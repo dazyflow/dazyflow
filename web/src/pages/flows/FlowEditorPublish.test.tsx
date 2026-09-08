@@ -91,9 +91,6 @@ vi.mock("../../api", () => {
   };
 });
 
-// setLive checks `e instanceof APIError` directly rather than going through
-// isHTTPStatus like the rest of the file, so this test needs a genuine instance
-// of the mocked class — a plain object with a .status takes the wrong branch.
 import { APIError } from "../../api";
 import { FlowEditor } from "./FlowEditor";
 
@@ -205,8 +202,6 @@ describe("editor go live", () => {
   });
 
   it("pausing disables the flow and never touches the published version", async () => {
-    // The universal kill switch: it stops cron, poll, webhook and form triggers
-    // alike, while leaving the live revision in place.
     getPublishedInfo.mockResolvedValue({
       published: true,
       published_commit: "abc123",
@@ -239,8 +234,6 @@ describe("editor go live", () => {
     mount();
     await flipSwitch();
     await confirmIn("alertdialog", "editor.pause");
-    // Reported in the toolbar's Errors panel, where every editor error lives
-    // now rather than in a banner over the canvas.
     await userEvent.click(
       await screen.findByRole("button", { name: /editor.issuesErrorsTitle/ }),
     );
@@ -248,13 +241,6 @@ describe("editor go live", () => {
   });
 });
 
-// Reaching the publish control at all — the half of this feature that lives in
-// layout rather than in usePublish. Two ways it went missing: the toolbar
-// controls sat in the horizontally scrolling half of the bar, so on a phone (or
-// with the inspector open) they were off-screen behind the fade with nothing to
-// suggest a sideways swipe; and the "Publish changes" link in the draft-vs-live
-// readout inherited pointer-events:none from the banner overlay it renders in,
-// so it looked like a link and did nothing.
 describe("editor publish reachability", () => {
   it("pins the publish controls outside the scrolling half of the toolbar", async () => {
     getPublishedInfo.mockResolvedValue({
@@ -286,7 +272,6 @@ describe("editor publish reachability", () => {
       if (!el) throw new Error("no live-state readout");
       return el as HTMLElement;
     });
-    // Scoped to the readout: the pinned toolbar button carries the same label.
     await userEvent.click(await within(readout).findByText("editor.publishChanges"));
     await confirmIn("dialog", "editor.publishChanges");
     await waitFor(() => expect(publishFlow).toHaveBeenCalled());

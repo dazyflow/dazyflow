@@ -6,10 +6,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CanvasContextMenu, type ContextMenuItem } from "./CanvasContextMenu";
 
-// The menu grew two item kinds for the connection menu, where three items are
-// answers to one question ("when does the next step run?") rather than three
-// unrelated commands. Both need to be more than cosmetic: a screen reader has
-// to hear a radio group, and a greyed-out item has to say why.
 
 const show = (items: ContextMenuItem[], onClose = () => {}) =>
   render(<CanvasContextMenu x={10} y={10} items={items} onClose={onClose} />);
@@ -28,8 +24,6 @@ describe("CanvasContextMenu", () => {
   });
 
   it("keeps a plain command a plain menuitem", async () => {
-    // Only items that carry `checked` become radios; everything else is still
-    // an ordinary command, so the delete item does not read as a choice.
     show([{ label: "Delete", onClick: () => {} }]);
     expect(screen.getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitemradio")).not.toBeInTheDocument();
@@ -38,7 +32,6 @@ describe("CanvasContextMenu", () => {
   it("shows the header without making it clickable", () => {
     show([{ header: "When does the next step run?" }, { label: "Go", onClick: () => {} }]);
     expect(screen.getByText("When does the next step run?")).toBeInTheDocument();
-    // One item, not two: the caption names the group, it is not an action.
     expect(screen.getAllByRole("menuitem")).toHaveLength(1);
   });
 

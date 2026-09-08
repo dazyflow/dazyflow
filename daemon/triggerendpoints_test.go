@@ -9,9 +9,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestTriggerEndpoints_Cov covers triggerEndpoints across all node trigger
-// kinds (webhook + bearer, hosted form, cron node, poll node) and a legacy
-// graph-level cron trigger.
 func TestTriggerEndpoints_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -19,8 +16,6 @@ func TestTriggerEndpoints_Cov(t *testing.T) {
 	g := core.Graph{
 		ID: "flow", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
-			// One door each now: the Webhook step carries the key, the Form
-			// step is its own trigger.
 			{ID: "hook", Module: "webhook_input", Params: map[string]any{
 				"secrets": []string{"bearer-abc"},
 			}},
@@ -58,12 +53,10 @@ func TestTriggerEndpoints_Cov(t *testing.T) {
 	if kinds["poll"] != 1 {
 		t.Errorf("poll endpoints = %d, want 1", kinds["poll"])
 	}
-	// One cron from the node + one legacy graph-level cron.
 	if kinds["cron"] != 2 {
 		t.Errorf("cron endpoints = %d, want 2 (node + legacy)", kinds["cron"])
 	}
 
-	// A graph with no triggers yields an empty (non-nil) slice.
 	empty := h.gw.flowAPI().triggerEndpoints("https://app.test", core.Graph{ID: "x", Tenant: "t", Workspace: "ws"})
 	if empty == nil || len(empty) != 0 {
 		t.Errorf("no-trigger graph = %v, want empty slice", empty)

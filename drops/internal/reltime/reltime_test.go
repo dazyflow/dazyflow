@@ -13,7 +13,6 @@ func TestResolve(t *testing.T) {
 	if err != nil {
 		t.Skipf("no tzdata: %v", err)
 	}
-	// A Thursday afternoon in Stockholm (UTC+2 in June).
 	now := time.Date(2026, 6, 18, 14, 30, 0, 0, sthlm)
 
 	cases := []struct {
@@ -30,7 +29,6 @@ func TestResolve(t *testing.T) {
 		{"-7d", "2026-06-11T12:30:00Z"},
 		{"now-2h30m", "2026-06-18T10:00:00Z"},
 		{"TOMORROW", "2026-06-18T22:00:00Z"},
-		// Absolute values pass through untouched, zone offset and all.
 		{"2026-06-16T00:00:00Z", "2026-06-16T00:00:00Z"},
 		{"2026-06-16T09:00:00+02:00", "2026-06-16T07:00:00Z"},
 		{"2026-06-16", "2026-06-16T00:00:00Z"},
@@ -82,17 +80,15 @@ func TestParseOffset(t *testing.T) {
 	}
 }
 
-// TestIsRelative pins the absolute/relative split. drops/gcal calls this to
-// resolve ONLY relative values: a plain date must read as absolute so an
-// all-day calendar event keeps its exact shape instead of being turned into a
-// midnight timestamp.
+// Pins the absolute/relative split. drops/gcal calls this to resolve ONLY
+// relative values: a plain date must read as absolute so an all-day calendar
+// event keeps its exact shape instead of being turned into a midnight
+// timestamp.
 func TestIsRelative(t *testing.T) {
 	relative := []string{
 		"+3d", "-2h30m", "+45s", "-1w",
 		"now", "today", "tomorrow", "yesterday",
-		// Case and padding are normalized, the same as Resolve accepts them.
 		"NOW", "Tomorrow", "  today  ", " +3d ",
-		// A named day with an offset is still relative.
 		"tomorrow+9h", "today-30m", "yesterday+1d",
 	}
 	for _, s := range relative {
@@ -110,9 +106,7 @@ func TestIsRelative(t *testing.T) {
 		"2026-06-16T09:30:00+02:00",
 		"2026-06-16 09:30",
 		"1750000000", // Unix seconds
-		// A leading sign followed by something that isn't a duration.
 		"+3q", "-notaduration", "+d", "-1x",
-		// Not a day word, so not relative however it is spelled.
 		"soon", "next tuesday", "midnight",
 	}
 	for _, s := range absolute {

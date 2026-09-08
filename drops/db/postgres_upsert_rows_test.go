@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// seedUpsertTable creates a table with a unique key for conflict tests.
 func seedUpsertTable(t *testing.T, dsn, table string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -59,7 +58,6 @@ func TestPostgresUpsert_InsertAndUpdate(t *testing.T) {
 	dsn, table := pgTestSetup(t)
 	seedUpsertTable(t, dsn, table)
 
-	// First pass: pure inserts.
 	res, _ := executePostgresUpsertRows(t.Context(), core.Job{
 		Params: map[string]any{
 			"dsn":              dsn,
@@ -78,7 +76,6 @@ func TestPostgresUpsert_InsertAndUpdate(t *testing.T) {
 		t.Fatalf("first pass: status=%q err=%+v", res.Status, res.Error)
 	}
 
-	// Second pass: same ids, different values → should UPDATE.
 	res, _ = executePostgresUpsertRows(t.Context(), core.Job{
 		Params: map[string]any{
 			"dsn":              dsn,
@@ -105,7 +102,6 @@ func TestPostgresUpsert_InsertAndUpdate(t *testing.T) {
 	if len(all) != 3 {
 		t.Fatalf("rows = %d, want 3", len(all))
 	}
-	// Verify the updates landed.
 	if all[0]["name"] != "Alicia" || all[1]["name"] != "Bobby" || all[2]["name"] != "Carol" {
 		t.Errorf("updates didn't apply: %+v", all)
 	}
@@ -115,7 +111,6 @@ func TestPostgresUpsert_DoNothingWhenUpdateColsEmpty(t *testing.T) {
 	dsn, table := pgTestSetup(t)
 	seedUpsertTable(t, dsn, table)
 
-	// Insert one row.
 	_, _ = executePostgresUpsertRows(t.Context(), core.Job{
 		Params: map[string]any{
 			"dsn":              dsn,
@@ -152,9 +147,6 @@ func TestPostgresUpsert_DoNothingWhenUpdateColsEmpty(t *testing.T) {
 }
 
 func TestPostgresUpsert_PartialUpdate(t *testing.T) {
-	// update_columns restricts which columns get overwritten.
-	// id is the conflict key; name should update, score should be
-	// preserved from the original insert.
 	dsn, table := pgTestSetup(t)
 	seedUpsertTable(t, dsn, table)
 	_, _ = executePostgresUpsertRows(t.Context(), core.Job{
@@ -188,8 +180,6 @@ func TestPostgresUpsert_PartialUpdate(t *testing.T) {
 	if all[0]["name"] != "updated" {
 		t.Errorf("name = %v, want 'updated'", all[0]["name"])
 	}
-	// score should still be 5.0; pgx returns numeric as pgtype.Numeric
-	// or similar, so compare via string round-trip.
 	if fmt.Sprint(all[0]["score"]) == "99" {
 		t.Errorf("score = %v, want preserved at 5 (update_columns omitted)", all[0]["score"])
 	}
@@ -199,7 +189,6 @@ func TestPostgresUpsert_CreateTableAddsUnique(t *testing.T) {
 	// create_table=true must add a UNIQUE on the conflict columns so
 	// ON CONFLICT has a target. Without it, the upsert would fail.
 	dsn, table := pgTestSetup(t)
-	// Don't pre-create — let the drop do it.
 	res, _ := executePostgresUpsertRows(t.Context(), core.Job{
 		Params: map[string]any{
 			"dsn":              dsn,
@@ -219,7 +208,6 @@ func TestPostgresUpsert_CreateTableAddsUnique(t *testing.T) {
 	if res.Status != core.StatusOK {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
 	}
-	// The second row should have UPDATEd the first.
 	ctx := t.Context()
 	conn, _ := pgx.Connect(ctx, dsn)
 	defer conn.Close(ctx)
@@ -237,7 +225,6 @@ func TestPostgresUpsert_CreateTableAddsUnique(t *testing.T) {
 func TestPostgresUpsert_RollbackOnFailure(t *testing.T) {
 	dsn, table := pgTestSetup(t)
 	seedUpsertTable(t, dsn, table)
-	// Insert a baseline so we can verify rollback.
 	_, _ = executePostgresUpsertRows(t.Context(), core.Job{
 		Params: map[string]any{
 			"dsn":              dsn,
@@ -274,10 +261,6 @@ func TestPostgresUpsert_RollbackOnFailure(t *testing.T) {
 		t.Errorf("rollback failed: %+v", all)
 	}
 }
-
-// ----------------------------------------------------------------------
-// Unit tests — no Postgres required.
-// ----------------------------------------------------------------------
 
 func TestPostgresUpsert_MissingConflictColumns(t *testing.T) {
 	res, _ := executePostgresUpsertRows(t.Context(), core.Job{
@@ -343,10 +326,6 @@ func TestPostgresUpsert_UnsafeConflictColumn(t *testing.T) {
 	}
 }
 
-// `name; DROP` is now a legal column name — the drop quotes it, so
-// the embedded semicolon stays inside the identifier. The only
-// genuinely-unsafe shape that gets pre-rejected is the NUL byte
-// (and empty, which the array shape can't carry meaningfully here).
 func TestPostgresUpsert_UnsafeUpdateColumn(t *testing.T) {
 	res, _ := executePostgresUpsertRows(t.Context(), core.Job{
 		Params: map[string]any{
@@ -370,7 +349,6 @@ func TestPostgresUpsert_SubtractHelper(t *testing.T) {
 	if len(got) != 2 || got[0] != "a" || got[1] != "c" {
 		t.Errorf("subtract = %v, want [a c]", got)
 	}
-	// Order-preserving and idempotent over duplicates in b.
 	got = subtract([]string{"x", "y"}, []string{"z", "z"})
 	if len(got) != 2 || got[0] != "x" {
 		t.Errorf("subtract w/o intersection = %v, want [x y]", got)

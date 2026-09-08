@@ -49,7 +49,6 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
       })
       .catch((e) => {
         if (cancelled) return;
-        // No link yet is the expected first-open state, not an error.
         if (!isErrorCode(e, "share_not_found")) {
           setError(explainApiError(e, t));
         }

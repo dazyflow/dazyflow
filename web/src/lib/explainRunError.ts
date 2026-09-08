@@ -1,55 +1,23 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// explainRunError turns a daemon-emitted error message into a
-// plain-language headline + optional next-action button, so a
-// non-technical user reading the Run detail page has a path
-// forward instead of staring at the raw text.
-//
-// Inputs are loose by design: callers pass whatever fields the
-// daemon populated on the failing run/node (code + message; either
-// may be empty). The matcher walks the most-specific patterns
-// first, falling through to a generic "details below" shape when
-// nothing matches.
 
 type RunErrorAction = {
-  // labelKey is an i18n key the renderer resolves. The action is
-  // rendered as a button (when href is a route path) or a link
-  // (when href is an external URL).
   labelKey: string;
-  // href is the route path or external URL the action navigates to.
-  // Relative paths route via react-router; anything starting with
-  // a protocol opens in a new tab.
   href: string;
 };
 
 export type RunErrorExplanation = {
-  // headlineKey is the i18n key for the one-line plain-English
-  // summary rendered above the raw error detail. Values for
-  // interpolation come back via the headlineValues object so the
-  // renderer can pass them to t().
   headlineKey: string;
   headlineValues?: Record<string, string>;
   action?: RunErrorAction;
 };
 
-// explainRunError matches against the message + code surface the
-// daemon emits. Returns null when no pattern matches; callers fall
-// back to showing the raw text in a details disclosure.
-// AppContext is what the caller knows about the step that failed but the
-// error text does not say: which app it was talking to, and as which account.
-// It turns "go to the Apps page" into "go to Gmail's page and reconnect the
-// account this flow uses" — the difference between a signpost and a fix.
 export type AppContext = {
-  // slug is the integration's /apps/:slug segment, e.g. "gmail".
   slug?: string;
-  // account is the connected-account name the step used, e.g. "default".
   account?: string;
 };
 
-// appsHref points at the specific app when we know it, and carries the
-// account so the page can offer to reconnect that one rather than making the
-// user work out which of several is broken.
 function appsHref(app?: AppContext): string {
   if (!app?.slug) return "/apps";
   const base = `/apps/${encodeURIComponent(app.slug)}`;
@@ -67,9 +35,6 @@ export function explainRunError(
   if (!msg && !code) return null;
   const lc = msg.toLowerCase();
 
-  // OAuth account not connected — exact match for the helper-string
-  // shape integrations/<provider>/helpers.go emits. We pull the
-  // account name out so the message can name it.
   const acctMatch = msg.match(
     /^(\w+) account "([^"]+)" is not connected/i,
   );
@@ -101,17 +66,11 @@ export function explainRunError(
     };
   }
 
-  // Slack channel-targeting errors. The send-message drop wraps
-  // the Slack API's own error code in a fixed prefix —
-  // channel_not_found means the bot can see channels but not this
-  // one; not_in_channel means the bot exists but isn't a member.
   if (lc.includes("channel_not_found")) {
     return {
       headlineKey: "explain.slackChannelNotFound",
       action: {
         labelKey: "explain.actionInviteBot",
-        // Slack's own "add apps to a channel" help — the marketing homepage
-        // (slack.com) gave no guidance on the actual fix (/invite the app).
         href: "https://slack.com/help/articles/202035138-Add-apps-to-your-Slack-workspace",
       },
     };
@@ -121,8 +80,6 @@ export function explainRunError(
       headlineKey: "explain.slackNotInChannel",
       action: {
         labelKey: "explain.actionInviteBot",
-        // Slack's own "add apps to a channel" help — the marketing homepage
-        // (slack.com) gave no guidance on the actual fix (/invite the app).
         href: "https://slack.com/help/articles/202035138-Add-apps-to-your-Slack-workspace",
       },
     };
@@ -169,9 +126,6 @@ export function explainRunError(
     return { headlineKey: "explain.rateLimited" };
   }
 
-  // Permission denied at the remote service — the connected account is
-  // valid but isn't allowed to do this (missing scope, restricted resource).
-  // Reconnecting often re-grants scopes, so point at Apps.
   if (
     lc.includes("permission denied") ||
     lc.includes("forbidden") ||
@@ -201,11 +155,6 @@ export function explainRunError(
     };
   }
 
-  // TLS / certificate failures — the remote service answered but its
-  // security certificate couldn't be validated (self-signed, expired, wrong
-  // host). Checked BEFORE the network branch because these often also carry
-  // a "dial"/connection phrase, and the cert cause is the more useful one.
-  // Usually a wrong/internal URL rather than something a Retry fixes.
   if (
     lc.includes("x509") ||
     lc.includes("certificate") ||
@@ -215,9 +164,6 @@ export function explainRunError(
     return { headlineKey: "explain.tlsError" };
   }
 
-  // Network-reachability failures — the remote host couldn't be reached
-  // (DNS, refused connection, dropped socket). Usually transient or a
-  // wrong URL; a Retry often clears it, so no destination.
   if (
     lc.includes("connection refused") ||
     lc.includes("no such host") ||
@@ -229,9 +175,6 @@ export function explainRunError(
     return { headlineKey: "explain.networkUnreachable" };
   }
 
-  // Remote temporarily unavailable — a 5xx gateway/overload from the service
-  // itself (not our side). Transient: the engine auto-retries idempotent
-  // steps, and a manual Retry usually clears it. No fix-it destination.
   if (
     lc.includes("502") ||
     lc.includes("503") ||
@@ -243,8 +186,6 @@ export function explainRunError(
     return { headlineKey: "explain.serviceUnavailable" };
   }
 
-  // Remote returned malformed/unexpected data — often an upstream error page
-  // where JSON was expected. Points at the failing step's output for detail.
   if (
     lc.includes("invalid character") ||
     lc.includes("unexpected end of json") ||
@@ -291,8 +232,6 @@ export function explainRunError(
     return { headlineKey: "explain.remoteRejectedInput" };
   }
 
-  // Remote resource not found (404 from the service) — a wrong id/path in a
-  // field (a deleted doc, a typo'd channel/spreadsheet id).
   if (
     lc.includes("404") ||
     lc.includes("not found") ||
@@ -301,13 +240,6 @@ export function explainRunError(
     return { headlineKey: "explain.remoteNotFound" };
   }
 
-  // Structured infra/runtime codes the daemon emits. For these the raw
-  // message is low-level (often a Go error string), so the CODE is the
-  // better signal — map each to a plain-English headline. The message-based
-  // matches above are more specific and take precedence; the raw code +
-  // message still render below the headline for anyone who wants detail.
-  // None of these have a single obvious fix-it destination, so they're
-  // headline-only (no action button) — honest guidance over a misleading link.
   if (code && CODE_HEADLINES[code]) {
     return { headlineKey: CODE_HEADLINES[code] };
   }

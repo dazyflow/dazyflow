@@ -1,10 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package mcptest provides a minimal MCP server implementation used by
-// unit tests (over io.Pipe) and the live demo (compiled as a real
-// subprocess). It implements initialize, tools/list, and tools/call —
-// enough to exercise the client end-to-end without external dependencies.
 package mcptest
 
 import (
@@ -15,12 +11,8 @@ import (
 	"github.com/dazyflow/dazyflow/engine/mcp"
 )
 
-// ToolHandler runs server-side when the client calls a tool. Return a
-// successful result, or an error result by setting IsError=true.
 type ToolHandler func(name string, args map[string]any) mcp.ToolCallResult
 
-// FakeServer is a deliberately small MCP server. Set Tools to declare
-// what tools/list returns; Handler runs for each tools/call.
 type FakeServer struct {
 	Name    string
 	Version string
@@ -28,8 +20,6 @@ type FakeServer struct {
 	Handler ToolHandler
 }
 
-// Serve reads JSON-RPC requests from r line by line, dispatches each
-// known method, and writes responses to w. Returns when r reaches EOF.
 func (s *FakeServer) Serve(r io.Reader, w io.Writer) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
@@ -49,7 +39,6 @@ func (s *FakeServer) Serve(r io.Reader, w io.Writer) {
 		if req.Method == "" {
 			continue
 		}
-		// Notifications carry no id; skip them.
 		if len(req.ID) == 0 || string(req.ID) == "null" {
 			continue
 		}

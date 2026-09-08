@@ -1,19 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package maillang holds the copy the daemon addresses to a person, in every
-// language the product speaks: transactional email and the hosted intake form.
-//
-// It is a struct rather than a map so a mistyped key is a compile error, not a
-// blank line in someone's inbox, and so the guard test can walk the fields to
-// prove no language is missing one or has dropped a format verb.
-//
-// Whose language is resolved per message by the caller: mail to an account
-// holder uses that user's preference; an invitation follows the inviter, since
-// the recipient has no account yet; mail a flow sends (an approval request and
-// its outcome) follows core.Graph.Language, because it is the flow speaking.
-// The support-queue notices to the operator's own staff stay English: a
-// config-file address carries no language to resolve.
 package maillang
 
 import "strings"
@@ -24,7 +11,6 @@ import "strings"
 // Fields carrying a %s say so in a comment, since the argument order is the
 // contract between the catalogue and the caller.
 type Messages struct {
-	// ── Account invitation (the invitee has no account yet) ──
 	InviteSubject   string
 	InvitePreheader string
 	InviteEyebrow   string
@@ -34,7 +20,6 @@ type Messages struct {
 	InviteExpiry    string // %s = expiry date
 	InviteFooter    string
 
-	// ── Organization invitation ──
 	OrgInviteSubject   string
 	OrgInvitePreheader string // %s = who invited them
 	OrgInviteEyebrow   string
@@ -44,7 +29,6 @@ type Messages struct {
 	OrgInviteExpiry    string // %s = expiry date
 	OrgInviteFooter    string
 
-	// ── Welcome, on a new account ──
 	WelcomeSubject   string
 	WelcomePreheader string
 	WelcomeEyebrow   string
@@ -54,7 +38,6 @@ type Messages struct {
 	WelcomeButton    string
 	WelcomeOutro     string
 
-	// ── Email verification ──
 	VerifySubject   string
 	VerifyPreheader string
 	VerifyEyebrow   string
@@ -63,7 +46,6 @@ type Messages struct {
 	VerifyButton    string
 	VerifyExpiry    string // %s = expiry date
 
-	// ── Password reset ──
 	ResetSubject   string
 	ResetPreheader string
 	ResetEyebrow   string
@@ -72,7 +54,6 @@ type Messages struct {
 	ResetButton    string
 	ResetExpiry    string // %s = expiry date
 
-	// ── A flow run failed ──
 	FailureSubject   string // %s = flow name
 	FailurePreheader string
 	FailureEyebrow   string
@@ -82,21 +63,18 @@ type Messages struct {
 	// alternative signals (an in-app banner, a marker in the Runs list) both
 	// need somebody to be looking at the app, which is what the users of an
 	// automation product are precisely not doing.
-	RunCapSubject   string
-	RunCapPreheader string
-	RunCapEyebrow   string
-	RunCapHeading   string
-	RunCapIntro     string
-	RunCapOutro     string
-	RunCapButton    string
-	FailureIntro    string // %s = flow name
-	// FailureStillBroken is added to a repeat email. %d = how many other runs
-	// of this flow failed in the preceding window.
+	RunCapSubject      string
+	RunCapPreheader    string
+	RunCapEyebrow      string
+	RunCapHeading      string
+	RunCapIntro        string
+	RunCapOutro        string
+	RunCapButton       string
+	FailureIntro       string // %s = flow name
 	FailureStillBroken string // %d = prior failure count
 	FailureOutro       string
 	FailureButton      string
 
-	// ── An approval is waiting ──
 	ApprovalSubject      string // %s = flow name
 	ApprovalPreheader    string
 	ApprovalEyebrow      string
@@ -106,10 +84,6 @@ type Messages struct {
 	ApprovalShareWarning string
 	ApprovalOpenLink     string // button, signed link
 	ApprovalOpenInbox    string // button, the Approvals page
-	// The decision PAGE the signed link opens — the only place an approver
-	// without an account ever decides anything. Its own words, because the
-	// email's are written for an inbox and these for a page with two buttons
-	// on it.
 	ApprovalPageTitle    string
 	ApprovalPageIntro    string // above the question, when the step asked one
 	ApprovalCommentLabel string
@@ -123,7 +97,6 @@ type Messages struct {
 	ApprovalGoneTitle    string // the link is expired, wrong, or for a run that is gone
 	ApprovalGoneBody     string
 
-	// ── An approval was decided ──
 	DecidedEyebrow           string
 	DecidedButton            string
 	DecidedApprovedSubject   string // %s = flow name
@@ -140,7 +113,6 @@ type Messages struct {
 	DecidedRejectedValue     string
 	DecidedAnonymous         string // stands in for a nameless approver
 
-	// ── Support: we answered you / we closed it ──
 	SupportRepliedSubject    string // %s = ticket subject
 	SupportRepliedPreheader  string
 	SupportEyebrow           string
@@ -162,7 +134,6 @@ type Messages struct {
 	SupportWaitingIntro     string // %s = ticket subject
 	SupportWaitingOutro     string
 
-	// ── Fact labels, shared by the notices above ──
 	FactFlow       string
 	FactRun        string
 	FactStep       string
@@ -172,10 +143,6 @@ type Messages struct {
 	FactDecidedBy  string
 	FactComment    string
 
-	// ── The hosted intake form ──
-	// Not email, but the same rule and the same resolution: a form is the
-	// FLOW speaking to a visitor, so it follows core.Graph.Language. It is
-	// also the only surface of the product a stranger ever sees.
 	FormSubmit      string // the submit button
 	FormThanksTitle string // bolded lead on the confirmation
 	FormThanksBody  string
@@ -184,13 +151,9 @@ type Messages struct {
 	FormErrorClosed string // the form can't receive; not the visitor's fault
 	FormGoneTitle   string // there is no form at this URL to show
 	FormGoneBody    string
-	// FormHoneypot labels the hidden anti-bot input. Nobody sees it — it sits
-	// off-screen — but a screen reader reaching it reads this out, so it is the
-	// flow speaking to a visitor like every other string here.
-	FormHoneypot string
+	FormHoneypot    string
 }
 
-// English is the source language and the fallback for anything else.
 var English = Messages{
 	InviteSubject:   "You're invited to Dazyflow",
 	InvitePreheader: "Create your account to get started.",
@@ -329,11 +292,6 @@ var English = Messages{
 	FormGoneBody:    "The link may be out of date, or the form may not be live yet. If someone sent you here, let them know.",
 }
 
-// Swedish. Written as Swedish rather than word-for-word from the English: the
-// product name stays as it is, and the decided-approval sentences are whole
-// sentences per outcome because "approved"/"rejected" inflect differently in
-// Swedish ("godkände"/"avslog" as verbs, "godkänd"/"avslagen" as adjectives) —
-// a template with a verb slotted into it can only be right in one of them.
 var Swedish = Messages{
 	InviteSubject:   "Du är inbjuden till Dazyflow",
 	InvitePreheader: "Skapa ditt konto för att komma igång.",

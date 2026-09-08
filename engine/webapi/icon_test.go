@@ -12,7 +12,6 @@ import (
 	"testing"
 )
 
-// pngBytes is a real 1x1 PNG, so the sniffing path has something to sniff.
 var pngBytes = []byte{
 	0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a,
 	0, 0, 0, 0x0d, 'I', 'H', 'D', 'R',
@@ -24,14 +23,8 @@ var pngBytes = []byte{
 	0, 0, 0, 0, 'I', 'E', 'N', 'D', 0xae, 0x42, 0x60, 0x82,
 }
 
-// icoBytes is an ICO header, which is what Go's sniffer recognises. Enough to
-// exercise the "served with the wrong Content-Type" path, which is the common
-// case for favicon.ico.
 var icoBytes = append([]byte{0x00, 0x00, 0x01, 0x00, 0x01, 0x00}, make([]byte, 32)...)
 
-// fakeDoer serves a fixed URL -> response map and records what was asked for,
-// which is how these tests assert on the ORDER of the guesses without standing
-// up TLS.
 type fakeDoer struct {
 	pages map[string]fakeResponse
 	asked []string
@@ -77,8 +70,6 @@ func wantPNG(t *testing.T, got string) {
 	}
 }
 
-// The page's declared icon is preferred over /favicon.ico, and the biggest
-// declared size wins — the whole reason the page is read at all.
 func TestResolveLogo_PrefersTheLargestDeclaredIcon(t *testing.T) {
 	f := &fakeDoer{pages: map[string]fakeResponse{
 		"https://api.example.com/": html(`<html><head>
@@ -96,8 +87,6 @@ func TestResolveLogo_PrefersTheLargestDeclaredIcon(t *testing.T) {
 	}
 }
 
-// An SVG beats every raster regardless of declared size: it is the one that is
-// right at whatever size the node card draws.
 func TestResolveLogo_PrefersSVG(t *testing.T) {
 	svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg"/>`)
 	f := &fakeDoer{pages: map[string]fakeResponse{
@@ -150,8 +139,6 @@ func TestResolveLogo_FaviconWithAWrongContentType(t *testing.T) {
 	}
 }
 
-// The reason originsFor exists: an API host serves no site, and the mark is on
-// the company's own page one label up.
 func TestResolveLogo_FallsBackToTheParentDomain(t *testing.T) {
 	f := &fakeDoer{pages: map[string]fakeResponse{
 		"https://example.com/":         html(`<head><link rel="icon" href="/icon.png"></head>`),
@@ -178,8 +165,6 @@ func TestResolveLogo_ApexHostAsksOneOrigin(t *testing.T) {
 	}
 }
 
-// Cleartext buys a decoration at the cost of putting "which org runs what" on
-// the wire, so it is refused before any request.
 func TestResolveLogo_RefusesNonHTTPS(t *testing.T) {
 	for _, base := range []string{"http://api.example.com", "ftp://example.com", "", "not a url at all::"} {
 		f := &fakeDoer{pages: map[string]fakeResponse{}}
@@ -192,7 +177,6 @@ func TestResolveLogo_RefusesNonHTTPS(t *testing.T) {
 	}
 }
 
-// A body that is not an image is not inlined, whatever it claims to be.
 func TestResolveLogo_RefusesNonImages(t *testing.T) {
 	f := &fakeDoer{pages: map[string]fakeResponse{
 		"https://example.com/": html(`<head><link rel="icon" href="/icon.png"></head>`),
@@ -219,8 +203,6 @@ func TestResolveLogo_RefusesAnOversizedIcon(t *testing.T) {
 	}
 }
 
-// A page may inline its own icon. It is accepted, but re-encoded from bytes we
-// decoded ourselves — see normalizeLogoData.
 func TestResolveLogo_NormalizesAnInlineIcon(t *testing.T) {
 	src := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes)
 	f := &fakeDoer{pages: map[string]fakeResponse{
@@ -258,8 +240,6 @@ func TestIconHrefs_ScansOnlyTheHead(t *testing.T) {
 	}
 }
 
-// Every operation of a catalog with a logo wears it; one without keeps the
-// globe. This is the field the whole file exists to fill.
 func TestSynthesizeManifest_CarriesTheLogo(t *testing.T) {
 	desc := Descriptor{
 		Tenant: "acme", Name: "orders", BaseURL: "https://api.example.com",
@@ -293,7 +273,6 @@ func TestValidate_RefusesANonInlineLogo(t *testing.T) {
 	}
 }
 
-// No doer wired means no logo, not an unguarded request.
 func TestResolveLogo_UnwiredDoer(t *testing.T) {
 	SetDoer(nil)
 	if got := ResolveLogo(context.Background(), "https://example.com"); got != "" {
@@ -344,9 +323,6 @@ func TestIconHrefs_ReadsHrefWhateverTheQuoting(t *testing.T) {
 	}
 }
 
-// A declared pixel size IS the score, so a bigger declaration outranks a
-// smaller one. Dropping the parsed size collapses every raster icon onto
-// the same rel-based fallback and the largest-first choice stops working.
 func TestIconScore_UsesDeclaredSizes(t *testing.T) {
 	big := iconScore([]string{"icon"}, "180x180", "image/png", "/a.png")
 	small := iconScore([]string{"icon"}, "16x16", "image/png", "/b.png")
@@ -359,15 +335,11 @@ func TestIconScore_UsesDeclaredSizes(t *testing.T) {
 	if big <= small {
 		t.Errorf("180x180 (%d) must outrank 16x16 (%d)", big, small)
 	}
-	// The largest of several declarations wins.
 	if got := iconScore([]string{"icon"}, "16x16 64x64 32x32", "image/png", "/c.png"); got != 64 {
 		t.Errorf("multi-size icon scored %d, want the largest (64)", got)
 	}
 }
 
-// A declared size is authoritative; the rel-based guess applies only when
-// nothing was declared. Letting the guess override a declaration makes a
-// large plain "icon" lose to a tiny apple-touch-icon.
 func TestIconScore_DeclaredSizeOverridesRelFallback(t *testing.T) {
 	bigIcon := iconScore([]string{"icon"}, "256x256", "image/png", "/a.png")
 	smallApple := iconScore([]string{"apple-touch-icon"}, "32x32", "image/png", "/b.png")
@@ -381,7 +353,6 @@ func TestIconScore_DeclaredSizeOverridesRelFallback(t *testing.T) {
 		t.Errorf("the 256px icon (%d) must outrank the 32px apple-touch-icon (%d)", bigIcon, smallApple)
 	}
 
-	// With nothing declared, the rel does decide.
 	if got := iconScore([]string{"apple-touch-icon"}, "", "image/png", "/c.png"); got != 120 {
 		t.Errorf("apple-touch-icon with no sizes scored %d, want the 120 convention", got)
 	}
@@ -390,8 +361,6 @@ func TestIconScore_DeclaredSizeOverridesRelFallback(t *testing.T) {
 	}
 }
 
-// paddedPNGDataURI builds a base64 data: URI for n bytes that sniff as a
-// PNG, so size-limit tests exercise the limit rather than the type check.
 func paddedPNGDataURI(n int) string {
 	raw := make([]byte, n)
 	copy(raw, []byte("\x89PNG\r\n\x1a\n"))

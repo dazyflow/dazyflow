@@ -12,12 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// stmtCounter counts the statements a run actually issues, grouped by shape.
-//
-// "13 transactions per step" is a number to act on only once you know which
-// thirteen. Postgres can be asked with pg_stat_statements, but that needs a
-// preloaded library and a server restart; the driver already sees every
-// statement, so ask it instead.
 type stmtCounter struct {
 	mu    sync.Mutex
 	count map[string]int
@@ -34,9 +28,6 @@ func (c *stmtCounter) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d pgx.Tr
 
 func (c *stmtCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
-// shapeOf reduces a statement to something readable and stable: the verb plus
-// the table it touches, which is all that is needed to see where the round
-// trips go.
 func shapeOf(sql string) string {
 	f := strings.Fields(strings.ToLower(strings.Join(strings.Fields(sql), " ")))
 	if len(f) == 0 {
@@ -58,8 +49,6 @@ func shapeOf(sql string) string {
 			break
 		}
 	}
-	// Reads all look alike by table; the first few words of the filter tell
-	// a point read of a run record from a scan of its nodes.
 	if verb == "select" {
 		for i, w := range f {
 			if w == "where" {
@@ -75,7 +64,6 @@ type stmtLine struct {
 	n     int
 }
 
-// top returns the statement shapes by frequency, most first.
 func (c *stmtCounter) top() []stmtLine {
 	c.mu.Lock()
 	defer c.mu.Unlock()

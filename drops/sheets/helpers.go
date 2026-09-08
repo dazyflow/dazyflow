@@ -1,10 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package sheets hosts the native Google Sheets connectors
-// (sheets_read_range, sheets_append_row, sheets_export_pdf), migrated from
-// the scripted TS drops. They authenticate with Google OAuth (the "google"
-// provider) via the SetTokenLookup hook the daemon wires at startup.
 package sheets
 
 import (
@@ -33,32 +29,22 @@ const (
 	driveAPIBase  = "https://www.googleapis.com/drive/v3"
 )
 
-// SetTokenLookup wires the shared Google OAuth token resolver (one provider
-// serves every Google connector — see drops/internal/google). Retained as a
-// package entry point for tests.
 func SetTokenLookup(fn google.TokenLookup) { google.SetTokenLookup(fn) }
 
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
 	return google.ResolveToken(ctx, job)
 }
 
-// Test seams: the read/append drops hit the Sheets API; export hits Drive.
 var (
 	sheetsBase = apibase.New(sheetsAPIBase)
 	driveBase  = apibase.New(driveAPIBase)
 )
 
-// SetHTTPBases swaps both API roots (tests point them at one httptest server).
 func SetHTTPBases(sheets, drive string) {
 	sheetsBase.Set(sheets)
 	driveBase.Set(drive)
 }
 
-// base_url is no longer a user-facing param (removed from the schema), but
-// like `token` the engine still honors it when present — the integration
-// tests point it at an httptest server. The SafeHTTPClient + egress guard in
-// googleDo still bound where the bearer token can be sent. The override is
-// used verbatim (no trailing-slash trim — endpoints are concatenated as-is).
 func sheetsBaseURL(job core.Job) string {
 	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
 		return b
@@ -81,8 +67,6 @@ func sheetsErr(body []byte) string { return google.ErrMessage(body, 512) }
 
 var sheetIDRe = regexp.MustCompile(`/d/([a-zA-Z0-9-_]+)`)
 
-// sheetID extracts the spreadsheet ID from a full Google Sheets URL, or
-// returns the input unchanged when it's already an ID.
 func sheetID(raw string) string {
 	if m := sheetIDRe.FindStringSubmatch(raw); m != nil {
 		return m[1]
@@ -131,8 +115,6 @@ func flattenValues(raw [][]any, useHeaders bool) ([]string, []map[string]any) {
 	return headers, rows
 }
 
-// normalizeRows coerces the rows input into a slice of objects. Mirrors
-// the transform/db contract: a list of objects, a single object, or JSON.
 func normalizeRows(inline any) ([]map[string]any, error) {
 	switch v := inline.(type) {
 	case nil:
@@ -164,19 +146,11 @@ func normalizeRows(inline any) ([]map[string]any, error) {
 	return nil, fmt.Errorf("rows: unsupported input type %T", inline)
 }
 
-// columnMapping is one row of the sheets_append_row `mapping` param:
-// the named sheet column and the field (key/path) in each incoming row
-// whose value fills it.
 type columnMapping struct {
 	Column string
 	Source string
 }
 
-// parseMapping reads the optional `mapping` param — an array of
-// {column, source} objects (JSON-decoded as []any of map[string]any).
-// Entries without a column are skipped; a missing/non-array param yields
-// nil (the header-derivation path). A JSON string is also accepted so the
-// value can round-trip through a text field.
 func parseMapping(p map[string]any) []columnMapping {
 	raw, ok := p["mapping"]
 	if !ok || raw == nil {
@@ -216,11 +190,6 @@ func parseMapping(p map[string]any) []columnMapping {
 	return out
 }
 
-// resolveSpreadsheetID picks the spreadsheet to act on: a wired
-// 'spreadsheet_id' input port wins over the picked param, so a spreadsheet
-// reference can be threaded in from an upstream sheet step (e.g. append row's
-// 'spreadsheet_id' output). Either form may be a full URL or a bare id —
-// sheetID extracts the id. Empty input falls back to the param.
 func resolveSpreadsheetID(job core.Job) string {
 	if in, ok := job.Input["spreadsheet_id"]; ok && in.Inline != nil {
 		switch v := in.Inline.(type) {
@@ -237,9 +206,6 @@ func resolveSpreadsheetID(job core.Job) string {
 	return sheetID(params.StringDefault(job.Params, "spreadsheet_id", ""))
 }
 
-// quoteSheetTab wraps a tab name in single quotes for A1 notation so names
-// with spaces or punctuation parse (e.g. 'Inbox Log'!A1). Embedded single
-// quotes are doubled, per the Sheets reference grammar.
 func quoteSheetTab(tab string) string {
 	return "'" + strings.ReplaceAll(tab, "'", "''") + "'"
 }
@@ -304,9 +270,6 @@ func projectRows(rows []map[string]any, cmap []columnMapping) []map[string]any {
 	return out
 }
 
-// lookupField reads source from row, supporting dotted paths (e.g.
-// "user.email") for nested objects. Returns "" when absent so a missing
-// field becomes a blank cell rather than a JSON null.
 func lookupField(row map[string]any, source string) any {
 	if source == "" {
 		return ""
@@ -326,12 +289,6 @@ func lookupField(row map[string]any, source string) any {
 	return cur
 }
 
-// ListSheetColumns reads the header row (row 1) of a spreadsheet tab and
-// returns each non-empty header as a {id, name} option (id == name == the
-// header text). It's the backend for the mapping editor's "Sheet column"
-// dropdown, so a user maps onto real, existing columns instead of typing.
-// Depends on the chosen spreadsheet_id and range (tab); reads account from
-// job.Params. An empty header row yields no options.
 func ListSheetColumns(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
 	id := sheetID(params.StringDefault(job.Params, "spreadsheet_id", ""))
 	if id == "" {
@@ -341,8 +298,6 @@ func ListSheetColumns(ctx context.Context, job core.Job) ([]core.AccountResource
 	if err != nil {
 		return nil, err
 	}
-	// Read just the first row of the target tab. range defaults to the tab
-	// the append uses; "<tab>!1:1" pins it to the header row.
 	tab := params.StringDefault(job.Params, "range", "Sheet1")
 	rng := tab + "!1:1"
 	q := url.Values{}
@@ -420,11 +375,6 @@ func ListDriveFiles(ctx context.Context, job core.Job, mimeType string) ([]core.
 	return out, nil
 }
 
-// ListSheetTabs lists the tab (sheet) titles within a spreadsheet as
-// {id, name} options — the backend for the tab/range picker, which depends
-// on the chosen spreadsheet_id. The tab title is both the id and the label
-// (append/read target a tab by name). Reads spreadsheet_id (ID or URL) and
-// account/token from job.Params.
 func ListSheetTabs(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
 	id := sheetID(params.StringDefault(job.Params, "spreadsheet_id", ""))
 	if id == "" {
@@ -469,9 +419,6 @@ func ListSheetTabs(ctx context.Context, job core.Job) ([]core.AccountResource, e
 // back to. Underscored so it can't collide with a real header.
 const RowNumberColumn = "_row"
 
-// firstDataRow is the sheet row number of the first row a read returns.
-// Reading a whole tab starts at row 1 (row 2 when the first row is headers);
-// an offset cell range (A5:D20) starts wherever it says.
 func firstDataRow(cells string, useHeaders bool) int {
 	start := 1
 	if cells = strings.TrimSpace(cells); cells != "" {
@@ -487,12 +434,8 @@ func firstDataRow(cells string, useHeaders bool) int {
 	return start
 }
 
-// a1StartRow pulls the row number out of the left-hand side of an A1 range
-// ("B5:D20" → 5). A range with no row number ("B:D") leaves the default.
 var a1StartRow = regexp.MustCompile(`^[A-Za-z]*([0-9]+)`)
 
-// columnLetter converts a 0-based column index to its spreadsheet letter
-// (0 → A, 25 → Z, 26 → AA).
 func columnLetter(i int) string {
 	if i < 0 {
 		return ""

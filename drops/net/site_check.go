@@ -65,8 +65,6 @@ func init() {
 				},
 				"required":["url"]
 			}`),
-			// The check advances the remembered up/down state, so two runs
-			// aren't interchangeable.
 			Idempotent: false,
 			NodeState: &core.NodeState{
 				Label:     "Remembered up/down state",
@@ -98,8 +96,6 @@ func executeSiteCheck(ctx context.Context, job core.Job, progress chan<- core.Pr
 	timeout := params.IntDefault(job.Params, "timeout_ms", 15000)
 	status, body, _, err := Do(ctx, "GET", target, nil, nil, timeout, maxCheckBytes)
 
-	// A failed check is the normal case for this step, not an error result:
-	// the whole point is to report it downstream rather than fail the run.
 	up, detail := true, ""
 	switch {
 	case err != nil:
@@ -127,9 +123,6 @@ func executeSiteCheck(ctx context.Context, job core.Job, progress chan<- core.Pr
 	prevUp, known := readCheckState(ctx, job.Tenant, name)
 	writeCheckState(ctx, job.Tenant, name, up)
 
-	// Fire only on a transition. A first check that finds the site DOWN does
-	// fire — a site that is down right now is news, however long we've been
-	// watching — but a first check that finds it up is just the baseline.
 	wentDown := !up && (!known || prevUp)
 	cameBack := up && known && !prevUp
 
@@ -162,8 +155,6 @@ func executeSiteCheck(ctx context.Context, job core.Job, progress chan<- core.Pr
 	return core.Result{JobID: job.ID, Status: core.StatusOK, Output: out}, nil
 }
 
-// readCheckState reads the remembered up/down flag. known=false means this is
-// the first check (or the state was reset).
 func readCheckState(ctx context.Context, tenant, name string) (up bool, known bool) {
 	cacheMu.RLock()
 	r := cacheReader

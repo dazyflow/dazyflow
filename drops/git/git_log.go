@@ -49,15 +49,9 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Named after its param so the card shows an inline editable
-				// box; a wired value (e.g. git checkout's path output)
-				// overrides the typed one.
 				{Port: "path", Label: "Repository folder"},
 			},
 			Outputs: []core.Port{
-				// Only the commit list is a pin; the walk summary (start,
-				// count, truncated) is still EMITTED under "meta" so run
-				// records keep it for debugging — it's just not a pin.
 				{Port: "commits", Label: "Commits", MIME: []string{"application/json"}},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
@@ -127,9 +121,6 @@ func executeGitLog(_ context.Context, job core.Job, progress chan<- core.Progres
 	}
 	defer iter.Close()
 
-	// Manual iteration so we can stop cleanly when a shallow clone runs
-	// out of locally-present parents — ErrObjectNotFound from Next()
-	// just means "history's been truncated", not a real failure.
 	commits := make([]map[string]any, 0, limit)
 	truncated := false
 	for len(commits) < limit {
@@ -152,9 +143,6 @@ func executeGitLog(_ context.Context, job core.Job, progress chan<- core.Progres
 			"when":    c.Author.When,
 			"summary": summary,
 		})
-		// Mirror each entry as a progress line so the pipeline console
-		// shows the history as it's walked — matches what `git log`
-		// users expect to see streaming past.
 		emitLogProgress(progress, job, "git",
 			fmt.Sprintf("%s  %-20s  %s",
 				c.Hash.String()[:8],

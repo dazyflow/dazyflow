@@ -25,9 +25,6 @@ import (
 // describe what you want in a sentence — so losing it is losing the feature
 // while every unit test still passes.
 
-// webAPIFlowgenService builds a Service whose resolver carries one org's
-// described API, the way a running daemon's does. The operation carries real
-// arguments, because the arguments are the half the generator has to get right.
 func webAPIFlowgenService(t *testing.T, tenant string) *Service {
 	t.Helper()
 	cat := webapi.NewCatalog()

@@ -3,11 +3,6 @@
 
 package daemon
 
-// The Request endpoint: like /trigger, but it holds the connection until the
-// flow's Reply step answers. /trigger's 202-immediately is a contract senders
-// like Stripe and GitHub rely on, so answering callers got its own path and
-// its own trigger drop rather than a mode of that one.
-
 import (
 	"context"
 	"crypto/sha256"
@@ -31,25 +26,13 @@ const (
 	defaultCallWait = 30 * time.Second
 	// maxCallWait caps ?wait. Past this a caller should submit and poll:
 	// every waiter costs a held connection and a goroutine.
-	maxCallWait = 60 * time.Second
-	// callPollInterval is the safety net under the bus subscription. The bus
-	// drops events on a full subscriber buffer (see localSubscribers), so a
-	// chatty run could bury the one event we're waiting for.
+	maxCallWait      = 60 * time.Second
 	callPollInterval = 2 * time.Second
 	// callNodeRecordLimit bounds the per-poll node-record read. A graph
 	// larger than this is past the node ceiling anyway.
 	callNodeRecordLimit = 1000
 )
 
-// handleCall serves POST /call/<tenant>/<workspace>/<graph-id>.
-//
-//	200 (or the Reply step's status) + the Reply body, once a Reply runs
-//	200/502 + {run_id, status} when the run ends without reaching a Reply
-//	202 + {run_id, status} when the wait elapses first — the run continues
-//	401 on an unknown endpoint or a bad key, 403 when the flow is paused
-//
-// The key comes from Authorization: Bearer or ?key=, and a step the author
-// marked public needs neither.
 func (w *WebhookListener) handleCall(rw http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
@@ -80,16 +63,11 @@ func (w *WebhookListener) handleCall(rw http.ResponseWriter, r *http.Request) {
 	keys := core.GraphRequestSecrets(g)
 	switch {
 	case len(keys) > 0:
-		// webhookKey reads the header first, then ?key= — a caller that can
-		// set neither has nowhere to put a key at all.
 		if !anyKeyMatches(keys, webhookKey(r)) {
 			http.Error(rw, unauthorized, http.StatusUnauthorized)
 			return
 		}
 	case core.GraphRequestPublic(g):
-		// Open by the author's explicit choice. Worth more thought here than
-		// on /trigger: this endpoint answers, so an open one publishes the
-		// flow's Reply to anyone holding the address.
 	default:
 		http.Error(rw, unauthorized, http.StatusUnauthorized)
 		return
@@ -157,15 +135,11 @@ func (w *WebhookListener) handleCall(rw http.ResponseWriter, r *http.Request) {
 		writeCallPending(rw, runID)
 		return
 	}
-	// The response is captured only to cache it; it still streams to the
-	// caller as it is written.
 	cw := &captureWriter{ResponseWriter: rw, headers: http.Header{}}
 	w.awaitReply(cw, r, g, runID, wait)
 	claim.commit(cw)
 }
 
-// readCallBody reads the request body under MaxBodyBytes, answering the
-// caller itself on failure. ok is false once a response has been written.
 func (w *WebhookListener) readCallBody(rw http.ResponseWriter, r *http.Request) ([]byte, bool) {
 	if r.Body == nil {
 		return nil, true
@@ -183,12 +157,6 @@ func (w *WebhookListener) readCallBody(rw http.ResponseWriter, r *http.Request) 
 	return data, true
 }
 
-// awaitReply holds the connection until a Reply step answers, the run ends,
-// or the wait elapses.
-//
-// It subscribes AFTER the submit (the bus is keyed by run id, which doesn't
-// exist before), so it polls the store once immediately to catch a run that
-// finished in between, and on a ticker in case the bus dropped an event.
 func (w *WebhookListener) awaitReply(rw http.ResponseWriter, r *http.Request, g core.Graph, runID string, wait time.Duration) {
 	replies := map[string]core.Node{}
 	for _, n := range g.Nodes {
@@ -206,8 +174,6 @@ func (w *WebhookListener) awaitReply(rw http.ResponseWriter, r *http.Request, g 
 	ticker := time.NewTicker(callPollInterval)
 	defer ticker.Stop()
 
-	// check gates the store read: only a reply landing, the run ending, or the
-	// safety-net tick is worth re-reading for.
 	check := true
 	for {
 		if check {
@@ -219,7 +185,6 @@ func (w *WebhookListener) awaitReply(rw http.ResponseWriter, r *http.Request, g 
 		select {
 		case ev, open := <-events:
 			if !open {
-				// Subscription gone — the ticker carries the wait alone.
 				events = nil
 				check = true
 				continue
@@ -231,15 +196,11 @@ func (w *WebhookListener) awaitReply(rw http.ResponseWriter, r *http.Request, g 
 			writeCallPending(rw, runID)
 			return
 		case <-ctx.Done():
-			// The caller hung up. The run keeps going — a reply nobody reads
-			// is not a reason to abandon the work.
 			return
 		}
 	}
 }
 
-// callEventSettles reports whether a bus event could have changed the answer:
-// a Reply step finishing, or the run reaching its end.
 func callEventSettles(ev BusEvent, replies map[string]core.Node) bool {
 	if ev.Terminal != nil {
 		return true
@@ -251,8 +212,6 @@ func callEventSettles(ev BusEvent, replies map[string]core.Node) bool {
 	return isReply
 }
 
-// settleCall checks whether the run can answer yet, writing the response when
-// it can. done is true once something has been written.
 func (w *WebhookListener) settleCall(ctx context.Context, rw http.ResponseWriter, runID string, replies map[string]core.Node) bool {
 	if len(replies) > 0 {
 		recs, err := w.svc.Jobs.ListNodeRecords(ctx, core.ListNodeRecordsOpts{
@@ -276,8 +235,6 @@ func (w *WebhookListener) settleCall(ctx context.Context, rw http.ResponseWriter
 	if err != nil || !core.IsTerminalStatus(run.Status) {
 		return false
 	}
-	// The run ended without reaching a Reply — a branch that skipped it, or a
-	// flow that has none. The caller still needs to know what happened.
 	status := http.StatusOK
 	if run.Status != core.JobStatusSucceeded {
 		status = http.StatusBadGateway
@@ -290,8 +247,6 @@ func (w *WebhookListener) settleCall(ctx context.Context, rw http.ResponseWriter
 	return true
 }
 
-// writeReply sends the Reply step's value verbatim: text as text, anything
-// structured as JSON.
 func writeReply(rw http.ResponseWriter, status int, ref core.Ref) {
 	mime := ref.MIME
 	if mime == "" {
@@ -318,8 +273,6 @@ func writeReply(rw http.ResponseWriter, status int, ref core.Ref) {
 	_, _ = rw.Write(payload)
 }
 
-// writeCallPending is the answer when the wait elapsed (or was declined):
-// the run is still going, and the caller can follow it by run id.
 func writeCallPending(rw http.ResponseWriter, runID string) {
 	writeJSON(rw, http.StatusAccepted, map[string]string{"run_id": runID, "status": "running"})
 }
@@ -341,13 +294,11 @@ func callWait(r *http.Request) time.Duration {
 	return maxCallWait
 }
 
-// ServeCallForTest dispatches a request to the /call handler without binding
-// a real port.
 func ServeCallForTest(w *WebhookListener, rw http.ResponseWriter, r *http.Request) {
 	w.handleCall(rw, r)
 }
 
-// --- Idempotency-Key on /call ---------------------------------------------
+// Idempotency-Key on /call
 //
 // A caller whose client gave up at 10 seconds and retried is the case this
 // exists for: without a key that retry starts a SECOND run, and the flow's
@@ -359,7 +310,6 @@ func ServeCallForTest(w *WebhookListener, rw http.ResponseWriter, r *http.Reques
 // valid key for one flow shares that flow's key namespace, which is the same
 // trust boundary as being able to call it at all.
 
-// callClaim is one request's ownership of an Idempotency-Key.
 type callClaim struct {
 	store *idempotencyStore
 	key   string
@@ -473,9 +423,6 @@ func (w *WebhookListener) claimCall(
 	return nil, true
 }
 
-// callRequestHash binds a key to the request that minted it: method, path and
-// body. The query string is deliberately excluded so the same call retried
-// with a different ?wait is the same request, not a reuse.
 func callRequestHash(r *http.Request, rawBody []byte) string {
 	sum := sha256.New()
 	sum.Write([]byte(r.Method))

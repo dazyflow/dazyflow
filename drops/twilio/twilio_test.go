@@ -88,7 +88,6 @@ func TestSendSMS_Success(t *testing.T) {
 
 func TestSendSMS_MessagingServicePrecedence(t *testing.T) {
 	f := newFakeTwilio(t)
-	// Both from and messaging_service_sid set → the service wins, From omitted.
 	res := f.run(t, map[string]any{
 		"to":                    "+15558675309",
 		"from":                  "+15551234567",
@@ -149,7 +148,6 @@ func TestSendSMS_APIErrorSurfacesMessage(t *testing.T) {
 }
 
 func TestSendSMS_MissingCredsIsFriendly(t *testing.T) {
-	// resolveCreds runs before the network call: blank account_sid → bad_param.
 	res, err := executeSendSMS(context.Background(), core.Job{
 		ID:     "j1",
 		Params: map[string]any{"auth_token": "t", "to": "+1", "from": "+1", "body": "x"},
@@ -162,8 +160,6 @@ func TestSendSMS_MissingCredsIsFriendly(t *testing.T) {
 	}
 }
 
-// TestSendSMS_NonTextInputsRejected covers executeSendSMS's two bad_input
-// branches: a non-text value wired into the To or Body port.
 func TestSendSMS_NonTextInputsRejected(t *testing.T) {
 	f := newFakeTwilio(t)
 	cases := []struct {
@@ -184,8 +180,6 @@ func TestSendSMS_NonTextInputsRejected(t *testing.T) {
 	}
 }
 
-// TestSendSMS_HTTPError covers the twilio_http_error branch: an unroutable base
-// URL makes net.Do return a transport error.
 func TestSendSMS_HTTPError(t *testing.T) {
 	res, err := executeSendSMS(context.Background(), core.Job{
 		ID: "j1",
@@ -204,8 +198,6 @@ func TestSendSMS_HTTPError(t *testing.T) {
 	}
 }
 
-// TestSendSMS_NoSIDInResponse covers the "Twilio response had no message sid"
-// branch: a 2xx body that is valid JSON but lacks a sid.
 func TestSendSMS_NoSIDInResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "queued"}) // no "sid"
@@ -230,8 +222,6 @@ func TestSendSMS_NoSIDInResponse(t *testing.T) {
 	}
 }
 
-// TestSendSMS_ZeroTimeoutDefaults covers twilioDo's timeout_ms<=0 → default
-// branch while completing a successful send.
 func TestSendSMS_ZeroTimeoutDefaults(t *testing.T) {
 	f := newFakeTwilio(t)
 	res := f.run(t, map[string]any{"to": "+1", "from": "+2", "body": "hi", "timeout_ms": 0}, nil)
@@ -240,8 +230,6 @@ func TestSendSMS_ZeroTimeoutDefaults(t *testing.T) {
 	}
 }
 
-// TestSetHTTPBase covers SetHTTPBase + baseURL: the override takes effect for a
-// job that doesn't set base_url itself, and is restored afterwards.
 func TestSetHTTPBase(t *testing.T) {
 	orig := baseURL(core.Job{Params: map[string]any{}})
 	SetHTTPBase("https://override.twilio.test")
@@ -250,13 +238,11 @@ func TestSetHTTPBase(t *testing.T) {
 	if got := baseURL(core.Job{Params: map[string]any{}}); got != "https://override.twilio.test" {
 		t.Errorf("baseURL = %q, want override", got)
 	}
-	// A per-job base_url still wins over the global override.
 	if got := baseURL(core.Job{Params: map[string]any{"base_url": "https://job.twilio.test"}}); got != "https://job.twilio.test" {
 		t.Errorf("per-job base_url should win: %q", got)
 	}
 }
 
-// TestResolveCreds covers both creds present and a missing-creds error.
 func TestResolveCreds(t *testing.T) {
 	sid, tok, err := resolveCreds(core.Job{Params: map[string]any{"account_sid": "AC", "auth_token": "tk"}})
 	if err != nil || sid != "AC" || tok != "tk" {
@@ -267,7 +253,6 @@ func TestResolveCreds(t *testing.T) {
 	}
 }
 
-// TestExtractTwilioError covers the error-body extraction wrapper.
 func TestExtractTwilioError(t *testing.T) {
 	got := extractTwilioError([]byte(`{"code":21211,"message":"The 'To' number is not a valid phone number."}`))
 	if !strings.Contains(got, "not a valid phone number") {

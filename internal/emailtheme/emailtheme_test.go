@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// TestRender_FullContent exercises every optional block in the template:
-// logo URL, eyebrow, facts, button, outro, footer override, danger tone.
 func TestRender_FullContent(t *testing.T) {
 	html, err := Render(Content{
 		Subject:    "Run failed",
@@ -43,8 +41,6 @@ func TestRender_FullContent(t *testing.T) {
 	}
 }
 
-// TestRender_Minimal exercises the fallback branches: inline SVG logo (no
-// LogoURL), default footer, default tone, no eyebrow/facts/button/outro.
 func TestRender_Minimal(t *testing.T) {
 	html, err := Render(Content{
 		Subject: "Welcome",
@@ -64,7 +60,6 @@ func TestRender_Minimal(t *testing.T) {
 	}
 }
 
-// TestRender_EscapesUserText confirms caller text is HTML-escaped.
 func TestRender_EscapesUserText(t *testing.T) {
 	html, err := Render(Content{
 		Subject: "Hi",

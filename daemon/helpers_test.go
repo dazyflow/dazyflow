@@ -31,11 +31,9 @@ func TestGoogleStateRoundTrip(t *testing.T) {
 		!st.Test || st.Binding != "bind-nonce" {
 		t.Fatalf("state = %+v", st)
 	}
-	// Single-use: a second consume misses.
 	if _, ok := api.consumeGoogleState(ctx, s); ok {
 		t.Fatal("state consumable twice")
 	}
-	// Unknown state misses.
 	if _, ok := api.consumeGoogleState(ctx, "deadbeef"); ok {
 		t.Fatal("unknown state found")
 	}
@@ -139,15 +137,12 @@ func TestSignInRedirectURL(t *testing.T) {
 	h := newGatewayHarness(t)
 	r := httptest.NewRequest("GET", "https://apex.example.com/api/v1/auth/google/callback", nil)
 
-	// No host tracked -> path unchanged.
 	if got := h.gw.authAPI().signInRedirectURL(r, googleSignInState{}, "/dash"); got != "/dash" {
 		t.Errorf("no host = %q, want /dash", got)
 	}
-	// Same host -> path unchanged.
 	if got := h.gw.authAPI().signInRedirectURL(r, googleSignInState{Host: "apex.example.com"}, "/dash"); got != "/dash" {
 		t.Errorf("same host = %q, want /dash", got)
 	}
-	// Different host -> absolute URL on the start host. Request is TLS so https.
 	got := h.gw.authAPI().signInRedirectURL(r, googleSignInState{Host: "org.example.com"}, "/dash")
 	if got != "https://org.example.com/dash" {
 		t.Errorf("cross host = %q, want https://org.example.com/dash", got)
@@ -184,7 +179,6 @@ func TestRedactionHelpers(t *testing.T) {
 		t.Errorf("list scalar altered: %+v", list)
 	}
 
-	// redactValueDeep on a bare scalar passes through.
 	if redactValueDeep(42) != 42 {
 		t.Error("redactValueDeep scalar changed")
 	}

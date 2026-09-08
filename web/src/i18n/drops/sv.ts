@@ -13,7 +13,6 @@ import {
 import type { Vocabulary } from "../../lib/dropText";
 
 
-// ---------------------------------------------------------------------------
 // Localized drop vocabulary.
 //
 // The catalog is authored in English on the Go side and stays that way: it is
@@ -86,17 +85,12 @@ export const SV_LABELS: Record<string, string> = {
   Request: "Förfrågan",
   "Reusable flow": "Återanvändbart flöde",
   "Route rows": "Dirigera rader",
-  // "Runner" is "körnod" throughout the UI (see the runners.* block in
-  // sv.json); the step names the machine, not the agent process.
   "Run on your machine": "Kör på din maskin",
   Schedule: "Schema",
   Secrets: "Hemligheter",
   "SMHI Weather": "SMHI Väder",
   "Sort rows": "Sortera rader",
   "Split rows": "Dela rader",
-  // A multiway conditional. "Switch" reads as an electrical switch to a
-  // non-technical Swedish user, and the Home Assistant switch entity is
-  // already called that — "Flerval" says multiple-choice instead.
   Switch: "Flerval",
   "Upload a file": "Ladda upp en fil",
   "Wait for approval": "Vänta på godkännande",
@@ -121,7 +115,6 @@ export const SV_SUBTITLES: Record<string, string> = {
   "Cancel event": "Avboka händelse",
   "Cancel subscription": "Avsluta prenumeration",
   "Capture order": "Debitera order",
-  // Git's subtitle, not a payment page — the version-control sense.
   Checkout: "Checka ut",
   "Checksum or HMAC a value": "Kontrollsumma eller HMAC av ett värde",
   Classify: "Klassificera",
@@ -390,8 +383,6 @@ export const SV_PORTS: Record<string, string> = {
   "Page body": "Sidans innehåll",
   Pages: "Sidor",
   Parts: "Delar",
-  // Matches the existing nodeCard.passThrough copy in sv.json, which already
-  // calls this "Genomströmning" — one word for one concept.
   "Pass-through": "Genomströmning",
   "Password-protected": "Lösenordsskyddad",
   Path: "Sökväg",

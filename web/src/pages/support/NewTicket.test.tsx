@@ -98,7 +98,6 @@ describe("New ticket modal", () => {
     });
   });
 
-  // A failed run makes the bundle far more useful, so it rides along.
   it("attaches the most recent failed run of the picked flow", async () => {
     listRuns.mockResolvedValue({
       runs: [{ id: "run-9", graph_id: "daily-invoice", status: "failed", enqueued_at: "2026-07-01T09:00:00Z" }],
@@ -130,7 +129,6 @@ describe("New ticket modal", () => {
     expect(createTicket.mock.calls[0][1].run_id).toBeUndefined();
   });
 
-  // No flows means the picker is noise, so it stays hidden.
   it("hides the picker when the workspace has no flows", async () => {
     listGraphs.mockResolvedValue({ graphs: [] });
     render(

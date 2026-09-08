@@ -12,9 +12,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// seedSqliteQueryDB creates a small mixed-type table for the query
-// tests. Uses STRICT mode off so SQLite's permissive typing applies,
-// matching what users will get from sqlite_insert_rows by default.
 func seedSqliteQueryDB(t *testing.T, root, path string, rows [][]any) {
 	t.Helper()
 	db, err := sql.Open("sqlite", filepath.Join(root, path))
@@ -101,7 +98,6 @@ func TestSQLiteQuery_TypedValues(t *testing.T) {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
 	}
 	row := res.Output["rows"].Inline.([]map[string]any)[0]
-	// modernc/sqlite returns INTEGER as int64, REAL as float64.
 	if v, ok := row["id"].(int64); !ok || v != 42 {
 		t.Errorf("id = %T %v, want int64(42)", row["id"], row["id"])
 	}
@@ -217,7 +213,6 @@ func TestSQLiteQuery_PathTraversalBlocked(t *testing.T) {
 }
 
 func TestSQLiteQuery_MissingFile(t *testing.T) {
-	// File doesn't exist → io error from the sandbox probe.
 	root := t.TempDir()
 	res, _ := executeSQLiteQuery(t.Context(), core.Job{
 		WorkspaceRoot: root,

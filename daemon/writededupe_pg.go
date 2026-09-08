@@ -40,8 +40,6 @@ type PgWriteDedupeStore struct {
 // prunes expired rows; Get also treats a stale row as absent as a backstop.
 const pgWriteDedupeTTL = time.Hour
 
-// pgWriteDedupeSweepInterval is how often expired rows are pruned. The TTL is
-// the correctness boundary; the sweep just bounds table growth.
 const pgWriteDedupeSweepInterval = 10 * time.Minute
 
 const pgWriteDedupeSchema = `
@@ -53,12 +51,10 @@ CREATE TABLE IF NOT EXISTS write_dedupe (
 CREATE INDEX IF NOT EXISTS write_dedupe_stored_at_idx ON write_dedupe (stored_at);
 `
 
-// EnsurePgWriteDedupeSchema creates the write_dedupe table. Idempotent.
 func EnsurePgWriteDedupeSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return pgstore.ApplySchema(ctx, pool, pgWriteDedupeSchema)
 }
 
-// NewPgWriteDedupeStore creates the schema and starts the background TTL sweep.
 func NewPgWriteDedupeStore(ctx context.Context, pool *pgxpool.Pool) (*PgWriteDedupeStore, error) {
 	if err := EnsurePgWriteDedupeSchema(ctx, pool); err != nil {
 		return nil, err
@@ -72,8 +68,6 @@ func NewPgWriteDedupeStore(ctx context.Context, pool *pgxpool.Pool) (*PgWriteDed
 	return s, nil
 }
 
-// Get returns the recorded successful result for key, or false. A DB error or a
-// stale row both read as absent so the worker re-runs (at-least-once holds).
 func (s *PgWriteDedupeStore) Get(ctx context.Context, key string) (core.Result, bool) {
 	var (
 		blob     []byte
@@ -97,8 +91,6 @@ func (s *PgWriteDedupeStore) Get(ctx context.Context, key string) (core.Result, 
 	return result, true
 }
 
-// Put records a successful result for key. Best-effort and first-writer-wins:
-// a failed insert just means a re-execution re-fires, which is the contract.
 func (s *PgWriteDedupeStore) Put(ctx context.Context, key string, result core.Result) {
 	blob, err := json.Marshal(result)
 	if err != nil {

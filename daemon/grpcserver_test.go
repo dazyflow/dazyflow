@@ -29,12 +29,9 @@ import (
 )
 
 type harness struct {
-	conn *grpc.ClientConn
-	stop func()
-	key  string
-	// svc lets tests seed Jobs directly when exercising paths that
-	// can't be set up over the wire (e.g. cancelling a "running"
-	// graph without actually waiting for an executing node).
+	conn      *grpc.ClientConn
+	stop      func()
+	key       string
 	svc       *daemon.Service
 	principal core.Principal
 }
@@ -134,7 +131,6 @@ func TestGRPC_SaveListLoadRun(t *testing.T) {
 	ctx, cancel := h.ctxWithAuth(t)
 	defer cancel()
 
-	// Save
 	saveResp, err := gs.SaveGraph(ctx, &controlpb.SaveGraphRequest{Graph: &controlpb.Graph{
 		Id: "demo", Tenant: "acme", Workspace: "ws1",
 		Nodes: []*controlpb.Node{
@@ -148,7 +144,6 @@ func TestGRPC_SaveListLoadRun(t *testing.T) {
 		t.Error("expected commit hash")
 	}
 
-	// List
 	listResp, err := gs.ListGraphs(ctx, &controlpb.ListGraphsRequest{Tenant: "acme", Workspace: "ws1"})
 	if err != nil {
 		t.Fatalf("ListGraphs: %v", err)
@@ -157,7 +152,6 @@ func TestGRPC_SaveListLoadRun(t *testing.T) {
 		t.Errorf("graphs = %v", listResp.GraphIds)
 	}
 
-	// Load
 	loadResp, err := gs.LoadGraph(ctx, &controlpb.LoadGraphRequest{
 		Tenant: "acme", Workspace: "ws1", GraphId: "demo",
 	})
@@ -168,7 +162,6 @@ func TestGRPC_SaveListLoadRun(t *testing.T) {
 		t.Errorf("graph = %+v", loadResp.Graph)
 	}
 
-	// Run via embedded graph
 	stream, err := gs.RunGraph(ctx, &controlpb.RunGraphRequest{Graph: loadResp.Graph})
 	if err != nil {
 		t.Fatalf("RunGraph: %v", err)
@@ -199,7 +192,6 @@ func TestGRPC_SaveListLoadRun(t *testing.T) {
 		t.Errorf("status = %q", finalStatus)
 	}
 
-	// Job lookup
 	rec, err := js.GetJob(ctx, &controlpb.GetJobRequest{JobId: jobID})
 	if err != nil {
 		t.Fatalf("GetJob: %v", err)
@@ -299,9 +291,6 @@ func TestGRPC_RunGraphByRef(t *testing.T) {
 	}
 }
 
-// TestGRPC_CancelJob exercises the new CancelJob RPC end to end:
-// seed a fake running graph run, cancel via gRPC, verify the
-// graph-record + every node-record flip to Cancelled.
 func TestGRPC_CancelJob(t *testing.T) {
 	t.Parallel()
 	// No worker: CancelJob is a control-plane record transition. A running
@@ -315,9 +304,6 @@ func TestGRPC_CancelJob(t *testing.T) {
 	ctx, cancel := h.ctxWithAuth(t)
 	defer cancel()
 
-	// Save a real graph and seed a "live" graph-record + one queued
-	// node-record. Mirrors the unit-test fixture in daemon/cancel_test.go
-	// but driven through the gRPC plane.
 	g := core.Graph{
 		ID: "f1", Tenant: "acme", Workspace: "ws1",
 		Visibility: core.VisibilityOrg,
@@ -371,7 +357,6 @@ func TestGRPC_CancelJob(t *testing.T) {
 		}
 	}
 
-	// Already-terminal: second CancelJob comes back as FailedPrecondition.
 	_, err := js.CancelJob(ctx, &controlpb.CancelJobRequest{JobId: "run-1"})
 	if err == nil {
 		t.Fatal("expected error on second cancel")
@@ -380,7 +365,6 @@ func TestGRPC_CancelJob(t *testing.T) {
 		t.Errorf("code = %v, want FailedPrecondition", st.Code())
 	}
 
-	// Missing run-id: NotFound.
 	_, err = js.CancelJob(ctx, &controlpb.CancelJobRequest{JobId: "nonexistent"})
 	if err == nil {
 		t.Fatal("expected error on missing run")
@@ -433,14 +417,13 @@ func TestGRPC_ListModules(t *testing.T) {
 	}
 }
 
-// TestRunGraph_ClosesProgressOnSubmitError pins the contract the gRPC
-// RunGraph handler depends on: Service.RunGraph closes the progress channel
-// on *every* return path, including an early submit error before the engine
-// runs. The handler's forwarding goroutine ranges over that channel and the
-// handler blocks on <-sendDone until the range ends — if RunGraph could
-// return without closing, the forwarder would leak and the RPC would
-// deadlock. A cross-tenant graph fails authz in SubmitGraph, exercising the
-// pre-engine error path.
+// Pins the contract the gRPC RunGraph handler depends on: Service.RunGraph
+// closes the progress channel on *every* return path, including an early
+// submit error before the engine runs. The handler's forwarding goroutine
+// ranges over that channel and the handler blocks on <-sendDone until the
+// range ends — if RunGraph could return without closing, the forwarder would
+// leak and the RPC would deadlock. A cross-tenant graph fails authz in
+// SubmitGraph, exercising the pre-engine error path.
 func TestRunGraph_ClosesProgressOnSubmitError(t *testing.T) {
 	t.Parallel()
 	h := newHarnessOpts(t, false)
@@ -460,7 +443,6 @@ func TestRunGraph_ClosesProgressOnSubmitError(t *testing.T) {
 	select {
 	case _, ok := <-progress:
 		if ok {
-			// Drained an event but channel still open: keep reading until close.
 			for range progress {
 			}
 		}
@@ -469,19 +451,14 @@ func TestRunGraph_ClosesProgressOnSubmitError(t *testing.T) {
 	}
 }
 
-// sanity: the error mapping uses the wrapped err's Is chain
 func TestGRPC_ToStatus_WrapsUnauthorized(t *testing.T) {
 	t.Parallel()
-	// Direct check that ErrUnauthorized round-trips through PermissionDenied.
-	// Lives here to keep package-level wiring documented.
 	err := errors.Join(core.ErrUnauthorized, errors.New("missing perm"))
 	if !errors.Is(err, core.ErrUnauthorized) {
 		t.Fatal("errors.Join lost the sentinel")
 	}
 }
 
-// TestGRPC_PromoteGraph covers the gRPC PromoteGraph handler: save a graph,
-// then promote HEAD into the published environment.
 func TestGRPC_PromoteGraph(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -504,7 +481,6 @@ func TestGRPC_PromoteGraph(t *testing.T) {
 	}
 }
 
-// TestGRPC_PromoteGraph_UnknownGraph covers the error path (toStatus mapping).
 func TestGRPC_PromoteGraph_UnknownGraph(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -521,8 +497,6 @@ func TestGRPC_PromoteGraph_UnknownGraph(t *testing.T) {
 	}
 }
 
-// TestGRPC_ListJobsForGraph covers the gRPC ListJobsForGraph handler after a
-// run has produced a job record for the graph.
 func TestGRPC_ListJobsForGraph(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -541,7 +515,6 @@ func TestGRPC_ListJobsForGraph(t *testing.T) {
 	}
 	_ = saveResp
 
-	// Run it to completion so there's a job record.
 	stream, err := gs.RunGraph(ctx, &controlpb.RunGraphRequest{
 		Tenant: "acme", Workspace: "ws1", GraphId: "jobs1",
 	})
@@ -565,7 +538,6 @@ func TestGRPC_ListJobsForGraph(t *testing.T) {
 	}
 }
 
-// TestGRPC_ListJobsForGraph_Empty covers the no-jobs path (empty result).
 func TestGRPC_ListJobsForGraph_Empty(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -576,7 +548,6 @@ func TestGRPC_ListJobsForGraph_Empty(t *testing.T) {
 
 	resp, err := js.ListJobsForGraph(ctx, &controlpb.ListJobsForGraphRequest{GraphId: "never-ran"})
 	if err != nil {
-		// A clean empty listing is also acceptable; only a non-permission error fails.
 		if status.Code(err) == codes.PermissionDenied {
 			t.Fatalf("unexpected permission error: %v", err)
 		}

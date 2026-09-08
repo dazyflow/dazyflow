@@ -5,9 +5,6 @@ import { describe, expect, it } from "vitest";
 import { expandToken, scoreDrop } from "./dropSearch";
 import type { Manifest } from "../types";
 
-// A slice of the real catalog — labels, subtitles, integrations and tags
-// copied verbatim from the live /drops response, so a passing test means the
-// alias actually lands on the shipped manifest text.
 function drop(
   id: string,
   label: string,
@@ -83,7 +80,6 @@ function ranked(query: string): string[] {
 }
 
 describe("Swedish queries reach the English catalog", () => {
-  // The Marina walkthrough's three dead ends, which returned 0 hits.
   it.each([
     ["schema", "cron_trigger"],
     ["e-post", "email_send"],
@@ -142,9 +138,6 @@ describe("Swedish queries reach the English catalog", () => {
   });
 
   it("matches every token in a multi-word Swedish query", () => {
-    // Both send-email drops satisfy "skicka mejl"; either may lead (Email's
-    // label is an exact hit on the alias, Gmail's is a tag hit), so the
-    // contract is that they take the top two rows.
     expect(ranked("skicka mejl").slice(0, 2).sort()).toEqual([
       "email_send",
       "gmail_send_email",
@@ -191,8 +184,6 @@ describe("English ranking is unchanged", () => {
 });
 
 describe("searching the localized names", () => {
-  // The palette passes the text the reader SEES; a Swedish user types what is
-  // on the row, which may not be in the alias table at all.
   const sv = (id: string, label: string, subtitle = "") => {
     const d = CATALOG.find((x) => x.id === id)!;
     return { drop: d, localized: { label, subtitle } };
@@ -201,8 +192,6 @@ describe("searching the localized names", () => {
   it("matches a translated label the alias table never mentions", () => {
     const { drop: d, localized } = sv("await_approval", "Vänta på godkännande");
     expect(scoreDrop(d, "vänta", localized)).toBeGreaterThan(0);
-    // Same query without the localized text only lands via the alias table, so
-    // this is really testing the localized surface.
     expect(scoreDrop(d, "vänta på godkännande", localized)).toBeGreaterThan(
       scoreDrop(d, "vänta på godkännande"),
     );

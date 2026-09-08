@@ -27,7 +27,6 @@ func testEncryptedSecrets(t *testing.T) *EncryptedSecrets {
 	return es
 }
 
-// testSSHKeyPEM generates a fresh, unencrypted OpenSSH ed25519 private key.
 func testSSHKeyPEM(t *testing.T) string {
 	t.Helper()
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -47,7 +46,6 @@ func TestGitCredential_RoundTrip(t *testing.T) {
 	ctx := core.WithTenant(t.Context(), "acme")
 	keyPEM := testSSHKeyPEM(t)
 
-	// An SSH-only credential, an HTTPS-PAT-only credential, and one with both.
 	if err := putGitCredential(ctx, es, "acme", "ssh-deploy", gitCredInput{PrivateKey: keyPEM, KnownHosts: "git.internal ssh-ed25519 AAAA"}); err != nil {
 		t.Fatalf("put ssh-deploy: %v", err)
 	}
@@ -85,7 +83,6 @@ func TestGitCredential_RoundTrip(t *testing.T) {
 		t.Errorf("both flags wrong: %+v", by["both"])
 	}
 
-	// Lookup returns the material; the key parses, the token round-trips.
 	rc, err := es.LookupGitCredential(ctx, "both")
 	if err != nil {
 		t.Fatalf("lookup: %v", err)
@@ -97,7 +94,6 @@ func TestGitCredential_RoundTrip(t *testing.T) {
 		t.Errorf("looked-up key doesn't parse: %v", perr)
 	}
 
-	// Hidden from the user-facing org secrets list.
 	names, err := es.ListScoped(ctx, "acme", "", ScopeTenant)
 	if err != nil {
 		t.Fatalf("ListScoped: %v", err)
@@ -108,7 +104,6 @@ func TestGitCredential_RoundTrip(t *testing.T) {
 		}
 	}
 
-	// Delete removes everything for the account.
 	if err := deleteGitCredential(ctx, es, "acme", "both"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
@@ -123,26 +118,19 @@ func TestGitCredential_Validation(t *testing.T) {
 	es := testEncryptedSecrets(t)
 	ctx := core.WithTenant(t.Context(), "acme")
 
-	// Neither key nor token → rejected.
 	if err := putGitCredential(ctx, es, "acme", "empty", gitCredInput{}); err == nil {
 		t.Errorf("expected error for a credential with no key and no token")
 	}
-	// Bad account name.
 	if err := putGitCredential(ctx, es, "acme", "bad name!", gitCredInput{Token: "x"}); err == nil {
 		t.Errorf("expected error for invalid account name")
 	}
-	// Garbage key.
 	if err := putGitCredential(ctx, es, "acme", "x", gitCredInput{PrivateKey: "not a key"}); err == nil {
 		t.Errorf("expected error for unparseable private key")
 	}
-	// Token-only is fine (PAT credential with no SSH key).
 	if err := putGitCredential(ctx, es, "acme", "patonly", gitCredInput{Token: "ghp_z"}); err != nil {
 		t.Errorf("token-only credential should be valid: %v", err)
 	}
 }
-
-// HTTP-handler branches of the /git/credentials endpoints: not-configured,
-// permission, decode, and validation errors.
 
 func TestGitCreds_NotConfigured(t *testing.T) {
 	t.Parallel()
@@ -162,7 +150,6 @@ func TestGitCreds_ForbiddenWithoutSecretPerm(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.EncryptedSecrets = testEncryptedSecrets(t)
-	// Default editor token lacks secret:read/write.
 	if rw := h.do(t, "GET", "/api/v1/git/credentials", nil); rw.Code != http.StatusForbidden {
 		t.Fatalf("list w/o perm = %d (%s), want 403", rw.Code, rw.Body.String())
 	}
@@ -189,7 +176,6 @@ func TestGitCreds_PutInvalidCredential(t *testing.T) {
 	t.Parallel()
 	h := newSecretsHarness(t)
 	h.gw.EncryptedSecrets = testEncryptedSecrets(t)
-	// Empty bundle (no key, no token) is invalid.
 	rw := h.do(t, "PUT", "/api/v1/git/credentials/acct", map[string]any{})
 	if rw.Code != http.StatusBadRequest {
 		t.Fatalf("put empty bundle = %d (%s), want 400", rw.Code, rw.Body.String())

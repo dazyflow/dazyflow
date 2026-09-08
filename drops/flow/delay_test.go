@@ -82,7 +82,6 @@ func TestDelay_MsFromInput(t *testing.T) {
 }
 
 func TestDelay_Passthrough(t *testing.T) {
-	// A value wired into the universal pass pin is forwarded on pass out.
 	res, err := executeDelay(t.Context(), core.Job{
 		Params: map[string]any{"ms": 10},
 		Input:  map[string]core.Ref{core.PassPort: {Ref: "x", MIME: "text/plain"}},
@@ -96,8 +95,6 @@ func TestDelay_Passthrough(t *testing.T) {
 }
 
 func TestDelay_EmitsControlSignalOnEmpty(t *testing.T) {
-	// Pure pause: nothing threaded in, but pass out still carries a control
-	// signal so a downstream node wired to it still fires.
 	res, err := executeDelay(t.Context(), core.Job{
 		Params: map[string]any{"ms": 10},
 	}, nil)
@@ -130,8 +127,6 @@ func TestDelay_RejectsAbsurdDurations(t *testing.T) {
 	}
 }
 
-// deferrableCtx is a context that looks like a worker's: a job record backs the
-// step, so it may hand its slot back. Without one a wait runs inline.
 func deferrableCtx(t *testing.T) context.Context {
 	t.Helper()
 	return core.WithNodeEnqueuedAt(t.Context(), time.Now())
@@ -154,9 +149,6 @@ func TestDelay_AcceptsTheCap(t *testing.T) {
 	}
 }
 
-// A wait past the inline threshold hands the worker slot back instead of
-// sleeping on it: the pool is serial and small, so a step that only waits used
-// to be able to stop every tenant's runs for as long as its author typed.
 func TestDelay_DefersLongWaits(t *testing.T) {
 	start := time.Now()
 	res, err := executeDelay(deferrableCtx(t), core.Job{
@@ -177,9 +169,6 @@ func TestDelay_DefersLongWaits(t *testing.T) {
 	}
 }
 
-// The deadline is anchored on when the step became due, not on when the
-// attempt started — so the re-execution after the horizon passes finds no time
-// left and completes, instead of restarting the wait on every hop.
 func TestDelay_ResumesFromTheEnqueueAnchor(t *testing.T) {
 	ctx := core.WithNodeEnqueuedAt(t.Context(), time.Now().Add(-time.Hour))
 	res, err := executeDelay(ctx, core.Job{
@@ -209,7 +198,6 @@ func TestDelay_DeclaredTimeoutStillBinds(t *testing.T) {
 	if res.Status != core.StatusError || res.Error == nil || res.Error.Code != "timeout" {
 		t.Errorf("status=%q err=%+v, want a timeout", res.Status, res.Error)
 	}
-	// A wait that fits inside the declared timeout still defers normally.
 	ctx = core.WithNodeTimeout(deferrableCtx(t), time.Hour)
 	res, _ = executeDelay(ctx, core.Job{Params: map[string]any{"ms": 30_000}}, nil)
 	if _, ok := core.ResumeAt(res); !ok {

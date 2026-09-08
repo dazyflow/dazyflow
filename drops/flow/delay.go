@@ -113,8 +113,6 @@ func executeDelay(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}
 	remaining := time.Until(deadline)
 	if remaining <= 0 {
-		// The horizon already passed — this is the re-execution after a
-		// deferral, or a zero wait.
 		params.EmitProgress(progress, job, 1.0, "done")
 		return core.Result{
 			JobID:  job.ID,
@@ -176,10 +174,6 @@ func executeDelay(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}
 }
 
-// resolveDelayMs reads the delay duration from the wired `ms` input when
-// connected, else from the `ms` param. Lets an upstream node compute the
-// wait dynamically (e.g. an exponential backoff) instead of a fixed literal.
-// Returns false when neither source supplies a usable number.
 func resolveDelayMs(job core.Job) (int, bool) {
 	if ref, ok := job.Input["ms"]; ok {
 		if n, ok := coerceInt(ref.Inline); ok {

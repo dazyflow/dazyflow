@@ -97,8 +97,6 @@ describe("AuthProvider bootstrap org reconciliation", () => {
 
     await waitFor(() => expect(switchOrg).toHaveBeenCalledWith("cookie", OTHER));
     await waitFor(() => expect(screen.getByTestId("active")).toHaveTextContent(OTHER));
-    // The re-scoped identity is adopted, so the rest of the app (and every
-    // scoped request) agrees with the server about which org it is in.
     expect(whoami).toHaveBeenCalledTimes(2);
   });
 

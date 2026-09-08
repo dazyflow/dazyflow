@@ -20,8 +20,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// workerHarness wires Service + Workers around in-memory storage. Workers
-// poll fast so tests don't sit waiting.
 type workerHarness struct {
 	svc       *daemon.Service
 	jobs      core.JobStore
@@ -107,10 +105,6 @@ func TestPerNode_LinearChain_ProgressesThroughDependencies(t *testing.T) {
 	}
 }
 
-// TestPerNode_TimeoutFailsTheNode uses the built-in sleep module to
-// guarantee a node exceeds its declared timeout. The node should land
-// in Failed with code=timeout — distinct enough from a generic
-// runtime error that dashboards can group on it.
 func TestPerNode_TimeoutFailsTheNode(t *testing.T) {
 	t.Parallel()
 	h := newWorkerHarness(t, 1)
@@ -146,7 +140,6 @@ func TestPerNode_DiamondSpreadsAcrossWorkers(t *testing.T) {
 	t.Parallel()
 	h := newWorkerHarness(t, 3)
 
-	// a feeds b and c (which can run in parallel), both feed merge d.
 	mergeMin := 1
 	_ = mergeMin // documentation; "merge" already requires variadic min via manifest
 	g := core.Graph{
@@ -173,16 +166,11 @@ func TestPerNode_DiamondSpreadsAcrossWorkers(t *testing.T) {
 		t.Fatalf("status = %q (err=%+v)", terminal.Status, terminal.Error)
 	}
 
-	// b and c should have executed on at least two distinct workers since
-	// they're independent and the harness has three.
 	bRec, _ := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, "b"))
 	cRec, _ := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, "c"))
 	if bRec.WorkerID == "" || cRec.WorkerID == "" {
 		t.Fatalf("nodes missing worker IDs: b=%q c=%q", bRec.WorkerID, cRec.WorkerID)
 	}
-	// Not strictly required by the algorithm (workers may happen to claim
-	// in sequence), but with 3 workers + 30ms node duration it's extremely
-	// likely; if this flakes it's worth investigating real serialization.
 	if bRec.WorkerID == cRec.WorkerID {
 		t.Logf("b and c happened to land on same worker %q; OK but rare", bRec.WorkerID)
 	}
@@ -255,14 +243,11 @@ func TestPerNode_NodesExecuteInDependencyOrder(t *testing.T) {
 
 func TestPerNode_LeaseExpiryAllowsReclaim(t *testing.T) {
 	t.Parallel()
-	// Manually enqueue a node-record, simulate a dead worker holding the
-	// claim, then start a real worker that should reclaim and finish it.
 	jobs := jobstore.NewMemory()
 	bus := daemon.NewMemoryBus()
 	eng := &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}}
 
 	graphRunID := "gr"
-	// Seed the graph-record manually so the worker can fetch it.
 	graphRec := core.JobRecord{
 		ID:           graphRunID,
 		Kind:         core.JobKindGraph,
@@ -298,7 +283,6 @@ func TestPerNode_LeaseExpiryAllowsReclaim(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	// Healthy worker reclaims after lease lapses.
 	wctx, wcancel := context.WithCancel(context.Background())
 	defer wcancel()
 	w := daemon.NewWorker(daemon.WorkerConfig{
@@ -364,8 +348,6 @@ func TestPerNode_EmptyGraphCompletesImmediately(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	// The graph-record is updated synchronously inside SubmitGraph for
-	// empty graphs; no need to wait on the bus.
 	rec, err := h.jobs.Get(t.Context(), graphRunID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -405,7 +387,6 @@ func TestPerNode_TerminalOnlyPublishedOnce(t *testing.T) {
 	defer linger.Stop()
 	for {
 		if terminalCount == 1 {
-			// Replace the long deadline with a short one to catch dupes.
 			linger.Reset(200 * time.Millisecond)
 		}
 		select {
@@ -454,9 +435,6 @@ func waitForTerminalEvent(t *testing.T, bus *daemon.MemoryBus, jobs core.JobStor
 	for {
 		select {
 		case <-deadline.C:
-			// Last-chance store peek before failing — covers the case
-			// where the worker finished AFTER subscribe but the bus
-			// publish dropped (e.g. channel full).
 			if jobs != nil {
 				if rec, err := jobs.Get(t.Context(), graphRunID); err == nil && core.IsTerminalStatus(rec.Status) {
 					return synthesizeTerminal(rec)
@@ -474,9 +452,6 @@ func waitForTerminalEvent(t *testing.T, bus *daemon.MemoryBus, jobs core.JobStor
 	}
 }
 
-// synthesizeTerminal builds a TerminalEvent from a JobRecord so tests
-// using the helper's store-fallback path get the same shape as a live
-// bus delivery.
 func synthesizeTerminal(rec core.JobRecord) daemon.TerminalEvent {
 	ev := daemon.TerminalEvent{
 		JobID:  rec.ID,
@@ -488,12 +463,8 @@ func synthesizeTerminal(rec core.JobRecord) daemon.TerminalEvent {
 	return ev
 }
 
-// silence linter if unused in some build configurations
 var _ = sync.OnceFunc
 
-// TestWorker_FailNodeWhenGraphUnloadable covers worker.failNode's nil-graph
-// branch: a node job whose graph-run record carries a corrupt payload can't be
-// loaded, so the node is failed and the run marked failed without a graph walk.
 func TestWorker_FailNodeWhenGraphUnloadable(t *testing.T) {
 	t.Parallel()
 	jobs := jobstore.NewMemory()
@@ -510,7 +481,6 @@ func TestWorker_FailNodeWhenGraphUnloadable(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed graph: %v", err)
 	}
-	// A node job referencing that run.
 	if err := jobs.Enqueue(t.Context(), core.JobRecord{
 		ID:         daemon.NodeJobID(graphRunID, "a"),
 		Kind:       core.JobKindNode,
@@ -542,12 +512,6 @@ func TestWorker_FailNodeWhenGraphUnloadable(t *testing.T) {
 	}
 }
 
-// A worker is a serial claim → process loop and the pool is small
-// (DAZYFLOW_WORKER_COUNT defaults to 2), so a step that only WAITS used to hold
-// one of the daemon's few execution slots for its whole duration — two of them
-// in one flow stopped every tenant's runs. A long wait now defers
-// (core.StatusDeferred): the worker requeues the node at its horizon and takes
-// other work, so the slot is free while the flow waits.
 func TestDeferredNode_ReleasesTheWorkerSlot(t *testing.T) {
 	t.Parallel()
 	h := newWorkerHarness(t, 1)
@@ -577,7 +541,6 @@ func TestDeferredNode_ReleasesTheWorkerSlot(t *testing.T) {
 			rec.Status, rec.AvailableAt)
 	}
 
-	// With the only worker free, an unrelated flow runs while the first waits.
 	other := core.Graph{
 		ID: "bystander", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{{ID: "a", Module: "text", Params: map[string]any{"text": "hi"}}},
@@ -594,7 +557,6 @@ func TestDeferredNode_ReleasesTheWorkerSlot(t *testing.T) {
 		t.Errorf("the bystander waited %v behind a waiting flow", waited)
 	}
 
-	// And the wait still finishes on its own once the horizon passes.
 	if got := waitForTerminalEvent(t, h.bus, h.jobs, waitRun, 15*time.Second); got.Status != core.JobStatusSucceeded {
 		t.Errorf("waiter status = %q, want succeeded", got.Status)
 	}

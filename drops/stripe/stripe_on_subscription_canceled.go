@@ -54,8 +54,6 @@ func init() {
 	})
 }
 
-// executeStripeOnSubscriptionCanceled is the standalone-execution path —
-// only called when a graph is run manually. Mirrors stripe_on_payment.
 func executeStripeOnSubscriptionCanceled(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	return core.Result{
 		JobID:  job.ID,

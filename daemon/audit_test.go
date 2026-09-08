@@ -34,7 +34,6 @@ func TestMemAuditLog_ScopesAndOrders(t *testing.T) {
 	if got[0].Action != "graph.run" { // newest first
 		t.Errorf("first = %q, want graph.run (newest)", got[0].Action)
 	}
-	// Pagination.
 	page := a.mustList(t, core.AuditQuery{Tenant: "acme", Limit: 1, Offset: 1})
 	if len(page) != 1 || page[0].Action != "graph.save" {
 		t.Errorf("page = %+v, want [graph.save]", page)
@@ -64,11 +63,9 @@ func TestAudit_EndpointRequiresAdmin(t *testing.T) {
 	h := newGatewayHarness(t)
 	h.gw.Audit = NewMemAuditLog()
 
-	// Editor (non-admin) token → 403.
 	if rw := h.do(t, "GET", "/api/v1/admin/audit", nil); rw.Code != http.StatusForbidden {
 		t.Fatalf("editor status = %d, want 403", rw.Code)
 	}
-	// organization:admin token → 200.
 	if rw := h.adminDo(t, "GET", "/api/v1/admin/audit", nil); rw.Code != http.StatusOK {
 		t.Fatalf("admin status = %d, want 200", rw.Code)
 	}
@@ -79,7 +76,6 @@ func TestAudit_GraphSaveEmitsEvent(t *testing.T) {
 	h := newGatewayHarness(t)
 	h.gw.Audit = NewMemAuditLog()
 
-	// Editor saves a graph (audited as actor=alice, tenant=t).
 	save := h.do(t, "PUT", "/api/v1/me/flows/t%2Fws%2Fmyflow", map[string]any{
 		"visibility": "org",
 		"nodes":      []map[string]any{{"id": "a", "module": "noop"}},
@@ -88,7 +84,6 @@ func TestAudit_GraphSaveEmitsEvent(t *testing.T) {
 		t.Fatalf("save status = %d: %s", save.Code, save.Body.String())
 	}
 
-	// Admin reads the trail and finds the graph.save event.
 	rw := h.adminDo(t, "GET", "/api/v1/admin/audit", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("audit status = %d", rw.Code)

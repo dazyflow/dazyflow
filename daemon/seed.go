@@ -12,20 +12,7 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// enqueueReadyDependents looks at every node downstream of completedNodeID
-// and, for each one whose predecessors are all already succeeded, writes
-// a queued node-record. Used by SubmitGraphWithSeed to kick off graph
-// execution when some root nodes start out pre-completed (e.g. a
-// webhook trigger seeded webhook_input).
-//
-// This is a deliberately simple version of the worker's full dispatch
-// logic — it doesn't cascade skips or handle fallback edges. Those
-// scenarios are correctly handled later when a worker completes a
-// regular node and triggers the engine's full dispatcher.
-// Returns how many records it queued.
 func enqueueReadyDependents(ctx context.Context, store core.JobStore, graph core.Graph, graphRunID, sourceNodeID string) int {
-	// Loop-body nodes run once per item under their for_each, never standalone,
-	// so the seed path must skip them just as the live dispatcher does.
 	bodyOwners := loopBodyOwners(graph)
 	dependents := map[string]struct{}{}
 	for _, e := range graph.Edges {
@@ -52,16 +39,11 @@ func enqueueReadyDependents(ctx context.Context, store core.JobStore, graph core
 			Job:        core.Job{GraphID: graph.ID, NodeID: nodeID},
 		})
 	}
-	// One write for the whole fan-out where the store can. On anything but
-	// success nothing was written, so the loop below still runs and still
-	// decides per record.
 	if n, ok := core.TryEnqueueNodes(ctx, store, ready); ok {
 		return n
 	}
 	var queued int
 	for _, rec := range ready {
-		// Idempotent: conflict means another path enqueued this node
-		// first, which is fine.
 		if err := store.Enqueue(ctx, rec); err == nil {
 			queued++
 		}
@@ -82,17 +64,6 @@ func allPredsSucceeded(ctx context.Context, store core.JobStore, graph core.Grap
 	return true
 }
 
-// SubmitGraphWithSeed is the trigger-fed variant of SubmitGraph. The
-// seeds map specifies nodes to pre-complete (status=succeeded with the
-// supplied result) — used by webhook triggers to deliver the request
-// body to webhook_input nodes.
-//
-// After creating the seed records, the helper enqueues their immediate
-// dependents whose predecessors are now all done. Normal worker
-// dispatch takes over from there.
-//
-// If a seed targets a node that doesn't exist in the graph, the call
-// fails before any state is written.
 func (s *Service) SubmitGraphWithSeed(
 	ctx context.Context,
 	p core.Principal,
@@ -102,42 +73,15 @@ func (s *Service) SubmitGraphWithSeed(
 	return s.SubmitGraphOpts(ctx, p, g, SubmitOpts{Seeds: seeds})
 }
 
-// SubmitOpts carries what a submission needs beyond the graph itself.
-//
-// A struct rather than more parameters because the two things in it are set by
-// different callers for different reasons, and every automatic trigger — the
-// scheduler, webhooks, forms — wants the zero value. Adding them as positional
-// arguments would have made eight call sites say "nil, false" to mean
-// "ordinary run".
+// What a submission needs beyond the graph.
 type SubmitOpts struct {
-	// Seeds pre-completes nodes: a webhook body, a form submission, the
-	// already-succeeded steps of a run being retried.
-	Seeds map[string]core.Result
-	// Manual marks a run a person started from the app and is watching. See
-	// core.JobRecord.Manual for what it changes and why it is persisted.
-	Manual bool
-	// TriggerDepth is how deep the trigger chain that reached this
-	// submission already is — set by the trigger endpoints from the inbound
-	// core.TriggerDepthHeader. See core.JobRecord.TriggerDepth.
+	Seeds        map[string]core.Result
+	Manual       bool
 	TriggerDepth int
 }
 
-// failSubmission marks a run failed when its own creation could not be
-// completed — the roots or the seeds would not enqueue.
-//
-// The Complete error used to be discarded here. It is the one that matters
-// most: whatever broke the enqueue (the store) is likely to break this write
-// too, and a graph record left `running` with no node work under it is a run
-// that can never finish and can never be reaped, because the completion check
-// finds no node records to declare done. It just sits in the Runs list as
-// running, for ever, holding a concurrency slot. So log it — an operator
-// chasing a stuck run needs the reason to exist somewhere.
-//
-// The failure notification is not fired here: the run is written failed, and
-// the sweep (SweepFailureNotifications) picks it up like any other. That is
-// the whole point of the sweep — this path used to fail the run BEFORE the
-// notifier was armed, so an enqueue failure, the most infrastructural failure
-// there is, was guaranteed to be silent.
+// A run whose creation half-succeeded must reach a terminal state, or it is
+// immortal: it holds a concurrency slot for ever and nothing notifies.
 func (s *Service) failSubmission(ctx context.Context, graphRunID string, g core.Graph, cause error, publish bool) {
 	jobErr := &core.JobError{Code: "enqueue_failed", Message: cause.Error()}
 	if err := s.Jobs.Complete(ctx, graphRunID, core.JobStatusFailed, &core.Result{
@@ -156,7 +100,6 @@ func (s *Service) failSubmission(ctx context.Context, graphRunID string, g core.
 	}
 }
 
-// SubmitGraphOpts is the one implementation the other two delegate to.
 func (s *Service) SubmitGraphOpts(
 	ctx context.Context,
 	p core.Principal,
@@ -167,12 +110,7 @@ func (s *Service) SubmitGraphOpts(
 	if err := core.AuthorizeGraphRun(p, g); err != nil {
 		return "", err
 	}
-	// Counting nodes and wires is O(1) per element and validating is not, so
-	// the size ceilings come first: an oversized graph is refused without
-	// being walked at all.
-	// Resource-exhaustion guard: refuse a graph whose node count exceeds
-	// the tenant's effective ceiling (tier/override, falling back to the
-	// global MaxGraphNodes) before allocating any run state.
+	// Cheap ceilings before the expensive validation.
 	if maxNodes := s.effectiveLimits(ctx, g.Tenant).MaxGraphNodes; maxNodes > 0 && len(g.Nodes) > maxNodes {
 		return "", fmt.Errorf("%w: graph has %d nodes, limit is %d",
 			core.ErrGraphTooLarge, len(g.Nodes), maxNodes)
@@ -181,49 +119,25 @@ func (s *Service) SubmitGraphOpts(
 		return "", fmt.Errorf("%w: graph has %d connections, limit is %d",
 			core.ErrGraphTooLarge, len(g.Edges), s.MaxGraphEdges)
 	}
-	// The full wiring gate, not just the structural one: the run path cannot
-	// honour a wiring the data model can't represent (a second wire into a
-	// single-value input silently wins), so a graph that reaches a worker has
-	// to have passed the same port rules the editor shows.
+	// The run path cannot honour a wiring it cannot represent.
 	if err := core.ValidateRuntime(g, s.manifestsSnapshot(g.Tenant)); err != nil {
 		return "", fmt.Errorf("invalid graph: %w", err)
 	}
 	if err := validateLoopBodies(g); err != nil {
 		return "", fmt.Errorf("invalid graph: %w", err)
 	}
-	// Plan gate (T3): free-tier tenants get FreeRunsPerMonth runs per
-	// calendar month; over the cap the submission is refused with
-	// core.ErrPlanLimit (HTTP 402 at the gateway) before any state is
-	// written. Applies to every entry point — manual Run, scheduler,
-	// webhook/form triggers — since they all pass through here. Nested
-	// sub-graph runs bypass it (submitGraphWithParent): their parent
-	// was already admitted, and stranding a mid-run graph would be
-	// worse than one over-cap child.
+	// Refused at submit, so a trigger is turned away rather than queued.
 	if err := s.checkRunQuota(ctx, g.Tenant); err != nil {
 		return "", err
 	}
-	// Concurrency admission is decided AFTER the record is created (below): a
-	// free tenant over its max_concurrency starts the run as pending (queued)
-	// rather than running, and the promotion sweep starts it when a slot frees.
-	// Platform-admin killswitch: a suspended org runs nothing. This is the
-	// authoritative halt — every run entry point (manual, scheduler,
-	// webhook/form trigger) funnels through here, including the inbound
-	// trigger paths that don't carry a user principal the auth gate could
-	// reject. Nested sub-graph runs bypass it for the same reason the plan
-	// gate does (the parent was already admitted).
 	if s.orgSuspended(ctx, g.Tenant) {
 		return "", core.ErrOrgSuspended
 	}
-	// Trigger-chain breaker: this run was set off by another run's step
-	// calling one of our own trigger URLs. Each such run is top-level, so
-	// the subgraph depth cap and fan-out budget — which walk parent links
-	// within one run tree — cannot see the cycle; refuse past the cap
-	// instead, before any state is written.
+	// A flow calling its own trigger URL would otherwise run for ever.
 	if opts.TriggerDepth >= core.MaxTriggerChainDepth {
 		return "", fmt.Errorf("%w: %d runs deep (max %d) — a flow is triggering itself",
 			core.ErrTriggerLoop, opts.TriggerDepth, core.MaxTriggerChainDepth)
 	}
-	// Validate seed targets exist in the graph before any state writes.
 	for nodeID := range seeds {
 		if _, ok := g.Node(nodeID); !ok {
 			return "", fmt.Errorf("seed targets node %q which is not in graph", nodeID)
@@ -239,24 +153,14 @@ func (s *Service) SubmitGraphOpts(
 		return "", fmt.Errorf("marshal graph: %w", err)
 	}
 
-	// Concurrency admission: a free tenant already at its max_concurrency
-	// running graph runs starts this one PENDING (queued) instead of running;
-	// the promotion sweep starts it when a slot frees. An empty graph completes
-	// instantly, so always admit it rather than stranding it in the queue.
-	// Pro/comped/trial and a 0 limit always admit.
 	admit := len(g.Nodes) == 0 || s.admitGraphRun(ctx, g.Tenant)
 	initialStatus := core.JobStatusQueued
 	if admit {
 		initialStatus = core.JobStatusRunning
 	}
 
-	// Authoritative run-cap gate + metering, atomic and JUST before enqueue:
-	// reserveRun counts one run iff the tenant is under its monthly cap. The
-	// earlier checkRunQuota is a fast read-path reject; this closes the
-	// check-then-increment race where concurrent submissions at the limit all
-	// passed the read. admitted=false → refuse before any state is written; a
-	// store error fails open (proceed). This REPLACES the old post-enqueue
-	// AddRun — reserveRun already metered the accepted run.
+	// Atomic and JUST before enqueue: a gap between the check and the increment lets
+	// two concurrent submissions both pass a cap with one slot left.
 	if s.Usage != nil {
 		if admitted, rerr := s.reserveRun(ctx, g.Tenant); rerr != nil {
 			if s.Logger != nil {
@@ -281,27 +185,11 @@ func (s *Service) SubmitGraphOpts(
 		Job:          core.Job{ID: graphRunID, GraphID: g.ID},
 	}
 	if err := s.Jobs.Enqueue(ctx, graphRec); err != nil {
-		// The run was metered a moment ago — the cap check and the increment
-		// have to be one atomic step, so the reservation necessarily precedes
-		// the write. This is the window where the write then fails, and
-		// without the release the tenant has paid a run out of its monthly
-		// allowance for something that exists nowhere: no record, no history,
-		// nothing to retry. (Past this point a failed submission DOES leave a
-		// visible failed run — see failSubmission — and being charged for that
-		// is fair.)
+		// Already metered above, so a failure here must release the reservation.
 		s.releaseRun(ctx, g.Tenant)
 		return "", fmt.Errorf("enqueue graph: %w", err)
 	}
 
-	// (Run metering happens in reserveRun above, before enqueue, so the cap
-	// gate and the count are a single atomic step. Nested sub-graph runs go
-	// through submitGraphWithParent and are deliberately NOT counted — their
-	// nodes still meter as node executions, and counting the child run too
-	// would double-bill one user action.)
-
-	// Pending (admission-deferred) run: persist its seeds now so the promoter
-	// can dispatch from them later, but enqueue no runnable work and arm no
-	// watchdog until it's promoted to running.
 	if !admit {
 		if errs := persistSeedsOnly(ctx, s.Jobs, g, graphRunID, seeds); len(errs) > 0 {
 			merged := errors.Join(errs...)
@@ -320,8 +208,6 @@ func (s *Service) SubmitGraphOpts(
 	}
 
 	queued, enqueueErrs := populateSeededRun(ctx, s.Jobs, g, graphRunID, seeds)
-	// Wake an idle worker now rather than leaving the run to be discovered on
-	// somebody's next poll: that wait is the whole of a small run's latency.
 	if queued > 0 {
 		s.Wake.Notify()
 	}
@@ -331,13 +217,6 @@ func (s *Service) SubmitGraphOpts(
 		return graphRunID, fmt.Errorf("enqueue roots: %w", merged)
 	}
 
-	// If the graph has no work left for workers (every node is already
-	// in a terminal record — happens when seeds cover the whole graph),
-	// finalize the graph-record now. Otherwise let workers drive the
-	// usual maybeCompleteGraph path.
-	// A record queued just now is work the run still owes, so the walk below
-	// can only confirm what we already know — at the cost of a read per
-	// submit on the path a person waits behind when they press Run.
 	if queued == 0 && allNodesAccountedFor(ctx, s.Jobs, g, graphRunID) {
 		final := &core.Result{Status: core.StatusOK}
 		if cerr := s.Jobs.Complete(ctx, graphRunID, core.JobStatusSucceeded, final); cerr == nil {
@@ -349,18 +228,12 @@ func (s *Service) SubmitGraphOpts(
 		return graphRunID, nil
 	}
 
-	// Arm the wall-time watchdog. The goroutine subscribes to the bus
-	// inside itself so a terminal event from the dispatcher exits it
-	// early; the timer is the safety net when nothing completes in time.
+	// Subscribes before returning, or a fast run finishes before anyone is watching.
 	s.startGraphTimeoutWatchdog(graphRunID, g.Tenant, g.Workspace, s.effectiveGraphTimeout(g))
 
 	return graphRunID, nil
 }
 
-// persistSeedsOnly writes the pre-completed node-records for every seeded node
-// and returns the set of node IDs it seeded. It enqueues NO runnable (root)
-// work — that's dispatchRoots. The split lets the concurrency admission queue
-// persist a pending run's seeds at submit and defer dispatch until promotion.
 func persistSeedsOnly(
 	ctx context.Context,
 	store core.JobStore,
@@ -394,14 +267,7 @@ func persistSeedsOnly(
 	return enqueueErrs
 }
 
-// dispatchRoots enqueues the runnable root node-records (no incoming edge, not
-// already seeded) and fans out from each already-seeded node. Call exactly once
-// when a run actually starts (immediately for admitted runs, or at promotion
-// for a pending one). seededNodeIDs reports which nodes carry pre-completed
-// seed records.
-// The queued count it returns is what lets the caller skip the
-// allNodesAccountedFor walk: a record enqueued here is queued, so the run
-// demonstrably has work left and the walk can only say so after a read.
+// Roots only: everything else is released by its predecessors completing.
 func dispatchRoots(
 	ctx context.Context,
 	store core.JobStore,
@@ -434,9 +300,6 @@ func dispatchRoots(
 			Job:        core.Job{GraphID: g.ID, NodeID: node.ID},
 		})
 	}
-	// One write for every root where the store can. The loop is still the
-	// fallback, and still the only thing that can say WHICH root failed —
-	// which matters here, because the caller fails the run on an enqueue error.
 	if n, ok := core.TryEnqueueNodes(ctx, store, roots); ok {
 		queued = n
 	} else {
@@ -454,8 +317,6 @@ func dispatchRoots(
 	return queued, enqueueErrs
 }
 
-// populateSeededRun persists seeds and dispatches roots in one step — the
-// immediate-start path used by admitted top-level runs and subgraph children.
 func populateSeededRun(
 	ctx context.Context,
 	store core.JobStore,
@@ -472,15 +333,9 @@ func populateSeededRun(
 	return queued, append(errs, dispatchErrs...)
 }
 
-// allNodesAccountedFor returns true when every node in the graph has
-// a node-record AND that record is in a terminal-success state. Used
-// to short-circuit graphs whose entire computation was satisfied by
-// seeds (e.g. a one-node graph that just receives a webhook).
 func allNodesAccountedFor(ctx context.Context, store core.JobStore, g core.Graph, graphRunID string) bool {
 	bodyOwners := loopBodyOwners(g)
 	for _, n := range g.Nodes {
-		// Loop-body nodes never run in the parent run, so they hold no
-		// record and must not block the "all accounted for" short-circuit.
 		if _, owned := bodyOwners[n.ID]; owned {
 			continue
 		}

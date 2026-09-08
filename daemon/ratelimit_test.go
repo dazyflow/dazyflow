@@ -11,9 +11,6 @@ import (
 	"time"
 )
 
-// reloadTrustedProxiesForTest re-parses DAZYFLOW_TRUSTED_PROXIES into the
-// package-level allowlist, bypassing the production sync.Once so a test
-// can exercise clientIP with a specific config.
 func reloadTrustedProxiesForTest() {
 	trustedProxies = nil
 	trustedProxiesOnce = sync.Once{}
@@ -65,8 +62,6 @@ func TestClientIP_TrustedPeerSkipsTrustedHops(t *testing.T) {
 }
 
 func TestIPRateLimiter_BurstThenBlock(t *testing.T) {
-	// 60/min = 1 token/sec, burst 3. First 3 immediate calls pass
-	// (burst), the 4th is blocked (no time to refill).
 	l := newIPRateLimiter(60, 3)
 	for i := 0; i < 3; i++ {
 		if !l.Allow("1.2.3.4") {
@@ -86,7 +81,6 @@ func TestIPRateLimiter_PerIPIsolation(t *testing.T) {
 	if l.Allow("a") {
 		t.Fatal("second IP-a call should block")
 	}
-	// Different IP has its own bucket — unaffected by IP-a's exhaustion.
 	if !l.Allow("b") {
 		t.Error("IP-b should have its own full bucket")
 	}
@@ -100,8 +94,6 @@ func TestNewAuthRateLimiter_SafeDefaultWhenZero(t *testing.T) {
 	if l == nil {
 		t.Fatal("perMinute=0 should fall back to a safe default, not nil")
 	}
-	// Burst is bounded: after defaultAuthRateBurst allowances the same IP is
-	// throttled (the refill rate can't replenish within this tight loop).
 	allowed := 0
 	for i := 0; i < defaultAuthRateBurst+5; i++ {
 		if l.Allow("1.2.3.4") {
@@ -116,18 +108,13 @@ func TestNewAuthRateLimiter_SafeDefaultWhenZero(t *testing.T) {
 	}
 }
 
-// TestIPRateLimiter_GCAndEvict directly exercises gcLocked (drops idle, fully-
-// refilled buckets) and evictOldestLocked (removes the LRU bucket).
 func TestIPRateLimiter_GCAndEvict(t *testing.T) {
 	l := newIPRateLimiter(60, 5)
 
-	// Normal Allow path: first request from an IP creates a bucket and passes.
 	if !l.Allow("1.1.1.1") {
 		t.Fatal("first request should be allowed")
 	}
 
-	// gcLocked: an idle, fully-refilled bucket is forgotten; a recently-used
-	// one (with debt) is kept.
 	l.mu.Lock()
 	l.lastGC = time.Now().Add(-2 * time.Minute) // force GC to run
 	l.buckets["idle"] = &tokenBucket{tokens: l.burst, last: time.Now().Add(-2 * time.Minute)}
@@ -143,8 +130,6 @@ func TestIPRateLimiter_GCAndEvict(t *testing.T) {
 		t.Error("busy bucket should be kept")
 	}
 
-	// evictOldestLocked: with several buckets, the one with the oldest `last`
-	// is removed.
 	l.mu.Lock()
 	l.buckets = map[string]*tokenBucket{
 		"old": {tokens: 1, last: time.Now().Add(-time.Hour)},
@@ -162,15 +147,12 @@ func TestIPRateLimiter_GCAndEvict(t *testing.T) {
 		t.Fatalf("after evict = %d buckets, want 2", n)
 	}
 
-	// evictOldestLocked on an empty map is a safe no-op.
 	l.mu.Lock()
 	l.buckets = map[string]*tokenBucket{}
 	l.evictOldestLocked()
 	l.mu.Unlock()
 }
 
-// TestIPRateLimiter_BurstExhaustion drives Allow until the burst is spent so
-// the deny branch is covered.
 func TestIPRateLimiter_BurstExhaustion(t *testing.T) {
 	l := newIPRateLimiter(60, 2) // burst 2
 	for i := 0; i < 2; i++ {
@@ -183,11 +165,8 @@ func TestIPRateLimiter_BurstExhaustion(t *testing.T) {
 	}
 }
 
-// TestIdempotencyStore_EvictLocked directly forces the cap-eviction loop by
-// constructing an over-cap store and calling evictLocked.
 func TestIdempotencyStore_EvictLocked(t *testing.T) {
 	s := newIdempotencyStore()
-	// Seed cap+2 entries so evictLocked drops the two oldest.
 	total := idempotencyMaxCache + 2
 	for i := 0; i < total; i++ {
 		key := keyFor(i)
@@ -198,7 +177,6 @@ func TestIdempotencyStore_EvictLocked(t *testing.T) {
 	if len(s.entries) != idempotencyMaxCache {
 		t.Fatalf("after evict = %d entries, want %d", len(s.entries), idempotencyMaxCache)
 	}
-	// The two oldest keys are gone.
 	if _, ok := s.entries[keyFor(0)]; ok {
 		t.Error("oldest entry survived eviction")
 	}
@@ -222,7 +200,6 @@ func TestIPRateLimiter_GCReclaimsDepletedIdleBucket(t *testing.T) {
 
 	l.mu.Lock()
 	l.lastGC = time.Now().Add(-2 * time.Minute) // force the sweep to run
-	// Drained 10 minutes ago: 600s * 1 tok/s refills far past burst.
 	l.buckets["drained-and-gone"] = &tokenBucket{tokens: 0, last: time.Now().Add(-10 * time.Minute)}
 	l.gcLocked(time.Now())
 	_, kept := l.buckets["drained-and-gone"]
@@ -232,14 +209,11 @@ func TestIPRateLimiter_GCReclaimsDepletedIdleBucket(t *testing.T) {
 	}
 }
 
-// A bucket that is idle but genuinely still in debt (slow refill rate) is kept,
-// so the throttle isn't reset out from under an ongoing abuser.
 func TestIPRateLimiter_GCKeepsIdleButStillIndebtedBucket(t *testing.T) {
 	l := newIPRateLimiter(1, 100) // 1/60 tok/sec, burst 100 — very slow refill
 
 	l.mu.Lock()
 	l.lastGC = time.Now().Add(-2 * time.Minute)
-	// Idle 2 minutes at 1/60 tok/s = ~2 tokens, nowhere near the burst of 100.
 	l.buckets["still-throttled"] = &tokenBucket{tokens: 0, last: time.Now().Add(-2 * time.Minute)}
 	l.gcLocked(time.Now())
 	_, kept := l.buckets["still-throttled"]

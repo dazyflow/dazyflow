@@ -9,11 +9,6 @@ import (
 	"testing"
 )
 
-// TestListGraphsDistinguishesEmptyFromGone pins the difference a caller that
-// deletes on absence depends on: a workspace with no flows reports none, a
-// workspace whose directory has vanished reports an error. Both resolve no
-// HEAD, so without the root check the second reads as the first — and the
-// schedule reconcile prunes every schedule the workspace owned.
 func TestListGraphsDistinguishesEmptyFromGone(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ws")
 	store, err := OpenFS(dir)
@@ -21,7 +16,6 @@ func TestListGraphsDistinguishesEmptyFromGone(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 
-	// Present but empty: no flows, no error.
 	ids, err := store.ListGraphs()
 	if err != nil {
 		t.Fatalf("empty workspace errored: %v", err)
@@ -30,7 +24,6 @@ func TestListGraphsDistinguishesEmptyFromGone(t *testing.T) {
 		t.Fatalf("empty workspace listed %v", ids)
 	}
 
-	// The volume goes away underneath it.
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}

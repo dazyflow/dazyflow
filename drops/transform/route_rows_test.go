@@ -9,8 +9,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// runRoute mirrors the helper shape used by sibling tests in this
-// package — pass params + rows, get back a Result.
 func runRoute(t *testing.T, params map[string]any, rows []map[string]any, headers []string) core.Result {
 	t.Helper()
 	in := map[string]core.Ref{"rows": {Inline: rows, Headers: headers}}
@@ -44,8 +42,6 @@ func mapKeys[V any](m map[string]V) []string {
 	}
 	return out
 }
-
-// ---- Happy paths --------------------------------------------------
 
 func TestRouteRows_ThreeWaySplit(t *testing.T) {
 	rows := []map[string]any{
@@ -96,9 +92,6 @@ func TestRouteRows_FirstMatchWins(t *testing.T) {
 }
 
 func TestRouteRows_CustomDefaultSlot(t *testing.T) {
-	// Use rows_3 as the catch-all instead of "default" — graphs
-	// that want a specific port for unmatched can wire it
-	// downstream without depending on the default name.
 	rows := []map[string]any{
 		{"v": "a"}, {"v": "b"},
 	}
@@ -117,11 +110,6 @@ func TestRouteRows_CustomDefaultSlot(t *testing.T) {
 	if got := slotRows(t, res, "rows_3"); len(got) != 1 {
 		t.Errorf("rows_3 (custom default): want 1, got %d", len(got))
 	}
-	// When default_slot is overridden, the "default" port stays
-	// dormant (no entry in Output) — consistent with the dormant-
-	// slots contract. Asserting absence rather than empty-presence
-	// because the engine treats a missing port as "no signal" which
-	// keeps downstream branches off the unused name.
 	if _, ok := res.Output["default"]; ok {
 		t.Errorf("default port should be absent when default_slot is overridden")
 	}
@@ -162,8 +150,6 @@ func TestRouteRows_HeadersPassThrough(t *testing.T) {
 		t.Errorf("headers=%v want [id name]", headers)
 	}
 }
-
-// ---- Error paths --------------------------------------------------
 
 func TestRouteRows_MissingRoutesParamFails(t *testing.T) {
 	res := runRoute(t,
@@ -244,7 +230,6 @@ func TestRouteRows_BadFilterExpressionFails(t *testing.T) {
 }
 
 func TestRouteRows_NonBoolFilterFails(t *testing.T) {
-	// CEL expression compiles but returns a string instead of bool.
 	res := runRoute(t,
 		map[string]any{
 			"routes": []any{
@@ -256,19 +241,12 @@ func TestRouteRows_NonBoolFilterFails(t *testing.T) {
 	if res.Status != core.StatusError {
 		t.Fatalf("expected error on non-bool filter")
 	}
-	// Either bad_param at compile or eval at runtime depending on
-	// how CEL types the expression — both are correct rejections.
 	if res.Error.Code != "bad_param" && res.Error.Code != "eval" {
 		t.Errorf("expected bad_param or eval, got %q", res.Error.Code)
 	}
 }
 
-// ---- Slot allocation contract --------------------------------------
-
 func TestRouteRows_DormantSlotsEmitNothing(t *testing.T) {
-	// Only rows_1 has a route — rows_2..rows_8 should not appear
-	// in the output at all (dormant edges, engine handles
-	// downstream skip).
 	res := runRoute(t,
 		map[string]any{
 			"routes": []any{

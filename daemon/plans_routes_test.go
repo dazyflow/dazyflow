@@ -13,8 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fakeEntitlements is a minimal in-memory EntitlementStore for handler tests:
-// only GetTier / GetEntitlement are exercised by the plans path.
 type fakeEntitlements struct {
 	tiers map[string]Tier
 	ents  map[string]TenantEntitlement
@@ -36,7 +34,6 @@ func (f *fakeEntitlements) ListEntitlements(context.Context) ([]TenantEntitlemen
 	return nil, nil
 }
 
-// fakePlans returns a fixed plan for every tenant.
 type fakePlans struct{ p TenantPlan }
 
 func (f fakePlans) GetPlan(context.Context, string) (TenantPlan, error) { return f.p, nil }
@@ -45,7 +42,6 @@ func (f fakePlans) SetPlan(context.Context, TenantPlan) error           { return
 func builtinTierStore() *fakeEntitlements {
 	return &fakeEntitlements{
 		tiers: map[string]Tier{
-			// Built-ins seeded as inherit (nil polling) — the fixed bug.
 			"free": {ID: "free", Name: "Free", Plan: PlanFree, BuiltIn: true},
 			"pro":  {ID: "pro", Name: "Pro", Plan: PlanPro, BuiltIn: true},
 		},

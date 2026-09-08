@@ -17,26 +17,15 @@ import (
 	"github.com/dazyflow/dazyflow/engine/mcp"
 )
 
-// fakeHTTPServer is an MCP endpoint over streamable HTTP. It answers
-// initialize/tools/list/tools/call and can be told to reply as SSE instead of
-// JSON, which is the shape a real server picks for a long-running call.
 type fakeHTTPServer struct {
-	tools []mcp.Tool
-	// sse makes every response an event stream.
-	sse bool
-	// authSeen records the Authorization (or custom) header of the last
-	// request, so a test can assert the credential actually left the process.
-	authSeen atomic.Value
-	calls    atomic.Int64
-	// toolErr makes tools/call answer with isError.
-	toolErr bool
-	// recordArgs stores the arguments of the last tools/call, so a test can
-	// assert what actually reached the tool rather than only that it was
-	// called.
+	tools      []mcp.Tool
+	sse        bool
+	authSeen   atomic.Value
+	calls      atomic.Int64
+	toolErr    bool
 	recordArgs bool
 	lastArgs   atomic.Value
-	// status, when non-zero, short-circuits every request with that code.
-	status int
+	status     int
 }
 
 func (f *fakeHTTPServer) handler() http.HandlerFunc {
@@ -56,7 +45,6 @@ func (f *fakeHTTPServer) handler() http.HandlerFunc {
 			http.Error(w, "bad body", http.StatusBadRequest)
 			return
 		}
-		// A notification has no id and expects no response.
 		if req.Method == "notifications/initialized" {
 			w.WriteHeader(http.StatusAccepted)
 			return
@@ -97,8 +85,6 @@ func (f *fakeHTTPServer) handler() http.HandlerFunc {
 			_, _ = w.Write(body)
 			return
 		}
-		// SSE: a keepalive comment and an unrelated notification first, so the
-		// reader has to skip both to find the response.
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, ": keepalive\n\n")
@@ -118,8 +104,6 @@ func echoTool() mcp.Tool {
 	return mcp.Tool{Name: "echo", Description: "echo it back", InputSchema: json.RawMessage(`{"type":"object"}`)}
 }
 
-// TestRegisterHTTP_JSON is the ordinary path: handshake, tool list, and a call
-// that comes back as a single JSON object.
 func TestRegisterHTTP_JSON(t *testing.T) {
 	fake := &fakeHTTPServer{tools: []mcp.Tool{echoTool()}}
 	srv := newFakeHTTP(t, fake)
@@ -149,8 +133,6 @@ func TestRegisterHTTP_JSON(t *testing.T) {
 	}
 }
 
-// TestRegisterHTTP_SSE covers the other body shape. The response has to be
-// found among a keepalive and an unrelated notification.
 func TestRegisterHTTP_SSE(t *testing.T) {
 	fake := &fakeHTTPServer{tools: []mcp.Tool{echoTool()}, sse: true}
 	srv := newFakeHTTP(t, fake)
@@ -173,8 +155,6 @@ func TestRegisterHTTP_SSE(t *testing.T) {
 	}
 }
 
-// TestRegisterHTTP_TenantIsolation is the security property: one org's server
-// is not reachable from another, and not reachable with no tenant at all.
 func TestRegisterHTTP_TenantIsolation(t *testing.T) {
 	srv := newFakeHTTP(t, &fakeHTTPServer{tools: []mcp.Tool{echoTool()}})
 
@@ -198,8 +178,6 @@ func TestRegisterHTTP_TenantIsolation(t *testing.T) {
 	}
 }
 
-// TestRegisterHTTP_InstanceWideVisibleToAll covers the other half: an
-// operator's server (tenant "") is every org's to use.
 func TestRegisterHTTP_InstanceWideVisibleToAll(t *testing.T) {
 	srv := newFakeHTTP(t, &fakeHTTPServer{tools: []mcp.Tool{echoTool()}})
 
@@ -235,8 +213,6 @@ func TestRegisterHTTP_RefusesShadowingInstanceWide(t *testing.T) {
 	}
 }
 
-// TestRegisterHTTP_ReplacesOnReRegister is what saving an edit does: the same
-// (tenant, name) reconnects with the new configuration instead of erroring.
 func TestRegisterHTTP_ReplacesOnReRegister(t *testing.T) {
 	first := newFakeHTTP(t, &fakeHTTPServer{tools: []mcp.Tool{echoTool()}})
 	second := newFakeHTTP(t, &fakeHTTPServer{tools: []mcp.Tool{{Name: "other"}}})
@@ -259,8 +235,6 @@ func TestRegisterHTTP_ReplacesOnReRegister(t *testing.T) {
 	}
 }
 
-// TestRegisterHTTP_SendsCredential proves the configured auth header reaches
-// the server — the whole point of storing one.
 func TestRegisterHTTP_SendsCredential(t *testing.T) {
 	fake := &fakeHTTPServer{tools: []mcp.Tool{echoTool()}}
 	srv := newFakeHTTP(t, fake)
@@ -297,7 +271,6 @@ func TestRegisterHTTP_UnauthorizedIsExplained(t *testing.T) {
 	}
 }
 
-// TestUnregister removes the server and its tools.
 func TestUnregister(t *testing.T) {
 	srv := newFakeHTTP(t, &fakeHTTPServer{tools: []mcp.Tool{echoTool()}})
 
@@ -313,12 +286,11 @@ func TestUnregister(t *testing.T) {
 	if got := cat.ServersFor("acme"); len(got) != 0 {
 		t.Fatalf("ServersFor still lists %d server(s)", len(got))
 	}
-	// Unregistering something absent is not an error — see Unregister.
 	cat.Unregister("acme", "never-existed")
 }
 
-// TestAllManifests_IncludesTenantServers is what the platform killswitch page
-// reads; a tenant server missing from it cannot be switched off.
+// What the platform killswitch page reads; a tenant server missing from it
+// cannot be switched off.
 func TestAllManifests_IncludesTenantServers(t *testing.T) {
 	srv := newFakeHTTP(t, &fakeHTTPServer{tools: []mcp.Tool{echoTool()}})
 

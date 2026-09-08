@@ -124,8 +124,6 @@ func executeGitHubListIssues(ctx context.Context, job core.Job, _ chan<- core.Pr
 			return params.Err(job, "bad_response", fmt.Sprintf("unexpected GitHub response on page %d: %v", pages+1, err)), nil
 		}
 		for _, it := range page {
-			// GitHub returns PRs from the issues endpoint; they carry a
-			// "pull_request" key, which is how the API distinguishes them.
 			if !includePRs {
 				if _, isPR := it["pull_request"]; isPR {
 					continue
@@ -148,7 +146,6 @@ func executeGitHubListIssues(ctx context.Context, job core.Job, _ chan<- core.Pr
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
 			"issues": {MIME: "application/json", Inline: issues},
-			// Emitted (not a declared pin), like the action drops' meta.
 			"meta": {MIME: "application/json", Inline: map[string]any{
 				"count": len(issues), "truncated": truncated,
 			}},

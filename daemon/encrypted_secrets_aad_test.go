@@ -13,13 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// A ciphertext is bound to the (tenant, name) row it lives in via AES-GCM's
-// additional authenticated data. Without that binding GCM proves only "sealed
-// under this tenant's DEK", so anyone with write access to the secrets table
-// could relocate a blob — copy conn.stripe.api_key's ciphertext into a
-// low-value secret their flow may read — and recover the plaintext through an
-// ordinary ${secret.…} reference.
-
 func newAADTestSecrets(t *testing.T) (*EncryptedSecrets, *MemSecretsStore) {
 	t.Helper()
 	key := make([]byte, 32)
@@ -46,8 +39,6 @@ func TestEncryptedSecrets_CiphertextIsBoundToItsName(t *testing.T) {
 		t.Fatalf("put: %v", err)
 	}
 
-	// Attacker with DB write access relocates the credential's ciphertext into
-	// a row their flow is allowed to read.
 	ct, nonce, err := store.getSecret(ctx, "acme", "conn.stripe.api_key")
 	if err != nil {
 		t.Fatalf("getSecret: %v", err)
@@ -70,8 +61,6 @@ func TestEncryptedSecrets_CiphertextIsBoundToItsTenant(t *testing.T) {
 	if err := es.Put(ctx, "acme", "k", "acme-value"); err != nil {
 		t.Fatalf("put: %v", err)
 	}
-	// Give the second tenant a DEK, then hand it the first tenant's blob. Even
-	// if the DEKs were somehow shared, the tenant is in the AAD.
 	if err := es.Put(ctx, "other", "k", "other-value"); err != nil {
 		t.Fatalf("put: %v", err)
 	}
@@ -87,8 +76,6 @@ func TestEncryptedSecrets_CiphertextIsBoundToItsTenant(t *testing.T) {
 	}
 }
 
-// A wrapped DEK is bound to its tenant too, so it can't be swapped between
-// tenant rows.
 func TestEncryptedSecrets_WrappedDEKIsBoundToItsTenant(t *testing.T) {
 	t.Parallel()
 	es, store := newAADTestSecrets(t)
@@ -108,7 +95,6 @@ func TestEncryptedSecrets_WrappedDEKIsBoundToItsTenant(t *testing.T) {
 		t.Fatalf("replaceWrappedDEK: %v", err)
 	}
 
-	// Drop the cached DEK so the swapped row is actually consulted.
 	es.mu.Lock()
 	delete(es.deks, "victim")
 	es.mu.Unlock()
@@ -125,7 +111,6 @@ func TestEncryptedSecrets_LegacyUnboundCiphertextStillReads(t *testing.T) {
 	es, store := newAADTestSecrets(t)
 	ctx := context.Background()
 
-	// Provision the tenant's DEK through the normal path.
 	if err := es.Put(ctx, "acme", "seed", "seed"); err != nil {
 		t.Fatalf("put: %v", err)
 	}
@@ -134,7 +119,6 @@ func TestEncryptedSecrets_LegacyUnboundCiphertextStillReads(t *testing.T) {
 		t.Fatalf("dekFor: %v", err)
 	}
 
-	// Write a legacy record the old way: sealed with nil AAD.
 	nonce := make([]byte, dek.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
 		t.Fatal(err)
@@ -152,7 +136,6 @@ func TestEncryptedSecrets_LegacyUnboundCiphertextStillReads(t *testing.T) {
 		t.Errorf("got %q, want %q", got, "legacy-value")
 	}
 
-	// Rewriting it upgrades the record to the bound form.
 	if err := es.Put(ctx, "acme", "old", "new-value"); err != nil {
 		t.Fatalf("put: %v", err)
 	}
@@ -168,7 +151,6 @@ func TestEncryptedSecrets_LegacyUnboundCiphertextStillReads(t *testing.T) {
 	}
 }
 
-// A KEK rotation upgrades a legacy unbound DEK to the bound form.
 func TestEncryptedSecrets_RewrapUpgradesLegacyDEKBinding(t *testing.T) {
 	t.Parallel()
 	es, store := newAADTestSecrets(t)
@@ -177,7 +159,6 @@ func TestEncryptedSecrets_RewrapUpgradesLegacyDEKBinding(t *testing.T) {
 	if err := es.Put(ctx, "acme", "k", "v"); err != nil {
 		t.Fatalf("put: %v", err)
 	}
-	// Rewrite the tenant's DEK the old way (nil AAD) to simulate pre-upgrade state.
 	wrapped, nonce, err := store.getWrappedDEK(ctx, "acme")
 	if err != nil {
 		t.Fatalf("getWrappedDEK: %v", err)
@@ -244,7 +225,6 @@ func TestEncryptedSecrets_BindingPreservesNormalResolution(t *testing.T) {
 		t.Errorf("got %q, want %q", got, "org-value")
 	}
 
-	// A flow-scoped value of the same name still shadows the org one.
 	flowCtx := core.WithFlow(ctx, "flow1")
 	if err := es.Put(flowCtx, "acme", secretFlowPrefix+"flow1.TOKEN", "flow-value"); err != nil {
 		t.Fatalf("put flow-scoped: %v", err)

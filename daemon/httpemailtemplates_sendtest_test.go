@@ -26,8 +26,6 @@ func storeEmailConn(t *testing.T, h *gatewayHarness, fields map[string]string) {
 	}
 }
 
-// A bad recipient is rejected as client input (400) before any connection
-// load or dial.
 func TestSendTestEmail_InvalidRecipient(t *testing.T) {
 	t.Parallel()
 	h := newSecretsHarness(t)
@@ -37,8 +35,6 @@ func TestSendTestEmail_InvalidRecipient(t *testing.T) {
 	}
 }
 
-// Without secret:write the caller can't read the SMTP credentials or send — a
-// 403 — even though the same secret:read role can list and preview templates.
 func TestSendTestEmail_RequiresSecretWrite(t *testing.T) {
 	t.Parallel()
 	h := newSecretsHarness(t)
@@ -53,8 +49,6 @@ func TestSendTestEmail_RequiresSecretWrite(t *testing.T) {
 	}
 }
 
-// With the Email integration available but no connection stored, the caller
-// gets a 409 pointing them at the Email page — not a confusing dial error.
 func TestSendTestEmail_NotConnected(t *testing.T) {
 	t.Parallel()
 	h := newSecretsHarness(t)
@@ -64,12 +58,8 @@ func TestSendTestEmail_NotConnected(t *testing.T) {
 	}
 }
 
-// Happy path: the rendered template actually reaches the (fake) SMTP server
-// with the requested recipient and the connection's From address.
 func TestSendTestEmail_Sends(t *testing.T) {
 	t.Parallel()
-	// The fake SMTP server is on loopback; the package TestMain allows private
-	// egress so the mailer's SSRF guard doesn't refuse it.
 	h := newSecretsHarness(t)
 	srv := newFakeSMTP(t)
 	host, port, err := net.SplitHostPort(srv.addr)

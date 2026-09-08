@@ -1,13 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Behaviour and coverage guards on the Swedish template vocabulary.
-//
-// The coverage half matters for the same reason dropTextCoverage.test.ts
-// exists: every lookup falls back to the English it was handed, so a template
-// added to index.json without a translation renders perfectly good English and
-// nothing says so. That is how this whole view sat untranslated — its buttons
-// were Swedish, so it looked done.
 import { describe, expect, it } from "vitest";
 import index from "../../public/templates/index.json";
 import { descriptionFingerprint } from "./dropText";
@@ -32,7 +25,6 @@ describe("template text", () => {
     expect(templateTitle(tpl, "en")).toBe(tpl.title);
     expect(templateBlurb(tpl, "en")).toBe(tpl.use_case);
     expect(templateCategory("Notifications", "en")).toBe("Notifications");
-    // No language at all — the catalog's English, not a crash.
     expect(templateTitle(tpl, undefined)).toBe(tpl.title);
   });
 
@@ -43,8 +35,6 @@ describe("template text", () => {
     expect(templateCategory("Notifications", "sv")).toBe("Aviseringar");
   });
 
-  // Regional tags collapse to the base language, matching the i18n config's
-  // load: "languageOnly".
   it("treats sv-SE as Swedish", () => {
     expect(templateCategory("Approvals", "sv-SE")).toBe("Godkännanden");
     expect(templateCategory("Approvals", "SV")).toBe("Godkännanden");
@@ -57,8 +47,6 @@ describe("template text", () => {
     expect(templateBlurb(tpl, "sv")).toBe("Something else now.");
   });
 
-  // Only the one-liner is translated, so an entry predating use_case reads in
-  // English rather than half-translated.
   it("uses the untranslated description when there is no use_case", () => {
     const tpl = { ...byID("email-to-slack"), use_case: undefined };
     expect(templateBlurb(tpl, "sv")).toBe(tpl.description);
@@ -116,8 +104,6 @@ describe("Swedish template vocabulary", () => {
     );
   });
 
-  // A template that was renamed or removed leaves its translation behind,
-  // where it reads as coverage that no longer exists.
   it("has no entries for templates that are gone", () => {
     const live = new Set(
       TEMPLATES.flatMap((t) => [`${t.id}.title`, `${t.id}.use_case`]),

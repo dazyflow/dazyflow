@@ -15,9 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// pgTestWorkspace returns two INDEPENDENT Stores over the same (tenant,
-// workspace) — the two-pod case. They share nothing in process: no mutex, no
-// cache, no working tree.
 func pgTestWorkspace(t *testing.T) (*Store, *Store) {
 	t.Helper()
 	dsn := os.Getenv("DAZYFLOW_TEST_DB")
@@ -50,8 +47,6 @@ func pgTestWorkspace(t *testing.T) (*Store, *Store) {
 	return a, b
 }
 
-// The point of the whole backend: a flow saved on one dzd is readable on
-// another, with no shared disk and nothing to reconcile.
 func TestPgBackend_WriteOnOneInstanceReadsOnTheOther(t *testing.T) {
 	podA, podB := pgTestWorkspace(t)
 
@@ -64,8 +59,6 @@ func TestPgBackend_WriteOnOneInstanceReadsOnTheOther(t *testing.T) {
 		t.Fatalf("pod B reads %q", got.Name)
 	}
 
-	// And a publish on one is live on the other, which is what makes the
-	// scheduler on any pod fire what an author published on any other.
 	if err := podA.PromoteToEnvironment("f1", PublishedEnv, rev); err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +80,6 @@ func TestPgBackend_ConcurrentInstancesDoNotCorrupt(t *testing.T) {
 	errs := make(chan error, 4*n)
 	for i := range n {
 		wg.Add(2)
-		// Distinct flows from both pods at once.
 		go func() {
 			defer wg.Done()
 			if _, err := podA.Save(flow(fmt.Sprintf("a%02d", i), "A"), "ada"); err != nil {
@@ -114,7 +106,6 @@ func TestPgBackend_ConcurrentInstancesDoNotCorrupt(t *testing.T) {
 	if len(ids) != 2*n {
 		t.Fatalf("ListGraphs = %d flows, want %d — a concurrent write was lost", len(ids), 2*n)
 	}
-	// Every one of them is readable and intact.
 	for _, id := range ids {
 		g, err := podB.Load(id)
 		if err != nil {
@@ -126,8 +117,6 @@ func TestPgBackend_ConcurrentInstancesDoNotCorrupt(t *testing.T) {
 	}
 }
 
-// Concurrent edits to the SAME flow are last-writer-wins, not corruption: both
-// land in the history and the flow reads as one of them.
 func TestPgBackend_ConcurrentEditsToOneFlowResolveCleanly(t *testing.T) {
 	podA, podB := pgTestWorkspace(t)
 	mustSave(t, podA, flow("f1", "base"), "u")

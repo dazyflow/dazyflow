@@ -29,7 +29,6 @@ function fixture(): Graph {
   };
 }
 
-// Each of these is a canvas gesture, not a change to what the flow does.
 const cosmetic: [string, (g: Graph) => void][] = [
   ["moved step", (g) => void (g.nodes[0].position = { x: 900, y: 900 })],
   ["step renamed", (g) => void (g.nodes[0].label = "Every morning")],
@@ -49,7 +48,6 @@ const cosmetic: [string, (g: Graph) => void][] = [
   ["paused", (g) => void (g.disabled = true)],
 ];
 
-// Each of these changes what a run, a schedule, or a trigger does.
 const behavioural: [string, (g: Graph) => void][] = [
   ["param edited", (g) => void (g.nodes[0].params.cron = "0 3 * * *")],
   ["module swapped", (g) => void (g.nodes[1].module = "email_send")],
@@ -90,8 +88,6 @@ describe("diffGraphs", () => {
     edit(draft);
     const d = diffGraphs(fixture(), draft);
     expect(diffIsEmpty(d)).toBe(false);
-    // The catch-all is the safety net for a field nothing itemizes; a change
-    // this list names should be described, not swept into "other".
     expect(d.metaChanged).not.toContain("other");
   });
 

@@ -39,7 +39,6 @@ func TestImportUsers(t *testing.T) {
 		t.Errorf("bob was clobbered: subject = %q, want bob-existing", b.Subject)
 	}
 
-	// Idempotent: a second run imports nothing.
 	imp2, skip2, err := ImportUsers(ctx, src, dst)
 	if err != nil {
 		t.Fatalf("re-run: %v", err)

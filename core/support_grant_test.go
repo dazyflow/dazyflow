@@ -17,7 +17,6 @@ func supportGraph() Graph {
 	return Graph{ID: "daily-invoice", Tenant: "acme", Workspace: "main"}
 }
 
-// approvedGrant builds an active grant for (agent, tenant, flow) expiring in 1h.
 func approvedGrant(now time.Time) AccessGrant {
 	return AccessGrant{
 		ID:           "grant-1",
@@ -168,8 +167,6 @@ func TestSupportAgent_NoAmbientAccess(t *testing.T) {
 	if err := AuthorizeGraphEdit(agent, g); !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("support agent must not edit, got %v", err)
 	}
-	// Sanity: with an active grant the support VIEW does open (the capability
-	// path), proving the rejections above aren't just "support can't do anything".
 	if err := AuthorizeGraphSupportView(agent, g, approvedGrant(now), now); err != nil {
 		t.Errorf("active grant should still authorize the support view, got %v", err)
 	}

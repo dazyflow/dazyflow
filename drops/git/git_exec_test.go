@@ -18,8 +18,6 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/sandbox"
 )
 
-// newRepo initialises a git repo in a fresh temp dir and returns the dir
-// and a worktree handle for staging commits.
 func newRepo(t *testing.T) (string, *gogit.Worktree) {
 	t.Helper()
 	dir := t.TempDir()
@@ -34,8 +32,6 @@ func newRepo(t *testing.T) (string, *gogit.Worktree) {
 	return dir, wt
 }
 
-// commit writes name=content into the repo and commits it, returning
-// nothing — tests resolve revisions by ref (HEAD, HEAD~1) instead.
 func commit(t *testing.T, dir string, wt *gogit.Worktree, name, content, msg string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
@@ -71,10 +67,9 @@ func commitAt(t *testing.T, dir string, wt *gogit.Worktree, name, content, msg s
 	return h
 }
 
-// TestExecuteGitLog_NonDefaultBranch is the regression for the resolution
-// gap: logging a branch that exists only as a remote-tracking ref (not the
-// checked-out one) must work, as the manifest's release-branch example
-// promises.
+// The regression for the resolution gap: logging a branch that exists only as
+// a remote-tracking ref (not the checked-out one) must work, as the manifest's
+// release-branch example promises.
 func TestExecuteGitLog_NonDefaultBranch(t *testing.T) {
 	src, _ := buildSource(t)
 	ws := t.TempDir()
@@ -97,9 +92,9 @@ func TestExecuteGitLog_NonDefaultBranch(t *testing.T) {
 	}
 }
 
-// TestExecuteGitLog_CommitterTimeOrder builds a merge history where DFS
-// pre-order and committer-time order disagree within the limit window, and
-// pins the timestamps so the assertion is deterministic.
+// Builds a merge history where DFS pre-order and committer-time order disagree
+// within the limit window, and pins the timestamps so the assertion is
+// deterministic.
 func TestExecuteGitLog_CommitterTimeOrder(t *testing.T) {
 	dir, wt := newRepo(t)
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -176,7 +171,6 @@ func TestExecuteGitLog_ReturnsCommits(t *testing.T) {
 	if len(commits) != 3 {
 		t.Fatalf("got %d commits, want 3", len(commits))
 	}
-	// Log walks newest-first.
 	if commits[0]["summary"] != "third" {
 		t.Errorf("commits[0].summary = %v, want third", commits[0]["summary"])
 	}
@@ -262,17 +256,12 @@ func TestExecuteGitDiff_Errors(t *testing.T) {
 	if res, _ := executeGitDiff(t.Context(), core.Job{ID: "j"}, nil); res.Error == nil || res.Error.Code != "no_sandbox" {
 		t.Errorf("no sandbox: got %+v, want no_sandbox", res.Error)
 	}
-	// HEAD~1 doesn't exist with a single commit ⇒ bad_ref on "from".
 	res, _ := executeGitDiff(t.Context(), core.Job{ID: "j", WorkspaceRoot: dir}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_ref" {
 		t.Errorf("got %+v, want error/bad_ref", res.Error)
 	}
 }
 
-// TestExecuteGitDiff_MergeBase contrasts two-dot and three-dot diffs on a
-// diverged history: master advances after feature branches off, so a direct
-// comparison reports the master-side change too, while merge_base reports
-// only what feature added.
 func TestExecuteGitDiff_MergeBase(t *testing.T) {
 	dir, wt := newRepo(t)
 	commit(t, dir, wt, "f.txt", "m1\n", "m1") // master root
@@ -296,7 +285,6 @@ func TestExecuteGitDiff_MergeBase(t *testing.T) {
 		return res.Output["meta"].Inline.(map[string]any)
 	}
 
-	// Two-dot: f.txt differs (m2 vs m1) AND feat.txt is added ⇒ 2 files.
 	two := metaOf(map[string]any{"from": "master", "to": "feature"})
 	if two["files_changed"] != 2 {
 		t.Errorf("two-dot files_changed = %v, want 2", two["files_changed"])
@@ -305,7 +293,6 @@ func TestExecuteGitDiff_MergeBase(t *testing.T) {
 		t.Errorf("two-dot merge_base = %v, want false", two["merge_base"])
 	}
 
-	// Three-dot from the merge-base (m1): only feat.txt added ⇒ 1 file.
 	three := metaOf(map[string]any{"from": "master", "to": "feature", "merge_base": true})
 	if three["files_changed"] != 1 {
 		t.Errorf("three-dot files_changed = %v, want 1 (the master-side change should not appear)", three["files_changed"])
@@ -320,7 +307,6 @@ func TestExecuteGitDiff_MergeBase(t *testing.T) {
 
 func TestCapDiff(t *testing.T) {
 	s := "line1\nline2\nline3\n"
-	// Cap mid-"line2": trims back to the last whole line, then appends the marker.
 	got := capDiff(s, 8)
 	if !strings.HasPrefix(got, "line1\n") {
 		t.Errorf("capDiff kept a partial line: %q", got)

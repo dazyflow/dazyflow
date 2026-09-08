@@ -44,7 +44,6 @@ func TestURL_EmitsHostAndPath(t *testing.T) {
 }
 
 func TestURL_HostKeepsPort_PathEmptyForBareHost(t *testing.T) {
-	// u.Host keeps an explicit port; a bare host with no path yields "".
 	res, _ := executeURL(t.Context(), core.Job{
 		Params: map[string]any{"url": "http://localhost:8080"},
 	}, nil)

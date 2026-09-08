@@ -31,7 +31,6 @@ type FSSandbox struct {
 	roots map[string]string // "tenant/workspace" → resolved absolute path
 }
 
-// NewFSSandbox prepares BaseDir, creating it if missing.
 func NewFSSandbox(base string) (*FSSandbox, error) {
 	if base == "" {
 		return nil, fmt.Errorf("FSSandbox: base directory required")
@@ -88,9 +87,6 @@ func (s *FSSandbox) Root(tenant, workspace string) (string, error) {
 // reclaim.
 const scratchDirName = ".scratch"
 
-// ScratchRoot returns (creating if needed) the run's scratch directory.
-// It sits beside the persistent workspace data, namespaced by run ID, so
-// it's quota-counted yet trivially reclaimable as a unit.
 func (s *FSSandbox) ScratchRoot(tenant, workspace, runID string) (string, error) {
 	if !isSafeIdent(tenant) {
 		return "", fmt.Errorf("unsafe tenant identifier %q", tenant)
@@ -125,13 +121,6 @@ func (s *FSSandbox) RemoveScratch(tenant, workspace, runID string) error {
 	return os.RemoveAll(filepath.Join(s.base, tenant, workspace, scratchDirName, runID))
 }
 
-// isSafeScratchID validates a run scratch identifier. A loop body run
-// namespaces its scratch per item with a "<parentRunID>/iN" sub-path so
-// concurrent iterations don't collide on a shared scratch directory; accept
-// "/"-separated segments as long as each segment is itself a safe identifier
-// (which rejects "", ".", ".." and traversal). Reclaiming the parent run's
-// scratch (RemoveScratch with the bare parent ID) still removes every nested
-// item directory with it.
 func isSafeScratchID(runID string) bool {
 	if runID == "" {
 		return false
@@ -144,10 +133,6 @@ func isSafeScratchID(runID string) bool {
 	return true
 }
 
-// RemoveTenant deletes a tenant's entire subtree (every workspace and all
-// scratch beneath it) — the sandbox half of the GDPR erasure cascade
-// (Art. 17). Idempotent. Drops any cached roots for the tenant so a later
-// recreate re-resolves cleanly.
 func (s *FSSandbox) RemoveTenant(tenant string) error {
 	if !isSafeIdent(tenant) {
 		return fmt.Errorf("unsafe tenant identifier %q", tenant)
@@ -178,19 +163,15 @@ func isSafeIdent(s string) bool {
 			return false
 		}
 	}
-	// Reject "." and ".." which match the rune set above but are
-	// dangerous.
 	if s == "." || s == ".." {
 		return false
 	}
-	// Avoid leading dots — common gotcha for hidden directories.
 	if s[0] == '.' {
 		return false
 	}
 	return true
 }
 
-// Ensure FSSandbox satisfies the interfaces at compile time.
 var (
 	_ core.SandboxProvider = (*FSSandbox)(nil)
 	_ core.ScratchProvider = (*FSSandbox)(nil)

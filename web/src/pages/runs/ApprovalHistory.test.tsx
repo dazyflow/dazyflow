@@ -6,8 +6,6 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
-// Stable `t` / useTranslation result: the page's refresh callbacks list `t` in
-// their deps, so a fresh function per render re-fires them forever.
 vi.mock("react-i18next", () => {
   const t = (k: string) => k;
   const value = { t };
@@ -47,10 +45,6 @@ const RUN_ID = "69a6f59b21aa3a4e7530df27";
 const DECIDED_RUN = "7f13c0aa5b2e41d9908ab442";
 const FLOW_ID = "refunds";
 
-// The history beneath the inbox. An inbox can only ever show what is
-// outstanding — a row leaves it the moment someone decides — so the page could
-// not answer either of the questions people came back with: has this already
-// been handled, and what did we say last time.
 describe("Approvals history", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -81,13 +75,9 @@ describe("Approvals history", () => {
       screen.getByText("Refund 240 SEK to alice@example.com?"),
     ).toBeInTheDocument();
     expect(screen.getByText("already refunded last week")).toBeInTheDocument();
-    // The verdict is carried by colour and glyph, so it has to reach a screen
-    // reader some other way.
     expect(
       screen.getByRole("img", { name: "approvals.historyRejected" }),
     ).toBeInTheDocument();
-    // Same rule as the inbox card: the link goes to the run, which holds the
-    // evidence — not to the editor.
     expect(screen.getByRole("link", { name: /Refunds/ })).toHaveAttribute(
       "href",
       `/runs/${DECIDED_RUN}`,
@@ -111,7 +101,6 @@ describe("Approvals history", () => {
     });
     render(<MemoryRouter><Approvals /></MemoryRouter>);
 
-    // Never the bare step id while the row has something to say.
     expect(await screen.findByText(/order: 4471/)).toBeInTheDocument();
     expect(screen.queryByText(/approvals\.noPrompt/)).not.toBeInTheDocument();
   });

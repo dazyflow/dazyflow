@@ -6,14 +6,6 @@ package daemon
 import "sync"
 
 const (
-	// maxSubgraphRunsPerRoot caps the TOTAL number of descendant runs a
-	// single top-level run may spawn through subgraph nodes. maxSubgraphDepth
-	// bounds the DEPTH of nesting but not the BREADTH: a graph with N subgraph
-	// nodes whose children each also have N subgraph nodes fans out to
-	// ~N^depth runs (N up to MaxGraphNodes). Depth 8 with N=10 is 10^7 runs
-	// from one trigger — a job-store/DB flood. This total cap turns a
-	// recursive/exponential blow-up into a clean per-node error while staying
-	// generous for legitimate fan-out (calling many subflows from one run).
 	maxSubgraphRunsPerRoot = 1024
 
 	// maxSubtreeRootsTracked bounds the in-memory counter map — one entry per

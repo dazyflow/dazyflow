@@ -16,11 +16,8 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// The drops dial a 127.0.0.1 httptest server, so they need the same
-// private-egress opt-in production gets via DAZYFLOW_ALLOW_PRIVATE_EGRESS.
 func init() { hfnet.SetAllowPrivateEgress(true) }
 
-// /v1/forecast current= sample.
 const sampleCurrent = `{
 	"latitude":59.34,"longitude":18.06,
 	"current_units":{"temperature_2m":"°C","wind_speed_10m":"m/s"},
@@ -34,8 +31,6 @@ const sampleCurrent = `{
 	}
 }`
 
-// /v1/forecast daily= sample: column arrays aligned by index. Day 0 partly
-// cloudy, day 1 slight rain (60% pop), day 2 slight snowfall.
 const sampleForecast = `{
 	"latitude":59.34,"longitude":18.06,"timezone":"Europe/Stockholm",
 	"daily_units":{"temperature_2m_max":"°C"},
@@ -48,8 +43,6 @@ const sampleForecast = `{
 	}
 }`
 
-// stubServer points BOTH hosts at a test server that records the query it was
-// called with and returns the given status + body. It restores them.
 func stubServer(t *testing.T, status int, body string, gotQuery *map[string][]string) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +92,6 @@ func TestUnitsAndClass(t *testing.T) {
 }
 
 func TestEndpointSelection(t *testing.T) {
-	// No key → free host, no apikey on the wire.
 	var q map[string][]string
 	stubServer(t, 200, sampleCurrent, &q)
 	job := core.Job{Params: map[string]any{"lat": 59.33, "lon": 18.07}}
@@ -110,7 +102,6 @@ func TestEndpointSelection(t *testing.T) {
 		t.Errorf("free path must not send apikey, got %v", q["apikey"])
 	}
 
-	// Key present → apikey forwarded.
 	var q2 map[string][]string
 	stubServer(t, 200, sampleCurrent, &q2)
 	jobKey := core.Job{Params: map[string]any{"lat": 59.33, "lon": 18.07, "api_key": "secret"}}
@@ -213,12 +204,10 @@ func TestForecastSummary_Empty(t *testing.T) {
 }
 
 func TestVerifyOpenMeteo(t *testing.T) {
-	// Empty key is a valid configuration (free endpoint is key-less).
 	if err := verifyOpenMeteo(context.Background(), map[string]string{}); err != nil {
 		t.Errorf("empty key should verify, got %v", err)
 	}
 
-	// 401 → reason surfaced verbatim.
 	const reason = "API key invalid."
 	stubServer(t, 401, `{"error":true,"reason":"`+reason+`"}`, nil)
 	err := verifyOpenMeteo(context.Background(), map[string]string{"api_key": "bad"})
@@ -248,22 +237,18 @@ func TestCovExtractOMError(t *testing.T) {
 }
 
 func TestCovHttpFailure(t *testing.T) {
-	// Non-SSRF transport error.
 	f := httpFailure(core.Job{}, 0, nil, errors.New("connection refused"))
 	if f == nil || f.Error.Code != "openmeteo_http_error" {
 		t.Fatalf("want openmeteo_http_error, got %+v", f)
 	}
-	// 401 without a reason body uses default message.
 	f = httpFailure(core.Job{}, 401, []byte("not json"), nil)
 	if f == nil || f.Error.Code != "auth" {
 		t.Fatalf("want auth, got %+v", f)
 	}
-	// Generic non-2xx.
 	f = httpFailure(core.Job{}, 500, []byte(`{"reason":"boom"}`), nil)
 	if f == nil {
 		t.Fatal("500 should fail")
 	}
-	// Success.
 	if httpFailure(core.Job{}, 200, []byte("{}"), nil) != nil {
 		t.Fatal("200 should be nil")
 	}
@@ -276,7 +261,6 @@ func TestCovClassForDefault(t *testing.T) {
 }
 
 func TestCovCurrentSummaryNoDesc(t *testing.T) {
-	// weather_code 123 → no wmo description → leading description omitted.
 	c := omCurrent{}
 	c.Current.WeatherCode = 123
 	c.Current.Temperature = 10
@@ -318,8 +302,6 @@ func TestCovExecuteCurrentTimeoutClamp(t *testing.T) {
 }
 
 func TestCovFlattenDailyShortColumns(t *testing.T) {
-	// Time has 2 entries but other columns are shorter — defensive reads leave
-	// missing fields zero.
 	var r omDailyResponse
 	r.Daily.Time = []string{"2026-06-24", "2026-06-25"}
 	r.Daily.TempMax = []float64{20}

@@ -14,7 +14,6 @@ import (
 // still a credential — rejecting it is how a lint silently stops catching
 // pasted tokens.
 func TestMatchesKnownSecret_ShortestMatchIsExactlyMinLen(t *testing.T) {
-	// The Slack alternative: "xoxb-" plus its ten-character minimum tail.
 	const shortest = "xoxb-0123456789"
 	if len(shortest) != minKnownSecretLen {
 		t.Fatalf("fixture is %d chars, want exactly minKnownSecretLen (%d)", len(shortest), minKnownSecretLen)
@@ -47,9 +46,6 @@ func TestIsLiteralSecret_LengthFloorIsInclusive(t *testing.T) {
 	}
 }
 
-// Every upstream reference in a string is collected, not just the first: the
-// dependency walk uses these ids, so missing one loses an edge of the graph
-// the linter reasons over.
 func TestUpstreamRefIDs_CollectsEveryReference(t *testing.T) {
 	got := upstreamRefIDs("${upstream.alpha.out} and ${upstream.beta.rows[0]} and ${upstream.gamma.out}")
 	want := []string{"alpha", "beta", "gamma"}
@@ -66,8 +62,6 @@ func TestUpstreamRefIDs_CollectsEveryReference(t *testing.T) {
 	}
 }
 
-// rootParam takes the segment BEFORE the first "." or "[", so a field-level
-// exemption on a whole param covers each of its elements.
 func TestRootParam(t *testing.T) {
 	for in, want := range map[string]string{
 		"headers.Authorization": "headers",
@@ -83,21 +77,15 @@ func TestRootParam(t *testing.T) {
 	}
 }
 
-// secretKeyNameLeaf judges the LAST path segment, not the whole path — that
-// is the entire point of it. "token.value" names a value under a token
-// object; the leaf is "value" and nothing about it says credential.
 func TestSecretKeyNameLeaf_JudgesOnlyTheLeaf(t *testing.T) {
 	for in, want := range map[string]bool{
 		"headers.Authorization": true,
 		"api_key":               true,
-		// A path ending in "]" has an EMPTY last segment, so the leaf carries
-		// nothing to match. Whole-param exemptions are matched by rootParam
-		// instead, which is why this one does not need to resolve here.
-		"secrets[0]":      false,
-		"token.value":     false, // the credential word is a PARENT, not the leaf
-		"secret.count":    false,
-		"password.length": false,
-		"spreadsheet_id":  false,
+		"secrets[0]":            false,
+		"token.value":           false, // the credential word is a PARENT, not the leaf
+		"secret.count":          false,
+		"password.length":       false,
+		"spreadsheet_id":        false,
 	} {
 		if got := secretKeyNameLeaf(in); got != want {
 			t.Errorf("secretKeyNameLeaf(%q) = %v, want %v", in, got, want)
@@ -138,7 +126,6 @@ func TestLintApprovalRecipients_FlagsOverLongLists(t *testing.T) {
 		t.Errorf("issue code = %q, want approval_too_many_recipients", issues[0].Code)
 	}
 
-	// Exactly the cap is fine — everyone named is emailed.
 	atCap := Graph{Nodes: []Node{{
 		ID: "ap", Module: ApprovalModuleID,
 		Params: map[string]any{"approvers": approverList(MaxApprovalRecipients)},

@@ -61,16 +61,10 @@ var geoConnectionFields = []core.ConnectionField{
 	},
 }
 
-// userAgent identifies dazyflow to the geocoder — Nominatim's policy rejects
-// requests without a real User-Agent (HTTP 403), so this is mandatory, not
-// cosmetic. Photon doesn't require it but accepts it.
 const userAgent = "dazyflow (+https://github.com/dazyflow/dazyflow)"
 
 const maxResponseBytes = 2 << 20 // 2 MiB — a geocode hit is a few KiB.
 
-// geoPlace is a backend-neutral geocoding result. Each backend maps its own
-// response (Nominatim JSON, Photon GeoJSON, …) onto this shape so the drops
-// consume one type regardless of provider.
 type geoPlace struct {
 	Lat, Lon    float64 // parsed coordinate
 	Coord       string  // canonical "lat,lon" (trimmed), ready to wire onward
@@ -79,20 +73,12 @@ type geoPlace struct {
 	Raw         any     // the backend's full response (decoded JSON), for "result"
 }
 
-// geocoder turns place names ↔ coordinates against a specific backend. forward
-// and reverse return either a populated geoPlace (and a nil *core.Result) or a
-// zero geoPlace and an error Result the caller returns to the engine directly.
 type geocoder interface {
-	// label names the backing service for error messages ("OpenStreetMap").
 	label() string
-	// forward geocodes a free-text place query, returning the best match.
 	forward(ctx context.Context, job core.Job, query string) (geoPlace, *core.Result)
-	// reverse geocodes a coordinate into a place.
 	reverse(ctx context.Context, job core.Job, lat, lon float64) (geoPlace, *core.Result)
 }
 
-// defaultGeocoderName is the deployment-wide fallback backend (DAZYFLOW_GEOCODER),
-// used when a tenant's connection doesn't choose one. Empty → Nominatim.
 var defaultGeocoderName = strings.ToLower(strings.TrimSpace(os.Getenv("DAZYFLOW_GEOCODER")))
 
 // geocoderFor selects the backend for a job. Precedence: the tenant's
@@ -108,8 +94,6 @@ func geocoderFor(job core.Job) geocoder {
 	return newGeocoder(name)
 }
 
-// newGeocoder maps a backend name to its implementation. An unknown value is a
-// config mistake — log it and fall back to Nominatim rather than crash.
 func newGeocoder(name string) geocoder {
 	switch name {
 	case "photon":
@@ -124,9 +108,6 @@ func newGeocoder(name string) geocoder {
 	}
 }
 
-// connBaseURL returns the tenant connection's base_url override (trailing slash
-// trimmed) or the given fallback — the backend's env/public default. Lets an
-// operator point a backend at a self-hosted instance per tenant.
 func connBaseURL(job core.Job, fallback string) string {
 	if u := strings.TrimRight(strings.TrimSpace(params.StringDefault(job.Params, "base_url", "")), "/"); u != "" {
 		return u
@@ -139,20 +120,14 @@ func connAPIKey(job core.Job) string {
 	return strings.TrimSpace(params.StringDefault(job.Params, "api_key", ""))
 }
 
-// acceptLanguage returns the optional `language` param, used both as a query
-// hint (Photon) and the Accept-Language header (Nominatim).
 func acceptLanguage(job core.Job) string {
 	return strings.TrimSpace(params.StringDefault(job.Params, "language", ""))
 }
 
-// countryCodes returns the optional comma-separated ISO country bias.
 func countryCodes(job core.Job) string {
 	return strings.TrimSpace(params.StringDefault(job.Params, "countrycodes", ""))
 }
 
-// geoFetch runs one geocoder GET with the shared User-Agent (and an optional
-// Accept-Language). Returns the HTTP status + raw body; the backend classifies.
-// The dial is SSRF-guarded like every other connector.
 func geoFetch(ctx context.Context, job core.Job, fullURL string) (int, []byte, error) {
 	headers := map[string]string{"User-Agent": userAgent}
 	if lang := acceptLanguage(job); lang != "" {
@@ -163,10 +138,6 @@ func geoFetch(ctx context.Context, job core.Job, fullURL string) (int, []byte, e
 	return status, body, err
 }
 
-// geoHTTPFailure maps a transport error or non-2xx geocoder response to an
-// error Result, returning nil on success — the shared epilogue of the geocoder
-// backends. svc names the service; rateHint is appended to the 403/429 message
-// so each backend can point at its own self-host knob.
 func geoHTTPFailure(job core.Job, svc, rateHint string, status int, body []byte, err error) *core.Result {
 	if r := geoloc.TransportFailure(job, "geocoder", svc, err); r != nil {
 		return r

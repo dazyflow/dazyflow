@@ -11,8 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/jobstore"
 )
 
-// planFixture is a run of the diamond a→{b,c}→d with the given records
-// already in the store, and a dispatcher over it that counts point reads.
 func planFixture(t *testing.T, recs ...core.JobRecord) (*Dispatcher, *readCountingStore, core.Graph) {
 	t.Helper()
 	g := core.Graph{
@@ -50,9 +48,6 @@ func planNode(run, id string, status core.JobStatus) core.JobRecord {
 		Result: &core.Result{Status: core.StatusOK}}
 }
 
-// A dependent this node alone feeds is released in the plan, and deciding it
-// costs no store read: the completing node's own record is what the index
-// needs, and the plan has it in hand.
 func TestPlanAdvance_ReleasesOwnDependentsWithoutReading(t *testing.T) {
 	d, st, g := planFixture(t)
 	plan := d.PlanAdvance(context.Background(), g, "run", "a", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}, false)
@@ -91,8 +86,6 @@ func TestPlanAdvance_ReleasesJoinOnTerminalSibling(t *testing.T) {
 	}
 }
 
-// The post-commit pass releases the join the plan deferred, and counts it, so
-// the run is not wrongly declared complete.
 func TestFinishAdvance_RevisitReleasesJoin(t *testing.T) {
 	d, st, g := planFixture(t,
 		core.JobRecord{ID: "run", Kind: core.JobKindGraph, GraphID: "g", Tenant: "t", Status: core.JobStatusRunning},
@@ -100,11 +93,9 @@ func TestFinishAdvance_RevisitReleasesJoin(t *testing.T) {
 		planNode("run", "c", core.JobStatusSucceeded),
 	)
 	plan := d.PlanAdvance(context.Background(), g, "run", "b", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}, false)
-	// c was terminal, so the plan releases d itself…
 	if len(plan.enqueue) != 1 {
 		t.Fatalf("plan = %+v, want d", plan)
 	}
-	// …but pretend the store had seen c still running: the plan then defers.
 	plan = advancePlan{revisit: true}
 	adv, err := st.CompleteAndEnqueue(context.Background(), NodeJobID("run", "b"), "", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}, nil)
 	if err != nil {
@@ -119,8 +110,6 @@ func TestFinishAdvance_RevisitReleasesJoin(t *testing.T) {
 	}
 }
 
-// A cancelled run, seen in the same write as the completion, stops the
-// advance: no revisit, no completion check.
 func TestFinishAdvance_CancelledRunStopsAdvance(t *testing.T) {
 	d, st, g := planFixture(t,
 		core.JobRecord{ID: "run", Kind: core.JobKindGraph, GraphID: "g", Tenant: "t", Status: core.JobStatusCancelled},
@@ -137,7 +126,6 @@ func TestFinishAdvance_CancelledRunStopsAdvance(t *testing.T) {
 	}
 }
 
-// A watched breakpoint releases nothing; an unwatched one is ignored.
 func TestPlanAdvance_BreakpointPausesOnlyWhenWatched(t *testing.T) {
 	d, _, g := planFixture(t)
 	g.Nodes[0].Breakpoint = true
@@ -149,7 +137,6 @@ func TestPlanAdvance_BreakpointPausesOnlyWhenWatched(t *testing.T) {
 	}
 }
 
-// A failure that propagates releases nothing; the run fails instead.
 func TestPlanAdvance_PropagatingFailureReleasesNothing(t *testing.T) {
 	d, _, g := planFixture(t)
 	plan := d.PlanAdvance(context.Background(), g, "run", "a", core.JobStatusFailed, &core.Result{Status: core.StatusError}, false)

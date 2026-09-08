@@ -11,10 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestExecuteWebhookInput_ErrorsWithoutTrigger verifies the run-without-a-fire
-// path: pressing Run on a graph containing a webhook node (instead of POSTing
-// the trigger URL) returns a clear, actionable error rather than zero-value
-// data.
 func TestExecuteWebhookInput_ErrorsWithoutTrigger(t *testing.T) {
 	res, err := executeWebhookInput(context.Background(), core.Job{ID: "job-1"}, nil)
 	if err != nil {

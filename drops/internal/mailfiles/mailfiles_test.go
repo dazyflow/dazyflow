@@ -43,8 +43,6 @@ func TestSanitizeFilename(t *testing.T) {
 			if got != tc.want {
 				t.Errorf("SanitizeFilename(%q) = %q, want %q", tc.in, got, tc.want)
 			}
-			// The invariants that matter, asserted independently of the exact
-			// expected string above — these are what the caller relies on.
 			if strings.ContainsAny(got, `/\`) {
 				t.Errorf("%q still carries a path separator", got)
 			}
@@ -57,8 +55,6 @@ func TestSanitizeFilename(t *testing.T) {
 		})
 	}
 
-	// A very long name is truncated, so a sender can't push a path past the
-	// filesystem's limit and have the create fail instead of the save.
 	long := SanitizeFilename(strings.Repeat("a", 500) + ".pdf")
 	if len(long) > 120 {
 		t.Errorf("a 500-character name came out %d long", len(long))
@@ -66,12 +62,9 @@ func TestSanitizeFilename(t *testing.T) {
 }
 
 func TestKeepExtensions(t *testing.T) {
-	// Blank means "keep everything", expressed as nil so Keep can tell it
-	// apart from "keep nothing".
 	if got := KeepExtensions("  "); got != nil {
 		t.Errorf("blank filter = %v, want nil", got)
 	}
-	// The spellings someone actually types.
 	got := KeepExtensions(" PDF , .png ,*.csv, ")
 	for _, want := range []string{"pdf", "png", "csv"} {
 		if !got[want] {
@@ -99,8 +92,6 @@ func TestKeep(t *testing.T) {
 	}
 }
 
-// Dest is what stops two emails whose invoice is both called "invoice.pdf"
-// from overwriting each other.
 func TestDest(t *testing.T) {
 	a := Dest("", "101", 0, "invoice.pdf")
 	b := Dest("", "102", 0, "invoice.pdf")
@@ -110,11 +101,9 @@ func TestDest(t *testing.T) {
 	if !strings.HasPrefix(a, "scratch://") {
 		t.Errorf("no folder should mean the run's scratch area, got %q", a)
 	}
-	// Two attachments on ONE message stay distinct too.
 	if Dest("", "101", 0, "a.pdf") == Dest("", "101", 1, "a.pdf") {
 		t.Error("two attachments on one message collide")
 	}
-	// A named folder is workspace-relative, not scratch.
 	inFolder := Dest("invoices/2026", "101", 0, "invoice.pdf")
 	if strings.Contains(inFolder, "scratch://") || !strings.HasPrefix(inFolder, "invoices/2026/") {
 		t.Errorf("folder path = %q", inFolder)

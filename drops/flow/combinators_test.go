@@ -10,10 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// runCombinator fetches an AND/OR drop from the registry and runs it with the
-// given booleans wired onto the variadic `in` pin (keyed in[0], in[1], …, the
-// way the engine routes variadic edges). Going through the registry proves the
-// drop is registered and folds end to end. (got() is from compare_test.go.)
 func runCombinator(t *testing.T, id string, inputs ...any) bool {
 	t.Helper()
 	tr, ok := engine.Default.Get(id)
@@ -37,20 +33,16 @@ func TestCombinators_Behaviour(t *testing.T) {
 		inputs []any
 		want   bool
 	}{
-		// AND: true only when every input holds.
 		{"and", []any{true, true}, true},
 		{"and", []any{true, false}, false},
 		{"and", []any{true, true, true}, true},
 		{"and", []any{true, true, false}, false},
 		{"and", []any{true}, true}, // single input folds to itself
-		// OR: true when any input holds.
 		{"or", []any{false, false}, false},
 		{"or", []any{false, true}, true},
 		{"or", []any{false, false, false}, false},
 		{"or", []any{false, false, true}, true},
 		{"or", []any{false}, false},
-		// asBool coercion: combinators accept the same shapes Branch.condition
-		// does (raw bool, truthy strings, nonzero numbers).
 		{"and", []any{"true", "yes"}, true},
 		{"or", []any{"false", 0, 1}, true},
 	} {
@@ -60,8 +52,6 @@ func TestCombinators_Behaviour(t *testing.T) {
 	}
 }
 
-// TestCombinators_EmptyInputs: a combinator with nothing wired is a wiring
-// error, not a silent true/false.
 func TestCombinators_EmptyInputs(t *testing.T) {
 	for _, id := range []string{"and", "or"} {
 		tr, _ := engine.Default.Get(id)
@@ -113,10 +103,6 @@ func TestNot_MissingInput(t *testing.T) {
 	}
 }
 
-// TestCombinators_Manifest locks in the metadata the canvas relies on: each
-// combinator is in the "logic" category and leaves Color unset, so the UI
-// tints it from the category palette (Blueprint-style), matching the
-// comparison primitives.
 func TestCombinators_Manifest(t *testing.T) {
 	want := map[string]string{"and": "A AND B", "or": "A OR B", "not": "NOT"}
 	mans := engine.Default.Manifests()

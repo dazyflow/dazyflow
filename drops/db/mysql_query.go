@@ -95,8 +95,5 @@ func executeMySQLQuery(ctx context.Context, job core.Job, _ chan<- core.Progress
 		return params.Err(job, "db", fmt.Sprintf("connect: %v", err)), nil
 	}
 
-	// The MySQL driver hands back []byte for text/varchar columns by
-	// default; sqlConn.bytesToString converts them so JSON consumers
-	// downstream see strings rather than base64 blobs.
 	return runQueryParsed(ctx, job, sqlConn{db: db, bytesToString: true}, qp)
 }

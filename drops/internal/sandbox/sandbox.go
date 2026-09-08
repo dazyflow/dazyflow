@@ -1,12 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package sandbox resolves a job's persistent-workspace and per-run
-// scratch trees down to os.Root handles that confine file access to
-// the chosen tree. Drops that read or write files share this helper so
-// the scratch:// URL scheme and path-traversal defense behave the same
-// way everywhere — io drops, integration drops (gmail, etc.), and any
-// future caller that needs to touch sandbox bytes.
 package sandbox
 
 import (
@@ -19,11 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Scheme marks a sandbox path that lives in the run's ephemeral scratch
-// area rather than the persistent workspace. The prefix is preserved in
-// output Refs so a downstream node reading the same scratch:// ref
-// resolves to the same place. The scratch tree is reclaimed when the
-// run finishes (see CleanupPolicy / the dispatcher's scratch reclaim).
 const Scheme = "scratch://"
 
 // WorkspaceScheme is an optional, redundant spelling of "workspace-relative".
@@ -40,10 +29,6 @@ const Scheme = "scratch://"
 // everywhere else.
 const WorkspaceScheme = "workspace://"
 
-// Resolve picks the root a sandbox path refers to. A scratch:// path
-// resolves against the job's per-run ScratchRoot; everything else is
-// workspace-relative against the persistent WorkspaceRoot. Returns the
-// absolute root directory and the path relative to it.
 func Resolve(job core.Job, p string) (root, rel string, err error) {
 	if rest, ok := strings.CutPrefix(p, Scheme); ok {
 		if job.ScratchRoot == "" {
@@ -73,9 +58,6 @@ func OpenRoot(job core.Job, p string) (root *os.Root, rel string, err error) {
 	return r, rel, nil
 }
 
-// IsEscape returns true when err looks like a path-traversal rejection
-// from *os.Root. The stdlib doesn't currently expose a sentinel error
-// type for this so we string-match the messages it emits.
 func IsEscape(err error) bool {
 	if err == nil {
 		return false
@@ -148,8 +130,6 @@ func ResolveDir(root, rel string) (dir, cleanRel string, err error) {
 		return "", "", fmt.Errorf("open root: %w", err)
 	}
 	defer func() { _ = r.Close() }()
-	// Opening the directory through the root is what enforces containment:
-	// a symlink escaping the workspace fails here rather than being followed.
 	d, err := r.Open(cleaned)
 	if err != nil {
 		if IsEscape(err) {

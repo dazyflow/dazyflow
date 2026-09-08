@@ -12,9 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fakeConn is an in-memory conn stub for exercising the shared run* skeletons
-// without a real database. Each method returns canned results or errors so the
-// happy and error branches can be driven deterministically.
 type fakeConn struct {
 	execErr  error
 	queryErr error
@@ -23,7 +20,6 @@ type fakeConn struct {
 	batchN   int
 	batchErr error
 
-	// captured for assertions
 	lastExec  string
 	lastBatch string
 }
@@ -45,8 +41,6 @@ func (c *fakeConn) execBatch(_ context.Context, stmt string, _ []string, _ []map
 	return c.batchN, c.batchErr
 }
 
-// TestRunQuery covers the param-parsing wrapper and the OK path through a
-// stub conn. (No drop calls runQuery directly, so this is its only coverage.)
 func TestRunQuery(t *testing.T) {
 	t.Run("bad params short-circuit before conn", func(t *testing.T) {
 		res, err := runQuery(t.Context(), core.Job{Params: map[string]any{}}, &fakeConn{})
@@ -72,8 +66,6 @@ func TestRunQuery(t *testing.T) {
 	})
 }
 
-// TestRunQueryParsed_Errors covers the two error mappings: too_many_rows
-// (the sentinel) and a generic db error.
 func TestRunQueryParsed_Errors(t *testing.T) {
 	t.Run("too many rows maps to too_many_rows", func(t *testing.T) {
 		c := &fakeConn{queryErr: errTooManyRows}
@@ -91,8 +83,6 @@ func TestRunQueryParsed_Errors(t *testing.T) {
 	})
 }
 
-// TestRunInsert covers create-table error, column_types error, zero-rows
-// early return, batch error, and the OK count path.
 func TestRunInsert(t *testing.T) {
 	d := sqliteDialect{}
 	ri := rowsInput{rows: []map[string]any{{"a": 1}}, headers: []string{"a"}}
@@ -111,7 +101,6 @@ func TestRunInsert(t *testing.T) {
 		}
 	})
 	t.Run("zero rows returns inserted=0 without batch", func(t *testing.T) {
-		// create_table=false so no exec; empty rows → early return.
 		job := core.Job{Params: map[string]any{"create_table": false}}
 		res, _ := runInsert(t.Context(), job, d, &fakeConn{}, `"t"`, rowsInput{headers: []string{"a"}})
 		if res.Status != core.StatusOK {
@@ -140,9 +129,6 @@ func TestRunInsert(t *testing.T) {
 	})
 }
 
-// TestRunUpsert covers the column_types error, create error, zero-rows path,
-// the derive-update-cols branch, the explicit-update-cols branch, and a
-// batch error.
 func TestRunUpsert(t *testing.T) {
 	d := postgresDialect{}
 	ri := rowsInput{rows: []map[string]any{{"id": 1, "name": "x"}}, headers: []string{"id", "name"}}
@@ -177,8 +163,6 @@ func TestRunUpsert(t *testing.T) {
 		if res.Status != core.StatusOK {
 			t.Fatalf("status=%q err=%+v", res.Status, res.Error)
 		}
-		// Derived update set = headers \ conflict = {name}; statement should
-		// reference EXCLUDED."name".
 		if c.lastBatch == "" || !strings.Contains(c.lastBatch, `"name" = EXCLUDED."name"`) {
 			t.Errorf("derived upsert clause wrong: %q", c.lastBatch)
 		}
@@ -203,8 +187,6 @@ func TestRunUpsert(t *testing.T) {
 	})
 }
 
-// TestQueryGuard covers the limit-reached stop and the row-ceiling error in
-// isolation (the shared append-with-bounds helper).
 func TestQueryGuard(t *testing.T) {
 	t.Run("limit reached signals stop", func(t *testing.T) {
 		out, stop, err := queryGuard([]map[string]any{{"a": 1}}, map[string]any{"a": 2}, 2)
@@ -220,10 +202,6 @@ func TestQueryGuard(t *testing.T) {
 	})
 }
 
-// runQuery is the shared body of every query drop once the connection is
-// in hand: parse params, run the SELECT through the conn, emit the
-// result. The caller supplies the connection (each backend opens it
-// differently — sqlite via sandbox probe, pg/mysql via the registries).
 func runQuery(ctx context.Context, job core.Job, c conn) (core.Result, error) {
 	qp, errRes := parseQueryParams(job)
 	if errRes != nil {

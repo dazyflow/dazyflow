@@ -29,14 +29,6 @@ import (
 // row with a cost error rather than hanging the worker.
 const CostLimit uint64 = 1_000_000
 
-// Env builds the CEL environment with two variables in scope:
-//
-//   - row: the current row as map<string, dyn>.
-//   - now: the current time as a timestamp, so filters can express "overdue",
-//     "last week", "due tomorrow" without a precomputed date column.
-//
-// extra options are appended for callers that need more (e.g. a computed
-// variable). Bound at eval time by Vars.
 func Env(extra ...cel.EnvOption) (*cel.Env, error) {
 	opts := []cel.EnvOption{
 		cel.Variable("row", cel.MapType(cel.StringType, cel.DynType)),
@@ -47,18 +39,11 @@ func Env(extra ...cel.EnvOption) (*cel.Env, error) {
 		// double-vs-int type error; without this, the builder's own output
 		// wouldn't compile.
 		cel.CrossTypeNumericComparisons(true),
-		// The string helpers people reach for the moment they write a formula
-		// by hand: substring, split/join, replace, trim, lowerAscii/upperAscii,
-		// indexOf, charAt. Without them even "the first ten characters of the
-		// date" has no expression, and the answer was a second step.
 		ext.Strings(),
 	}
 	return cel.NewEnv(append(opts, extra...)...)
 }
 
-// Vars is the activation for one row evaluation. `now` is sampled per call;
-// within a batch that's day-granularity stable, which is all the time-window
-// filters need.
 func Vars(row map[string]any) map[string]any {
 	return map[string]any{"row": row, "now": time.Now().UTC()}
 }

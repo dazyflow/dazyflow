@@ -29,7 +29,6 @@ func pages(t *testing.T, res core.Result) string {
 	return s
 }
 
-// Combining is the point: three documents in, one out, with all the pages.
 func TestPDFMerge_JoinsEveryPage(t *testing.T) {
 	job := pdfJob(t, map[string][]byte{
 		"a.pdf": makePDF(t, 2),
@@ -49,18 +48,12 @@ func TestPDFMerge_JoinsEveryPage(t *testing.T) {
 	if !strings.HasPrefix(string(out), "%PDF") {
 		t.Error("the combined file isn't a PDF")
 	}
-	// And the result is readable by the info step, which is the only
-	// assertion that proves it's a well-formed document rather than bytes
-	// that happen to start with %PDF.
 	back := pdfJob(t, map[string][]byte{"m.pdf": out}, "file", "m.pdf")
 	if got := pages(t, run(t, executePDFInfo, back)); got != "6" {
 		t.Errorf("reading the merged file back gives %q pages", got)
 	}
 }
 
-// The page count is read back from the RESULT, not added up from the inputs —
-// with a divider page inserted the arithmetic differs, and a count that
-// disagrees with the file is worse than none.
 func TestPDFMerge_DividerChangesTheCount(t *testing.T) {
 	files := map[string][]byte{"a.pdf": makePDF(t, 1), "b.pdf": makePDF(t, 1)}
 	plain := run(t, executePDFMerge, pdfJob(t, files, "files", "a.pdf", "b.pdf"))
@@ -95,9 +88,6 @@ func TestPDFMerge_NothingConnected(t *testing.T) {
 	}
 }
 
-// The likeliest mistake is wiring the wrong file in. pdfcpu's own error is
-// about object parsing, which reads like a corrupt document rather than the
-// truth — so the step checks the header and says what it actually got.
 func TestPDFMerge_NonPDFIsExplained(t *testing.T) {
 	job := pdfJob(t, map[string][]byte{"notes.txt": []byte("just some text, not a document")}, "files", "notes.txt")
 
@@ -121,8 +111,6 @@ func TestPDFMerge_NamesTheOutput(t *testing.T) {
 	job.Params = map[string]any{"name": "invoices-june"}
 
 	res := run(t, executePDFMerge, job)
-	// ".pdf" is appended when the author leaves it off — a file called
-	// "invoices-june" opens in nothing.
 	if !strings.HasSuffix(res.Output["pdf"].Ref, "invoices-june.pdf") {
 		t.Errorf("output path = %q, want the given name with .pdf", res.Output["pdf"].Ref)
 	}
@@ -149,7 +137,6 @@ func TestPDFSplit_OneFilePerPage(t *testing.T) {
 			t.Errorf("piece %d has %q pages, want 1", i+1, got)
 		}
 	}
-	// The page range rides on each row so a flow can label or route by it.
 	if from, _ := rows[2]["from"].(int); from != 3 {
 		t.Errorf("third piece starts at page %v, want 3", rows[2]["from"])
 	}
@@ -163,14 +150,11 @@ func TestPDFSplit_EveryTwoPages(t *testing.T) {
 	job.Params = map[string]any{"pages_per_file": 2}
 
 	res := run(t, executePDFSplit, job)
-	// 5 pages in twos is 3 files: 2 + 2 + 1.
 	if got, _ := res.Output["count"].Inline.(string); got != "3" {
 		t.Errorf("count = %q, want 3 (2+2+1)", got)
 	}
 }
 
-// The cap exists so a 2000-page scan split per page can't fill the run's
-// scratch area with 2000 documents.
 func TestPDFSplit_RefusesTooManyPieces(t *testing.T) {
 	job := pdfJob(t, map[string][]byte{"huge.pdf": makePDF(t, maxParts+1)}, "file", "huge.pdf")
 	job.Params = map[string]any{"pages_per_file": 1}
@@ -196,7 +180,6 @@ func TestPDFSplit_NamePrefix(t *testing.T) {
 
 	res := run(t, executePDFSplit, job)
 	rows := res.Output["files"].Inline.([]map[string]any)
-	// The prefix loses its own ".pdf" so the pieces aren't "invoice.pdf-1.pdf".
 	if name, _ := rows[0]["name"].(string); name != "invoice-1.pdf" {
 		t.Errorf("first piece is %q, want invoice-1.pdf", name)
 	}
@@ -222,7 +205,6 @@ func TestPDFInfo_ReadsTheDetails(t *testing.T) {
 	if sz, _ := info["size_bytes"].(int); sz == 0 {
 		t.Error("info should carry the file size")
 	}
-	// The page size tells A4 from Letter from a receipt at a glance.
 	if ps, _ := info["page_size"].(string); !strings.Contains(ps, "595") {
 		t.Errorf("page_size = %q, want the A4 dimensions of the fixture", ps)
 	}

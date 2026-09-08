@@ -18,7 +18,7 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// TestBranch_ValueWireCannotRunTheUntakenSide is the double-send regression.
+// The double-send regression.
 //
 // The shape is the one people actually build: an If that mails one thing on
 // Yes and another on No, where BOTH send steps take their recipient from an
@@ -55,7 +55,6 @@ func TestBranch_ValueWireCannotRunTheUntakenSide(t *testing.T) {
 	sender("test_send_yes", &sentYes)
 	sender("test_send_no", &sentNo)
 	sender("test_follow_up", &followUp)
-	// Bring the real drops (if, text, email) in alongside the fixtures.
 	for id, m := range engine.Default.Manifests() {
 		transport, _ := engine.Default.Get(id)
 		_ = reg.Register(engine.NativeDrop{
@@ -96,8 +95,6 @@ func TestBranch_ValueWireCannotRunTheUntakenSide(t *testing.T) {
 		Nodes: []core.Node{
 			{ID: "subject", Module: "text", Params: map[string]any{"text": "urgent"}},
 			{ID: "check", Module: "if", Params: map[string]any{"op": "equals", "B": "urgent"}},
-			// The address step: no incoming wire, so it runs as a root and its
-			// output is live for both branches.
 			{ID: "addr", Module: "email", Params: map[string]any{"email": "ada@acme.com"}},
 			{ID: "yes", Module: "test_send_yes"},
 			{ID: "no", Module: "test_send_no"},
@@ -107,10 +104,8 @@ func TestBranch_ValueWireCannotRunTheUntakenSide(t *testing.T) {
 			{From: "subject", FromPort: "out", To: "check", ToPort: "A"},
 			{From: "check", FromPort: "then", To: "yes", ToPort: "body"},
 			{From: "check", FromPort: "else", To: "no", ToPort: "body"},
-			// One address step feeding the To pin of both branches.
 			{From: "addr", FromPort: "out", To: "yes", ToPort: "to"},
 			{From: "addr", FromPort: "out", To: "no", ToPort: "to"},
-			// A step past the untaken side, itself holding a live wire.
 			{From: "no", FromPort: "out", To: "after_no", ToPort: "body"},
 			{From: "addr", FromPort: "out", To: "after_no", ToPort: "to"},
 		},
@@ -142,8 +137,6 @@ func TestBranch_ValueWireCannotRunTheUntakenSide(t *testing.T) {
 		{"yes", core.JobStatusSucceeded},
 		{"no", core.JobStatusSkipped},
 		{"after_no", core.JobStatusSkipped},
-		// The address step still runs on its own: it is a root, and nothing
-		// about branch routing should stop it.
 		{"addr", core.JobStatusSucceeded},
 	} {
 		rec, err := jobs.Get(t.Context(), daemon.NodeJobID(runID, c.node))

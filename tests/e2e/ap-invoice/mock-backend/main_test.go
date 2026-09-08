@@ -73,7 +73,6 @@ func TestReadBody(t *testing.T) {
 	if b := readBody(r); b != "hello" {
 		t.Fatalf("readBody=%q", b)
 	}
-	// empty body
 	r2 := httptest.NewRequest(http.MethodPost, "/x", io.NopCloser(strings.NewReader("")))
 	if b := readBody(r2); b != "" {
 		t.Fatalf("readBody empty=%q", b)

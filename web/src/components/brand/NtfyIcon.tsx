@@ -3,10 +3,6 @@
 
 import type { SVGProps } from "react";
 
-// NtfyIcon renders the ntfy logo (https://ntfy.sh) — a teal chat bubble
-// with a "> _" prompt mark. Simplified from the official SVG to keep
-// the inlined markup compact and to avoid gradient-id collisions when
-// multiple instances render in the same document.
 type Props = SVGProps<SVGSVGElement> & {
   size?: number | string;
   color?: string;

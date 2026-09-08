@@ -14,9 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/webapi"
 )
 
-// ordersSpec is the running example, written the way a framework actually emits
-// one: a $ref'd parameter, a $ref'd body schema, an allOf, a path-level
-// parameter and an operation with no operationId.
 const ordersSpec = `
 openapi: 3.0.3
 info:
@@ -141,7 +138,6 @@ func TestParseSpec_ResolvesRefsAndMergesAllOf(t *testing.T) {
 	if create.BodyMode != webapi.BodyJSON {
 		t.Fatalf("body mode = %q, want json", create.BodyMode)
 	}
-	// From the allOf's second member...
 	if a := argByName(t, create, "sku"); !a.Required || a.In != webapi.InBody {
 		t.Errorf("sku = %+v, want a required body arg", a)
 	}
@@ -151,8 +147,6 @@ func TestParseSpec_ResolvesRefsAndMergesAllOf(t *testing.T) {
 	if a := argByName(t, create, "gift"); a.Required {
 		t.Error("gift is not in the required list and must not be required")
 	}
-	// ...and from the $ref'd member it inherits, which is the whole point of
-	// merging allOf rather than reading only the last branch.
 	if a := argByName(t, create, "source"); a.In != webapi.InBody {
 		t.Errorf("source = %+v, want the inherited body arg", a)
 	}
@@ -160,8 +154,6 @@ func TestParseSpec_ResolvesRefsAndMergesAllOf(t *testing.T) {
 
 func TestParseSpec_PathLevelParametersReachEveryOperation(t *testing.T) {
 	got := parse(t, ordersSpec)
-	// Declared once on the path item, via a $ref, and needed by both the GET
-	// and the DELETE under it.
 	for _, id := range []string{"getOrder", "delete_orders_order_id"} {
 		op := opByID(t, got, id)
 		a := argByName(t, op, "order_id")
@@ -195,7 +187,6 @@ func TestParseSpec_KeepsEnumDetailOnTheArgument(t *testing.T) {
 	if !strings.Contains(string(expand.Schema), "lines") {
 		t.Errorf("schema = %s", expand.Schema)
 	}
-	// A schema that says nothing the type does not is not worth carrying.
 	region := argByName(t, opByID(t, got, "getOrder"), "X-Region")
 	if region.Schema != nil {
 		t.Errorf("a bare {type: string} was carried as a schema: %s", region.Schema)
@@ -313,8 +304,6 @@ paths:
       responses: {'200': {description: ok}}
 `
 	got := parse(t, spec)
-	// Neither has a field-per-argument reading, so both become a working step
-	// with a request_body port rather than a skipped one.
 	for _, id := range []string{"upload", "bulk"} {
 		if op := opByID(t, got, id); op.BodyMode != webapi.BodyRaw {
 			t.Errorf("%s body mode = %q, want raw", id, op.BodyMode)
@@ -340,7 +329,6 @@ paths:
 }
 
 func TestParseSpec_SurvivesARefCycle(t *testing.T) {
-	// A self-referential document is a plausible way to try to spin the parser.
 	const spec = `
 openapi: 3.0.0
 info: {title: X}
@@ -354,13 +342,10 @@ components:
   parameters:
     Loop: {$ref: '#/components/parameters/Loop'}
 `
-	// The point is that this RETURNS. A hang is the failure.
 	if _, err := webapi.ParseSpec([]byte(spec)); err != nil {
 		t.Logf("refused, which is fine: %v", err)
 	}
 }
-
-// --- refresh diff -----------------------------------------------------------
 
 func ops(in ...webapi.Operation) []webapi.Operation { return in }
 
@@ -375,13 +360,9 @@ func TestDiffOperations_ClassifiesEachOperation(t *testing.T) {
 		op("cancelOrder", "DELETE", "/orders/{order_id}", webapi.Arg{Name: "order_id", In: webapi.InPath, Required: true}),
 	)
 	incoming := ops(
-		// unchanged
 		op("getOrder", "GET", "/orders/{order_id}", webapi.Arg{Name: "order_id", In: webapi.InPath, Required: true}),
-		// changed: a new query argument
 		op("listOrders", "GET", "/orders", webapi.Arg{Name: "limit", In: webapi.InQuery}),
-		// added
 		op("refundOrder", "POST", "/orders/{order_id}/refund", webapi.Arg{Name: "order_id", In: webapi.InPath, Required: true}),
-		// cancelOrder is gone
 	)
 
 	diff := webapi.DiffOperations("orders", stored, incoming)
@@ -391,8 +372,6 @@ func TestDiffOperations_ClassifiesEachOperation(t *testing.T) {
 	if !diff.HasRemovals() {
 		t.Error("HasRemovals = false with a removal present")
 	}
-	// A removal has to name the step id, because that is what a reader searches
-	// their flows for.
 	if got := diff.RemovedStepIDs(); len(got) != 1 || got[0] != "api:orders:cancelOrder" {
 		t.Errorf("RemovedStepIDs = %v", got)
 	}
@@ -437,7 +416,7 @@ func TestParseThenRefresh_IsAllUnchanged(t *testing.T) {
 	}
 }
 
-// TestFetchSpec covers the guarded spec fetch. A spec URL is tenant-supplied,
+// Covers the guarded spec fetch. A spec URL is tenant-supplied,
 // so the note's rule is that it goes through the same Doer a step's call does —
 // never a bare http.Client. These pin the boundary conditions around that: no
 // Doer wired, a non-https address, a non-2xx answer, and the happy path.
@@ -454,7 +433,6 @@ func TestFetchSpec(t *testing.T) {
 		t.Errorf("error = %q, want it to name the missing caller", err)
 	}
 
-	// A Doer that records what it was asked for and returns the running example.
 	var gotURL, gotMethod string
 	var gotAccept string
 	var gotMaxBytes int
@@ -490,13 +468,10 @@ func TestFetchSpec(t *testing.T) {
 			t.Errorf("FetchSpec(%q) error = %q, want it to state the https rule", bad, err)
 		}
 	}
-	// None of those should have reached the caller.
 	if gotURL != "" {
 		t.Errorf("a rejected address still hit the network: %q", gotURL)
 	}
 
-	// The happy path: parsed, and fetched through the guarded caller with the
-	// response cap applied.
 	got, err := webapi.FetchSpec(ctx, "  https://api.example.com/spec.yaml  ")
 	if err != nil {
 		t.Fatalf("FetchSpec: %v", err)
@@ -507,7 +482,6 @@ func TestFetchSpec(t *testing.T) {
 	if gotMethod != http.MethodGet {
 		t.Errorf("method = %q, want GET", gotMethod)
 	}
-	// The surrounding whitespace is trimmed before the request.
 	if gotURL != "https://api.example.com/spec.yaml" {
 		t.Errorf("url = %q, want it trimmed", gotURL)
 	}
@@ -518,7 +492,6 @@ func TestFetchSpec(t *testing.T) {
 		t.Errorf("maxBytes = %d, want the response cap applied", gotMaxBytes)
 	}
 
-	// A non-2xx answer is reported with its status, not parsed as a document.
 	for _, status := range []int{301, 404, 401, 500} {
 		install(status, `{"error":"nope"}`)
 		_, err := webapi.FetchSpec(ctx, "https://api.example.com/spec.yaml")
@@ -531,7 +504,6 @@ func TestFetchSpec(t *testing.T) {
 		}
 	}
 
-	// A transport failure surfaces as a fetch error, not a parse error.
 	webapi.SetDoer(func(_ context.Context, _, _ string, _ map[string]string,
 		_ []byte, _, _ int) (int, []byte, http.Header, error) {
 		return 0, nil, nil, errors.New("dial guard blocked a private address")
@@ -542,7 +514,6 @@ func TestFetchSpec(t *testing.T) {
 		t.Errorf("error = %q, want a fetch failure", err)
 	}
 
-	// A 200 carrying something that isn't a spec still fails at the parser.
 	install(200, `{"hello":"world"}`)
 	if _, err := webapi.FetchSpec(ctx, "https://api.example.com/spec.yaml"); err == nil {
 		t.Fatal("a non-spec 200 body was accepted")

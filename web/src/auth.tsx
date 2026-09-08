@@ -11,25 +11,13 @@ import i18n, { setLanguage } from "./i18n/index";
 import { applyTheme } from "./theme";
 import type { Permission, WhoAmI } from "./types";
 
-// SESSION_MARKER is a NON-SECRET "a session exists in this browser" hint. The
-// session credential itself is the HttpOnly `dazyflow_session` cookie and never
-// touches JS-readable storage — so XSS can't exfiltrate it. The marker only lets
-// a cold boot know to render the app and re-validate the cookie (instead of
-// flashing the sign-in screen) for a returning user.
+// NON-SECRET hint only: the session itself lives in an HttpOnly cookie.
 const SESSION_MARKER = "dazyflow.session";
-// LEGACY_TOKEN_KEY is where older builds persisted the raw bearer token. It's
-// scrubbed on boot so an upgrade removes the XSS-exfiltratable secret; the
-// matching session cookie re-establishes the session via the boot probe.
+// Older builds persisted the raw bearer here; it is cleared, never read.
 const LEGACY_TOKEN_KEY = "dazyflow.token";
 const TENANT_STORAGE_KEY = "dazyflow.activeTenant";
 
-// Every org has exactly one workspace. The concept is no longer
-// user-facing: there's no switcher and no per-workspace scoping in the
-// UI. `activeWorkspace` still exists purely as the value threaded into
-// the API calls that take a workspace path segment — it resolves to the
-// principal's bound workspace (historically "main") and never changes
-// within an org. DEFAULT_WORKSPACE is the fallback when a principal has
-// no explicit binding (e.g. a platform admin browsing another org).
+// Every org has exactly one workspace; the concept is vestigial in the UI.
 const DEFAULT_WORKSPACE = "main";
 
 type AuthCtx = {
@@ -37,31 +25,16 @@ type AuthCtx = {
   me: WhoAmI | null;
   loading: boolean;
   error: string | null;
-  // clearError wipes the context error. SignIn/SignUp call it when the user
-  // navigates between them so a stale sign-in failure doesn't show on the
-  // sign-up page (and vice versa).
   clearError: () => void;
-  // signInWithPassword resolves to a discriminator: when the account has
-  // 2FA enabled the server withholds the session and returns a challenge
-  // instead, so the caller must collect a code and finish via verifyTOTP.
-  // Errors surface on `error` and are re-thrown.
   signInWithPassword: (
     email: string,
     password: string,
   ) => Promise<{ totpRequired: boolean; challenge?: string }>;
-  // verifyTOTP completes leg 2 of sign-in: it exchanges the challenge +
-  // a code (or recovery code) for a session, landing the user in the
-  // same signed-in state as a code-free sign-in. Pass recoveryCode="" to
-  // use a TOTP code and code="" to use a recovery code.
   verifyTOTP: (
     challenge: string,
     code: string,
     recoveryCode: string,
   ) => Promise<void>;
-  // signUpWithPassword creates a new account, auto-signs the user in,
-  // and lands them in the same authenticated state as a sign-in call.
-  // Errors surface on the context (`error`) and are re-thrown so the
-  // caller can branch on success.
   signUpWithPassword: (
     email: string,
     password: string,
@@ -69,48 +42,25 @@ type AuthCtx = {
   ) => Promise<void>;
   signOut: () => Promise<void>;
   hasPerm: (p: Permission) => boolean;
-  // activeWorkspace is the single workspace of the active org, threaded
-  // into the API calls that still take a workspace path segment. It is
-  // not user-selectable — one workspace per org — and is derived from the
-  // principal's binding (see DEFAULT_WORKSPACE).
   activeWorkspace: string;
 
-  // Tenant state. For platform admins (no tenant binding), `tenants`
-  // lists every tenant on the dzd instance and `activeTenant` is
-  // their current selection. For everyone else, `tenants` is the
-  // singleton of their own tenant and the switcher hides.
   tenants: string[];
   activeTenant: string;
-  // opts.reload forces a full-page reload (to "/") after the switch lands so
-  // no page keeps the previous org's data on screen; the org switcher sets it.
   setActiveTenant: (t: string, opts?: { reload?: boolean }) => void;
 
-  // refreshMe re-fetches the current identity (whoami) and updates `me`,
-  // so chrome bound to it — the top bar's org name/logo, the tenant
-  // switcher — reflects a just-saved org profile without a full reload.
   refreshMe: () => Promise<void>;
 
-  // reloadTenants re-runs the identity bootstrap (whoami + tenant catalogue),
-  // so a newly created org shows up in `tenants` and `me.memberships` without
-  // a page refresh. refreshMe only updates `me`; this also rebuilds the list.
   reloadTenants: () => void;
 };
 
 const Ctx = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // `token` holds the COOKIE_SESSION sentinel for a live session (never the real
-  // bearer — that's in the HttpOnly cookie). It stays truthy so the app's many
-  // `if (!token)` gates work, and api.request() reads the sentinel as
-  // "authenticate via the cookie". Initialized from the non-secret marker so a
-  // returning user renders the app immediately; the bootstrap effect then
-  // re-validates the cookie.
+  // The sentinel, never a real credential: the cookie is not readable from JS.
   const [token, setToken] = useState<string | null>(() =>
     localStorage.getItem(SESSION_MARKER) ? COOKIE_SESSION : null,
   );
   const [me, setMe] = useState<WhoAmI | null>(null);
-  // Bumped by reloadTenants() to re-run the bootstrap effect on demand (e.g.
-  // after creating an org) without changing the token.
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState<boolean>(!!token);
   const [error, setError] = useState<string | null>(null);
@@ -119,26 +69,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activeTenant, setActiveTenantState] = useState<string>("");
   const navigate = useNavigate();
 
-  // Register the process-wide 401 handler so a session that expires or is
-  // revoked *while the app is open* — not just on the bootstrap whoami —
-  // tears down local state, shows the "session expired" message, and
-  // bounces to sign-in, instead of leaking the raw backend error into
-  // whichever component happened to make the failing request. Registered
-  // ahead of the bootstrap effect below so it's live before the first
-  // authenticated call resolves. setToken/setMe/setError are stable and
-  // navigate is stable across renders, so this runs once.
+  // So a session expiring anywhere in the app lands the user on sign-in once.
   useEffect(() => {
     setUnauthorizedHandler(() => {
       localStorage.removeItem(SESSION_MARKER);
       setToken(null);
       setMe(null);
-      // Drop the bootstrap spinner along with the session. The identity
-      // bootstrap below clears its own `loading` in a .finally() guarded by
-      // `cancelled`, and clearing the token here re-runs that effect — so its
-      // cleanup can flip `cancelled` first and the .finally() becomes a no-op,
-      // leaving `loading` stuck true. That disables the sign-in submit button
-      // (`disabled={busy || loading || ...}`) on the page we're about to
-      // navigate to, locking the user out of the app entirely.
       setLoading(false);
       setError(i18n.t("signIn.sessionExpired"));
       navigate("/signin");
@@ -146,16 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => setUnauthorizedHandler(null);
   }, [navigate]);
 
-  // Cold-boot cookie adoption. Two cases land here with a valid session cookie
-  // but no in-browser marker: (1) an SSO / subdomain-handoff sign-in, where the
-  // server set the cookie on a redirect and could not write localStorage; and
-  // (2) an upgrade from an older build whose raw token we scrub below. Probe the
-  // cookie once: if it authenticates, adopt the session (which kicks off the
-  // identity bootstrap); a 401 is swallowed (probe variant) so an anonymous
-  // visitor just stays on the sign-in screen with no "session expired" toast.
+  // A valid cookie with no in-memory state: adopt it rather than bouncing to sign-in.
   useEffect(() => {
-    // Scrub any raw bearer a previous build left in storage — the cookie is the
-    // credential now, and a persisted token is XSS-exfiltratable.
     localStorage.removeItem(LEGACY_TOKEN_KEY);
     if (token) return; // marker already adopted the session
     let cancelled = false;
@@ -182,18 +110,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setActiveWorkspaceState("");
       setTenants([]);
       setActiveTenantState("");
-      // No session means nothing is bootstrapping: assert the invariant here
-      // too, so every path that clears the token (401 handler, sign-out, a
-      // failed bootstrap) lands with an interactive sign-in form regardless of
-      // how the in-flight promise and this effect's cleanup interleave.
+      // No session means nothing is bootstrapping.
       setLoading(false);
       return;
     }
     let cancelled = false;
     setLoading(true);
-    // Bootstrap: resolve identity + tenant catalog. Workspace loading
-    // is a separate effect keyed on activeTenant so a tenant switch
-    // triggers a clean refetch (rather than racing the initial pass).
     api
       .whoami(token)
       .then(async (w) => {
@@ -201,11 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setMe(w);
         setError(null);
         const isPlatform = w.permissions.includes("platform:admin");
-        // Build the tenant catalogue from three sources in priority
-        // order: platform admins see every tenant on the daemon; other
-        // users see the orgs they have memberships in (home + invited);
-        // a brand-new account with no memberships still sees its home
-        // org as the single entry.
+        // Three sources in priority order; the first wins.
         let tenantList: string[] = [];
         if (w.memberships && w.memberships.length > 0) {
           tenantList = w.memberships.map((m) => m.tenant);
@@ -216,8 +134,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const r = await api.listTenants(token);
             const platformList = r.tenants ?? [];
-            // Merge: keep the user's home + invited orgs first
-            // (relevant to them), then platform-wide entries after.
             const seen = new Set(tenantList);
             for (const t of platformList) {
               if (!seen.has(t)) {
@@ -232,12 +148,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setTenants(tenantList);
 
-        // A mailed link (e.g. a failure notification's "View run details")
-        // carries ?org=<tenant>, because the route itself has no org segment
-        // and the run only exists in one org. Honour it BEFORE pickActive, so
-        // the link wins over whatever org this browser last used — otherwise a
-        // member of several orgs opens the link in the wrong one and is told
-        // the run doesn't exist.
         const deepLink = resolveOrgDeepLink({
           requested: new URLSearchParams(window.location.search).get(ORG_PARAM) ?? "",
           available: tenantList,
@@ -245,29 +155,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           loc: window.location,
         });
         if (deepLink.kind === "switch") {
-          // The session is scoped to another org, so re-scope it server-side
-          // first — reloading before that lands the cold boot back in the OLD
-          // scope. Then navigate to the deep link itself (not "/", which is
-          // where a manual org switch goes) so the user arrives at the page the
-          // mail pointed at. localStorage is set first so the cold boot picks
-          // the same org up.
+          // Scoped to another org, so re-scope server-side before rendering.
           localStorage.setItem(TENANT_STORAGE_KEY, deepLink.tenant);
           setActiveTenantState(deepLink.tenant);
           api
             .switchOrg(token, deepLink.tenant)
             .then(() => window.location.assign(deepLink.url))
             .catch(() => {
-              // The server refused to re-scope. Staying put in the old org
-              // would show a misleading "run not found", so send them to the
-              // switcher-visible root with the org selected locally and let the
-              // normal switch path report any problem.
               window.location.assign("/");
             });
           return;
         }
         if (deepLink.kind === "adopt") {
-          // Already in the right org — nothing to reload. Just drop the param
-          // so it can't re-assert this org after a later manual switch.
           window.history.replaceState(null, "", deepLink.url);
         }
         const chosenTenant = pickActive(
@@ -277,21 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             : localStorage.getItem(TENANT_STORAGE_KEY) ?? "",
           w.tenant ?? "",
         );
-        // Reconcile the SESSION with that choice before anything renders
-        // against it. The two can legitimately disagree: a fresh sign-in
-        // always binds the session to the user's home org, while
-        // localStorage still holds whichever org this browser last used,
-        // and pickActive deliberately prefers the cached one (that IS the
-        // "remember my last org" behaviour). Left unreconciled, every
-        // scoped call then carries ?tenant=<cached> against a principal
-        // bound elsewhere and comes back 403 forbidden_scope — which the
-        // UI can only render as "you don't have permission", a dead end no
-        // amount of role-granting fixes. This is the same switchOrg round
-        // trip setActiveTenant does for a manual switch; the bootstrap
-        // needs it too, because a divergence can be a whole session old.
-        //
-        // Platform admins carry no tenant binding and are exempt from the
-        // server's scope check, so they skip the round trip entirely.
+        // Before anything renders, or a component reads the wrong org.
         let effectiveTenant = chosenTenant;
         if (chosenTenant && w.tenant && chosenTenant !== w.tenant && !isPlatform) {
           try {
@@ -300,11 +185,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (cancelled) return;
             setMe(rescoped);
           } catch {
-            // The server refused to re-scope — a revoked membership or a
-            // suspended org. Fall back to the binding we actually hold
-            // rather than pointing the client at an org it cannot read,
-            // and repair the cache so the next cold boot doesn't retry the
-            // same dead org.
             effectiveTenant = w.tenant;
           }
         }
@@ -314,14 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch((e: unknown) => {
         if (!cancelled) {
-          // A token restored from localStorage that the server rejects
-          // (401) means the saved session has expired or been revoked.
-          // Show a plain-language message rather than the raw backend
-          // "auth: invalid credential" string — most users hitting this
-          // are non-technical and just need to know to sign in again.
-          // Other failures (network, 5xx) go through explainApiError so the
-          // user never sees a raw "Failed to fetch" / Go error string here
-          // either — this is the very first screen they hit.
+          // A rejected restored token must be cleared, or every request 401s.
           const expired = e instanceof APIError && e.status === 401;
           setError(expired ? i18n.t("signIn.sessionExpired") : explainApiError(e, i18n.t));
           setMe(null);
@@ -337,14 +210,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [token, reloadKey]);
 
-  // Hydrate account-roaming interface prefs (theme, language) once the
-  // session is live. The boot path already applied this browser's cached
-  // theme/lang for a flash-free first paint; here we reconcile to the
-  // account's stored choice so a fresh device picks up the user's real
-  // preference. applyTheme + changeLanguage also refresh the localStorage
-  // caches, so the next cold boot matches without re-fetching. Empty
-  // server values mean "no explicit choice" — leave the local default
-  // alone. Best-effort: a failed fetch just keeps the local state.
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
@@ -367,11 +232,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [token]);
 
-  // One workspace per org: there's no list to fetch and nothing to pick.
-  // activeWorkspace simply mirrors the principal's bound workspace (which
-  // a tenant switch refreshes via whoami), falling back to the default for
-  // a principal with no explicit binding. It exists only to feed the API
-  // calls that still carry a workspace path segment.
   useEffect(() => {
     setActiveWorkspaceState(token ? me?.workspace || DEFAULT_WORKSPACE : "");
   }, [token, me]);
@@ -380,24 +240,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setActiveTenantState(t);
     if (t) localStorage.setItem(TENANT_STORAGE_KEY, t);
     else localStorage.removeItem(TENANT_STORAGE_KEY);
-    // A deep reload (opts.reload, used by the org switcher) re-bootstraps the
-    // whole SPA so no page keeps the previous org's in-memory data on screen:
-    // the cold boot re-reads the active tenant from localStorage and refetches
-    // everything in the new scope. We navigate to "/" rather than reload the
-    // current URL because org-specific routes (e.g. a flow editor for a flow id
-    // that only exists in the old org) wouldn't resolve in the new org.
     const deepReload = () => {
       if (opts?.reload) window.location.assign("/");
     };
-    // The new org's workspace is re-derived from whoami below (and by the
-    // me-driven effect above), so no explicit workspace reset is needed.
-    // For password-auth users, also tell the server to re-issue the
-    // session against the new tenant so the next /graphs / /secrets /
-    // /admin call lands in the right scope. Platform admins skip this
-    // because their session isn't bound to one tenant in the first
-    // place; the path here is for invited members switching between
-    // their home org and an org they were invited into. Best-effort —
-    // a network error is non-fatal, the local state still updates.
+    // Re-derived from whoami, not carried over from the previous org.
     if (token && t && me?.subject?.includes("@")) {
       setError(null);
       void api
@@ -405,16 +251,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .then(() => api.whoami(token))
         .then((w) => {
           setMe(w);
-          // Reload only after the session is re-scoped server-side — reloading
-          // mid-switch would cold-boot against the OLD tenant's scope.
           deepReload();
         })
         .catch((e) => {
-          // The server refused to re-scope the session, so subsequent calls
-          // would still hit the OLD tenant — claiming we switched would be a
-          // lie. Surface it (the chrome banner reads context `error`) instead
-          // of silently leaving the user in the wrong scope. Skip the reload
-          // so the error banner stays on screen.
+          // Refused re-scope: subsequent calls would run against the wrong org.
           setError(
             i18n.t("signIn.switchOrgFailed", {
               error: explainApiError(e, i18n.t),
@@ -422,16 +262,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           );
         });
     } else {
-      // Platform admins / non-password sessions aren't tenant-bound, so there's
-      // nothing to re-scope server-side — reload straight away.
       deepReload();
     }
   };
 
-  // refreshMe re-resolves identity from the server and updates `me` so
-  // anything bound to it (top bar org name/logo, tenant switcher) reflects
-  // a just-saved change. Stable across renders (keyed on token) so callers
-  // can safely list it in effect/useCallback deps.
   const refreshMe = useCallback(async () => {
     if (!token) return;
     try {
@@ -441,15 +275,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [token]);
 
-  // reloadTenants re-runs the bootstrap effect (whoami + tenant catalogue) so
-  // a newly created org appears in the switcher without a page reload.
   const reloadTenants = useCallback(() => setReloadKey((k) => k + 1), []);
 
-  // applySession adopts the session the server just established. The sign-in /
-  // TOTP / signup responses each set the HttpOnly `dazyflow_session` cookie; we
-  // keep ONLY the non-secret marker and use the cookie sentinel in memory, so
-  // the returned bearer token is never persisted in JS-readable storage. Shared
-  // by the password, TOTP-second-leg, and signup flows.
+  // Adopts the session the server just established.
   const applySession = async () => {
     localStorage.setItem(SESSION_MARKER, "1");
     setToken(COOKIE_SESSION);
@@ -462,17 +290,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const r = await api.signIn(email, password);
-      // 2FA gate: the server returns a challenge instead of a session.
-      // Don't apply anything yet — hand the challenge back so the form
-      // can switch to the code step. Keep loading off so the second-step
-      // inputs are interactive.
       if (r.totp_required && r.challenge) {
         setLoading(false);
         return { totpRequired: true, challenge: r.challenge };
       }
-      // The signin endpoint sets the HttpOnly session cookie; we adopt it
-      // (the returned r.token is intentionally not stored — the cookie is the
-      // credential).
       await applySession();
       return { totpRequired: false };
     } catch (e) {
@@ -501,9 +322,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // signUpWithPassword: same wire shape as signInWithPassword (the
-  // backend issues a session immediately on signup), so we can
-  // collapse the two code paths after the initial API call.
   const signUpWithPassword = async (
     email: string,
     password: string,
@@ -523,11 +341,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    // Await the server-side session delete before clearing local state, so
-    // the session cookie is actually expired by the time we navigate. The
-    // landing gate at / is cookie-based (hasValidSession), so a still-live
-    // cookie would otherwise serve the app shell to a just-logged-out user.
-    // Failure is non-fatal — we clear local state regardless.
+    // Await the server-side delete first, or a race leaves the cookie live.
     const t = token;
     if (t) {
       try {
@@ -544,9 +358,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setActiveWorkspaceState("");
     setTenants([]);
     setActiveTenantState("");
-    // Leave the protected path we were on (e.g. /admin) — otherwise the
-    // URL stays put and just re-renders as the sign-in form under a stale
-    // path. Root renders SignIn when logged out, so this is a clean reset.
+    // Leave the protected path, or the guard bounces on the next render.
     navigate("/", { replace: true });
   };
 

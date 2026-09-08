@@ -34,10 +34,6 @@ export function formatBytes(n: number): string {
   return `${v.toFixed(1)}${NBSP}${units[i]}`;
 }
 
-// formatDuration renders the gap between two RFC3339 instants as a short
-// human string: "840 ms", "4.6 s", "3.5 min". One decimal for seconds and
-// minutes, and "min" rather than "m" (the symbol for metre). Shared by the runs
-// list and the run page so the same run reads the same on both.
 export function formatDuration(startedISO: string, finishedISO: string): string {
   const start = Date.parse(startedISO);
   const end = Date.parse(finishedISO);
@@ -48,10 +44,6 @@ export function formatDuration(startedISO: string, finishedISO: string): string 
   return `${(ms / 60_000).toFixed(1)}${NBSP}min`;
 }
 
-// slugify turns a display name into an id-safe slug. Returns "" for input with
-// nothing slug-worthy in it; callers that need a non-empty id supply their own
-// fallback (CreateFlow uses "flow"), since the right default depends on what is
-// being named.
 export function slugify(name: string): string {
   return name
     .trim()

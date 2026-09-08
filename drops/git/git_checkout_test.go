@@ -15,10 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// buildSource creates a local source repo to clone from in the checkout
-// tests. It has: master (f.txt="master-1"), a develop branch
-// (f.txt="develop-1"), and a lightweight tag v1 pointing at master's first
-// commit. It returns the repo dir and master's first-commit SHA.
 func buildSource(t *testing.T) (dir, masterSHA string) {
 	t.Helper()
 	dir, wt := newRepo(t)
@@ -52,7 +48,6 @@ func buildSource(t *testing.T) (dir, masterSHA string) {
 	return dir, masterSHA
 }
 
-// fileIn reads a tracked file from a checked-out clone.
 func fileIn(t *testing.T, dir, name string) string {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(dir, name))
@@ -72,8 +67,6 @@ func TestOpenOrClone_RefVariants(t *testing.T) {
 		want  string
 	}{
 		{"default branch", "", 0, "master-1\n"},
-		// Regression for bug #1: a non-default branch is fetched and checked
-		// out by its plain name (go-git's post-clone resolution can't).
 		{"non-default branch", "develop", 0, "develop-1\n"},
 		// Regression for bug #2: a shallow clone targets the requested tag,
 		// not the default branch it would otherwise be limited to.
@@ -116,9 +109,8 @@ func TestOpenOrClone_RefNotFound(t *testing.T) {
 	}
 }
 
-// TestOpenOrClone_PulledUpdatesWorktree is the regression for bug #3: a
-// re-run over an existing clone must fast-forward the working tree, not
-// silently return the stale checkout.
+// The regression for bug #3: a re-run over an existing clone must fast-forward
+// the working tree, not silently return the stale checkout.
 func TestOpenOrClone_PulledUpdatesWorktree(t *testing.T) {
 	src, _ := buildSource(t)
 	dst := filepath.Join(t.TempDir(), "clone")
@@ -130,7 +122,6 @@ func TestOpenOrClone_PulledUpdatesWorktree(t *testing.T) {
 		t.Fatalf("after clone f.txt = %q, want master-1", got)
 	}
 
-	// Advance the source's master, then re-run with no ref.
 	srcRepo, _ := gogit.PlainOpen(src)
 	srcWT, _ := srcRepo.Worktree()
 	commit(t, src, srcWT, "f.txt", "master-2\n", "m2")
@@ -147,9 +138,8 @@ func TestOpenOrClone_PulledUpdatesWorktree(t *testing.T) {
 	}
 }
 
-// TestOpenOrClone_PulledSwitchesBranch covers re-running an existing clone
-// with a branch ref that has no local branch yet — it must be created at
-// the remote tip and checked out.
+// Covers re-running an existing clone with a branch ref that has no local
+// branch yet — it must be created at the remote tip and checked out.
 func TestOpenOrClone_PulledSwitchesBranch(t *testing.T) {
 	src, _ := buildSource(t)
 	dst := filepath.Join(t.TempDir(), "clone")
@@ -211,7 +201,7 @@ func TestLooksLikeSHA(t *testing.T) {
 	}
 }
 
-// TestGuardRepoURL_BlocksSSRFAndLocalSchemes locks in the SSRF/egress guard
+// Locks in the SSRF/egress guard
 // on git_checkout's tenant-supplied url. go-git's default transport serves
 // http/git/file, so these must be refused before any dial; https/ssh to
 // public hosts must still pass. The operator private-egress opt-in is left
@@ -236,9 +226,6 @@ func TestGuardRepoURL_BlocksSSRFAndLocalSchemes(t *testing.T) {
 		}
 	}
 
-	// Public-IP literals so the test stays hermetic — CheckDialHost only
-	// does a DNS lookup for hostnames, so these assert the scheme/host
-	// policy without depending on network resolution in CI.
 	allowed := []string{
 		"https://93.184.216.34/example/widgets.git",
 		"ssh://git@93.184.216.34/example/widgets.git",

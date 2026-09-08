@@ -94,7 +94,6 @@ func TestValidateProductionConfig_DevModeWarnsOnly(t *testing.T) {
 	defaultDSN := "postgres://dazyflow:dazyflow@db:5432/dazyflow?sslmode=disable"
 	validateProductionConfig(true, false, defaultDSN, "", "")
 
-	// A clean config returns immediately regardless of dev flag (no problems).
 	safeDSN := "postgres://dazyflow:s3cret@db:5432/dazyflow?sslmode=require"
 	strongKey := "c3Ryb25nLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9rIQ=="
 	validateProductionConfig(false, false, safeDSN, strongKey, "")
@@ -102,13 +101,9 @@ func TestValidateProductionConfig_DevModeWarnsOnly(t *testing.T) {
 
 func TestRegisterMCPServers_ParseErrors(t *testing.T) {
 	cat := mcp.NewCatalog()
-	// Whitespace-only and empty-segment specs are no-ops (no registration,
-	// so no live connection attempted).
 	if err := registerMCPServers(cat, "  ;  ; "); err != nil {
 		t.Errorf("registerMCPServers(whitespace) = %v, want nil", err)
 	}
-	// Empty command after the equals sign is a parse error caught before any
-	// connection attempt.
 	if err := registerMCPServers(cat, "bad="); err == nil {
 		t.Error("registerMCPServers(name=) should error on empty command")
 	}
@@ -116,20 +111,17 @@ func TestRegisterMCPServers_ParseErrors(t *testing.T) {
 
 func TestRegisterRemotes_ParseErrors(t *testing.T) {
 	cat := engine.NewRemoteCatalog()
-	// Whitespace-only / empty-segment specs register nothing (dev or not).
 	if err := registerRemotes(cat, " , , ", true); err != nil {
 		t.Errorf("registerRemotes(whitespace) = %v, want nil", err)
 	}
-	// Missing '=' is a parse error caught before any dial (dev mode, so the
-	// cleartext guard doesn't short-circuit it first).
 	if err := registerRemotes(cat, "no-equals", true); err == nil {
 		t.Error("registerRemotes(no-equals) should error")
 	}
 }
 
-// TestRegisterRemotes_RefusesCleartextInProd pins the fail-closed guard: the
-// flag-based remote spec is plaintext gRPC, so outside dev mode a non-empty
-// spec must be refused before anything is dialed (no secrets on the wire).
+// Pins the fail-closed guard: the flag-based remote spec is plaintext gRPC, so
+// outside dev mode a non-empty spec must be refused before anything is dialed
+// (no secrets on the wire).
 func TestRegisterRemotes_RefusesCleartextInProd(t *testing.T) {
 	cat := engine.NewRemoteCatalog()
 	if err := registerRemotes(cat, "mod=10.0.0.5:9000", false); err == nil {
@@ -142,7 +134,6 @@ func TestRegisterRemotes_RefusesCleartextInProd(t *testing.T) {
 }
 
 func TestWaitForGroupCov(t *testing.T) {
-	// Already-done group returns true promptly.
 	var wg sync.WaitGroup
 	if !waitForGroup(&wg, time.Second) {
 		t.Error("waitForGroup on empty group should return true")
@@ -167,24 +158,17 @@ func TestSetupOAuth_PrereqsMissingReturnsNil(t *testing.T) {
 	if reg := setupOAuth(nil, "https://example.com"); reg != nil {
 		t.Error("setupOAuth(nil secrets) should return nil")
 	}
-	// Non-nil secrets pointer but empty base URL also yields nil.
 	if reg := setupOAuth(&daemon.EncryptedSecrets{}, ""); reg != nil {
 		t.Error("setupOAuth(empty base URL) should return nil")
 	}
 }
 
 func TestApplyNetworkPolicy_DevModeNoFatal(t *testing.T) {
-	// Empty allowlist + dev mode avoids the fatal path and the advisory log;
-	// exercises the env-driven branches without touching the network.
 	t.Setenv("DAZYFLOW_ALLOW_PRIVATE_EGRESS", "0")
 	t.Setenv("DAZYFLOW_EGRESS_RATE_PER_MIN", "")
 	applyNetworkPolicy("", "", ":8642", true)
 }
 
-// The dev remote spec has to name a tenant, because the catalog is keyed by
-// one and a remote registered under no tenant resolves for nobody. An entry
-// that omits it gets devRemoteTenant — the tenant the seeded development user
-// signs in as — so the documented local workflow keeps working unchanged.
 func TestParseRemoteEntry(t *testing.T) {
 	for _, tc := range []struct {
 		name, spec, tenant, id string
@@ -216,9 +200,6 @@ func TestParseRemoteEntry(t *testing.T) {
 	}
 }
 
-// The address the gateway binds is one of the origins that reach us: a flow
-// posting to http://localhost:<port> is triggering this daemon, whatever the
-// public base URL says. Both loopback spellings count.
 func TestListenOrigins(t *testing.T) {
 	got := listenOrigins("0.0.0.0:8642")
 	want := []string{"http://localhost:8642", "https://localhost:8642"}

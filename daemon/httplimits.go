@@ -10,13 +10,10 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// limitsAPI serves the workspace-limit endpoints. Its fields are the whole of what
-// those handlers touch.
 type limitsAPI struct {
 	svc *Service
 }
 
-// limitsAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) limitsAPI() *limitsAPI {
 	return &limitsAPI{svc: h.svc}
 }

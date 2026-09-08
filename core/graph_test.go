@@ -10,15 +10,6 @@ import (
 	"testing"
 )
 
-// graphFixture builds a small DAG for upstream-subset tests.
-//
-//	A   B          (sources)
-//	 \ / \
-//	  C   D        (B → both C and D)
-//	  |   |
-//	  E   F
-//	   \ /
-//	    G          (sink)
 func graphFixture() Graph {
 	return Graph{
 		ID: "g", Tenant: "t", Workspace: "w",
@@ -38,7 +29,6 @@ func graphFixture() Graph {
 	}
 }
 
-// nodeIDs sorts node IDs for stable assertion against a set.
 func nodeIDs(g Graph) []string {
 	ids := make([]string, len(g.Nodes))
 	for i, n := range g.Nodes {
@@ -66,14 +56,12 @@ func TestUpstreamSubset_LeafIncludesAllAncestors(t *testing.T) {
 	if got := nodeIDs(sub); !equalStrings(got, want) {
 		t.Fatalf("nodes=%v want=%v", got, want)
 	}
-	// Every original edge is between included nodes — all should survive.
 	if got, n := len(sub.Edges), 7; got != n {
 		t.Fatalf("edges=%d want=%d (%v)", got, n, edgeKeys(sub))
 	}
 }
 
 func TestUpstreamSubset_MidNodeDropsParallelBranch(t *testing.T) {
-	// Sampling E should bring A, B, C, E (but not D, F, or G).
 	sub, ok := graphFixture().UpstreamSubset("E")
 	if !ok {
 		t.Fatal("not found")
@@ -82,7 +70,6 @@ func TestUpstreamSubset_MidNodeDropsParallelBranch(t *testing.T) {
 	if got := nodeIDs(sub); !equalStrings(got, want) {
 		t.Fatalf("nodes=%v want=%v", got, want)
 	}
-	// Edges between included nodes only.
 	wantEdges := []string{"A->C", "B->C", "C->E"}
 	if got := edgeKeys(sub); !equalStrings(got, wantEdges) {
 		t.Fatalf("edges=%v want=%v", got, wantEdges)
@@ -131,8 +118,6 @@ func TestUpstreamSubset_MissingTargetReturnsFalse(t *testing.T) {
 }
 
 func TestUpstreamSubset_CarriesGraphIdentity(t *testing.T) {
-	// The submitted run needs to share tenant/workspace/visibility so
-	// authz + run records line up. Verifying the shallow-copy fields.
 	g := Graph{
 		ID:         "promo",
 		Tenant:     "acme",
@@ -218,7 +203,6 @@ func TestNodeLabel_RoundTripsAndOmitsWhenEmpty(t *testing.T) {
 	if !strings.Contains(string(b), `"label":"Every morning"`) {
 		t.Errorf("named step lost its label: %s", b)
 	}
-	// The unnamed step carries no key at all, not an empty one.
 	if strings.Count(string(b), `"label"`) != 1 {
 		t.Errorf("expected exactly one label in %s", b)
 	}

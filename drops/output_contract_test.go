@@ -18,10 +18,6 @@ import (
 // editor's wiring and any flow built on it. examples_contract_test.go covers
 // the INPUT/params side; this is the OUTPUT side, for every built-in at once.
 
-// TestAllDrops_PortsWellFormed asserts the static port declarations are sane:
-// unique non-empty ids per side, a human Label, and at least one non-empty
-// MIME on every port (the editor types pins by MIME — an empty one renders as
-// an untyped wildcard, which for a concrete connector port is a bug).
 func TestAllDrops_PortsWellFormed(t *testing.T) {
 	for _, d := range allDrops(t) {
 		t.Run(d.id, func(t *testing.T) {
@@ -54,13 +50,13 @@ func checkPorts(t *testing.T, side string, ports []core.Port) {
 	}
 }
 
-// TestAllDrops_EmittedOutputsAreDeclared runs every drop against the
-// adversarial corpus and, whenever one returns a successful Result, asserts
-// every output port it emitted is declared in the manifest. A drop that emits
-// an undeclared port is the output-side twin of the params drift the examples
-// contract catches — a downstream step could never have been wired to it, so
-// it's silently lost. (Most adversarial inputs make a drop error, which is
-// fine: this asserts only on the StatusOK runs, where the contract bites.)
+// Runs every drop against the adversarial corpus and, whenever one returns a
+// successful Result, asserts every output port it emitted is declared in the
+// manifest. A drop that emits an undeclared port is the output-side twin of
+// the params drift the examples contract catches — a downstream step could
+// never have been wired to it, so it's silently lost. (Most adversarial inputs
+// make a drop error, which is fine: this asserts only on the StatusOK runs,
+// where the contract bites.)
 func TestAllDrops_EmittedOutputsAreDeclared(t *testing.T) {
 	for _, d := range allDrops(t) {
 		t.Run(d.id, func(t *testing.T) {
@@ -70,10 +66,6 @@ func TestAllDrops_EmittedOutputsAreDeclared(t *testing.T) {
 			for _, p := range d.manifest.Outputs {
 				declared[p.Port] = true
 			}
-			// The universal passthrough pin is a reserved convention: the
-			// engine prepends it (WithPassthrough) for opted-in drops, and a
-			// few (delay) hand-roll emitting on it while opting the auto-pin
-			// out. Always allowed.
 			declared[core.PassPort] = true
 			// NOTE: "meta" is NOT exempt. 31 drops used to emit it without
 			// declaring it, which this check never caught because it only

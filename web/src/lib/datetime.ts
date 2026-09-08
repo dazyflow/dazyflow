@@ -29,34 +29,22 @@ export function formatDateTime(value: string | Date | null | undefined): string 
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// formatDate is the date-only variant: "YYYY-MM-DD", local time.
 export function formatDate(value: string | Date | null | undefined): string {
   const d = toDate(value);
   if (!d) return typeof value === "string" ? value : "";
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-// formatClock is the time-only variant: "HH:MM", local time.
 export function formatClock(value: string | Date | null | undefined): string {
   const d = toDate(value);
   if (!d) return typeof value === "string" ? value : "";
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// absoluteTime is the legacy name kept for existing callers; it now returns
-// the standard local "YYYY-MM-DD HH:MM" like everything else.
 export function absoluteTime(value: string | Date | null | undefined): string {
   return formatDateTime(value);
 }
 
-// formatRelative renders a coarse "time ago" string ("just now", "5m ago",
-// "3h ago", "2d ago") for recency-at-a-glance surfaces — the flow cards'
-// last-run line and the runs table. Strings are localized via `t` (the same
-// pattern as formatNextRun) so a Swedish viewer doesn't see English "ago"
-// fragments. Past the one-week mark it hands off to the absolute date, where
-// "2026-04-03" reads better than "37d ago". `now` is injectable so tests
-// don't depend on the wall clock. Returns "" for an unparseable/empty value
-// so callers can hide the line.
 export function formatRelative(
   value: string | Date | null | undefined,
   t: TFunc,

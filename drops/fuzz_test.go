@@ -12,9 +12,9 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// FuzzAllDrops feeds the Go fuzzer's bytes — decoded as a params object — to
-// a fuzzer-chosen drop, spread across both params and the common input ports.
-// The contract is the same as the adversarial sweep: never panic, never hang.
+// Feeds the Go fuzzer's bytes — decoded as a params object — to a fuzzer-
+// chosen drop, spread across both params and the common input ports. The
+// contract is the same as the adversarial sweep: never panic, never hang.
 // Crash inputs land under testdata/fuzz/FuzzAllDrops and become permanent
 // regression cases. Run with: go test ./drops -run x -fuzz FuzzAllDrops
 func FuzzAllDrops(f *testing.F) {
@@ -41,8 +41,6 @@ func FuzzAllDrops(f *testing.F) {
 	f.Fuzz(func(t *testing.T, idx int, paramsJSON []byte) {
 		d := drops[((idx%len(drops))+len(drops))%len(drops)]
 
-		// Best-effort decode; malformed JSON yields a nil params map, which
-		// is itself a valid (and adversarial) input.
 		var params map[string]any
 		_ = json.Unmarshal(paramsJSON, &params)
 

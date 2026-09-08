@@ -72,8 +72,6 @@ describe("Welcome", () => {
       "/flows/new?tab=ai",
       "/flows/new?tab=blank",
     ]);
-    // Equal weight means one shared class and no per-option modifier — the old
-    // page ranked these as a button, two text links and a boxed card.
     for (const o of options) {
       expect(o.className).toBe("welcome-option");
     }

@@ -21,10 +21,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// TestWebhookBody_E2E_JSONPropagation drives the full pipeline: an
-// inbound POST with a JSON body fires a graph whose webhook_input node
-// is pre-completed by the trigger handler, and a downstream branch
-// routes on a field inside the body.
 func TestWebhookBody_E2E_JSONPropagation(t *testing.T) {
 	_, wh, jobs, _, wsStore := startWebhookHarnessLocal(t)
 
@@ -32,8 +28,6 @@ func TestWebhookBody_E2E_JSONPropagation(t *testing.T) {
 		ID: "wh-body-flow", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
 			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secrets": []any{"wh-secret"}}},
-			// Compare reads the priority field out of A (the JSON body) and
-			// tests it against "high" (B), emitting 1/0; Branch routes on it.
 			{ID: "check", Module: "compare", Params: map[string]any{
 				"field": "priority", "op": "equals", "B": "high",
 			}},
@@ -85,7 +79,6 @@ func TestWebhookBody_E2E_JSONPropagation(t *testing.T) {
 		t.Fatalf("status=%q", terminal)
 	}
 
-	// Assertions
 	inbound, _ := jobs.Get(t.Context(), daemon.NodeJobID(out.JobID, "inbound"))
 	if inbound.Status != core.JobStatusSucceeded {
 		t.Errorf("inbound = %q", inbound.Status)
@@ -93,7 +86,6 @@ func TestWebhookBody_E2E_JSONPropagation(t *testing.T) {
 	if inbound.Result == nil {
 		t.Fatal("inbound has no result")
 	}
-	// Inbound's body output should be the parsed JSON object
 	bodyOut := inbound.Result.Output["body"]
 	parsed, ok := bodyOut.Inline.(map[string]any)
 	if !ok {
@@ -106,14 +98,12 @@ func TestWebhookBody_E2E_JSONPropagation(t *testing.T) {
 		t.Errorf("alert = %v", parsed["alert"])
 	}
 
-	// Headers should round-trip too
 	headersOut := inbound.Result.Output["headers"]
 	hmap, _ := headersOut.Inline.(map[string]any)
 	if hmap["X-Custom-Header"] != "from-test" {
 		t.Errorf("headers = %+v", hmap)
 	}
 
-	// Branch routed correctly on body.priority == "high"
 	pageRec, _ := jobs.Get(t.Context(), daemon.NodeJobID(out.JobID, "page"))
 	queueRec, _ := jobs.Get(t.Context(), daemon.NodeJobID(out.JobID, "queue"))
 	if pageRec.Status != core.JobStatusSucceeded {
@@ -127,8 +117,6 @@ func TestWebhookBody_E2E_JSONPropagation(t *testing.T) {
 func TestWebhookBody_E2E_TextBody(t *testing.T) {
 	_, wh, jobs, _, wsStore := startWebhookHarnessLocal(t)
 
-	// Single-node graph — entirely satisfied by the seed, so it
-	// completes synchronously inside SubmitGraphWithSeed.
 	g := core.Graph{
 		ID: "wh-text", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
@@ -158,8 +146,6 @@ func TestWebhookBody_E2E_TextBody(t *testing.T) {
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&out)
 
-	// Single-node seeded graph is terminal by the time POST returns;
-	// no need to wait on the bus.
 	graphRec, err := jobs.Get(t.Context(), out.JobID)
 	if err != nil {
 		t.Fatalf("Get graph: %v", err)
@@ -206,9 +192,6 @@ func TestWebhookBody_E2E_ManualRunFails(t *testing.T) {
 	}
 }
 
-// startWebhookHarnessLocal mirrors the startWebhookHarness pattern from
-// daemon/webhook_test.go but lives in this e2e package so the test
-// imports stay clean.
 func startWebhookHarnessLocal(t *testing.T) (*daemon.Service, *daemon.WebhookListener, core.JobStore, *daemon.MemoryBus, *workspace.Store) {
 	t.Helper()
 	ks := auth.NewMemKeyStore()

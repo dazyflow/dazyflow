@@ -55,7 +55,6 @@ export function GitMirrorPanel({
   // confirm that can override — the only route to a destructive overwrite.
   const [unrelated, setUnrelated] = useState<string | null>(null);
 
-  // Form state, seeded from the stored config once it loads.
   const [remoteURL, setRemoteURL] = useState("");
   const [account, setAccount] = useState("");
   const [pushOn, setPushOn] = useState<"publish" | "save">("publish");
@@ -70,8 +69,6 @@ export function GitMirrorPanel({
     [credentials],
   );
 
-  // Returns its promise: pushNow has to sequence the status refresh against
-  // the message it shows, since a reload clears `error`.
   const load = useCallback(() => {
     if (!token) return Promise.resolve();
     setLoading(true);
@@ -95,8 +92,6 @@ export function GitMirrorPanel({
     load();
   }, [load]);
 
-  // Default the account to the only SSH credential there is — with one
-  // choice, making the user pick it is pure friction.
   useEffect(() => {
     if (!account && sshCreds.length === 1) setAccount(sshCreds[0].account);
   }, [account, sshCreds]);
@@ -117,8 +112,6 @@ export function GitMirrorPanel({
       setEnabled(m.enabled);
     } catch (e) {
       setError(explainApiError(e, t));
-      // The toggle didn't take — put it back so the switch doesn't lie about
-      // what the server holds.
       setEnabled(mirror?.enabled ?? false);
     } finally {
       setBusy(false);
@@ -150,13 +143,7 @@ export function GitMirrorPanel({
         failure = explainApiError(e, t);
       }
     }
-    // Reload either way: the server recorded this attempt, so the status
-    // below should agree with what we are about to say.
     await load();
-    // Set the failure AFTER the reload, not in a catch before it. load()
-    // clears `error` on success, so setting it first made a failed push
-    // flash the reason and then swallow it — the one message the user
-    // actually needs, shown for a few milliseconds.
     if (failure) setError(failure);
     setBusy(false);
   };
@@ -183,8 +170,6 @@ export function GitMirrorPanel({
 
   const configured = !!mirror?.configured;
   const canSave = remoteURL.trim() !== "" && account !== "" && !busy && canEdit;
-  // Pushing needs a stored config — it pushes what the server holds, not
-  // what's currently typed into the form.
   const canPush = configured && !busy && canEdit;
 
   if (loading) {

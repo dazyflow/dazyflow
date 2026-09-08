@@ -79,8 +79,6 @@ func executeListFiles(ctx context.Context, job core.Job, _ chan<- core.Progress)
 	}, nil
 }
 
-// ListFiles queries Drive and returns the normalized file objects. Exported so
-// the daemon can reuse the exact read (e.g. a resource picker).
 func ListFiles(ctx context.Context, job core.Job) ([]map[string]any, error) {
 	token, err := resolveToken(ctx, job)
 	if err != nil {
@@ -115,9 +113,6 @@ func ListFiles(ctx context.Context, job core.Job) ([]map[string]any, error) {
 	return out, nil
 }
 
-// buildQuery assembles the Drive q= expression from the convenience filters
-// (name_contains, folder_id, mime_type), the trashed gate, and any raw advanced
-// query — all ANDed. Injected values are escaped per the Drive grammar.
 func buildQuery(job core.Job) string {
 	var clauses []string
 	if v := strings.TrimSpace(params.StringDefault(job.Params, "name_contains", "")); v != "" {

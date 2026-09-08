@@ -42,14 +42,10 @@ export interface UsePublishArgs {
   workspace: string;
   t: (key: string, opts?: Record<string, unknown>) => string;
   hasPerm: (perm: Permission) => boolean;
-  // The flow's paused flag, which lives in the saved graph.
   disabled: boolean;
   setDisabled: (v: boolean) => void;
   onError: (message: string | null) => void;
-  // Called after anything that changes which revision is live, so an open
-  // history panel re-reads the list.
   onPublished: () => void | Promise<void>;
-  // The status probe returns the live commit; the history list badges with it.
   onPublishedCommit: (commit: string | null) => void;
 }
 
@@ -69,13 +65,11 @@ export function usePublish({
 }: UsePublishArgs) {
   const [publishInfo, setPublishInfo] = useState<PublishInfo | null>(null);
   const [publishing, setPublishing] = useState(false);
-  // Drives the launch animation. Self-dismisses.
   const [justPublished, setJustPublished] = useState(false);
   const [diffOpen, setDiffOpen] = useState(false);
   const [diff, setDiff] = useState<GraphDiff | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
 
-  // Refreshes the draft-vs-live status that drives the toolbar control.
   const loadPublishInfo = useCallback(async () => {
     if (!token || !graphID) return;
     try {
@@ -93,9 +87,6 @@ export function usePublish({
     window.setTimeout(() => setJustPublished(false), CELEBRATION_MS);
   }, []);
 
-  // Promotes a draft to live. With a `ref` it publishes an older commit instead
-  // — same endpoint, different revision, which is how rollback works. Either way
-  // the editor keeps showing the draft.
   const publishRef = useCallback(
     async (ref?: string, label?: string) => {
       if (!token || !graphID) return;
@@ -115,10 +106,6 @@ export function usePublish({
     [token, graphID, tenant, workspace, loadPublishInfo, onPublished, celebrate, onError, t],
   );
 
-  // The single Live/Paused switch. Live = published AND enabled, the only state
-  // where automatic triggers actually run, for every trigger type. Going off
-  // disables — the universal kill switch that stops cron, poll, webhook and form
-  // triggers alike.
   const setLive = useCallback(
     async (on: boolean, label?: string) => {
       if (!token || !graphID) return;
@@ -126,11 +113,6 @@ export function usePublish({
       onError(null);
       try {
         if (on) {
-          // Draft safety: publish ONLY when there is no live version to
-          // preserve — a first go-live, or after an explicit unpublish. A
-          // paused-but-published flow resumes its existing live version
-          // untouched, so edits made while paused stay a draft. Publishing
-          // needs graph:admin; a graph:edit-only user can still resume.
           if (!publishInfo?.published && hasPerm("graph:admin")) {
             await api.publishFlow(token, tenant, workspace, graphID, undefined, label);
           }
@@ -174,7 +156,6 @@ export function usePublish({
     ],
   );
 
-  // Fetches the published revision and diffs it against the current draft.
   const openDiff = useCallback(async () => {
     if (!token || !graphID || !publishInfo?.published || !publishInfo.published_commit) {
       return;
@@ -189,15 +170,12 @@ export function usePublish({
       setDiff(diffGraphs(published, draft));
     } catch (e) {
       onError(explainApiError(e, t));
-      // Close again rather than leaving an empty modal open over the canvas.
       setDiffOpen(false);
     } finally {
       setDiffLoading(false);
     }
   }, [token, graphID, tenant, workspace, publishInfo, onError, t]);
 
-  // Load the status once the flow and scope are ready, so the toolbar reflects
-  // draft-vs-live from first paint.
   useEffect(() => {
     if (!ready) return;
     void loadPublishInfo();
@@ -207,10 +185,6 @@ export function usePublish({
     publishInfo,
     publishing,
     justPublished,
-    // Exposed so a dev build can fire the confirmation on its own, without
-    // publishing anything — see the shortcut in FlowEditor. Judging an
-    // animation means replaying it, and the real path needs a live flow and a
-    // draft to promote each time.
     celebrate,
     diffOpen,
     setDiffOpen,

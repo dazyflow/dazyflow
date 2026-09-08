@@ -15,15 +15,10 @@ import (
 // dispatch on this prefix alone.
 const BuiltinPrefix = "builtin:"
 
-// IsBuiltinID reports whether id refers to a global built-in template.
 func IsBuiltinID(id string) bool {
 	return strings.HasPrefix(id, BuiltinPrefix)
 }
 
-// builtins is the fixed, global, read-only catalog. Each shell wraps the
-// drop's body via {{.Body}} and may surface the org logo via {{.Logo}}. The
-// markup follows the same email-client-safe conventions as internal/emailtheme
-// (nested tables, inline styles, 600px container, web-safe fonts).
 var builtins = []core.EmailTemplate{
 	{
 		ID:   BuiltinPrefix + "plain",
@@ -42,14 +37,12 @@ var builtins = []core.EmailTemplate{
 	},
 }
 
-// BuiltinTemplates returns a copy of the global built-in catalog.
 func BuiltinTemplates() []core.EmailTemplate {
 	out := make([]core.EmailTemplate, len(builtins))
 	copy(out, builtins)
 	return out
 }
 
-// Builtin returns the built-in template with the given ID.
 func Builtin(id string) (core.EmailTemplate, bool) {
 	for _, t := range builtins {
 		if t.ID == id {
@@ -59,8 +52,6 @@ func Builtin(id string) (core.EmailTemplate, bool) {
 	return core.EmailTemplate{}, false
 }
 
-// plain: a minimal, unstyled white card. The lightest wrapper — gives the body
-// a centred, readable column without imposing branding.
 const plainHTML = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -77,8 +68,6 @@ const plainHTML = `<!DOCTYPE html>
 </body>
 </html>`
 
-// branded: a white card with a gradient top bar, logo header, and footer —
-// the same shell vocabulary as the system transactional emails.
 const brandedHTML = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"></head>
@@ -103,8 +92,6 @@ const brandedHTML = `<!DOCTYPE html>
 </body>
 </html>`
 
-// announcement: a bolder header band for marketing/announcement sends, with
-// the logo and a coloured banner above the body.
 const announcementHTML = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"></head>

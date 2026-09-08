@@ -25,8 +25,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
-// gitHTTPBackend locates git-http-backend, skipping the test when the host
-// has no git installed (CI images without it).
 func gitHTTPBackend(t *testing.T) string {
 	t.Helper()
 	for _, p := range []string{
@@ -44,22 +42,15 @@ func gitHTTPBackend(t *testing.T) string {
 	return ""
 }
 
-// serveBareRepoHTTPS publishes src (a working repo dir) as a bare repo over a
-// loopback HTTPS server backed by git-http-backend, and installs a go-git
-// https transport that trusts the test cert. It returns the clone URL. Private
-// egress is enabled so guardRepoURL lets the loopback host through. Everything
-// is restored on test cleanup.
 func serveBareRepoHTTPS(t *testing.T, src string) string {
 	t.Helper()
 	backend := gitHTTPBackend(t)
 
-	// Make a bare mirror of src so smart-http can serve it.
 	root := t.TempDir()
 	bare := filepath.Join(root, "repo.git")
 	if out, err := exec.Command("git", "clone", "--bare", src, bare).CombinedOutput(); err != nil {
 		t.Fatalf("git clone --bare: %v\n%s", err, out)
 	}
-	// Allow fetching from the bare repo over http.
 	_ = exec.Command("git", "-C", bare, "config", "http.receivepack", "false").Run()
 
 	handler := &cgi.Handler{
@@ -74,7 +65,6 @@ func serveBareRepoHTTPS(t *testing.T, src string) string {
 	}))
 	t.Cleanup(srv.Close)
 
-	// go-git https transport that trusts the httptest cert.
 	client := &http.Client{Transport: &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}}
@@ -87,9 +77,6 @@ func serveBareRepoHTTPS(t *testing.T, src string) string {
 	return srv.URL + "/repo.git"
 }
 
-// TestExecuteGitCheckout_Success drives the full success path of
-// executeGitCheckout against a loopback HTTPS git server: a fresh clone, then
-// a re-run that pulls.
 func TestExecuteGitCheckout_Success(t *testing.T) {
 	src, _ := buildSource(t)
 	url := serveBareRepoHTTPS(t, src)
@@ -116,7 +103,6 @@ func TestExecuteGitCheckout_Success(t *testing.T) {
 		t.Error("expected progress events from clone")
 	}
 
-	// Re-run over the existing clone ⇒ pulled.
 	res2, _ := executeGitCheckout(t.Context(), job, nil)
 	if res2.Status != core.StatusOK {
 		t.Fatalf("re-run status = %q, err = %+v", res2.Status, res2.Error)
@@ -127,8 +113,6 @@ func TestExecuteGitCheckout_Success(t *testing.T) {
 	}
 }
 
-// TestExecuteGitCheckout_WithRef clones a specific branch end-to-end so the
-// ref-targeting branches in executeGitCheckout/openOrClone run.
 func TestExecuteGitCheckout_WithRef(t *testing.T) {
 	src, _ := buildSource(t)
 	url := serveBareRepoHTTPS(t, src)
@@ -146,13 +130,9 @@ func TestExecuteGitCheckout_WithRef(t *testing.T) {
 	}
 }
 
-// TestExecuteGitCheckout_CloneFailed covers the clone_failed error mode: a
-// valid https URL (passes guardRepoURL with private egress on) pointing at a
-// path the backend can't serve.
 func TestExecuteGitCheckout_CloneFailed(t *testing.T) {
 	src, _ := buildSource(t)
 	url := serveBareRepoHTTPS(t, src)
-	// Point at a nonexistent repo under the same server.
 	badURL := strings.Replace(url, "/repo.git", "/nope.git", 1)
 	ws := t.TempDir()
 
@@ -168,8 +148,6 @@ func TestExecuteGitCheckout_CloneFailed(t *testing.T) {
 	}
 }
 
-// TestOpenOrClone_AuthFailed covers the git_auth_failed branch: an ssh URL
-// resolving a credential that has no key.
 func TestOpenOrClone_AuthFailed(t *testing.T) {
 	SetGitCredLookup(nil)
 	_, mode, err := openOrClone(t.Context(), filepath.Join(t.TempDir(), "c"),
@@ -182,8 +160,6 @@ func TestOpenOrClone_AuthFailed(t *testing.T) {
 	}
 }
 
-// TestExecuteGitCheckout_AuthFailed exercises executeGitCheckout's
-// openOrClone error return (line 109-111) via the same ssh-no-key path.
 func TestExecuteGitCheckout_AuthFailed(t *testing.T) {
 	SetGitCredLookup(nil)
 	res, _ := executeGitCheckout(t.Context(), core.Job{
@@ -198,8 +174,6 @@ func TestExecuteGitCheckout_AuthFailed(t *testing.T) {
 	}
 }
 
-// TestOpenOrClone_StatFailed covers the stat_failed branch: dst's parent is a
-// file, so os.Stat(dst) returns a non-IsNotExist error (ENOTDIR).
 func TestOpenOrClone_StatFailed(t *testing.T) {
 	base := t.TempDir()
 	notDir := filepath.Join(base, "afile")
@@ -216,15 +190,12 @@ func TestOpenOrClone_StatFailed(t *testing.T) {
 	}
 }
 
-// TestGuardRepoURL_InvalidURL covers the url.Parse failure branch.
 func TestGuardRepoURL_InvalidURL(t *testing.T) {
 	if err := guardRepoURL(context.Background(), "https://exa mple.com/x.git"); err == nil {
 		t.Fatal("expected parse error for a malformed https URL")
 	}
 }
 
-// TestHostKeyDB_WithUserKnownHosts covers the userKnownHosts append branch in
-// hostKeyDB (a valid extra line is combined with the bundled set).
 func TestHostKeyDB_WithUserKnownHosts(t *testing.T) {
 	line := "git.internal ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMZvRd4EtM7R+IHVMWmDkVU3VLQTSwQDSAvW0t2Tkj60"
 	db, err := hostKeyDB(line)
@@ -236,8 +207,6 @@ func TestHostKeyDB_WithUserKnownHosts(t *testing.T) {
 	}
 }
 
-// TestAuthForURL_SSHWithPort covers the explicit-port branch in authForURL
-// (host+":"+port instead of the default :22).
 func TestAuthForURL_SSHWithPort(t *testing.T) {
 	SetGitCredLookup(nil)
 	auth, err := authForURL(t.Context(),
@@ -251,8 +220,6 @@ func TestAuthForURL_SSHWithPort(t *testing.T) {
 	}
 }
 
-// TestExecuteGitDiff_InputPathViaRef covers git_diff's input["path"].Ref
-// fallback branch (Inline empty, relPath empty, Ref set).
 func TestExecuteGitDiff_InputPathViaRef(t *testing.T) {
 	ws := t.TempDir()
 	repoDir := filepath.Join(ws, "repo")
@@ -273,7 +240,6 @@ func TestExecuteGitDiff_InputPathViaRef(t *testing.T) {
 	}
 }
 
-// TestExecuteGitDiff_OpenError covers git_diff's "open" error branch.
 func TestExecuteGitDiff_OpenError(t *testing.T) {
 	res, _ := executeGitDiff(t.Context(), core.Job{
 		ID: "j", WorkspaceRoot: t.TempDir(),
@@ -283,8 +249,6 @@ func TestExecuteGitDiff_OpenError(t *testing.T) {
 	}
 }
 
-// TestExecuteGitDiff_BadToRef covers the "to" bad_ref branch (from resolves,
-// to does not).
 func TestExecuteGitDiff_BadToRef(t *testing.T) {
 	dir, wt := newRepo(t)
 	commit(t, dir, wt, "f.txt", "a\n", "first")
@@ -299,8 +263,6 @@ func TestExecuteGitDiff_BadToRef(t *testing.T) {
 	}
 }
 
-// TestExecuteGitDiff_InputPathInline covers git_diff's input["path"].Inline
-// string branch (a wired value overriding the typed path).
 func TestExecuteGitDiff_InputPathInline(t *testing.T) {
 	ws := t.TempDir()
 	repoDir := filepath.Join(ws, "repo")
@@ -321,7 +283,6 @@ func TestExecuteGitDiff_InputPathInline(t *testing.T) {
 	}
 }
 
-// TestExecuteGitDiff_SandboxEscape covers git_diff's sandbox_escape branch.
 func TestExecuteGitDiff_SandboxEscape(t *testing.T) {
 	res, _ := executeGitDiff(t.Context(), core.Job{
 		ID: "j", WorkspaceRoot: t.TempDir(),
@@ -332,9 +293,6 @@ func TestExecuteGitDiff_SandboxEscape(t *testing.T) {
 	}
 }
 
-// TestExecuteGitLog_ShallowTruncated clones depth=1 over https and then walks
-// the log, hitting the ErrObjectNotFound "history truncated" branch when the
-// walk runs past the single locally-present commit.
 func TestExecuteGitLog_ShallowTruncated(t *testing.T) {
 	dir, wt := newRepo(t)
 	commit(t, dir, wt, "f.txt", "c1\n", "c1")
@@ -359,7 +317,6 @@ func TestExecuteGitLog_ShallowTruncated(t *testing.T) {
 	}
 }
 
-// TestExecuteGitLog_LimitClamp covers the limit<1 and limit>1000 clamps.
 func TestExecuteGitLog_LimitClamp(t *testing.T) {
 	dir, wt := newRepo(t)
 	commit(t, dir, wt, "f.txt", "a\n", "only")
@@ -374,8 +331,6 @@ func TestExecuteGitLog_LimitClamp(t *testing.T) {
 	}
 }
 
-// drainProgress returns a buffered progress channel and a func collecting the
-// events emitted to it (read after the call under test returns).
 func drainProgress(t *testing.T) (chan core.Progress, func() []core.Progress) {
 	t.Helper()
 	ch := make(chan core.Progress, 256)
@@ -416,8 +371,6 @@ func TestExecuteGitCheckout_EarlyErrors(t *testing.T) {
 	}
 }
 
-// TestExecuteGitLog_EmitsProgress drives a populated repo through executeGitLog
-// with a live progress channel so the per-commit emitLogProgress path is run.
 func TestExecuteGitLog_EmitsProgress(t *testing.T) {
 	dir, wt := newRepo(t)
 	commit(t, dir, wt, "f.txt", "a\n", "first")
@@ -450,9 +403,6 @@ func TestExecuteGitDiff_EmitsProgress(t *testing.T) {
 	}
 }
 
-// TestExecuteGitDiff_NoMergeBase covers the no-common-ancestor branch by
-// stitching a second, fully independent root commit into the same object store
-// (no parents) and diffing it against the existing history with merge_base.
 func TestExecuteGitDiff_NoMergeBase(t *testing.T) {
 	dir, wt := newRepo(t)
 	commit(t, dir, wt, "f.txt", "m1\n", "m1")
@@ -461,8 +411,6 @@ func TestExecuteGitDiff_NoMergeBase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Build an orphan root commit directly via the object storer: an empty
-	// tree and no parents, so it shares no ancestor with master.
 	emptyTree := &object.Tree{}
 	teo := repo.Storer.NewEncodedObject()
 	if err := emptyTree.Encode(teo); err != nil {
@@ -492,7 +440,6 @@ func TestExecuteGitDiff_NoMergeBase(t *testing.T) {
 	}
 }
 
-// TestExecuteGitLog_InputPath covers the job.Input["path"] resolution branch.
 func TestExecuteGitLog_InputPath(t *testing.T) {
 	ws := t.TempDir()
 	repoDir := filepath.Join(ws, "repo")
@@ -564,9 +511,9 @@ func TestOpenOrClone_NotARepo(t *testing.T) {
 	}
 }
 
-// TestOpenOrClone_PulledDetachedHead exercises updateCurrentBranch's detached
-// HEAD early return: a re-run with a commit-SHA ref leaves HEAD detached, and a
-// later no-ref re-run must be a no-op fast-forward.
+// Exercises updateCurrentBranch's detached HEAD early return: a re-run with a
+// commit-SHA ref leaves HEAD detached, and a later no-ref re-run must be a no-
+// op fast-forward.
 func TestOpenOrClone_PulledDetachedHead(t *testing.T) {
 	src, masterSHA := buildSource(t)
 	dst := filepath.Join(t.TempDir(), "clone")
@@ -574,7 +521,6 @@ func TestOpenOrClone_PulledDetachedHead(t *testing.T) {
 	if _, _, err := openOrClone(t.Context(), dst, src, masterSHA, 0, nil, core.Job{ID: "j"}); err != nil {
 		t.Fatalf("initial detached clone: %v", err)
 	}
-	// Re-run with no ref: updateCurrentBranch hits its detached-HEAD branch.
 	_, mode, err := openOrClone(t.Context(), dst, src, "", 0, nil, core.Job{ID: "j"})
 	if err != nil {
 		t.Fatalf("re-run: %v", err)
@@ -623,7 +569,6 @@ func TestResolveCred_ViaHook(t *testing.T) {
 }
 
 func TestHostKeyDB_BadUserKnownHosts(t *testing.T) {
-	// A malformed known_hosts line makes NewKnownHostsDb fail.
 	if _, err := hostKeyDB("this-is-not-a-valid-known-hosts-line"); err == nil {
 		t.Fatal("expected error for malformed user known_hosts")
 	}
@@ -648,13 +593,10 @@ func TestSSHURLParts_PortAndDefaults(t *testing.T) {
 	}
 }
 
-// TestProgressSink_FlushLeftover covers progressSink.flush emitting a trailing
-// partial line (no terminating CR/LF) plus the empty-buffer no-op.
 func TestProgressSink_FlushLeftover(t *testing.T) {
 	ch, collect := drainProgress(t)
 	s := newProgressSink(ch, core.Job{ID: "j", NodeID: "n"})
 
-	// Two complete lines emit immediately; the trailing partial stays buffered.
 	if _, err := s.Write([]byte("Counting objects: 1\rResolving deltas\nstill-going")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -670,18 +612,15 @@ func TestProgressSink_FlushLeftover(t *testing.T) {
 	}
 }
 
-// TestCheckout_ReRunResetsLocalBranch drives checkout twice for the same branch
-// so the second call hits the "local branch already exists" fast-forward path.
+// Drives checkout twice for the same branch so the second call hits the "local
+// branch already exists" fast-forward path.
 func TestCheckout_ReRunResetsLocalBranch(t *testing.T) {
 	src, _ := buildSource(t)
 	dst := filepath.Join(t.TempDir(), "clone")
 
-	// First run creates a local 'develop' branch from origin/develop.
 	if _, _, err := openOrClone(t.Context(), dst, src, "develop", 0, nil, core.Job{ID: "j"}); err != nil {
 		t.Fatalf("first develop checkout: %v", err)
 	}
-	// Advance source develop, then re-run: checkout finds the existing local
-	// branch and resets it to the new remote tip.
 	srcRepo, _ := gogit.PlainOpen(src)
 	srcWT, _ := srcRepo.Worktree()
 	if err := srcWT.Checkout(&gogit.CheckoutOptions{Branch: plumbing.NewBranchReferenceName("develop"), Force: true}); err != nil {
@@ -713,10 +652,10 @@ func TestEmitProgress_NilAndBufferFull(t *testing.T) {
 	params.EmitProgress(ch, core.Job{ID: "j"}, 0.5, "x")
 }
 
-// TestExecuteGitCheckout_QuotaPreflight covers the cheap refusal: an org
-// already at its limit fails without the transfer ever happening. The URL
-// guard still runs first (a security check must not be skippable by being
-// out of disk), so this uses a URL that passes it.
+// Covers the cheap refusal: an org already at its limit fails without the
+// transfer ever happening. The URL guard still runs first (a security check
+// must not be skippable by being out of disk), so this uses a URL that passes
+// it.
 func TestExecuteGitCheckout_QuotaPreflight(t *testing.T) {
 	src, _ := buildSource(t)
 	url := serveBareRepoHTTPS(t, src)
@@ -739,10 +678,9 @@ func TestExecuteGitCheckout_QuotaPreflight(t *testing.T) {
 	}
 }
 
-// TestExecuteGitCheckout_QuotaRollsBackClone drives a real clone against a
-// budget too small to hold it: the job must fail quota_exceeded AND leave
-// no tree behind, since a fresh clone that overshot would otherwise wedge
-// every later write in the org.
+// Drives a real clone against a budget too small to hold it: the job must fail
+// quota_exceeded AND leave no tree behind, since a fresh clone that overshot
+// would otherwise wedge every later write in the org.
 func TestExecuteGitCheckout_QuotaRollsBackClone(t *testing.T) {
 	src, _ := buildSource(t)
 	url := serveBareRepoHTTPS(t, src)
@@ -765,10 +703,9 @@ func TestExecuteGitCheckout_QuotaRollsBackClone(t *testing.T) {
 	}
 }
 
-// TestExecuteGitCheckout_QuotaNoDoubleCount is the regression guard for the
-// re-run accounting: on a pull the existing clone's bytes are ALREADY in
-// job.QuotaUsed, so a budget that comfortably holds the repo must not fail
-// just because the tree is measured again.
+// The regression guard for the re-run accounting: on a pull the existing
+// clone's bytes are ALREADY in job.QuotaUsed, so a budget that comfortably
+// holds the repo must not fail just because the tree is measured again.
 func TestExecuteGitCheckout_QuotaNoDoubleCount(t *testing.T) {
 	src, _ := buildSource(t)
 	url := serveBareRepoHTTPS(t, src)
@@ -798,8 +735,8 @@ func TestExecuteGitCheckout_QuotaNoDoubleCount(t *testing.T) {
 	}
 }
 
-// TestCheckoutFitsQuota_PullKeepsTree pins the asymmetric rollback: an
-// overshooting PULL fails but must NOT delete the pre-existing clone.
+// Pins the asymmetric rollback: an overshooting PULL fails but must NOT delete
+// the pre-existing clone.
 func TestCheckoutFitsQuota_PullKeepsTree(t *testing.T) {
 	dst := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dst, "f"), make([]byte, 500), 0o644); err != nil {
@@ -818,16 +755,12 @@ func TestCheckoutFitsQuota_PullKeepsTree(t *testing.T) {
 	}
 }
 
-// TestCheckoutFitsQuota_Unlimited: a zero limit means unlimited, so no walk
-// and no refusal regardless of size.
 func TestCheckoutFitsQuota_Unlimited(t *testing.T) {
 	if _, ok := checkoutFitsQuota(core.Job{ID: "j"}, t.TempDir(), "r", "cloned", 0); !ok {
 		t.Error("zero QuotaLimit must mean unlimited")
 	}
 }
 
-// TestDirSize_MissingRoot: a not-yet-cloned destination measures as zero
-// rather than erroring, which is what the fresh-clone path relies on.
 func TestDirSize_MissingRoot(t *testing.T) {
 	if got := dirSize(filepath.Join(t.TempDir(), "nope")); got != 0 {
 		t.Errorf("dirSize(missing) = %d, want 0", got)

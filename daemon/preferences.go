@@ -12,15 +12,12 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// preferencesAPI serves the user-preference and usage endpoints. Its fields are the whole of what
-// those handlers touch.
 type preferencesAPI struct {
 	auditor
 	svc   *Service
 	Users auth.UserStore
 }
 
-// preferencesAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) preferencesAPI() *preferencesAPI {
 	return &preferencesAPI{auditor: h.auditor(), svc: h.svc, Users: h.Users}
 }
@@ -42,13 +39,8 @@ func (h *HTTPGateway) preferencesAPI() *preferencesAPI {
 // (nil) fields are left untouched; the response always echoes the full
 // resolved state.
 
-// prefsEmail resolves the user-store email for a principal: password
-// users carry their email as the subject.
 func prefsEmail(p core.Principal) string { return p.Subject }
 
-// preferencesResponse is the GET body and the PUT echo — fully resolved
-// values (the server flattens the notification tri-state, and reports
-// theme/language as stored, "" meaning "no explicit choice").
 type preferencesResponse struct {
 	EmailOnFlowFailure  bool   `json:"email_on_flow_failure"`
 	EmailOnSupportReply bool   `json:"email_on_support_reply"`
@@ -56,9 +48,6 @@ type preferencesResponse struct {
 	Language            string `json:"language"`
 }
 
-// preferencesUpdate is the PUT body. Pointers distinguish "field
-// present, apply it" from "field absent, leave unchanged" — the partial
-// semantics each independent UI control relies on.
 type preferencesUpdate struct {
 	EmailOnFlowFailure  *bool   `json:"email_on_flow_failure"`
 	EmailOnSupportReply *bool   `json:"email_on_support_reply"`
@@ -66,10 +55,6 @@ type preferencesUpdate struct {
 	Language            *string `json:"language"`
 }
 
-// langPattern bounds the language code's shape without hardcoding the
-// client's locale list: a 2-letter primary subtag with an optional
-// region (e.g. "en", "sv", "pt-BR"). Empty is allowed separately and
-// means "clear the choice / use browser detection".
 var langPattern = regexp.MustCompile(`^[A-Za-z]{2}(-[A-Za-z]{2})?$`)
 
 func responseFor(u auth.User) preferencesResponse {
@@ -81,8 +66,6 @@ func responseFor(u auth.User) preferencesResponse {
 	}
 }
 
-// getPreferences is GET /api/v1/me/preferences — the Settings UI and the
-// app-boot hydration both read this.
 func (h *preferencesAPI) getPreferences(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Users == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")

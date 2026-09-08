@@ -12,16 +12,8 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// scheduleCronParser is the 5-field cron parser every scheduling path shares,
-// so an expression reads identically wherever it is validated, previewed,
-// enrolled or fired.
 var scheduleCronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
-// ScheduleSpec is one scheduler enrollment derived from a flow: which flow to
-// fire, on what cadence, under a key that is stable across rescans.
-//
-// Deriving specs is separated from tracking them so the set can come from
-// somewhere other than a full git walk — see DeriveScheduleSpecs.
 type ScheduleSpec struct {
 	Tenant    string
 	Workspace string
@@ -38,8 +30,6 @@ type ScheduleSpec struct {
 	// rather than after the old one's next tick.
 	SpecKey string
 
-	// Exactly one of the two is set: a cron expression (with TZ), or a
-	// positive poll interval.
 	Cron            string
 	TZ              string
 	IntervalSeconds int
@@ -48,17 +38,10 @@ type ScheduleSpec struct {
 // IsPoll reports whether this spec is interval-driven rather than cron-driven.
 func (s ScheduleSpec) IsPoll() bool { return s.IntervalSeconds > 0 }
 
-// graphTriggerEntryKey keys a graph-level trigger by its cadence, so a flow
-// carrying two different schedules gets two entries while duplicate identical
-// triggers collapse into one. Keying by array index instead let one saved flow
-// fire once per copy of the same trigger.
 func graphTriggerEntryKey(tenant, workspace, graphID, specKey string) string {
 	return fmt.Sprintf("%s/%s/%s#%s", tenant, workspace, graphID, specKey)
 }
 
-// nodeTriggerEntryKey keys a trigger NODE by its node ID — stable across
-// edits, so a rescan after a cadence change updates the entry in place
-// instead of dropping one key and adding another.
 func nodeTriggerEntryKey(tenant, workspace, graphID, nodeID string) string {
 	return fmt.Sprintf("%s/%s/%s@%s", tenant, workspace, graphID, nodeID)
 }
@@ -102,9 +85,6 @@ func DeriveScheduleSpecs(parser cron.Parser, tenant, workspace string, g core.Gr
 	}
 
 	for _, t := range g.Triggers {
-		// "webhook" and any other type aren't scheduler-driven. A legacy
-		// graph-level "poll" is ignored here — the interval lives on the
-		// poll_trigger node now, and the trigger lint flags the migration.
 		if t.Type != "cron" || t.Cron == "" {
 			continue
 		}
@@ -150,10 +130,6 @@ func DeriveScheduleSpecs(parser cron.Parser, tenant, workspace string, g core.Gr
 				TZ:        tz,
 			})
 
-		// google_form_trigger and ticketmaster_on_new_event use the identical
-		// interval mechanism: the scheduler fires the graph on the node's
-		// interval, and the node reads what is new since its stored cursor at
-		// execute time.
 		case "poll_trigger", "google_form_trigger", "ticketmaster_on_new_event":
 			secs := paramSeconds(node.Params, "interval_seconds")
 			if secs == 0 {
@@ -179,8 +155,6 @@ func DeriveScheduleSpecs(parser cron.Parser, tenant, workspace string, g core.Gr
 	return out
 }
 
-// paramString reads a string-valued node param, empty when absent or of
-// another type.
 func paramString(params map[string]any, key string) string {
 	v, _ := params[key].(string)
 	return v

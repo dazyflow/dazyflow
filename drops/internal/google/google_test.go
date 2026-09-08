@@ -16,8 +16,6 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// Tests hit httptest servers on loopback; the shared SSRF guard blocks
-// loopback unless the operator opt-in is set, so enable it for the suite.
 func TestMain(m *testing.M) {
 	hfnet.SetAllowPrivateEgress(true)
 	os.Exit(m.Run())
@@ -131,7 +129,6 @@ func TestDo_NoContentTypeAndTimeoutDefault(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// timeoutMS <= 0 exercises the 15s fallback; empty contentType omits the header.
 	status, raw, err := Do(context.Background(), "GET", srv.URL, "tok", "", nil, 0, 0)
 	if err != nil {
 		t.Fatalf("Do: %v", err)
@@ -145,15 +142,12 @@ func TestDo_NoContentTypeAndTimeoutDefault(t *testing.T) {
 }
 
 func TestErrMessage(t *testing.T) {
-	// Envelope message wins.
 	if got := ErrMessage([]byte(`{"error":{"message":"bad scope"}}`), 100); got != "bad scope" {
 		t.Errorf("envelope = %q", got)
 	}
-	// Malformed/empty envelope, short body → full body.
 	if got := ErrMessage([]byte("oops"), 100); got != "oops" {
 		t.Errorf("short body = %q", got)
 	}
-	// Long body with no envelope → truncated to limit.
 	long := strings.Repeat("z", 50)
 	if got := ErrMessage([]byte(long), 10); got != long[:10] {
 		t.Errorf("truncated = %q (len %d)", got, len(got))

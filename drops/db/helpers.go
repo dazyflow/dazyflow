@@ -9,8 +9,6 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/rows"
 )
 
-// paramInt accepts JSON numbers (float64), Go ints, or int64, so a
-// `limit:5` param works whether it arrived natively or via JSON.
 func paramInt(params map[string]any, key string) (int, bool) {
 	v, ok := params[key]
 	if !ok {
@@ -27,8 +25,6 @@ func paramInt(params map[string]any, key string) (int, bool) {
 	return 0, false
 }
 
-// paramStringArray reads a required array-of-string parameter. JSON
-// roundtrips to []any of strings; native callers can pass []string.
 func paramStringArray(params map[string]any, key string) ([]string, error) {
 	v, ok := params[key]
 	if !ok {
@@ -37,8 +33,6 @@ func paramStringArray(params map[string]any, key string) ([]string, error) {
 	return normalizeStringArray(v, key)
 }
 
-// normalizeStringArray accepts both []string (native) and []any of
-// strings (post-JSON-roundtrip).
 func normalizeStringArray(v any, key string) ([]string, error) {
 	switch s := v.(type) {
 	case []string:
@@ -57,8 +51,6 @@ func normalizeStringArray(v any, key string) ([]string, error) {
 	return nil, fmt.Errorf("%s: expected array of strings, got %T", key, v)
 }
 
-// paramStringMap reads a JSON object whose values are all strings —
-// used for the column_types parameter.
 func paramStringMap(params map[string]any, key string) (map[string]string, bool) {
 	v, ok := params[key]
 	if !ok {
@@ -95,10 +87,6 @@ func parseColumnTypes(params map[string]any) (map[string]string, error) {
 	return m, nil
 }
 
-// normalizeRows / coerceRowMap / deriveHeaders are
-// thin aliases over the shared drops/internal/rows package. The db
-// drops only accept list shapes (a bare object is rejected) and do not
-// pre-cap the input here, so they pass the zero-value Options.
 func normalizeRows(inline any) ([]map[string]any, error) {
 	return rows.Normalize(inline, rows.Options{})
 }

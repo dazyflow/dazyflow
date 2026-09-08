@@ -27,8 +27,6 @@ var locationiqURL = func() string {
 
 const locationiqRateHint = "Check your LocationIQ plan's rate limit, or self-host (set base_url) / switch the backend to Photon (no key)."
 
-// locationiqGeocoder talks to LocationIQ. It reuses the Nominatim-compatible
-// request/parse path, adding the required API key as a query param.
 type locationiqGeocoder struct{}
 
 func (locationiqGeocoder) label() string { return "LocationIQ" }
@@ -49,9 +47,6 @@ func (g locationiqGeocoder) reverse(ctx context.Context, job core.Job, lat, lon 
 	return nominatimReverse(ctx, job, lat, lon, g.label(), locationiqRateHint, connBaseURL(job, locationiqURL), key)
 }
 
-// keyParam builds the LocationIQ `key` query param from the connection's
-// api_key, or a pointed not_connected error when it's missing — selecting
-// LocationIQ without a key is the one setup mistake worth catching early.
 func (locationiqGeocoder) keyParam(job core.Job) (url.Values, *core.Result) {
 	key := connAPIKey(job)
 	if key == "" {

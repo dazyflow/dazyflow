@@ -35,7 +35,6 @@ func TestApprovalParamApprovers(t *testing.T) {
 		{"newlines", "a@x.se\nb@x.se", []string{"a@x.se", "b@x.se"}},
 		{"trims and lowercases", "  Ops@ACME.se ", []string{"ops@acme.se"}},
 		{"dedupes after normalising", "a@x.se, A@X.SE", []string{"a@x.se"}},
-		// Not an address: dropping it beats handing the mailer garbage.
 		{"skips non-addresses", "ops@acme.se, the ops team", []string{"ops@acme.se"}},
 		{"only junk", "the ops team", nil},
 	}
@@ -53,9 +52,6 @@ func TestApprovalParamApprovers(t *testing.T) {
 	}
 }
 
-// approvalFixture builds a Service with the stores the notifier touches. The
-// recipient rule reads the step and nothing else, so there is no org here to
-// fall back to — that is the property the tests below pin.
 func approvalFixture(t *testing.T) *Service {
 	t.Helper()
 	users, _ := auth.OpenJSONUserStore("")
@@ -92,7 +88,6 @@ func TestApprovalRecipients_BlankMeansNobody(t *testing.T) {
 		{"approvers": ""},
 		{"approvers": "   "},
 		{"prompt": "Refund 230 kr?"},
-		// Nothing that parses as an address — same as blank.
 		{"approvers": "the ops team"},
 	} {
 		if got := svc.approvalRecipients(context.Background(), approvalGraph(params), "gate"); len(got) != 0 {
@@ -101,8 +96,6 @@ func TestApprovalRecipients_BlankMeansNobody(t *testing.T) {
 	}
 }
 
-// A node id that isn't in the graph resolves to nobody rather than panicking
-// or falling through to some wider set.
 func TestApprovalRecipients_UnknownNode(t *testing.T) {
 	t.Parallel()
 	svc := approvalFixture(t)
@@ -124,8 +117,6 @@ func TestApprovalNotify_NoMailerIsInert(t *testing.T) {
 		ApprovalDecision{Decision: "approve", Approver: "admin@acme.se"})
 }
 
-// A subgraph node parks as awaiting too, but carries no approval link. The
-// hook has to ignore it rather than mail an empty URL.
 func TestHandleNodeAwaiting_IgnoresNonApprovalPauses(t *testing.T) {
 	t.Parallel()
 	svc := approvalFixture(t)
@@ -148,7 +139,6 @@ func TestHandleNodeAwaiting_MailsTheResolvedPromptNotTheTemplate(t *testing.T) {
 	svc.Mailer = mailer
 	svc.PublicBaseURL = "https://app.example"
 
-	// The graph holds the unresolved template, exactly as it is stored.
 	g := approvalGraph(map[string]any{
 		"approvers": "ops@acme.se",
 		"prompt":    "${upstream.webhook_input_1.body}",
@@ -156,8 +146,7 @@ func TestHandleNodeAwaiting_MailsTheResolvedPromptNotTheTemplate(t *testing.T) {
 	svc.HandleNodeAwaiting(context.Background(), g, "run-1", "gate", core.Result{
 		Output: map[string]core.Ref{
 			"pending_url": {Inline: "https://app.example/approve/x"},
-			// What the engine resolved it to before the step ran.
-			"prompt": {Inline: "Release 0.27.5 to production?"},
+			"prompt":      {Inline: "Release 0.27.5 to production?"},
 		},
 	})
 
@@ -233,9 +222,6 @@ func TestNotifyApprovalRequested_SendsWithoutSignedLink(t *testing.T) {
 	svc.Mailer = mailer
 	svc.PublicBaseURL = "https://app.example"
 
-	// The prompt now arrives as an argument — the RESOLVED text the step ran
-	// with — rather than being re-read from the node. The graph keeps its copy
-	// so this stays a faithful fixture, but it is no longer what is mailed.
 	g := approvalGraph(map[string]any{"approvers": "ops@acme.se", "prompt": "Refund 230 kr?"})
 	svc.NotifyApprovalRequested(context.Background(), g, "run-1", "gate", "", "Refund 230 kr?")
 
@@ -273,8 +259,6 @@ func TestNotifyApprovalRequested_SendsWithoutSignedLink(t *testing.T) {
 	}
 }
 
-// With a signer configured the one-click link is the CTA, and the warning
-// that it is a bearer capability comes back.
 func TestNotifyApprovalRequested_UsesSignedLinkWhenPresent(t *testing.T) {
 	t.Parallel()
 	srv := newFakeSMTP(t)
@@ -343,10 +327,8 @@ func TestApprove_SendsExactlyOneDecisionEmail(t *testing.T) {
 		t.Fatalf("approve: %v", err)
 	}
 
-	// Give any stray second send a chance to land before counting.
 	time.Sleep(300 * time.Millisecond)
 	_, _, data, to := srv.snapshot()
-	// One Message-ID header per delivered message.
 	if n := strings.Count(data, "Message-ID:"); n != 1 {
 		t.Errorf("delivered %d emails for one Approve, want 1", n)
 	}
@@ -391,12 +373,6 @@ func TestNotifyApprovalRequested_FallbackIsNotTheRunPage(t *testing.T) {
 	}
 }
 
-// The approver list is a comma-separated param, so nothing but the graph byte
-// budget bounded it — about 650,000 addresses — and the notifier sends one
-// message per address, serially, on the worker goroutine that parked the run,
-// through the OPERATOR'S mailer rather than an account the author connected.
-// Capping where the list is READ covers both notifiers (the request mail and
-// the decision mail) and any later reader.
 func TestApprovalParamApprovers_IsCapped(t *testing.T) {
 	t.Parallel()
 	var list []string
@@ -408,11 +384,9 @@ func TestApprovalParamApprovers_IsCapped(t *testing.T) {
 		t.Errorf("read %d approvers from a %d-address list, want it capped at %d",
 			len(got), len(list), core.MaxApprovalRecipients)
 	}
-	// The ones it keeps are the ones the author listed first.
 	if len(got) > 0 && got[0] != "victim0@example.com" {
 		t.Errorf("first approver = %q, want the first one listed", got[0])
 	}
-	// A real list is untouched.
 	real := approvalParamApprovers(map[string]any{"approvers": "ops@acme.se, cto@acme.se"})
 	if len(real) != 2 {
 		t.Errorf("an ordinary two-person list read as %d addresses", len(real))

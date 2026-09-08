@@ -102,8 +102,6 @@ func init() {
 }
 
 func executeEmail(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	// Wired 'email' input wins over the inline param (params.TextInputOr), so the
-	// address can be computed upstream or set on the node.
 	raw, ok := params.TextInputOr(job, "email", params.StringDefault(job.Params, "email", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "the connected 'email' input must be text"), nil
@@ -150,9 +148,7 @@ func executeEmail(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 			"out":    {MIME: "text/plain", Inline: normalized},
 			"local":  {MIME: "text/plain", Inline: local},
 			"domain": {MIME: "text/plain", Inline: domain},
-			// Empty for a plain address rather than absent, so a template
-			// referencing it renders nothing instead of failing.
-			"name": {MIME: "text/plain", Inline: addr.Name},
+			"name":   {MIME: "text/plain", Inline: addr.Name},
 			"meta": {MIME: "application/json", Inline: map[string]any{
 				"address": normalized,
 				"local":   local,

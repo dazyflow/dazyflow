@@ -39,45 +39,19 @@ import type {
 import { featureUnavailable } from "../lib/explainApiError";
 import { Loading } from "../components/ui/Loading";
 
-// Apps is the index page — one card per integration ("app") the daemon knows
-// about, derived from the live manifest registry plus curated prose from
-// integrationMeta. Drops without an Integration field land in a "Built-in"
-// bucket so the page covers everything the catalog shows in the editor.
-//
-// Built to be read at CATALOG SCALE. The page used to render every app at once
-// in two sections ("Ready to use" / "Needs setup"), which works at forty apps
-// and stops working well before a thousand: the browser lays out every card,
-// and finding one means scrolling past all of them.
-//
-// So the two sections became a FILTER instead of a layout. That is the trade
-// worth naming: a section heading tells you the answer without asking, but two
-// headings over a paginated list make the count meaningless ("page 3 of 12" of
-// what?) and split every page in half. Status is now one dropdown, each card
-// says its own state, and nothing that was visible before is gone — it is one
-// click away and, unlike a heading, it composes with search and category.
-//
-// Every control lives in the URL (?q, ?status, ?category, ?page) so a filtered
-// view is linkable, survives a reload, and works with the back button. The
-// pre-existing ?category=ai deep link (from "Connect an AI provider") keeps
-// working unchanged — it is the same parameter.
+// One card per integration the daemon knows about.
 export function Apps() {
   const { t, i18n } = useTranslation();
   const { token } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [drops, setDrops] = useState<Manifest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Connection state, used to bucket cards and to drive the status filter. A
-  // feature being off / forbidden isn't an error here — it just means "nothing
-  // is connected", so those fetches fall back to [] rather than blocking the
-  // page.
   const [secrets, setSecrets] = useState<string[] | null>(null);
   const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(null);
 
   useEffect(() => {
     if (!token) return;
-    // Cancelled-flag guard: a late response from a previous token (sign-out /
-    // tenant switch) must not overwrite the current page's state. Mirrors the
-    // pattern used across the run pages.
+    // A late response from a previous token must not overwrite the current one.
     let cancelled = false;
     api
       .listDrops(token)
@@ -109,15 +83,7 @@ export function Apps() {
     };
   }, [token]);
 
-  // Group drops by integration slug: the apps most people arrive looking for
-  // first, then everything else alphabetically. The standard-library bucket
-  // catches anything without an Integration field — matches the NodeCatalog
-  // grouping rules.
-  //
-  // Straight alphabetical put 46elks — a Swedish SMS gateway — at the top of
-  // the page, ahead of Gmail, Slack and Google, so the first thing a new
-  // visitor met was the one app they were least likely to recognise. Of every
-  // possible order, alphabetical is the one that guarantees that.
+  // Grouped by integration slug, which is what a connection is keyed on.
   const groups = useMemo(() => {
     const nameOf = (g: { slug: string; meta: { name: string } }) =>
       groupDisplayName(g.slug, g.meta.name, t, i18n.language);
@@ -133,10 +99,7 @@ export function Apps() {
     });
   }, [drops, t, i18n.language]);
 
-  // Connection state per app, computed once for the whole list rather than per
-  // card: the status filter needs every app's state to count the options, and
-  // recomputing it inside the card would do the work twice for the page's slice
-  // and not at all for the rest.
+  // Computed once for the whole list, not per card.
   const states = useMemo(() => {
     const out = new Map<string, ReturnType<typeof appConnectionState>>();
     for (const g of groups) {
@@ -145,9 +108,6 @@ export function Apps() {
     return out;
   }, [groups, secrets, providers]);
 
-  // The searchable text for each app, built once. Includes the steps INSIDE the
-  // app, which is the difference between a search box and a useful one:
-  // somebody looking for SMS does not know the app is called 46elks.
   const haystacks = useMemo(() => {
     const out = new Map<string, string>();
     for (const g of groups) {
@@ -166,10 +126,6 @@ export function Apps() {
   const categoryFilter = searchParams.get("category") ?? "";
   const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
 
-  // setParam writes one control and, for anything that changes the RESULT SET,
-  // drops the page back to 1. Staying on page 7 while narrowing to three
-  // results is the classic paginated-filter bug: the user sees an empty page
-  // and reads it as "no matches".
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
     if (value) next.set(key, value);
@@ -183,8 +139,6 @@ export function Apps() {
     setSearchParams(next, { replace: true });
   };
 
-  // Every category present in the catalog, so the dropdown stays right as the
-  // catalog grows instead of naming a curated list that drifts out of date.
   const categories = useMemo(() => {
     const seen = new Set<string>();
     for (const g of groups) for (const d of g.drops) if (d.category) seen.add(d.category);
@@ -213,8 +167,6 @@ export function Apps() {
   }, [groups, haystacks, states, query, categoryFilter, statusFilter]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / APPS_PER_PAGE));
-  // Clamp rather than trusting the URL: ?page=99 (a stale link, or a filter
-  // applied by hand) must show the last page of results, not nothing.
   const current = Math.min(page, pageCount);
   const from = (current - 1) * APPS_PER_PAGE;
   const shown = filtered.slice(from, from + APPS_PER_PAGE);
@@ -330,18 +282,10 @@ export function Apps() {
   );
 }
 
-// APPS_PER_PAGE bounds what one page lays out.
-//
-// 24 fills three or four rows of the auto-fill grid at common widths — enough
-// that scanning is worthwhile, few enough that the page stays cheap when the
-// catalog is thousands of apps long.
 const APPS_PER_PAGE = 24;
 
 type AppStatusFilter = "all" | "connected" | "needs_setup" | "ailing";
 
-// foldForSearch normalises text for matching: lowercase, and diacritics folded
-// so "bokforing" finds "Bokföring". A Swedish user typing on a keyboard they
-// have is the common case, not the exception.
 function foldForSearch(s: string): string {
   return s
     .normalize("NFD")
@@ -350,13 +294,7 @@ function foldForSearch(s: string): string {
     .trim();
 }
 
-// Pager is the page strip. Local to this page on purpose: it is the first
-// pagination in the app, and one caller does not tell you what the second one
-// would need. Extract it when there is a second.
-//
-// Windowed rather than every page: a 2,000-app catalog filtered to nothing is
-// 84 pages, and 84 buttons is not navigation. First and last are always
-// reachable, with an ellipsis standing in for the gap.
+// Local on purpose: the first of its kind, so it is not yet a shared primitive.
 function Pager({
   page,
   pageCount,
@@ -408,29 +346,16 @@ function Pager({
   );
 }
 
-// categoryLabel maps a drop category to a friendly filter label. Only the
-// curated categories get prose; anything else falls back to the raw value
-// (capitalized) so a new category still renders something sensible.
 function categoryLabel(
   category: string,
   t: (k: string) => string,
   lang?: string,
 ): string {
   if (category === "ai") return t("integrations.categoryAi");
-  // dropCategoryLabel carries the localized catalog vocabulary; it returns the
-  // raw category for a locale it has no word for, which then gets the same
-  // capitalization as before.
   const named = dropCategoryLabel(category, lang);
   return named.charAt(0).toUpperCase() + named.slice(1);
 }
 
-// IntegrationCard is one tile in the index grid.
-//
-// The card now carries its own state, because the page no longer groups by it:
-// with the sections gone, a card that said nothing would leave "is this set up?"
-// answerable only by opening it. The dot is the at-a-glance signal and the label
-// under it is the unambiguous one — a dot alone cannot distinguish "nothing to
-// set up" from "set up".
 function IntegrationCard({
   slug,
   meta,
@@ -443,20 +368,10 @@ function IntegrationCard({
   meta: { name: string; description: string; brand_logo?: string };
   drops: Manifest[];
   connected: boolean;
-  // ailing: connected, but an account needs reconnecting. Amber, not green —
-  // "set up" and "working" are different claims, and only the second one is
-  // what someone scanning this page is actually asking.
   ailing: boolean;
-  // needsSetup: declares a connection nobody has filled in. Distinct from
-  // !connected, which is also true of an app that needs no connection at all.
   needsSetup: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  // Logo fallback chain: curated override → any drop's brand_logo →
-  // category-derived lucide glyph from the first drop. Drops carrying
-  // their own brand_logo means we render the right vendor mark even for
-  // integrations without a curated metadata entry (excel, mysql,
-  // postgres, sqlite all ship per-drop logos).
   const brandLogo = meta.brand_logo ?? drops.find((d) => d.brand_logo)?.brand_logo;
   const headerDrop = drops[0];
   const HeaderIcon = headerDrop ? iconFor(headerDrop.icon, headerDrop.category) : Box;
@@ -519,12 +434,6 @@ function IntegrationCard({
   );
 }
 
-// appConnectionState classifies an integration for the index grouping.
-// needsSetup = it declares a connection (single secret, OAuth, or a
-// multi-field service connection) that isn't fully satisfied yet.
-// connected = it declares one and it IS satisfied. A no-connection
-// integration is neither (needsSetup:false, connected:false) — always
-// "Ready to use", no dot.
 function appConnectionState(
   slug: string,
   drops: Manifest[],
@@ -541,9 +450,7 @@ function appConnectionState(
       ? (secrets ?? []).includes(req.name)
       : ((providers ?? []).find((p) => p.name === req.name)?.accounts.length ?? 0) > 0,
   );
-  // Set up, but not working: an account whose grant is dead or whose scopes
-  // fell behind. Green here would be a lie — this is the app the user's flow
-  // is failing on, and the index is where they look first.
+  // Set up but not working: a dead grant, or scopes that no longer cover the drop.
   const ailing = reqs.some((req) => {
     if (req.kind === "secret") return false;
     const p = (providers ?? []).find((x) => x.name === req.name);
@@ -559,17 +466,12 @@ function appConnectionState(
   return { needsSetup: !connected, connected, ailing: connected && ailing };
 }
 
-// AppDetail is /apps/:slug — the per-app "profile" page. Shows
-// the hero (logo + name + full prose), the Connection card(s), and every
-// drop the app ships with its ports and a collapsed params hint.
 export function AppDetail() {
   const { t, i18n } = useTranslation();
   const slugRaw = window.location.pathname.split("/").pop() ?? "";
   const slug = decodeURIComponent(slugRaw);
   const { token, hasPerm } = useAuth();
-  // Connecting/managing an app needs secret:write. Viewers can browse the
-  // catalog + drops, but the whole connection section is hidden for them
-  // (no read-only card, no "ask an admin" note) — it's not theirs to act on.
+  // Connecting writes a credential, so it is gated on secret:write.
   const canManageConnections = hasPerm("secret:write");
   const [drops, setDrops] = useState<Manifest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -628,8 +530,6 @@ export function AppDetail() {
     );
   }
 
-  // Pick a brand logo: curated override wins, otherwise borrow from
-  // the first drop with one.
   const brandLogo =
     meta.brand_logo ?? integrationDrops.find((d) => d.brand_logo)?.brand_logo;
 
@@ -702,15 +602,6 @@ export function AppDetail() {
 }
 
 
-// IntegrationConnections is the configure widget: it turns each drop's
-// requires_connections into an actionable row, so a user sets up an
-// integration here (enter the API key / Connect the account) instead
-// of having to know the magic secret name on the raw Credentials list.
-// Secret-kind requirements get an inline key field that writes to the
-// manifest-declared name; oauth-kind requirements reuse the Connect
-// redirect (return_to bounces back to this page). Renders nothing when
-// the integration declares no connection requirements (e.g. the
-// standard library), so it's inert for everything that needs no auth.
 function IntegrationConnections({
   drops,
   slug,
@@ -726,38 +617,27 @@ function IntegrationConnections({
   const [searchParams, setSearchParams] = useSearchParams();
 
   const reqs = useMemo(() => dedupeRequirements(drops), [drops]);
-  // A multi-field service connection (ntfy server+token, SMTP host/…) is
-  // declared identically across the integration's drops; take the first.
   const connectionFields = useMemo(
     () => drops.find((d) => d.connection_fields?.length)?.connection_fields ?? [],
     [drops],
   );
-  // The integration is testable when any of its drops reports a live
-  // connection check (the daemon computes connection_verifiable).
   const connectionVerifiable = useMemo(
     () => drops.some((d) => d.connection_verifiable),
     [drops],
   );
   const needsSecret = reqs.some((r) => r.kind === "secret") || connectionFields.length > 0;
   const needsOAuth = reqs.some((r) => r.kind === "oauth");
-  // With more than one card on the page, a title naming only the app repeats
-  // verbatim — so each secret card names the credential it holds instead.
   const manyCards = (connectionFields.length > 0 ? 1 : 0) + reqs.length > 1;
 
   const [secrets, setSecrets] = useState<string[] | null>(null);
   const [secretsOff, setSecretsOff] = useState(false);
-  // secretsErr/providersErr latch a non-501 fetch failure. Without them a
-  // failed fetch left `secrets` null forever, so the card showed "Loading…"
-  // indefinitely; now the card shows an error with a Retry instead.
   const [secretsErr, setSecretsErr] = useState(false);
   const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(null);
   const [providersOff, setProvidersOff] = useState(false);
   const [providersErr, setProvidersErr] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // refresh re-fetches connection state. `isCancelled` lets the mount effect
-  // discard a response that resolves after the user navigated away (stale
-  // write); on-demand callers (after connect/disconnect) pass nothing.
+  // isCancelled lets the mount effect drop a response that arrives after unmount.
   const refresh = (isCancelled?: () => boolean) => {
     if (!token) return;
     const live = () => !(isCancelled?.() ?? false);
@@ -798,8 +678,6 @@ function IntegrationConnections({
         });
     }
   };
-  // reqs is derived from drops (stable per detail load), so token is the
-  // only real dependency; needsSecret/needsOAuth are read inside refresh.
   useEffect(() => {
     let cancelled = false;
     refresh(() => cancelled);
@@ -809,12 +687,7 @@ function IntegrationConnections({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, slug]);
 
-  // OAuth bounces back to /apps/:slug?oauth=success|error. Show
-  // the result once, then strip the params so a refresh doesn't re-show.
-  // Snapshot the OAuth callback result on the first render, then strip the
-  // params from the URL so a refresh (or the effects below re-running) can't
-  // re-show a stale banner. The banner stays visible from this local state
-  // until the user dismisses it.
+  // OAuth bounces back with a query flag; it must be cleared after reading.
   const [oauthBanner, setOauthBanner] = useState<{
     result: string;
     error: string;
@@ -913,11 +786,6 @@ function IntegrationConnections({
             loading={providers === null && !providersOff && !providersErr}
             off={providersOff}
             errored={providersErr}
-            // The provider list loaded cleanly and this provider is not in
-            // it: the deployment has no client credentials for it, so the
-            // authorize endpoint would 404. The template gallery already
-            // gates on exactly this; without it here, Connect looked live
-            // and threw the visitor out of the app onto a raw JSON error.
             unavailable={
               providers !== null &&
               !providersOff &&
@@ -935,9 +803,6 @@ function IntegrationConnections({
   );
 }
 
-// ConnectionStatus is the card's headline — a status dot plus
-// "Connected to X" / "Connect X" — the at-a-glance state, shared by the
-// secret and oauth cards.
 function ConnectionStatus({
   connected,
   title,
@@ -953,11 +818,6 @@ function ConnectionStatus({
   );
 }
 
-// SecretCard is the heart of the widget: a card titled by the
-// integration with an inline key field. The user pastes the value into
-// a field labelled by the manifest's note ("Anthropic API key") — they
-// never type the secret NAME. Saving writes under the declared name so
-// existing ${secret.NAME} references resolve.
 function SecretCard({
   req,
   name,
@@ -972,9 +832,7 @@ function SecretCard({
 }: {
   req: ConnectionRequirement;
   name: string;
-  // qualify names the credential in the title as well as the app. Stripe ships
-  // two connections — the API key as connection_fields, the webhook signing
-  // secret as a requirement — and both cards read "Connect Stripe" without it.
+  // Some apps ship several credentials, so the title has to name which.
   qualify?: boolean;
   configured: boolean;
   loading: boolean;
@@ -993,10 +851,6 @@ function SecretCard({
   const [err, setErr] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
 
-  // Split the manifest note into a field label and a placeholder hint:
-  // "Anthropic API key (sk-ant-…)." → label "Anthropic API key",
-  // placeholder "sk-ant-…". Notes without a parenthetical fall back to
-  // the whole note as the label and a generic placeholder.
   const note = req.note ?? req.name;
   const parts = splitConnectionNote(note);
   const fieldLabel = connectionText(parts.label, i18n.language);
@@ -1029,8 +883,6 @@ function SecretCard({
       setErr(explainApiError(e, t));
     } finally {
       setRemoving(false);
-      // Always re-read from the server so the card reflects the real
-      // state whether the delete succeeded or failed.
       onChanged();
     }
   };
@@ -1137,10 +989,6 @@ function SecretCard({
   );
 }
 
-// OAuthCard surfaces an oauth-kind requirement as the same card. The
-// status comes from GET /oauth/providers; Connect does the full-page
-// authorize redirect, with return_to set to this page so the round-trip
-// lands back here.
 function OAuthCard({
   req,
   status,
@@ -1168,24 +1016,14 @@ function OAuthCard({
   const meta = oauthProviderDisplay(req.name);
   const accounts = status?.accounts ?? [];
   const connected = accounts.length > 0;
-  // An account whose grant is dead (the refresh was rejected) or whose
-  // scopes no longer cover what we ask for. Both mean the same thing to the
-  // person reading the page: this one needs reconnecting.
   const broken = new Set([
     ...(status?.needs_reconnect ?? []),
     ...(status?.stale_accounts ?? []),
   ]);
-  // A run that failed on this app links here with ?reconnect=<account>, so
-  // the account that actually broke is the one called out.
   const flagged = new URLSearchParams(window.location.search).get("reconnect");
   const healthy = connected && broken.size === 0;
 
-  // account undefined = connect a new one; a name re-authorizes that account
-  // in place rather than adding a second.
   const connect = (account?: string) => {
-    // Pass the integration so the consent screen requests only this
-    // service's scopes (incremental authorization) — e.g. connecting from
-    // the Google Sheets page won't ask for Gmail/Forms.
     window.location.assign(
       api.oauthAuthorizeUrl(req.name, `/apps/${encodeURIComponent(slug)}`, account, integration),
     );
@@ -1254,9 +1092,6 @@ function OAuthCard({
       ) : loading ? (
         <p className="connection-note">{t("common.loading")}</p>
       ) : unavailable && !connected ? (
-        // Nothing to connect to. Offering the button anyway sent the visitor
-        // to an authorize endpoint that answers 404 as a raw JSON body, in a
-        // top-level navigation — the application simply vanished.
         <p className="connection-note">
           {t("integrations.connection.providerUnavailable", {
             name: meta.name,
@@ -1269,22 +1104,12 @@ function OAuthCard({
           </Button>
         </div>
       ) : !connected ? (
-        // Viewer (no secret:write) + not connected: mirror the secret
-        // cards' "ask an admin" note instead of a bare headline.
         <p className="connection-note">{t("integrations.connection.notConfigured")}</p>
       ) : null}
     </div>
   );
 }
 
-// ConnectionFieldsCard is the multi-field service connection — an
-// endpoint + credentials a tenant sets once (ntfy server+token, SMTP
-// host/user/pass) so flows only carry per-use params. Each field is
-// stored as the tenant secret conn/<slug>/<key>; secret fields are
-// password inputs, plain fields (a URL) are text. "Connected" means
-// every required field is set (or, when nothing is required, at least
-// one field is set). The engine injects these into a node's unset
-// params at run time — see core.injectConnectionDefaults.
 function ConnectionFieldsCard({
   fields,
   name,
@@ -1301,8 +1126,6 @@ function ConnectionFieldsCard({
 }: {
   fields: ConnectionField[];
   name: string;
-  // See SecretCard.qualify. Names the credential alongside the app when the
-  // page carries more than one card, so two cards never read identically.
   qualify?: boolean;
   slug: string;
   secrets: string[] | null;
@@ -1322,9 +1145,6 @@ function ConnectionFieldsCard({
   const [removing, setRemoving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
-  // testState tracks the "Test connection" button: idle, in-flight, or a
-  // resolved result with a human message. Separate from `err` (the save
-  // form's error) so testing an existing connection doesn't disturb the form.
   const [testState, setTestState] = useState<
     { kind: "idle" } | { kind: "testing" } | { kind: "ok" } | { kind: "fail"; message: string }
   >({ kind: "idle" });
@@ -1343,10 +1163,6 @@ function ConnectionFieldsCard({
     setErr(null);
     setTestState({ kind: "idle" });
     try {
-      // Verify-before-save: the daemon tests the credentials (when the
-      // integration supports it) and stores them only if they work, so a bad
-      // value is rejected here with the real reason instead of being saved
-      // and shown as "Connected".
       const entered: Record<string, string> = {};
       for (const f of pending) entered[f.key] = values[f.key];
       await api.connectIntegration(token, slug, entered);
@@ -1383,16 +1199,12 @@ function ConnectionFieldsCard({
       setErr(explainApiError(e, t));
     } finally {
       setRemoving(false);
-      // Re-read from the server regardless: a partial failure (some fields
-      // deleted, one errored) still needs the card to show the true state.
       onChanged();
     }
   };
 
   const showForm = canWrite && (!connected || editing);
 
-  // One required field names the card ("Secret API key"); several (SMTP's
-  // host/user/pass) have no single name, so those keep the app name alone.
   const identifying = fields.filter((f) => f.required);
   const titleName =
     qualify && identifying.length === 1 && identifying[0].label
@@ -1495,8 +1307,6 @@ function ConnectionFieldsCard({
                 )}
               </span>
               {f.options?.length ? (
-                // Enum field → dropdown. The blank option means "leave at the
-                // default" (the drop's own fallback, e.g. Nominatim).
                 <select
                   value={values[f.key] ?? ""}
                   onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
@@ -1573,11 +1383,6 @@ function ConnectionFieldsCard({
   );
 }
 
-// dedupeRequirements flattens requires_connections across every drop in
-// the integration into a unique list keyed by (kind, name) — Notion's
-// two drops both want NOTION_TOKEN, Google's many drops all ride one
-// "google" oauth — keeping the first note seen. Secret-kind first (the
-// gap this widget fills), then oauth; name-sorted within each.
 function dedupeRequirements(drops: Manifest[]): ConnectionRequirement[] {
   const seen = new Map<string, ConnectionRequirement>();
   for (const d of drops) {
@@ -1591,19 +1396,6 @@ function dedupeRequirements(drops: Manifest[]): ConnectionRequirement[] {
   );
 }
 
-// DropCard renders one drop's "help" entry: icon + label + module ID, full
-// description, and its input + output ports behind a disclosure.
-//
-// It used to end with the drop's params_schema, pretty-printed as a raw JSON
-// dump. That is gone. The schema's human-readable half — every field title,
-// help line and dropdown option — is what the Inspector's form renders, and
-// i18n/drops/fields.sv.ts translates 870 of those strings for it; the dump showed the
-// untranslated original, so a Swedish user opening this disclosure met English
-// JSON describing fields the editor shows them in Swedish. The machine-readable
-// half is already served to the consumers that want it, by
-// GET /api/v1/catalog/drops/{id} (which the MCP describe_drop tool proxies) and
-// over gRPC. That left a surface with no audience: 122 schemas, ~4,200 lines of
-// JSON, for a page whose job is "what does this app do".
 function DropCard({ drop }: { drop: Manifest }) {
   const { t, i18n } = useTranslation();
   return (
@@ -1690,19 +1482,6 @@ function DropCard({ drop }: { drop: Manifest }) {
   );
 }
 
-// uncuratedMeta is what an app looks like when integrationMeta has no entry for
-// it — which is permanent for an app an ORG created, since that table lives in
-// this repo and only the org can describe its own service.
-//
-// So both fields come off the manifests instead, from whichever drop carries
-// them first. The daemon does the same for the catalog API (daemon/catalog.go),
-// reading the same field.
-//
-// The name is taken from `integration` rather than title-cased back out of the
-// slug, because that round trip is lossy: an admin who types "Order service"
-// gets "Order Service" on the page for no reason they could discover. The slug
-// remains the fallback for the catch-all bucket, whose drops name no integration
-// at all.
 function uncuratedMeta(
   slug: string,
   drops: Manifest[],
@@ -1714,14 +1493,6 @@ function uncuratedMeta(
   };
 }
 
-// groupDisplayName is a group's heading.
-//
-// Two slugs get a localized name instead of integrationMeta's: the catch-all
-// bucket, which reads as "Built-in" rather than "Standard library" to anyone
-// who is not a programmer, and the MCP bucket, whose steps come from servers
-// the org added rather than from a connector we wrote. Every other curated
-// name goes through integrationName, which translates the ones that are
-// generic English ("Mailbox (IMAP)") and leaves a product name alone.
 function groupDisplayName(
   slug: string,
   metaName: string,
@@ -1733,9 +1504,6 @@ function groupDisplayName(
   return integrationName(metaName, lang);
 }
 
-// integrationSlugFor returns the slug a drop belongs to. Drops
-// without an Integration field land in "standard-library" — same
-// rule the NodeCatalog uses for grouping.
 function integrationSlugFor(m: Manifest): string {
   if (m.integration && m.integration.trim() !== "") {
     return integrationSlug(m.integration);
@@ -1743,18 +1511,6 @@ function integrationSlugFor(m: Manifest): string {
   return "standard-library";
 }
 
-// buildGroups maps drops into the displayable group list. The
-// curated integrationMeta entries are surfaced first (in
-// declaration order) so the most-polished integrations appear at
-// the top; any uncurated slugs that still have drops get tacked on
-// alphabetically at the end.
-// FEATURED_APPS is the head of the Apps list: the apps a small business
-// recognises without being told what they are, roughly in the order they get
-// asked for. Everything not listed keeps its alphabetical place behind them.
-//
-// This is a reading order, not a ranking of the connectors — the Nordic ones
-// are the point of the product, but nobody's first visit starts by looking
-// for nShift. Adding a connector does NOT require touching this list.
 const FEATURED_APPS = [
   "gmail",
   "google-sheets",

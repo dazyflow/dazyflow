@@ -45,8 +45,6 @@ describe("ROUTING_MODES", () => {
 
 describe("edgeErrorStyle", () => {
   it("leaves the default exactly as it was drawn before", () => {
-    // So opening an existing flow looks identical, and colour reads as
-    // "something was chosen here" rather than as decoration.
     expect(edgeErrorStyle("")).toEqual({ stroke: "var(--accent)", strokeWidth: 1.5 });
   });
 

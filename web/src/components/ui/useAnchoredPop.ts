@@ -18,8 +18,6 @@ export function useAnchoredPop<T extends HTMLElement, P extends HTMLElement>(
   const trigger = useRef<T | null>(null);
   const pop = useRef<P | null>(null);
   const [pos, setPos] = useState<AnchorPos | null>(null);
-  // Held in a ref so a caller passing an inline literal (all of them) doesn't
-  // re-register the reflow listeners on every render.
   const optsRef = useRef(opts);
   optsRef.current = opts;
 

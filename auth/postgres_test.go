@@ -16,13 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Integration tests against a real Postgres. Skipped unless
-// DAZYFLOW_TEST_DB is set, e.g.
-//
-//	DAZYFLOW_TEST_DB=postgres://localhost/dazyflow_test go test ./auth/
-//
-// Mirrors the jobstore Postgres gate so CI exercises one DB for both.
-
 func testPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
 	url := os.Getenv("DAZYFLOW_TEST_DB")
@@ -64,13 +57,10 @@ func TestPgKeyStore_RoundTrip(t *testing.T) {
 		t.Errorf("round-trip mismatch: %+v", got)
 	}
 
-	// Unknown key → ErrInvalidCredential (so the authenticator treats it
-	// like a bad credential, not a server error).
 	if _, err := store.GetKey(ctx, "nope"); err != ErrInvalidCredential {
 		t.Errorf("GetKey(unknown) err = %v, want ErrInvalidCredential", err)
 	}
 
-	// ListByTenant / ListAll.
 	if list, err := store.ListByTenant(ctx, "acme"); err != nil || len(list) != 1 {
 		t.Errorf("ListByTenant = %v, %v", list, err)
 	}
@@ -78,7 +68,6 @@ func TestPgKeyStore_RoundTrip(t *testing.T) {
 		t.Errorf("ListAll = %v, %v", list, err)
 	}
 
-	// Revoke flips revoked_at; the authenticator rejects revoked keys.
 	if err := store.Revoke(ctx, "k1", time.Now()); err != nil {
 		t.Fatalf("Revoke: %v", err)
 	}
@@ -146,7 +135,6 @@ func TestPgUserStore_RoundTrip(t *testing.T) {
 	if err := store.PutUser(ctx, u); err != nil {
 		t.Fatalf("PutUser: %v", err)
 	}
-	// Lookup normalizes case.
 	got, err := store.GetByEmail(ctx, "alice@example.com")
 	if err != nil {
 		t.Fatalf("GetByEmail: %v", err)
@@ -154,8 +142,6 @@ func TestPgUserStore_RoundTrip(t *testing.T) {
 	if got.Subject != "alice" || got.Email != "alice@example.com" || len(got.Roles) != 1 {
 		t.Errorf("round-trip mismatch: %+v", got)
 	}
-	// Notification preference survives the JSONB round-trip as an
-	// explicit (non-nil) choice.
 	if got.Notify.EmailOnFlowFailure == nil {
 		t.Errorf("Notify.EmailOnFlowFailure lost in round-trip (got nil)")
 	} else if *got.Notify.EmailOnFlowFailure {
@@ -164,7 +150,6 @@ func TestPgUserStore_RoundTrip(t *testing.T) {
 	if got.Notify.EmailOnFlowFailureEnabled() {
 		t.Errorf("EmailOnFlowFailureEnabled() = true, want false (explicit opt-out)")
 	}
-	// Interface prefs survive the JSONB round-trip too.
 	if got.UI.Theme != "light" || got.UI.Language != "sv" {
 		t.Errorf("UI prefs round-trip: got %+v, want {light sv}", got.UI)
 	}
@@ -176,8 +161,6 @@ func TestPgUserStore_RoundTrip(t *testing.T) {
 	}
 }
 
-// covPool returns a pool with all auth + orgs + blocklist schemas ensured
-// and every table truncated. Gated on DAZYFLOW_TEST_DB like the others.
 func covPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
 	url := os.Getenv("DAZYFLOW_TEST_DB")
@@ -270,11 +253,9 @@ func TestPgUserStore_DeleteUser(t *testing.T) {
 	if err := store.PutUser(ctx, User{Email: "Del@Example.com", Subject: "del", PasswordHash: []byte("h")}); err != nil {
 		t.Fatalf("PutUser: %v", err)
 	}
-	// Empty email rejected.
 	if err := store.PutUser(ctx, User{Email: "   "}); err == nil {
 		t.Error("empty email should be rejected")
 	}
-	// Delete (case-insensitive) then confirm gone; idempotent re-delete.
 	if err := store.DeleteUser(ctx, "del@example.com"); err != nil {
 		t.Fatalf("DeleteUser: %v", err)
 	}
@@ -293,20 +274,16 @@ func TestPgBlocklistStore_Cov(t *testing.T) {
 		t.Fatalf("NewPgBlocklistStore: %v", err)
 	}
 
-	// Empty email → not blocked, no query.
 	if blocked, _, err := store.IsBlocked(ctx, "  "); err != nil || blocked {
 		t.Errorf("empty IsBlocked = %v, %v", blocked, err)
 	}
-	// Nothing blocked yet.
 	if blocked, _, err := store.IsBlocked(ctx, "alice@acme.test"); err != nil || blocked {
 		t.Errorf("IsBlocked before any block = %v, %v", blocked, err)
 	}
 
-	// Block an exact email (default kind).
 	if err := store.Block(ctx, Blocked{Value: "Banned@Acme.test", Reason: "spam", CreatedBy: "admin"}); err != nil {
 		t.Fatalf("Block email: %v", err)
 	}
-	// Empty value rejected.
 	if err := store.Block(ctx, Blocked{Value: "  "}); err == nil {
 		t.Error("empty value should be rejected")
 	}
@@ -315,7 +292,6 @@ func TestPgBlocklistStore_Cov(t *testing.T) {
 		t.Errorf("exact block IsBlocked = %v, %+v, %v", blocked, b, err)
 	}
 
-	// Block a whole domain.
 	if err := store.Block(ctx, Blocked{Value: "evil.test", Kind: BlockDomain, CreatedAt: time.Now().UTC()}); err != nil {
 		t.Fatalf("Block domain: %v", err)
 	}
@@ -324,13 +300,11 @@ func TestPgBlocklistStore_Cov(t *testing.T) {
 		t.Errorf("domain block IsBlocked = %v, %+v, %v", blocked, b, err)
 	}
 
-	// List returns both, newest first.
 	list, err := store.List(ctx)
 	if err != nil || len(list) != 2 {
 		t.Fatalf("List = %v, %v", list, err)
 	}
 
-	// Unblock the email; re-check.
 	if err := store.Unblock(ctx, "banned@acme.test"); err != nil {
 		t.Fatalf("Unblock: %v", err)
 	}
@@ -356,7 +330,6 @@ func TestMigrateLegacyOrgAdminPerm_Cov(t *testing.T) {
 		t.Fatalf("NewPgMembershipStore: %v", err)
 	}
 
-	// Seed rows carrying the legacy permission string directly via JSONB.
 	legacyRoles := []core.Role{{Name: "owner", Permissions: []core.Permission{core.Permission("tenant:admin")}}}
 	if err := ustore.PutUser(ctx, User{Email: "owner@acme.test", Subject: "o", Tenant: "acme", Roles: legacyRoles, PasswordHash: []byte("h")}); err != nil {
 		t.Fatalf("PutUser: %v", err)
@@ -373,12 +346,10 @@ func TestMigrateLegacyOrgAdminPerm_Cov(t *testing.T) {
 		t.Errorf("migrated rows = %d, want 2", n)
 	}
 
-	// Re-running is a no-op now that the legacy string is gone.
 	if n2, err := MigrateLegacyOrgAdminPerm(ctx, pool); err != nil || n2 != 0 {
 		t.Errorf("re-run = %d, %v, want 0", n2, err)
 	}
 
-	// Confirm the user's role now carries the renamed permission.
 	got, err := ustore.GetByEmail(ctx, "owner@acme.test")
 	if err != nil {
 		t.Fatalf("GetByEmail: %v", err)
@@ -444,7 +415,6 @@ func TestPgInvitationStore_GDPRPaths(t *testing.T) {
 	mk("t2", "alice@acme.test", "globex")
 	mk("t3", "bob@acme.test", "acme")
 
-	// Validation paths.
 	if err := store.PutInvitation(ctx, Invitation{Tenant: "x"}); err == nil {
 		t.Error("missing token should be rejected")
 	}
@@ -462,7 +432,6 @@ func TestPgInvitationStore_GDPRPaths(t *testing.T) {
 		t.Errorf("DeleteByTenant = %d, %v", n, err)
 	}
 
-	// MarkRevoked round-trip on a fresh token + unknown path.
 	mk("t4", "carol@acme.test", "delta")
 	if err := store.MarkRevoked(ctx, "t4", now); err != nil {
 		t.Fatalf("MarkRevoked: %v", err)
@@ -482,35 +451,28 @@ func TestPgOrgProfileStore_SubdomainAndDelete(t *testing.T) {
 	if err := store.PutOrgProfile(ctx, OrgProfile{Tenant: "acme", DisplayName: "Acme", Subdomain: "acme"}); err != nil {
 		t.Fatalf("PutOrgProfile: %v", err)
 	}
-	// Lookup by subdomain (case-insensitive).
 	got, err := store.GetOrgProfileBySubdomain(ctx, "ACME")
 	if err != nil || got.Tenant != "acme" {
 		t.Errorf("GetOrgProfileBySubdomain = %+v, %v", got, err)
 	}
-	// Empty subdomain → ErrUnknownOrgProfile.
 	if _, err := store.GetOrgProfileBySubdomain(ctx, "  "); !errors.Is(err, ErrUnknownOrgProfile) {
 		t.Errorf("empty subdomain err = %v", err)
 	}
-	// Unknown subdomain.
 	if _, err := store.GetOrgProfileBySubdomain(ctx, "nobody"); !errors.Is(err, ErrUnknownOrgProfile) {
 		t.Errorf("unknown subdomain err = %v", err)
 	}
-	// Tenant required on Put.
 	if err := store.PutOrgProfile(ctx, OrgProfile{}); err == nil {
 		t.Error("empty tenant should be rejected")
 	}
-	// A second org claiming the same subdomain → ErrSubdomainTaken.
 	if err := store.PutOrgProfile(ctx, OrgProfile{Tenant: "globex", DisplayName: "Globex", Subdomain: "acme"}); !errors.Is(err, ErrSubdomainTaken) {
 		t.Errorf("duplicate subdomain err = %v, want ErrSubdomainTaken", err)
 	}
-	// ListAllOrgProfiles + ListOrgProfiles(empty).
 	if all, err := store.ListAllOrgProfiles(ctx); err != nil || len(all) == 0 {
 		t.Errorf("ListAllOrgProfiles = %v, %v", all, err)
 	}
 	if m, err := store.ListOrgProfiles(ctx, nil); err != nil || len(m) != 0 {
 		t.Errorf("ListOrgProfiles(nil) = %v, %v", m, err)
 	}
-	// Delete.
 	if err := store.DeleteOrgProfile(ctx, "acme"); err != nil {
 		t.Fatalf("DeleteOrgProfile: %v", err)
 	}
@@ -530,7 +492,7 @@ func TestPgOrgAuthStore_TenantRequired(t *testing.T) {
 	}
 }
 
-// TestPgMembership_SeatLimitIsAtomicUnderConcurrency — the real SQL path:
+// The real SQL path:
 // several people accepting at the same instant cannot all take the last seat.
 //
 // This exercises the real transaction and per-tenant advisory lock. The
@@ -552,7 +514,6 @@ func TestPgMembership_SeatLimitIsAtomicUnderConcurrency(t *testing.T) {
 	}
 	const tenant = "seatrace"
 	const maxRows = 3
-	// Two seats already taken; one left for everyone below to fight over.
 	for _, e := range []string{"a@example.com", "b@example.com"} {
 		if err := store.PutMembership(ctx, Membership{
 			UserEmail: e, Tenant: tenant, Workspace: "main",
@@ -601,9 +562,6 @@ func TestPgMembership_SeatLimitIsAtomicUnderConcurrency(t *testing.T) {
 	}
 }
 
-// TestPgMembership_SeatLimitAllowsUpdatingAnExistingMember — a role change on
-// someone already seated is an update, not a new seat, so a full org can still
-// fix a role.
 func TestPgMembership_SeatLimitAllowsUpdatingAnExistingMember(t *testing.T) {
 	pool, ctx := covPool(t)
 	store, err := NewPgMembershipStore(ctx, pool)
@@ -617,7 +575,6 @@ func TestPgMembership_SeatLimitAllowsUpdatingAnExistingMember(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	// Full at one row.
 	seated, err := store.PutMembershipWithinLimit(ctx, Membership{
 		UserEmail: "only@example.com", Tenant: tenant, Workspace: "ops",
 		Roles: []core.Role{{Name: "admin"}},
@@ -635,7 +592,6 @@ func TestPgMembership_SeatLimitAllowsUpdatingAnExistingMember(t *testing.T) {
 	if m.Workspace != "ops" || len(m.Roles) == 0 || m.Roles[0].Name != "admin" {
 		t.Errorf("membership = %+v, want the update applied", m)
 	}
-	// A genuinely new person still doesn't fit.
 	if ok, err := store.PutMembershipWithinLimit(ctx, Membership{
 		UserEmail: "newcomer@example.com", Tenant: tenant, Workspace: "main",
 	}, 1); err != nil || ok {
@@ -643,7 +599,7 @@ func TestPgMembership_SeatLimitAllowsUpdatingAnExistingMember(t *testing.T) {
 	}
 }
 
-// TestPgMembership_SeatLimitNeedsTheLock is the executable rationale for the
+// The executable rationale for the
 // advisory lock in PutMembershipWithinLimit: it forces the interleave that a
 // plain count-then-insert cannot survive, and shows the store's own method
 // surviving it.
@@ -683,8 +639,6 @@ func TestPgMembership_SeatLimitNeedsTheLock(t *testing.T) {
 		return n
 	}
 
-	// 1) Unlocked count-then-insert, interleaved on purpose: both read two
-	//    rows, both insert, and the org lands on four against a limit of three.
 	seed()
 	counted := make(chan struct{}, 2)
 	proceed := make(chan struct{})
@@ -729,8 +683,6 @@ func TestPgMembership_SeatLimitNeedsTheLock(t *testing.T) {
 			"the isolation behaviour this lock guards against may have changed", got)
 	}
 
-	// 2) The store's own method, same interleave pressure: the lock makes the
-	//    second transaction wait, re-count, and find the seat gone.
 	seed()
 	var wg2 sync.WaitGroup
 	seated := make([]bool, 2)

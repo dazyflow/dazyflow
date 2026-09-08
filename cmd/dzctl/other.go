@@ -205,8 +205,6 @@ func jobLogsCmd() *cobra.Command {
 					if node == "" {
 						node = "run"
 					}
-					// Labelled output lines show their stream (stdout/stderr)
-					// instead of the generic "progress".
 					kind := e.Kind
 					if e.Stream != "" {
 						kind = e.Stream

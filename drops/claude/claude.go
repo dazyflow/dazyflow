@@ -1,13 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package claude is the Claude (Anthropic Messages API) provider for the
-// shared llmtask core. It implements one Provider — the vendor API call +
-// response parsing — and registers the five task-shaped drops (Ask,
-// Summarize, Extract, Classify, Draft reply) under the "Claude" integration
-// via llmtask.RegisterAll. The task UX + manifests live in llmtask; only the
-// Anthropic-specific bits live here. ChatGPT is the sibling package
-// drops/openai, sharing the same core.
 package claude
 
 import (
@@ -23,8 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
-// claudeModels is the model picker, shared by the task drops (llmtask) and
-// the shared LLM registry (internal/llm) so both list the same set.
 var claudeModels = []llmtask.ModelOption{
 	{ID: "claude-opus-4-8", Label: "Claude Opus 4.8"},
 	{ID: "claude-sonnet-4-6", Label: "Claude Sonnet 4.6"},
@@ -39,9 +30,6 @@ const (
 
 type provider struct{}
 
-// Call sends one single-turn Anthropic Messages request and normalizes the
-// response into an llmtask.Result. Forced tools map to Anthropic's
-// tools + tool_choice; the response's tool_use block carries the input.
 func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (llmtask.Result, *core.JobError) {
 	model := req.Model
 	if model == "" {
@@ -100,8 +88,6 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 }
 
 func init() {
-	// Shared LLM registry: makes this provider available to editor/platform
-	// features (the render_template AI assist) — not just the flow drops.
 	llm.Register(llm.ProviderInfo{
 		Name:         "claude",
 		Integration:  "Claude",
@@ -124,10 +110,6 @@ func init() {
 	})
 }
 
-// verifyKey checks an Anthropic API key by listing models — a free,
-// read-only GET (no tokens spent, nothing generated). 200 means the key is
-// valid; 401/403 means it was rejected. Used by the Apps page to test the
-// connection before saving it.
 func verifyKey(ctx context.Context, apiKey, base string) error {
 	base = strings.TrimRight(base, "/")
 	if base == "" {
@@ -148,7 +130,6 @@ func verifyKey(ctx context.Context, apiKey, base string) error {
 	return nil
 }
 
-// extractText concatenates the text blocks of a Messages API response.
 func extractText(parsed map[string]any) string {
 	content, ok := parsed["content"].([]any)
 	if !ok {
@@ -167,8 +148,6 @@ func extractText(parsed map[string]any) string {
 	return b.String()
 }
 
-// extractToolInput returns the input map of the first tool_use block matching
-// name (the forced tool), or nil if the model didn't call it.
 func extractToolInput(parsed map[string]any, name string) map[string]any {
 	content, ok := parsed["content"].([]any)
 	if !ok {
@@ -214,8 +193,6 @@ func claudeError(body []byte) string {
 func userContent(req llmtask.Request) []any {
 	blocks := make([]any, 0, len(req.Files)+1)
 	for _, f := range req.Files {
-		// base64.StdEncoding, unwrapped: the API rejects a data string
-		// carrying newlines.
 		data := base64.StdEncoding.EncodeToString(f.Data)
 		switch {
 		case f.IsPDF():
@@ -237,8 +214,6 @@ func userContent(req llmtask.Request) []any {
 				},
 			})
 		default:
-			// A CSV or a text file has no block type of its own; inlining it
-			// as text is what the API's own plain-text document source does.
 			blocks = append(blocks, map[string]any{
 				"type": "text",
 				"text": fmt.Sprintf("--- %s ---\n%s", f.Name, string(f.Data)),
@@ -251,8 +226,6 @@ func userContent(req llmtask.Request) []any {
 	return blocks
 }
 
-// mediaType strips any parameters off a content type — "image/png; foo=bar"
-// is not a media_type the API accepts.
 func mediaType(mime string) string {
 	return strings.TrimSpace(strings.SplitN(mime, ";", 2)[0])
 }

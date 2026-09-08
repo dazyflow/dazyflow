@@ -50,8 +50,6 @@ func TestSubgraph_EmitsAwaitingWithMetadata(t *testing.T) {
 		t.Errorf("graph_id = %q", got)
 	}
 
-	// Seeds payload should embed the parent input under the child
-	// node ID, keyed by "in" port.
 	seedsJSON, _ := res.Output["pending_input_seeds"].Inline.(string)
 	var seeds map[string]core.Result
 	if err := json.Unmarshal([]byte(seedsJSON), &seeds); err != nil {
@@ -67,7 +65,6 @@ func TestSubgraph_EmitsAwaitingWithMetadata(t *testing.T) {
 		t.Errorf("seed value = %+v", body)
 	}
 
-	// Output map should round-trip through JSON.
 	outMapJSON, _ := res.Output["pending_output_map"].Inline.(string)
 	var bindings map[string]SubgraphOutputBinding
 	if err := json.Unmarshal([]byte(outMapJSON), &bindings); err != nil {
@@ -84,7 +81,6 @@ func TestSubgraph_HandlesEmptyMaps(t *testing.T) {
 	if res.Status != core.StatusAwaiting {
 		t.Fatalf("status = %q", res.Status)
 	}
-	// Empty seeds + empty output_map JSON are both valid.
 	if seedsJSON, _ := res.Output["pending_input_seeds"].Inline.(string); seedsJSON != "{}" {
 		t.Errorf("seeds = %q, want {}", seedsJSON)
 	}

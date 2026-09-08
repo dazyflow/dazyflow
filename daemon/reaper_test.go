@@ -14,7 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/jobstore"
 )
 
-// reapGraph is the 2-node a→b graph the reaper tests run against.
 func reapGraph() core.Graph {
 	return core.Graph{
 		ID: "g", Tenant: "t", Workspace: "ws",
@@ -26,9 +25,6 @@ func reapGraph() core.Graph {
 	}
 }
 
-// seedGraphRun writes a graph-record (running) plus node-records at the given
-// statuses — directly, without a worker, so the test controls exactly which
-// nodes are terminal. Mirrors the post-crash on-disk state.
 func seedGraphRun(t *testing.T, jobs core.JobStore, runID string, g core.Graph, nodeStatus map[string]core.JobStatus) {
 	t.Helper()
 	payload, err := json.Marshal(g)
@@ -162,8 +158,6 @@ func TestReaper_RecoversFailedRun(t *testing.T) {
 func TestReaper_AbandonsARunThatCanNeverFinish(t *testing.T) {
 	jobs := jobstore.NewMemory()
 	g := reapGraph()
-	// A graph record with NO node records at all: nothing pending, nothing
-	// terminal, nothing that could ever advance it.
 	payload, err := json.Marshal(g)
 	if err != nil {
 		t.Fatal(err)
@@ -193,8 +187,6 @@ func TestReaper_AbandonsARunThatCanNeverFinish(t *testing.T) {
 	if rec.Result == nil || rec.Result.Error == nil || rec.Result.Error.Code != "run_abandoned" {
 		t.Errorf("no reason recorded: %+v", rec.Result)
 	}
-	// Terminal, so it stops counting against concurrency, the notification
-	// sweep reports it, and retention can finally age it out.
 	if rec.FinishedAt == nil {
 		t.Error("no finish time: retention keys a run's age on it")
 	}
@@ -211,8 +203,6 @@ func TestReaper_LeavesAWaitingRunAlone(t *testing.T) {
 		t.Run(string(pending), func(t *testing.T) {
 			jobs := jobstore.NewMemory()
 			g := reapGraph()
-			// Old enough to be past the abandonment window, with step "b"
-			// still pending.
 			payload, err := json.Marshal(g)
 			if err != nil {
 				t.Fatal(err)
@@ -257,9 +247,6 @@ func TestReaper_LeavesAWaitingRunAlone(t *testing.T) {
 	}
 }
 
-// A young run with nothing pending is mid-transition, not abandoned: a node
-// has gone terminal and its successor is not enqueued yet. The window exists
-// for exactly that instant.
 func TestReaper_LeavesAYoungRunAlone(t *testing.T) {
 	jobs := jobstore.NewMemory()
 	g := reapGraph()

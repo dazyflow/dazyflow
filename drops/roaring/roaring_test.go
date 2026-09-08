@@ -16,10 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fakeRoaring stands in for the Roaring API: it serves the /token exchange and
-// the company data endpoints, checking the Basic auth on /token and the Bearer
-// token on the data calls, and counting token exchanges so a test can prove the
-// cache is used.
 type fakeRoaring struct {
 	srv        *httptest.Server
 	mu         sync.Mutex
@@ -57,7 +53,6 @@ func newFakeRoaring(t *testing.T) *fakeRoaring {
 			_, _ = io.WriteString(rw, f.tokenReply)
 			return
 		}
-		// Data endpoints require the minted bearer token.
 		if r.Header.Get("Authorization") != "Bearer tok-abc" {
 			rw.WriteHeader(401)
 			_, _ = io.WriteString(rw, `{"message":"Unauthorized"}`)
@@ -147,8 +142,8 @@ func TestCompanySearch_OK(t *testing.T) {
 	}
 }
 
-// TestToken_CachedAcrossCalls proves the client-credentials token is minted once
-// and reused: two data calls on the same connection hit /token only once.
+// Proves the client-credentials token is minted once and reused: two data
+// calls on the same connection hit /token only once.
 func TestToken_CachedAcrossCalls(t *testing.T) {
 	f := newFakeRoaring(t)
 	for i := 0; i < 2; i++ {
@@ -164,7 +159,6 @@ func TestToken_CachedAcrossCalls(t *testing.T) {
 
 func TestToken_BadCredentialsSurfaced(t *testing.T) {
 	f := newFakeRoaring(t)
-	// Wrong secret → /token 401 → a friendly connection error, not a leaked body.
 	res, _ := executeCompanyOverview(context.Background(),
 		f.job(map[string]any{"company_id": "5566778899", "client_secret": "wrong"}), nil)
 	if res.Status == core.StatusOK {

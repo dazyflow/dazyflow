@@ -37,9 +37,6 @@ import (
 //go:embed embed/dzrunner.py embed/runner.sh
 var runnerFiles embed.FS
 
-// urlPlaceholder is what the shipped installer carries where the server address
-// belongs, so the file is still runnable straight from the repository with an
-// explicit --url.
 const urlPlaceholder = "@@DAZYFLOW_URL@@"
 
 // agentSHAPlaceholder is where the installer carries the checksum of the agent
@@ -58,7 +55,6 @@ var (
 	agentSHAHex  string
 )
 
-// agentChecksum is the SHA-256 of the embedded agent, computed once.
 func agentChecksum() string {
 	agentSHAOnce.Do(func() {
 		b, err := runnerFiles.ReadFile("embed/dzrunner.py")
@@ -71,22 +67,17 @@ func agentChecksum() string {
 	return agentSHAHex
 }
 
-// serveRunnerAgent hands over the agent script.
 func (h *runnerAPI) serveRunnerAgent(rw http.ResponseWriter, _ *http.Request) {
 	b, err := runnerFiles.ReadFile("embed/dzrunner.py")
 	if err != nil {
 		writeJSONError(rw, http.StatusNotImplemented, "the runner agent is not bundled in this build")
 		return
 	}
-	// text/plain, not a download: someone should be able to read this in a
-	// browser before trusting it with their machine.
 	rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	rw.WriteHeader(http.StatusOK)
 	_, _ = rw.Write(b)
 }
 
-// serveRunnerScript hands over runner.sh with this server's address already
-// substituted, which is what leaves the token as the only thing to paste.
 func (h *runnerAPI) serveRunnerScript(rw http.ResponseWriter, r *http.Request) {
 	b, err := runnerFiles.ReadFile("embed/runner.sh")
 	if err != nil {

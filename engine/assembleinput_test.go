@@ -20,18 +20,12 @@ func TestAssembleInput_Cov(t *testing.T) {
 	graph := core.Graph{
 		ID: "g",
 		Edges: []core.Edge{
-			// Two edges into a variadic port -> distinct variadic keys.
 			{From: "a", To: "sink", FromPort: "out", ToPort: "items"},
 			{From: "b", To: "sink", FromPort: "out", ToPort: "items"},
-			// A normal edge.
 			{From: "a", To: "sink", FromPort: "out", ToPort: "single"},
-			// Fallback edge: carries no data, skipped.
 			{From: "c", To: "sink", FromPort: "out", ToPort: "single", OnError: core.OnErrorFallback},
-			// Edge to a different node: skipped.
 			{From: "a", To: "other", FromPort: "out", ToPort: "x"},
-			// Source has no recorded result: skipped.
 			{From: "ghost", To: "sink", FromPort: "out", ToPort: "single"},
-			// Source result exists but lacks the named port: skipped.
 			{From: "a", To: "sink", FromPort: "absent", ToPort: "single"},
 		},
 	}

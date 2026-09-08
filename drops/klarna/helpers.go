@@ -45,10 +45,6 @@ import (
 // streaming an unbounded body.
 const maxResponseBytes = 8 << 20 // 8 MiB — order bodies carry line items
 
-// regionHosts maps a connection's region option to its Klarna API host. Klarna
-// splits both by data region (EU / North America / Oceania) and by
-// production-vs-playground, each a separate host with its own credentials —
-// https://docs.klarna.com/api/api-urls/.
 var regionHosts = map[string]string{
 	"eu":            "https://api.klarna.com",
 	"eu-playground": "https://api.playground.klarna.com",
@@ -80,10 +76,6 @@ func baseURL(job core.Job) string {
 	return regionBase(params.StringDefault(job.Params, "region", ""))
 }
 
-// klarnaConnectionFields is the per-tenant Klarna connection: region + API
-// username + password, entered once on the Apps page (stored as conn.klarna.*)
-// and injected into each action's job at run time. Shared by every action drop
-// so the whole integration configures from one place.
 func klarnaConnectionFields() []core.ConnectionField {
 	return []core.ConnectionField{
 		{Key: "region", Label: "Region", Required: true, Options: regionOptions, Placeholder: "eu-playground"},
@@ -104,10 +96,6 @@ func resolveCreds(job core.Job) (user, pass string, err error) {
 	return user, pass, nil
 }
 
-// klarnaDo runs one authenticated Klarna API call (HTTP Basic with the API
-// username + password). `body` nil means no request body (GETs). Returns status,
-// raw body and response headers (capture/refund return their new id in a header);
-// the caller maps non-2xx via klarnaFailure.
 func klarnaDo(ctx context.Context, job core.Job, method, url string, body []byte) (int, []byte, http.Header, error) {
 	user, pass, err := resolveCreds(job)
 	if err != nil {
@@ -160,10 +148,6 @@ func orderPath(job core.Job, orderID string) string {
 	return baseURL(job) + "/ordermanagement/v1/orders/" + escapePathSeg(orderID)
 }
 
-// extractKlarnaError pulls a human message out of a Klarna error body —
-// {"error_code":"NO_SUCH_ORDER","error_messages":["Order not found."],
-// "correlation_id":"…"} — so the real reason reaches the user instead of a bare
-// HTTP status. Falls back to params.APIErrorMessage for other shapes.
 func extractKlarnaError(body []byte) string {
 	var e struct {
 		ErrorCode     string   `json:"error_code"`
@@ -183,9 +167,6 @@ func extractKlarnaError(body []byte) string {
 	return params.APIErrorMessage(body, 200)
 }
 
-// klarnaFailure maps a transport error or a non-2xx Klarna response to an error
-// Result, or returns nil when the call succeeded — the shared epilogue of every
-// drop's klarnaDo call. Delegates to params.HTTPFailure with Klarna's extractor.
 func klarnaFailure(job core.Job, status int, body []byte, err error) *core.Result {
 	return params.HTTPFailure(job, "klarna", "Klarna", status, body, err, extractKlarnaError)
 }

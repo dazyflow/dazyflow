@@ -16,35 +16,19 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// subgraphOutputBinding mirrors the JSON shape the subgraph module
-// writes into its awaiting Result. We duplicate the trivial struct here
-// rather than importing modules/flow so daemon stays decoupled from any
-// one module's package.
 type subgraphOutputBinding struct {
 	Node string `json:"node"`
 	Port string `json:"port"`
 }
 
-// Dispatcher advances graph state after a node-record reaches a definite
-// outcome. It is shared by the Worker (which calls it after each Execute)
-// and by the approval path (which calls it after a human resumes a paused
-// node). The dispatcher is purely state-driven — given a graph and a
-// completed node ID, it walks dependents, classifies edges, enqueues
-// ready nodes, marks the unreachable ones skipped, and finalizes the
-// graph-record when nothing remains.
 type Dispatcher struct {
-	store  core.JobStore
-	bus    Bus
-	engine *engine.Engine
-	logger *log.Logger
-	// topologies caches each run's wiring index (see graphTopology): the
-	// graph is pinned for the life of a run, so re-deriving it per node
-	// completion was pure overhead on a densely wired flow.
+	store      core.JobStore
+	bus        Bus
+	engine     *engine.Engine
+	logger     *log.Logger
 	topologies topologyCache
 }
 
-// NewDispatcher returns a Dispatcher that uses store/bus/engine for I/O.
-// logger may be nil — in which case dispatcher writes are discarded.
 func NewDispatcher(store core.JobStore, bus Bus, eng *engine.Engine, logger *log.Logger) *Dispatcher {
 	if logger == nil {
 		logger = log.New(io.Discard, "", 0)
@@ -52,34 +36,20 @@ func NewDispatcher(store core.JobStore, bus Bus, eng *engine.Engine, logger *log
 	return &Dispatcher{store: store, bus: bus, engine: eng, logger: logger}
 }
 
-// reapBatchLimit bounds one reaper sweep. Runs that complete drop out of the
-// running filter, so anything beyond the batch is picked up on the next sweep.
 const reapBatchLimit = 500
 
-// ReapStuckGraphRuns recovers graph-run records still marked running whose
-// every node-record has already reached a terminal state, and finalizes them.
+// ReapStuckGraphRuns finalizes runs still marked running whose every node has
+// reached a terminal state.
 //
-// Normally the dispatcher finalizes a graph run as a side effect of the last
-// node's terminal transition (maybeCompleteGraph). If a worker dies in the
-// window between that node's terminal write and the completion check — or the
-// process is killed mid-finalize — the graph record is left running forever,
-// with no lease and no node transition left to re-fire it. This sweep closes
-// that gap: it re-runs the completion check for each running graph run, which
-// is a no-op for runs that genuinely still have work outstanding and a clean
-// finalize (success, propagated failure, parent-subgraph resume, scratch
-// reclaim — exactly the live path) for runs that are actually done.
+// Normally the dispatcher finalizes as a side effect of the last node's terminal
+// transition. If a worker dies between that write and the completion check, the
+// graph record is left running forever, with no lease and no node transition left
+// to re-fire it. Re-running the completion check is a no-op for runs that
+// genuinely still have work, and a clean finalize for those that are done.
 //
-// Safe to run on every replica concurrently: Complete is terminal-guarded, so
-// only one finalize wins and a healthy in-flight run is never disturbed.
-// Returns the number of runs finalized this sweep.
+// Safe on every replica concurrently: Complete is terminal-guarded, so only one
+// finalize wins and a healthy in-flight run is never disturbed.
 func (d *Dispatcher) ReapStuckGraphRuns(ctx context.Context) (int, error) {
-	// Both non-terminal run statuses are swept. `awaiting` is included
-	// because a run parked on an approval carries that status now, and it can
-	// reach the same stranded state as a running one: the decision commits,
-	// the finalize doesn't, and no node transition is left to re-fire it.
-	// Sweeping it is safe — maybeCompleteGraph returns early while any node
-	// record is non-terminal, so a genuinely parked run is looked at and left
-	// exactly as it was.
 	var runs []core.JobRecord
 	for _, st := range []core.JobStatus{core.JobStatusRunning, core.JobStatusAwaiting} {
 		batch, err := d.store.ListGraphRuns(ctx, core.ListGraphRunsOpts{
@@ -101,9 +71,6 @@ func (d *Dispatcher) ReapStuckGraphRuns(ctx context.Context) (int, error) {
 			d.logger.Printf("reaper: graph run %s has unparseable payload, skipping: %v", run.ID, err)
 			continue
 		}
-		// A non-failing lastStatus + empty lastNodeID skips the fast-path and
-		// runs the full all-terminal evaluation; if the run isn't actually
-		// done this returns without touching it.
 		d.maybeCompleteGraph(ctx, g, run.ID, "", core.JobStatusSucceeded, nil)
 		rec, err := d.store.Get(ctx, run.ID)
 		if err == nil && core.IsTerminalStatus(rec.Status) {
@@ -118,48 +85,27 @@ func (d *Dispatcher) ReapStuckGraphRuns(ctx context.Context) (int, error) {
 	return reaped, nil
 }
 
-// AbandonRunsAfter is how long a run may sit non-terminal with nothing left
-// that could ever advance it before the reaper gives up and fails it.
-//
-// Long enough that no legitimately slow run is caught by the clock alone —
-// but the clock is not what decides it. abandonIfStuck only considers a run
-// with NO pending step at all, which a waiting run always has. The window is
-// there so a run mid-transition (a node terminal-written, its successor not
-// yet enqueued) is never mistaken for an abandoned one.
+// AbandonRunsAfter is not what decides it: abandonIfStuck only considers a run
+// with NO pending step, which a waiting run always has. The window is there so a
+// run mid-transition is never mistaken for an abandoned one.
 var AbandonRunsAfter = 6 * time.Hour
 
-// abandonIfStuck fails a run that can never finish, and reports whether it
-// did.
+// abandonIfStuck fails a run that can never finish.
 //
-// This exists because of what retention stopped doing. Retention is
-// run-scoped now: an unfinished run is never pruned, which is right — quietly
-// deleting a live run is a data-loss bug — but it means a run that can NEVER
-// finish is immortal. It sits in the Runs list as running for ever, and for a
-// tenant with a concurrency cap it holds a slot for ever, so after a few of
-// them every new run is admitted as pending and never starts. Nothing
-// notifies, because the run never reaches a terminal state.
+// Retention is run-scoped now: an unfinished run is never pruned, which is right,
+// but it means a run that can NEVER finish is immortal — it holds a concurrency
+// slot for ever, so after a few of them every new run is admitted as pending and
+// never starts, and nothing notifies because the run never reaches a terminal
+// state. Two things produce one: a node record deleted by the old row-scoped
+// retention, and a submission whose enqueue and Complete both failed.
 //
-// Two things produce one: a node record deleted out from under a live run by
-// the old row-scoped retention (maybeCompleteGraph reads a missing record as
-// "not done yet", so the run can never complete and the reaper can never
-// close it), and a submission whose enqueue failed and whose Complete failed
-// too, leaving a graph record with no node work under it.
-//
-// The test is not "old" — it is "nothing is pending". A run with any queued,
-// running or awaiting node record is waiting for something real: an approval
-// parked for three weeks, a delay step counting down 90 days, a step whose
-// worker is about to pick it up. Those must never be touched, and they always
-// have a pending record. A run with none, that the completion check has just
-// refused to finalize, has nothing left that could ever advance it.
+// The test is not "old" but "nothing is pending". A run with any queued, running
+// or awaiting record is waiting for something real — an approval parked three
+// weeks, a delay counting down 90 days — and must never be touched.
 func (d *Dispatcher) abandonIfStuck(ctx context.Context, graph core.Graph, run core.JobRecord) bool {
 	if AbandonRunsAfter <= 0 {
 		return false
 	}
-	// Measured from EnqueuedAt, not StartedAt: a graph record is enqueued
-	// already-running, so the two are milliseconds apart for every run this
-	// sweep can see (only running/awaiting runs are listed, and a
-	// concurrency-deferred one sits at `queued` until it is promoted).
-	// Preferring StartedAt would add a subtlety that buys nothing.
 	age := time.Since(run.EnqueuedAt)
 	if age < AbandonRunsAfter {
 		return false
@@ -190,9 +136,8 @@ func (d *Dispatcher) abandonIfStuck(ctx context.Context, graph core.Graph, run c
 	}
 	d.logger.Printf("reaper: abandoned graph run %s (%s old, %d node record(s), none pending)",
 		run.ID, age.Round(time.Minute), len(recs))
-	// Terminal now, so three things unblock at once: it stops counting against
-	// the tenant's concurrency cap, the notification sweep tells the owner, and
-	// retention can finally age it out.
+	// Terminal now, so it stops counting against the concurrency cap, the
+	// notification sweep tells the owner, and retention can age it out.
 	d.bus.Publish(run.ID, BusEvent{Terminal: &TerminalEvent{
 		JobID:  run.ID,
 		Status: core.JobStatusFailed,
@@ -201,11 +146,6 @@ func (d *Dispatcher) abandonIfStuck(ctx context.Context, graph core.Graph, run c
 	return true
 }
 
-// AdvanceAfterCompletion is the single entry-point used by the worker
-// and the approval handler once a node has reached its final outcome.
-// It centralizes the "publish node-status + dispatch dependents +
-// check graph completion" sequence so callers don't have to reason
-// about failure-propagation rules or remember to fire bus events.
 func (d *Dispatcher) AdvanceAfterCompletion(
 	ctx context.Context,
 	graph core.Graph,
@@ -214,19 +154,16 @@ func (d *Dispatcher) AdvanceAfterCompletion(
 	resultErr *core.JobError,
 ) {
 	d.PublishNodeStatus(graphRunID, nodeID, status, resultErr)
-	// Cancel guard: if Service.CancelGraphRun has already marked the
-	// graph-record terminal, the cancel path published its own Terminal
-	// event and the user's intent is "no more downstream work." Skip
-	// dispatchReady and maybeCompleteGraph so a node that finished mid
-	// cancel doesn't enqueue dependents or double-publish completion.
+	// If the cancel path already marked the graph-record terminal it published its
+	// own Terminal event, and the user's intent is "no more downstream work" — so a
+	// node finishing mid-cancel must not enqueue dependents or double-publish.
 	grec, grecErr := d.store.Get(ctx, graphRunID)
 	if grecErr == nil && core.IsTerminalStatus(grec.Status) {
 		return
 	}
-	// Only a run somebody started and is watching (JobRecord.Manual) pauses on
-	// a breakpoint; see shouldPauseAfter. An unreadable record reads as "not
-	// watched" — losing a pause is a worse-debugging-session, keeping one on a
-	// triggered run is a run that never ends.
+	// Only a run somebody is watching pauses on a breakpoint. An unreadable record
+	// reads as "not watched": losing a pause is a worse debugging session, keeping one
+	// on a triggered run is a run that never ends.
 	watched := grecErr == nil && grec.Manual
 	if pausesAfter(graph, graphRunID, nodeID, status, watched) {
 		d.publishPaused(graphRunID, nodeID)
@@ -236,39 +173,30 @@ func (d *Dispatcher) AdvanceAfterCompletion(
 	if d.advances(graph, nodeID, status) {
 		enqueued = d.dispatchReady(ctx, graph, graphRunID, nodeID)
 	}
-	// Something was just queued, so the run is not finished and the completion
-	// check would read every node record in it only to say so. On a chain of
-	// steps that is one whole-run read per step; here it is one, at the end.
-	// The reaper re-runs the check anyway for a run that somehow strands.
+	// Something was just queued, so the run is not finished and the completion check
+	// would read every node record only to say so — one whole-run read per step on a
+	// chain. The reaper re-runs it anyway for a run that somehow strands.
 	if enqueued == 0 {
 		d.maybeCompleteGraph(ctx, graph, graphRunID, nodeID, status, resultErr)
 	}
 }
 
-// advancePlan is what a node's completion does to its run, decided BEFORE the
-// completion is written so the store can commit both together
-// (core.CompleteEnqueuer) — one commit per step instead of two, and no window
-// with the node finished but its successor not yet queued.
+// advancePlan is decided BEFORE the completion is written, so the store can
+// commit both together — one commit per step instead of two, and no window with
+// the node finished but its successor not yet queued.
 //
-// Deciding early is sound for a dependent this node alone releases, and for
-// one whose other predecessors are already terminal. It is not sound for a
-// dependent still waiting on a step that may be finishing right now: the
-// guarantee that at least one of two concurrent completions sees the other
-// rests on each reading the other only after its own write is visible. So a
-// dependent not released here is re-examined after the commit, on the
-// ordinary read-then-dispatch path (revisit).
+// Sound for a dependent this node alone releases, and for one whose other
+// predecessors are already terminal. NOT sound for a dependent still waiting on a
+// step that may be finishing right now: the guarantee that at least one of two
+// concurrent completions sees the other rests on each reading the other only
+// after its own write is visible. So such a dependent is re-examined after the
+// commit, on the ordinary read-then-dispatch path.
 type advancePlan struct {
-	// pause holds the run at a breakpoint: nothing is released.
-	pause bool
-	// enqueue is the dependents this completion releases.
+	pause   bool
 	enqueue []core.JobRecord
-	// revisit is set when some dependent was waiting or is to be skipped;
-	// FinishAdvance then runs the full dispatch pass.
 	revisit bool
 }
 
-// PlanAdvance decides a node's dependents from its about-to-be-written
-// outcome. watched is the run's JobRecord.Manual.
 func (d *Dispatcher) PlanAdvance(
 	ctx context.Context,
 	graph core.Graph,
@@ -299,8 +227,6 @@ func (d *Dispatcher) PlanAdvance(
 	return plan
 }
 
-// FinishAdvance is the rest of AdvanceAfterCompletion once the planned
-// completion has committed: adv is what the store saw and did.
 func (d *Dispatcher) FinishAdvance(
 	ctx context.Context,
 	graph core.Graph,
@@ -315,7 +241,6 @@ func (d *Dispatcher) FinishAdvance(
 		resultErr = result.Error
 	}
 	d.PublishNodeStatus(graphRunID, nodeID, status, resultErr)
-	// The cancel guard, read in the same statement as the completion.
 	if core.IsTerminalStatus(adv.RunStatus) {
 		return
 	}
@@ -325,8 +250,6 @@ func (d *Dispatcher) FinishAdvance(
 	}
 	enqueued := adv.Enqueued
 	if plan.revisit {
-		// The record is committed now, so the pass reads the siblings fresh;
-		// only our own record is seeded, since the store holds exactly it.
 		ix := d.indexFor(graphRunID, graph)
 		ix.put(completedRecord(graphRunID, nodeID, status, result))
 		enqueued += d.dispatchReadyIndexed(ctx, graph, graphRunID, nodeID, ix)
@@ -336,23 +259,11 @@ func (d *Dispatcher) FinishAdvance(
 	}
 }
 
-// advances reports whether a node in this state releases its dependents. A
-// node that parked has published its pause-time outputs (the approval link),
-// so its dependents are considered now — classifyEdge lets through only the
-// ports it actually emitted. Enqueue is keyed on the node's stable record id
-// and tolerates a conflict, so re-dispatching these same dependents when the
-// node finally resumes is a no-op rather than a second notification.
 func (d *Dispatcher) advances(graph core.Graph, nodeID string, status core.JobStatus) bool {
 	return status == core.JobStatusSucceeded || status == core.JobStatusAwaiting ||
 		(status == core.JobStatusFailed && !d.failurePropagates(graph, nodeID))
 }
 
-// pausesAfter is the breakpoint / step gate (#12): a node that carries a
-// breakpoint (or a run that is stepping) holds here — dependents are not
-// dispatched and the graph is not completed. The node keeps its Succeeded
-// status (output inspectable); the run idles until Continue/Step re-drives
-// it via Service.ResumeGraphRun. Only on success — a failed breakpoint node
-// should still propagate failure normally.
 func pausesAfter(graph core.Graph, graphRunID, nodeID string, status core.JobStatus, watched bool) bool {
 	return status == core.JobStatusSucceeded && shouldPauseAfter(graph, graphRunID, nodeID, watched)
 }
@@ -365,9 +276,6 @@ func (d *Dispatcher) publishPaused(graphRunID, nodeID string) {
 	}})
 }
 
-// completedRecord is the node record a completion writes, as the dispatch
-// index needs it: enough for classifyEdge, so the pass that follows the
-// write does not read back what it just wrote.
 func completedRecord(graphRunID, nodeID string, status core.JobStatus, result *core.Result) core.JobRecord {
 	return core.JobRecord{
 		ID:         NodeJobID(graphRunID, nodeID),
@@ -379,7 +287,6 @@ func completedRecord(graphRunID, nodeID string, status core.JobStatus, result *c
 	}
 }
 
-// dependentRecord is the queued node record for a released dependent.
 func dependentRecord(graph core.Graph, graphRunID, nodeID string) core.JobRecord {
 	return core.JobRecord{
 		ID:         NodeJobID(graphRunID, nodeID),
@@ -393,10 +300,6 @@ func dependentRecord(graph core.Graph, graphRunID, nodeID string) core.JobRecord
 	}
 }
 
-// resumeFrom re-drives advancement from the nodes a run is paused after —
-// dispatching their dependents and re-checking graph completion, exactly
-// the work AdvanceAfterCompletion skipped at the breakpoint. Shared by the
-// Continue and Step paths in Service.ResumeGraphRun.
 func (d *Dispatcher) resumeFrom(ctx context.Context, graph core.Graph, graphRunID string, nodeIDs []string) {
 	for _, nodeID := range nodeIDs {
 		d.dispatchReady(ctx, graph, graphRunID, nodeID)
@@ -404,10 +307,6 @@ func (d *Dispatcher) resumeFrom(ctx context.Context, graph core.Graph, graphRunI
 	}
 }
 
-// PublishNodeStatus emits a NodeStatusEvent for subscribers (the SSE
-// stream is the primary consumer). Exported so worker paths that
-// don't go through AdvanceAfterCompletion (notably the awaiting park)
-// can publish their own status.
 func (d *Dispatcher) PublishNodeStatus(
 	graphRunID, nodeID string,
 	status core.JobStatus,
@@ -424,16 +323,14 @@ func (d *Dispatcher) dispatchReady(ctx context.Context, graph core.Graph, graphR
 	return d.dispatchReadyIndexed(ctx, graph, graphRunID, completedNodeID, d.indexFor(graphRunID, graph))
 }
 
-// dispatchReadyIndexed is dispatchReady over a prebuilt edge index. The
-// index is what keeps dispatch linear in edge count: without it each
-// dependent re-scanned every edge in the graph and re-read every
-// predecessor record, so a densely wired flow cost O(nodes² × edges) —
-// minutes of CPU for a few hundred no-op steps, and a store round trip per
-// edge per evaluation.
-// dispatchReadyIndexed returns how many dependents it turned into NEW runnable
-// work. The caller uses that to skip the completion check: a run with something
-// freshly queued cannot be finished, and asking the store to confirm that costs
-// a read of every node record in the run, on every step.
+// dispatchReadyIndexed uses a prebuilt edge index, which is what keeps dispatch
+// linear in edge count: without it each dependent re-scanned every edge and
+// re-read every predecessor record, so a densely wired flow cost O(nodes² ×
+// edges) — minutes of CPU for a few hundred no-op steps.
+//
+// It returns how many dependents became NEW runnable work, which lets the caller
+// skip the completion check: a run with something freshly queued cannot be
+// finished, and confirming that costs a read of every node record in the run.
 func (d *Dispatcher) dispatchReadyIndexed(
 	ctx context.Context,
 	graph core.Graph,
@@ -441,9 +338,8 @@ func (d *Dispatcher) dispatchReadyIndexed(
 	ix *dispatchIndex,
 ) int {
 	enqueued := 0
-	// Loop-body nodes run once per item under their for_each (see loopBodyOwners),
-	// never standalone — so the normal dispatcher must skip them, including the
-	// for_each's own "body" pin edge that feeds the body entry node.
+	// Loop-body nodes run once per item under their for_each, never standalone, so
+	// the normal dispatcher skips them — including the for_each's own "body" edge.
 	bodyOwners := ix.bodyOwners
 	for _, nodeID := range ix.outgoing[completedNodeID] {
 		if _, owned := bodyOwners[nodeID]; owned {
@@ -455,20 +351,17 @@ func (d *Dispatcher) dispatchReadyIndexed(
 			case err == nil:
 				enqueued++
 			case errors.Is(err, core.ErrConflict):
-				// The record already exists — a re-dispatch of a dependent
-				// that may well be terminal already. Deliberately NOT counted:
-				// treating it as new work would skip the completion check on a
-				// run that really has finished, and leave it hanging.
+				// A re-dispatch of a dependent that may already be terminal. Deliberately NOT
+				// counted: treating it as new work would skip the completion check on a run that
+				// really has finished, and leave it hanging.
 			default:
 				d.logger.Printf("enqueue dependent %s: %v", nodeID, err)
 			}
 		case depSkipped:
 			d.recordSkippedIndexed(ctx, graph, graphRunID, nodeID, reason, ix)
 		case depWaiting:
-			// One line per dependent per pass floods the log on a wide flow —
-			// a 200-wire fan-in wrote thousands of lines in a second, and it
-			// says nothing an operator acts on ("not ready yet" is the normal
-			// state of every step before its turn). Opt in for debugging.
+			// One line per dependent per pass floods the log on a wide flow — a 200-wire
+			// fan-in wrote thousands in a second — and says nothing an operator acts on.
 			if reason != "" && debugDispatch {
 				d.logger.Printf("%s waiting: %s", nodeID, reason)
 			}
@@ -502,8 +395,6 @@ func (d *Dispatcher) recordSkippedIndexed(
 	}
 	d.logger.Printf("skipped %s: %s", nodeID, reason)
 	d.PublishNodeStatus(graphRunID, nodeID, core.JobStatusSkipped, nil)
-	// The skip cascade reuses this pass's index; seed the record we just
-	// wrote so the dependents below see it instead of re-reading the store.
 	ix.put(rec)
 	d.dispatchReadyIndexed(ctx, graph, graphRunID, nodeID, ix)
 	d.maybeCompleteGraph(ctx, graph, graphRunID, nodeID, core.JobStatusSkipped, nil)
@@ -534,10 +425,6 @@ func (d *Dispatcher) analyzeDependentIndexed(
 		if err != nil {
 			return depWaiting, fmt.Sprintf("predecessor %q not yet recorded", edge.From)
 		}
-		// A parked step is the one non-terminal state worth looking past: it
-		// has published what it can (an approval link) and will publish no
-		// more until something outside the run happens. Its EMITTED ports are
-		// usable now; everything else it feeds keeps waiting.
 		parked := predRec.Status == core.JobStatusAwaiting
 		if !core.IsTerminalStatus(predRec.Status) && !parked {
 			return depWaiting, fmt.Sprintf("predecessor %q is %s", edge.From, predRec.Status)
@@ -546,11 +433,9 @@ func (d *Dispatcher) analyzeDependentIndexed(
 		case edgeActive:
 			anyActive = true
 		case edgeDormant:
-			// dormant: doesn't activate, doesn't block
 		case edgeNotRouted:
-			// A path the predecessor declined to take. Recorded like a block
-			// so no other live wire can run this step behind the router's
-			// back — but with its own reason, because nothing went wrong here.
+			// A path the predecessor declined. Recorded like a block so no other live wire
+			// can run this step behind the router's back, but with its own reason.
 			if !anyNotRouted && !anyBlocked {
 				firstReason = fmt.Sprintf("predecessor %q did not route down %q",
 					edge.From, edge.FromPort)
@@ -558,8 +443,6 @@ func (d *Dispatcher) analyzeDependentIndexed(
 			anyNotRouted = true
 		case edgeBlocking:
 			if parked {
-				// Not "skip this branch" — "not yet". The decision ports
-				// arrive when the step resumes.
 				return depWaiting, fmt.Sprintf("predecessor %q is still waiting for its decision", edge.From)
 			}
 			if !anyBlocked {
@@ -569,9 +452,8 @@ func (d *Dispatcher) analyzeDependentIndexed(
 			anyBlocked = true
 		}
 	}
-	// A declined path skips the dependent even when another wire is live:
-	// routing is exclusive, and a live address/value wire must not be able to
-	// run the branch nobody chose.
+	// A declined path skips the dependent even when another wire is live: routing is
+	// exclusive, and a live value wire must not run the branch nobody chose.
 	if anyBlocked || anyNotRouted {
 		return depSkipped, firstReason
 	}
@@ -596,24 +478,18 @@ func classifyEdge(predRec core.JobRecord, edge core.Edge) edgeOutcome {
 		if edge.OnError == core.OnErrorFallback {
 			return edgeDormant
 		}
-		// The pass pin is a CONTROL pin (Unreal-style exec): wiring it means
-		// "run after this step", whether or not a value threaded through the
-		// predecessor's pass-in. Without this, a pass→pass sequencing wire
-		// from a node with an empty pass-in reads as dormant and silently
-		// skips everything downstream. The no-output dormancy below is for
-		// DATA routing (e.g. branch emitting only then/else) — control
-		// edges activate on success alone.
+		// The pass pin is a CONTROL pin: wiring it means "run after this step", whether
+		// or not a value threaded through. Without this, a pass→pass sequencing wire from
+		// a node with an empty pass-in reads as dormant and silently skips everything
+		// downstream. The no-output dormancy below is for DATA routing.
 		if edge.FromPort == core.PassPort {
 			return edgeActive
 		}
-		// The predecessor ran, chose which ports to emit on, and left this
-		// one empty. That is a ROUTING answer — "not down here" — so it must
-		// skip the dependent, not merely fail to activate it. Treating it as
-		// dormant is what let a router leak: `if` emits only `then`, but any
-		// OTHER live wire into the else-side step (an address, a value node,
-		// anything) was enough to enqueue it, so both branches ran. It is the
-		// same hole NoPassthrough closes for the pass pin (see the comment on
-		// core.Manifest.NoPassthrough), reached through a data port instead.
+		// The predecessor chose which ports to emit on and left this one empty. That is
+		// a ROUTING answer — "not down here" — so it must SKIP the dependent, not merely
+		// fail to activate it. Treating it as dormant is what let a router leak: `if`
+		// emits only `then`, but any OTHER live wire into the else-side step was enough to
+		// enqueue it, so both branches ran.
 		if predRec.Result == nil || predRec.Result.Output == nil {
 			return edgeNotRouted
 		}
@@ -638,19 +514,13 @@ func classifyEdge(predRec core.JobRecord, edge core.Edge) edgeOutcome {
 			return edgeBlocking
 		}
 	case core.JobStatusAwaiting:
-		// A parked step has already published what it could — an approval
-		// link, most importantly — and the whole point of that link is to
-		// reach somebody WHILE the run waits. So an edge from a port it has
-		// actually emitted is live now; the ports that only arrive with the
-		// decision (approved / rejected) stay blocked until it resumes.
+		// A parked step has published what it could, and the whole point of an approval
+		// link is to reach somebody WHILE the run waits. So an edge from a port it has
+		// actually emitted is live now, while the ports arriving with the decision stay
+		// blocked. Without this the documented pattern cannot work: the notification only
+		// fired after the approval, so nobody was told there was something to approve.
 		//
-		// Without this the documented pattern cannot work: "put the approval
-		// step before the step that notifies a person" produced a
-		// notification that only fired after the approval, so nobody was ever
-		// told there was something to approve.
-		//
-		// The pass pin means "run after this step", which a parked step has
-		// not done, so it keeps waiting.
+		// The pass pin means "run after this step", which a parked step has not done.
 		if edge.FromPort == core.PassPort {
 			return edgeBlocking
 		}
@@ -667,10 +537,9 @@ func classifyEdge(predRec core.JobRecord, edge core.Edge) edgeOutcome {
 }
 
 func (d *Dispatcher) failurePropagates(graph core.Graph, nodeID string) bool {
-	// A step marked non-critical never fails the run — the author has said
-	// this one is allowed to fail. Checked first because it must hold for a
-	// TERMINAL step too, which by the edge rules below would always
-	// propagate (it has no outgoing edge to carry a policy).
+	// A non-critical step never fails the run. Checked first because it must hold
+	// for a TERMINAL step too, which by the edge rules below would always propagate,
+	// having no outgoing edge to carry a policy.
 	if n, ok := graph.Node(nodeID); ok && n.ContinueOnError {
 		return false
 	}
@@ -684,7 +553,6 @@ func (d *Dispatcher) failurePropagates(graph core.Graph, nodeID string) bool {
 		case core.OnErrorFallback:
 			hasFallback = true
 		case core.OnErrorSkip:
-			// tolerated locally
 		default:
 			hasNonTolerant = true
 		}
@@ -710,13 +578,6 @@ func (d *Dispatcher) maybeCompleteGraph(
 		return
 	}
 
-	// One batch read of the run's node records, then check completion
-	// against the in-memory map — instead of a point Get per node. That
-	// keeps a graph run's completion checking to O(nodes) round trips
-	// total rather than O(nodes²) (every node's terminal transition used
-	// to re-Get every other node). Still store-backed (not an in-process
-	// counter), so it stays correct when sibling nodes complete on other
-	// dzd replicas writing the same shared store.
 	recs, err := d.store.ListNodeRecords(ctx, core.ListNodeRecordsOpts{
 		Tenant:     graph.Tenant,
 		Workspace:  graph.Workspace,
@@ -731,10 +592,9 @@ func (d *Dispatcher) maybeCompleteGraph(
 		byNode[r.NodeID] = r
 	}
 
-	// Loop-body nodes never run in the parent run (the for_each executes them
-	// once per item), so they hold no record here and must not gate completion.
-	// Read from the run's cached topology: this runs on every node
-	// transition, and re-deriving ownership each time walked the whole graph.
+	// Loop-body nodes hold no record in the parent run and must not gate completion.
+	// Read from the cached topology: re-deriving ownership on every node transition
+	// walked the whole graph.
 	bodyOwners := d.topologies.get(graphRunID, graph).bodyOwners
 	nodeResults := make(map[string]core.Result, len(graph.Nodes))
 	for _, n := range graph.Nodes {
@@ -742,9 +602,8 @@ func (d *Dispatcher) maybeCompleteGraph(
 			continue
 		}
 		rec, ok := byNode[n.ID]
-		// A missing or non-terminal node means the run isn't done yet.
-		// Under-fetching here can only err toward "not complete", never
-		// toward a false completion — safe.
+		// Under-fetching can only err toward "not complete", never toward a false
+		// completion.
 		if !ok || !core.IsTerminalStatus(rec.Status) {
 			return
 		}
@@ -771,16 +630,11 @@ func (d *Dispatcher) maybeCompleteGraph(
 		core.StatusOK, nil)
 }
 
-// finalizeGraph runs the shared terminal sequence for a graph run that
-// has reached a definite end state: persist the terminal record, clear
-// any pending breakpoints, reclaim the run's scratch directory, publish
-// the Terminal bus event, and resume a waiting parent (for subgraph
-// runs). It is a no-op past the Complete call if the record was already
-// terminal — Complete returning non-nil means another writer beat us,
-// so we must not double-publish. Used by both the success and failure
-// completion paths; the cancel path keeps its own ordering (it clears
-// breakpoints before flipping the record and propagates Complete
-// errors) but shares reclaimScratch.
+// finalizeGraph persists the terminal record, clears pending breakpoints,
+// reclaims scratch, publishes Terminal, and resumes a waiting parent. A no-op past
+// the Complete call if the record was already terminal — Complete returning
+// non-nil means another writer beat us, so we must not double-publish. The cancel
+// path keeps its own ordering but shares reclaimScratch.
 func (d *Dispatcher) finalizeGraph(
 	ctx context.Context,
 	graph core.Graph,
@@ -805,11 +659,9 @@ func (d *Dispatcher) finalizeGraph(
 	d.maybeResumeParent(ctx, graphRunID, resumeStatus, resumeErr)
 }
 
-// reclaimScratch removes a finished run's ephemeral scratch directory
-// (everything written under a scratch:// path). Best-effort: a reclaim
-// failure is logged, never fatal, so it can't block or fail completion.
-// No-op when the sandbox provider doesn't support scratch, or when the
-// run never created any (RemoveScratch is idempotent).
+// reclaimScratch is best-effort: a failure is logged, never fatal, so it cannot
+// block completion. A no-op without scratch support, or when the run created
+// none.
 func (d *Dispatcher) reclaimScratch(graph core.Graph, graphRunID string) {
 	if d.engine == nil {
 		return
@@ -846,14 +698,6 @@ func (d *Dispatcher) markGraphFailed(
 		core.StatusError, errPayload)
 }
 
-// maybeResumeParent walks the child→parent linkage and, if present,
-// transitions the parent's awaiting record to terminal. Outputs are
-// computed by reading the parent node's pending_output_map and pulling
-// the named (childNode, port) from the child's per-node records.
-//
-// A child failure propagates to the parent as a node failure with code
-// "child_failed" — the parent's graph then applies its usual OnError /
-// fallback rules to decide whether to continue or abort.
 func (d *Dispatcher) maybeResumeParent(
 	ctx context.Context,
 	childRunID string,
@@ -870,7 +714,6 @@ func (d *Dispatcher) maybeResumeParent(
 		return
 	}
 	if parentRec.Status != core.JobStatusAwaiting {
-		// Likely cancelled or already failed via some other path.
 		return
 	}
 
@@ -913,8 +756,6 @@ func (d *Dispatcher) maybeResumeParent(
 		d.logger.Printf("load parent graph for %s: %v", parentRec.ID, err)
 		return
 	}
-	// parentResult is assigned in every branch above (child failure,
-	// projection failure, success) — no nil check needed.
 	d.AdvanceAfterCompletion(ctx, parentGraph, parentRec.GraphRunID, parentRec.NodeID, parentStatus, parentResult.Error)
 }
 
@@ -925,9 +766,6 @@ func childErrMessage(e *core.JobError) string {
 	return e.Error()
 }
 
-// projectChildOutputs reads the parent's pending_output_map (stashed by
-// the subgraph module during its awaiting Execute) and reaches into the
-// child's per-node records to build the parent's output port map.
 func (d *Dispatcher) projectChildOutputs(
 	ctx context.Context,
 	parentRec core.JobRecord,
@@ -938,9 +776,6 @@ func (d *Dispatcher) projectChildOutputs(
 	}
 	rawJSON, _ := parentRec.Result.Output["pending_output_map"].Inline.(string)
 	if rawJSON == "" {
-		// No mapping declared — parent simply succeeds with no
-		// outputs. Downstream edges from this parent's ports will be
-		// dormant.
 		return map[string]core.Ref{}, nil
 	}
 	var bindings map[string]subgraphOutputBinding

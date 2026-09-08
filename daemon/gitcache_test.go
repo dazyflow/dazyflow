@@ -14,9 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// TestDeleteGraph_RemovesGitCache verifies a flow's auto-assigned
-// git_checkout cache (gitcache/<flow>) is removed when the flow is deleted,
-// while unrelated workspace files are left untouched.
 func TestDeleteGraph_RemovesGitCache(t *testing.T) {
 	t.Parallel()
 	base := t.TempDir()
@@ -40,7 +37,6 @@ func TestDeleteGraph_RemovesGitCache(t *testing.T) {
 	}
 
 	root, _ := sb.Root("acme", "main")
-	// The flow's clone cache + an unrelated user file.
 	cacheDir := filepath.Join(root, filepath.FromSlash(core.GitCacheGraphRel("flow1")), "co")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -65,8 +61,6 @@ func TestDeleteGraph_RemovesGitCache(t *testing.T) {
 	}
 }
 
-// newGitCacheService builds the minimal Service + principal the gitcache
-// tests need, returning the sandbox root alongside them.
 func newGitCacheService(t *testing.T) (*Service, core.Principal, *workspace.Store, string) {
 	t.Helper()
 	sb, err := NewFSSandbox(t.TempDir())
@@ -86,7 +80,6 @@ func newGitCacheService(t *testing.T) (*Service, core.Principal, *workspace.Stor
 	return svc, p, ws, root
 }
 
-// seedCache plants a fake checkout for (flow, node) and returns its dir.
 func seedCache(t *testing.T, root, flow, node string) string {
 	t.Helper()
 	dir := filepath.Join(root, filepath.FromSlash(core.GitCheckoutRel(flow, node)))
@@ -99,11 +92,11 @@ func seedCache(t *testing.T, root, flow, node string) string {
 	return dir
 }
 
-// TestSaveGraph_PrunesOrphanedGitCache is the regression guard for the
-// per-node cache leak: deleting a git_checkout step (or rebuilding it under
-// a new node ID) used to strand its clone forever, since only flow deletion
-// reclaimed anything. Saving the flow must now reclaim the orphan while
-// leaving every live step's clone — and unrelated flows — untouched.
+// The regression guard for the per-node cache leak: deleting a git_checkout
+// step (or rebuilding it under a new node ID) used to strand its clone
+// forever, since only flow deletion reclaimed anything. Saving the flow must
+// now reclaim the orphan while leaving every live step's clone — and unrelated
+// flows — untouched.
 func TestSaveGraph_PrunesOrphanedGitCache(t *testing.T) {
 	t.Parallel()
 	svc, p, _, root := newGitCacheService(t)
@@ -129,10 +122,9 @@ func TestSaveGraph_PrunesOrphanedGitCache(t *testing.T) {
 	}
 }
 
-// TestSaveGraph_PrunesKeepsNonCheckoutNodes pins the conservative rule: a
-// directory survives on node-ID membership alone, so a step that is no
-// longer a git_checkout (or was never one) never has its folder reclaimed
-// out from under it while the step still exists.
+// Pins the conservative rule: a directory survives on node-ID membership
+// alone, so a step that is no longer a git_checkout (or was never one) never
+// has its folder reclaimed out from under it while the step still exists.
 func TestSaveGraph_PrunesKeepsNonCheckoutNodes(t *testing.T) {
 	t.Parallel()
 	svc, p, _, root := newGitCacheService(t)

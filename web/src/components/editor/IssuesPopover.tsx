@@ -33,12 +33,8 @@ export function IssuesButton({
   children,
 }: {
   kind: IssueKind;
-  // What the badge reads. Rows can be worth more than one (a lint pass finds
-  // three things, five steps need setup), so the caller decides the number.
   count: number;
-  // Accessible name and hover text on the button.
   title: string;
-  // The panel's own heading, which repeats the count in words.
   heading: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -54,8 +50,6 @@ export function IssuesButton({
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      // Stop here: the canvas also closes things on Escape (the selection, the
-      // palette), and one press should shut the panel it was aimed at.
       e.stopPropagation();
       onOpenChange(false);
       trigger.current?.focus();
@@ -121,10 +115,6 @@ export function IssuesButton({
   );
 }
 
-// IssueRow is one entry in a panel: prose, and whatever the message can
-// actually do about itself. The actions travel with the row rather than the
-// panel — Retry belongs to a failed run, Connect to a missing app — which is
-// what lets the two panels hold unrelated kinds of message without a legend.
 export function IssueRow({
   text,
   actions,
@@ -132,8 +122,6 @@ export function IssueRow({
 }: {
   text: ReactNode;
   actions?: ReactNode;
-  // Machine code (a lint code) for bug reports, as hover text. Deliberately
-  // not in the visible sentence.
   title?: string;
 }) {
   return (

@@ -22,8 +22,6 @@ import { Component, ErrorInfo, ReactNode } from "react";
 
 type Props = {
   children: ReactNode;
-  // Where "go back" leads. The app's root redirects a signed-in user onward;
-  // the docs have no "/" route at all, so each entry names its own.
   home: string;
 };
 
@@ -37,9 +35,6 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Kept in the console rather than posted anywhere: this build has no error
-    // reporter, and inventing a network call on the failure path is how a
-    // crash becomes a crash plus a hung request.
     console.error("Unhandled render error:", error, info.componentStack);
     this.setState({ stack: info.componentStack ?? "" });
   }

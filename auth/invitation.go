@@ -40,11 +40,6 @@ type Invitation struct {
 	RevokedAt  *time.Time  `json:"revoked_at,omitempty"`
 }
 
-// IsPending reports whether the invitation can still be accepted —
-// not accepted, not revoked, not past its expiry. The /invite
-// detail endpoint exposes this so the UI can render a "this invite
-// has been used / cancelled / expired" message rather than just
-// failing on accept.
 func (i Invitation) IsPending(now time.Time) bool {
 	return i.AcceptedAt == nil && i.RevokedAt == nil && now.Before(i.ExpiresAt)
 }
@@ -70,9 +65,6 @@ const SignupInviteTenant = "_signup"
 // invite. The two share a store but never a code path.
 func (i Invitation) IsSignupInvite() bool { return i.Tenant == SignupInviteTenant }
 
-// InvitationStore is the invitation lookup boundary. GetByToken is
-// the no-auth lookup used by the /invite/<token> detail endpoint;
-// the rest of the surface is admin-only.
 type InvitationStore interface {
 	PutInvitation(ctx context.Context, inv Invitation) error
 	GetByToken(ctx context.Context, token string) (Invitation, error)
@@ -95,10 +87,6 @@ func MintInvitationToken() (string, error) {
 	return "inv_" + hex.EncodeToString(b), nil
 }
 
-// JSONInvitationStore is the JSON-file backing — same shape as the
-// other dev stores in this package. Tokens unique → keyed directly
-// on token. The load/flush/atomic-write machinery lives in the embedded
-// jsonFileStore.
 type JSONInvitationStore struct {
 	*jsonFileStore[string, Invitation]
 }
@@ -125,13 +113,6 @@ func (s *JSONInvitationStore) PutInvitation(_ context.Context, inv Invitation) e
 	return s.flushLocked()
 }
 
-// AnonymizeSubject replaces an erased person's email where it appears as the
-// INVITER, returning the rows changed.
-//
-// The row belongs to somebody else — the person invited — and survives the
-// inviter's erasure, so the identifier is pseudonymised rather than deleted.
-// Probed by the erasure cascade rather than declared on the interface, matching
-// how DeleteByEmail is already handled for this store.
 func (s *JSONInvitationStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
 	ident = strings.ToLower(strings.TrimSpace(ident))
 	if ident == "" {
@@ -166,7 +147,6 @@ func (s *JSONInvitationStore) GetByToken(_ context.Context, token string) (Invit
 	return inv, nil
 }
 
-// filter returns every invitation matching pred (read-locked).
 func (s *JSONInvitationStore) filter(pred func(Invitation) bool) []Invitation {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -179,8 +159,6 @@ func (s *JSONInvitationStore) filter(pred func(Invitation) bool) []Invitation {
 	return out
 }
 
-// deleteWhere hard-deletes every invitation matching pred and flushes
-// (write-locked), returning the number removed.
 func (s *JSONInvitationStore) deleteWhere(pred func(Invitation) bool) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -203,17 +181,14 @@ func (s *JSONInvitationStore) ListByTenant(_ context.Context, tenant string) ([]
 	return s.filter(func(i Invitation) bool { return i.Tenant == tenant }), nil
 }
 
-// ListByEmail returns every invitation addressed to an email (export).
 func (s *JSONInvitationStore) ListByEmail(_ context.Context, email string) ([]Invitation, error) {
 	return s.filter(emailMatches(email)), nil
 }
 
-// DeleteByEmail hard-deletes every invitation to an email (erasure).
 func (s *JSONInvitationStore) DeleteByEmail(_ context.Context, email string) (int, error) {
 	return s.deleteWhere(emailMatches(email))
 }
 
-// DeleteByTenant hard-deletes every invitation in a tenant (org deletion).
 func (s *JSONInvitationStore) DeleteByTenant(_ context.Context, tenant string) (int, error) {
 	return s.deleteWhere(func(i Invitation) bool { return i.Tenant == tenant })
 }

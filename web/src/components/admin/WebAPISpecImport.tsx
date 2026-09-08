@@ -42,8 +42,6 @@ export function WebAPISpecImport({
   storedSpecURL,
   onImport,
 }: {
-  // againstName names an existing catalog, which turns this into a refresh:
-  // the daemon diffs and the removals need confirming.
   againstName?: string;
   storedSpecURL?: string;
   // onImport hands the chosen operations to the form, which is what actually
@@ -64,8 +62,6 @@ export function WebAPISpecImport({
   const [error, setError] = useState<unknown>(null);
   const [result, setResult] = useState<WebAPISpecResponse | null>(null);
   const [chosen, setChosen] = useState<Set<string>>(new Set());
-  // Removals are opt-in, every time. Not remembered across reads: a fresh
-  // document is a fresh decision.
   const [confirmRemovals, setConfirmRemovals] = useState(false);
 
   const read = async () => {

@@ -5,11 +5,6 @@ import { Zap, MousePointerClick, PauseCircle, UploadCloud } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { FlowRunStatus } from "../../flowStatus";
 
-// FlowStatusChip is the at-a-glance "will this run on its own?" badge.
-// Three states (live / manual / paused) computed by flowRunStatus (editor,
-// Triggers modal) or the server's run_status (flow list). Colour + icon
-// carry the meaning; the tooltip explains it so nobody has to guess again
-// whether a saved flow is actually scheduled.
 const ICONS: Record<FlowRunStatus, typeof Zap> = {
   live: Zap,
   manual: MousePointerClick,

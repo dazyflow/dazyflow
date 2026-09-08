@@ -95,8 +95,6 @@ func executeBuiltinStoreFind(ctx context.Context, job core.Job, _ chan<- core.Pr
 		limit = n
 	}
 
-	// Compile the optional no-code filter (CEL emitted by the row-condition
-	// builder). An empty filter means "return every row".
 	var prog cel.Program
 	if expr := strings.TrimSpace(params.StringDefault(job.Params, "filter", "")); expr != "" {
 		env, err := rowcel.Env()
@@ -114,9 +112,6 @@ func executeBuiltinStoreFind(ctx context.Context, job core.Job, _ chan<- core.Pr
 		return *errResult, nil
 	}
 	if db == nil {
-		// No store exists yet, so the named collection definitely doesn't.
-		// Fail loudly rather than returning a silent empty result — a missing
-		// collection is almost always a typo, and an empty result hides it.
 		return params.Err(job, "no_such_collection",
 			fmt.Sprintf("collection %q doesn't exist — no collections have been created yet (save rows to one first)", table)), nil
 	}
@@ -212,18 +207,12 @@ func resolveTable(job core.Job) (string, error) {
 	if name == "" {
 		return "", errors.New("pick a collection to read from, or connect a collection name into the Collection input")
 	}
-	// Validate the identifier on the read path too — the write path already does
-	// (executeBuiltinStoreAppend). quoteIdent makes injection impossible either
-	// way, but rejecting a NUL/oversized name here gives a clear error instead of
-	// a confusing driver failure, and keeps the read and write paths consistent.
 	if err := validateIdent(name); err != nil {
 		return "", err
 	}
 	return name, nil
 }
 
-// missingCollectionMsg builds a "collection X doesn't exist" message, listing
-// the collections that DO exist so a typo is easy to spot and fix.
 func missingCollectionMsg(ctx context.Context, db *sql.DB, table string) string {
 	names := existingCollections(ctx, db)
 	if len(names) == 0 {
@@ -232,8 +221,6 @@ func missingCollectionMsg(ctx context.Context, db *sql.DB, table string) string 
 	return fmt.Sprintf("collection %q doesn't exist — available collections: %s", table, strings.Join(names, ", "))
 }
 
-// existingCollections lists the user tables in the store (best-effort; a query
-// error just yields no names, so the caller still reports the missing one).
 func existingCollections(ctx context.Context, db *sql.DB) []string {
 	rows, err := db.QueryContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
 	if err != nil {
@@ -262,8 +249,6 @@ func cellLess(a, b any) bool {
 	return cellString(a) < cellString(b)
 }
 
-// cellFloat tries to read a cell as a float64, accepting the numeric types a
-// SQLite scan or a numeric TEXT value can carry.
 func cellFloat(v any) (float64, bool) {
 	switch n := v.(type) {
 	case float64:
@@ -279,7 +264,6 @@ func cellFloat(v any) (float64, bool) {
 	return 0, false
 }
 
-// cellString renders a cell for lexical comparison; nil becomes "".
 func cellString(v any) string {
 	if v == nil {
 		return ""

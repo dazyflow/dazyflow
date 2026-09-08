@@ -24,15 +24,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// TestHTTPGateway_E2E_SubmitAndStreamSSE drives the full UI-facing path:
-//
-//  1. PUT a graph
-//  2. POST /run
-//  3. GET /jobs/{id}/events with SSE — expect a snapshot frame, optional
-//     progress frames, and a terminal frame
-//  4. GET /jobs/{id} — expect status=succeeded
-//
-// This is the contract a visual editor will rely on.
 func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 	ks := auth.NewMemKeyStore()
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
@@ -67,7 +58,6 @@ func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	// 1. PUT graph
 	g := core.Graph{
 		ID: "stream-demo", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -91,7 +81,6 @@ func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 		t.Fatalf("PUT status = %d", putResp.StatusCode)
 	}
 
-	// 2. POST /run
 	runReq, _ := http.NewRequest("POST", ts.URL+"/api/v1/me/flows/t%2Fws%2Fstream-demo/run", nil)
 	runReq.Header.Set("Authorization", "Bearer "+token)
 	runResp, err := http.DefaultClient.Do(runReq)
@@ -110,7 +99,6 @@ func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 		t.Fatal("no job_id")
 	}
 
-	// 3. GET /jobs/{id}/events — SSE
 	streamCtx, streamCancel := context.WithTimeout(t.Context(), e2eWaitCeiling)
 	defer streamCancel()
 	sseReq, _ := http.NewRequestWithContext(streamCtx, "GET",
@@ -129,17 +117,14 @@ func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 	if len(events) == 0 {
 		t.Fatal("no SSE events received")
 	}
-	// The very first frame is a snapshot of the current job-record.
 	if events[0].name != "snapshot" {
 		t.Errorf("first event = %q, want snapshot", events[0].name)
 	}
-	// The last frame is the terminal event.
 	last := events[len(events)-1]
 	if last.name != "terminal" {
 		t.Fatalf("last event = %q, want terminal", last.name)
 	}
 
-	// 4. GET /jobs/{id} — final snapshot
 	snapReq, _ := http.NewRequest("GET", ts.URL+"/api/v1/me/runs/"+runOut.JobID, nil)
 	snapReq.Header.Set("Authorization", "Bearer "+token)
 	snapResp, err := http.DefaultClient.Do(snapReq)
@@ -159,10 +144,10 @@ func TestHTTPGateway_E2E_SubmitAndStreamSSE(t *testing.T) {
 	}
 }
 
-// TestHTTPGateway_E2E_PerNodeSSE asserts that the SSE stream carries
-// per-node status transitions as `node` frames, in order, plus a
-// terminal frame at the end. The graph has two sleeps so we should
-// see at least four `node` frames: running+succeeded for each node.
+// Asserts that the SSE stream carries per-node status transitions as `node`
+// frames, in order, plus a terminal frame at the end. The graph has two sleeps
+// so we should see at least four `node` frames: running+succeeded for each
+// node.
 func TestHTTPGateway_E2E_PerNodeSSE(t *testing.T) {
 	ks := auth.NewMemKeyStore()
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
@@ -238,9 +223,6 @@ func TestHTTPGateway_E2E_PerNodeSSE(t *testing.T) {
 
 	events := readSSEUntilTerminal(t, sseResp.Body, e2eWaitCeiling)
 
-	// Collect per-node status events; we expect each node to appear with
-	// at least one terminal-ish status. (Snapshot may also have emitted
-	// some — we just want non-empty coverage.)
 	statuses := map[string][]string{}
 	for _, e := range events {
 		if e.name != "node" {
@@ -267,16 +249,11 @@ func TestHTTPGateway_E2E_PerNodeSSE(t *testing.T) {
 	}
 }
 
-// sseEvent captures one SSE frame's name and JSON-decoded data so tests
-// can assert against frame sequence without re-parsing.
 type sseEvent struct {
 	name string
 	data []byte
 }
 
-// readSSEUntilTerminal reads SSE frames until either a terminal frame
-// arrives or the deadline elapses. Frames are `event: <name>\ndata: <json>\n\n`.
-// Comment-only ping frames (lines starting with ":") are skipped.
 func readSSEUntilTerminal(t *testing.T, body io.Reader, deadline time.Duration) []sseEvent {
 	t.Helper()
 	scanner := bufio.NewScanner(body)
@@ -284,14 +261,12 @@ func readSSEUntilTerminal(t *testing.T, body io.Reader, deadline time.Duration) 
 	var out []sseEvent
 	var current sseEvent
 	stop := time.AfterFunc(deadline, func() {
-		// no-op; the bufio scanner already returns on EOF/close
 	})
 	defer stop.Stop()
 	for scanner.Scan() {
 		line := scanner.Text()
 		switch {
 		case strings.HasPrefix(line, ":"):
-			// keep-alive comment, ignore
 		case strings.HasPrefix(line, "event: "):
 			current.name = strings.TrimPrefix(line, "event: ")
 		case strings.HasPrefix(line, "data: "):

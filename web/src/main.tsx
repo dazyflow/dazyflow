@@ -17,8 +17,6 @@ import "./theme.css";
 import "./app.css";
 import "@xyflow/react/dist/style.css";
 
-// Apply the saved theme before first paint so there's no dark→light
-// flash for users who picked light.
 initTheme();
 
 const root = ReactDOM.createRoot(document.getElementById("root")!);

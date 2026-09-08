@@ -37,10 +37,6 @@ func storeTerminalRun(t *testing.T, svc *Service, g core.Graph, runID string, st
 	}
 }
 
-// The point of the whole change: a run that fails with nobody watching still
-// gets reported. This is the post-restart / post-reap / lease-recovery shape —
-// no watcher was ever armed for this run, because the process that submitted
-// it is gone.
 func TestNotifySweep_ReportsARunNoWatcherWasArmedFor(t *testing.T) {
 	fw := newFakeWebhook(t)
 	svc := newFailureNotifyHarness(t)
@@ -80,11 +76,6 @@ func TestNotifySweep_DoesNotRepeatItself(t *testing.T) {
 	}
 }
 
-// #6: the platform killing a run on its wall-clock timeout terminates it as
-// CANCELLED, which the old watcher ignored entirely — it only ever looked for
-// `failed`. So the one failure the platform itself causes was the one nobody
-// was told about, and the Runs list just said "cancelled", which reads as if
-// somebody meant it.
 func TestNotifySweep_ReportsATimeoutCancel(t *testing.T) {
 	fw := newFakeWebhook(t)
 	svc := newFailureNotifyHarness(t)
@@ -99,8 +90,6 @@ func TestNotifySweep_ReportsATimeoutCancel(t *testing.T) {
 	fw.wait(t, 1, 2*time.Second)
 }
 
-// The other half of that rule: somebody stopping their own run does not need
-// an email about it.
 func TestNotifySweep_IgnoresAPersonsCancel(t *testing.T) {
 	fw := newFakeWebhook(t)
 	svc := newFailureNotifyHarness(t)
@@ -143,7 +132,6 @@ func TestNotifySweep_IgnoresSuccess(t *testing.T) {
 // Bounded, so a host that refuses forever cannot make the sweep loop forever.
 func TestNotifySweep_RetriesAFailedSendThenGivesUp(t *testing.T) {
 	svc := newFailureNotifyHarness(t)
-	// A mailer pointed at a port nothing is listening on: every send fails.
 	mailer, err := NewMailerFromURL("smtp://127.0.0.1:1?tls=none", "noreply@example.com")
 	if err != nil {
 		t.Fatalf("mailer: %v", err)
@@ -165,8 +153,6 @@ func TestNotifySweep_RetriesAFailedSendThenGivesUp(t *testing.T) {
 		t.Fatal("job store does not implement core.FailureNotifier")
 	}
 	_ = err
-	// Each pass claims, fails to send, and releases — until the attempt
-	// ceiling stops it being reconsidered.
 	for i := 0; i < notifyMaxAttempts; i++ {
 		svc.SweepFailureNotifications(t.Context())
 	}

@@ -52,7 +52,6 @@ func TestMemory_LeaseExpiryReclaim(t *testing.T) {
 		t.Fatalf("first claim: %v", err)
 	}
 
-	// Advance past the lease.
 	now = now.Add(2 * time.Minute)
 	got, err := s.Claim(t.Context(), "w2", time.Minute)
 	if err != nil {
@@ -116,7 +115,6 @@ func TestMemory_MaxConcurrentPerTenant(t *testing.T) {
 		}
 	}
 
-	// Two claims succeed — acme is then at its cap of 2.
 	c1, err := s.Claim(t.Context(), "w", 30*time.Second)
 	if err != nil {
 		t.Fatalf("claim 1: %v", err)
@@ -124,12 +122,10 @@ func TestMemory_MaxConcurrentPerTenant(t *testing.T) {
 	if _, err := s.Claim(t.Context(), "w", 30*time.Second); err != nil {
 		t.Fatalf("claim 2: %v", err)
 	}
-	// Third acme job is withheld: the tenant has 2 running.
 	if _, err := s.Claim(t.Context(), "w", 30*time.Second); !errors.Is(err, core.ErrNoJobs) {
 		t.Fatalf("claim 3 err = %v, want ErrNoJobs (acme at cap)", err)
 	}
 
-	// A different tenant is unaffected by acme's cap.
 	if err := s.Enqueue(t.Context(), core.JobRecord{ID: "b1", Kind: core.JobKindNode, Tenant: "globex"}); err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +133,6 @@ func TestMemory_MaxConcurrentPerTenant(t *testing.T) {
 		t.Fatalf("globex claim should succeed despite acme at cap: %v", err)
 	}
 
-	// Completing an acme job frees a slot, so the third becomes claimable.
 	if err := s.Complete(t.Context(), c1.ID, core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); err != nil {
 		t.Fatalf("complete %s: %v", c1.ID, err)
 	}
@@ -156,10 +151,6 @@ func TestMemory_MaxConcurrentExemptsExpiredReclaim(t *testing.T) {
 	s.clock = func() time.Time { return now }
 	s.SetMaxConcurrentPerTenant(1)
 
-	// Craft a tenant at its cap of 1 live-running job, plus a dead
-	// (expired-lease) job and a fresh queued job. Injected directly: a
-	// live AND an expired running job under a cap of 1 is unreachable
-	// through Claim alone.
 	future := time.Unix(200, 0)
 	past := time.Unix(50, 0)
 	s.records["live"] = &core.JobRecord{
@@ -175,9 +166,6 @@ func TestMemory_MaxConcurrentExemptsExpiredReclaim(t *testing.T) {
 		Status: core.JobStatusQueued, EnqueuedAt: time.Unix(3, 0),
 	}
 
-	// acme has 1 live-running job (== cap), so "queued" stays withheld —
-	// but "dead" (expired lease) is recovery, exempt from the cap, so it
-	// is what Claim hands back.
 	got, err := s.Claim(t.Context(), "w", 10*time.Second)
 	if err != nil {
 		t.Fatalf("reclaim: %v", err)
@@ -206,7 +194,6 @@ func TestMemory_CompleteOwned_FencesNonOwner(t *testing.T) {
 		t.Errorf("status = %q after fenced write, want still running", rec.Status)
 	}
 
-	// The actual owner completes fine.
 	if err := s.CompleteOwned(t.Context(), "j1", "worker-A", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); err != nil {
 		t.Fatalf("owner CompleteOwned: %v", err)
 	}
@@ -241,9 +228,6 @@ func TestMemory_EnqueueDoesNotStampQueuedRecord(t *testing.T) {
 	}
 }
 
-// Enqueue fills in only what is missing: a record that arrives carrying
-// its own StartedAt keeps it, so a replayed or restored run does not have
-// its start time rewritten to "now".
 func TestMemory_EnqueueStampsOnlyMissingStartedAt(t *testing.T) {
 	s := NewMemory()
 	now := time.Unix(1_000, 0)
@@ -264,7 +248,6 @@ func TestMemory_EnqueueStampsOnlyMissingStartedAt(t *testing.T) {
 		t.Errorf("StartedAt = %v, want the supplied %v", got.StartedAt, started)
 	}
 
-	// A running record with no StartedAt does get one stamped.
 	if err := s.Enqueue(t.Context(), core.JobRecord{
 		ID: "g2", Kind: core.JobKindGraph, Tenant: "t", Status: core.JobStatusRunning,
 	}); err != nil {
@@ -342,8 +325,6 @@ func TestMemory_ListGraphRunsFiltersByStatus(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("got %d runs, want 2 running", len(got))
 	}
-	// An inverted predicate returns the complement, which can have a
-	// plausible size — so check the status of every row too.
 	for _, r := range got {
 		if r.Status != core.JobStatusRunning {
 			t.Errorf("run %s has status %q, want running", r.ID, r.Status)

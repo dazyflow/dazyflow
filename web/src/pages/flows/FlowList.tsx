@@ -61,17 +61,10 @@ const HAS_FLOWS_KEY = "dazyflow.hasFlows";
 export function FlowList() {
   const { t } = useTranslation();
   const { token, me, activeTenant, activeWorkspace, hasPerm } = useAuth();
-  // Creating a flow needs graph:edit; viewers can browse + open flows but
-  // not create. Disable the create CTAs (with a tooltip) so they don't
-  // click into a server "missing graph:edit" error. Browsing templates
-  // stays enabled — only the fork/create action is gated (on Templates).
   const canEdit = hasPerm("graph:edit");
   const [flows, setFlows] = useState<FlowSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Schedules fold-in: the standalone Schedules page is gone — its
-  // workspace-wide overview + per-trigger pause/resume now live on each
-  // scheduled flow's card below.
   const [schedules, setSchedules] = useState<ScheduleEntry[]>([]);
   const [schedBusy, setSchedBusy] = useState<string | null>(null);
   // Recent runs across the workspace, grouped per flow — drives each card's
@@ -83,9 +76,7 @@ export function FlowList() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("recent");
   const [statusFilter, setStatusFilter] = useState<FlowRunStatus | "all">("all");
-  // The flow whose password-gated delete confirm is open (null = none).
   const [deleteTarget, setDeleteTarget] = useState<FlowSummary | null>(null);
-  // The flow whose duplicate name-prompt is open (null = none).
   const [dupTarget, setDupTarget] = useState<FlowSummary | null>(null);
   const navigate = useNavigate();
 
@@ -157,9 +148,6 @@ export function FlowList() {
     return m;
   }, [schedules]);
 
-  // Pull the most recent runs workspace-wide and bucket them by flow. One
-  // request feeds every card's last-run line + sparkline (vs N per-flow
-  // requests); the API returns newest-first, which both consumers rely on.
   useEffect(() => {
     if (!token || !activeWorkspace) return;
     let cancelled = false;
@@ -187,8 +175,6 @@ export function FlowList() {
     };
   }, [token, activeTenant, activeWorkspace]);
 
-  // The flows actually rendered: text-filtered, status-filtered, and sorted
-  // per the toolbar. Derived (not state) so it always tracks the inputs.
   const visibleFlows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const matchesQuery = (f: FlowSummary) =>
@@ -269,8 +255,6 @@ export function FlowList() {
       return next;
     });
     setDeleteTarget(null);
-    // Tell the sidebar (and anything else listening) the flow set changed, so
-    // its own list drops the deleted flow without waiting for a navigation.
     window.dispatchEvent(new Event(FLOWS_CHANGED_EVENT));
   };
 
@@ -284,7 +268,6 @@ export function FlowList() {
     const ws = activeWorkspace || "";
     const newID = await api.duplicateFlow(token, tn, ws, target.id, name);
     setDupTarget(null);
-    // The flow set changed; let the sidebar refresh in the background.
     window.dispatchEvent(new Event(FLOWS_CHANGED_EVENT));
     navigate(`/flows/${encodeURIComponent(newID)}`);
   };
@@ -542,11 +525,6 @@ export function FlowList() {
   );
 }
 
-// FlowScheduleChip is the per-flow schedule summary that replaced the
-// standalone Schedules page: the cadence, the next run (or paused state),
-// and an inline pause/resume that flips every trigger on the flow at once.
-// The card is a <Link>, so the toggle stops click propagation to avoid
-// navigating. The toggle is gated on graph:edit — viewers just read status.
 function FlowScheduleChip({
   sum,
   canEdit,

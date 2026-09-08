@@ -14,32 +14,11 @@ import (
 	"github.com/dazyflow/dazyflow/internal/maillang"
 )
 
-// Approval mail: who gets told a flow is waiting on a person, and who gets
-// told what they decided.
-//
-// The recipient set is resolved ONCE per notification from the same rule in
-// both directions, so the people asked to decide are exactly the people told
-// the outcome — a second approver never goes hunting for an item somebody
-// already resolved.
-//
-// The rule: the step's "Email these people" field, and nothing else. Blank
-// means Dazyflow sends no mail and the step behaves exactly as it did before
-// this existed — you deliver the `pending_url` link yourself, or people work
-// the Approvals inbox.
-//
-// Defaulting to "everyone in the org who could act on it" was the other
-// option and was rejected: approving is not permission-gated (anyone with the
-// workspace can), so that set is wide, and it would have turned every
-// already-deployed approval step into a mailshot the moment the daemon was
-// upgraded — a behaviour change nobody asked for, on a channel that is hard
-// to take back. Opt-in costs one field and surprises no one.
-//
-// Everything here is best-effort: an unreachable mailer must never block a
-// flow from parking, and must never fail the decision that resumes it.
+// Who is told a flow is waiting on a person. The mail goes through the OPERATOR'S
+// transactional mailer, not an account the author connected, which is why the
+// recipient list is capped rather than trusted.
 
-// approvalParamApprovers reads the step's explicit recipient list. Comma or
-// semicolon separated — people paste both, and a list that silently notified
-// nobody because of the wrong separator is the worst failure mode here.
+// The choke point where MaxApprovalRecipients is actually applied.
 func approvalParamApprovers(params map[string]any) []string {
 	raw, _ := params["approvers"].(string)
 	if strings.TrimSpace(raw) == "" {
@@ -56,13 +35,8 @@ func approvalParamApprovers(params map[string]any) []string {
 		}
 		seen[addr] = true
 		out = append(out, addr)
-		// One message per address, sent serially on the worker goroutine that
-		// parked the run — and through the OPERATOR'S mailer, not a connected
-		// account the author had to authorize. Nothing else bounded the list:
-		// 650,000 addresses fit inside the graph byte budget, notified twice
-		// (park, then decision). Cap it where it is read, so both notifiers and
-		// any later reader get the same list; core.ValidateGraphFull tells the
-		// author at save time.
+		// One message per address, serially, on the worker goroutine that parked the run
+		// — which is why the cap matters: an uncapped list holds a worker slot for hours.
 		if len(out) >= core.MaxApprovalRecipients {
 			break
 		}
@@ -70,8 +44,6 @@ func approvalParamApprovers(params map[string]any) []string {
 	return out
 }
 
-// approvalRecipients resolves the addresses for one await_approval node:
-// whatever its "Email these people" field names, and nothing if it is blank.
 func (s *Service) approvalRecipients(_ context.Context, graph core.Graph, nodeID string) []string {
 	for _, n := range graph.Nodes {
 		if n.ID == nodeID {
@@ -81,12 +53,7 @@ func (s *Service) approvalRecipients(_ context.Context, graph core.Graph, nodeID
 	return nil
 }
 
-// buildApprovalsURL points at the Approvals inbox, org-scoped the same way
-// buildRunURL scopes a run link. This is the fallback destination when there is
-// no signed one-click link — NOT the run page, which shows an awaiting node but
-// offers no way to decide it (RunDetail can only stop a run). Sending someone to
-// a page where they can see the thing waiting on them and do nothing about it is
-// worse than sending no link at all.
+// Org-scoped, or the link lands the approver in the wrong org.
 func buildApprovalsURL(baseURL, tenant string) string {
 	if baseURL == "" {
 		return ""
@@ -94,35 +61,12 @@ func buildApprovalsURL(baseURL, tenant string) string {
 	return withOrg(strings.TrimRight(baseURL, "/")+"/approvals", tenant)
 }
 
-// HandleNodeAwaiting is the WorkerConfig.OnNodeAwaiting adapter: it pulls the
-// signed approval link off the parked result and mails the approvers. Lives
-// here rather than in the wiring so cmd/dzd stays a declaration of what is
-// connected, not a place that knows which port carries the link.
-//
-// Nodes that park for other reasons (a subgraph awaiting its child) carry no
-// pending_url and fall out here, which is the whole filter — there is no
-// approval to ask about.
 func (s *Service) HandleNodeAwaiting(ctx context.Context, graph core.Graph, runID, nodeID string, result core.Result) {
 	ref, ok := result.Output["pending_url"]
 	if !ok {
 		return
 	}
-	// Ref.Inline is `any` — the module writes a string here, but a wrong type
-	// must degrade to "no mail", never to a panic on the worker goroutine.
 	url, _ := ref.Inline.(string)
-	// The prompt comes off the RESULT, not the graph node.
-	//
-	// The graph holds what the author typed, templates and all, so reading it
-	// here mailed people a literal "${upstream.webhook_input_1.body}" where the
-	// question should have been. The engine resolves templates into the job
-	// before the step runs, and await_approval already emits the resolved text
-	// on this port — which is why the Approvals inbox showed the right thing
-	// while the email did not. Two readers of one value; only one of them was
-	// reading the resolved copy.
-	//
-	// No fallback to the node's params when the port is absent: the step omits
-	// it only when the prompt is empty, so falling back could only ever
-	// resurrect an unresolved template.
 	var prompt string
 	if pRef, ok := result.Output["prompt"]; ok {
 		prompt, _ = pRef.Inline.(string)
@@ -130,14 +74,6 @@ func (s *Service) HandleNodeAwaiting(ctx context.Context, graph core.Graph, runI
 	s.NotifyApprovalRequested(ctx, graph, runID, nodeID, url, prompt)
 }
 
-// NotifyApprovalRequested mails the approvers when a run parks on an
-// await_approval node. Called from the worker's park path, which is the only
-// place that knows the pause actually took effect (as opposed to the module
-// merely asking for one).
-//
-// approvalURL is the signed, single-purpose link — the same one the
-// pending_url port carries. Anyone holding it can decide, which is why the
-// recipient rule above is deliberately conservative.
 func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph, runID, nodeID, approvalURL, prompt string) {
 	if s.Mailer == nil {
 		return
@@ -146,27 +82,12 @@ func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph,
 	if len(to) == 0 {
 		return
 	}
-	// The name is the mail SUBJECT, so it is bounded far tighter than a body:
-	// a header line past RFC 5321's 1000 octets makes the server drop the
-	// connection, and a flow whose approval mail never sends is a run its
-	// approvers are never told about and nobody can unblock.
+	// The SUBJECT: RFC 5321 caps a line at 1000 octets, and a longer one is dropped.
 	name := core.ClipNotificationLabel(flowDisplayName(graph, graph.ID))
 	runURL := buildRunURL(s.PublicBaseURL, graph.Tenant, runID)
 
-	// approvalURL is the signed one-click link, and it only exists when the
-	// deployment sets DAZYFLOW_APPROVAL_HMAC_SECRET — engine.ApprovalSigner is
-	// nil otherwise and the step emits an empty pending_url. Requiring it here
-	// meant every deployment without that secret sent no request mail at all,
-	// silently, while still sending the decision mail.
-	//
-	// The fallback is the Approvals inbox, which needs a sign-in but does carry
-	// Approve/Reject. It is deliberately not the run page: that shows the node
-	// parked and gives you no way to act on it.
+	// Only exists when a signer is configured; without one the inbox is the route.
 	approvalsURL := buildApprovalsURL(s.PublicBaseURL, graph.Tenant)
-	// This email is sent BY A FLOW, so it speaks the flow's language — the same
-	// field the Date & time step reads — rather than any reader's preference.
-	// Its recipients are addresses typed into the step and often have no
-	// account here at all, so there is frequently no preference to read.
 	m := maillang.For(flowLang(graph))
 	link, linkLabel, shareWarning := approvalURL, m.ApprovalOpenLink, true
 	if link == "" {
@@ -174,24 +95,16 @@ func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph,
 	}
 
 	facts := []emailtheme.Fact{{Label: m.FactFlow, Value: name}, {Label: m.FactStep, Value: core.ClipNotificationLabel(nodeID)}}
-	// The run's own URL used to appear only in the plain-text half of this
-	// message, so an HTML reader never got it. As a fact it reaches both,
-	// while the button stays the thing that actually decides the approval.
+	// Both halves carry it, or an HTML reader loses the link entirely.
 	if runURL != "" {
 		facts = append(facts, emailtheme.Fact{Label: m.FactRun, Value: runURL})
 	}
 	intro := []string{fmt.Sprintf(m.ApprovalIntro, name)}
 	if prompt != "" {
-		// The prompt is the flow author's own words — never translated. Bounded
-		// though: it is read off the run result, so the value ceiling (64 MiB)
-		// was its only limit, and it goes out once per recipient in two bodies.
-		// The full text is on the Approvals inbox and the run page, both of
-		// which this mail links to.
+		// The author's own words, never translated, and bounded like any other body text.
 		intro = append(intro, core.ClipNotificationText(prompt))
 	}
-	// The don't-forward warning is only true of the signed link, which is a
-	// bearer capability. The run page is access-controlled, so saying it there
-	// would be false and would train people to ignore the real warning.
+	// Only true of the signed link, which IS the capability.
 	outro := []string{m.ApprovalOutro}
 	if shareWarning {
 		outro = append([]string{m.ApprovalShareWarning}, outro...)
@@ -212,10 +125,7 @@ func (s *Service) NotifyApprovalRequested(ctx context.Context, graph core.Graph,
 	s.sendApprovalMail(ctx, "requested", graph, to, emailtheme.PlainText(content), content)
 }
 
-// NotifyApprovalDecided closes the loop: the same people who were asked now
-// learn what happened and who did it. Called from Service.Approve after the
-// resume has been committed, so the mail can never claim a decision that
-// didn't land.
+// The same people who were asked are told what was decided.
 func (s *Service) NotifyApprovalDecided(
 	ctx context.Context,
 	graph core.Graph,
@@ -229,10 +139,7 @@ func (s *Service) NotifyApprovalDecided(
 	if len(to) == 0 {
 		return
 	}
-	// The name is the mail SUBJECT, so it is bounded far tighter than a body:
-	// a header line past RFC 5321's 1000 octets makes the server drop the
-	// connection, and a flow whose approval mail never sends is a run its
-	// approvers are never told about and nobody can unblock.
+	// The SUBJECT: RFC 5321 caps a line at 1000 octets, and a longer one is dropped.
 	name := core.ClipNotificationLabel(flowDisplayName(graph, graph.ID))
 	runURL := buildRunURL(s.PublicBaseURL, graph.Tenant, runID)
 	m := maillang.For(flowLang(graph))
@@ -241,13 +148,6 @@ func (s *Service) NotifyApprovalDecided(
 	if approved {
 		tone = "success"
 	}
-	// Each outcome is its own set of whole sentences rather than a verb slotted
-	// into a shared template. English gets away with "was %s" because
-	// "approved" and "rejected" are interchangeable there; Swedish inflects
-	// them differently as verb and adjective ("godkände"/"avslog",
-	// "godkänt"/"avslaget"), so a template could only ever be right in one of
-	// them. Title-casing the verb by byte, as this used to, is the same class
-	// of mistake — it assumes a language whose first letter is one byte.
 	subjectFmt, preheaderFmt, heading, introFmt, outro, decided :=
 		m.DecidedRejectedSubject, m.DecidedRejectedPreheader, m.DecidedRejectedHeading,
 		m.DecidedRejectedIntro, m.DecidedRejectedOutro, m.DecidedRejectedValue
@@ -256,8 +156,6 @@ func (s *Service) NotifyApprovalDecided(
 			m.DecidedApprovedSubject, m.DecidedApprovedPreheader, m.DecidedApprovedHeading,
 			m.DecidedApprovedIntro, m.DecidedApprovedOutro, m.DecidedApprovedValue
 	}
-	// The HMAC link path has no session, so Approver can be blank or a
-	// self-declared label. Say so rather than printing an empty field.
 	who := strings.TrimSpace(decision.Approver)
 	if who == "" {
 		who = m.DecidedAnonymous
@@ -289,10 +187,6 @@ func (s *Service) NotifyApprovalDecided(
 	s.sendApprovalMail(ctx, "decided", graph, to, emailtheme.PlainText(content), content)
 }
 
-// sendApprovalMail fans the message out one recipient at a time. One
-// address per message on purpose: a shared To/Cc header would leak the org's
-// member list to every approver, and an external reviewer named in the
-// step's param would see it too.
 func (s *Service) sendApprovalMail(
 	ctx context.Context,
 	kind string,
@@ -301,17 +195,9 @@ func (s *Service) sendApprovalMail(
 	text string,
 	content emailtheme.Content,
 ) {
-	// One line per notification, before the sends. Duplicate approval mail was
-	// reported from a live deployment and could not be reproduced — the
-	// recipient list dedupes, Approve is guarded against a second decision,
-	// and SendTrusted does not retry — which left no way to tell an
-	// application double-send from a duplicate delivery downstream. This makes
-	// that answerable from the log: one line means Dazyflow sent once.
 	log.Printf("approval-notify(%s) %s/%s: sending to %d recipient(s)", kind, graph.Tenant, graph.ID, len(to))
 	for _, addr := range to {
 		if err := s.Mailer.SendThemed(ctx, addr, text, content); err != nil {
-			// Best-effort, and per-recipient: one bad address must not stop
-			// the rest of the list being told.
 			log.Printf("approval-notify(%s) %s/%s -> %s: %v", kind, graph.Tenant, graph.ID, addr, err)
 		}
 	}

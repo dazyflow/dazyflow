@@ -14,7 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/webapi"
 )
 
-// seenCall is what the fake doer recorded.
 type seenCall struct {
 	method  string
 	url     string
@@ -24,9 +23,6 @@ type seenCall struct {
 	maxBody int
 }
 
-// fakeDoer installs a doer that records the call and answers with the given
-// status/content-type/body. Cleared on cleanup — SetDoer is process-wide, so no
-// test here may run in parallel with another.
 func fakeDoer(t *testing.T, status int, contentType, body string) *seenCall {
 	t.Helper()
 	var seen seenCall
@@ -43,8 +39,6 @@ func fakeDoer(t *testing.T, status int, contentType, body string) *seenCall {
 	return &seen
 }
 
-// ordersDescriptor is the running example: an org's own service, one GET with a
-// path + query + header argument and one POST with a JSON body.
 func ordersDescriptor() webapi.Descriptor {
 	return webapi.Descriptor{
 		Tenant:  "acme",
@@ -103,8 +97,6 @@ func portNames(ports []core.Port) []string {
 	}
 	return out
 }
-
-// --- registration -----------------------------------------------------------
 
 func TestRegister_RefusesDescriptorsThatCannotBeCalled(t *testing.T) {
 	base := func(mutate func(*webapi.Descriptor)) webapi.Descriptor {
@@ -222,9 +214,6 @@ func TestCatalog_TenantIsolation(t *testing.T) {
 	}
 }
 
-// Re-registering replaces: an edited catalog takes effect without the org
-// deleting it first, and an operation dropped from the new descriptor stops
-// resolving.
 func TestRegister_ReplacesAndDropsRemovedOperations(t *testing.T) {
 	cat := mustRegister(t, ordersDescriptor())
 	desc := ordersDescriptor()
@@ -276,14 +265,10 @@ func TestAllManifests_SpansTenantsForTheKillswitch(t *testing.T) {
 	}
 }
 
-// --- manifest synthesis -----------------------------------------------------
-
 func TestManifest_Ports(t *testing.T) {
 	cat := mustRegister(t, ordersDescriptor())
 	m := transport(t, cat, "acme", "api:orders:get_order").Manifest()
 
-	// order_id (required) first, then the optional query arg, then the overlay.
-	// X-Region is a header argument and gets no pin.
 	if got := portNames(m.Inputs); strings.Join(got, ",") != "order_id,expand,input" {
 		t.Fatalf("inputs = %v", got)
 	}
@@ -379,8 +364,6 @@ func TestManifest_DeprecationIsSaidFirst(t *testing.T) {
 	}
 }
 
-// The ergonomic point of the feature: the tenant's own service gets an Apps-page
-// connection instead of a ${secret.X} in every step.
 func TestManifest_ConnectionFields(t *testing.T) {
 	cat := mustRegister(t, ordersDescriptor())
 	m := transport(t, cat, "acme", "api:orders:get_order").Manifest()
@@ -415,14 +398,12 @@ func TestManifest_NoCredentialFieldWithoutAuth(t *testing.T) {
 	desc.Auth = webapi.Auth{Kind: webapi.AuthNone}
 	cat := mustRegister(t, desc)
 	m := transport(t, cat, "acme", "api:orders:get_order").Manifest()
-	// Nothing to connect at all: no credential, and the address is not a
-	// connection field either, so the Apps page has no form to offer.
 	if len(m.ConnectionFields) != 0 {
 		t.Errorf("fields = %+v, want none for a catalog with no auth", m.ConnectionFields)
 	}
 }
 
-// TestTransport_ConnectionCannotRepointTheService is the privilege boundary the
+// The privilege boundary the
 // field removal exists for.
 //
 // A connection value reaches a step by being injected into a param of the same
@@ -493,8 +474,6 @@ func TestManifest_ArgumentSchemaKeptVerbatim(t *testing.T) {
 	}
 }
 
-// --- execution --------------------------------------------------------------
-
 func TestExecute_AssemblesTheCall(t *testing.T) {
 	seen := fakeDoer(t, 200, "application/json", `{"id":"o-1"}`)
 	cat := mustRegister(t, ordersDescriptor())
@@ -506,8 +485,7 @@ func TestExecute_AssemblesTheCall(t *testing.T) {
 			"order_id": "o-1",
 			"expand":   "lines",
 			"X-Region": "eu",
-			// Injected by the engine from the tenant's connection in a real run.
-			"token": "tok-abc",
+			"token":    "tok-abc",
 		},
 	}, nil)
 	if err != nil {
@@ -557,9 +535,6 @@ func TestExecute_PathValuesAreEscaped(t *testing.T) {
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
-	// The dots survive and are harmless: traversal needs SLASHES, and those are
-	// escaped, so the whole value reaches the service as one path segment it can
-	// reject rather than as a URL that walked up out of /orders.
 	if strings.Contains(strings.TrimPrefix(seen.url, "https://api.example.com/v1/orders/"), "/") {
 		t.Fatalf("url = %q, want the value to stay a single path segment", seen.url)
 	}
@@ -605,8 +580,6 @@ func TestExecute_JSONBodyCoercesPortText(t *testing.T) {
 	if seen.headers["Content-Type"] != "application/json" {
 		t.Errorf("Content-Type = %q", seen.headers["Content-Type"])
 	}
-	// POST is not idempotent under HTTP, so a lost-response retry needs a key
-	// the service can dedupe on.
 	if seen.headers["Idempotency-Key"] == "" {
 		t.Error("no Idempotency-Key on a POST")
 	}
@@ -651,7 +624,6 @@ func TestExecute_RawBody(t *testing.T) {
 	}
 }
 
-// params < overlay < port, the same precedence the rest of the product states.
 func TestExecute_ArgumentPrecedence(t *testing.T) {
 	seen := fakeDoer(t, 200, "application/json", `{}`)
 	cat := mustRegister(t, ordersDescriptor())
@@ -693,7 +665,6 @@ func TestExecute_UnexpectedStatus(t *testing.T) {
 	}
 }
 
-// expect_status is how a 404 becomes an answer rather than a failure.
 func TestExecute_ExpectStatusWidens(t *testing.T) {
 	fakeDoer(t, 404, "application/json", `{}`)
 	cat := mustRegister(t, ordersDescriptor())
@@ -746,8 +717,6 @@ func TestExecute_MissingCredentialAndAddress(t *testing.T) {
 	})
 }
 
-// The connection's address wins over the one typed at import time — that is how
-// staging and production differ without re-importing.
 func TestExecute_BaseURLFromParamsOverridesDescriptor(t *testing.T) {
 	seen := fakeDoer(t, 200, "application/json", `{}`)
 	cat := mustRegister(t, ordersDescriptor())
@@ -883,8 +852,6 @@ func TestExecute_HeaderValueLineBreakRefused(t *testing.T) {
 	}
 }
 
-// A base URL supplied by the connection at run time gets the same check as one
-// typed at import: it is a tenant-editable value either way.
 func TestExecute_RuntimeBaseURLIsValidated(t *testing.T) {
 	fakeDoer(t, 200, "application/json", `{}`)
 	cat := mustRegister(t, ordersDescriptor())
@@ -903,9 +870,6 @@ func TestExecute_RuntimeBaseURLIsValidated(t *testing.T) {
 	}
 }
 
-// TestManifest_CaptionedByHumanNames is the difference between a palette a
-// non-technical author can read and one full of identifiers. The step ids are
-// unchanged by it — a name is display only.
 func TestManifest_CaptionedByHumanNames(t *testing.T) {
 	desc := ordersDescriptor()
 	desc.Label = "Order service"
@@ -916,7 +880,6 @@ func TestManifest_CaptionedByHumanNames(t *testing.T) {
 	if m.Label != "Order service — Fetch an order" {
 		t.Errorf("Label = %q, want the typed names", m.Label)
 	}
-	// The id is built from the ids, not the names.
 	if m.ID != "api:orders:get_order" {
 		t.Errorf("ID = %q, want it unmoved by naming", m.ID)
 	}
@@ -925,9 +888,6 @@ func TestManifest_CaptionedByHumanNames(t *testing.T) {
 	}
 }
 
-// TestManifest_ProseNamesTheCatalogByItsName covers the generated-prose branch:
-// an operation with no summary of its own gets a sentence built from the
-// catalog, and that sentence should name it the way a human does.
 func TestManifest_ProseNamesTheCatalogByItsName(t *testing.T) {
 	desc := ordersDescriptor()
 	desc.Label = "Order service"
@@ -953,7 +913,6 @@ func TestManifest_CaptionFallsBackToIDs(t *testing.T) {
 	}
 }
 
-// TestDisplayName bounds what a typed name can do to a palette row.
 func TestDisplayName(t *testing.T) {
 	cases := []struct {
 		title, id, want string
@@ -961,7 +920,6 @@ func TestDisplayName(t *testing.T) {
 		{"", "get_order", "get_order"},
 		{"  Fetch an order  ", "get_order", "Fetch an order"},
 		{"   ", "get_order", "get_order"},
-		// A pasted paragraph is not a caption: first line only.
 		{"Fetch an order\nUse the id from the previous step.", "get_order", "Fetch an order"},
 		{strings.Repeat("x", 200), "get_order", strings.Repeat("x", 60) + "…"},
 	}
@@ -970,7 +928,6 @@ func TestDisplayName(t *testing.T) {
 		if got != c.want {
 			t.Errorf("Operation{%q,%q}.DisplayName() = %q, want %q", c.id, c.title, got, c.want)
 		}
-		// The catalog half uses the same rule.
 		if d := (webapi.Descriptor{Name: c.id, Label: c.title}).DisplayName(); d != c.want {
 			t.Errorf("Descriptor{%q,%q}.DisplayName() = %q, want %q", c.id, c.title, d, c.want)
 		}

@@ -11,8 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// A fallback edge is the failure path. What happens to the dependent when the
-// source SUCCEEDS — is it skipped (and the run finishes) or waited on forever?
 func TestFallbackEdge_WhenSourceSucceeds(t *testing.T) {
 	h := newHarness(t)
 	g := graph("fbok",
@@ -90,7 +88,6 @@ func TestGraphID_IsValidated(t *testing.T) {
 		t.Errorf("FINDING: id=%q stored (commit %.8s); reload: %v", id, commit, loadErr)
 	}
 
-	// What the editor produces still saves, and reloads.
 	g := core.Graph{ID: "order-received-alert", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{textNode("a", "x")}}
 	if _, err := h.svc.SaveGraph(t.Context(), h.p, g); err != nil {
@@ -101,7 +98,6 @@ func TestGraphID_IsValidated(t *testing.T) {
 	}
 }
 
-// Timeouts arrive as free integers from every entry path.
 func TestAbsurdTimeouts(t *testing.T) {
 	h := newHarness(t)
 	const minInt = -1 << 62

@@ -55,23 +55,13 @@ func init() {
 			// node's Awaiting result. So opt out of it.
 			NoPassthrough: true,
 			Inputs: []core.Port{{
-				// Untyped: the value can be anything the author wants to carry
-				// across the approval to downstream nodes. Port id stays
-				// "context" (daemon.Approve routes it out the taken decision
-				// port on resume); label is Value.
 				Port:  "context",
 				Label: "Value",
 			}},
 			Outputs: []core.Port{
 				{Port: "pending_url", Label: "Approval link", MIME: []string{"text/plain"}, Example: json.RawMessage(`"https://dazyflow.example/approve/9f2ab7c4d1e0b7a3"`)},
-				// Branch-style decision ports: the input Value rides out exactly
-				// one of these — `approved` on approve, `rejected` on reject — so
-				// downstream edges fork on the decision by port presence, the
-				// same mechanism Branch's then/else uses, with no separate Branch
-				// node needed. Untyped: they carry whatever was threaded in.
 				{Port: "approved", Label: "Approved"},
 				{Port: "rejected", Label: "Rejected"},
-				// The authenticated subject that made the decision.
 				{Port: "approver", Label: "Approver", MIME: []string{"text/plain"}, Example: json.RawMessage(`"anna@nordkraft.se"`)},
 				{Port: "comment", Label: "Comment", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Ser bra ut — kör."`)},
 			},

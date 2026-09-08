@@ -34,9 +34,6 @@ describe("previewOutput", () => {
     expect(previewOutput(out)).toBe("the answer");
   });
 
-  // A large output lives in storage and arrives as a bare reference. The ref
-  // string is an internal handle, so it's no use as a preview — better to
-  // report "nothing to show inline" and let the caller fall back.
   it("ignores outputs held by reference", () => {
     expect(previewOutput({ file: { ref: "blob://abc", mime: "application/pdf" } })).toBe("");
   });
@@ -204,10 +201,6 @@ describe("pickResultNode", () => {
     expect(pickResultNode(nodes, edges, "succeeded")?.NodeID).toBe("summary");
   });
 
-  // The defect this function exists for: a flow that reads a literal,
-  // converts it and writes a CSV has no inline value at its end, and the
-  // fallback used to reach back past the file and present the flow's own
-  // INPUT as its result — directly above a Files panel holding the real one.
   it("shows no result when the end of the flow wrote a file", () => {
     const nodes = [
       node("literal", { out: { data: '[{"a":1}]' } }),
@@ -221,7 +214,6 @@ describe("pickResultNode", () => {
     expect(pickResultNode(nodes, edges, "succeeded")).toBeNull();
   });
 
-  // But a flow that fans out to a file AND a value still has a value to show.
   it("still shows a value when another end step produced one", () => {
     const nodes = [
       node("rows", { out: { data: '[{"a":1}]' } }),
@@ -235,9 +227,6 @@ describe("pickResultNode", () => {
     expect(pickResultNode(nodes, edges, "succeeded")?.NodeID).toBe("summary");
   });
 
-  // No graph (a deleted flow) means no way to tell an end step from the
-  // middle, so the last step that produced a value is the best available
-  // answer — the same node in a linear flow.
   it("falls back to the last valued step without a graph", () => {
     const nodes = [
       node("a", { out: { data: "first" } }),

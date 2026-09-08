@@ -47,9 +47,6 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
-			// A binary comparator: A and B are the two operands. Either can be
-			// wired from upstream or typed as a literal default on the node
-			// (the matching A/B params back the unconnected-pin editor).
 			Inputs: []core.Port{
 				{Port: "A", Label: "A"},
 				{Port: "B", Label: "B"},
@@ -79,8 +76,7 @@ func init() {
 				},
 				"required":["op"]
 			}`),
-			Idempotent: true,
-			// Pure predicate: emits a boolean verdict, not a payload to thread.
+			Idempotent:    true,
 			NoPassthrough: true,
 		},
 		Execute: executeCompare,
@@ -92,8 +88,6 @@ func init() {
 // decides, Branch routes. Each operand comes from its input port when wired,
 // or from the matching literal param (typed on the node) otherwise.
 func executeCompare(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	// op defaults to "equals" (the schema default) so a freshly-dropped
-	// Compare is immediately valid — no required-param friction.
 	op, _ := job.Params["op"].(string)
 	if op == "" {
 		op = "equals"
@@ -140,10 +134,6 @@ func operand(job core.Job, port string) any {
 	return coerceLiteral(job.Params[port])
 }
 
-// coerceLiteral turns a typed-in param into a real value. A param is a string
-// from the node's text field; we JSON-parse it so "299" becomes a number,
-// "[200,299]" becomes a list, and "true" becomes a bool — falling back to the
-// raw string when it isn't valid JSON. Empty means "no value" (nil).
 func coerceLiteral(v any) any {
 	s, ok := v.(string)
 	if !ok {
@@ -160,9 +150,6 @@ func coerceLiteral(v any) any {
 	return s
 }
 
-// extractPath navigates a dotted path inside a value. An empty field returns
-// the value unchanged. A JSON string is decoded first so a field can be read
-// out of a structured payload that arrived as text.
 func extractPath(root any, field string) (any, error) {
 	if field == "" {
 		return root, nil
@@ -254,10 +241,6 @@ func inSet(a, b any) (bool, error) {
 	return false, nil
 }
 
-// inRange reports whether a falls between the two bounds in the [min, max]
-// array B. Modelled on Unreal's InRange node: by default both ends are
-// inclusive (so [200, 299] matches every 2xx HTTP status), and each end can be
-// made exclusive independently via inclusive_min / inclusive_max.
 func inRange(a, b any, incMin, incMax bool) (bool, error) {
 	arr, ok := b.([]any)
 	if !ok || len(arr) != 2 {
@@ -318,10 +301,6 @@ func toStr(v any) (string, bool) {
 }
 
 func looseEqual(a, b any) bool {
-	// Handle the common JSON-decoded number cases. JSON only has
-	// "number" and Go decodes everything to float64; user-typed JSON
-	// like 200 arrives as float64 too. Compare numerically when both
-	// sides convert.
 	an, aok := toFloat(a)
 	bn, bok := toFloat(b)
 	if aok && bok {
@@ -337,10 +316,6 @@ func looseEqual(a, b any) bool {
 func toFloat(v any) (float64, bool) {
 	switch x := v.(type) {
 	case string:
-		// Plenty of steps report a number as text — a count pin, a status
-		// code, a spreadsheet cell. Comparing one of those against a number
-		// is the obvious thing to do, and failing it with "string vs
-		// float64" is an error the person who wired it can do nothing with.
 		f, err := strconv.ParseFloat(strings.TrimSpace(x), 64)
 		return f, err == nil
 	case []byte:
@@ -363,8 +338,6 @@ func toFloat(v any) (float64, bool) {
 	return 0, false
 }
 
-// numericCompare returns true when sign(a - b) matches `want` (-1 for <, +1
-// for >).
 func numericCompare(a, b any, want int) (bool, error) {
 	af, ok1 := toFloat(a)
 	bf, ok2 := toFloat(b)

@@ -50,14 +50,9 @@ func init() {
 			ProcessModel:     core.ProcessLongLived,
 			ConnectionFields: connectionFields(),
 			Inputs: []core.Port{
-				// Accepts either a path (text, e.g. ${item.path} inside a For
-				// each) or List files' record/list wired straight in.
 				{Port: "path", Label: "File", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
-				// Untyped on purpose: the file's type is whatever was on the
-				// server, so the pin carries it per-run rather than declaring
-				// one. Same shape as Download attachments' First file.
 				{Port: "file", Label: "File"},
 				{Port: "name", Label: "File name", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Faktura-4471.pdf"`)},
 				{Port: "size", Label: "Size", MIME: []string{"text/plain"}, Example: json.RawMessage(`"48213"`)},
@@ -90,8 +85,6 @@ func executeSFTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 	if remote = strings.TrimSpace(remote); remote == "" {
 		return params.Err(job, "bad_param", "'path' is required — set it or connect the 'File' input"), nil
 	}
-	// A bare name is resolved against the step's folder, so ${item.name}
-	// works as well as ${item.path}.
 	if !strings.HasPrefix(remote, "/") && !strings.Contains(remote, "/") {
 		remote = path.Join(cfg.Directory, remote)
 	}
@@ -124,8 +117,6 @@ func executeSFTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 	}
 	defer src.Close()
 
-	// The remote name is server-controlled, so it goes through the same
-	// sanitiser as a mail attachment's before becoming part of a local path.
 	saveInto := strings.TrimSpace(params.StringDefault(job.Params, "save_into", ""))
 	dest := mailfiles.Dest(saveInto, "sftp", 0, path.Base(remote))
 	root, rel, serr := sandbox.OpenRoot(job, dest)

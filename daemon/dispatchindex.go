@@ -13,17 +13,9 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// graphTopology is a run's wiring in the shape the dispatcher asks about it:
-// who depends on whom, which edges feed a given step, and which steps belong
-// to a loop body. Derived from the graph, which is pinned for the life of a
-// run, so it is computed once and reused.
 type graphTopology struct {
-	// outgoing maps a node to its dependents, deduplicated — parallel wires
-	// between the same two steps are one dependent, not several.
-	outgoing map[string][]string
-	// incoming maps a node to the edges that feed it.
-	incoming map[string][]core.Edge
-	// bodyOwners maps a loop-body node to the for_each that owns it.
+	outgoing   map[string][]string
+	incoming   map[string][]core.Edge
 	bodyOwners map[string]string
 }
 
@@ -46,9 +38,6 @@ func buildTopology(graph core.Graph) *graphTopology {
 	return t
 }
 
-// maxCachedTopologies bounds the per-dispatcher cache. A worker advances a
-// handful of runs at a time, and a topology is rebuilt on a miss, so a small
-// window is enough to keep a dense graph from being re-indexed once per node.
 const maxCachedTopologies = 8
 
 type topologyCache struct {
@@ -79,27 +68,12 @@ func (c *topologyCache) get(runID string, graph core.Graph) *graphTopology {
 	return t
 }
 
-// dispatchIndex pairs a run's topology with the predecessor records read
-// during one dispatch pass.
-//
-// It exists for cost. A dependent's readiness is a function of its incoming
-// edges and their predecessors' records, and the dispatcher re-derived both
-// by scanning the whole edge list and issuing one store read per edge —
-// per dependent, after every node completion. On a densely wired flow that
-// is O(nodes² × edges) with a store round trip per edge: 400 no-op steps
-// took minutes, and against Postgres each of those reads is a query.
-//
-// A pass lasts milliseconds, so the cached records are as fresh as the
-// point-reads they replace: a record that changes mid-pass can only make a
-// dependent read as "not ready yet", and the completion that changed it
-// runs its own pass. Records this pass writes itself are seeded via put.
 type dispatchIndex struct {
 	*graphTopology
 	records map[string]core.JobRecord
 	misses  map[string]struct{}
 }
 
-// indexFor builds a pass index over this run's cached topology.
 func (d *Dispatcher) indexFor(graphRunID string, graph core.Graph) *dispatchIndex {
 	return &dispatchIndex{
 		graphTopology: d.topologies.get(graphRunID, graph),
@@ -108,9 +82,6 @@ func (d *Dispatcher) indexFor(graphRunID string, graph core.Graph) *dispatchInde
 	}
 }
 
-// pred returns the node record for nodeID in this run, reading it at most
-// once per pass. A missing record is remembered too, so a step fed by many
-// edges from the same not-yet-recorded predecessor costs one read.
 func (ix *dispatchIndex) pred(ctx context.Context, store core.JobStore, graphRunID, nodeID string) (core.JobRecord, error) {
 	if rec, ok := ix.records[nodeID]; ok {
 		return rec, nil
@@ -127,8 +98,6 @@ func (ix *dispatchIndex) pred(ctx context.Context, store core.JobStore, graphRun
 	return rec, nil
 }
 
-// put seeds a record this pass just wrote, so the cascade that follows sees
-// it without a store read.
 func (ix *dispatchIndex) put(rec core.JobRecord) {
 	if rec.NodeID == "" {
 		return
@@ -137,20 +106,12 @@ func (ix *dispatchIndex) put(rec core.JobRecord) {
 	delete(ix.misses, rec.NodeID)
 }
 
-// debugDispatch turns on the per-dependent "waiting" trace, off by default:
-// it is one line per dependent per completion, so a wide flow buries the
-// log in it. Set DAZYFLOW_DEBUG_DISPATCH=1 when tracing why a step didn't
-// run.
 var debugDispatch = os.Getenv("DAZYFLOW_DEBUG_DISPATCH") != ""
 
-// cachedRun is what a worker needs from a graph-record on every node of a
-// run: the parsed graph and the run's own metadata.
 type cachedRun struct {
 	graph        core.Graph
 	triggerDepth int
-	// manual: a person started this run from the app and is watching it —
-	// what a breakpoint needs to know (see shouldPauseAfter).
-	manual bool
+	manual       bool
 }
 
 // RunCache holds that for recent runs. A run's payload is immutable once
@@ -184,8 +145,6 @@ type RunCache struct {
 	graphOrder []string
 }
 
-// maxCachedRuns is the default window when the caller does not size one. An
-// entry is a graph header plus two fields, so this costs tens of kilobytes.
 const maxCachedRuns = 4096
 
 // maxInternedGraphs bounds the parse cache. Unlike a run entry this holds the
@@ -193,23 +152,16 @@ const maxCachedRuns = 4096
 // under load rather than by runs.
 const maxInternedGraphs = 128
 
-// NewRunCache bounds the cache at capacity runs; 0 means the default window.
 func NewRunCache(capacity int) *RunCache {
 	return &RunCache{max: capacity}
 }
 
-// graphFor decodes payload, reusing another run's decode of the same flow.
-// The returned Graph shares its slices with every other holder, which is the
-// same sharing the run window already relies on: the run path only reads a
-// cached graph.
 func (c *RunCache) graphFor(payload []byte) (core.Graph, error) {
 	if c == nil {
 		var g core.Graph
 		return g, json.Unmarshal(payload, &g)
 	}
 	c.mu.Lock()
-	// Keying a map with string(byteSlice) does not allocate — the compiler
-	// hashes the bytes in place — so a hit costs one pass over the payload.
 	if g, ok := c.graphs[string(payload)]; ok {
 		c.mu.Unlock()
 		return g, nil
@@ -254,7 +206,6 @@ func (c *RunCache) runFor(ctx context.Context, store core.JobStore, graphRunID s
 	if err != nil {
 		return cachedRun{}, err
 	}
-	// Decode through the cache so concurrent runs of one flow share a parse.
 	g, err := c.graphFor(rec.GraphPayload)
 	if err != nil {
 		return cachedRun{}, fmt.Errorf("unmarshal graph %s: %w", graphRunID, err)
@@ -264,7 +215,6 @@ func (c *RunCache) runFor(ctx context.Context, store core.JobStore, graphRunID s
 	return run, nil
 }
 
-// graphForRun is runFor when only the flow is wanted.
 func (c *RunCache) graphForRun(ctx context.Context, store core.JobStore, graphRunID string) (core.Graph, error) {
 	run, err := c.runFor(ctx, store, graphRunID)
 	return run.graph, err
@@ -317,12 +267,8 @@ type runStateMeter struct {
 	order []string
 }
 
-// maxMeteredRuns bounds the meter's window. Generous next to how many runs a
-// single worker has in flight.
 const maxMeteredRuns = 512
 
-// charge adds n bytes to runID's total and reports the new total plus
-// whether the run is still inside the ceiling.
 func (m *runStateMeter) charge(runID string, n int64) (int64, bool) {
 	limit := int64(core.MaxRunStateBytes())
 	if runID == "" || limit <= 0 {

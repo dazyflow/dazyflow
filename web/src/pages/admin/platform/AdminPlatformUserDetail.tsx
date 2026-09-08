@@ -19,10 +19,6 @@ import { ICON } from "../../../icons";
 import { Loading } from "../../../components/ui/Loading";
 import { Notice } from "../../../components/ui/Notice";
 
-// AdminPlatformUserDetail is one account's platform-admin moderation
-// page: suspend (reversible lockout), ban (suspend + block re-signup),
-// and delete (irreversible GDPR erase). Each destructive action is
-// behind a confirm that collects the operator's reason for the audit log.
 export function AdminPlatformUserDetail() {
   const { t } = useTranslation();
   const { token, hasPerm } = useAuth();
@@ -86,7 +82,6 @@ export function AdminPlatformUserDetail() {
   const suspended = user?.status === "suspended";
   const isAdmin = user?.platform_admin ?? false;
   const isEnvAdmin = user?.platform_admin_env ?? false;
-  // A runtime grant (revocable here); an env admin is immutable.
   const isGrantedAdmin = isAdmin && !isEnvAdmin;
 
   return (
@@ -326,7 +321,6 @@ export function AdminPlatformUserDetail() {
   );
 }
 
-// ReasonModal collects a free-text reason for the audit trail.
 function ReasonModal({
   title,
   warning,
@@ -367,7 +361,6 @@ function ReasonModal({
   );
 }
 
-// BanModal additionally offers blocking the whole email domain.
 function BanModal({
   email,
   onConfirm,

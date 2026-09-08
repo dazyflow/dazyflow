@@ -26,9 +26,6 @@ type server struct {
 	nodepb.UnimplementedNodeServiceServer
 }
 
-// ListManifests declares what this runner serves. One drop here, returned as a
-// list of one: the RPC is plural so a runner can grow to several without the
-// daemon and every existing runner having to change together.
 func (s *server) ListManifests(_ context.Context, _ *nodepb.ListManifestsRequest) (*nodepb.ListManifestsResponse, error) {
 	return &nodepb.ListManifestsResponse{Manifests: []*nodepb.Manifest{{
 		Id:             "csv_uppercase",
@@ -61,9 +58,6 @@ func (s *server) Execute(job *nodepb.Job, stream nodepb.NodeService_ExecuteServe
 		})
 	}
 
-	// Engine wraps Ref.Inline with json.Marshal before gRPC transport.
-	// For text payloads it ends up as a JSON-quoted string; unmarshal to
-	// recover the original text.
 	text, err := decodeInlineText(in.Inline)
 	if err != nil {
 		return sendResult(stream, job.JobId, &nodepb.Result{
@@ -94,9 +88,6 @@ func (s *server) Execute(job *nodepb.Job, stream nodepb.NodeService_ExecuteServe
 	})
 }
 
-// decodeInlineText handles both forms we might receive:
-//   - JSON-quoted string (the engine-marshaled string path), or
-//   - raw bytes (when the upstream wrote []byte without JSON wrapping)
 func decodeInlineText(raw []byte) (string, error) {
 	if len(raw) == 0 {
 		return "", nil

@@ -11,7 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fakeProvider records the Request and returns a canned Result.
 type fakeProvider struct {
 	text   string
 	tool   map[string]any
@@ -124,7 +123,6 @@ func TestClassify_ReturnsCategoryAndConfidence(t *testing.T) {
 	if res.Output["confidence"].Inline != 0.9 {
 		t.Errorf("confidence = %v", res.Output["confidence"].Inline)
 	}
-	// allow_none defaults false → enum has exactly the two declared names.
 	enum := fp.gotReq.Tool.Schema["properties"].(map[string]any)["category"].(map[string]any)["enum"].([]string)
 	if len(enum) != 2 {
 		t.Errorf("enum = %+v", enum)
@@ -192,28 +190,21 @@ func TestHTTPError_ActionableByStatus(t *testing.T) {
 		if !strings.Contains(je.Message, c.wantSub) {
 			t.Errorf("status %d: message %q missing %q", c.status, je.Message, c.wantSub)
 		}
-		// The vendor detail is appended for debugging.
 		if !strings.Contains(je.Message, "quota exceeded") {
 			t.Errorf("status %d: message %q dropped vendor detail", c.status, je.Message)
 		}
 	}
-	// 429 keeps the legacy stable code the UI may key on.
 	if HTTPError("claude", "Claude", 429, "").Code != "claude_rate_limited" {
 		t.Error("claude 429 code regressed")
 	}
 }
 
-// errProvider returns a fixed JobError from Call, exercising the post-call
-// error path every drop shares. recordProvider captures the Request like the
-// existing fakeProvider but also lets a test force an empty Result.
 type errProvider struct{ je *core.JobError }
 
 func (e *errProvider) Call(_ context.Context, _ string, _ Request) (Result, *core.JobError) {
 	return Result{}, e.je
 }
 
-// nilToolProvider returns a Result with no Tool (text-only), to hit the
-// "model did not return …" branches in extract and classify.
 type nilToolProvider struct{ text string }
 
 func (p *nilToolProvider) Call(_ context.Context, _ string, _ Request) (Result, *core.JobError) {
@@ -359,7 +350,6 @@ func TestBuildExtractTool(t *testing.T) {
 			t.Fatalf("tool = %+v", tool)
 		}
 		props := tool.Schema["properties"].(map[string]any)
-		// on_missing=null → types are nullable [type, "null"].
 		amt := props["amount"].(map[string]any)["type"].([]any)
 		if amt[0] != "number" || amt[1] != "null" {
 			t.Errorf("amount type = %v", amt)
@@ -389,8 +379,6 @@ func TestBuildExtractTool(t *testing.T) {
 		}
 	})
 }
-
-// --- drop-level error and branch paths -------------------------------------
 
 func TestSummarize_ProviderError(t *testing.T) {
 	fp := &errProvider{je: &core.JobError{Code: "openai_rate_limited", Message: "slow down"}}
@@ -594,7 +582,6 @@ func TestAsk_ParamPromptFallback(t *testing.T) {
 }
 
 func TestResolveText_ParamFallbackWhenInputEmpty(t *testing.T) {
-	// Input present but coerces to empty → falls through to the text param.
 	job := core.Job{
 		Params: map[string]any{"text": "param text"},
 		Input:  map[string]core.Ref{"text": {Inline: ""}},

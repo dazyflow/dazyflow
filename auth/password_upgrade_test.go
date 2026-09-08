@@ -14,14 +14,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// TestVerifyPassword_UpgradesLegacyCost covers the opportunistic re-hash: a
-// user whose hash was minted at an older, weaker cost still logs in, and comes
-// out of it stored at the current cost.
-//
-// Everything here is relative to activeHashCost rather than to the literal
-// PasswordHashCost, because the suite runs at testPasswordHashCost — see the
-// comment on activeHashCost. The property under test is "below the cost in
-// force gets upgraded to it", which holds at either setting.
 func TestVerifyPassword_UpgradesLegacyCost(t *testing.T) {
 	ctx := context.Background()
 	store, err := OpenJSONUserStore("")
@@ -59,17 +51,14 @@ func TestVerifyPassword_UpgradesLegacyCost(t *testing.T) {
 	if cost != activeHashCost {
 		t.Errorf("cost after login = %d, want %d", cost, activeHashCost)
 	}
-	// And the re-hashed credential still works on the next login.
 	if _, err := VerifyPassword(ctx, store, "legacy@acme.test", pw); err != nil {
 		t.Fatalf("VerifyPassword after upgrade: %v", err)
 	}
-	// A wrong password is still rejected after the upgrade.
 	if _, err := VerifyPassword(ctx, store, "legacy@acme.test", "wrong"); err == nil {
 		t.Error("wrong password accepted after upgrade")
 	}
 }
 
-// TestNeedsPasswordRehash covers the predicate's edges.
 func TestNeedsPasswordRehash(t *testing.T) {
 	current, err := HashPassword("whatever-it-is")
 	if err != nil {
@@ -88,8 +77,6 @@ func TestNeedsPasswordRehash(t *testing.T) {
 	}
 }
 
-// putFailStore serves a real user but refuses writes, so the opportunistic
-// re-hash fails while the credential itself stays valid.
 type putFailStore struct {
 	UserStore
 	err error

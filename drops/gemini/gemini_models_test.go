@@ -12,7 +12,6 @@ import (
 	"testing"
 )
 
-// modelEntry builds one /v1beta/models row.
 func modelEntry(name, display string, methods ...string) map[string]any {
 	if len(methods) == 0 {
 		methods = []string{"generateContent"}
@@ -43,13 +42,11 @@ func TestListModels_KeepsOnlyTextGeneration(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"models": []any{
 			modelEntry("gemini-3.7-flash", "Gemini 3.7 Flash"),
-			// Answers generateContent but does not produce text a step can use.
 			modelEntry("gemini-3.1-flash-tts-preview", "TTS"),
 			modelEntry("gemini-3.1-flash-image", "Nano Banana 2"),
 			modelEntry("gemini-3.5-transcribe", "Transcribe"),
 			modelEntry("gemini-robotics-er-2-preview", "Robotics"),
 			modelEntry("lyria-3-pro-preview", "Lyria"),
-			// Not a generateContent model at all.
 			modelEntry("text-embedding-004", "Embedding", "embedContent"),
 		}})
 	}))
@@ -75,8 +72,6 @@ func TestListModels_HoistsMaintainedAliases(t *testing.T) {
 	if len(got) != 4 || got[0] != "gemini-flash-latest" || got[1] != "gemini-pro-latest" {
 		t.Errorf("ids = %v, want the -latest aliases first", got)
 	}
-	// Order within each group is the catalog's own, which puts the current
-	// generation above the previous one.
 	if got[2] != "gemini-2.5-flash" || got[3] != "gemini-3.7-flash" {
 		t.Errorf("ids = %v, want catalog order preserved after the aliases", got)
 	}

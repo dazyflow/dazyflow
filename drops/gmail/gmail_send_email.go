@@ -84,9 +84,7 @@ func init() {
 			// a retried POST sends the email twice. This drop is a terminal
 			// leaf the engine auto-retries on backoff, so retries must be
 			// off here.
-			RetryPolicy: core.RetryNever,
-			// …and the engine dedupes a same-job re-execution (expired-lease
-			// reclaim / crash recovery) so a recovered run doesn't re-send.
+			RetryPolicy:  core.RetryNever,
 			DedupeWrites: true,
 		},
 		Execute: executeGmailSend,
@@ -109,8 +107,6 @@ func executeGmailSend(ctx context.Context, job core.Job, _ chan<- core.Progress)
 		return params.Err(job, "auth", err.Error()), nil
 	}
 
-	// Body is optional — an empty body is allowed (send a subject-only email).
-	// Minimal friction for non-tech authors; To is the only hard requirement.
 	body, ok := params.TextInputOr(job, "body", params.StringDefault(job.Params, "body", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Body' input must be text"), nil
@@ -120,17 +116,12 @@ func executeGmailSend(ctx context.Context, job core.Job, _ chan<- core.Progress)
 		return params.Err(job, "bad_input", "'Subject' input must be text"), nil
 	}
 
-	// Default to HTML (matches the schema default) so an unset format isn't
-	// sent as plain text when the form shows HTML selected. Explicit "text"
-	// still sends text/plain.
 	bodyContentType := `text/html; charset="utf-8"`
 	isHTML := params.StringDefault(job.Params, "format", "html") != "text"
 	if !isHTML {
 		bodyContentType = `text/plain; charset="utf-8"`
 	}
 
-	// Wrap the body in the referenced email template (HTML sends only). A
-	// missing/unresolvable template fails the node rather than sending unwrapped.
 	if isHTML {
 		wrapped, werr := mailmsg.WrapWithTemplate(ctx, job, body, subject)
 		if werr != nil {
@@ -183,9 +174,6 @@ type rfcHeaders struct {
 	to, cc, bcc, replyTo, subject, bodyContentType string
 }
 
-// buildRFC822 assembles the message Gmail's send endpoint wants. Header
-// values are stripped of CR/LF to defeat header injection; the subject is
-// MIME-word encoded; multipart/mixed is used only when attachments exist.
 func buildRFC822(h rfcHeaders, body string, atts []mailmsg.Attachment) string {
 	var lines []string
 	add := func(name, value string) {

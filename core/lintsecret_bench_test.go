@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// Realistic param strings: what a flow's steps actually hold.
 var benchStrings = []string{
 	"https://api.example.com/v1/resource/17",
 	"POST",
@@ -42,8 +41,6 @@ func BenchmarkKnownSecretRegexOnly(b *testing.B) {
 	benchScan(b, knownSecretValue.MatchString)
 }
 
-// Length floor: the shortest string knownSecretValue can match is 15 chars
-// (xox?- plus 10).
 func BenchmarkKnownSecretLenGuard(b *testing.B) {
 	benchScan(b, func(s string) bool {
 		return len(s) >= 15 && knownSecretValue.MatchString(s)
@@ -68,7 +65,6 @@ func BenchmarkKnownSecretPrefilter(b *testing.B) {
 	})
 }
 
-// A single alternation of the bare markers, as one regex, for comparison.
 var markerRe = regexp.MustCompile(`sk_|gh|xox|AKIA|AIza|-----BEGIN `)
 
 func BenchmarkKnownSecretMarkerRegex(b *testing.B) {

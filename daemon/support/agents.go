@@ -16,53 +16,25 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Runtime support-agent grants. A support agent carries core.SupportAgentRole
-// (PermSupportAgent) — the weak, grant-gated support permission. Unlike
-// platform-admin there is NO env-allowlist bootstrap: support agents are managed
-// entirely at runtime from this store, so an operator can add/remove vendor
-// support staff without a redeploy.
-//
-// The store feeds the same session-issue chokepoint as platform-admin
-// elevation: at issue time, a user whose email is Granted here gets
-// SupportAgentRole appended. A grant takes effect on the target's next session
-// issue; a revoke once their live sessions drop and they re-authenticate.
-// Holding the role grants NO ambient access — it only lets the agent request an
-// AccessGrant and use the support-view capability (see AuthorizeGraphSupportView).
-//
-// Like platform-admin, a cached in-memory snapshot keeps the per-session-issue
-// Granted lookup off the DB hot path; writes refresh it and a ticker catches
-// cross-node changes.
-
-// AgentGrant is one runtime support-agent grant row.
 type AgentGrant struct {
 	Email     string    `json:"email"`
 	GrantedBy string    `json:"granted_by"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// AgentStore is the runtime support-agent grant boundary.
 type AgentStore interface {
-	// Granted reports whether email currently holds a support-agent grant. Reads
-	// the cached snapshot, so it's cheap and safe at every session issue.
 	Granted(email string) bool
 	Grant(ctx context.Context, email, grantedBy string) error
 	Revoke(ctx context.Context, email string) error
 	List(ctx context.Context) ([]AgentGrant, error)
-	// AnonymizeGrantedBy replaces an erased person's email where it appears as
-	// the GRANTER of someone else's agent role, returning the rows changed.
-	// See PlatformAdminStore.AnonymizeGrantedBy — same shape, same reason.
 	AnonymizeGrantedBy(ctx context.Context, email string) (int, error)
 }
 
-// ---- In-memory (tests + single-node) ---------------------------------------
-
-// MemAgentStore is a mutex-guarded in-memory AgentStore.
 type MemAgentStore struct {
 	mu     sync.RWMutex
 	grants map[string]AgentGrant // keyed by normalized email
 }
 
-// NewMemAgentStore returns an empty in-memory support-agent store.
 func NewMemAgentStore() *MemAgentStore {
 	return &MemAgentStore{grants: map[string]AgentGrant{}}
 }
@@ -135,8 +107,6 @@ func (s *MemAgentStore) List(_ context.Context) ([]AgentGrant, error) {
 	return out, nil
 }
 
-// ---- Postgres (production) -------------------------------------------------
-
 const pgAgentSchema = `
 CREATE TABLE IF NOT EXISTS support_agents (
     email      TEXT PRIMARY KEY,
@@ -145,12 +115,10 @@ CREATE TABLE IF NOT EXISTS support_agents (
 );
 `
 
-// EnsurePgAgentSchema creates the support_agents table. Idempotent.
 func EnsurePgAgentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return pgstore.ApplySchema(ctx, pool, pgAgentSchema)
 }
 
-// PgAgentStore is the Postgres AgentStore with a cached snapshot.
 type PgAgentStore struct {
 	pool   *pgxpool.Pool
 	logger *log.Logger
@@ -159,8 +127,6 @@ type PgAgentStore struct {
 	granted map[string]struct{}
 }
 
-// NewPgAgentStore creates the schema, loads the snapshot, and starts the
-// cross-node refresh loop.
 func NewPgAgentStore(ctx context.Context, pool *pgxpool.Pool) (*PgAgentStore, error) {
 	if err := EnsurePgAgentSchema(ctx, pool); err != nil {
 		return nil, err
@@ -218,13 +184,11 @@ func (s *PgAgentStore) AnonymizeGrantedBy(ctx context.Context, email string) (in
 	if email == "" {
 		return 0, fmt.Errorf("email required")
 	}
-	// Compare on the NORMALIZED stored value, not the raw column. Grant()
-	// normalizes the grantee's email but stores grantedBy exactly as the admin
-	// form supplied it, so a granter recorded as "Operator@Acme.COM" would not
-	// match the normalized identifier an erasure request arrives with — leaving
-	// the erased person's address in the table and reporting 0 rows changed.
-	// MemAgentStore.AnonymizeGrantedBy already normalizes both sides; this is
-	// the same comparison in SQL, and it also repairs rows already stored.
+	// Compare the NORMALIZED stored value, not the raw column: Grant normalizes
+	// the grantee's email but stores grantedBy as the admin form supplied it, so
+	// "Operator@Acme.COM" never matched the normalized identifier an erasure
+	// request arrives with — leaving the address in the table and reporting 0
+	// rows changed. This also repairs rows already stored.
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE support_agents SET granted_by = $2 WHERE lower(btrim(granted_by)) = $1`,
 		email, core.ErasedIdentity)
@@ -271,12 +235,10 @@ func (s *PgAgentStore) refreshLoop(ctx context.Context) {
 	pgstore.PollReload(ctx, s.reload, s.logger.Printf, "refresh: %v")
 }
 
-// normalizeEmail is the identity form of an address: case-folded and trimmed.
-//
-// Support-agent membership and every grant check compare addresses, and the
-// person who types one into an admin form does not type it the same way twice.
-// The same two calls appear in daemon/platformadmin.go and across auth/ — the
-// repo's idiom for this, spelled here because the package now stands alone.
+// normalizeEmail case-folds and trims, because membership and every grant check
+// compare addresses and nobody types one into an admin form the same way twice.
+// Spelled out here rather than shared with daemon/platformadmin.go and auth/
+// because the package stands alone.
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }

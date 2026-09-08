@@ -27,30 +27,18 @@ const (
 	providerStorePrefix = "oauth_provider/"
 )
 
-// providerCreds is the persisted shape — just the deployment-set
-// credentials, no provider metadata (URLs/scopes come from the
-// hardcoded defaults table). UpdatedAt is informational, surfaced in
-// the admin UI so an operator can tell when the credentials were
-// last rotated.
 type providerCreds struct {
 	ClientID     string    `json:"client_id"`
 	ClientSecret string    `json:"client_secret"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// loadProviderCreds reads the persisted (client_id, client_secret) for
-// a provider. Returns (nil, nil) when nothing has been written —
-// distinguishing "no creds" from "decryption failed" so the boot
-// hydration loop doesn't treat a fresh install as an error.
 func loadProviderCreds(ctx context.Context, secrets *EncryptedSecrets, name string) (*providerCreds, error) {
 	if secrets == nil {
 		return nil, nil
 	}
 	raw, err := secrets.Get(core.WithTenant(ctx, providerStoreTenant), providerStorePrefix+name)
 	if err != nil {
-		// "Never written" is a normal state on a fresh install, not an
-		// error — Get wraps ErrSecretNotFound for it. A decryption or
-		// store failure is real and propagates.
 		if errors.Is(err, ErrSecretNotFound) {
 			return nil, nil
 		}
@@ -81,10 +69,6 @@ func saveProviderCreds(ctx context.Context, secrets *EncryptedSecrets, name stri
 	return secrets.Put(ctx, providerStoreTenant, providerStorePrefix+name, string(payload))
 }
 
-// deleteProviderCreds clears the persisted credentials for a provider.
-// The registry still keeps the in-memory entry until the next restart
-// — callers that need the live unregister also remove from the
-// registry (see admin handler).
 func deleteProviderCreds(ctx context.Context, secrets *EncryptedSecrets, name string) error {
 	if secrets == nil {
 		return fmt.Errorf("encrypted secret store not configured")
@@ -133,8 +117,6 @@ func HydrateOAuthProvidersFromStore(ctx context.Context, r *OAuthRegistry, secre
 	for _, name := range names {
 		def := providerDefault(name)
 		if def == nil {
-			// Persisted creds for a provider the daemon no longer knows.
-			// Skip — admin can delete it via the UI.
 			errs = append(errs, fmt.Errorf("persisted credentials for unknown provider %q; ignoring", name))
 			continue
 		}

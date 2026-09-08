@@ -57,7 +57,6 @@ export function AdminPlatformDrops() {
       (d) =>
         d.id.toLowerCase().includes(q) ||
         d.label.toLowerCase().includes(q) ||
-        // Match what the admin sees, too — the row renders the localized name.
         dropLabel(d, i18n.language).toLowerCase().includes(q) ||
         (d.integration ?? "").toLowerCase().includes(q),
     );
@@ -209,8 +208,6 @@ export function AdminPlatformDrops() {
   );
 }
 
-// DisableDropModal collects the operator's reason (audit trail) before
-// the global killswitch fires.
 function DisableDropModal({
   drop,
   onConfirm,

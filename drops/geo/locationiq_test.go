@@ -13,11 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// LocationIQ mirrors the Nominatim API, so it reuses the same JSON samples
-// (sampleSearch / sampleReverse from geo_test.go).
-
-// stubLocationIQ points locationiqURL at a recording server, restored on
-// cleanup. Tests select the backend + key via locationiqJob.
 func stubLocationIQ(t *testing.T, status int, body string, gotReq **http.Request) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +28,6 @@ func stubLocationIQ(t *testing.T, status int, body string, gotReq **http.Request
 	t.Cleanup(func() { locationiqURL = prev; srv.Close() })
 }
 
-// locationiqJob selects LocationIQ and supplies an api_key, merging extras.
 func locationiqJob(extra map[string]any) core.Job {
 	p := map[string]any{"backend": "locationiq", "api_key": "pk.test123"}
 	maps.Copy(p, extra)
@@ -73,7 +67,6 @@ func TestLocationIQ_ReverseSendsKey(t *testing.T) {
 	}
 }
 
-// Selecting LocationIQ without a key is caught up front, before any request.
 func TestLocationIQ_MissingKey(t *testing.T) {
 	var req *http.Request
 	stubLocationIQ(t, 200, sampleReverse, &req)
@@ -87,7 +80,6 @@ func TestLocationIQ_MissingKey(t *testing.T) {
 	}
 }
 
-// base_url on the connection overrides the backend's default host.
 func TestLocationIQ_BaseURLOverride(t *testing.T) {
 	var req *http.Request
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -59,8 +59,6 @@ describe("dataFaceView", () => {
     expect(view.rows).toHaveLength(MAX_ROWS);
     expect(view.columns).toHaveLength(MAX_COLUMNS);
     expect(view.moreColumns).toBe(1);
-    // total counts the whole list, not the sampled slice — it is the number
-    // the footer reports.
     expect(view.total).toBe(12);
   });
 
@@ -137,8 +135,6 @@ describe("dataFaceSource", () => {
   });
 
   it("treats a run value that carried nothing as nothing, and still shows the example", () => {
-    // A step that ran and emitted an empty string has produced no preview;
-    // the example is more use than a blank panel.
     expect(dataFaceSource({ data: "" }, withExample).tier).toBe("example");
   });
 });

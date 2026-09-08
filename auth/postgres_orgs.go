@@ -17,11 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Postgres-backed implementations of the four org-level stores that
-// were previously JSON-file only: memberships, invitations, per-org
-// auth config, per-org profile. Selecting these (via DAZYFLOW_POSTGRES_DSN)
-// is what lets a deploy fully drop the on-disk state/ directory.
-
 const pgOrgsSchema = `
 CREATE TABLE IF NOT EXISTS memberships (
     user_email TEXT NOT NULL,
@@ -82,9 +77,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS org_profiles_subdomain_key
     ON org_profiles (lower(subdomain)) WHERE subdomain <> '';
 `
 
-// EnsurePgOrgsSchema creates the four org-level tables if they don't
-// exist. Each Pg*Store constructor calls it so opening any one of
-// them provisions all four (idempotent, like EnsurePgAuthSchema).
 func EnsurePgOrgsSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	if pool == nil {
 		return fmt.Errorf("nil pool")
@@ -124,8 +116,6 @@ func MigrateLegacyOrgAdminPerm(ctx context.Context, pool *pgxpool.Pool) (int64, 
 	return total, nil
 }
 
-// ---- memberships ----------------------------------------------------
-
 type PgMembershipStore struct {
 	pool *pgxpool.Pool
 }
@@ -137,8 +127,6 @@ func NewPgMembershipStore(ctx context.Context, pool *pgxpool.Pool) (*PgMembershi
 	return &PgMembershipStore{pool: pool}, nil
 }
 
-// AnonymizeSubject replaces an erased person's email where it appears as the
-// INVITER on someone else's membership row. See PgInvitationStore's method.
 func (s *PgMembershipStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
 	ident = strings.ToLower(strings.TrimSpace(ident))
 	if ident == "" {
@@ -257,13 +245,11 @@ func (s *PgMembershipStore) DeleteMembership(ctx context.Context, email, tenant 
 	return err
 }
 
-// DeleteByEmail removes every membership for a user (erasure, Art. 17).
 func (s *PgMembershipStore) DeleteByEmail(ctx context.Context, email string) (int, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	return deleteWhere(ctx, s.pool, "memberships", "user_email", email)
 }
 
-// DeleteByTenant removes every membership in an org (org deletion).
 func (s *PgMembershipStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	return deleteWhere(ctx, s.pool, "memberships", "tenant", tenant)
 }
@@ -311,8 +297,6 @@ func scanMembership(row rowScanner) (Membership, error) {
 	return m, nil
 }
 
-// ---- invitations ----------------------------------------------------
-
 type PgInvitationStore struct {
 	pool *pgxpool.Pool
 }
@@ -324,13 +308,6 @@ func NewPgInvitationStore(ctx context.Context, pool *pgxpool.Pool) (*PgInvitatio
 	return &PgInvitationStore{pool: pool}, nil
 }
 
-// AnonymizeSubject replaces an erased person's email where it appears as the
-// INVITER, returning the rows changed.
-//
-// The row belongs to somebody else — the person invited — and survives the
-// inviter's erasure, so the identifier is pseudonymised rather than deleted.
-// Probed by the erasure cascade rather than declared on the interface, matching
-// how DeleteByEmail is already handled for this store.
 func (s *PgInvitationStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
 	ident = strings.ToLower(strings.TrimSpace(ident))
 	if ident == "" {
@@ -393,7 +370,6 @@ func (s *PgInvitationStore) ListByTenant(ctx context.Context, tenant string) ([]
          ORDER BY created_at DESC`, tenant)
 }
 
-// ListByEmail returns every invitation addressed to an email (export).
 func (s *PgInvitationStore) ListByEmail(ctx context.Context, email string) ([]Invitation, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	return queryRows(ctx, s.pool, scanInvitation,
@@ -402,13 +378,11 @@ func (s *PgInvitationStore) ListByEmail(ctx context.Context, email string) ([]In
          ORDER BY created_at DESC`, email)
 }
 
-// DeleteByEmail hard-deletes every invitation to an email (erasure).
 func (s *PgInvitationStore) DeleteByEmail(ctx context.Context, email string) (int, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	return deleteWhere(ctx, s.pool, "invitations", "email", email)
 }
 
-// DeleteByTenant hard-deletes every invitation in an org (org deletion).
 func (s *PgInvitationStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	return deleteWhere(ctx, s.pool, "invitations", "tenant", tenant)
 }
@@ -455,8 +429,6 @@ func scanInvitation(row rowScanner) (Invitation, error) {
 	inv.Roles = roles
 	return inv, nil
 }
-
-// ---- org_auth -------------------------------------------------------
 
 type PgOrgAuthStore struct {
 	pool *pgxpool.Pool
@@ -507,8 +479,6 @@ func (s *PgOrgAuthStore) DeleteOrgAuth(ctx context.Context, tenant string) error
 	return err
 }
 
-// ---- org_profiles ---------------------------------------------------
-
 type PgOrgProfileStore struct {
 	pool *pgxpool.Pool
 }
@@ -520,9 +490,6 @@ func NewPgOrgProfileStore(ctx context.Context, pool *pgxpool.Pool) (*PgOrgProfil
 	return &PgOrgProfileStore{pool: pool}, nil
 }
 
-// orgProfileColumns is the org_profiles SELECT/Scan column list, shared
-// by every read path and (positionally) the PutOrgProfile INSERT so a new
-// column stays in lockstep across all of them. Mirrors userColumns.
 const orgProfileColumns = `tenant, display_name, icon, subdomain, updated_at,
 	status, suspended_at, suspend_reason`
 
@@ -583,8 +550,6 @@ func (s *PgOrgProfileStore) PutOrgProfile(ctx context.Context, p OrgProfile) err
             suspend_reason = EXCLUDED.suspend_reason`
 	_, err := s.pool.Exec(ctx, q, p.Tenant, p.DisplayName, p.Icon, p.Subdomain, updated,
 		status, p.SuspendedAt, p.SuspendReason)
-	// A unique-index violation means another org already claimed this
-	// subdomain — surface a typed error the handler maps to 409.
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		return ErrSubdomainTaken
@@ -608,25 +573,16 @@ func (s *PgOrgProfileStore) ListOrgProfiles(ctx context.Context, tenants []strin
 	return out, nil
 }
 
-// ListAllOrgProfiles returns every org profile, newest-updated first —
-// the platform-admin org roster. Unlike ListOrgProfiles it isn't scoped
-// to a tenant set, so it's gated to platform admins at the handler.
 func (s *PgOrgProfileStore) ListAllOrgProfiles(ctx context.Context) ([]OrgProfile, error) {
 	return queryRows(ctx, s.pool, scanOrgProfile,
 		`SELECT `+orgProfileColumns+` FROM org_profiles ORDER BY updated_at DESC`)
 }
 
-// DeleteOrgProfile removes an org's display profile (org deletion).
 func (s *PgOrgProfileStore) DeleteOrgProfile(ctx context.Context, tenant string) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM org_profiles WHERE tenant=$1`, tenant)
 	return err
 }
 
-// ---- shared ---------------------------------------------------------
-
-// nullable folds empty strings to nil so optional columns store NULL
-// rather than the empty string. Keeps the schema legible (e.g.
-// invited_by IS NULL is the obvious "no inviter" query).
 func nullable(s string) any {
 	if s == "" {
 		return nil

@@ -112,8 +112,6 @@ func runWorkspaceConformance(t *testing.T, mk func(t *testing.T) *Store) {
 	// differently depending on which backend an install runs.
 	t.Run("ListHeadersAtHead", func(t *testing.T) {
 		s := mk(t)
-		// A flow with a real trigger and a real ordinary step, so the test
-		// covers both sides of the elision.
 		g := core.Graph{
 			ID: "sched", Version: "1", Name: "Scheduled", Owner: "ada@example.com",
 			Visibility: core.VisibilityPrivate,
@@ -361,7 +359,6 @@ func runWorkspaceConformance(t *testing.T, mk func(t *testing.T) *Store) {
 		if _, err := s.LoadPublished("f1"); !errors.Is(err, ErrNotPublished) {
 			t.Fatalf("LoadPublished after unpublish = %v, want ErrNotPublished", err)
 		}
-		// Idempotent.
 		if err := s.ClearEnvironment("f1", PublishedEnv); err != nil {
 			t.Fatalf("second unpublish: %v", err)
 		}
@@ -413,7 +410,6 @@ func runWorkspaceConformance(t *testing.T, mk func(t *testing.T) *Store) {
 		if other, _ := s.RevisionLabel("f1", second); other != "" {
 			t.Fatalf("label leaked onto another revision: %q", other)
 		}
-		// It shows up in history, so the panel can name each entry.
 		revs, _ := s.History("f1", 10)
 		var labelled int
 		for _, r := range revs {
@@ -424,7 +420,6 @@ func runWorkspaceConformance(t *testing.T, mk func(t *testing.T) *Store) {
 		if labelled != 1 {
 			t.Fatalf("history shows the label on %d entries, want 1", labelled)
 		}
-		// Empty clears.
 		if err := s.SetRevisionLabel("f1", first, ""); err != nil {
 			t.Fatal(err)
 		}
@@ -567,8 +562,6 @@ func TestConformance_PostgresBackend(t *testing.T) {
 	})
 }
 
-// workspaceHeaderNodes is the per-flow slice the header spot-check reads:
-// each step's params by node id, plus the two fields visibility turns on.
 type workspaceHeaderNodes struct {
 	params     map[string]map[string]any
 	owner      string

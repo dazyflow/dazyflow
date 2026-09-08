@@ -15,7 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
-// TestOAuthErrorCode_Cov covers every arm of the status->code mapping.
 func TestOAuthErrorCode_Cov(t *testing.T) {
 	t.Parallel()
 	cases := map[int]string{
@@ -33,9 +32,9 @@ func TestOAuthErrorCode_Cov(t *testing.T) {
 	}
 }
 
-// TestRedactGraphSecrets_Cov covers redactGraphSecrets across triggers, node
-// params/env, nested secret keys, and the FailureNotify webhook — verifying the
-// original graph is never mutated in place.
+// Covers redactGraphSecrets across triggers, node params/env, nested secret
+// keys, and the FailureNotify webhook — verifying the original graph is never
+// mutated in place.
 func TestRedactGraphSecrets_Cov(t *testing.T) {
 	t.Parallel()
 	orig := core.Graph{
@@ -113,12 +112,10 @@ func TestExportHandler_Cov(t *testing.T) {
 	ctx := context.Background()
 	_ = mem.PutMembership(ctx, auth.Membership{UserEmail: "ex@example.com", Tenant: "acme", Workspace: "ws"})
 
-	// API-key credential is rejected (export requires a session).
 	if rw := h.do(t, "GET", "/api/v1/me/export", nil); rw.Code != http.StatusForbidden {
 		t.Fatalf("api-key export = %d, want 403", rw.Code)
 	}
 
-	// Session credential succeeds and the export is offered as a download.
 	rw := sessionDo(t, h, tok, "GET", "/api/v1/me/export", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("export = %d: %s", rw.Code, rw.Body.String())
@@ -137,7 +134,6 @@ func TestExportHandler_Cov(t *testing.T) {
 		t.Fatalf("export memberships = %+v", exp.Memberships)
 	}
 
-	// A session for an unknown email -> 404 (assembleExport's only hard error).
 	ghost := auth.User{Subject: "ghost@example.com", Email: "ghost@example.com", Tenant: "x"}
 	_, gtok, err := auth.IssueSession(ctx, h.gw.Sessions.(*auth.MemSessionStore), ghost, 3600*1e9)
 	if err != nil {
@@ -148,9 +144,6 @@ func TestExportHandler_Cov(t *testing.T) {
 	}
 }
 
-// TestAssembleExport_IncludesSupportAuditAndRoles covers the Art. 15 sections
-// added after the first export shipped: support correspondence, the subject's
-// own audit trail, and platform roles held.
 func TestAssembleExport_IncludesSupportAuditAndRoles(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -209,7 +202,6 @@ func TestAssembleExport_IncludesSupportAuditAndRoles(t *testing.T) {
 		t.Fatalf("assembleExport: %v", err)
 	}
 
-	// Support: their thread, with both sides of the conversation.
 	if len(exp.SupportTickets) != 1 {
 		t.Fatalf("SupportTickets = %d, want 1 (theirs only)", len(exp.SupportTickets))
 	}
@@ -230,7 +222,6 @@ func TestAssembleExport_IncludesSupportAuditAndRoles(t *testing.T) {
 		t.Error("the subject's own words are missing from their support history")
 	}
 
-	// Audit: theirs, including the source IP; not their colleague's.
 	if len(exp.AuditEvents) != 1 {
 		t.Fatalf("AuditEvents = %d, want 1", len(exp.AuditEvents))
 	}
@@ -238,7 +229,6 @@ func TestAssembleExport_IncludesSupportAuditAndRoles(t *testing.T) {
 		t.Errorf("audit detail = %q, want the subject's source IP", exp.AuditEvents[0].Detail)
 	}
 
-	// Roles held.
 	if !exp.RoleGrants.PlatformAdmin {
 		t.Error("platform-admin grant missing from the export")
 	}
@@ -246,15 +236,14 @@ func TestAssembleExport_IncludesSupportAuditAndRoles(t *testing.T) {
 		t.Error("reported a support-agent role the subject does not hold")
 	}
 
-	// The document says what it left out.
 	if len(exp.Excluded) == 0 {
 		t.Error("Excluded is empty — a DSAR that silently omits a category is " +
 			"indistinguishable from one with nothing to report")
 	}
 }
 
-// TestAssembleExport_ExcludesOtherPeoplesData is the Art. 15(4) boundary: an
-// access request is for the requester's data, not their colleagues'.
+// The Art. 15(4) boundary: an access request is for the requester's data, not
+// their colleagues'.
 func TestAssembleExport_ExcludesOtherPeoplesData(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -291,13 +280,6 @@ func TestAssembleExport_ExcludesOtherPeoplesData(t *testing.T) {
 	}
 }
 
-// TestAssembleExport_SurvivesUnconfiguredStores pins the best-effort contract
-// the function documents: a deployment missing a store gets an empty section,
-// not a failed export.
-//
-// It did not hold. ListFlowSummaries opens s.Workspaces with no nil check of
-// its own, so an export on a daemon without a workspace store panicked the
-// request instead of returning what it could.
 func TestAssembleExport_SurvivesUnconfiguredStores(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -316,7 +298,6 @@ func TestAssembleExport_SurvivesUnconfiguredStores(t *testing.T) {
 	if exp.Profile.Email != email {
 		t.Errorf("profile = %q, want the subject's row to still be present", exp.Profile.Email)
 	}
-	// Empty, non-nil sections so the JSON has [] rather than null.
 	for name, n := range map[string]int{
 		"Flows": len(exp.Flows), "Runs": len(exp.Runs),
 		"SupportTickets": len(exp.SupportTickets), "AuditEvents": len(exp.AuditEvents),
@@ -326,7 +307,6 @@ func TestAssembleExport_SurvivesUnconfiguredStores(t *testing.T) {
 			t.Errorf("%s = %d, want 0 with no store configured", name, n)
 		}
 	}
-	// Marshals cleanly — the document is the deliverable.
 	if _, err := json.Marshal(exp); err != nil {
 		t.Fatalf("export does not marshal: %v", err)
 	}

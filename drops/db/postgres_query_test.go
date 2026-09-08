@@ -13,9 +13,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// seedQueryTable creates a small table with mixed-type columns and
-// inserts the given rows. Used by the integration tests below to give
-// each one isolated, predictable data.
 func seedQueryTable(t *testing.T, dsn, table string, rows [][]any) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -97,9 +94,6 @@ func TestPostgresQuery_PositionalParams(t *testing.T) {
 }
 
 func TestPostgresQuery_TypedValuesPreserved(t *testing.T) {
-	// pgx returns Go-typed values per the column's pg type — verifying
-	// we don't string-stringify everything on the way out (excel_read
-	// does, postgres_query intentionally doesn't).
 	dsn, table := pgTestSetup(t)
 	seedQueryTable(t, dsn, table, [][]any{
 		{42, "x", 3.14, true},
@@ -115,7 +109,6 @@ func TestPostgresQuery_TypedValuesPreserved(t *testing.T) {
 	}
 	row := res.Output["rows"].Inline.([]map[string]any)[0]
 	if _, ok := row["id"].(int32); !ok {
-		// pgx returns int4 as int32; either int32 or int64 is acceptable.
 		if _, ok := row["id"].(int64); !ok {
 			t.Errorf("id = %T %v, want integer", row["id"], row["id"])
 		}
@@ -183,10 +176,6 @@ func TestPostgresQuery_BadSQL(t *testing.T) {
 		t.Errorf("status=%q code=%q, want error/db", res.Status, res.Error.Code)
 	}
 }
-
-// ----------------------------------------------------------------------
-// Unit tests — no Postgres required.
-// ----------------------------------------------------------------------
 
 func TestPostgresQuery_MissingDSN(t *testing.T) {
 	res, _ := executePostgresQuery(t.Context(), core.Job{

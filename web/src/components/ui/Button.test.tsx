@@ -36,8 +36,6 @@ describe("Button classes", () => {
   });
 
   it("keeps a call-site layout class alongside the derived ones", () => {
-    // The editor's Stop is `variant="danger" filled className="run-stop"`;
-    // run-stop only holds the width, so all three have to survive together.
     expect(cls(<Button variant="danger" filled className="run-stop">Stop</Button>)).toEqual([
       "danger",
       "filled",

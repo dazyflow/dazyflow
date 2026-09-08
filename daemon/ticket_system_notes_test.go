@@ -18,16 +18,6 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
-// System notes are composed here in English and stored in Body — right for an
-// API reader, an email digest, or an agent grepping the table, and wrong for
-// the web UI, which is translated and was rendering "The customer closed this
-// ticket." in the middle of a Swedish thread.
-//
-// The fix is a code alongside the prose, so the UI can say the same thing in
-// the reader's language. That only works if every note actually carries one,
-// and a note is a single line in a handler that nothing forces to be complete
-// — which is what these cover.
-
 func ticketNoteHarness(t *testing.T) (*gatewayHarness, time.Time) {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -63,7 +53,6 @@ func TestSystemNote_CarriesACodeForTheUIToTranslate(t *testing.T) {
 	if m.SystemCode != core.NoteCustomerClosed {
 		t.Errorf("SystemCode = %q, want %q", m.SystemCode, core.NoteCustomerClosed)
 	}
-	// The English survives: it is what an API reader and an older UI get.
 	if m.Body != "The customer closed this ticket." {
 		t.Errorf("Body = %q, want the English prose kept as the fallback", m.Body)
 	}
@@ -74,9 +63,6 @@ func TestSystemNote_CarriesACodeForTheUIToTranslate(t *testing.T) {
 
 func TestMarkedNote_IsOneCodePerStatus(t *testing.T) {
 	t.Parallel()
-	// One whole sentence per status rather than a code plus an interpolated
-	// status label: Swedish inflects around the insertion point, and a flat
-	// code is greppable from either side of the stack.
 	for _, s := range []core.TicketStatus{
 		core.TicketOpen, core.TicketAwaitingUser, core.TicketAwaitingSupport,
 		core.TicketResolved, core.TicketClosed,
@@ -109,7 +95,7 @@ func TestSystemNote_EmptyBodyStillWritesNothing(t *testing.T) {
 	}
 }
 
-// TestSystemNote_NoHandlerBypassesTheHelper is the one that keeps this fixed.
+// The one that keeps this fixed.
 //
 // appendSystemNote is the only place that pairs a code with its prose. A new
 // handler calling appendTicketMessage with AuthorSystem instead would compile,

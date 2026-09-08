@@ -36,12 +36,9 @@ type pgBackend struct {
 	pool      *pgxpool.Pool
 	tenant    string
 	workspace string
-	// mirrorDir is where synthesis keeps this workspace's derived git
-	// repository. Empty disables mirroring — see gitsynth.go.
 	mirrorDir string
 }
 
-// PgOption configures a Postgres-backed workspace.
 type PgOption func(*pgBackend)
 
 // WithMirrorCache enables git mirroring for a Postgres-backed workspace, using
@@ -99,8 +96,6 @@ CREATE TABLE IF NOT EXISTS flow_envs (
 );
 `
 
-// EnsurePgWorkspaceSchema creates the tables a Postgres-backed workspace needs.
-// Idempotent; run once at startup.
 func EnsurePgWorkspaceSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	if pool == nil {
 		return errors.New("nil pool")
@@ -143,7 +138,6 @@ func newRevisionID() (string, error) {
 
 func (p *pgBackend) ctx() context.Context { return context.Background() }
 
-// headRevision reads a flow's current revision id, "" when the flow has none.
 func (p *pgBackend) headRevision(ctx context.Context, q rowQuerier, graphID string) (string, error) {
 	var rev string
 	err := q.QueryRow(ctx,
@@ -155,8 +149,6 @@ func (p *pgBackend) headRevision(ctx context.Context, q rowQuerier, graphID stri
 	return rev, err
 }
 
-// rowQuerier is the sliver of *pgxpool.Pool and pgx.Tx this file shares, so a
-// helper can run inside or outside a transaction.
 type rowQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
@@ -207,8 +199,6 @@ func (p *pgBackend) save(graph core.Graph, author string, coalesce bool) (string
 		return head, tx.Commit(ctx)
 	}
 
-	// Amend a recent autosave by the same author, so an editing burst stays one
-	// entry in the history.
 	amend := coalesce && head != "" && headAuthor == author &&
 		strings.HasPrefix(headMessage, "autosave:") &&
 		time.Since(headAt) <= autosaveCoalesceWindow
@@ -231,8 +221,6 @@ func (p *pgBackend) save(graph core.Graph, author string, coalesce bool) (string
 				return headParent, tx.Commit(ctx)
 			}
 		}
-		// Ordinary amend: replace the autosave's content in place. The revision
-		// id is stable across this, which is why ids are not content-derived.
 		if _, err := tx.Exec(ctx,
 			`UPDATE flow_revisions SET content=$5, message=$6, created_at=now()
 			  WHERE tenant=$1 AND workspace=$2 AND graph_id=$3 AND revision=$4`,
@@ -271,9 +259,6 @@ func (p *pgBackend) insertRevision(ctx context.Context, tx pgx.Tx, graphID, rev,
 	return err
 }
 
-// dropRevision removes a revision and moves the flow back to parent. Only used
-// for the discarded-autosave case above, where nothing can be pointing at it
-// yet; env pointers and labels naming it are cleared for safety.
 func (p *pgBackend) dropRevision(ctx context.Context, tx pgx.Tx, graphID, rev, parent string) error {
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM flow_envs WHERE tenant=$1 AND workspace=$2 AND graph_id=$3 AND revision=$4`,
@@ -325,8 +310,6 @@ func (p *pgBackend) delete(graphID, author string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// A tombstone, not a purge: the flow's history is where a mistaken delete
-	// is recovered from. Its environment pointers go, so it stops firing.
 	if err := p.insertRevision(ctx, tx, graphID, rev, head, author,
 		fmt.Sprintf("graph: delete %s [user:%s]", graphID, author), nil); err != nil {
 		return "", err
@@ -396,11 +379,6 @@ func (p *pgBackend) listGraphs() ([]string, error) {
 	return out, rows.Err()
 }
 
-// listAtHead answers the whole flow list in ONE query. Per flow it is three:
-// resolve the head revision, read its content, then read the env pointer —
-// so a workspace of fifty flows cost 151 round trips to render a sidebar.
-// The env pointer is an outer join because an unpublished flow still belongs
-// in the list.
 func (p *pgBackend) listAtHead(env string, headersOnly bool) ([]FlowAtHead, error) {
 	rows, err := p.pool.Query(p.ctx(),
 		`SELECT h.graph_id, r.content, COALESCE(e.revision, '')
@@ -430,8 +408,6 @@ func (p *pgBackend) listAtHead(env string, headersOnly bool) ([]FlowAtHead, erro
 		}
 		g, err := decodeFlow(content, headersOnly)
 		if err != nil {
-			// Same rule as the git backend: one unreadable flow does not
-			// take the list down with it.
 			continue
 		}
 		out = append(out, FlowAtHead{ID: id, Graph: g, EnvCommit: rev})
@@ -467,8 +443,6 @@ func (p *pgBackend) history(graphID string, limit int) ([]Revision, error) {
 	return revs, rows.Err()
 }
 
-// head is the workspace's high-water revision sequence — a token that changes
-// on any write to any flow in it. Opaque by contract; callers only compare it.
 func (p *pgBackend) head() (string, error) {
 	var seq *int64
 	if err := p.pool.QueryRow(p.ctx(),
@@ -489,17 +463,12 @@ func (p *pgBackend) resolve(ref string) (string, error) {
 	return ref, nil
 }
 
-// resolveGraph turns a ref into one flow's revision id. Unlike git, where every
-// flow shared a commit history and "HEAD" named a revision of all of them, a
-// revision here belongs to exactly one flow — so resolving needs to know which.
 func (p *pgBackend) resolveGraph(graphID, ref string) (string, error) {
 	ctx := p.ctx()
 	switch ref {
 	case "", "HEAD":
 		return p.headRevision(ctx, p.pool, graphID)
 	}
-	// An environment name (e.g. "published") resolves through its pointer;
-	// anything else is taken as a revision id.
 	var rev string
 	err := p.pool.QueryRow(ctx,
 		`SELECT revision FROM flow_envs WHERE tenant=$1 AND workspace=$2 AND graph_id=$3 AND env=$4`,
@@ -588,9 +557,6 @@ func (p *pgBackend) label(graphID, commit string) (string, error) {
 	return label, err
 }
 
-// refs has no meaning without a git repository. Empty rather than an error:
-// the only callers are ones doing their own listing, and "no branches" is the
-// honest answer.
 func (p *pgBackend) refs(string) ([]string, error) { return nil, nil }
 
 // mirror: a repository is synthesized from the revision log, when the caller

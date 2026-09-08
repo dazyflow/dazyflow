@@ -33,8 +33,6 @@ func erasurePool(t *testing.T) (context.Context, *pgxpool.Pool) {
 		t.Fatalf("pgxpool.New: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	// The stores create their own tables; make sure they all exist before the
-	// truncate so a fresh database doesn't fail on an unknown relation.
 	for _, ensure := range []func() error{
 		func() error { _, err := NewPgTicketStore(ctx, pool); return err },
 		func() error { _, err := NewPgGrantStore(ctx, pool); return err },
@@ -52,12 +50,10 @@ func erasurePool(t *testing.T) (context.Context, *pgxpool.Pool) {
 	return ctx, pool
 }
 
-// ---- support-agent store (Postgres) ---------------------------------------
-
-// TestPgAgentStore_Lifecycle covers the whole PgAgentStore, which had no test
-// at all: every support agent's session-issue elevation reads its cached
-// snapshot, so a write that fails to refresh the cache would leave a revoked
-// vendor agent holding the role until the next poll tick.
+// Covers the whole PgAgentStore, which had no test at all: every support
+// agent's session-issue elevation reads its cached snapshot, so a write that
+// fails to refresh the cache would leave a revoked vendor agent holding the
+// role until the next poll tick.
 func TestPgAgentStore_Lifecycle(t *testing.T) {
 	ctx, pool := erasurePool(t)
 
@@ -65,7 +61,6 @@ func TestPgAgentStore_Lifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPgAgentStore: %v", err)
 	}
-	// A second construction is safe: EnsurePgAgentSchema is idempotent.
 	if _, err := NewPgAgentStore(ctx, pool); err != nil {
 		t.Fatalf("second NewPgAgentStore: %v", err)
 	}
@@ -73,7 +68,6 @@ func TestPgAgentStore_Lifecycle(t *testing.T) {
 	if s.Granted("agent@vendor.com") {
 		t.Fatal("no grants yet")
 	}
-	// Mixed case + padding on the way in; the store normalizes the key.
 	if err := s.Grant(ctx, "  Agent@Vendor.COM ", "operator-1"); err != nil {
 		t.Fatalf("grant: %v", err)
 	}
@@ -100,8 +94,6 @@ func TestPgAgentStore_Lifecycle(t *testing.T) {
 		t.Error("CreatedAt not populated by the schema default")
 	}
 
-	// Re-granting the same agent updates the granter instead of erroring on the
-	// primary key (ON CONFLICT DO UPDATE).
 	if err := s.Grant(ctx, "agent@vendor.com", "operator-2"); err != nil {
 		t.Fatalf("re-grant: %v", err)
 	}
@@ -128,12 +120,10 @@ func TestPgAgentStore_Lifecycle(t *testing.T) {
 	if s.Granted("agent@vendor.com") {
 		t.Error("revoked agent still granted — the snapshot did not refresh")
 	}
-	// Revoking an agent who holds nothing is a no-op, not an error.
 	if err := s.Revoke(ctx, "ghost@vendor.com"); err != nil {
 		t.Errorf("Revoke(unknown) = %v, want nil", err)
 	}
 
-	// List sorts by email so the admin table is stable across page loads.
 	_ = s.Grant(ctx, "zed@vendor.com", "op")
 	_ = s.Grant(ctx, "abe@vendor.com", "op")
 	list, _ = s.List(ctx)
@@ -142,9 +132,6 @@ func TestPgAgentStore_Lifecycle(t *testing.T) {
 	}
 }
 
-// TestPgAgentStore_AnonymizeGrantedBy is the roleRevoker half of the erase
-// cascade on Postgres: erasing the OPERATOR who granted a role scrubs their
-// email off the grantee's row while the grantee keeps the role.
 func TestPgAgentStore_AnonymizeGrantedBy(t *testing.T) {
 	ctx, pool := erasurePool(t)
 	s, err := NewPgAgentStore(ctx, pool)
@@ -182,7 +169,6 @@ func TestPgAgentStore_AnonymizeGrantedBy(t *testing.T) {
 			}
 		}
 	}
-	// The grantees keep the role: erasing a granter is not a revocation.
 	if !s.Granted("agent-a@vendor.com") || !s.Granted("agent-c@vendor.com") {
 		t.Error("a grantee lost the role when a granter was erased")
 	}
@@ -191,20 +177,18 @@ func TestPgAgentStore_AnonymizeGrantedBy(t *testing.T) {
 	}
 }
 
-// TestPgAgentStore_AnonymizeGrantedByNormalizes is the regression test for a
-// GDPR hole: Grant() normalizes the GRANTEE's email but stores grantedBy
-// verbatim, so a granter recorded from an admin form as "Operator@Acme.COM"
-// never matched the normalized identifier an erasure request arrives with. The
-// UPDATE reported 0 rows changed and the erased person's address stayed in
-// support_agents.granted_by — on Postgres only, since the memory store already
-// normalizes both sides.
+// The regression test for a GDPR hole: Grant() normalizes the GRANTEE's email
+// but stores grantedBy verbatim, so a granter recorded from an admin form as
+// "Operator@Acme.COM" never matched the normalized identifier an erasure
+// request arrives with. The UPDATE reported 0 rows changed and the erased
+// person's address stayed in support_agents.granted_by — on Postgres only,
+// since the memory store already normalizes both sides.
 func TestPgAgentStore_AnonymizeGrantedByNormalizes(t *testing.T) {
 	ctx, pool := erasurePool(t)
 	s, err := NewPgAgentStore(ctx, pool)
 	if err != nil {
 		t.Fatalf("NewPgAgentStore: %v", err)
 	}
-	// Stored exactly as typed: mixed case and padding.
 	if err := s.Grant(ctx, "agent-a@vendor.com", "  Operator@Acme.COM "); err != nil {
 		t.Fatalf("grant: %v", err)
 	}
@@ -225,8 +209,6 @@ func TestPgAgentStore_AnonymizeGrantedByNormalizes(t *testing.T) {
 			list[0].GrantedBy, core.ErasedIdentity)
 	}
 }
-
-// ---- ticket erasure + retention (Postgres) --------------------------------
 
 func TestPgTicketStore_Erasure(t *testing.T) {
 	ctx, pool := erasurePool(t)
@@ -289,16 +271,15 @@ func TestPgTicketStore_DeleteByTenant(t *testing.T) {
 	}
 }
 
-// TestPgTicketStore_Prune covers the retention sweep's central rule: an OPEN
-// ticket is never pruned however old it is, because an unanswered ticket is a
-// backlog item and deleting one would hide a support failure.
+// Covers the retention sweep's central rule: an OPEN ticket is never pruned
+// however old it is, because an unanswered ticket is a backlog item and
+// deleting one would hide a support failure.
 func TestPgTicketStore_Prune(t *testing.T) {
 	ctx, pool := erasurePool(t)
 	s, err := NewPgTicketStore(ctx, pool)
 	if err != nil {
 		t.Fatalf("NewPgTicketStore: %v", err)
 	}
-	// Prune keys off wall-clock now, so ages are relative to it.
 	old := time.Now().UTC().Add(-400 * 24 * time.Hour)
 	recent := time.Now().UTC().Add(-1 * time.Hour)
 
@@ -319,8 +300,6 @@ func TestPgTicketStore_Prune(t *testing.T) {
 		t.Fatalf("append: %v", err)
 	}
 
-	// olderThan <= 0 is an explicit no-op, so a misconfigured sweep can't wipe
-	// the table.
 	if n, err := s.Prune(ctx, 0, 100); err != nil || n != 0 {
 		t.Errorf("Prune(0) = %d, %v; want 0, nil", n, err)
 	}
@@ -345,12 +324,10 @@ func TestPgTicketStore_Prune(t *testing.T) {
 			t.Errorf("%s should have been pruned", gone)
 		}
 	}
-	// The pruned ticket's thread went with it.
 	if msgs, _ := s.ListMessages(ctx, "old-resolved"); len(msgs) != 0 {
 		t.Errorf("pruned ticket left %d messages behind", len(msgs))
 	}
 
-	// batch bounds the sweep, so one pass can't lock the table for an hour.
 	mk("old-r2", core.TicketResolved, old.Add(time.Minute))
 	mk("old-r3", core.TicketResolved, old.Add(2*time.Minute))
 	n, err = s.Prune(ctx, 365*24*time.Hour, 1)
@@ -360,13 +337,10 @@ func TestPgTicketStore_Prune(t *testing.T) {
 	if n != 1 {
 		t.Errorf("pruned = %d, want 1 (batch limit)", n)
 	}
-	// Oldest first: old-r2 predates old-r3, so it is the one that went.
 	if _, err := s.Get(ctx, "old-r2"); err == nil {
 		t.Error("Prune should take the oldest first (old-r2)")
 	}
 }
-
-// ---- grant erasure (Postgres) ---------------------------------------------
 
 func TestPgGrantStore_Erasure(t *testing.T) {
 	ctx, pool := erasurePool(t)
@@ -418,8 +392,6 @@ func TestPgGrantStore_ListForAgentAndDeleteByTenant(t *testing.T) {
 	}
 }
 
-// ---- bundle erasure + retention (Postgres) --------------------------------
-
 func TestPgBundleStore_Erasure(t *testing.T) {
 	ctx, pool := erasurePool(t)
 	s, err := NewPgBundleStore(ctx, pool)
@@ -454,8 +426,6 @@ func TestPgBundleStore_Erasure(t *testing.T) {
 	if got.CreatedBy != core.ErasedIdentity {
 		t.Errorf("b1 CreatedBy = %q, want %q", got.CreatedBy, core.ErasedIdentity)
 	}
-	// The bundle survives the person: it is redacted by construction and still
-	// answers the ticket it was taken for.
 	if len(got.Payload) == 0 || got.FlowID != "daily-invoice" {
 		t.Errorf("b1 lost its content: %+v", got)
 	}
@@ -478,13 +448,13 @@ func TestPgBundleStore_Erasure(t *testing.T) {
 	}
 }
 
-// TestPgBundleStore_Prune locks down the bundle/ticket pairing invariant that
-// bundles.go documents as a past regression: a bundle referenced by ANY ticket
-// is kept whatever that ticket's status, because the two pruners key on
-// different timestamps (a bundle on created_at, a ticket on updated_at). The
-// obvious version — spare only bundles whose ticket is still open — swept the
-// bundle of a long-running ticket resolved last week and made "View diagnostic"
-// 404 for both the customer and the agent.
+// Locks down the bundle/ticket pairing invariant that bundles.go documents as
+// a past regression: a bundle referenced by ANY ticket is kept whatever that
+// ticket's status, because the two pruners key on different timestamps (a
+// bundle on created_at, a ticket on updated_at). The obvious version — spare
+// only bundles whose ticket is still open — swept the bundle of a long-running
+// ticket resolved last week and made "View diagnostic" 404 for both the
+// customer and the agent.
 func TestPgBundleStore_Prune(t *testing.T) {
 	ctx, pool := erasurePool(t)
 	bs, err := NewPgBundleStore(ctx, pool)

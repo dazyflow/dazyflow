@@ -29,7 +29,6 @@ describe("formatDuration", () => {
   it("renders minutes to one decimal, so a half-minute survives", () => {
     expect(d(60_000)).toBe(`1.0${NBSP}min`);
     expect(d(90_000)).toBe(`1.5${NBSP}min`);
-    // 3m29s. The runs list used to round this to "3m" and drop the half.
     expect(d(209_000)).toBe(`3.5${NBSP}min`);
   });
 
@@ -83,8 +82,6 @@ describe("slugify", () => {
     expect(slugify("  --Hello--  ")).toBe("hello");
   });
 
-  // Deliberately not "flow": the caller picks the fallback, because the right
-  // default depends on what is being named. CreateFlow wraps this as flowSlug.
   it("returns empty when nothing slug-worthy is left", () => {
     expect(slugify("!!!")).toBe("");
     expect(slugify("")).toBe("");

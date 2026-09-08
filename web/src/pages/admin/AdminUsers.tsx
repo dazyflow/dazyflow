@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-// useEffect already imported above; no separate hooks needed.
 import { Link } from "react-router-dom";
 import {
   Check,
@@ -45,11 +44,6 @@ function isAdminMember(m: MemberSummary): boolean {
   );
 }
 
-// AdminUsers is the People page for an organization: the home owner
-// plus everyone who's accepted an invite, plus the pending invites
-// section below. API keys live on /admin/api-keys — they're a
-// programmatic-access concept, not "users", and conflating the two was
-// the original confusion this page is rewritten to fix.
 export function AdminUsers() {
   const { t } = useTranslation();
   const { token, hasPerm, me } = useAuth();
@@ -202,9 +196,6 @@ function MemberCard({
   // last-admin guard so the org can never be left with no one who can
   // manage it.
   adminCount: number;
-  // isSelf marks the card for the signed-in admin — privilege-reducing
-  // changes to your own account get an extra confirm (it's easy to lock
-  // yourself out of the admin surfaces in one careless click).
   isSelf: boolean;
   onChanged: () => void;
 }) {
@@ -212,14 +203,8 @@ function MemberCard({
   const { token } = useAuth();
   const [removing, setRemoving] = useState(false);
   const [savingRole, setSavingRole] = useState(false);
-  // pendingRole defers a confirmed role change: set when a privilege-
-  // reducing self-change needs a confirm, applied on ConfirmModal accept.
   const [pendingRole, setPendingRole] = useState<TeamRoleName | null>(null);
-  // confirmRemove gates member removal behind the themed ConfirmModal
-  // (replacing window.confirm).
   const [confirmRemove, setConfirmRemove] = useState(false);
-  // err shows action failures / guard messages inline in the card (themed),
-  // replacing the old native window.alert().
   const [err, setErr] = useState<string | null>(null);
 
   const wasAdmin = isAdminMember(member);
@@ -254,7 +239,6 @@ function MemberCard({
     setSavingRole(true);
     setErr(null);
     try {
-      // Name-only: the server fills in the catalog role's permissions.
       await api.updateMemberRoles(token, member.email, [{ name: next, permissions: [] }]);
       onChanged();
     } catch (e) {
@@ -555,8 +539,6 @@ function InviteModal({
   const canSubmit = !submitting && trimmed !== "" && looksValid;
   const selectedRole = rolePresetFor(roleName);
 
-  // Esc closes the modal — small thing, big quality-of-life. Attached
-  // to the document so a focus inside the input still picks it up.
   useEscapeToClose(onCancel);
 
   const submit = async (e: React.FormEvent) => {
@@ -700,20 +682,12 @@ function rolePresetFor(name: TeamRoleName): Role {
   };
 }
 
-// teamRoleOf reduces a member's stored role set to a catalog name when
-// it matches one (single role named viewer/editor/admin), or null for
-// custom/multi-role sets — those show as "custom" and stay editable
-// only via the API.
 function teamRoleOf(roles: Role[]): TeamRoleName | null {
   if (roles.length !== 1) return null;
   const n = roles[0].name;
   return n === "viewer" || n === "editor" || n === "admin" ? n : null;
 }
 
-// absoluteInviteURL turns a path-only accept_url (returned when the
-// daemon has no --public-base-url) into a clickable absolute URL by
-// rewriting against the current window origin. Already-absolute URLs
-// pass through unchanged.
 function absoluteInviteURL(acceptURL: string): string {
   if (/^https?:\/\//i.test(acceptURL)) return acceptURL;
   if (typeof window !== "undefined") {

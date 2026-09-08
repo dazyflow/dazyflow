@@ -7,8 +7,6 @@ import { api } from "../api";
 import type { Manifest } from "../types";
 import { type DazyNodeData } from "../components/editor/nodeCardShared";
 
-// RESOURCE_PICKER_KINDS maps a string param's `format` to the (provider, kind)
-// whose account-resource list resolves its opaque id to a friendly name.
 const RESOURCE_PICKER_KINDS: Record<string, { provider: string; kind: string }> = {
   "google-form": { provider: "google", kind: "forms" },
   "google-spreadsheet": { provider: "google", kind: "spreadsheets" },
@@ -25,15 +23,12 @@ const RESOURCE_PICKER_KINDS: Record<string, { provider: string; kind: string }> 
   "homeassistant-service": { provider: "homeassistant", kind: "services" },
 };
 
-// PickerSchema is the narrow shape we read off a manifest param's JSON schema:
-// just the `format` discriminator that maps to RESOURCE_PICKER_KINDS.
 type PickerSchema = { format?: string };
 const pickerFormat = (sch: unknown): string => {
   const f = (sch as PickerSchema | undefined)?.format;
   return typeof f === "string" ? f : "";
 };
 
-// ResourceResolverInput is the editor state the resolver reads.
 type ResourceResolverInput = {
   nodes: FlowNode<DazyNodeData>[];
   edges: FlowEdge[];
@@ -42,12 +37,6 @@ type ResourceResolverInput = {
   token: string | null;
 };
 
-// useResourceResolver owns the "resolve resource-picker ids to human names"
-// concern, extracted from FlowEditor: it fetches each (provider, kind, account)
-// resource list once (cached id→name, bounded), and derives a per-node
-// {paramKey → friendly name} map — following wires so a picker fed by an
-// upstream step borrows that step's resolved name. Returns the per-node label
-// map the node cards and inspector consume; absent entries fall back to the id.
 export function useResourceResolver({
   nodes,
   edges,
@@ -55,17 +44,9 @@ export function useResourceResolver({
   manifestByID,
   token,
 }: ResourceResolverInput): Map<string, Record<string, string>> {
-  // Resolved resource-picker names (spreadsheet_id/form_id → human name).
-  // Keyed `${provider}:${kind}:${account}:${id}`. Populated lazily below.
   const [resourceNames, setResourceNames] = useState<Map<string, string>>(() => new Map());
-  // (provider:kind:account) sets we've already fetched, so we don't refetch
-  // every render. A failed fetch is removed so it can retry.
   const fetchedResourceSets = useRef<Set<string>>(new Set());
 
-  // Resolve resource-picker IDs (spreadsheet_id/form_id) to their human names
-  // so the card shows the name, not the opaque id. We fetch each (kind,
-  // account) list once and cache id→name; google-sheet-tab needs no lookup
-  // (its value is already the tab name).
   useEffect(() => {
     if (!token) return;
     const combos = new Map<string, { provider: string; kind: string; account?: string }>();
@@ -117,21 +98,16 @@ export function useResourceResolver({
           });
         })
         .catch(() => {
-          // Allow a retry on the next change (e.g. once the account connects).
           fetchedResourceSets.current.delete(ck);
         });
     }
   }, [nodes, paramsByID, manifestByID, token]);
 
-  // Per-node {paramKey → resolved name} for the picker params, derived from
-  // the resolved-names cache. Absent entries fall back to the id on the card.
   return useMemo(() => {
     const byId = new Map(nodes.map((n) => [n.id, n]));
     const propsOf = (id: string) =>
       manifestByID.get((byId.get(id)?.data as DazyNodeData | undefined)?.moduleID ?? "")
         ?.params_schema?.properties;
-    // resolveOwn turns a node's OWN picker param value into a friendly name
-    // (via the id→name cache), or undefined if unpicked/unresolved.
     const resolveOwn = (id: string, key: string): string | undefined => {
       const picker = RESOURCE_PICKER_KINDS[pickerFormat(propsOf(id)?.[key])];
       const pp = paramsByID[id] ?? {};
@@ -152,11 +128,6 @@ export function useResourceResolver({
         });
       }
     }
-    // resolveName follows wires: a WIRED picker takes its name from whatever
-    // it's connected to (recursively up the chain), so switching the sheet
-    // upstream propagates downstream — the node's own (now-overridden) value
-    // is ignored. Unwired → the node's own picked value. The seen-guard stops
-    // a cyclic graph from looping.
     const resolveName = (id: string, key: string, seen = new Set<string>()): string | undefined => {
       const guard = `${id}:${key}`;
       if (seen.has(guard)) return undefined;

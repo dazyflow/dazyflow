@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// TestParseErrorEnvelope_Shapes covers the legacy-string, structured,
-// and unparseable branches of parseErrorEnvelope.
 func TestParseErrorEnvelope_Shapes(t *testing.T) {
 	t.Run("legacy string", func(t *testing.T) {
 		code, msg, doc, det := parseErrorEnvelope([]byte(`{"error":"plain message"}`))
@@ -35,7 +33,6 @@ func TestParseErrorEnvelope_Shapes(t *testing.T) {
 		}
 	})
 	t.Run("error not string or object", func(t *testing.T) {
-		// error is a number → neither switch arm fires, all zero values.
 		code, msg, _, _ := parseErrorEnvelope([]byte(`{"error":42}`))
 		if code != "" || msg != "" {
 			t.Errorf("got code=%q msg=%q", code, msg)
@@ -43,19 +40,16 @@ func TestParseErrorEnvelope_Shapes(t *testing.T) {
 	})
 }
 
-// TestBuildQuery covers empty-skip, empty-result, and encoded output.
 func TestBuildQuery(t *testing.T) {
 	if got := buildQuery(map[string]string{"a": "", "b": ""}); got != "" {
 		t.Errorf("all-empty = %q, want empty", got)
 	}
 	got := buildQuery(map[string]string{"a": "1", "b": "", "c": "x y"})
-	// Keys are sorted by url.Values.Encode; empty b is skipped.
 	if got != "?a=1&c=x+y" {
 		t.Errorf("buildQuery = %q", got)
 	}
 }
 
-// TestComposeFlowID and pathSegment cover the URL-encoding helpers.
 func TestComposeFlowID_AndPathSegment(t *testing.T) {
 	if got := composeFlowID("t", "ws", "id"); got != "t%2Fws%2Fid" {
 		t.Errorf("composeFlowID = %q", got)
@@ -65,7 +59,6 @@ func TestComposeFlowID_AndPathSegment(t *testing.T) {
 	}
 }
 
-// TestConnectionSlug covers the lower/trim/space-to-dash transform.
 func TestConnectionSlug(t *testing.T) {
 	cases := map[string]string{
 		"  Email ":   "email",
@@ -80,7 +73,6 @@ func TestConnectionSlug(t *testing.T) {
 	}
 }
 
-// TestRequiredFieldsMessage covers the 0/1/2/3+ field phrasings.
 func TestRequiredFieldsMessage(t *testing.T) {
 	cases := []struct {
 		keys []string
@@ -98,7 +90,6 @@ func TestRequiredFieldsMessage(t *testing.T) {
 	}
 }
 
-// TestStringField covers fallback, nil-map, wrong-type, and hit paths.
 func TestStringField(t *testing.T) {
 	if got := stringField(nil, "k", "fb"); got != "fb" {
 		t.Errorf("nil map = %q", got)
@@ -117,7 +108,6 @@ func TestStringField(t *testing.T) {
 	}
 }
 
-// TestIntField covers float64, int, json.Number, fallback, and nil-map.
 func TestIntField(t *testing.T) {
 	if got := intField(nil, "k", 5); got != 5 {
 		t.Errorf("nil map = %d", got)
@@ -139,7 +129,6 @@ func TestIntField(t *testing.T) {
 	}
 }
 
-// TestScoped covers explicit-args precedence and the missing-scope error.
 func TestScoped(t *testing.T) {
 	d := Defaults{Tenant: "dt", Workspace: "dw"}
 	tn, ws, err := scoped(map[string]any{}, d)
@@ -155,8 +144,6 @@ func TestScoped(t *testing.T) {
 	}
 }
 
-// TestIsTerminal covers terminal/non-terminal for both the lowercase
-// status field and the capitalized fallback.
 func TestIsTerminal(t *testing.T) {
 	cases := []struct {
 		rec  map[string]any
@@ -176,8 +163,6 @@ func TestIsTerminal(t *testing.T) {
 	}
 }
 
-// TestIdempotencyKey covers determinism and name/args separation, plus
-// the context round-trip helpers.
 func TestIdempotencyKey(t *testing.T) {
 	k1 := idempotencyKeyFor("set_secret", json.RawMessage(`{"name":"A"}`))
 	k2 := idempotencyKeyFor("set_secret", json.RawMessage(`{"name":"A"}`))
@@ -192,13 +177,11 @@ func TestIdempotencyKey(t *testing.T) {
 	if idempotencyKeyFromContext(ctx) != "key1" {
 		t.Error("context round-trip failed")
 	}
-	// Empty key leaves the context untouched.
 	if got := idempotencyKeyFromContext(withIdempotencyKey(context.Background(), "")); got != "" {
 		t.Errorf("empty key stored = %q", got)
 	}
 }
 
-// TestDecodeArgs covers empty input, valid object, and decode error.
 func TestDecodeArgs(t *testing.T) {
 	m, err := decodeArgs(nil)
 	if err != nil || len(m) != 0 {
@@ -213,8 +196,8 @@ func TestDecodeArgs(t *testing.T) {
 	}
 }
 
-// TestTextResult_MarshalFailure covers the marshal-error branch of
-// TextResult via a value json cannot encode (a channel).
+// Covers the marshal-error branch of TextResult via a value json cannot encode
+// (a channel).
 func TestTextResult_MarshalFailure(t *testing.T) {
 	res := TextResult(map[string]any{"bad": make(chan int)})
 	if !res.IsError {
@@ -225,8 +208,6 @@ func TestTextResult_MarshalFailure(t *testing.T) {
 	}
 }
 
-// TestErrorResultOrErr_NonHTTP covers the pass-through of a non-HTTPError
-// (transport-style) error and the nil-error case.
 func TestErrorResultOrErr_NonHTTP(t *testing.T) {
 	if res, err := errorResultOrErr(nil); err != nil || res.IsError {
 		t.Errorf("nil error: res=%v err=%v", res, err)
@@ -237,10 +218,10 @@ func TestErrorResultOrErr_NonHTTP(t *testing.T) {
 	}
 }
 
-// TestIdempotencyKeyFor_CanonicalizesArgs is the regression for a duplicated
-// side effect on retry: an MCP host that re-serializes the arguments (key
-// order, whitespace, number formatting held constant) must still land on the
-// same idempotency key, or the gateway treats the retry as a new request.
+// The regression for a duplicated side effect on retry: an MCP host that re-
+// serializes the arguments (key order, whitespace, number formatting held
+// constant) must still land on the same idempotency key, or the gateway treats
+// the retry as a new request.
 func TestIdempotencyKeyFor_CanonicalizesArgs(t *testing.T) {
 	same := []string{
 		`{"flow":"a","tenant":"acme"}`,
@@ -272,9 +253,8 @@ func TestIdempotencyKeyFor_CanonicalizesArgs(t *testing.T) {
 	}
 }
 
-// TestIdempotencyKeyFor_PreservesNumericPrecision pins the UseNumber choice:
-// two int64 arguments that differ only beyond float64's 53-bit mantissa must
-// still produce different keys.
+// Pins the UseNumber choice: two int64 arguments that differ only beyond
+// float64's 53-bit mantissa must still produce different keys.
 func TestIdempotencyKeyFor_PreservesNumericPrecision(t *testing.T) {
 	a := idempotencyKeyFor("t", json.RawMessage(`{"n":9007199254740993}`))
 	b := idempotencyKeyFor("t", json.RawMessage(`{"n":9007199254740992}`))
@@ -283,8 +263,6 @@ func TestIdempotencyKeyFor_PreservesNumericPrecision(t *testing.T) {
 	}
 }
 
-// TestIdempotencyKeyFor_InvalidJSONIsStable covers the fallback: args that
-// aren't valid JSON still hash deterministically rather than panicking.
 func TestIdempotencyKeyFor_InvalidJSONIsStable(t *testing.T) {
 	const bad = `{"flow":`
 	first, second := idempotencyKeyFor("t", json.RawMessage(bad)), idempotencyKeyFor("t", json.RawMessage(bad))

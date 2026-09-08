@@ -14,8 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// threadServer serves one conversation. sent says, per message, whether it
-// carries the SENT label (i.e. we wrote it).
 func threadServer(t *testing.T, sent ...bool) *httptest.Server {
 	t.Helper()
 	b64 := func(s string) string { return base64.RawURLEncoding.EncodeToString([]byte(s)) }
@@ -47,8 +45,6 @@ func threadServer(t *testing.T, sent ...bool) *httptest.Server {
 	}))
 }
 
-// The whole point: "they haven't got back to me" is the newest message still
-// being one of mine.
 func TestGetThread_NoReplyYet(t *testing.T) {
 	srv := threadServer(t, true) // one message, ours
 	defer srv.Close()
@@ -92,8 +88,6 @@ func TestGetThread_TheyAnswered(t *testing.T) {
 	}
 }
 
-// We answered last after they wrote — the ball is back with them, so this is
-// again "no reply yet" from our point of view.
 func TestGetThread_WeAnsweredLast(t *testing.T) {
 	srv := threadServer(t, true, false, true)
 	defer srv.Close()
@@ -107,7 +101,6 @@ func TestGetThread_WeAnsweredLast(t *testing.T) {
 	}
 }
 
-// The obvious drag: a search result row (or the whole list) wired straight in.
 func TestGetThread_AcceptsMessageRow(t *testing.T) {
 	srv := threadServer(t, true)
 	defer srv.Close()

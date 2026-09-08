@@ -21,10 +21,6 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// TestMain opts this package's tests into private-network egress. The drops
-// dial through net.SafeHTTPClient, whose SSRF guard blocks loopback unless
-// the operator opts in; the tests point at a 127.0.0.1 httptest server, so
-// they need the same opt-in production gets via DAZYFLOW_ALLOW_PRIVATE_EGRESS.
 func TestMain(m *testing.M) {
 	hfnet.SetAllowPrivateEgress(true)
 	os.Exit(m.Run())
@@ -73,7 +69,6 @@ func TestCallService_PostsServiceAndEntity(t *testing.T) {
 	if gotBody["brightness_pct"] != 50.0 {
 		t.Errorf("body brightness_pct = %v, want 50 (from data)", gotBody["brightness_pct"])
 	}
-	// The targeted entity is re-emitted for chaining into a status check.
 	if res.Output["entity_id"].Inline != "light.living_room" {
 		t.Errorf("entity_id output = %v, want light.living_room", res.Output["entity_id"].Inline)
 	}
@@ -84,8 +79,6 @@ func TestCallService_OmitsEntityOutputWhenNoEntity(t *testing.T) {
 		_, _ = io.WriteString(w, `[]`)
 	}))
 	defer srv.Close()
-	// An entity-less service (e.g. notify.notify) emits no entity pin, so the
-	// downstream edge stays dormant.
 	job := core.Job{ID: "j", Params: connParams(srv.URL, map[string]any{"service": "notify.notify"})}
 	res, _ := executeCallService(context.Background(), job, nil)
 	if res.Status != core.StatusOK {
@@ -175,7 +168,6 @@ func TestGetState_401IsAuthError(t *testing.T) {
 	}
 }
 
-// memCursor is an in-memory cursor store for the trigger tests.
 type memCursor struct {
 	mu sync.Mutex
 	m  map[string]string
@@ -215,7 +207,6 @@ func TestStateChanged_FirstObservationDoesNotFire(t *testing.T) {
 	if len(res.Output) != 0 {
 		t.Fatalf("first observation should emit nothing, got %v", res.Output)
 	}
-	// The watermark should have been recorded.
 	if v, _ := store.read(context.Background(), "t", "cursor.homeassistant.g.n"); v == "" {
 		t.Fatalf("expected cursor to be stored on first observation")
 	}
@@ -234,15 +225,12 @@ func TestStateChanged_FiresOnChangeWithPrevious(t *testing.T) {
 
 	job := core.Job{ID: "j", GraphID: "g", NodeID: "n", Tenant: "t", Params: connParams(srv.URL, map[string]any{"entity_id": "binary_sensor.door"})}
 
-	// First poll: records "off", no fire.
 	if res, _ := executeStateChanged(context.Background(), job, nil); len(res.Output) != 0 {
 		t.Fatalf("first poll should not fire")
 	}
-	// Second poll, same state: still no fire.
 	if res, _ := executeStateChanged(context.Background(), job, nil); len(res.Output) != 0 {
 		t.Fatalf("unchanged poll should not fire")
 	}
-	// Door opens.
 	state = `{"entity_id":"binary_sensor.door","state":"on","attributes":{"friendly_name":"Front Door"},"last_changed":"2026-06-16T10:05:00Z"}`
 	res, _ := executeStateChanged(context.Background(), job, nil)
 	if res.Status != core.StatusOK || len(res.Output) == 0 {
@@ -254,7 +242,6 @@ func TestStateChanged_FiresOnChangeWithPrevious(t *testing.T) {
 	if res.Output["previous_state"].Inline != "off" {
 		t.Errorf("previous_state = %v, want off", res.Output["previous_state"].Inline)
 	}
-	// And it doesn't re-fire on the next identical poll.
 	if r2, _ := executeStateChanged(context.Background(), job, nil); len(r2.Output) != 0 {
 		t.Fatalf("should not re-fire the same change")
 	}
@@ -310,8 +297,6 @@ func TestListEntities_FriendlyNamesSorted(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("want 2 entities, got %d", len(items))
 	}
-	// Sorted by name: "binary_sensor.front_door" (no friendly_name → its id)
-	// sorts before "Living Room Light".
 	if items[0].ID != "binary_sensor.front_door" || items[0].Name != "binary_sensor.front_door" {
 		t.Errorf("entity[0] = %+v (want id+name = entity_id fallback)", items[0])
 	}
@@ -343,7 +328,6 @@ func TestListServices_DomainServiceIDs(t *testing.T) {
 	if byID["light.turn_on"] != "Light: Turn on" {
 		t.Errorf("light.turn_on = %q, want 'Light: Turn on'", byID["light.turn_on"])
 	}
-	// No friendly name → falls back to the service key; domain underscores → space.
 	if byID["input_boolean.toggle"] != "Input boolean: toggle" {
 		t.Errorf("input_boolean.toggle = %q", byID["input_boolean.toggle"])
 	}
@@ -359,19 +343,15 @@ func TestResolveConn_RequiresBoth(t *testing.T) {
 }
 
 func TestExtractError(t *testing.T) {
-	// A Home Assistant error body carries the human message under "message".
 	if got := extractError([]byte(`{"message":"Entity not found."}`)); got != "Entity not found." {
 		t.Errorf("message body = %q, want 'Entity not found.'", got)
 	}
-	// Non-JSON (or JSON without a message) falls back to the trimmed raw body.
 	if got := extractError([]byte("  not json  ")); got != "not json" {
 		t.Errorf("raw fallback = %q, want 'not json'", got)
 	}
-	// JSON with an empty message also falls back to the raw body.
 	if got := extractError([]byte(`{"message":""}`)); got != `{"message":""}` {
 		t.Errorf("empty-message fallback = %q", got)
 	}
-	// An over-long body is truncated to 300 bytes so it can't flood the result.
 	long := strings.Repeat("x", 500)
 	if got := extractError([]byte(long)); len(got) != 300 {
 		t.Errorf("truncated len = %d, want 300", len(got))
@@ -379,8 +359,6 @@ func TestExtractError(t *testing.T) {
 }
 
 func TestGetState_GenericErrorSurfacesMessage(t *testing.T) {
-	// A non-2xx that isn't 401/404 maps to ha_error, and the body's message is
-	// surfaced through extractError so the user sees what went wrong.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 		_, _ = io.WriteString(w, `{"message":"template error"}`)
@@ -398,8 +376,6 @@ func TestGetState_GenericErrorSurfacesMessage(t *testing.T) {
 }
 
 func TestGetState_EgressBlockedIsFriendly(t *testing.T) {
-	// With private egress off, a LAN base_url trips the SSRF guard; httpFailure
-	// turns that into the operator-facing egress_blocked code.
 	hfnet.SetAllowPrivateEgress(false)
 	defer hfnet.SetAllowPrivateEgress(true)
 
@@ -411,8 +387,6 @@ func TestGetState_EgressBlockedIsFriendly(t *testing.T) {
 }
 
 func TestCallService_NonTextInputRejected(t *testing.T) {
-	// A wired 'Service' port carrying a non-text value is a wiring mistake, not
-	// a service name — textInputOr returns ok=false and the call is rejected.
 	job := core.Job{
 		ID:     "j",
 		Params: connParams("http://x", map[string]any{"service": "light.turn_on"}),
@@ -458,7 +432,6 @@ func TestHaDo_RejectsOversizedBody(t *testing.T) {
 }
 
 func TestCovHaDoMissingConn(t *testing.T) {
-	// resolveConn fails → haDo returns the error before dialing.
 	_, _, err := haDo(context.Background(), core.Job{Params: map[string]any{}}, "GET", "/api/", nil)
 	if err == nil {
 		t.Fatal("missing connection should error")
@@ -466,12 +439,10 @@ func TestCovHaDoMissingConn(t *testing.T) {
 }
 
 func TestCovHttpFailureNonSSRFTransport(t *testing.T) {
-	// A plain transport error (not SSRF) maps to ha_http_error.
 	f := httpFailure(core.Job{}, 0, nil, errors.New("dial tcp: connection refused"))
 	if f == nil || f.Error.Code != "ha_http_error" {
 		t.Fatalf("want ha_http_error, got %+v", f)
 	}
-	// 200 → nil.
 	if httpFailure(core.Job{}, 200, []byte("[]"), nil) != nil {
 		t.Fatal("2xx should be nil")
 	}
@@ -583,11 +554,9 @@ func TestCovGetStateNilAttributes(t *testing.T) {
 }
 
 func TestCovListEntitiesErrors(t *testing.T) {
-	// Transport error (no connection).
 	if _, err := ListEntities(context.Background(), core.Job{Params: map[string]any{}}); err == nil {
 		t.Fatal("missing conn should error")
 	}
-	// Non-2xx status.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 		_, _ = io.WriteString(w, `{"message":"boom"}`)
@@ -596,7 +565,6 @@ func TestCovListEntitiesErrors(t *testing.T) {
 	if _, err := ListEntities(context.Background(), core.Job{Params: connParams(srv.URL, nil)}); err == nil {
 		t.Fatal("500 should error")
 	}
-	// Bad JSON.
 	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "not json")
 	}))
@@ -654,14 +622,12 @@ func TestCovTitleizeDomain(t *testing.T) {
 }
 
 func TestCovVerifyHomeAssistant(t *testing.T) {
-	// Missing URL / token.
 	if err := verifyHomeAssistant(context.Background(), map[string]string{"token": "t"}); err == nil {
 		t.Fatal("missing url")
 	}
 	if err := verifyHomeAssistant(context.Background(), map[string]string{"base_url": "http://x"}); err == nil {
 		t.Fatal("missing token")
 	}
-	// 500 server error.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 	}))
@@ -669,7 +635,6 @@ func TestCovVerifyHomeAssistant(t *testing.T) {
 	if err := verifyHomeAssistant(context.Background(), map[string]string{"base_url": srv.URL, "token": "t"}); err == nil {
 		t.Fatal("500 should fail verification")
 	}
-	// Network error (closed server).
 	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	addr := srv2.URL
 	srv2.Close()

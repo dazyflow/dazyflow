@@ -10,14 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// core.MaxGraphTriggers caps len(Graph.Triggers), and the scheduler keys a
-// graph-level entry by the schedule itself so identical ones collapse
-// (TestTriggerArray_IsCapped). Neither holds for a trigger NODE: the schedule
-// moved onto cron_trigger / poll_trigger steps, the scheduler keys those by
-// NODE ID (deliberately — each node carries its own cursor), and nothing counts
-// them. So the shape that test closed is reachable again by pasting the step
-// instead of the trigger: N identical Schedule steps are N scheduler entries
-// and N runs of the whole flow per tick, bounded only by MaxGraphNodes (1000).
 func TestTriggerNodeArray_IsCapped(t *testing.T) {
 	h := newHarness(t)
 
@@ -35,8 +27,6 @@ func TestTriggerNodeArray_IsCapped(t *testing.T) {
 		t.Logf("refused at the save gate: %v", firstLine(err))
 	}
 
-	// At the cap the flow saves, and the scheduler's node-keyed entries are
-	// then bounded by it: MaxGraphTriggers fires a minute, not MaxGraphNodes.
 	g := graph("crontrigcap", nil, nil)
 	for i := range core.MaxGraphTriggers {
 		g.Nodes = append(g.Nodes, core.Node{
@@ -107,7 +97,6 @@ func TestTriggerArrayAndSteps_ShareOneCap(t *testing.T) {
 	}
 }
 
-// itoa avoids pulling strconv into every case file.
 func itoa(i int) string {
 	if i == 0 {
 		return "0"

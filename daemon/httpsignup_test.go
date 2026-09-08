@@ -15,9 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/auth"
 )
 
-// newSignupHarness extends the default gateway harness with the
-// Users + Sessions stores wired up and signup enabled, mirroring
-// what dzd does when --signup is set.
 func newSignupHarness(t *testing.T) *gatewayHarness {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -35,13 +32,11 @@ func newSignupHarness(t *testing.T) *gatewayHarness {
 	return h
 }
 
-// signupBody returns the JSON body for POST /signup.
 func signupBody(email, password string) []byte {
 	b, _ := json.Marshal(map[string]any{"email": email, "password": password})
 	return b
 }
 
-// rawDo posts without a bearer token — signup is unauthenticated.
 func rawDo(t *testing.T, h *gatewayHarness, method, path string, body []byte) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, bytes.NewBuffer(body))
@@ -78,7 +73,6 @@ func TestSignup_HappyPath(t *testing.T) {
 		t.Errorf("tenant = %q, want usr_<hex>", resp.Tenant)
 	}
 
-	// Verify the user landed in the store with the right roles.
 	user, err := h.gw.Users.GetByEmail(t.Context(), "new@example.com")
 	if err != nil {
 		t.Fatalf("user not in store: %v", err)
@@ -89,7 +83,6 @@ func TestSignup_HappyPath(t *testing.T) {
 	if user.Workspace != "main" {
 		t.Errorf("workspace = %q, want main", user.Workspace)
 	}
-	// Should be able to immediately use the returned token.
 	whoamiReq := httptest.NewRequest("GET", "/api/v1/me", nil)
 	whoamiReq.Header.Set("Authorization", "Bearer "+resp.Token)
 	whoamiRW := httptest.NewRecorder()
@@ -127,8 +120,6 @@ func TestSignup_SetsSessionCookie(t *testing.T) {
 	}
 }
 
-// signupCookie posts a signup and returns the session cookie from the
-// response, failing the test if there isn't one.
 func signupCookie(t *testing.T, h *gatewayHarness, req *http.Request) *http.Cookie {
 	t.Helper()
 	rw := httptest.NewRecorder()
@@ -145,7 +136,7 @@ func signupCookie(t *testing.T, h *gatewayHarness, req *http.Request) *http.Cook
 	return nil
 }
 
-// TestSignup_SecureCookieBehindTLSTerminatingProxy pins the Secure flag to
+// Pins the Secure flag to
 // requestIsHTTPS rather than a bare r.TLS check. In the shipped topology
 // Caddy terminates TLS and proxies plaintext to dzd:8080, so r.TLS is nil
 // on every production request — keying Secure off it would hand every new
@@ -165,10 +156,9 @@ func TestSignup_SecureCookieBehindTLSTerminatingProxy(t *testing.T) {
 	}
 }
 
-// TestSignup_NoSecureCookieOverPlainHTTP is the other half: on a genuinely
-// plaintext deployment (localhost trial, no trusted proxy) the flag must
-// stay off, or the browser drops the cookie and signup silently fails to
-// sign anyone in.
+// The other half: on a genuinely plaintext deployment (localhost trial, no
+// trusted proxy) the flag must stay off, or the browser drops the cookie and
+// signup silently fails to sign anyone in.
 func TestSignup_NoSecureCookieOverPlainHTTP(t *testing.T) {
 	t.Parallel()
 	h := newSignupHarness(t)
@@ -188,12 +178,10 @@ func TestSignup_NoSecureCookieOverPlainHTTP(t *testing.T) {
 func TestSignup_DuplicateEmailRejected(t *testing.T) {
 	t.Parallel()
 	h := newSignupHarness(t)
-	// First signup succeeds.
 	first := rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody("dup@example.com", "supersecret"))
 	if first.Code != http.StatusCreated {
 		t.Fatalf("first: %d", first.Code)
 	}
-	// Second signup with same email — 409.
 	second := rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody("dup@example.com", "differentpass"))
 	if second.Code != http.StatusConflict {
 		t.Errorf("status=%d, want 409", second.Code)
@@ -270,8 +258,6 @@ func TestSignup_RejectsLongPassword(t *testing.T) {
 
 func TestSignup_EmailNormalized(t *testing.T) {
 	t.Parallel()
-	// "  USER@EXAMPLE.COM " should land as "user@example.com" — both
-	// for the stored user record AND the duplicate-detection path.
 	h := newSignupHarness(t)
 	rw := rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody("  USER@EXAMPLE.COM ", "supersecret"))
 	if rw.Code != http.StatusCreated {
@@ -288,7 +274,6 @@ func TestSignup_EmailNormalized(t *testing.T) {
 
 func TestSignup_DisabledIs501(t *testing.T) {
 	t.Parallel()
-	// Default deployment: EnableSignup=false → endpoint returns 501.
 	h := newGatewayHarness(t)
 	h.gw.Users, _ = auth.OpenJSONUserStore("")
 	h.gw.Sessions = auth.NewMemSessionStore()
@@ -305,7 +290,6 @@ func TestSignup_NoUsersStoreIs501(t *testing.T) {
 	// must surface as 501 rather than panicking.
 	h := newGatewayHarness(t)
 	h.gw.EnableSignup = true
-	// No Users, no Sessions.
 	rw := rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody("any@example.com", "supersecret"))
 	if rw.Code != http.StatusNotImplemented {
 		t.Errorf("status=%d, want 501", rw.Code)
@@ -314,10 +298,6 @@ func TestSignup_NoUsersStoreIs501(t *testing.T) {
 
 func TestSignup_GrantsEditorAndTenantOwnerRoles(t *testing.T) {
 	t.Parallel()
-	// New users need enough permissions to actually use the product
-	// — graph editing, secret writes (OAuth flows), tenant admin
-	// (issuing API keys later). Pin this so a future refactor of
-	// defaultSignupRoles doesn't accidentally lock new users out.
 	h := newSignupHarness(t)
 	_ = rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody("perms@example.com", "supersecret"))
 	user, _ := h.gw.Users.GetByEmail(t.Context(), "perms@example.com")

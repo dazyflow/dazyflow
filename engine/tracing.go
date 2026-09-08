@@ -14,9 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// tracer is resolved lazily from the global TracerProvider; tests can swap
-// it via otel.SetTracerProvider before invoking the engine. With the noop
-// default this is effectively zero-cost.
 func tracer() trace.Tracer {
 	return otel.GetTracerProvider().Tracer("github.com/dazyflow/dazyflow/engine")
 }
@@ -51,8 +48,6 @@ func recordSpanError(span trace.Span, err error) {
 	span.RecordError(err)
 }
 
-// jobIDsFromSpan copies the W3C TraceID/SpanID into the job so module code
-// (or downstream systems) can correlate logs and remote traces.
 func jobIDsFromSpan(ctx context.Context, job *core.Job) {
 	sc := trace.SpanContextFromContext(ctx)
 	if !sc.HasTraceID() {

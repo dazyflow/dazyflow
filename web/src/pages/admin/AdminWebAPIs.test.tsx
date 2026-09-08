@@ -88,12 +88,10 @@ describe("AdminWebAPIs", () => {
     await waitFor(() =>
       expect(screen.getByText("Order service")).toBeInTheDocument(),
     );
-    // The operation ids, so an admin knows what to search the palette for.
     expect(
       screen.getByText(/get_order, list_orders, create_order/),
     ).toBeInTheDocument();
     expect(screen.getByText(/webapi.andMore/)).toBeInTheDocument();
-    // And the id, which is what flow JSON holds.
     expect(screen.getByText("order-service")).toBeInTheDocument();
   });
 
@@ -129,8 +127,6 @@ describe("AdminWebAPIs", () => {
     expect(screen.queryByText("webapi.broken")).not.toBeInTheDocument();
   });
 
-  // The whole point of the editor: an operation and its typed arguments reach
-  // the API in the shape the daemon validates.
   it("submits the described operation with its arguments", async () => {
     listWebAPIs.mockResolvedValue({ web_apis: [] });
     saveWebAPI.mockResolvedValue({ ...orders });
@@ -151,7 +147,6 @@ describe("AdminWebAPIs", () => {
     );
     const path = screen.getByLabelText("webapi.opPathLabel");
     await userEvent.clear(path);
-    // `{` opens a key descriptor in user-event, so a literal one is doubled.
     await userEvent.type(path, "/orders/{{order_id}");
     await userEvent.type(
       screen.getByLabelText("webapi.opSummaryLabel"),
@@ -215,8 +210,6 @@ describe("AdminWebAPIs", () => {
       screen.getByLabelText("webapi.runnerTagsLabel"),
       " orders-box , dmz ",
     );
-    // Filling it in skips the outbound guards, so the page says so where the
-    // choice is made rather than leaving it to the docs.
     expect(screen.getByText("webapi.runnerTagsWarning")).toBeInTheDocument();
 
     await userEvent.click(screen.getByText("webapi.save"));
@@ -240,8 +233,6 @@ describe("AdminWebAPIs", () => {
     expect(saveWebAPI.mock.calls[0][1].runner_tags).toEqual([]);
   });
 
-  // An edit sends the existing name, so the daemon replaces rather than creating
-  // a second catalog with a numbered id.
   it("edits in place rather than creating a second catalog", async () => {
     saveWebAPI.mockResolvedValue({ ...orders });
     render(<AdminWebAPIs />);
@@ -254,9 +245,6 @@ describe("AdminWebAPIs", () => {
     expect(saveWebAPI.mock.calls[0][2]).toBe("order-service");
   });
 
-  // A body argument is only legal when the operation sends a JSON body, so the
-  // choice appears only then — and switching away relocates the argument instead
-  // of dropping what the admin typed.
   it("offers a body argument only for a JSON body, and rehomes it when that changes", async () => {
     listWebAPIs.mockResolvedValue({ web_apis: [] });
     render(<AdminWebAPIs />);
@@ -305,7 +293,6 @@ describe("AdminWebAPIs", () => {
       screen.getByLabelText("webapi.urlLabel"),
       "https://api.example.com/v1",
     );
-    // The operation's own name — the field this test exists for.
     await userEvent.type(
       screen.getByLabelText("webapi.opTitleLabel"),
       "Fetch an order",
@@ -366,13 +353,10 @@ describe("AdminWebAPIs", () => {
 
     expect(await screen.findByText(/webapi.removeReally/)).toBeInTheDocument();
     expect(screen.queryByText(/webapi.removeUnused/)).toBeNull();
-    // And the delete still works.
     await userEvent.click(screen.getByText("common.remove"));
     await waitFor(() => expect(deleteWebAPI).toHaveBeenCalledWith("tok", "order-service"));
   });
 
-  // The guessed favicon is shown where the address that produced it can be
-  // corrected — and a catalog with no mark shows no broken image.
   it("shows the guessed brand mark beside the name, when there is one", async () => {
     const logo = "data:image/png;base64,AAAA";
     listWebAPIs.mockResolvedValue({ web_apis: [{ ...orders, logo }] });
@@ -380,7 +364,6 @@ describe("AdminWebAPIs", () => {
     await screen.findByText("Order service");
     const img = container.querySelector("img.step-source-logo");
     expect(img).toHaveAttribute("src", logo);
-    // Decorative: the name beside it already says which service this is.
     expect(img).toHaveAttribute("alt", "");
   });
 
@@ -390,8 +373,6 @@ describe("AdminWebAPIs", () => {
     expect(container.querySelector("img.step-source-logo")).toBeNull();
   });
 
-  // The blurb the Apps page shows. It round-trips through the form, because the
-  // alternative — retyping it on every edit — is how it ends up blank.
   it("edits the service description", async () => {
     listWebAPIs.mockResolvedValue({
       web_apis: [{ ...orders, description: "Our order system." }],
@@ -412,8 +393,6 @@ describe("AdminWebAPIs", () => {
     expect(input.description).toBe("Warehouse picking and dispatch.");
   });
 
-  // The three sources are a choice the form has to carry, because a guess that
-  // found nothing and a glyph the admin chose are the same empty image.
   it("submits the chosen icon source", async () => {
     saveWebAPI.mockResolvedValue({ ...orders, logo_mode: "none" });
     render(<AdminWebAPIs />);
@@ -432,7 +411,6 @@ describe("AdminWebAPIs", () => {
       logo?: string;
     };
     expect(input.logo_mode).toBe("none");
-    // No image is sent for a mode that does not read one.
     expect(input.logo).toBeUndefined();
   });
 
@@ -459,7 +437,6 @@ describe("AdminWebAPIs", () => {
     expect(input).toMatchObject({ logo_mode: "custom", logo });
   });
 
-  // The file picker only belongs to the one mode that uses it.
   it("offers a file to upload only for a chosen image", async () => {
     render(<AdminWebAPIs />);
     await screen.findByText("Order service");
@@ -514,9 +491,7 @@ describe("AdminWebAPIs", () => {
   });
 });
 
-// --- OpenAPI import --------------------------------------------------------
 
-// parsed is what the daemon returns for a first import: two operations, no diff.
 const parsed = {
   title: "Order service",
   base_url: "https://api.example.com/v1",
@@ -556,7 +531,6 @@ describe("AdminWebAPIs spec import", () => {
     await userEvent.click(screen.getByText("webapi.specRead"));
 
     await waitFor(() => expect(screen.getByText("/orders")).toBeInTheDocument());
-    // Everything is selected on a first import; the label says how many.
     expect(screen.getByText(/webapi.specImport.*"count":2/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByText(/webapi.specImport/));
@@ -567,7 +541,6 @@ describe("AdminWebAPIs spec import", () => {
     expect(input.operations).toHaveLength(2);
     expect(input.label).toBe("Order service");
     expect(input.base_url).toBe("https://api.example.com/v1");
-    // Remembered so a later refresh does not ask for the address again.
     expect(input.spec_url).toBe("https://api.example.com/openapi.json");
   });
 
@@ -579,7 +552,6 @@ describe("AdminWebAPIs spec import", () => {
     await userEvent.type(screen.getByLabelText("webapi.specURLLabel"), "https://x.example/s.json");
     await userEvent.click(screen.getByText("webapi.specRead"));
     await waitFor(() => expect(parseWebAPISpec).toHaveBeenCalled());
-    // Reading is not importing: the save is the admin's separate act.
     expect(saveWebAPI).not.toHaveBeenCalled();
   });
 

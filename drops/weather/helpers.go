@@ -39,8 +39,6 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// The free Current Weather and 5-day/3-hour Forecast endpoints. They're vars,
-// not consts, so tests can point them at a local httptest server.
 var (
 	currentURL  = "https://api.openweathermap.org/data/2.5/weather"
 	forecastURL = "https://api.openweathermap.org/data/2.5/forecast"
@@ -73,9 +71,6 @@ func normalizeUnits(u string) string {
 	}
 }
 
-// owmGet performs one GET against an OpenWeather 2.5 endpoint for the given
-// coordinate. It returns the HTTP status and raw body; transport and non-2xx
-// handling is the shared httpFailure epilogue.
 func owmGet(ctx context.Context, job core.Job, endpoint string, lat, lon float64) (int, []byte, error) {
 	key := resolveKey(job)
 	if key == "" {
@@ -99,24 +94,15 @@ func owmGet(ctx context.Context, job core.Job, endpoint string, lat, lon float64
 	return status, body, err
 }
 
-// extractOWMError pulls the human message out of an OpenWeather error body
-// ({"cod":401,"message":"Invalid API key. ..."}) so the real reason reaches
-// the user instead of a bare status. Falls back to a truncated raw body.
 func extractOWMError(body []byte) string {
 	return params.JSONFieldMessage(body, "message", 300)
 }
 
-// httpFailure maps a transport error or non-2xx response to an error Result,
-// returning nil on success — the shared epilogue of both weather drops. A 401
-// on the free 2.5 endpoints means the key is wrong or not yet activated (new
-// keys can take a couple of hours).
 func httpFailure(job core.Job, status int, body []byte, err error) *core.Result {
 	if r := geoloc.TransportFailure(job, "owm", "OpenWeather", err); r != nil {
 		return r
 	}
 	if status == 401 {
-		// Lead with OpenWeather's own message when present — so the run detail
-		// view shows the actionable reason, not a generic 401.
 		msg := "OpenWeather rejected the API key (401). Check that the key is correct and active — a newly created key can take a couple of hours to start working."
 		if detail := extractOWMError(body); detail != "" {
 			msg = "OpenWeather rejected the API key: " + detail
@@ -127,9 +113,6 @@ func httpFailure(job core.Job, status int, body []byte, err error) *core.Result 
 	return params.HTTPFailure(job, "owm", "OpenWeather", status, body, nil, extractOWMError)
 }
 
-// owmWeather is the {id, main, description, icon} object that appears in both
-// the current observation and each forecast slot. Main is the short class
-// ("Clear", "Rain") that's handy for branching; Description is the long phrase.
 type owmWeather struct {
 	ID          int    `json:"id"`
 	Main        string `json:"main"`

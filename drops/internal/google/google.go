@@ -1,13 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package google centralizes the plumbing shared by every native Google
-// connector — gmail, sheets, gcal, drive, and the gform trigger. They all ride
-// a single OAuth provider ("google"), so the token lookup, the guarded HTTP
-// call, and the {error:{message}} envelope parsing were byte-identical copies
-// in each package. They live here once; the daemon wires one SetTokenLookup,
-// and each connector keeps only what is genuinely its own: API roots, the
-// SetHTTPBase test seam, response shaping, and manifests.
 package google
 
 import (
@@ -21,7 +14,6 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// TokenLookup resolves a per-account Google OAuth access token.
 type TokenLookup func(ctx context.Context, account string) (string, error)
 
 var (
@@ -29,9 +21,6 @@ var (
 	tokenLookup   TokenLookup
 )
 
-// SetTokenLookup wires the daemon's per-account Google OAuth token resolver.
-// One hook serves every Google connector (one provider), so cmd/dzd calls this
-// once at startup instead of once per package.
 func SetTokenLookup(fn TokenLookup) {
 	tokenLookupMu.Lock()
 	defer tokenLookupMu.Unlock()

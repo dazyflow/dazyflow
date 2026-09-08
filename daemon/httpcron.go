@@ -13,25 +13,13 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// cronValidator uses the SAME parser the scheduler uses (5-field
-// minute-hour-dom-month-dow), so anything that passes here is also
-// fireable by the scheduler at rescan time. Built once at startup —
-// the parser holds no state, so a package-level value is fine.
 var cronValidator = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
-// nextFiresPreview is how many upcoming fire times the validate
-// endpoint returns when an expression parses. Three is enough to
-// confirm the cadence ("daily" / "every Monday") without sending
-// back a wall of timestamps for short-interval expressions.
 const nextFiresPreview = 3
 
 type cronValidateRequest struct {
 	Expr string `json:"expr"`
-	// TZ is the IANA timezone the expression is interpreted in, so the
-	// preview matches the time the scheduler will actually fire (which
-	// reads the same field off the saved trigger). Empty defaults to UTC.
-	// The web editor sends its browser timezone here.
-	TZ string `json:"tz,omitempty"`
+	TZ   string `json:"tz,omitempty"`
 }
 
 type cronValidateResponse struct {
@@ -80,12 +68,6 @@ func validateCron(rw http.ResponseWriter, r *http.Request, _ core.Principal) {
 	})
 }
 
-// nextCronFires returns up to n upcoming fire times for sched starting
-// from `from`, as RFC3339 UTC strings. Shared by the cron-validate
-// endpoint (the pre-save preview) and the schedules listing (the live
-// "next run" column) so the time a user previews and the time the flow
-// actually fires are computed by one code path. Stops early if the
-// schedule gives up (zero time — an impossible date like Feb 30).
 func nextCronFires(sched cron.Schedule, from time.Time, n int) []string {
 	fires := make([]string, 0, n)
 	t := from

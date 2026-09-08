@@ -1,11 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Bundled docs content. `make docs-content` populates web/src/docs/content/
-// before the Vite build: the guide pages are copied from docs/guide/, and the
-// step-catalog reference (reference/steps/*) is generated from the drop
-// manifests by cmd/docsgen. This module globs that tree at build time and
-// derives the page map + the sidebar nav.
+// `make docs-content` must populate web/src/docs/content/ before the Vite build:
+// this globs that tree at build time.
 import {
   Workflow,
   ShieldCheck,
@@ -85,8 +82,6 @@ export type DocPage = {
   body: string;
   icon?: string;
 };
-// A nav row shows either the group's brand mark (`brand`, e.g. /brands/gmail.svg)
-// or, when there's none, a generic lucide `icon`.
 type NavItem = {
   text: string;
   link: string;
@@ -95,8 +90,6 @@ type NavItem = {
 };
 export type NavGroup = { text: string; items: NavItem[] };
 
-// Pull the front-matter `title` + `icon` (and strip the block) so the body
-// handed to the Markdown renderer has no YAML; fall back to the first H1.
 function parse(src: string): { title: string; body: string; icon?: string } {
   let body = src;
   let title = "";
@@ -116,8 +109,6 @@ function parse(src: string): { title: string; body: string; icon?: string } {
   return { title, body, icon };
 }
 
-// "./content/guide/concepts.md" -> "/guide/concepts";
-// "./content/reference/steps/index.md" -> "/reference/steps/".
 function routeFor(key: string): string {
   let p = key.replace(/^\.\/content/, "").replace(/\.md$/, "");
   if (p.endsWith("/index")) p = p.slice(0, -"index".length);
@@ -208,7 +199,7 @@ export const NAV: NavGroup[] = [
   },
 ];
 
-// ── Reading order ────────────────────────────────────────────────────────
+// Reading order
 // The sidebar flattened into one sequence, which is what the prev/next footer
 // walks. Derived from NAV rather than listed again, so a page added to the
 // sidebar joins the reading order automatically and the two can't disagree.
@@ -218,9 +209,6 @@ export const ORDER: PageRef[] = NAV.flatMap((g) =>
   g.items.map((i) => ({ text: i.text, link: i.link })),
 );
 
-// Trailing slashes: "/reference/steps/" is a real route (the catalog index) but
-// a reader can arrive at "/reference/steps". Compare on a slash-insensitive key
-// so both find the same neighbours — the same tolerance getPage already has.
 const orderKey = (p: string) => p.replace(/\/+$/, "") || "/";
 
 export function neighbours(path: string): { prev?: PageRef; next?: PageRef } {

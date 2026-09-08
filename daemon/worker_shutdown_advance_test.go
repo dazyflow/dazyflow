@@ -27,10 +27,6 @@ import (
 // tests drive both paths with an already-cancelled context, which is the
 // shutdown race made deterministic.
 
-// ctxHonoringStore models a store that fails once its context is cancelled —
-// which is what production does (pgx surfaces context.Canceled on every query).
-// The in-memory store ignores ctx entirely, so wrapping it is what makes a
-// cancelled-context test meaningful rather than vacuously green.
 type ctxHonoringStore struct {
 	*jobstore.Memory
 }
@@ -77,9 +73,6 @@ func (s ctxHonoringStore) ListNodeRecords(ctx context.Context, opts core.ListNod
 	return s.Memory.ListNodeRecords(ctx, opts)
 }
 
-// shutdownHarness builds a worker over a ctx-honoring store with one graph run
-// enqueued, and claims the named node so processNodeJob/failNode see a record
-// they own.
 type shutdownHarness struct {
 	w     *Worker
 	jobs  ctxHonoringStore
@@ -120,7 +113,6 @@ func newShutdownHarness(t *testing.T, g core.Graph, claimNode string) *shutdownH
 		LeaseRenewEvery: time.Minute,
 	}, jobs, eng, bus)
 
-	// Claim under a live context — the node was picked up just before SIGTERM.
 	rec, err := jobs.Claim(t.Context(), w.cfg.ID, time.Minute)
 	if err != nil {
 		t.Fatalf("claim: %v", err)
@@ -149,15 +141,12 @@ func (h *shutdownHarness) runStatus(t *testing.T) core.JobStatus {
 	return rec.Status
 }
 
-// cancelledCtx is a context already past cancellation — the state the claim
-// loop's ctx is in once SIGTERM has been handled.
 func cancelledCtx() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	return ctx
 }
 
-// A disabled node skipped during shutdown still cascades and finalizes the run.
 func TestWorker_DisabledSkipAdvancesRunDespiteCancelledCtx(t *testing.T) {
 	t.Parallel()
 	h := newShutdownHarness(t, core.Graph{
@@ -184,7 +173,6 @@ func TestWorker_DisabledSkipAdvancesRunDespiteCancelledCtx(t *testing.T) {
 	}
 }
 
-// A node failed during shutdown still propagates and finalizes the run.
 func TestWorker_FailNodeAdvancesRunDespiteCancelledCtx(t *testing.T) {
 	t.Parallel()
 	g := core.Graph{

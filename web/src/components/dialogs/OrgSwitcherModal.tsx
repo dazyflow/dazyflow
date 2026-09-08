@@ -21,8 +21,6 @@ export type OrgRow = {
   tenant: string;
   name: string;
   glyph: ReactNode;
-  // deletable marks orgs the caller may erase (not their home org; and either
-  // platform admin or org admin of the active org). Drives the trash action.
   deletable?: boolean;
 };
 
@@ -40,13 +38,8 @@ export function OrgSwitcherModal({
   activeTenant: string;
   showId?: boolean;
   onPick: (tenant: string) => void;
-  // onCreate creates the org, switches to it, and closes the modal; it
-  // rejects with a message we surface inline.
   onCreate: (displayName: string) => Promise<void>;
-  // onDelete permanently erases the org (after password step-up), then
-  // refreshes/closes. Rejects with a message surfaced in the confirm dialog.
   onDelete: (tenant: string, password: string) => Promise<void>;
-  // onExport downloads a copy of the org's data (the export-first step).
   onExport: (tenant: string) => Promise<void>;
   onClose: () => void;
 }) {
@@ -57,16 +50,11 @@ export function OrgSwitcherModal({
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<OrgRow | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  // Step-up: the password re-entered to confirm the irreversible delete.
   const [deletePassword, setDeletePassword] = useState("");
   const deletePwRef = useRef<HTMLInputElement>(null);
-  // Move focus to the password field when the confirm opens — ConfirmModal
-  // autofocuses Cancel, but here we want the user typing the password (so
-  // Enter submits the delete rather than dismissing).
   useEffect(() => {
     if (confirmDelete) deletePwRef.current?.focus();
   }, [confirmDelete]);
-  // Export-first state for the delete confirm: "idle" → "exporting" → "done".
   const [exportState, setExportState] = useState<"idle" | "exporting" | "done">(
     "idle",
   );
@@ -80,15 +68,12 @@ export function OrgSwitcherModal({
     setError(null);
     try {
       await onCreate(trimmed);
-      // Parent closes the modal on success; nothing more to do here.
     } catch (e) {
       setError(explainApiError(e, t));
       setBusy(false);
     }
   };
 
-  // submitDelete runs the org deletion (shared by the Delete button and the
-  // password field's Enter key). No-ops while busy or without a password.
   const submitDelete = () => {
     if (busy || !confirmDelete) return;
     if (!deletePassword.trim()) {

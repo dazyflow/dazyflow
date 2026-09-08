@@ -12,8 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fakeSpotify is a stand-in Spotify API. Tests read back the last request to
-// assert the query Spotify is actually asked for.
 type fakeSpotify struct {
 	server    *httptest.Server
 	lastQuery string
@@ -34,9 +32,6 @@ func newFakeSpotify(t *testing.T, handler http.HandlerFunc) *fakeSpotify {
 	return f
 }
 
-// job builds a job pointed at the fake server with an injected token (the
-// `token` param wins in the oauthtok resolve sequence, so no daemon lookup is
-// needed in unit tests).
 func (f *fakeSpotify) job(params map[string]any) core.Job {
 	p := map[string]any{"token": "test-token", "base_url": f.server.URL}
 	for k, v := range params {
@@ -77,7 +72,6 @@ func TestFollowedArtists_OK(t *testing.T) {
 	if f.lastPath != "/me/following" {
 		t.Errorf("path = %q, want /me/following", f.lastPath)
 	}
-	// type=artist is not optional — Spotify rejects the call without it.
 	if f.lastQuery != "limit=20&type=artist" {
 		t.Errorf("query = %q, want limit=20&type=artist", f.lastQuery)
 	}
@@ -98,13 +92,9 @@ func TestFollowedArtists_OK(t *testing.T) {
 	if rows[0]["url"] != "https://open.spotify.com/artist/0OdUWJ0sBjDrqHygGUXeCF" {
 		t.Errorf("url = %v", rows[0]["url"])
 	}
-	// The first image is the largest Spotify returns, which is the one a card
-	// or an email wants.
 	if rows[0]["image"] != "https://i.scdn.co/image/big" {
 		t.Errorf("image = %v", rows[0]["image"])
 	}
-	// An artist with no artwork gets no image key rather than an empty string,
-	// so a template can test for its absence.
 	if _, has := rows[1]["image"]; has {
 		t.Errorf("artist without images carries an image key: %v", rows[1])
 	}
@@ -125,14 +115,11 @@ func TestFollowedArtists_PagesWithAfterAndClampsLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	// 500 clamps to Spotify's cap rather than being sent through and 400ing.
 	if f.lastQuery != "after=2CIMQHirSU0MQqyYHq0eOx&limit=50&type=artist" {
 		t.Errorf("query = %q", f.lastQuery)
 	}
 }
 
-// The 'After ID' input pin is what a paging loop wires, so it has to beat the
-// param the author typed when the flow was built.
 func TestFollowedArtists_InputCursorOverridesParam(t *testing.T) {
 	f := newFakeSpotify(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(followingPage))
@@ -167,8 +154,6 @@ func TestFollowedArtists_LastPageHasNoMore(t *testing.T) {
 	}
 }
 
-// An expired token is the failure a Spotify flow meets most, so the message
-// has to carry Spotify's own words rather than a bare 401.
 func TestFollowedArtists_SurfacesSpotifyErrorMessage(t *testing.T) {
 	f := newFakeSpotify(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

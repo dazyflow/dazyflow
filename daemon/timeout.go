@@ -87,14 +87,9 @@ func (s *Service) runGraphTimeoutWatchdog(runID, tenant, workspace string, timeo
 				return
 			}
 			if ev.Terminal != nil {
-				// Run finished on its own — nothing for us to do.
 				return
 			}
 		case <-timer.C:
-			// Mint a system principal with the same shape the
-			// scheduler uses: PermGraphRun lets us cancel; PermGraphAdmin
-			// lets us bypass private-flow visibility if the run was on
-			// a private flow whose owner isn't us.
 			sysP := SystemPrincipal("dazyflow-timeout", tenant, workspace)
 			ctx, cancelCtx := context.WithTimeout(context.Background(), 30*time.Second)
 			// CancelCodeTimeout, not a person's cancel: this is the platform
@@ -102,10 +97,6 @@ func (s *Service) runGraphTimeoutWatchdog(runID, tenant, workspace string, timeo
 			err := s.cancelGraphRun(ctx, sysP, runID, CancelCodeTimeout,
 				fmt.Sprintf("graph timeout after %s", timeout))
 			cancelCtx()
-			// ErrConflict means the run finished between the timer
-			// firing and our Get — totally fine, ignore. Any other
-			// error is worth logging because something is wrong with
-			// the cancel path itself.
 			if err != nil && !errors.Is(err, core.ErrConflict) {
 				log.Printf("dazyflow-timeout: cancel %s: %v", runID, err)
 			}

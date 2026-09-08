@@ -116,17 +116,12 @@ func deleteResult(job core.Job, uid, calendar string, removed bool) core.Result 
 			"meta": {MIME: "application/json", Inline: map[string]any{
 				"id":       uid,
 				"calendar": calendar,
-				// Says which of the two happened, so a flow can report "3
-				// cancelled, 1 already gone" rather than guessing.
-				"removed": removed,
+				"removed":  removed,
 			}},
 		},
 	}
 }
 
-// resolveEventID works out which event a step was pointed at: an id (text,
-// e.g. ${item.id} inside a For each) or List events' record/list wired
-// straight in, in which case the first entry is used.
 func resolveEventID(job core.Job) (string, bool) {
 	fallback := strings.TrimSpace(params.StringDefault(job.Params, "id", ""))
 	in, present := job.Input["id"]

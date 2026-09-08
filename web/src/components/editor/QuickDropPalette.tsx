@@ -32,8 +32,6 @@ type Props = {
   // starts typing, when the ranked search takes over. The caller is
   // responsible for ordering; we render them as given.
   suggested?: Manifest[];
-  // placeholder overrides the search box hint (e.g. "Search entry points" when
-  // a fresh flow is being seeded with a trigger).
   placeholder?: string;
   // onShowAll, when set, renders an escape hatch that widens the list from a
   // filtered subset (entry points) back to every drop — so a flow that wants
@@ -61,15 +59,11 @@ let pendingHistoryPop: ReturnType<typeof setTimeout> | null = null;
 
 export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAll, suggested }: Props) {
   const { t, i18n } = useTranslation();
-  // Sorting and ranking both read the drop names the user actually sees, so
-  // the language is a dependency of the match memo, not just of the render.
   const lang = i18n.language;
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-  // Always call the latest onClose from the mount-once popstate effect
-  // without making that effect depend on (and re-run with) onClose.
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -80,14 +74,10 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
   // next real Back behaves normally. Matters most for the fullscreen
   // mobile variant, where Back is the instinctive way to dismiss it.
   useEffect(() => {
-    // A remount (incl. StrictMode's dev probe) cancels any back() the
-    // previous cleanup scheduled — we're still open, so don't pop.
     if (pendingHistoryPop) {
       clearTimeout(pendingHistoryPop);
       pendingHistoryPop = null;
     }
-    // Only push when our marker isn't already on top, so the StrictMode
-    // remount doesn't stack a second entry.
     if (!window.history.state?.dazyPalette) {
       window.history.pushState({ dazyPalette: true }, "");
     }
@@ -125,11 +115,6 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
   }>(() => {
     const q = query.trim();
     if (!q) {
-      // Default ordering leads with the user-facing connectors (Slack, ntfy,
-      // Gmail, …) and pushes the bare stdlib primitives down — with the raw
-      // comparison operators (A < B, A = B, …) dead last. Without this the
-      // alphabetised list opens on those operators, which reads as cryptic
-      // jargon to anyone who isn't a developer.
       const tier = (d: Manifest) => {
         if (d.disabled || d.unavailable) return 9; // not pickable — sink to the bottom
         if (!d.integration) return d.category === "logic" ? 3 : 2;
@@ -157,11 +142,6 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
         suggestedCount: sug.length,
       };
     }
-    // Once the user types, the dedicated section is gone — but suggested
-    // drops should still surface above equally-relevant ones, so a search
-    // match on a suggested drop gets a flat bonus. Modest enough that a
-    // strong direct hit (exact label, 1000) always outranks a weak suggested
-    // one; large enough to lift it past same-tier non-suggested results.
     const sugIds = new Set((suggested ?? []).map((d) => d.id));
     const hits: Match[] = [];
     for (const d of drops) {
@@ -201,9 +181,6 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
     return () => prevFocused?.focus?.();
   }, []);
 
-  // Keyboard navigation. We listen on the window so the arrow keys work
-  // even when focus is still inside the input (which doesn't natively
-  // do anything with up/down).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -243,9 +220,6 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
     return () => window.removeEventListener("keydown", onKey);
   }, [matches, active, onPick, onClose]);
 
-  // Keep the active row in view as it moves via arrow keys. scrollIntoView
-  // with block: "nearest" avoids snapping the list back to the top on
-  // every keystroke.
   useLayoutEffect(() => {
     const list = listRef.current;
     if (!list) return;
@@ -259,8 +233,6 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
     <div
       className="quick-palette-backdrop"
       onMouseDown={(e) => {
-        // Backdrop click closes — but only when the click landed on the
-        // backdrop itself, not the dialog (events bubble up).
         if (e.target === e.currentTarget) onClose();
       }}
       role="presentation"

@@ -18,7 +18,6 @@ func TestRenderCustom_Localized(t *testing.T) {
 		{"ddd", "tors"},
 		{"D MMMM YYYY", "27 augusti 2026"},
 		{"ddd D MMM", "tors 27 aug"},
-		// Numbers and separators are the same in every language.
 		{"YYYY-MM-DD HH:mm", "2026-08-27 14:05"},
 		// A bracketed literal is the author's own words — never translated.
 		{"[vecka] D MMM", "vecka 27 aug"},
@@ -60,15 +59,12 @@ func TestDate_MachineFormatsStayEnglish(t *testing.T) {
 			t.Errorf("format %q changed with the locale: %q vs %q", format, en, sv)
 		}
 	}
-	// And rfc1123 really does carry the English day name.
 	out := outOf(t, runDate(t, "2026-08-27T14:05:09Z", map[string]any{"format": "rfc1123", "locale": "sv"}))
 	if !strings.HasPrefix(out, "Thu,") {
 		t.Errorf("rfc1123 = %q, want it to start with Thu,", out)
 	}
 }
 
-// The flow's language is the default, so a Swedish flow writes Swedish dates
-// without setting the field on every date step.
 func TestDate_FollowsTheFlowLanguage(t *testing.T) {
 	job := core.Job{
 		ID:       "j",
@@ -85,8 +81,6 @@ func TestDate_FollowsTheFlowLanguage(t *testing.T) {
 	}
 }
 
-// And a step that names a language wins over the flow's, for the one message
-// that has to differ.
 func TestDate_StepLocaleOverridesTheFlow(t *testing.T) {
 	job := core.Job{
 		ID:       "j",

@@ -16,10 +16,6 @@ import { slugify } from "../../../lib/format";
 import { useEscapeToClose } from "../../../components/ui/useEscapeToClose";
 import { Loading } from "../../../components/ui/Loading";
 
-// AdminPlatformTiers manages the reusable limit bundles a platform admin
-// assigns to orgs. Built-in Free/Pro can be edited (their limits) but not
-// deleted; custom tiers (e.g. Enterprise) are full CRUD. "0" on any limit
-// means "inherit the deployment default" — shown as "—".
 export function AdminPlatformTiers() {
   const { t } = useTranslation();
   const { token, hasPerm } = useAuth();
@@ -169,8 +165,6 @@ export function AdminPlatformTiers() {
   );
 }
 
-// limitSummary renders a one-line digest of a tier's limits, with "—" for
-// inherit-default (0).
 function limitSummary(tier: PlatformTier, t: (k: string) => string): string {
   const n = (v: number) => (v > 0 ? String(v) : "—");
   const mb = tier.disk_quota_bytes > 0 ? `${Math.round(tier.disk_quota_bytes / (1024 * 1024))} MB` : "—";
@@ -207,7 +201,6 @@ function TierEditor({
   const { token } = useAuth();
   const isNew = tier.id === "" && !tier.built_in;
   const [draft, setDraft] = useState<PlatformTier>({ ...tier });
-  // Disk is edited in MB for sanity; converted to bytes on save.
   const [diskMB, setDiskMB] = useState<number>(
     tier.disk_quota_bytes > 0 ? Math.round(tier.disk_quota_bytes / (1024 * 1024)) : 0,
   );

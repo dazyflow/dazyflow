@@ -40,18 +40,9 @@ func init() {
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				// Primary output: the untyped pass pin that snaps to the next
-				// drop's Pass-through input (triangle → triangle) to sequence
-				// the flow, so you don't have to drag the typed Time value into
-				// a generic pin. See poll_trigger for the full rationale; it
-				// carries the fire timestamp too.
 				{Port: core.PassPort, Label: "Pass-through"},
 				{Port: "fired_at", Label: "Time", MIME: []string{"text/plain"}, Example: json.RawMessage(`"2026-02-12T08:00:00Z"`)},
 			},
-			// cron + tz live on the node (Phase 2: schedule config is on the
-			// entry point). Neither is required — a blank schedule means
-			// "manual only", which the trigger lint flags as a soft warning
-			// rather than a hard error so a half-built flow still saves.
 			ParamsSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -72,22 +63,12 @@ func init() {
 					}
 				}
 			}`),
-			// Retry-safe but operationally meaningless — a schedule fire is
-			// a discrete event; rerunning doesn't re-derive a "fired at"
-			// from the original tick. Mirrors poll_trigger.
 			Idempotent: false,
 		},
 		Execute: executeCronTrigger,
 	})
 }
 
-// executeCronTrigger emits the current timestamp, exactly like
-// poll_trigger. The scheduler fires the whole graph on the graph's cron
-// schedule; this node runs as a root and stamps the fire moment so
-// downstream steps can read when they ran. Manual runs (the Run button
-// or 'dzctl graph run') produce a valid one-off fire — the same graph
-// behaves identically whether the scheduler or a user fired it, which is
-// the natural mental model for "test this scheduled workflow now."
 func executeCronTrigger(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	// Stamp the fire moment in the schedule's OWN time zone (the tz set on
 	// this node — the editor auto-stamps the author's browser zone), so

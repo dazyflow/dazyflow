@@ -24,16 +24,12 @@ func auditActions(t *testing.T, log *MemAuditLog, tenant string) map[string]core
 	return out
 }
 
-// TestAuditAuth_LifecycleEvents covers the success path: signup auto
-// sign-in, an explicit password sign-in, and sign-out each land in the
-// tenant's audit trail with the actor and source IP recorded.
 func TestAuditAuth_LifecycleEvents(t *testing.T) {
 	t.Parallel()
 	h := newSignupHarness(t)
 	log := NewMemAuditLog()
 	h.gw.Audit = log
 
-	// Signup auto-issues a session -> auth.signup.
 	rw := rawDo(t, h, "POST", "/api/v1/auth/signup", signupBody("audit@example.com", "supersecret"))
 	if rw.Code != http.StatusCreated {
 		t.Fatalf("signup status=%d body=%s", rw.Code, rw.Body.String())
@@ -45,7 +41,6 @@ func TestAuditAuth_LifecycleEvents(t *testing.T) {
 		t.Fatalf("decode signup: %v", err)
 	}
 
-	// Explicit password sign-in -> auth.signin, returns a session token.
 	rw = rawDo(t, h, "POST", "/api/v1/auth/signin", signupBody("audit@example.com", "supersecret"))
 	if rw.Code != http.StatusOK {
 		t.Fatalf("signin status=%d body=%s", rw.Code, rw.Body.String())
@@ -57,7 +52,6 @@ func TestAuditAuth_LifecycleEvents(t *testing.T) {
 		t.Fatalf("decode signin: %v", err)
 	}
 
-	// Sign out the session we just got -> auth.signout.
 	soReq := httptest.NewRequest("POST", "/api/v1/auth/signout", nil)
 	soReq.Header.Set("Authorization", "Bearer "+si.Token)
 	soRW := httptest.NewRecorder()
@@ -82,10 +76,9 @@ func TestAuditAuth_LifecycleEvents(t *testing.T) {
 	}
 }
 
-// TestAuditAuth_FailedSigninNoTenant verifies a wrong-password attempt is
-// recorded as auth.signin_failed under the empty (platform-level) tenant —
-// we don't resolve the tenant, since that would reveal whether the email
-// maps to an account.
+// Verifies a wrong-password attempt is recorded as auth.signin_failed under
+// the empty (platform-level) tenant — we don't resolve the tenant, since that
+// would reveal whether the email maps to an account.
 func TestAuditAuth_FailedSigninNoTenant(t *testing.T) {
 	t.Parallel()
 	h := newSignupHarness(t)
@@ -101,7 +94,6 @@ func TestAuditAuth_FailedSigninNoTenant(t *testing.T) {
 		t.Fatalf("signin status=%d, want 401", rw.Code)
 	}
 
-	// The failure is recorded under the empty tenant, not the user's.
 	failures := auditActions(t, log, "")
 	e, ok := failures["auth.signin_failed"]
 	if !ok {

@@ -103,7 +103,6 @@ func TestRenderText_NonStringCellsStringified(t *testing.T) {
 }
 
 func TestRenderText_JSONRoundtripShape(t *testing.T) {
-	// rows arrive as []any of map[string]any (gRPC/MCP path).
 	got := renderedText(t,
 		map[string]any{"column": "name"},
 		[]any{
@@ -114,8 +113,6 @@ func TestRenderText_JSONRoundtripShape(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
-
-// --- Error paths -----------------------------------------------------
 
 func TestRenderText_MissingRowsInput(t *testing.T) {
 	res, _ := executeRenderText(t.Context(), core.Job{Params: map[string]any{"column": "x"}}, nil)

@@ -15,9 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/jobstore"
 )
 
-// decidedRec builds a settled approval node-record the way Approve leaves one:
-// the pause's `pending_url` carried through, the value routed out the decision
-// port, and approver/comment stamped on.
 func decidedRec(id, run, node, decision string, finished time.Time, approver, comment string, value any) core.JobRecord {
 	out := map[string]core.Ref{
 		"pending_url": {MIME: "text/plain", Inline: "https://app.example/approve/" + run + "/" + node},
@@ -49,7 +46,6 @@ func historySvc(t *testing.T) (*Service, core.JobStore) {
 
 var acmePrincipal = core.Principal{Subject: "ops@acme.se", Tenant: "acme", Workspace: "default"}
 
-// acmeRunner is acmePrincipal with the permission cancelling a run requires.
 var acmeRunner = core.Principal{
 	Subject: "ops@acme.se", Tenant: "acme", Workspace: "default",
 	Roles: []core.Role{{Name: "editor", Permissions: []core.Permission{core.PermGraphRun}}},
@@ -84,10 +80,6 @@ func TestListDecidedApprovals_ReportsBothVerdicts(t *testing.T) {
 	}
 }
 
-// TestListDecidedApprovals_OrdersByDecisionNotEnqueue is the reason the store
-// grew NewestByFinished. An approval parked for three weeks and decided this
-// morning is the newest DECISION and the oldest RECORD; ordering by enqueue
-// time buries it — and under a limit, drops it off the page entirely.
 func TestListDecidedApprovals_OrdersByDecisionNotEnqueue(t *testing.T) {
 	t.Parallel()
 	svc, store := historySvc(t)
@@ -110,7 +102,6 @@ func TestListDecidedApprovals_OrdersByDecisionNotEnqueue(t *testing.T) {
 			[]string{got[0].RunID, got[1].RunID})
 	}
 
-	// Under a limit the ordering decides membership, not just position.
 	one, err := svc.ListDecidedApprovals(t.Context(), acmePrincipal, "", "", 1)
 	if err != nil {
 		t.Fatalf("list: %v", err)
@@ -131,14 +122,12 @@ func TestListDecidedApprovals_ExcludesNonApprovals(t *testing.T) {
 
 	_ = store.Enqueue(t.Context(), decidedRec("decided", "run-1", "gate", "approve", fin, "ada@acme.se", "", nil))
 
-	// An ordinary succeeded step: no approval marker.
 	_ = store.Enqueue(t.Context(), core.JobRecord{
 		ID: "plain", Kind: core.JobKindNode, GraphRunID: "run-1", NodeID: "http",
 		Tenant: "acme", Workspace: "default", Status: core.JobStatusSucceeded,
 		FinishedAt: &fin,
 		Result:     &core.Result{Status: core.StatusOK, Output: map[string]core.Ref{"body": {Inline: "hi"}}},
 	})
-	// Still parked — belongs to the inbox above, not the history below.
 	_ = store.Enqueue(t.Context(), core.JobRecord{
 		ID: "parked", Kind: core.JobKindNode, GraphRunID: "run-2", NodeID: "gate",
 		Tenant: "acme", Workspace: "default", Status: core.JobStatusAwaiting,
@@ -146,9 +135,6 @@ func TestListDecidedApprovals_ExcludesNonApprovals(t *testing.T) {
 			"pending_url": {Inline: "https://app.example/approve/run-2/gate"},
 		}},
 	})
-	// Marked as an approval but carrying no decision port (an older record, or
-	// a resume that isn't a decision): skipped rather than shown as a verdict
-	// we'd have to invent.
 	_ = store.Enqueue(t.Context(), core.JobRecord{
 		ID: "verdictless", Kind: core.JobKindNode, GraphRunID: "run-3", NodeID: "gate",
 		Tenant: "acme", Workspace: "default", Status: core.JobStatusSucceeded,
@@ -190,7 +176,6 @@ func TestListDecidedApprovals_ScopedToTenantAndWorkspace(t *testing.T) {
 		t.Fatalf("got %+v, want only this tenant's default workspace", got)
 	}
 
-	// An admin with no workspace binding sees the tenant, and can narrow.
 	admin := core.Principal{Subject: "root@acme.se", Tenant: "acme"}
 	all, err := svc.ListDecidedApprovals(t.Context(), admin, "", "", 0)
 	if err != nil {
@@ -208,10 +193,10 @@ func TestListDecidedApprovals_ScopedToTenantAndWorkspace(t *testing.T) {
 	}
 }
 
-// TestApprove_ThenAppearsInHistory drives the real path end to end. It is the
-// test that matters: the history reads fields Approve writes, and the two are
-// in different files — a rename of the `approved` port or the `approver` key
-// would leave both halves compiling and the page silently empty.
+// Drives the real path end to end. It is the test that matters: the history
+// reads fields Approve writes, and the two are in different files — a rename
+// of the `approved` port or the `approver` key would leave both halves
+// compiling and the page silently empty.
 func TestApprove_ThenAppearsInHistory(t *testing.T) {
 	t.Parallel()
 	store := jobstore.NewMemory()
@@ -225,8 +210,6 @@ func TestApprove_ThenAppearsInHistory(t *testing.T) {
 		Tenant: "acme", Workspace: "default",
 		Status: core.JobStatusRunning, GraphPayload: payload,
 	})
-	// Parked exactly as the module leaves it: the marker URL, the prompt, and
-	// the value stashed on the internal `context` key.
 	_ = store.Enqueue(t.Context(), core.JobRecord{
 		ID: NodeJobID("run-1", "gate"), Kind: core.JobKindNode,
 		GraphRunID: "run-1", GraphID: "refunds", NodeID: "gate",
@@ -241,7 +224,6 @@ func TestApprove_ThenAppearsInHistory(t *testing.T) {
 		Resolver: &engine.NodeResolver{Native: engine.Default},
 	}}
 
-	// Before: the inbox has it, the history doesn't.
 	pending, err := svc.ListPendingApprovals(t.Context(), acmePrincipal, "", "")
 	if err != nil || len(pending) != 1 {
 		t.Fatalf("pending = %+v, err = %v; want the parked approval", pending, err)
@@ -256,7 +238,6 @@ func TestApprove_ThenAppearsInHistory(t *testing.T) {
 		t.Fatalf("approve: %v", err)
 	}
 
-	// After: it has moved from one list to the other, carrying the evidence.
 	if p, _ := svc.ListPendingApprovals(t.Context(), acmePrincipal, "", ""); len(p) != 0 {
 		t.Errorf("inbox still holds %+v after the decision", p)
 	}
@@ -286,10 +267,6 @@ func TestApprove_ThenAppearsInHistory(t *testing.T) {
 	}
 }
 
-// --- HTTP surface ---
-
-// TestHTTPGateway_DecidedApprovals covers the endpoint the history section
-// calls: the decided list, its scoping, and the one input it takes.
 func TestHTTPGateway_DecidedApprovals(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -365,8 +342,6 @@ func TestHTTPGateway_DecidedApprovals(t *testing.T) {
 		t.Errorf("cancelled row names a decider: %+v", cancelled)
 	}
 
-	// A junk limit is a client bug, and answering 200 with a defaulted page
-	// hides it.
 	if bad := h.do(t, "GET", "/api/v1/approvals/decided?limit=soon", nil); bad.Code != http.StatusBadRequest {
 		t.Errorf("limit=soon → %d, want 400", bad.Code)
 	}
@@ -374,8 +349,6 @@ func TestHTTPGateway_DecidedApprovals(t *testing.T) {
 		t.Errorf("limit=0 → %d, want 400", bad.Code)
 	}
 
-	// Unauthenticated: history names who decided what, so it is behind the
-	// same auth as the inbox.
 	req := httptest.NewRequest("GET", "/api/v1/approvals/decided", nil)
 	anon := httptest.NewRecorder()
 	ServeForTest(h.gw, anon, req)
@@ -384,11 +357,6 @@ func TestHTTPGateway_DecidedApprovals(t *testing.T) {
 	}
 }
 
-// --- cancelled approvals ---
-
-// parkedApprovalRun seeds a running graph with one approval parked on it, the
-// way the module leaves things: the marker URL, the prompt, and the value
-// stashed on the internal `context` key.
 func parkedApprovalRun(t *testing.T, store core.JobStore, runID string) {
 	t.Helper()
 	graph := core.Graph{
@@ -417,11 +385,6 @@ func parkedApprovalRun(t *testing.T, store core.JobStore, runID string) {
 	}
 }
 
-// TestCancelRun_KeepsWhatAParkedStepPublished: cancelling used to overwrite the
-// node's result with a bare error, erasing the only record of what the request
-// had been for — the prompt, the value, the approval URL. Nothing downstream
-// reads those on a cancelled node (classifyEdge blocks every edge out of one),
-// but the run page and the approvals history do.
 func TestCancelRun_KeepsWhatAParkedStepPublished(t *testing.T) {
 	t.Parallel()
 	svc, store := historySvc(t)
@@ -449,9 +412,6 @@ func TestCancelRun_KeepsWhatAParkedStepPublished(t *testing.T) {
 	}
 }
 
-// TestCancelRun_LeavesAPlainNodeResultAlone: only a step that had already
-// published something has anything to carry. Everything else keeps the
-// error-only result it always had.
 func TestCancelRun_LeavesAPlainNodeResultAlone(t *testing.T) {
 	t.Parallel()
 	svc, store := historySvc(t)
@@ -483,15 +443,11 @@ func TestCancelRun_LeavesAPlainNodeResultAlone(t *testing.T) {
 	}
 }
 
-// TestListDecidedApprovals_IncludesCancelled: a request the run was called off
-// under is settled — nobody decided it, and it is not waiting anywhere either.
-// Left out of the history it simply vanished.
 func TestListDecidedApprovals_IncludesCancelled(t *testing.T) {
 	t.Parallel()
 	svc, store := historySvc(t)
 	parkedApprovalRun(t, store, "run-x")
 
-	// While parked it belongs to the inbox and not the history.
 	if h, _ := svc.ListDecidedApprovals(t.Context(), acmePrincipal, "", "", 0); len(h) != 0 {
 		t.Fatalf("history = %+v, want empty while parked", h)
 	}
@@ -522,8 +478,6 @@ func TestListDecidedApprovals_IncludesCancelled(t *testing.T) {
 	if d.Prompt != "Refund order 4471?" {
 		t.Errorf("prompt = %q, want the question it was called off on", d.Prompt)
 	}
-	// The value survives the cancel on the internal `context` key — only a
-	// decision moves it to a port.
 	ctx, ok := d.Context.(map[string]any)
 	if !ok || ctx["order"] != "4471" {
 		t.Errorf("context = %#v, want the value it was waiting on", d.Context)
@@ -542,7 +496,6 @@ func TestListDecidedApprovals_MergesBothOutcomesInOrder(t *testing.T) {
 	svc, store := historySvc(t)
 	now := time.Now()
 
-	// Newest and oldest are decisions; the cancellation sits between them.
 	_ = store.Enqueue(t.Context(), decidedRec("newest", "run-1", "gate", "approve", now.Add(-1*time.Minute), "ada@acme.se", "", nil))
 	_ = store.Enqueue(t.Context(), decidedRec("oldest", "run-3", "gate", "reject", now.Add(-30*time.Minute), "bo@acme.se", "", nil))
 	mid := now.Add(-10 * time.Minute)

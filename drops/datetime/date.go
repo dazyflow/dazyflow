@@ -1,12 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package datetime hosts date/time drops — pure, no-auth nodes for the
-// everyday time work a flow needs: read "now", parse a timestamp that
-// arrived as text, shift it by an offset, convert it to a timezone, and
-// render it in a chosen format. They speak the same text/rows contract as
-// the transform family, so a formatted date drops straight into an email
-// body, a filename, a Sheets cell, or a comparison.
 package datetime
 
 import (
@@ -128,11 +122,7 @@ func init() {
 	})
 }
 
-// executeDate resolves the base time (the 'in' input, or now when unwired),
-// applies the offset, timezone and time-of-day, then renders the result per
-// 'format'.
 func executeDate(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	// Base time: parse the 'in' input if present and non-empty, else now.
 	base := time.Now().UTC()
 	if ref, ok := job.Input["in"]; ok && ref.Inline != nil {
 		if !isEmptyInput(ref.Inline) {
@@ -206,9 +196,6 @@ func isEmptyInput(inline any) bool {
 	return ok && strings.TrimSpace(s) == ""
 }
 
-// parseTime turns an inline value into a time. Numbers (and numeric strings)
-// are read as Unix seconds; strings are tried against a set of common
-// layouts, RFC3339 first.
 func parseTime(inline any) (time.Time, error) {
 	switch v := inline.(type) {
 	case float64:
@@ -248,7 +235,6 @@ func parseTimeString(s string) (time.Time, error) {
 	if s == "" {
 		return time.Time{}, fmt.Errorf("empty date string")
 	}
-	// A bare integer string is Unix seconds.
 	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
 		return time.Unix(n, 0).UTC(), nil
 	}
@@ -260,16 +246,10 @@ func parseTimeString(s string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("couldn't parse %q as a date — expected ISO-8601 (2006-01-02T15:04:05Z), a plain date, or Unix seconds", s)
 }
 
-// parseOffset parses a signed duration that, on top of Go's h/m/s, also
-// understands w (weeks) and d (days) — e.g. "3d", "-2h30m", "1w2d". An
-// empty string is a zero offset. Shared with the relative time windows on
-// steps like Google Calendar's, so "3d" means the same thing everywhere.
 func parseOffset(s string) (time.Duration, error) {
 	return reltime.ParseOffset(s)
 }
 
-// loadLocation resolves a timezone name. Empty and "UTC" are UTC; "Local" is
-// the host's zone; anything else goes through the IANA database.
 func loadLocation(tz string) (*time.Location, error) {
 	switch strings.TrimSpace(tz) {
 	case "", "UTC":
@@ -314,8 +294,6 @@ func renderFormat(t time.Time, job core.Job, names datenames.Names) (string, err
 		"pattern (e.g. \"DD/MM/YYYY\") in the Custom format field", format)
 }
 
-// renderPreset formats t per a named format, reporting false for a name it
-// doesn't know so the caller can treat the value as a format string.
 func renderPreset(t time.Time, format string, names datenames.Names) (string, bool) {
 	switch strings.ToLower(format) {
 	case "", "iso", "rfc3339":
@@ -351,8 +329,6 @@ func renderPreset(t time.Time, format string, names datenames.Names) (string, bo
 	return "", false
 }
 
-// timeParts breaks a time into the fields a downstream drop is likely to
-// branch or compute on, plus the canonical iso/unix renderings.
 func timeParts(t time.Time) map[string]any {
 	return map[string]any{
 		"iso":     t.Format(time.RFC3339),

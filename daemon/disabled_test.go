@@ -11,9 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/daemon"
 )
 
-// A disabled node is recorded as skipped without executing, and the skip
-// cascades: everything downstream of it is skipped too, while independent
-// branches still run and the graph completes successfully.
 func TestDisabled_SkipsNodeAndPrunesDownstream(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)
@@ -99,8 +96,6 @@ func TestPassEdge_SequencesWithoutValue(t *testing.T) {
 	}
 }
 
-// A disabled ROOT (no incoming edges) is skipped at pickup and the graph
-// still completes.
 func TestDisabled_RootSkips(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)
@@ -133,8 +128,6 @@ func TestDisabled_RootSkips(t *testing.T) {
 	}
 }
 
-// Disabling a node inside a loop body prunes it (and its exclusive
-// downstream) from the per-item run; the loop itself still succeeds.
 func TestDisabled_LoopBodyNodePruned(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}

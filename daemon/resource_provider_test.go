@@ -71,13 +71,11 @@ func TestResourceProvider_FlowOverridesOrg(t *testing.T) {
 	putDef(t, rp.Secrets, "acme", "f1", ScopeFlow, core.ResourceDef{
 		Name: "leads", Type: "google_sheet", Config: map[string]any{"spreadsheet_id": "FLOW"},
 	})
-	// With the flow on ctx, the flow-scoped def wins.
 	ctx := core.WithFlow(core.WithTenant(context.Background(), "acme"), "f1")
 	v, _ := rp.Resolve(ctx, "leads")
 	if v.(map[string]any)["id"] != "FLOW" {
 		t.Errorf("flow scope should win, got %+v", v)
 	}
-	// With no flow, the org def is used.
 	v, _ = rp.Resolve(core.WithTenant(context.Background(), "acme"), "leads")
 	if v.(map[string]any)["id"] != "ORG" {
 		t.Errorf("org fallback, got %+v", v)

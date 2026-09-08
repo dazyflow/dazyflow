@@ -15,8 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// BenchmarkManifestsForTenant measures the catalog snapshot every graph
-// validation, save and submit takes — see NodeResolver.ManifestsForTenant.
 func BenchmarkManifestsForTenant(b *testing.B) {
 	r := &engine.NodeResolver{Native: engine.Default}
 	b.Logf("native drops: %d", len(engine.Default.Manifests()))
@@ -28,8 +26,6 @@ func BenchmarkManifestsForTenant(b *testing.B) {
 	}
 }
 
-// realisticGraph is a chain of built-in steps with the wiring a real flow
-// has, sized like a mid-size customer flow.
 func realisticGraph(nodes int) core.Graph {
 	g := core.Graph{ID: "g", Tenant: "t", Workspace: "main"}
 	for i := range nodes {
@@ -49,8 +45,6 @@ func realisticGraph(nodes int) core.Graph {
 	return g
 }
 
-// BenchmarkValidateRuntime measures the gate every save and every submit
-// runs the flow through, against the real catalog.
 func BenchmarkValidateRuntime(b *testing.B) {
 	manifests := (&engine.NodeResolver{Native: engine.Default}).ManifestsForTenant("t")
 	g := realisticGraph(20)
@@ -62,8 +56,6 @@ func BenchmarkValidateRuntime(b *testing.B) {
 	}
 }
 
-// BenchmarkSubmitValidation is the pair as a submit actually pays for it:
-// the catalog snapshot and the validation, once per run.
 func BenchmarkSubmitValidation(b *testing.B) {
 	r := &engine.NodeResolver{Native: engine.Default}
 	g := realisticGraph(20)

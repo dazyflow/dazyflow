@@ -28,7 +28,6 @@ func TestHMACApprovalSigner_DeterministicAndVerifies(t *testing.T) {
 		!strings.Contains(url1, "&token=") {
 		t.Errorf("URL shape unexpected: %q", url1)
 	}
-	// computeToken is deterministic given (run, node, exp).
 	exp := time.Now().Add(time.Hour).Unix()
 	tok := s.computeToken("run-1", "node-A", exp)
 	if s.computeToken("run-1", "node-A", exp) != tok {
@@ -54,7 +53,7 @@ func TestHMACApprovalSigner_DeterministicAndVerifies(t *testing.T) {
 	}
 }
 
-// TestHMACApprovalSigner_SignIsStableAcrossResigns guards the retry contract:
+// Guards the retry contract:
 // SignApprovalURL must reproduce the same URL when the same pause is re-signed,
 // which is what lets a retried await_approval Execute (after a lease expiry)
 // re-emit a link already emailed to an approver. exp is part of the SIGNED
@@ -105,7 +104,6 @@ func TestHMACApprovalSigner_SignIsStableAcrossResigns(t *testing.T) {
 		if !s.verifyToken("run-1", "node-A", exp, token) {
 			t.Fatal("bucketed token failed to verify")
 		}
-		// The signed expiry is still honoured, and still can't be extended.
 		if s.verifyToken("run-1", "node-A", exp+1, token) {
 			t.Error("verify accepted a tampered (extended) expiry")
 		}
@@ -126,8 +124,6 @@ func TestHMACApprovalSigner_SignIsStableAcrossResigns(t *testing.T) {
 	})
 }
 
-// parseApprovalURL pulls the exp and token query params out of a signed
-// approval URL.
 func parseApprovalURL(t *testing.T, raw string) (int64, string) {
 	t.Helper()
 	u, err := neturl.Parse(raw)
@@ -197,16 +193,8 @@ func (conflictOnCompleteStore) Complete(context.Context, string, core.JobStatus,
 	return core.ErrConflict
 }
 
-// TestApprovalListener_ClassifiesErrorsBySentinel pins the HTTP mapping of the
-// approval outcomes. These were classified with strings.Contains on the error
-// text, which mapped the CONCURRENT duplicate approve to 500: it loses inside
-// Complete and surfaces as "job state conflict", matching neither "not awaiting"
-// nor "not found". The sequential duplicate matched and returned 409, so the
-// endpoint reported two different statuses for the same user-visible event.
 func TestApprovalListener_ClassifiesErrorsBySentinel(t *testing.T) {
 	t.Parallel()
-	// awaiting builds a service whose run-1/node-A record is parked awaiting,
-	// with the graph payload Approve needs to advance the run.
 	awaiting := func(t *testing.T, wrap func(core.JobStore) core.JobStore) *Service {
 		t.Helper()
 		store := jobstore.NewMemory()
@@ -229,7 +217,6 @@ func TestApprovalListener_ClassifiesErrorsBySentinel(t *testing.T) {
 		}}
 	}
 
-	// call signs a valid link for run-1/node-A and drives the listener.
 	call := func(t *testing.T, svc *Service, query string) *httptest.ResponseRecorder {
 		t.Helper()
 		signer := &HMACApprovalSigner{BaseURL: "https://x", Secret: []byte("k")}
@@ -256,7 +243,6 @@ func TestApprovalListener_ClassifiesErrorsBySentinel(t *testing.T) {
 		if rw := call(t, svc, "&decision=approve"); rw.Code != http.StatusOK {
 			t.Fatalf("first approve: status = %d, want 200; body=%s", rw.Code, rw.Body.String())
 		}
-		// Second click: the record now reads terminal.
 		if rw := call(t, svc, "&decision=approve"); rw.Code != http.StatusConflict {
 			t.Fatalf("second approve: status = %d, want 409; body=%s", rw.Code, rw.Body.String())
 		}
@@ -319,8 +305,6 @@ func TestApprovalListener_RejectsNonPost(t *testing.T) {
 	}
 }
 
-// TestApprovalListener_ValidTokenResumes exercises the now-wired HMAC
-// path end to end: a valid signed token resumes an awaiting node.
 func TestApprovalListener_ValidTokenResumes(t *testing.T) {
 	t.Parallel()
 	store := jobstore.NewMemory()
@@ -329,8 +313,6 @@ func TestApprovalListener_ValidTokenResumes(t *testing.T) {
 		Resolver: &engine.NodeResolver{Native: engine.Default},
 	}}
 
-	// Graph-record (carries the payload Approve loads to advance) + an
-	// awaiting node-record for node-A.
 	graph := core.Graph{ID: "g", Nodes: []core.Node{{ID: "node-A", Module: "noop"}}}
 	payload, _ := json.Marshal(graph)
 	_ = store.Enqueue(t.Context(), core.JobRecord{
@@ -355,8 +337,6 @@ func TestApprovalListener_ValidTokenResumes(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", rw.Code, rw.Body.String())
 	}
 
-	// The awaiting node is now resumed (succeeded) and routed out the
-	// approved port (Branch-style), not rejected.
 	rec, _ := store.Get(t.Context(), NodeJobID("run-1", "node-A"))
 	if rec.Status != core.JobStatusSucceeded {
 		t.Errorf("node status = %q, want succeeded", rec.Status)
@@ -372,10 +352,6 @@ func TestApprovalListener_ValidTokenResumes(t *testing.T) {
 	}
 }
 
-// The link path has no principal, so it audits through its own writer. Before
-// that existed, a decision taken from an approval email left nothing in the
-// trail at all — only a stdout line — which made the one approval route that
-// carries no proven identity also the one route with no record of who used it.
 func TestApprovalListener_AuditsTheDecision(t *testing.T) {
 	t.Parallel()
 	store := jobstore.NewMemory()
@@ -419,7 +395,6 @@ func TestApprovalListener_AuditsTheDecision(t *testing.T) {
 	if e.Action != "approval" || e.Target != "run-1/node-A" || e.Detail != "approve" {
 		t.Errorf("event = %+v", e)
 	}
-	// Tenant is read off the graph record, since there is no principal here.
 	if e.Tenant != "acme" {
 		t.Errorf("tenant = %q, want acme", e.Tenant)
 	}
@@ -430,7 +405,6 @@ func TestApprovalListener_AuditsTheDecision(t *testing.T) {
 	}
 }
 
-// No ?approver= at all: still audited, still marked as unverified.
 func TestApprovalListener_AuditsAnonymousDecision(t *testing.T) {
 	t.Parallel()
 	store := jobstore.NewMemory()

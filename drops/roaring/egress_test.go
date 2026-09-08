@@ -13,9 +13,6 @@ import (
 
 func TestMain(m *testing.M) { dropstest.EgressTestMain(m) }
 
-// Roaring's guarded call is the token exchange itself, not a data endpoint:
-// resolveToken posts the client credentials to base_url, so that is where a
-// private address has to be refused.
 func TestResolveToken_SSRFGuardBlocksPrivate(t *testing.T) {
 	dropstest.AssertSSRFBlocked(t, func() error {
 		job := core.Job{ID: "j", Params: map[string]any{

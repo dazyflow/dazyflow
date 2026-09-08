@@ -11,19 +11,15 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestRunFlowMe_RunAndMissing_Cov4 covers runFlowMe + runGraph: the clean 404 for a missing
-// flow and the happy-path 202 submit for an existing one.
 func TestRunFlowMe_RunAndMissing_Cov4(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 
-	// Unknown flow -> 404 flow_not_found.
 	missing := url.PathEscape("t/ws/ghost")
 	if rw := h.do(t, "POST", "/api/v1/me/flows/"+missing+"/run", nil); rw.Code != http.StatusNotFound {
 		t.Fatalf("run(missing) = %d, want 404; body=%s", rw.Code, rw.Body.String())
 	}
 
-	// Save a flow, then run it -> 202 with a job id.
 	g := core.Graph{
 		ID: "runnable", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{{ID: "n", Module: "delay", Params: map[string]any{"ms": 1}}},

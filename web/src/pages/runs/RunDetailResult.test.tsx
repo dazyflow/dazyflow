@@ -1,12 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The Result and Files panels, through the page that mounts them.
-//
-// The panels are what a manually-run flow is FOR: the run produced an answer,
-// and until it is on this page the only way to read it was to expand a step
-// and then a port. Two shapes have to survive: a rows value becomes a table
-// (not JSON), and a value that is a file becomes a download.
 
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -111,12 +105,10 @@ describe("RunDetail result panel", () => {
     });
     renderRun();
 
-    // The header row is the data's own column names.
     await waitFor(() =>
       expect(screen.getByRole("columnheader", { name: "region" })).toBeTruthy(),
     );
     expect(screen.getByRole("columnheader", { name: "orders" })).toBeTruthy();
-    // And the values are cells, not a JSON blob.
     expect(screen.getByRole("cell", { name: "North" })).toBeTruthy();
     expect(screen.getByRole("cell", { name: "42" })).toBeTruthy();
     expect(document.body.textContent).not.toContain('"region":');

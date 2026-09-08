@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-// TestDialectQuotePlaceholder covers the per-backend quoting and bind-marker
-// rules for all three dialects, including the MySQL flavor that the
-// integration-gated path never reaches under a Postgres-only run.
+// Covers the per-backend quoting and bind-marker rules for all three dialects,
+// including the MySQL flavor that the integration-gated path never reaches
+// under a Postgres-only run.
 func TestDialectQuotePlaceholder(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -39,8 +39,6 @@ func TestDialectQuotePlaceholder(t *testing.T) {
 	}
 }
 
-// TestUpsertClause_AllDialects covers the ON CONFLICT / ON DUPLICATE KEY tail
-// for every dialect across the DO-UPDATE and DO-NOTHING / no-update-cols modes.
 func TestUpsertClause_AllDialects(t *testing.T) {
 	t.Run("sqlite do update", func(t *testing.T) {
 		got := sqliteDialect{}.upsertClause([]string{"id"}, []string{"name", "email"})
@@ -78,8 +76,6 @@ func TestUpsertClause_AllDialects(t *testing.T) {
 		}
 	})
 	t.Run("mysql empty update cols falls back to first conflict col", func(t *testing.T) {
-		// MySQL has no DO NOTHING; the no-op sets the first conflict column to
-		// itself rather than INSERT IGNORE.
 		got := mysqlDialect{}.upsertClause([]string{"id", "other"}, nil)
 		want := "ON DUPLICATE KEY UPDATE `id` = VALUES(`id`)"
 		if got != want {
@@ -88,8 +84,6 @@ func TestUpsertClause_AllDialects(t *testing.T) {
 	})
 }
 
-// TestInsertSQL covers the shared INSERT renderer for plain and upsert-tail
-// forms across the placeholder dialects.
 func TestInsertSQL(t *testing.T) {
 	t.Run("postgres plain insert numbers placeholders", func(t *testing.T) {
 		got := insertSQL(postgresDialect{}, `"public"."t"`, []string{"a", "b"}, "")
@@ -107,8 +101,6 @@ func TestInsertSQL(t *testing.T) {
 	})
 }
 
-// TestCreateTableSQL covers default TEXT typing, the column_types override,
-// and the optional trailing UNIQUE constraint.
 func TestCreateTableSQL(t *testing.T) {
 	t.Run("defaults to TEXT, override applies, no unique", func(t *testing.T) {
 		got := createTableSQL(sqliteDialect{}, `"t"`, []string{"id", "name"}, map[string]string{"id": "INTEGER"}, nil)
@@ -131,7 +123,6 @@ func TestCreateTableSQL(t *testing.T) {
 	})
 }
 
-// TestPlaceholdersAndQuoteAll covers the small slice builders.
 func TestPlaceholdersAndQuoteAll(t *testing.T) {
 	if got := placeholders(postgresDialect{}, 3); got != "$1, $2, $3" {
 		t.Errorf("placeholders pg = %q", got)
@@ -144,8 +135,8 @@ func TestPlaceholdersAndQuoteAll(t *testing.T) {
 	}
 }
 
-// TestBindArgs covers value extraction in header order, including a missing
-// key binding nil (SQL NULL).
+// Covers value extraction in header order, including a missing key binding nil
+// (SQL NULL).
 func TestBindArgs(t *testing.T) {
 	row := map[string]any{"a": 1, "c": 3}
 	got := bindArgs([]string{"a", "b", "c"}, row)

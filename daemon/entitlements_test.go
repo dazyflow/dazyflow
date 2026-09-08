@@ -53,7 +53,6 @@ func TestResolveEffective_ProCapsHonoredElseUnlimited(t *testing.T) {
 		t.Errorf("global ceilings should still apply to pro: %+v", eff)
 	}
 
-	// Pro tier with an explicit fair-use cap: honored, not zeroed.
 	proTier := &Tier{ID: "pro", Plan: PlanPro, RunsPerMonth: 10000, MaxConcurrency: 10}
 	eff = ResolveEffective(nil, proTier, testDefaults, PlanPro, now)
 	if eff.RunsPerMonth != 10000 || eff.MaxConcurrency != 10 {
@@ -63,14 +62,12 @@ func TestResolveEffective_ProCapsHonoredElseUnlimited(t *testing.T) {
 		t.Errorf("unset pro dims should stay unlimited, got members %d ret %d", eff.MaxMembers, eff.RetentionDays)
 	}
 
-	// A per-org override also sticks on Pro.
 	ent := &TenantEntitlement{MaxMembers: ptrInt(25)}
 	eff = ResolveEffective(ent, proTier, testDefaults, PlanPro, now)
 	if eff.MaxMembers != 25 {
 		t.Errorf("pro override members = %d, want 25", eff.MaxMembers)
 	}
 
-	// Free is unaffected: still inherits the free defaults.
 	eff = ResolveEffective(nil, nil, testDefaults, PlanFree, now)
 	if eff.RunsPerMonth != 100 {
 		t.Errorf("free runs = %d, want the default 100", eff.RunsPerMonth)
@@ -133,23 +130,21 @@ func TestResolveEffective_PlanResolution(t *testing.T) {
 	}
 }
 
-// TestResolveEffective_TierPollingInherits is the regression guard for the
-// bug that silently disabled scheduling for every free org: a built-in tier
-// with PollingAllowed unset (nil) must INHERIT the deployment-global default,
-// not force it false. A non-nil tier value still wins.
+// The regression guard for the bug that silently disabled scheduling for every
+// free org: a built-in tier with PollingAllowed unset (nil) must INHERIT the
+// deployment-global default, not force it false. A non-nil tier value still
+// wins.
 func TestResolveEffective_TierPollingInherits(t *testing.T) {
 	t.Parallel()
 	allowDefaults := testDefaults
 	allowDefaults.PollingAllowed = true // deployment allows free polling
 
-	// Built-in free tier, polling unset → inherit the (allow) default.
 	freeTier := &Tier{ID: "free", Plan: PlanFree} // PollingAllowed nil
 	eff := ResolveEffective(nil, freeTier, allowDefaults, PlanFree, time.Unix(0, 0))
 	if !eff.PollingAllowed {
 		t.Fatal("free tier with nil polling must inherit the allow-by-default global default")
 	}
 
-	// An explicit tier value still overrides the default.
 	denyTier := &Tier{ID: "free", Plan: PlanFree, PollingAllowed: ptrBool(false)}
 	eff = ResolveEffective(nil, denyTier, allowDefaults, PlanFree, time.Unix(0, 0))
 	if eff.PollingAllowed {
@@ -180,9 +175,6 @@ func TestResolveEffective_AllOverrideKinds(t *testing.T) {
 	}
 }
 
-// TestResolveEffective_NewDimsPrecedence verifies the three three-tier
-// dimensions (retention, concurrency, seats) resolve override → tier → default
-// like the original numeric limits, and that 0 means inherit.
 func TestResolveEffective_NewDimsPrecedence(t *testing.T) {
 	t.Parallel()
 	def := testDefaults
@@ -190,13 +182,11 @@ func TestResolveEffective_NewDimsPrecedence(t *testing.T) {
 	def.MaxConcurrency = 2
 	def.MaxMembers = 2
 
-	// No tier, no override → global free defaults.
 	eff := ResolveEffective(nil, nil, def, PlanFree, time.Unix(0, 0))
 	if eff.RetentionDays != 7 || eff.MaxConcurrency != 2 || eff.MaxMembers != 2 {
 		t.Fatalf("expected free defaults, got %+v", eff)
 	}
 
-	// Tier raises them; a 0 tier field still inherits the default.
 	tier := &Tier{ID: "team", Plan: PlanFree, RetentionDays: 90, MaxMembers: 25} // MaxConcurrency 0 = inherit
 	eff = ResolveEffective(nil, tier, def, PlanFree, time.Unix(0, 0))
 	if eff.RetentionDays != 90 {
@@ -209,7 +199,6 @@ func TestResolveEffective_NewDimsPrecedence(t *testing.T) {
 		t.Errorf("members = %d, want tier 25", eff.MaxMembers)
 	}
 
-	// Override beats the tier.
 	ent := &TenantEntitlement{TierID: "team", MaxMembers: ptrInt(3)}
 	eff = ResolveEffective(ent, tier, def, PlanFree, time.Unix(0, 0))
 	if eff.MaxMembers != 3 {

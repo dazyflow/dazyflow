@@ -9,11 +9,6 @@ import { fileToIconDataURL, isImageIcon } from "../../lib/iconImage";
 import { Button } from "../ui/Button";
 import { ICON } from "../../icons";
 
-// IconUpload is the shared "set a real icon" control used by flow
-// settings and org settings. Shows a preview tile (the uploaded image,
-// or a caller-supplied fallback when none is set), an Upload button that
-// accepts SVG/PNG and stores it as a data: URL via onChange, and a
-// Remove button. Errors (wrong type / too large) render inline.
 export function IconUpload({
   value,
   onChange,
@@ -21,8 +16,6 @@ export function IconUpload({
 }: {
   value?: string;
   onChange: (next: string | undefined) => void;
-  // Rendered in the preview tile when there's no uploaded image (e.g. a
-  // lucide glyph for a flow, an initial for an org).
   fallback?: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -56,7 +49,6 @@ export function IconUpload({
           hidden
           onChange={(e) => {
             void onFile(e.target.files?.[0]);
-            // Reset so re-picking the same file fires change again.
             e.target.value = "";
           }}
         />

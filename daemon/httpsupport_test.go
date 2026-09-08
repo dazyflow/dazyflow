@@ -16,9 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
-// supportGateway builds a gateway with just the support stores wired + a pinned
-// clock, enough to drive the grant-lifecycle handlers directly (bypassing
-// requireAuth, which needs sessions).
 func supportGateway() (*HTTPGateway, time.Time) {
 	now := time.Unix(1_700_000_000, 0).UTC()
 	h := &HTTPGateway{
@@ -37,14 +34,11 @@ func adminPrincipal(tenant string) core.Principal {
 	return core.Principal{Subject: "admin-1", Tenant: tenant, Roles: []core.Role{core.TeamRoleAdmin()}}
 }
 
-// Full lifecycle: agent requests → admin lists + approves → ActiveGrant opens →
-// revoke closes it.
 func TestSupport_GrantLifecycle(t *testing.T) {
 	t.Parallel()
 	h, now := supportGateway()
 	ctx := context.Background()
 
-	// 1. Agent requests access.
 	rw := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/support/grants",
 		strings.NewReader(`{"tenant":"acme","flow_id":"daily-invoice","ticket_id":"t1"}`))
@@ -59,19 +53,16 @@ func TestSupport_GrantLifecycle(t *testing.T) {
 	if created.Status != core.GrantRequested || created.AgentSubject != "agent-a" {
 		t.Fatalf("unexpected created grant: %+v", created)
 	}
-	// Not active yet (only requested).
 	if _, ok, _ := h.Grants.ActiveGrant(ctx, "agent-a", "acme", "daily-invoice", now); ok {
 		t.Fatal("requested grant must not be active")
 	}
 
-	// 2. Admin lists their tenant's grants and sees it.
 	lrw := httptest.NewRecorder()
 	h.supportAPI().listGrants(lrw, httptest.NewRequest("GET", "/api/v1/support/grants", nil), adminPrincipal("acme"))
 	if lrw.Code != 200 || !strings.Contains(lrw.Body.String(), created.ID) {
 		t.Fatalf("list grants: code %d body %s", lrw.Code, lrw.Body)
 	}
 
-	// 3. Admin approves → grant becomes active for 4h.
 	drw := httptest.NewRecorder()
 	dreq := httptest.NewRequest("POST", "/api/v1/support/grants/"+created.ID+"/decide",
 		strings.NewReader(`{"decision":"approve"}`))
@@ -88,7 +79,6 @@ func TestSupport_GrantLifecycle(t *testing.T) {
 		t.Errorf("expiry = %v, want now+4h = %v", g.ExpiresAt, want)
 	}
 
-	// 4. Agent revokes their own grant → no longer active.
 	rrw := httptest.NewRecorder()
 	rreq := httptest.NewRequest("POST", "/api/v1/support/grants/"+created.ID+"/revoke", nil)
 	rreq.SetPathValue("id", created.ID)
@@ -107,7 +97,6 @@ func TestSupport_RequestRequiresAgentRole(t *testing.T) {
 	rw := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/support/grants",
 		strings.NewReader(`{"tenant":"acme","flow_id":"f1"}`))
-	// A plain org user (no support:agent) is forbidden.
 	h.supportAPI().requestGrant(rw, req, core.Principal{Subject: "u1", Tenant: "acme", Roles: []core.Role{core.TeamRoleViewer()}})
 	if rw.Code != 403 {
 		t.Errorf("want 403 without support role, got %d", rw.Code)
@@ -118,10 +107,8 @@ func TestSupport_DecideAuthz(t *testing.T) {
 	t.Parallel()
 	h, _ := supportGateway()
 	ctx := context.Background()
-	// Seed a requested grant for acme.
 	_ = h.Grants.Create(ctx, reqGrant("g1", "agent-a", h.supportAPI().supportTime()))
 
-	// A non-admin can't decide → 404 (existence not leaked).
 	rw := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/v1/support/grants/g1/decide", strings.NewReader(`{"decision":"approve"}`))
 	req.SetPathValue("id", "g1")
@@ -130,7 +117,6 @@ func TestSupport_DecideAuthz(t *testing.T) {
 		t.Errorf("non-admin decide should 404, got %d", rw.Code)
 	}
 
-	// A DIFFERENT tenant's admin can't decide acme's grant → 404.
 	rw2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest("POST", "/api/v1/support/grants/g1/decide", strings.NewReader(`{"decision":"approve"}`))
 	req2.SetPathValue("id", "g1")
@@ -138,7 +124,6 @@ func TestSupport_DecideAuthz(t *testing.T) {
 	if rw2.Code != 404 {
 		t.Errorf("cross-tenant admin decide should 404, got %d", rw2.Code)
 	}
-	// The grant is untouched (still requested).
 	g, _ := h.Grants.Get(ctx, "g1")
 	if g.Status != core.GrantRequested {
 		t.Errorf("grant should be untouched, got %q", g.Status)
@@ -155,8 +140,6 @@ func TestSupport_DisabledReturns501(t *testing.T) {
 	}
 }
 
-// Session elevation stamps SupportAgentRole for a granted email (mirrors the
-// platform-admin elevation).
 func TestElevateSupportAgent(t *testing.T) {
 	t.Parallel()
 	agents := support.NewMemAgentStore()
@@ -174,7 +157,6 @@ func TestElevateSupportAgent(t *testing.T) {
 		t.Error("granted email should get SupportAgentRole")
 	}
 
-	// Not granted → unchanged.
 	other := h.authAPI().elevateSupportAgent(context.Background(), auth.User{Email: "rando@example.com"})
 	for _, r := range other.Roles {
 		if r.Has(core.PermSupportAgent) {
@@ -182,14 +164,10 @@ func TestElevateSupportAgent(t *testing.T) {
 		}
 	}
 
-	// Nil store → no-op, no panic.
 	bare := &HTTPGateway{}
 	_ = bare.authAPI().elevateSupportAgent(context.Background(), auth.User{Email: "agent@vendor.com"})
 }
 
-// reqGrant is a grant in the requested state, the state every route test here
-// starts from. The store package has its own copy for its own tests; this one
-// exists because the two packages no longer share a test binary.
 func reqGrant(id, agent string, now time.Time) core.AccessGrant {
 	return core.AccessGrant{
 		ID:           id,

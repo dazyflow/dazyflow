@@ -3,9 +3,6 @@
 
 package daemon
 
-// The gateway's response writers. Every handler in the package funnels
-// through these, so status/content-type handling stays in one place.
-
 import (
 	"bytes"
 	"encoding/json"
@@ -22,10 +19,6 @@ func writeJSON(rw http.ResponseWriter, status int, body any) {
 	_ = json.NewEncoder(rw).Encode(body)
 }
 
-// writeXML is the XML analogue of writeJSON — it emits the XML declaration
-// followed by the marshaled body. Used by endpoints that content-negotiate
-// an XML representation (see wantsXML); the body's xml struct tags decide the
-// element names, mirroring the JSON tags.
 func writeXML(rw http.ResponseWriter, status int, body any) {
 	rw.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	rw.WriteHeader(status)
@@ -54,9 +47,6 @@ func writeSSE(rw http.ResponseWriter, event string, payload any) {
 	_, _ = fmt.Fprintf(rw, "event: %s\ndata: %s\n\n", event, b)
 }
 
-// jsonBufPool retains the encoding buffer for the few big list responses.
-// The catalog encodes to ~500 KB and the buffer reaches that by doubling,
-// so without pooling every palette request allocates the whole ladder.
 var jsonBufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 
 // jsonBufMaxKeep is the largest buffer worth holding between requests. A
@@ -64,8 +54,6 @@ var jsonBufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 // for the process's life; the catalog fits well under this.
 const jsonBufMaxKeep = 1 << 21 // 2 MiB
 
-// encodeJSONPooled marshals v into a pooled buffer and hands it to fn.
-// The buffer is only valid for the duration of the call.
 func encodeJSONPooled(v any, fn func([]byte)) error {
 	buf := jsonBufPool.Get().(*bytes.Buffer)
 	buf.Reset()
@@ -74,8 +62,6 @@ func encodeJSONPooled(v any, fn func([]byte)) error {
 			jsonBufPool.Put(buf)
 		}
 	}()
-	// Encoder.Encode appends a newline; the callers here frame their own
-	// value, so trim it back off.
 	if err := json.NewEncoder(buf).Encode(v); err != nil {
 		return err
 	}
@@ -84,16 +70,9 @@ func encodeJSONPooled(v any, fn func([]byte)) error {
 	return nil
 }
 
-// writeCachedJSON is writeJSON plus the response cache: the same bytes,
-// with a content-derived ETag, a compressed form reused across requests,
-// and a 304 when the caller already holds them. Worth it for a body big
-// enough that compressing it dominates the request; a small one is
-// cheaper to just write.
 func writeCachedJSON(rw http.ResponseWriter, r *http.Request, v any, allowGzip bool) {
 	err := encodeJSONPooled(v, func(value []byte) {
 		rw.Header().Set("Content-Type", "application/json")
-		// encodeJSONPooled trims the newline Encode appends; writeJSON
-		// keeps it, and these have to stay the same bytes.
 		writeCachedParts(rw, r, [][]byte{value, []byte("\n")}, allowGzip)
 	})
 	if err != nil {

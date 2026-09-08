@@ -57,8 +57,6 @@ func NewEncryptedOrgAuthStore(inner auth.OrgAuthStore, secrets *EncryptedSecrets
 	return &EncryptedOrgAuthStore{inner: inner, secrets: secrets}
 }
 
-// GetOrgAuth returns the config with GoogleClientSecret populated from the
-// encrypted store.
 func (s *EncryptedOrgAuthStore) GetOrgAuth(ctx context.Context, tenant string) (auth.OrgAuthConfig, error) {
 	cfg, err := s.inner.GetOrgAuth(ctx, tenant)
 	if err != nil {
@@ -116,7 +114,6 @@ func (s *EncryptedOrgAuthStore) migrateRow(ctx context.Context, cfg auth.OrgAuth
 // config to the row, with the secret column left empty.
 func (s *EncryptedOrgAuthStore) PutOrgAuth(ctx context.Context, cfg auth.OrgAuthConfig) error {
 	secret := cfg.GoogleClientSecret
-	// Never let the plaintext reach the row, on any path below.
 	cfg.GoogleClientSecret = ""
 
 	if secret == "" {

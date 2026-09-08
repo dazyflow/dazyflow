@@ -11,8 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// runText executes the drop and fails the test on a transport error, so the
-// cases below read as "these params produce this result".
 func runText(t *testing.T, params map[string]any) core.Result {
 	t.Helper()
 	res, err := executeText(t.Context(), core.Job{ID: "j1", Params: params}, nil)
@@ -22,8 +20,6 @@ func runText(t *testing.T, params map[string]any) core.Result {
 	return res
 }
 
-// textManifest pulls the registered manifest back out, so a test reads what the
-// editor will.
 func textManifest(t *testing.T) core.Manifest {
 	t.Helper()
 	m, ok := engine.Default.Manifests()["text"]
@@ -63,9 +59,6 @@ func TestText_Multiline(t *testing.T) {
 }
 
 func TestText_EmptyAllowed(t *testing.T) {
-	// An empty string is still a valid value — useful as a "null"
-	// placeholder downstream. The schema marks 'text' as required so
-	// the param is always present; absent => empty.
 	res, _ := executeText(t.Context(), core.Job{
 		Params: map[string]any{"text": ""},
 	}, nil)
@@ -74,10 +67,6 @@ func TestText_EmptyAllowed(t *testing.T) {
 	}
 }
 
-// The `language` param changes the EDITOR and nothing else. Worth its own test
-// because the temptation later will be to make it mean something at run time —
-// parse the JSON, validate the SQL — and the moment it does, Text stops being
-// "emit this string" and the JSON step stops being the one that parses.
 func TestText_LanguageDoesNotChangeTheValue(t *testing.T) {
 	const src = "select 1"
 	plain := runText(t, map[string]any{"text": src})

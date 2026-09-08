@@ -83,13 +83,10 @@ describe("enumValueLabel", () => {
   });
 
   it("returns a value the schema no longer lists as itself", () => {
-    // A graph saved against an older version still has to render.
     expect(enumValueLabel(schema, "retired_op")).toBe("retired_op");
   });
 
   it("survives a schema with no labels at all", () => {
-    // Legitimate for enums whose value IS the name a user knows — HTTP
-    // methods, currency codes.
     expect(enumValueLabel({ enum: ["GET", "POST"] }, "POST")).toBe("POST");
   });
 

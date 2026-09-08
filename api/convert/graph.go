@@ -16,8 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// GraphToPB converts a core.Graph into its protobuf wire form. Node
-// params are JSON-encoded; the remaining fields map one-to-one.
 func GraphToPB(g core.Graph) (*controlpb.Graph, error) {
 	out := &controlpb.Graph{
 		Id: g.ID, Version: g.Version,
@@ -50,8 +48,6 @@ func GraphToPB(g core.Graph) (*controlpb.Graph, error) {
 	return out, nil
 }
 
-// GraphFromPB converts a protobuf Graph back into a core.Graph. Node
-// params are JSON-decoded into a map; the remaining fields map one-to-one.
 func GraphFromPB(g *controlpb.Graph) (core.Graph, error) {
 	if g == nil {
 		return core.Graph{}, errors.New("graph required")

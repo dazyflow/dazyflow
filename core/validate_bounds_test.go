@@ -24,8 +24,6 @@ func approverList(n int) string {
 }
 
 func TestValidate_ApprovalRecipientCeilingIsInclusive(t *testing.T) {
-	// Each step is capped at MaxApprovalRecipients, so the run ceiling is
-	// reached with exactly that many full steps.
 	build := func(steps int) Graph {
 		g := Graph{}
 		for i := range steps {
@@ -52,7 +50,6 @@ func TestValidate_ApprovalRecipientCeilingIsInclusive(t *testing.T) {
 }
 
 func TestValidate_GraphByteCeilingIsInclusive(t *testing.T) {
-	// ID + Module is the whole payload, so the measurement is exact.
 	build := func(total int) Graph {
 		return Graph{Nodes: []Node{{ID: strings.Repeat("n", total-len("text")), Module: "text"}}}
 	}
@@ -107,7 +104,6 @@ func TestValidate_WaypointOverrunReportBoundary(t *testing.T) {
 	build := func(edges int) Graph {
 		g := Graph{Nodes: []Node{{ID: "a", Module: "src"}, {ID: "b", Module: "sink"}}}
 		for i := range edges {
-			// Distinct source ports so these are not ALSO duplicate wires.
 			g.Edges = append(g.Edges, Edge{
 				From: "a", FromPort: fmt.Sprintf("out%d", i),
 				To: "b", ToPort: "items", Waypoints: over,
@@ -140,8 +136,6 @@ func TestValidate_WaypointOverrunReportBoundary(t *testing.T) {
 }
 
 func TestValidate_TotalWaypointCeilingIsInclusive(t *testing.T) {
-	// Spread across wires that are each within the per-edge limit, so only the
-	// graph-wide total is under test.
 	build := func(total int) Graph {
 		g := Graph{Nodes: []Node{{ID: "a", Module: "src"}, {ID: "b", Module: "sink"}}}
 		for i := 0; total > 0; i++ {
@@ -165,7 +159,6 @@ func TestValidate_TotalWaypointCeilingIsInclusive(t *testing.T) {
 	}
 }
 
-// A declared variadic minimum is inclusive: exactly Min wires satisfies it.
 func TestValidateWithManifests_VariadicMinIsInclusive(t *testing.T) {
 	minTwo := 2
 	manifests := map[string]Manifest{
@@ -192,9 +185,6 @@ func TestValidateWithManifests_VariadicMinIsInclusive(t *testing.T) {
 	}
 }
 
-// A wire from a switched-off step carries no data, so the port-shape checks
-// skip it — but it still connects the pin. Dropping it from the fan-in tally
-// makes a live step fed by a disabled upstream read as unconnected.
 func TestValidateWithManifests_DisabledUpstreamStillCountsFanIn(t *testing.T) {
 	minOne := 1
 	manifests := map[string]Manifest{

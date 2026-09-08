@@ -38,8 +38,6 @@ func mcpList(t *testing.T, h *HTTPGateway, p core.Principal) *httptest.ResponseR
 	return rw
 }
 
-// TestMCPServersEndpoints_UnconfiguredDeployment: no store wired means the
-// feature is absent, not broken.
 func TestMCPServersEndpoints_UnconfiguredDeployment(t *testing.T) {
 	t.Parallel()
 	h := &HTTPGateway{}
@@ -48,8 +46,6 @@ func TestMCPServersEndpoints_UnconfiguredDeployment(t *testing.T) {
 	}
 }
 
-// TestMCPServersEndpoints_RequiresStepSourceAdmin: adding a server is not
-// something an editor may do — it points the daemon at a new endpoint.
 func TestMCPServersEndpoints_RequiresStepSourceAdmin(t *testing.T) {
 	t.Parallel()
 	h, _, url := mcpGateway(t)
@@ -104,9 +100,6 @@ func TestMCPServersEndpoints_SaveThenList(t *testing.T) {
 	}
 }
 
-// TestMCPServersEndpoints_ReportsWhatTheServerSaidAboutItself: the handshake
-// note reaches the admin page, and does so as a live fact rather than a stored
-// one — nothing persists a paragraph a third party can change at will.
 func TestMCPServersEndpoints_ReportsWhatTheServerSaidAboutItself(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestMCPServers(t)
@@ -128,7 +121,6 @@ func TestMCPServersEndpoints_ReportsWhatTheServerSaidAboutItself(t *testing.T) {
 	if saved.Instructions != "Ask in English; the index is English-only." {
 		t.Fatalf("instructions = %q", saved.Instructions)
 	}
-	// A server that says nothing leaves the field off the wire entirely.
 	quiet := &fakeMCPEndpoint{toolNames: []string{"search"}}
 	quietSrv := quiet.start(t)
 	rw = mcpPost(t, h, adminPrincipal("acme"), `{"label":"Quiet","url":"`+quietSrv.URL+`"}`)
@@ -140,8 +132,6 @@ func TestMCPServersEndpoints_ReportsWhatTheServerSaidAboutItself(t *testing.T) {
 	}
 }
 
-// TestMCPServersEndpoints_ListIsTenantScoped: the page shows the caller's org
-// and nobody else's.
 func TestMCPServersEndpoints_ListIsTenantScoped(t *testing.T) {
 	t.Parallel()
 	h, _, url := mcpGateway(t)
@@ -222,8 +212,6 @@ func TestMCPServersEndpoints_PutOmittingEnabledKeepsItOn(t *testing.T) {
 	}
 }
 
-// TestMCPServersEndpoints_Usage covers the lookup behind the delete warning:
-// scoped to a server that exists, and answered for the caller's own org.
 func TestMCPServersEndpoints_Usage(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestMCPServers(t)
@@ -256,12 +244,9 @@ func TestMCPServersEndpoints_Usage(t *testing.T) {
 		t.Fatalf("flows = %+v, want the one referencing flow", got.Flows)
 	}
 
-	// A name that is not a server of this org gets a 404, not a confident
-	// "nothing uses this".
 	if rw := mcpUsage(t, h, adminPrincipal("acme"), "typo"); rw.Code != 404 {
 		t.Errorf("unknown server usage code %d, want 404", rw.Code)
 	}
-	// And it is admin-only, like every other route on this page.
 	if rw := mcpUsage(t, h, editorPrincipal("acme"), "mcp-test"); rw.Code != 403 {
 		t.Errorf("editor usage code %d, want 403", rw.Code)
 	}

@@ -18,8 +18,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// alwaysFailManifest is non-idempotent + no retry so a failure is terminal
-// for that node — useful for isolating skip behaviour from retry behaviour.
 var alwaysFailManifest = core.Manifest{
 	ID:             "boom",
 	Version:        "1.0",
@@ -31,8 +29,6 @@ var alwaysFailManifest = core.Manifest{
 	Outputs:        []core.Port{{Port: "out"}},
 }
 
-// skipHarness adds the bomb module alongside the built-in registry so
-// tests can compose graphs of "boom" + sleep + merge.
 type skipHarness struct {
 	svc       *daemon.Service
 	jobs      core.JobStore
@@ -47,7 +43,6 @@ func newSkipHarness(t *testing.T) *skipHarness {
 
 	executed := &atomic.Int32{}
 	reg := engine.NewRegistry()
-	// Boom — always errors.
 	_ = reg.Register(engine.NativeDrop{
 		Manifest: alwaysFailManifest,
 		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
@@ -80,7 +75,6 @@ func newSkipHarness(t *testing.T) *skipHarness {
 			}, nil
 		},
 	})
-	// Bring in sleep + merge from the global default registry.
 	for id, mf := range engine.Default.Manifests() {
 		mf := mf
 		nativeT, _ := engine.Default.Get(id)
@@ -133,7 +127,6 @@ func TestSkip_FailureDoesNotPropagateThroughSkipEdge(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)
 
-	// boom (fails) →[skip]→ sleep (no other deps, runs with empty input)
 	g := core.Graph{
 		ID: "skip-single", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -167,11 +160,6 @@ func TestSkip_AbortEdgeStillPropagatesEvenWithSkipSibling(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)
 
-	// boom (fails) has TWO outgoing edges:
-	//   - skip-edge to "skipped" sleep
-	//   - default abort-edge to "aborted" sleep
-	// Failure should propagate (abort wins) and graph fails. Neither
-	// downstream node should run.
 	g := core.Graph{
 		ID: "skip-mixed", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -204,8 +192,6 @@ func TestSkip_LeafFailureStillPropagates(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)
 
-	// boom is a leaf — no outgoing edges. Default behaviour for leaves is
-	// abort, so the graph fails.
 	g := core.Graph{
 		ID: "skip-leaf", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -226,10 +212,6 @@ func TestSkip_SurvivingPredecessorReachesNode(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)
 
-	// Two predecessors of merge:
-	//   - boom failing via skip-edge
-	//   - sleep succeeding via default edge
-	// merge should run with only sleep's output. Graph succeeds.
 	g := core.Graph{
 		ID: "skip-multi", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -255,8 +237,6 @@ func TestSkip_SurvivingPredecessorReachesNode(t *testing.T) {
 	if join.Status != core.JobStatusSucceeded {
 		t.Fatalf("join status = %q", join.Status)
 	}
-	// merge wrote a list of refs into its "out" port. With one survivor
-	// it should be a single-element list.
 	if join.Result == nil || join.Result.Output["out"].Inline == nil {
 		t.Fatal("merge output missing inline list")
 	}
@@ -273,8 +253,6 @@ func TestSkip_ChainOfSkips_AllRun(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)
 
-	// boom(skip)→sleep1(skip)→sleep2
-	// Both downstream sleeps should run; graph succeeds.
 	g := core.Graph{
 		ID: "skip-chain", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{

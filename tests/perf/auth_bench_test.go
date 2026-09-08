@@ -84,8 +84,6 @@ func authFixture(b *testing.B, ttl time.Duration) (auth.Authenticator, string) {
 	}, token
 }
 
-// BenchmarkAuthenticateSession measures what every authenticated HTTP and
-// gRPC request pays before its handler runs.
 func BenchmarkAuthenticateSession(b *testing.B) {
 	a, token := authFixture(b, 0)
 	ctx := context.Background()
@@ -102,8 +100,6 @@ func BenchmarkAuthenticateSession(b *testing.B) {
 	}
 }
 
-// BenchmarkAuthenticateSessionParallel is the same path under the
-// concurrency a browser produces, where the pool is the contended resource.
 func BenchmarkAuthenticateSessionParallel(b *testing.B) {
 	a, token := authFixture(b, 0)
 	b.ReportAllocs()
@@ -118,9 +114,6 @@ func BenchmarkAuthenticateSessionParallel(b *testing.B) {
 	})
 }
 
-// BenchmarkAuthenticateSessionNoGate isolates the attribution: the same
-// request with the moderation gate's two reads removed. The difference
-// between this and BenchmarkAuthenticateSession is what the gate costs.
 func BenchmarkAuthenticateSessionNoGate(b *testing.B) {
 	a, token := authFixture(b, 0)
 	inner := a.(*auth.ModerationGate).Inner
@@ -134,9 +127,6 @@ func BenchmarkAuthenticateSessionNoGate(b *testing.B) {
 	}
 }
 
-// BenchmarkAuthenticateSessionCached is the same chain with the
-// moderation gate's memo window on — what a request pays once the two
-// lockout reads stop being per-request round trips.
 func BenchmarkAuthenticateSessionCached(b *testing.B) {
 	a, token := authFixture(b, 15*time.Second)
 	ctx := context.Background()
@@ -153,8 +143,6 @@ func BenchmarkAuthenticateSessionCached(b *testing.B) {
 	}
 }
 
-// BenchmarkAuthenticateSessionCachedParallel is the cached path under the
-// concurrency a browser produces.
 func BenchmarkAuthenticateSessionCachedParallel(b *testing.B) {
 	a, token := authFixture(b, 15*time.Second)
 	b.ReportAllocs()

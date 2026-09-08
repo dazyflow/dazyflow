@@ -26,9 +26,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// fullStack wires every production-relevant piece together: auth + Git
-// workspace + JobStore + Engine + sandbox + quota + workers + a custom
-// flaky module so we can drive retry behaviour deterministically.
 type fullStack struct {
 	svc          *daemon.Service
 	jobs         core.JobStore
@@ -66,7 +63,6 @@ func newFullStack(t *testing.T, quotaBytes int64) *fullStack {
 	failuresLeft.Store(2) // module fails 2× then succeeds
 
 	reg := engine.NewRegistry()
-	// "flaky" — uses exponential backoff retry policy.
 	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:             "flaky",
@@ -95,7 +91,6 @@ func newFullStack(t *testing.T, quotaBytes int64) *fullStack {
 			}, nil
 		},
 	})
-	// "explode" — always fails; used as a fallback target's primary.
 	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:             "explode",
@@ -114,7 +109,6 @@ func newFullStack(t *testing.T, quotaBytes int64) *fullStack {
 			}, nil
 		},
 	})
-	// Bring in sleep, file_read, file_write from the global registry.
 	for id, m := range engine.Default.Manifests() {
 		nt, _ := engine.Default.Get(id)
 		nativeT := nt
@@ -151,7 +145,6 @@ func newFullStack(t *testing.T, quotaBytes int64) *fullStack {
 	}
 	wctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	// 3 workers so node-level parallelism actually happens.
 	for i := 0; i < 3; i++ {
 		w := daemon.NewWorker(daemon.WorkerConfig{
 			ID:              "w" + string('a'+rune(i)),
@@ -192,7 +185,7 @@ func waitTerminal(t *testing.T, store core.JobStore, id string) daemon.TerminalE
 	return ev
 }
 
-// TestKitchenSink_AllPoliciesTogether builds a single graph that uses:
+// Builds a single graph that uses:
 //
 //   - retry on a flaky node (fails twice → succeeds)
 //   - fallback handler for an always-failing node ("explode")
@@ -210,8 +203,6 @@ func waitTerminal(t *testing.T, store core.JobStore, id string) daemon.TerminalE
 func TestKitchenSink_AllPoliciesTogether(t *testing.T) {
 	h := newFullStack(t, 10_000) // 10 KB tenant quota, plenty
 
-	// Seed a source file inside the sandbox so file_write has something
-	// to copy under quota's eye.
 	root, _ := h.sandbox.Root("acme", "ws1")
 	seed := []byte("kitchen-sink data")
 	if err := os.WriteFile(filepath.Join(root, "seed.txt"), seed, 0o644); err != nil {
@@ -230,7 +221,6 @@ func TestKitchenSink_AllPoliciesTogether(t *testing.T) {
 			{ID: "writer", Module: "file_write", Params: map[string]any{"path": "out.txt"}},
 		},
 		Edges: []core.Edge{
-			// flaky → merger; on_error=retry triggers the retry policy
 			{From: "flaky", FromPort: "out", To: "merger", ToPort: "items", OnError: core.OnErrorRetry},
 			// explode → handler (fallback rescues). Delay threads the value on
 			// the universal `pass` pin — it stopped declaring its own in/out
@@ -238,11 +228,8 @@ func TestKitchenSink_AllPoliciesTogether(t *testing.T) {
 			// long after Delay dropped them, which core.Validate rejects and
 			// which dispatch used to tolerate as a silently dead wire.
 			{From: "explode", FromPort: "out", To: "handler", ToPort: core.PassPort, OnError: core.OnErrorFallback},
-			// explode → ignored (skip — runs anyway despite failure)
 			{From: "explode", FromPort: "out", To: "ignored", ToPort: core.PassPort, OnError: core.OnErrorSkip},
-			// handler → merger
 			{From: "handler", FromPort: core.PassPort, To: "merger", ToPort: "items"},
-			// reader → writer (sandbox+quota active here)
 			{From: "reader", FromPort: "out", To: "writer", ToPort: "in"},
 		},
 	}
@@ -255,8 +242,6 @@ func TestKitchenSink_AllPoliciesTogether(t *testing.T) {
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("graph status = %q (err=%+v)", terminal.Status, terminal.Error)
 	}
-
-	// === Per-node assertions ===
 
 	flaky, _ := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, "flaky"))
 	if flaky.Status != core.JobStatusSucceeded {
@@ -294,7 +279,6 @@ func TestKitchenSink_AllPoliciesTogether(t *testing.T) {
 		t.Errorf("writer.Status = %q, want succeeded", writer.Status)
 	}
 
-	// === Filesystem effect ===
 	got, err := os.ReadFile(filepath.Join(root, "out.txt"))
 	if err != nil {
 		t.Fatalf("out.txt missing: %v", err)
@@ -303,7 +287,6 @@ func TestKitchenSink_AllPoliciesTogether(t *testing.T) {
 		t.Errorf("out.txt = %q, want %q", got, seed)
 	}
 
-	// === Worker distribution ===
 	workers := map[string]struct{}{}
 	for _, id := range []string{"flaky", "handler", "ignored", "merger", "reader", "writer"} {
 		rec, _ := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, id))
@@ -316,9 +299,6 @@ func TestKitchenSink_AllPoliciesTogether(t *testing.T) {
 	}
 }
 
-// TestKitchenSink_QuotaCutsOffMidGraph composes a graph where the first
-// file_write barely fits but a second one exceeds the tenant quota. The
-// downstream of the quota-blocked write should propagate the failure.
 func TestKitchenSink_QuotaCutsOffMidGraph(t *testing.T) {
 	h := newFullStack(t, 50) // 50 byte budget
 
@@ -346,8 +326,6 @@ func TestKitchenSink_QuotaCutsOffMidGraph(t *testing.T) {
 		t.Fatalf("status = %q, want failed (second write should hit quota)", terminal.Status)
 	}
 
-	// Exactly one of the writes should have succeeded; the other should
-	// be quota_exceeded. Which one depends on worker scheduling.
 	wr1, _ := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, "wr1"))
 	wr2, _ := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, "wr2"))
 	statuses := []string{string(wr1.Status), string(wr2.Status)}
@@ -366,9 +344,6 @@ func TestKitchenSink_QuotaCutsOffMidGraph(t *testing.T) {
 	}
 }
 
-// TestKitchenSink_ConcurrentGraphsIsolated submits 5 different graphs in
-// parallel and verifies they all complete without cross-contamination of
-// job IDs, bus subscriptions, or sandbox state.
 func TestKitchenSink_ConcurrentGraphsIsolated(t *testing.T) {
 	h := newFullStack(t, 1_000_000)
 
@@ -409,9 +384,6 @@ func TestKitchenSink_ConcurrentGraphsIsolated(t *testing.T) {
 	}
 }
 
-// TestKitchenSink_GraphRecordReflectsOutcome checks that the graph-level
-// JobRecord always ends in a sensible terminal state, regardless of how
-// the run finished.
 func TestKitchenSink_GraphRecordReflectsOutcome(t *testing.T) {
 	cases := []struct {
 		name      string

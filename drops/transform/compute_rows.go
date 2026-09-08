@@ -242,11 +242,6 @@ func evalExpression(_ context.Context, prog cel.Program, row map[string]any) (an
 	return unwrapCEL(v)
 }
 
-// unwrapCEL converts a CEL ref.Val back to a plain Go value suitable
-// for downstream JSON marshaling. Primitives come out as their
-// natural Go type (int64, float64, bool, string); composite types
-// (list, map) get unwrapped recursively via ConvertToNative so a
-// computed `{"a": 1}` doesn't surface as a CEL types.Map wrapper.
 func unwrapCEL(v ref.Val) (any, error) {
 	raw := v.Value()
 	switch raw.(type) {
@@ -254,8 +249,6 @@ func unwrapCEL(v ref.Val) (any, error) {
 		uint, uint8, uint16, uint32, uint64, float32, float64:
 		return raw, nil
 	}
-	// Composite types: use ConvertToNative with the any-interface
-	// target so cel-go does the recursive unwrap for us.
 	native, err := v.ConvertToNative(reflect.TypeOf((*any)(nil)).Elem())
 	if err != nil {
 		return raw, nil // fall back to the wrapped value; better than dropping

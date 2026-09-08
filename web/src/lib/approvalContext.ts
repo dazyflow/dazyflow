@@ -20,8 +20,6 @@ export type ApprovalContextView =
   | { kind: "fields"; fields: { key: string; value: string }[]; more: number }
   | null;
 
-// MAX_FIELDS keeps one wide record from burying the Approve button. The run
-// page has the whole thing; this is the gist.
 const MAX_FIELDS = 8;
 // MAX_VALUE trims a single long answer (a free-text form field can run to
 // paragraphs) so one field can't crowd out the rest.
@@ -32,9 +30,6 @@ function clip(s: string): string {
   return t.length > MAX_VALUE ? t.slice(0, MAX_VALUE).trimEnd() + "…" : t;
 }
 
-// display renders one field's value. Primitives read as themselves; a nested
-// object or list becomes compact JSON, which is honest about being structured
-// without pretending to be prose.
 function display(v: unknown): string {
   if (v === null || v === undefined) return "";
   if (typeof v === "string") return clip(v);
@@ -64,8 +59,6 @@ export function approvalContextView(
     return { kind: "text", text: String(value) };
   }
 
-  // A single-row list is how a form submission reaches a row-writing step, and
-  // it reads far better unwrapped than as a one-item array.
   if (Array.isArray(value)) {
     if (value.length === 1) return approvalContextView(value[0], order);
     if (value.length === 0) return null;
@@ -74,8 +67,6 @@ export function approvalContextView(
 
   if (typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>).filter(
-      // A field the person left blank tells the approver nothing, and an empty
-      // row is worse than an absent one.
       ([, v]) => display(v) !== "",
     );
     if (entries.length === 0) return null;
@@ -99,12 +90,6 @@ export function approvalContextView(
   return null;
 }
 
-// approvalContextSummary flattens a context view onto one line, for the
-// history list beneath the inbox. A settled decision is scanned, not studied —
-// the row says what was decided in a sentence and links to the run for the
-// rest — so the field/text distinction the inbox card draws in layout collapses
-// here into "key: value · key: value". Returns "" when there was no value,
-// which the caller falls back on the prompt for.
 export function approvalContextSummary(view: ApprovalContextView): string {
   if (!view) return "";
   if (view.kind === "text") return view.text;

@@ -31,8 +31,6 @@ const NEW_DRAFT = "\u0000new"; // sentinel selection id for an unsaved new templ
 export function EmailTemplates() {
   const { t } = useTranslation();
   const { token, hasPerm } = useAuth();
-  // Managing the library is admin-only (org-wide branding, live reference);
-  // non-admins can still view and pick templates when building flows.
   const canWrite = hasPerm("organization:admin");
 
   const [templates, setTemplates] = useState<EmailTemplateSummary[] | null>(null);
@@ -168,10 +166,6 @@ export function EmailTemplates() {
   );
 }
 
-// TemplateEditor edits one template (or a new draft). Built-ins arrive with
-// canWrite=false: the HTML and preview show, but name/HTML are read-only and
-// Save is hidden. The preview is server-rendered (debounced) so it matches a
-// real send including {{if .Logo}} blocks.
 function TemplateEditor({
   token,
   canWrite,
@@ -202,13 +196,10 @@ function TemplateEditor({
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
 
-  // Debounced server-side preview of the current HTML.
   useEffect(() => {
     if (!token) return;
     const handle = window.setTimeout(() => {
       api
-        // Sample subject so a {{.Subject}} slot renders something in the editor
-        // preview (body falls back to sample content server-side).
         .previewEmailTemplate(token, { html, subject: "Sample subject" })
         .then((r) => setPreview(r.html))
         .catch(() => setPreview("")); // a parse error just blanks the preview
@@ -233,8 +224,6 @@ function TemplateEditor({
     setTestResult(null);
     setTestBusy(true);
     api
-      // Send the current editor HTML so unsaved edits are tested as-is, with a
-      // subject naming the template for context in the inbox.
       .sendTestEmail(token, {
         to: testTo.trim() || undefined,
         html,
@@ -339,8 +328,6 @@ function TemplateEditor({
   );
 }
 
-// DEFAULT_TEMPLATE_HTML seeds a new template with a minimal valid shell that
-// already has the required {{.Body}} placeholder.
 const DEFAULT_TEMPLATE_HTML = `<!DOCTYPE html>
 <html>
   <body style="margin:0;padding:24px;background:#f4f5fa;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1b2233;">

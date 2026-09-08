@@ -1,13 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package mimetype centralizes the "is this content text?" decision the
-// drops use to choose between emitting a Go string (text) or a []byte
-// (binary) on an output port. It previously lived as two slightly
-// divergent copies in drops/io and drops/net — the io copy missed the
-// charset-parameter trim and a few textual application/* types — which
-// meant the same Content-Type could be classified differently depending
-// on which drop produced it. One definition keeps that consistent.
 package mimetype
 
 import (
@@ -15,13 +8,6 @@ import (
 	"strings"
 )
 
-// GuessByExt maps a filename's extension to a MIME type, covering the file
-// types the workspace catalogue actually deals with — spreadsheets, CSVs,
-// JSON, common text and images. It deliberately avoids the stdlib mime
-// package, whose mapping is OS-dependent (it reads /etc/mime.types on Linux)
-// — reproducibility noise we don't need. Unknown extensions fall back to
-// application/octet-stream, matching what file_read settles on when no MIME
-// is supplied.
 func GuessByExt(path string) string {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".xlsx", ".xlsm":
@@ -56,10 +42,6 @@ func GuessByExt(path string) string {
 	return "application/octet-stream"
 }
 
-// IsText reports whether a MIME type denotes textual content. It strips
-// any parameters ("text/plain; charset=utf-8" → "text/plain"), treats
-// the whole text/* family as text, and allows the common textual
-// application/* types (JSON, XML, CSV, JavaScript, YAML).
 func IsText(mime string) bool {
 	if i := strings.IndexByte(mime, ';'); i >= 0 {
 		mime = mime[:i]

@@ -24,8 +24,6 @@ describe("ScriptEditor", () => {
   });
 
   it("indents with Tab instead of leaving the field", async () => {
-    // In a one-line input Tab moving on is right; in a code box it is how you
-    // lose your place, and Python is not writable without indentation.
     const onChange = vi.fn();
     render(<ScriptEditor value="" onChange={onChange} lang="python" />);
     const ta = screen.getByRole("textbox");

@@ -66,9 +66,6 @@ func init() {
 	})
 }
 
-// mapSpec is the parsed, validated form of the drop's params. We
-// parse once up front so the per-row hot loop doesn't re-validate
-// shapes on every iteration.
 type mapSpec struct {
 	hasSelect bool
 	hasDrop   bool
@@ -106,8 +103,6 @@ func executeMapRows(_ context.Context, job core.Job, _ chan<- core.Progress) (co
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
-	// 1. Filter rows. Reduces the working set before we do per-cell
-	// work in the projection step below.
 	filtered := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		if rowPassesFilters(row, spec) {
@@ -136,7 +131,6 @@ func executeMapRows(_ context.Context, job core.Job, _ chan<- core.Progress) (co
 		keptCols = inputHeaders
 	}
 
-	// 3. Resolve output headers (kept cols with renames applied).
 	outputHeaders := make([]string, len(keptCols))
 	for i, c := range keptCols {
 		if newName, ok := spec.rename[c]; ok {
@@ -146,9 +140,6 @@ func executeMapRows(_ context.Context, job core.Job, _ chan<- core.Progress) (co
 		}
 	}
 
-	// 4. Project each filtered row into the kept columns, applying
-	// defaults for missing/null values, then write under the output
-	// (renamed) name.
 	outRows := make([]map[string]any, 0, len(filtered))
 	for _, row := range filtered {
 		outRow := make(map[string]any, len(keptCols))

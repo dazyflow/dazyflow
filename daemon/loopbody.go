@@ -40,8 +40,6 @@ func loopBodyOwners(graph core.Graph) map[string]string {
 		for len(stack) > 0 {
 			n := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
-			// Never fold the loop node itself into its body (a body chain that
-			// loops back), and don't revisit an already-owned node.
 			if n == forEach {
 				continue
 			}

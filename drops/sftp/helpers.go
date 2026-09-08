@@ -27,12 +27,8 @@ import (
 	"github.com/dazyflow/dazyflow/internal/sftputil"
 )
 
-// integration is the label every drop here shares — the name of the page a
-// tenant configures once, and the key its stored connection hangs off.
 const integration = "SFTP"
 
-// brandColor is shared by every step in the app so the cards read as one
-// group on the canvas.
 const brandColor = "#7c3aed"
 
 // connectionFields is the SFTP server, configured once on the integration
@@ -62,11 +58,6 @@ func connectionFields() []core.ConnectionField {
 	}
 }
 
-// configFromJob assembles the SFTP connection from the params the engine
-// injected. `directory` is declared as a param as well as a connection
-// field, so a step can point at another folder while everything else comes
-// from the connection — injectConnectionDefaults leaves an author's per-step
-// value alone.
 func configFromJob(job core.Job) (sftputil.Config, error) {
 	host := strings.TrimSpace(params.StringDefault(job.Params, "host", ""))
 	if host == "" {
@@ -108,12 +99,6 @@ func remoteDir(job core.Job) string {
 	return "."
 }
 
-// fileRecord is one remote file, as a flow works with it.
-//
-// `path` is the full remote path, so it wires straight into Download file
-// without the author having to rebuild it from the folder and the name —
-// the same reasoning behind Search emails emitting ids that Read email
-// takes. `modified` is RFC3339 so a Date step or a Compare can use it.
 func fileRecord(dir string, info os.FileInfo) map[string]any {
 	return map[string]any{
 		"name":     info.Name(),
@@ -156,8 +141,6 @@ func sortByModified(rows []map[string]any) {
 	})
 }
 
-// sortStrings is sort.Strings, wrapped so sftp_list_files does not need its
-// own sort import for one call.
 func sortStrings(s []string) { sort.Strings(s) }
 
 // resolveRemotePath works out which file a step was pointed at. It accepts a
@@ -179,8 +162,6 @@ func resolveRemotePath(job core.Job) (string, bool) {
 		if s, _ := m["path"].(string); s != "" {
 			return s
 		}
-		// A record with only a name is still usable — join it onto the folder
-		// the step is working in.
 		if s, _ := m["name"].(string); s != "" {
 			return path.Join(remoteDir(job), s)
 		}
@@ -203,7 +184,6 @@ func resolveRemotePath(job core.Job) (string, bool) {
 		}
 		return "", false
 	case []any:
-		// The whole file list: take the first entry.
 		for _, item := range v {
 			if s := recordPath(item); s != "" {
 				return s, true

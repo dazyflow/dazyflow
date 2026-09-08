@@ -15,11 +15,6 @@ import (
 	"time"
 )
 
-// billingHarness extends the gateway harness with a plan store, usage
-// store, and a Stripe fake.
-// stripeFormRecorder captures the POST form of each call the daemon makes to
-// Stripe, keyed by path, so a test can assert on the success/cancel/return URLs
-// the daemon supplies.
 type stripeFormRecorder struct {
 	mu    sync.Mutex
 	forms map[string]url.Values
@@ -139,7 +134,6 @@ func TestBillingMe(t *testing.T) {
 		t.Errorf("got %+v", got)
 	}
 
-	// After an upgrade the flags flip.
 	_ = plans.SetPlan(t.Context(), TenantPlan{Tenant: "t", Plan: PlanPro, StripeCustomerID: "cus_1"})
 	rw = h.do(t, "GET", "/api/v1/me/billing", nil)
 	_ = json.Unmarshal(rw.Body.Bytes(), &got)
@@ -148,9 +142,6 @@ func TestBillingMe(t *testing.T) {
 	}
 }
 
-// A self-hosted deployment with no Stripe wired up reports billing_enabled
-// false (and can_upgrade/can_manage false), so the web client hides the whole
-// plan/billing surface and shows usage only.
 func TestBillingMeNoStripe(t *testing.T) {
 	t.Parallel()
 	h, _, _ := billingHarness(t)
@@ -185,8 +176,6 @@ func TestBillingMeCompedEntitlement(t *testing.T) {
 	}
 	var got map[string]any
 	_ = json.Unmarshal(rw.Body.Bytes(), &got)
-	// Plan store has no Stripe sub (no SetPlan), but the comp grant makes the
-	// tenant effectively pro: plan reads pro and upgrade is not offered.
 	if got["plan"] != "pro" || got["can_upgrade"] != false {
 		t.Errorf("comped tenant: got %+v, want plan=pro can_upgrade=false", got)
 	}
@@ -221,8 +210,6 @@ func TestBillingCheckout_AlreadySubscribedRejected(t *testing.T) {
 		t.Errorf("body %s, want already_subscribed code", rw.Body.String())
 	}
 
-	// A lapsed subscription (canceled) may re-checkout — and reuses the
-	// stored customer rather than spawning a new one.
 	_ = plans.SetPlan(t.Context(), TenantPlan{
 		Tenant: "t", Plan: PlanFree, StripeCustomerID: "cus_1",
 		StripeSubscriptionID: "sub_1", SubscriptionStatus: "canceled",
@@ -257,7 +244,6 @@ func TestBillingPortal_RequiresExistingCustomer(t *testing.T) {
 	}
 }
 
-// postStripeEvent signs and POSTs a webhook event to the gateway.
 func postStripeEvent(t *testing.T, h *gatewayHarness, payload string) *httptest.ResponseRecorder {
 	t.Helper()
 	body := []byte(payload)
@@ -311,8 +297,6 @@ func TestStripeWebhook_SubscriptionDeletedDowngrades(t *testing.T) {
 
 func TestStripeWebhook_PastDueStaysPro(t *testing.T) {
 	t.Parallel()
-	// Stripe is still retrying the charge — don't cut access on the
-	// first payment hiccup.
 	h, plans, _ := billingHarness(t)
 	_ = plans.SetPlan(t.Context(), TenantPlan{Tenant: "t", Plan: PlanPro, StripeCustomerID: "cus_9"})
 
@@ -395,8 +379,6 @@ func TestStripeWebhook_UnknownEventAcked(t *testing.T) {
 	}
 }
 
-// The full loop: a capped free tenant upgrades via webhook and the next
-// run goes through.
 func TestPlanGate_WebhookUpgradeLiftsCap(t *testing.T) {
 	t.Parallel()
 	h, _, _ := billingHarness(t)
@@ -429,9 +411,7 @@ func TestStripeWebhook_ReplayedEventIgnored(t *testing.T) {
 	if rw := postStripeEvent(t, h, ev); rw.Code != http.StatusOK {
 		t.Fatalf("first delivery: %d", rw.Code)
 	}
-	// Simulate state moving on after the first processing…
 	_ = plans.SetPlan(t.Context(), TenantPlan{Tenant: "t", Plan: PlanPro, StripeCustomerID: "cus_LATER"})
-	// …then Stripe retries the original delivery.
 	if rw := postStripeEvent(t, h, ev); rw.Code != http.StatusOK {
 		t.Fatalf("replay: %d", rw.Code)
 	}

@@ -78,10 +78,6 @@ export function CommandPalette({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { hasPerm } = useAuth();
-  // Same bar the Admin index itself uses: it lists every org card to anyone
-  // with either permission and lets each page enforce its own. Mirroring that
-  // here keeps the palette and the index showing the same set, instead of the
-  // palette inventing a third answer to "what may I reach".
   const canAdmin = hasPerm("organization:admin") || hasPerm("graph:admin");
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -105,8 +101,6 @@ export function CommandPalette({
     onClose();
   };
 
-  // The full command set: workspace pages, then settings/admin destinations,
-  // then one entry per flow.
   const commands = useMemo<Command[]>(() => {
     const nav: Command[] = [
       { id: "nav:new", label: t("flowList.newFlow"), icon: <Plus size={ICON.md} />, group: "nav", keywords: "create add nytt skapa", run: () => go("/flows/new") },
@@ -167,7 +161,6 @@ export function CommandPalette({
     );
   }, [commands, query]);
 
-  // Clamp the active row whenever the result set shrinks.
   useEffect(() => {
     setActive((i) => Math.min(i, Math.max(0, matches.length - 1)));
   }, [matches.length]);
@@ -193,7 +186,6 @@ export function CommandPalette({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, matches, active, onClose]);
 
-  // Keep the active row visible as arrows move it.
   useLayoutEffect(() => {
     listRef.current
       ?.querySelector<HTMLElement>(`[data-cmd-index="${active}"]`)

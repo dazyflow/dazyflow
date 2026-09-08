@@ -11,8 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// testDrop registers a no-op native drop with the given id into a fresh
-// registry and returns the resolver wrapping it.
 func dropGateResolver(t *testing.T, id string, gate func(ctx context.Context, dropID, tenant string) error) *NodeResolver {
 	t.Helper()
 	reg := NewRegistry()
@@ -51,8 +49,6 @@ func TestResolve_DropGateBlocks(t *testing.T) {
 	}
 }
 
-// TestResolve_DropGateSeesTenant confirms the gate receives the executing
-// tenant from the context the engine sets via core.WithTenant.
 func TestResolve_DropGateSeesTenant(t *testing.T) {
 	var seen string
 	r := dropGateResolver(t, "test_drop", func(_ context.Context, _, tenant string) error {
@@ -68,8 +64,6 @@ func TestResolve_DropGateSeesTenant(t *testing.T) {
 	}
 }
 
-// TestResolve_UnknownIDStillUnknown confirms an unknown id reports
-// "no transport" even with a gate present (the gate runs after lookup).
 func TestResolve_UnknownIDStillUnknown(t *testing.T) {
 	r := dropGateResolver(t, "test_drop", func(_ context.Context, _, _ string) error { return nil })
 	_, err := r.Resolve(context.Background(), "nope")

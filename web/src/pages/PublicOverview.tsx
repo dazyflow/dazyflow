@@ -39,8 +39,6 @@ export function PublicOverview() {
   // this browser — which is what a kiosk wants anyway: set it once on the
   // screen in the hallway, and it survives the nightly reload.
   const theme = useThemeMode();
-  // Tracks whether the very first fetch has resolved, so we show a spinner
-  // rather than an empty board on initial load.
   const loadedRef = useRef(false);
 
   const poll = useCallback(async () => {
@@ -68,7 +66,6 @@ export function PublicOverview() {
     return () => window.clearInterval(id);
   }, [poll]);
 
-  // A ticking clock + "updated Ns ago" need a steady re-render even between polls.
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), TICK.second);
     return () => window.clearInterval(id);
@@ -81,9 +78,6 @@ export function PublicOverview() {
   }, []);
 
   const toggleTheme = useCallback(() => {
-    // Writes an explicit choice rather than flipping "system": someone who
-    // reaches for this button on a wall screen means "this screen, this way",
-    // not "follow whatever the kiosk's OS decides at dusk".
     applyTheme(theme === "light" ? "dark" : "light");
   }, [theme]);
 
@@ -95,9 +89,6 @@ export function PublicOverview() {
     }
   }, []);
 
-  // Both message states carry the mark: a dead link or a slow first poll is
-  // the whole screen, and an unsigned dark rectangle reads as a broken TV
-  // rather than as a board waiting for something.
   if (notFound) {
     return (
       <div className="tv-view tv-message">
@@ -125,14 +116,11 @@ export function PublicOverview() {
   const flows = data?.flows ?? [];
   const health = boardHealth(data);
 
-  // 24-hour clock (e.g. 14:05) — no AM/PM, regardless of system locale.
   const clock = new Date(now).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   });
-  // The date under the clock, in the board's language. A wall screen is the
-  // one place people genuinely read the date off the wall.
   const today = new Date(now).toLocaleDateString(i18n.resolvedLanguage, {
     weekday: "long",
     day: "numeric",
@@ -319,9 +307,6 @@ export function PublicOverview() {
   );
 }
 
-// TvBrand is the product lockup: the mark plus the wordmark. Not a link — the
-// board lives on a wall, where a stray navigation is a screen nobody is
-// standing next to that has wandered off the dashboard.
 function TvBrand() {
   return (
     <span className="tv-brand">
@@ -360,20 +345,12 @@ function columns(n: number): number {
   return Math.ceil(n / rows);
 }
 
-// density picks how the board composes itself for the number of flows it has
-// to show. A wall screen with three flows and a screen with forty are different
-// designs, not the same design at different scroll positions: few flows get
-// tall poster tiles that fill the wall, a screenful gets rows that share out
-// the height, and past that the tiles go compact and the board scrolls.
 function density(n: number): "sparse" | "roomy" | "dense" {
   if (n <= 4) return "sparse";
   if (n <= 12) return "roomy";
   return "dense";
 }
 
-// boardHealth is the single colour the whole board leans toward: red when
-// anything has failed, blue while work is in flight, green when all clear.
-// Drives the ambient accent so a glance from across the room reads right.
 function boardHealth(d: PublicOverviewData | null): "bad" | "busy" | "good" {
   if (!d) return "good";
   if (d.stats.failed > 0) return "bad";

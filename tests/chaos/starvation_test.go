@@ -16,10 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// poolHarness is newHarness with a worker POOL, so a case can reproduce what a
-// default dzd actually runs: DAZYFLOW_WORKER_COUNT defaults to 2, and
-// Worker.Run is a strictly serial claim → process loop, so a deployment
-// executes at most two nodes at a time across every tenant.
 func newPoolHarness(t *testing.T, workers int) *harness {
 	t.Helper()
 	ks := auth.NewMemKeyStore()
@@ -82,7 +78,6 @@ func TestParallelWaits_DoNotStarveWorkers(t *testing.T) {
 	)
 	h := newPoolHarness(t, workers)
 
-	// One flow, `workers` parallel Wait steps hanging off one source.
 	hog := graph("waithog", []core.Node{textNode("src", "go")}, nil)
 	for i := range workers {
 		id := "wait" + itoa(i)
@@ -97,8 +92,6 @@ func TestParallelWaits_DoNotStarveWorkers(t *testing.T) {
 		t.Fatalf("submit the hog: %v", err)
 	}
 
-	// Give the hog time to claim every slot, then submit an ordinary flow:
-	// one text step, microseconds of work.
 	time.Sleep(1500 * time.Millisecond)
 	start := time.Now()
 	status, err := h.submit(graph("bystander", []core.Node{textNode("a", "hello")}, nil), 30*time.Second)
@@ -134,8 +127,6 @@ func TestQueuedWaits_DoNotMonopolizeThePool(t *testing.T) {
 	const workers = 2
 	h := newPoolHarness(t, workers)
 
-	// 60 independent Wait steps of 2s each: 120 worker-seconds of queued work
-	// from one submit, all ready at once.
 	hog := graph("waitqueue", []core.Node{textNode("src", "go")}, nil)
 	for i := range 60 {
 		id := "w" + itoa(i)

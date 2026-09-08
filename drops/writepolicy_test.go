@@ -79,10 +79,6 @@ func TestWritePolicy_DedupingDropsStillOptIn(t *testing.T) {
 	}
 }
 
-// The inverse: a drop that opts into dedupe while calling itself idempotent
-// has one of the two backwards. Dedupe exists precisely because the write
-// CAN'T be repeated safely — if it can, the drop wants Idempotent and no
-// dedupe, and the engine may simply retry it.
 func TestWritePolicy_DedupeImpliesNotIdempotent(t *testing.T) {
 	for _, d := range allDrops(t) {
 		if d.manifest.DedupeWrites && d.manifest.Idempotent {

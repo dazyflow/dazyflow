@@ -20,17 +20,9 @@ type OAuthProviderDefault struct {
 	TokenURL        string
 	Scopes          []string
 	AuthorizeExtras map[string]string
-	// DisplayName is the user-friendly label shown in the admin UI
-	// next to the configuration row. Avoids hard-coding the
-	// capitalisation map in the frontend.
-	DisplayName string
-	// SetupHelp is one-line operator guidance — "where do I get this
-	// client ID?" — rendered under the paste boxes in the admin UI.
-	SetupHelp string
-	// TokenAuthStyle selects how client credentials reach the token
-	// endpoint: "" (client_secret_post, the default) or "basic"
-	// (client_secret_basic). See OAuthProvider.TokenAuthStyle.
-	TokenAuthStyle string
+	DisplayName     string
+	SetupHelp       string
+	TokenAuthStyle  string
 }
 
 // KnownOAuthProviderDefaults is the deployment-invariant catalogue of
@@ -64,9 +56,6 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 		AuthorizeURL: "https://accounts.google.com/o/oauth2/v2/auth",
 		TokenURL:     "https://oauth2.googleapis.com/token",
 		Scopes: []string{
-			// Sensitive scopes: send mail + read/write Sheets + Calendar
-			// events (calendar.events reads/writes events; calendar.readonly
-			// lists calendars and reads events).
 			"https://www.googleapis.com/auth/gmail.send",
 			"https://www.googleapis.com/auth/spreadsheets",
 			"https://www.googleapis.com/auth/calendar.events",
@@ -84,17 +73,11 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 			// (or drop these) before outside companies can connect.
 			"https://www.googleapis.com/auth/gmail.readonly",
 			"https://www.googleapis.com/auth/drive.readonly",
-			// drive.file grants write access to files the app creates/opens —
-			// least privilege for drive_upload (no access to the user's other
-			// files). drive.readonly above powers drive_list / drive_download.
 			"https://www.googleapis.com/auth/drive.file",
 			"https://www.googleapis.com/auth/forms.responses.readonly",
 			"https://www.googleapis.com/auth/forms.body.readonly",
 		},
 		AuthorizeExtras: map[string]string{
-			// Required for refresh_token (Google's "first consent only"
-			// quirk — without prompt=consent re-grants don't return
-			// one and access expires in ~1h with no refresh path).
 			"access_type": "offline",
 			"prompt":      "consent",
 			// Incremental authorization: when a connect requests only one
@@ -124,30 +107,19 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 		// customer (create/list), invoice (create + the paid-invoice poll),
 		// and companyinformation (a cheap read to verify a connection).
 		// Add more here as the connector grows (article, order, bookkeeping…).
-		Scopes: []string{"customer", "invoice", "companyinformation"},
-		// Fortnox only returns a refresh_token when offline access is
-		// requested — without it the access token dies in ~1h with no
-		// refresh path, exactly like Google.
+		Scopes:          []string{"customer", "invoice", "companyinformation"},
 		AuthorizeExtras: map[string]string{"access_type": "offline"},
-		// Fortnox's token endpoint demands client_secret_basic — credentials
-		// in an HTTP Basic header, rejected if also sent in the body.
-		TokenAuthStyle: "basic",
-		SetupHelp:      "Create an app in the Fortnox Developer Portal (developer.fortnox.se); copy its Client ID and Client Secret and add the daemon's /api/v1/oauth/fortnox/callback URL as the redirect URI.",
+		TokenAuthStyle:  "basic",
+		SetupHelp:       "Create an app in the Fortnox Developer Portal (developer.fortnox.se); copy its Client ID and Client Secret and add the daemon's /api/v1/oauth/fortnox/callback URL as the redirect URI.",
 	},
 	{
-		Name:         "spotify",
-		DisplayName:  "Spotify",
-		AuthorizeURL: "https://accounts.spotify.com/authorize",
-		TokenURL:     "https://accounts.spotify.com/api/token",
-		// Scopes are per-capability and cover the shipped drops only; widen
-		// as the connector grows (playlist-*, user-library-*, user-read-*).
-		Scopes: []string{"user-follow-read"},
-		// Spotify's token endpoint wants client_secret_basic, like Fortnox.
+		Name:           "spotify",
+		DisplayName:    "Spotify",
+		AuthorizeURL:   "https://accounts.spotify.com/authorize",
+		TokenURL:       "https://accounts.spotify.com/api/token",
+		Scopes:         []string{"user-follow-read"},
 		TokenAuthStyle: "basic",
-		// The user cap is the fact that decides whether Spotify is usable at
-		// all here, and it is invisible in the dashboard until a sixth person
-		// fails to connect, so it goes in front of the operator up front.
-		SetupHelp: "Create an app at developer.spotify.com/dashboard; add the daemon's /api/v1/oauth/spotify/callback URL as a redirect URI. A Spotify app stays in development mode unless its owner qualifies for extended quota (a registered business with 250k monthly users), which means at most 5 listeners — each allowlisted by hand in the dashboard — and the app owner needs Spotify Premium.",
+		SetupHelp:      "Create an app at developer.spotify.com/dashboard; add the daemon's /api/v1/oauth/spotify/callback URL as a redirect URI. A Spotify app stays in development mode unless its owner qualifies for extended quota (a registered business with 250k monthly users), which means at most 5 listeners — each allowlisted by hand in the dashboard — and the app owner needs Spotify Premium.",
 	},
 }
 
@@ -175,17 +147,12 @@ var googleScopeGroups = map[string][]string{
 		"https://www.googleapis.com/auth/calendar.readonly",
 	},
 	"Google Drive": {
-		// list + download read with drive.readonly; upload writes with the
-		// least-privilege drive.file (app-created files only).
 		"https://www.googleapis.com/auth/drive.readonly",
 		"https://www.googleapis.com/auth/drive.file",
 	},
 	"Google Forms": {
 		"https://www.googleapis.com/auth/forms.responses.readonly",
 		"https://www.googleapis.com/auth/forms.body.readonly",
-		// drive.metadata.readonly powers the form picker: the Forms API has
-		// no "list my forms", so the dropdown lists form files via Drive.
-		// Metadata-only (names + ids, no content) — least privilege.
 		"https://www.googleapis.com/auth/drive.metadata.readonly",
 	},
 }
@@ -202,11 +169,6 @@ func scopeSubsetForIntegration(provider, integration string) []string {
 	return googleScopeGroups[integration]
 }
 
-// scopeGroupsForProvider returns the integration→scopes map for a provider
-// that authorizes incrementally (only Google today), or nil. The
-// /admin/google accounts endpoint inverts it to report, per connected
-// account, which services its grant covers — so the scope→service mapping
-// stays single-source with the connect path's scopeSubsetForIntegration.
 func scopeGroupsForProvider(provider string) map[string][]string {
 	if provider == "google" {
 		return googleScopeGroups
@@ -224,8 +186,6 @@ func providerUsesIncrementalScopes(provider string) bool {
 	return provider == "google"
 }
 
-// providerDefault returns the defaults entry for name, or nil if the
-// provider isn't in Dazyflow's known catalogue.
 func providerDefault(name string) *OAuthProviderDefault {
 	for i := range KnownOAuthProviderDefaults {
 		if KnownOAuthProviderDefaults[i].Name == name {
@@ -235,8 +195,6 @@ func providerDefault(name string) *OAuthProviderDefault {
 	return nil
 }
 
-// toProvider lifts a defaults entry + credentials into the runnable
-// OAuthProvider the registry holds.
 func (d OAuthProviderDefault) toProvider(clientID, clientSecret string) OAuthProvider {
 	return OAuthProvider{
 		Name:            d.Name,

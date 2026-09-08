@@ -35,10 +35,6 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// Parse splits a "lat,lon" string (e.g. "59.33,18.07") into two range-checked
-// floats. Whitespace around either part is tolerated. A missing comma, a
-// non-numeric part, or an out-of-range value is a clear user error, reported
-// as such.
 func Parse(s string) (lat, lon float64, err error) {
 	parts := strings.Split(s, ",")
 	if len(parts) != 2 {
@@ -58,8 +54,6 @@ func Parse(s string) (lat, lon float64, err error) {
 	return lat, lon, nil
 }
 
-// CheckRange rejects an obviously bad coordinate so a lookup fails fast with a
-// readable message instead of a remote 400.
 func CheckRange(lat, lon float64) error {
 	if lat < -90 || lat > 90 {
 		return fmt.Errorf("latitude %g is out of range (must be between -90 and 90)", lat)
@@ -122,10 +116,6 @@ func ResolveLatLon(job core.Job) (lat, lon float64, err error) {
 	return lat, lon, nil
 }
 
-// Fmt renders a "lat,lon" string, trimming trailing zeros so a tidy point
-// stays tidy ("59.3293,18.0686", not "59.32930000,18.06860000"). This is the
-// shape every connector's Coordinate input accepts, so a geocode or picker
-// wires straight into a weather lookup.
 func Fmt(lat, lon float64) string {
 	return strconv.FormatFloat(lat, 'f', -1, 64) + "," + strconv.FormatFloat(lon, 'f', -1, 64)
 }
@@ -144,7 +134,6 @@ func TempUnit(units string) string {
 	}
 }
 
-// SpeedUnit returns the display symbol for wind speed ("3.4 m/s").
 func SpeedUnit(units string) string {
 	if units == "imperial" {
 		return "mph"
@@ -152,16 +141,10 @@ func SpeedUnit(units string) string {
 	return "m/s"
 }
 
-// Num1 formats a number to one decimal ("12.3"); Num0 rounds to a whole
-// number ("12") for the coarser daily min/max range.
 func Num1(f float64) string { return strconv.FormatFloat(f, 'f', 1, 64) }
 
-// Num0 rounds to a whole number — see Num1.
 func Num0(f float64) string { return strconv.FormatFloat(f, 'f', 0, 64) }
 
-// CapitalizeFirst upper-cases the first rune of a phrase so "clear sky" reads
-// "Clear sky" at the start of a summary. ASCII-only, which covers the English
-// descriptions; localized langs keep their own casing.
 func CapitalizeFirst(s string) string {
 	if s == "" {
 		return s
@@ -173,14 +156,6 @@ func CapitalizeFirst(s string) string {
 	return string(r)
 }
 
-// TransportFailure maps a transport error to an error Result — the shared
-// prologue of every location connector's httpFailure. An SSRF/egress refusal
-// gets its own code so the run detail view can explain it; anything else is
-// "<code>_http_error". Returns nil when err is nil, so callers fall through to
-// their own status-code handling.
-//
-// label is the human service name ("OpenWeather", "SMHI") and code the
-// connector's error-code prefix ("owm", "smhi").
 func TransportFailure(job core.Job, code, label string, err error) *core.Result {
 	if err == nil {
 		return nil
@@ -198,8 +173,6 @@ func TransportFailure(job core.Job, code, label string, err error) *core.Result 
 // hundred bytes; 64 KiB is headroom that still refuses an unbounded body.
 const probeBodyCap = 1 << 16
 
-// probeTimeout bounds a connection check. The Apps page waits on it
-// synchronously, so it stays short.
 const probeTimeout = 10 * time.Second
 
 // Probe performs the one-shot GET a connection verifier uses to check

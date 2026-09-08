@@ -16,41 +16,27 @@ import (
 
 // Tool icons, turned into something the palette can render.
 //
-// The whole file exists because of one constraint: the app's CSP is
-// `img-src 'self' data: blob:` (daemon/httporigin.go), so a third party's
-// https URL would not load in a browser even if we passed it through. That is
-// the right default and we keep it — a remote <img> on an admin page is a
-// third party learning who looked at what, and a dead icon host is a page that
-// hangs on someone else's outage.
+// The file exists because of one constraint: the app's CSP is
+// `img-src 'self' data: blob:`, so a third party's https URL would not load even
+// if passed through. That is the right default — a remote <img> on an admin page
+// is a third party learning who looked at what, and a dead icon host is a page
+// that hangs on someone else's outage.
 //
-// So an icon is fetched HERE, through the same guarded client that dials the
-// MCP endpoint itself, and inlined as a data: URI on the manifest. The bytes
-// then travel with the catalog and render from our own origin.
-//
-// Everything in this file fails soft. An icon is decoration: a server whose
-// icon host is down, slow, or serving something that is not an image still
-// connects, and its steps still work wearing the category glyph.
+// So an icon is fetched here through the same guarded client that dials the MCP
+// endpoint, and inlined as a data: URI. Everything fails soft: a server whose
+// icon host is down still connects, wearing the category glyph.
 
 const (
-	// maxIconBytes bounds one icon. Comfortably above a 96×96 PNG and far
-	// below anything that belongs in a JSON catalog response.
 	maxIconBytes = 32 << 10
-	// maxIconsPerServer bounds how many DISTINCT sources one handshake will
-	// fetch. Most servers use one icon for every tool, which dedupes to a
-	// single fetch; this is the ceiling for one that does not.
+	// maxIconsPerServer: most servers use one icon for every tool, which dedupes to
+	// a single fetch; this is the ceiling for one that does not.
 	maxIconsPerServer = 8
-	// iconFetchBudget bounds the whole icon phase of a handshake. An admin
-	// pressing "Save and connect" waits for this in the worst case, so it is
-	// short: icons are the last thing worth delaying that answer for.
-	iconFetchBudget = 3 * time.Second
+	iconFetchBudget   = 3 * time.Second
 )
 
-// iconMimeTypes is what we will inline.
-//
-// SVG is included because the only place a logo is rendered is an <img> tag
-// (web/src/pages/Apps.tsx), where script inside an SVG does not execute and
-// external references do not load. It is never inlined into the DOM — an
-// inline SVG from a third party would be an XSS surface, and this is not one.
+// iconMimeTypes includes SVG because the only place a logo renders is an <img>
+// tag, where script inside an SVG does not execute and external references do not
+// load. It is never inlined into the DOM, which would be an XSS surface.
 var iconMimeTypes = map[string]bool{
 	"image/png":     true,
 	"image/jpeg":    true,
@@ -59,14 +45,6 @@ var iconMimeTypes = map[string]bool{
 	"image/svg+xml": true,
 }
 
-// resolveToolIcons turns each tool's icon list into a data: URI, keyed by tool
-// name. Tools with no usable icon are absent from the result.
-//
-// Sources are deduplicated before fetching: a server that gives all forty of
-// its tools the same logo costs one request, not forty.
-//
-// A nil client means "build the guarded one", which is what production wants;
-// a test passes its own to reach an httptest server.
 func resolveToolIcons(ctx context.Context, client *http.Client, tools []Tool) map[string]string {
 	wanted := map[string][]string{} // src -> tool names wanting it
 	order := []string{}
@@ -93,7 +71,7 @@ func resolveToolIcons(ctx context.Context, client *http.Client, tools []Tool) ma
 		client = buildHTTPClient(iconFetchBudget)
 	}
 
-	// Concurrent, because the budget is for the phase and not per source: two
+	// Concurrent, because the budget is for the phase rather than per source: two
 	// slow hosts should not add up.
 	var mu sync.Mutex
 	resolved := map[string]string{}
@@ -125,12 +103,9 @@ func resolveToolIcons(ctx context.Context, client *http.Client, tools []Tool) ma
 	return out
 }
 
-// pickIcon chooses one icon from what a tool offers.
-//
-// A manifest carries a single logo while the app renders in light AND dark, so
-// an icon that declares no theme beats one that does. Beyond that the first
-// usable entry wins: the palette draws one small square, and choosing on
-// `sizes` would be precision the render does not use.
+// pickIcon prefers an icon declaring no theme, a manifest carrying a single logo
+// while the app renders light AND dark. Beyond that the first usable entry wins:
+// choosing on `sizes` would be precision the render does not use.
 func pickIcon(icons []Icon) (Icon, bool) {
 	var themed Icon
 	var haveThemed bool
@@ -138,9 +113,8 @@ func pickIcon(icons []Icon) (Icon, bool) {
 		if strings.TrimSpace(icon.Src) == "" {
 			continue
 		}
-		// A declared type we cannot render is a reason to skip before
-		// spending a request on it. An absent one is fine — the response
-		// decides.
+		// A declared type we cannot render is worth skipping before spending a request.
+		// An absent one is fine — the response decides.
 		if icon.MimeType != "" && !iconMimeTypes[strings.ToLower(icon.MimeType)] {
 			continue
 		}
@@ -154,14 +128,10 @@ func pickIcon(icons []Icon) (Icon, bool) {
 	return themed, haveThemed
 }
 
-// resolveIcon turns one icon source into a data: URI, or fails.
-//
-// Only two schemes are accepted. A data: URI is already inline and is merely
-// checked and normalised. An https URL is fetched through the guarded client,
-// which applies the same post-DNS SSRF control as an MCP call and refuses
-// redirects — a redirecting icon host yields no icon rather than a dial to
-// somewhere unvetted. Cleartext http is refused outright: it would be mixed
-// content in the browser even if we did inline it.
+// resolveIcon accepts only two schemes. A data: URI is checked and normalised.
+// An https URL is fetched through the guarded client, which applies the same
+// post-DNS SSRF control as an MCP call and refuses redirects. Cleartext http is
+// refused outright: it would be mixed content even if inlined.
 func resolveIcon(ctx context.Context, client *http.Client, src string) (string, error) {
 	src = strings.TrimSpace(src)
 	switch {
@@ -192,8 +162,6 @@ func resolveIcon(ctx context.Context, client *http.Client, src string) (string, 
 	if !iconMimeTypes[mime] {
 		return "", fmt.Errorf("icon content-type %q is not an image we inline", mime)
 	}
-	// One byte over the cap is read on purpose: it is how a body that is
-	// exactly at the limit is told apart from one that was truncated.
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxIconBytes+1))
 	if err != nil {
 		return "", err
@@ -207,13 +175,9 @@ func resolveIcon(ctx context.Context, client *http.Client, src string) (string, 
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(body), nil
 }
 
-// normalizeDataIcon validates an inline icon and re-emits it in the one form
-// we are willing to put on a manifest: base64, with a type we render.
-//
-// Re-encoding rather than passing the string through is the point. What comes
-// back is built from bytes WE decoded, so a src carrying anything other than
-// the image it claims — a percent-encoded payload, a second data: URI, markup
-// after the comma — cannot survive the round trip.
+// normalizeDataIcon re-encodes rather than passing the string through, which is
+// the point: what comes back is built from bytes WE decoded, so a src carrying
+// anything other than the image it claims cannot survive the round trip.
 func normalizeDataIcon(src string) (string, error) {
 	rest := src[len("data:"):]
 	comma := strings.IndexByte(rest, ',')

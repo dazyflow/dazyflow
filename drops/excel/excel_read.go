@@ -42,9 +42,6 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Named after the param so the card shows an inline editable box
-				// (Unreal-style); a wired value overrides the typed one — e.g. a
-				// file path threaded from an upstream Excel write's 'path' output.
 				{Port: "path", Label: "File", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
@@ -122,7 +119,6 @@ func executeExcelRead(_ context.Context, job core.Job, _ chan<- core.Progress) (
 
 	typed := params.BoolDefault(job.Params, "typed", false)
 	if !params.BoolDefault(job.Params, "headers", true) {
-		// header:false → rows are arrays.
 		rows := make([]any, 0, len(grid))
 		for _, r := range grid {
 			arr := make([]any, len(r))
@@ -164,9 +160,6 @@ func rowsResult(job core.Job, path string, rows []any, headers []string) core.Re
 	}
 }
 
-// applyRange narrows the grid to a cell range (e.g. "A1:D100") or, when no
-// range is set, drops `skip` leading rows. excelize has no native subgrid
-// read, so we slice GetRows ourselves.
 func applyRange(grid [][]string, rng string, skip int) ([][]string, error) {
 	if rng != "" {
 		parts := splitRange(rng)

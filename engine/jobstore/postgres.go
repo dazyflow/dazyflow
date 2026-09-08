@@ -21,66 +21,29 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
-// Postgres is the production JobStore. It relies on SELECT ... FOR UPDATE
-// SKIP LOCKED for the workqueue and pg_try_advisory_lock for scheduler
-// leader election (called by the scheduler, not here).
-//
-// The implementation is exercised in this repo only when DATABASE_URL is
-// set; CI environments should run the schema migration before invoking
-// tests. See postgres_test.go for the integration gate.
+// Relies on SELECT ... FOR UPDATE SKIP LOCKED for the workqueue and
+// pg_try_advisory_lock for scheduler leader election. Exercised only when
+// DATABASE_URL is set.
 type Postgres struct {
-	pool *pgxpool.Pool
-	// ownsPool is true only when OpenPostgres created the pool, so
-	// Close() knows whether it may shut it down (shared pools are
-	// owned by the daemon, not the JobStore).
-	ownsPool bool
-	// maxConcurrent caps per-tenant running node jobs (0 = unlimited).
-	// Set once at startup before any worker claims, so no synchronization
-	// is needed for the read in Claim.
+	pool          *pgxpool.Pool
+	ownsPool      bool
 	maxConcurrent int
-	// burstSpacing spreads one org's burst along the queue; see Enqueue.
-	burstSpacing time.Duration
+	burstSpacing  time.Duration
 }
 
-// DefaultBurstSpacing is the queue distance between two steps an org has
-// waiting at once: a burst of N steps from one org spans N×spacing of queue,
-// so it competes with other orgs' steps as if it had arrived at one step per
-// spacing (10/s here), and an org with nothing waiting lands ahead of all
-// but its first. The order only matters when someone else is waiting: an org
-// alone on the queue still gets every worker, whatever its slots say.
-//
-// Why not smaller: the tail advances one spacing per enqueue, but wall time
-// advances too, and GREATEST(now, tail+spacing) only spreads a burst while
-// the tail outruns the clock. Under load an enqueue takes a few ms, and
-// several enqueues in flight for the same org read the same tail and land on
-// the same slot — at 10ms both effects let a real burst degrade to FIFO,
-// which is what the load rig showed. 100ms outpaces both by a wide margin.
+// The queue distance between two steps one org has waiting, so a burst of N
+// spans N×spacing and competes as if it had arrived one step per spacing. Not
+// smaller: GREATEST(now, tail+spacing) only spreads a burst while the tail
+// outruns the clock, and at 10ms a real burst degraded to FIFO on the load rig.
 const DefaultBurstSpacing = 100 * time.Millisecond
 
-// SetBurstSpacing overrides DefaultBurstSpacing. Set once at startup.
 func (s *Postgres) SetBurstSpacing(d time.Duration) { s.burstSpacing = d }
 
-// SetMaxConcurrentPerTenant caps how many node jobs a single tenant may
-// have running at once. Claim withholds new (queued) work from a tenant
-// at the cap; reclaiming an expired lease is exempt. 0 = no cap.
-//
-// Fairness does not depend on it: the queue order already spreads one org's
-// burst so it cannot starve the others (see Enqueue). The cap is a hard
-// ceiling on top, for steps that hold a worker without running — waiting on
-// the egress budget, say — where any share of the fleet is too much to hand
-// one org.
-//
-// NOTE: this is a best-effort SOFT cap. The per-tenant running count is
-// read in the same statement that claims, but it is not locked against
-// other concurrent claimers, so a race between workers can briefly let a
-// tenant reach cap+1. A hard cap would need per-tenant locking; the soft
-// cap is sufficient as a fairness throttle. Set once at startup.
+// SOFT cap: the running count is read in the claiming statement but not locked,
+// so a race can briefly reach cap+1. Expired-lease reclaims are exempt. Set once
+// at startup.
 func (s *Postgres) SetMaxConcurrentPerTenant(n int) { s.maxConcurrent = n }
 
-// OpenPostgres connects via the supplied connection string and applies the
-// embedded schema. Production deployments should run migrations through
-// their normal tooling instead, but this convenience matches the spec's
-// "boot from zero" goal.
 func OpenPostgres(ctx context.Context, url string) (*Postgres, error) {
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
@@ -95,12 +58,6 @@ func OpenPostgres(ctx context.Context, url string) (*Postgres, error) {
 	return store, nil
 }
 
-// NewPostgresFromPool builds a JobStore on an already-open pgxpool,
-// applying the schema. Lets the daemon share one pool across the
-// JobStore, the secret store, and the auth stores (one connection
-// budget instead of N). The caller retains ownership of the pool —
-// Close() here is a no-op so closing the JobStore doesn't yank the
-// pool out from under the other stores.
 func NewPostgresFromPool(ctx context.Context, pool *pgxpool.Pool) (*Postgres, error) {
 	if pool == nil {
 		return nil, fmt.Errorf("nil pool")
@@ -111,14 +68,15 @@ func NewPostgresFromPool(ctx context.Context, pool *pgxpool.Pool) (*Postgres, er
 	return &Postgres{pool: pool, burstSpacing: DefaultBurstSpacing}, nil
 }
 
-// Close releases the pool only when this store opened it (OpenPostgres).
-// When the pool was injected via NewPostgresFromPool the owner closes it.
 func (s *Postgres) Close() {
 	if s.ownsPool {
 		s.pool.Close()
 	}
 }
 
+// slot_at places a queued step one spacing behind the last its org has waiting,
+// so an org queueing a thousand at once does not put all of them ahead of
+// everyone else's next step.
 func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	jobJSON, err := json.Marshal(rec.Job)
 	if err != nil {
@@ -136,13 +94,6 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	if len(rec.GraphPayload) > 0 {
 		graphPayload = rec.GraphPayload
 	}
-	// Persist Result at enqueue time. Most records are enqueued queued
-	// (no result), but seeded records (SubmitGraphWithSeed pre-completing
-	// a webhook_input/trigger node) arrive status=succeeded WITH a result.
-	// Dropping it here left the trigger succeeded-but-result-less, so a
-	// downstream node's load_predecessors failed with: predecessor
-	// "trigger" has no result yet. The in-memory store kept the whole
-	// record, which is why this only bit Postgres.
 	var resJSON any
 	if rec.Result != nil {
 		b, merr := json.Marshal(rec.Result)
@@ -151,11 +102,6 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 		}
 		resJSON = b
 	}
-	// A record enqueued already-terminal (a seed) is finished now; mirror
-	// complete() so run duration and the stuck-run reaper see a finish time.
-	// Seeds and graph-records (enqueued already-running) never pass through
-	// Claim, so stamp started_at here too — otherwise webhook-triggered
-	// runs render with no start time/duration.
 	var finished, started any
 	if core.IsTerminalStatus(status) {
 		now := time.Now().UTC()
@@ -164,15 +110,6 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	} else if status == core.JobStatusRunning {
 		started = time.Now().UTC()
 	}
-	// slot_at is the record's place in the queue. FIFO would be enqueued_at;
-	// instead a queued step is placed one spacing behind the last step its org
-	// already has waiting, so an org that queues a thousand steps at once
-	// spreads them along the queue rather than putting all of them ahead of
-	// everyone else's next step — which lands at the front, having nothing
-	// waiting. The org's queue tail is one index probe (jobs_tenant_queue_idx),
-	// at the end where nothing has been claimed yet; counting its backlog
-	// instead cost a heap visit per waiting row, inside the hot statement.
-	// Records that never wait (graph records, seeds) take their enqueue time.
 	const q = `
 		INSERT INTO jobs (id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result, enqueued_at, started_at, finished_at, parent_node_rec_id, manual, slot_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, COALESCE($12, now()), $13, $14, $15, $16,
@@ -195,19 +132,9 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	return nil
 }
 
-// EnqueueNodes writes several plain queued node records as ONE statement, and
-// therefore one commit — see core.NodeBatchEnqueuer for why that matters.
-//
-// slot_at is assigned exactly as Enqueue and CompleteAndEnqueue assign it: one
-// spacing behind the org's queue tail, and one spacing apart from each other by
-// ordinality, so a batch takes the same places in the queue that the same
-// records would have taken one at a time. Getting that wrong would not show up
-// as breakage — it would show up as one org's burst jumping the queue.
-//
-// Deliberately NOT `ON CONFLICT DO NOTHING`: a duplicate must fail the whole
-// statement so the caller falls back and finds out which record it was. The
-// submit path fails a run on a duplicate root, and silently swallowing it here
-// would change that without anyone noticing.
+// One statement and so one commit — see core.NodeBatchEnqueuer. Deliberately NOT
+// ON CONFLICT DO NOTHING: a duplicate must fail the whole statement so the caller
+// falls back and finds out which record it was.
 func (s *Postgres) EnqueueNodes(ctx context.Context, recs []core.JobRecord) (int, error) {
 	if len(recs) == 0 {
 		return 0, nil
@@ -268,11 +195,6 @@ func (s *Postgres) Claim(ctx context.Context, worker string, lease time.Duration
 const claimReturning = `id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
 		           enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual`
 
-// claimQuery picks the first claimable node job (queued, or running with an
-// expired lease) in queue order and marks it running under the caller's
-// worker. Queue order is slot_at — assigned at enqueue, see Enqueue — which is
-// FIFO except that one org's burst is spread out, so the fairness decision
-// costs nothing here: one index scan, skipping past rows other workers hold.
 const claimQuery = `
 		UPDATE jobs
 		   SET status = 'running',
@@ -293,12 +215,8 @@ const claimQuery = `
 		 )
 		 RETURNING ` + claimReturning
 
-// claimCappedQuery is claimQuery plus a per-tenant concurrency cap ($3):
-// a queued job is only claimable if its tenant currently has fewer than
-// $3 live-running node jobs. Expired-lease reclaims bypass the cap (they
-// recover existing work). The count is a correlated subquery, not locked
-// against concurrent claimers — hence the soft cap documented on
-// SetMaxConcurrentPerTenant.
+// A queued job is claimable only if its tenant has fewer than $3 running.
+// Expired-lease reclaims bypass the cap, being recovery of existing work.
 const claimCappedQuery = `
 		UPDATE jobs
 		   SET status = 'running',
@@ -324,33 +242,10 @@ const claimCappedQuery = `
 		 )
 		 RETURNING ` + claimReturning
 
-// PruneTerminal enforces run history retention. The unit it deletes is a
-// RUN, not a row: it finds graph-records that finished before the cutoff and
-// removes each one together with every node-record underneath it, in bounded
-// batches so a large backlog doesn't lock the table in one statement. Returns
-// the total number of rows deleted. olderThan <= 0 is a no-op so callers can
-// pass a disabled-retention value straight through.
-//
-// The invariant is one sentence: a run's history is deleted whole, once the
-// RUN has been finished for longer than the window — and a run that hasn't
-// finished is never touched. Keying on each row's own finished_at instead,
-// which is what this used to do, broke that at both ends:
-//
-//   - A run parked on an approval, or sitting in a long delay, is non-terminal
-//     for as long as it waits, but its already-succeeded steps are terminal
-//     rows with a finished_at from the day they ran. Past the window they were
-//     deleted out from under a live run. What that costs is not just history:
-//     maybeCompleteGraph reads a missing node-record as "not done yet", so the
-//     run could never complete or be reaped, and a step whose predecessor had
-//     been pruned failed with a bare "predecessor not found".
-//
-//   - Node-records finish BEFORE the graph-record that owns them, so a cutoff
-//     landing between the two deleted the steps of an already-completed run
-//     and left the run itself listed, with nothing in it.
-//
-// Sub-graph runs are separate runs, linked by ParentNodeRecID rather than
-// graph_run_id, so they age out on their own finish time — a few minutes ahead
-// of the parent that waited for them.
+// Deletes a RUN whole, once the RUN has been finished for longer than the window
+// — an unfinished run is never touched, however old its steps. Keying on each
+// row's own finished_at deleted the succeeded steps out from under a run parked
+// on an approval. olderThan <= 0 is a no-op.
 func (s *Postgres) PruneTerminal(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
 	if olderThan <= 0 {
 		return 0, nil
@@ -373,12 +268,9 @@ func (s *Postgres) PruneTerminal(ctx context.Context, olderThan time.Duration, b
 		if err != nil {
 			return total, err
 		}
-		// Fewer runs than asked for means the index range is drained.
 		if len(ids) < batch {
 			break
 		}
-		// Yield between batches: bail promptly on shutdown rather than
-		// holding a connection through a long backlog drain.
 		select {
 		case <-ctx.Done():
 			return total, ctx.Err()
@@ -389,10 +281,6 @@ func (s *Postgres) PruneTerminal(ctx context.Context, olderThan time.Duration, b
 	return total + n, err
 }
 
-// oldTerminalRunIDs returns up to batch graph-record IDs whose RUN finished
-// before the cutoff. Served by jobs_prune_idx (finished_at, terminal statuses)
-// — the kind filter is applied on the rows the range scan yields, and the scan
-// stops at the limit, so a swept-clean table costs an empty range probe.
 func (s *Postgres) oldTerminalRunIDs(ctx context.Context, cutoff time.Time, batch int) ([]string, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT id FROM jobs
@@ -415,14 +303,9 @@ func (s *Postgres) oldTerminalRunIDs(ctx context.Context, cutoff time.Time, batc
 	return ids, rows.Err()
 }
 
-// deleteRuns removes the named graph-records and every node-record under
-// them. One statement, so a run is never left half-deleted: the id match is
-// the primary key and the graph_run_id match is jobs_graph_run_idx.
-//
-// Node-record status is deliberately NOT filtered here. The run is terminal,
-// so any non-terminal row left under it is a remnant of it (a step abandoned
-// by a cancel, say), and keeping such a row after its run is gone would leave
-// exactly the orphan the pass below has to clean up.
+// One statement, so a run is never left half-deleted. Node-record status is
+// deliberately unfiltered: the run is terminal, so a non-terminal row under it is
+// a remnant.
 func (s *Postgres) deleteRuns(ctx context.Context, ids []string) (int, error) {
 	tag, err := s.pool.Exec(ctx,
 		`DELETE FROM jobs WHERE id = ANY($1) OR graph_run_id = ANY($1)`, ids)
@@ -432,14 +315,8 @@ func (s *Postgres) deleteRuns(ctx context.Context, ids []string) (int, error) {
 	return int(tag.RowsAffected()), nil
 }
 
-// pruneOrphanNodes deletes terminal, old-enough node-records whose graph-record
-// is gone. Two things produce them: rows left behind by the row-scoped sweep
-// this replaced, and a tenant erasure (DeleteByTenant) that raced a write.
-// Without their run there is nothing to key retention on but their own
-// finished_at, which is what this uses.
-//
-// A node-record whose parent still exists is never touched here — that run's
-// own age decides, in the pass above.
+// Node-records whose graph-record is gone have nothing to key retention on but
+// their own finished_at. One whose parent still exists is never touched here.
 func (s *Postgres) pruneOrphanNodes(ctx context.Context, cutoff time.Time, batch int) (int, error) {
 	total := 0
 	for {
@@ -467,14 +344,8 @@ func (s *Postgres) pruneOrphanNodes(ctx context.Context, cutoff time.Time, batch
 	}
 }
 
-// ClaimUnnotified implements core.FailureNotifier.
-//
-// The claim and the read are ONE statement: a CTE picks the oldest eligible
-// rows, stamps notified_at on them, and returns them. Two replicas sweeping
-// the same instant therefore cannot both hand back the same run — the loser's
-// update matches nothing. Doing it as a SELECT then an UPDATE would leave
-// exactly that window, and the symptom (one duplicate alert) is the kind
-// nobody reports and everybody mistrusts.
+// Claims and reads in ONE statement, so two replicas sweeping the same instant
+// cannot both hand back the same run.
 func (s *Postgres) ClaimUnnotified(ctx context.Context, lookback time.Duration, maxAttempts, limit int) ([]core.JobRecord, error) {
 	if limit <= 0 {
 		limit = 50
@@ -516,17 +387,13 @@ func (s *Postgres) ClaimUnnotified(ctx context.Context, lookback time.Duration, 
 	return out, rows.Err()
 }
 
-// ReleaseNotifyClaim implements core.FailureNotifier.
 func (s *Postgres) ReleaseNotifyClaim(ctx context.Context, jobID string) error {
 	_, err := s.pool.Exec(ctx, `UPDATE jobs SET notified_at = NULL WHERE id = $1`, jobID)
 	return err
 }
 
-// DeleteByTenant hard-deletes every job record (graph + node, terminal or
-// in-flight) owned by a tenant. Unlike PruneTerminal this ignores status,
-// because it backs the GDPR erasure cascade (Art. 17): the tenant is being
-// removed, so any in-flight run goes with it. Callers should cancel active
-// runs first. Returns the number of rows removed.
+// Ignores status, unlike PruneTerminal: it backs the GDPR erasure cascade, so an
+// in-flight run goes with the tenant. Callers should cancel active runs first.
 func (s *Postgres) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	tag, err := s.pool.Exec(ctx, `DELETE FROM jobs WHERE tenant = $1`, tenant)
 	if err != nil {
@@ -535,11 +402,6 @@ func (s *Postgres) DeleteByTenant(ctx context.Context, tenant string) (int, erro
 	return int(tag.RowsAffected()), nil
 }
 
-// OldestQueuedEnqueuedAt returns the enqueue time of the oldest
-// claimable (queued, available) node job, so metrics can expose queue
-// latency — the age of this row is how long the most-delayed work has
-// waited for a worker. The bool is false when nothing is queued. Uses
-// the same workqueue index as Claim, so it's a cheap index probe.
 func (s *Postgres) OldestQueuedEnqueuedAt(ctx context.Context) (time.Time, bool, error) {
 	var t time.Time
 	err := s.pool.QueryRow(ctx,
@@ -619,18 +481,13 @@ func (s *Postgres) Complete(ctx context.Context, jobID string, status core.JobSt
 	return s.complete(ctx, jobID, "", status, result)
 }
 
-// CompleteOwned implements core.OwnedCompleter: Complete, but only if
-// worker still owns the record (ErrConflict otherwise).
 func (s *Postgres) CompleteOwned(ctx context.Context, jobID, worker string, status core.JobStatus, result *core.Result) error {
 	return s.complete(ctx, jobID, worker, status, result)
 }
 
-// CompleteAndEnqueue implements core.CompleteEnqueuer as one statement: a
-// data-modifying CTE completes the node, reads its run's status and inserts
-// the dependents, so all of it is one round trip and one commit. The
-// fencing rules are complete()'s; a dependent that already exists is skipped
-// by ON CONFLICT rather than aborting the whole write, and none are inserted
-// when the run record is already terminal.
+// One statement: a data-modifying CTE completes the node, reads its run's status
+// and inserts the dependents. An existing dependent is skipped by ON CONFLICT,
+// and none are inserted when the run record is already terminal.
 func (s *Postgres) CompleteAndEnqueue(ctx context.Context, jobID, worker string, status core.JobStatus, result *core.Result, deps []core.JobRecord) (core.Advance, error) {
 	if !core.IsTerminalStatus(status) && status != core.JobStatusAwaiting {
 		return core.Advance{}, core.ErrConflict
@@ -664,8 +521,6 @@ func (s *Postgres) CompleteAndEnqueue(ctx context.Context, jobID, worker string,
 		fence = " AND worker_id = $12"
 		args = append(args, worker)
 	}
-	// The dependents take queue slots behind the org's queue tail, as
-	// Enqueue does, and one spacing apart from each other.
 	q := `
 		WITH done AS (
 			UPDATE jobs SET status = $2, result = $3::jsonb, ` + finishedClause + `, lease_until = NULL
@@ -711,8 +566,9 @@ func (s *Postgres) CompleteAndEnqueue(ctx context.Context, jobID, worker string,
 	return adv, nil
 }
 
-// complete is the shared body. worker == "" skips the ownership fence
-// (the plain Complete used by non-lease callers).
+// Refuses to overwrite a terminal record, and fences on lease ownership when
+// worker is set. Parking is fenced against an ALREADY parked record too, or the
+// park hook mails the approvers twice for one pause.
 func (s *Postgres) complete(ctx context.Context, jobID, worker string, status core.JobStatus, result *core.Result) error {
 	if !core.IsTerminalStatus(status) && status != core.JobStatusAwaiting {
 		return core.ErrConflict
@@ -725,25 +581,10 @@ func (s *Postgres) complete(ctx context.Context, jobID, worker string, status co
 		}
 		resJSON = b
 	}
-	// Awaiting parks the record without finishing it — finished_at stays
-	// NULL so the resume path can mark it later. Terminal writes set it.
 	finishedClause := "finished_at = now()"
 	if status == core.JobStatusAwaiting {
 		finishedClause = "finished_at = finished_at"
 	}
-	// Refuse to overwrite an already-terminal record. Awaiting and skipped
-	// are NOT included in the guard so the resume path (awaiting → succeeded)
-	// works. When worker is set, also fence on lease ownership.
-	//
-	// Parking is additionally fenced against a record that is ALREADY parked:
-	// awaiting → awaiting is a re-park, and the only way to reach one is a
-	// second execution of a node that already parked (an expired lease
-	// reclaimed by another worker while the first was still running). That
-	// write used to succeed, so both executions announced a pause that only
-	// happened once — and the daemon's park hook mailed the approvers on
-	// each. Rejecting it here gives the park path the at-most-once guarantee
-	// its notification hook assumes; the worker already treats a fenced park
-	// as "someone else owns this now" and abandons without notifying.
 	terminalGuard := "'succeeded','failed','cancelled'"
 	if status == core.JobStatusAwaiting {
 		terminalGuard += ",'awaiting'"
@@ -762,7 +603,6 @@ func (s *Postgres) complete(ctx context.Context, jobID, worker string, status co
 		return wrapPgErr(err)
 	}
 	if ct.RowsAffected() == 0 {
-		// Either the record doesn't exist or it's already terminal.
 		var exists bool
 		_ = s.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM jobs WHERE id = $1)", jobID).Scan(&exists)
 		if !exists {
@@ -786,10 +626,6 @@ func (s *Postgres) Get(ctx context.Context, jobID string) (core.JobRecord, error
 	return rec, err
 }
 
-// Outcomes implements core.OutcomeReader: the status and result of many node
-// records in one round trip, reading only the two columns a dependent uses.
-// The full-record path would decode each predecessor's Job JSON — params,
-// input refs and env — on a read that never looks at it.
 func (s *Postgres) Outcomes(ctx context.Context, jobIDs []string) (map[string]core.NodeOutcome, error) {
 	if len(jobIDs) == 0 {
 		return nil, nil
@@ -823,10 +659,6 @@ func (s *Postgres) Outcomes(ctx context.Context, jobIDs []string) (map[string]co
 	return out, rows.Err()
 }
 
-// MarkGraphRunning implements core.GraphRunStarter: flip a pending (queued)
-// graph record to running. The WHERE status='queued' is the admission guard —
-// only one promoter's UPDATE affects a row, so concurrent sweeps on multiple
-// nodes can't double-start a run. Returns true when this call did the flip.
 func (s *Postgres) MarkGraphRunning(ctx context.Context, jobID string) (bool, error) {
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE jobs SET status = 'running', started_at = COALESCE(started_at, now())
@@ -837,12 +669,6 @@ func (s *Postgres) MarkGraphRunning(ctx context.Context, jobID string) (bool, er
 	return tag.RowsAffected() == 1, nil
 }
 
-// SetGraphRunParked implements core.GraphRunParker. Both directions are
-// conditional on the current status, so a second park (a run with two steps
-// awaiting at once) and a resume that isn't the last one are no-ops rather
-// than errors — the caller doesn't have to track how many are outstanding.
-// Terminal records are never touched: a cancelled run must not be dragged
-// back to awaiting by a park that lost the race.
 func (s *Postgres) SetGraphRunParked(ctx context.Context, graphRunID string, parked bool) (bool, error) {
 	from, to := core.JobStatusRunning, core.JobStatusAwaiting
 	if !parked {
@@ -879,11 +705,6 @@ func (s *Postgres) ListByGraph(ctx context.Context, graphID string) ([]core.JobR
 	return out, rows.Err()
 }
 
-// graphRunPredicates appends the shared graph-run scope clauses to q and
-// their values to args. Split out because three reads share this WHERE —
-// the full-record list, the summary projection and the count — and a filter
-// that applied to only some of them would silently disagree about which runs
-// exist.
 func graphRunPredicates(q string, args []any, opts core.ListGraphRunsOpts) (string, []any) {
 	if opts.Tenant != "" {
 		args = append(args, opts.Tenant)
@@ -912,13 +733,6 @@ func graphRunPredicates(q string, args []any, opts core.ListGraphRunsOpts) (stri
 	return q, args
 }
 
-// graphRunOrderLimit appends the shared newest-first ordering and paging.
-//
-// id DESC is a deterministic tiebreaker: enqueued_at ties are common (a
-// scheduler/webhook fan-out submits many runs in the same instant), and
-// without a unique secondary key LIMIT/OFFSET pagination can repeat or skip
-// a row across page boundaries. id is random, not chronological, but it
-// gives a stable total order, which is all pagination needs.
 func graphRunOrderLimit(q string, args []any, opts core.ListGraphRunsOpts) (string, []any) {
 	limit := opts.Limit
 	if limit <= 0 {
@@ -934,8 +748,6 @@ func graphRunOrderLimit(q string, args []any, opts core.ListGraphRunsOpts) (stri
 }
 
 func (s *Postgres) ListGraphRuns(ctx context.Context, opts core.ListGraphRunsOpts) ([]core.JobRecord, error) {
-	// The kind='graph' clause is non-negotiable — that's the whole point of
-	// this method vs ListByGraph.
 	q := `SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
 	             enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual
 	        FROM jobs WHERE kind = 'graph'`
@@ -957,14 +769,6 @@ func (s *Postgres) ListGraphRuns(ctx context.Context, opts core.ListGraphRunsOpt
 	return out, rows.Err()
 }
 
-// ListGraphRunSummaries is ListGraphRuns without the columns a list view
-// never shows. The one that matters is graph_payload: it holds the flow JSON
-// the run pinned at submit, so a 20-row page was fetching (and Postgres was
-// detoasting and decompressing) hundreds of kilobytes to render seven
-// scalars per row, every two seconds, for every open tab.
-//
-// The error code is projected in SQL rather than by decoding result, which
-// is the other large JSONB column on the row.
 func (s *Postgres) ListGraphRunSummaries(ctx context.Context, opts core.ListGraphRunsOpts) ([]core.RunSummary, error) {
 	q, args := graphRunPredicates(summarySelect, []any{}, opts)
 	q, args = graphRunOrderLimit(q, args, opts)
@@ -984,21 +788,12 @@ func (s *Postgres) ListGraphRunSummaries(ctx context.Context, opts core.ListGrap
 	return out, rows.Err()
 }
 
-// summarySelect projects a run record onto core.RunSummary. The error is
-// taken as the `error` member of the stored result rather than the result
-// itself: the result also carries every output value the run produced, and
-// none of these callers read one.
 const summaryCols = `SELECT id, graph_id, tenant, workspace, status, enqueued_at, started_at, finished_at,
 	             result->'error'
 	        FROM jobs WHERE `
 const summarySelect = summaryCols + `kind = 'graph'`
 const summaryByID = summaryCols + `id = $1`
 
-// isJSONNull reports whether a scanned JSON column carries no value. Two
-// shapes mean that and both have to be caught: a SQL NULL (or an absent `->`
-// member) arrives as no bytes, while a stored JSON null arrives as the four
-// bytes `null` — which every Unmarshal below would happily decode into a
-// zero-valued struct and present as real content.
 func isJSONNull(b []byte) bool { return len(b) == 0 || string(b) == "null" }
 
 func scanSummary(r row) (core.RunSummary, error) {
@@ -1010,10 +805,6 @@ func scanSummary(r row) (core.RunSummary, error) {
 		&sum.EnqueuedAt, &sum.StartedAt, &sum.FinishedAt, &errJSON); err != nil {
 		return core.RunSummary{}, err
 	}
-	// A result with no `error` member scans as SQL NULL and arrives empty. A
-	// result that stored an explicit JSON null arrives as the four bytes
-	// "null", which decodes into a zero JobError and would invent a failure
-	// on a run that succeeded — so both are "no error".
 	if !isJSONNull(errJSON) {
 		var je core.JobError
 		if err := json.Unmarshal(errJSON, &je); err != nil {
@@ -1024,12 +815,7 @@ func scanSummary(r row) (core.RunSummary, error) {
 	return sum, nil
 }
 
-// GetGraphRunSummary is the point-read counterpart, for the run-detail
-// header.
 func (s *Postgres) GetGraphRunSummary(ctx context.Context, jobID string) (core.RunSummary, error) {
-	// Deliberately NOT filtered to kind='graph': this is a projection of Get,
-	// which does not filter either, so a caller swapping one for the other
-	// cannot find an id newly rejected.
 	sum, err := scanSummary(s.pool.QueryRow(ctx, summaryByID, jobID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return core.RunSummary{}, core.ErrNotFound
@@ -1040,9 +826,6 @@ func (s *Postgres) GetGraphRunSummary(ctx context.Context, jobID string) (core.R
 	return sum, nil
 }
 
-// CountGraphRuns answers "how many" without building any row. The LIMIT is
-// pushed inside the subquery so a caller asking whether a cap is reached
-// stops there instead of counting a tenant's whole history.
 func (s *Postgres) CountGraphRuns(ctx context.Context, opts core.ListGraphRunsOpts) (int, error) {
 	q := `SELECT 1 FROM jobs WHERE kind = 'graph'`
 	q, args := graphRunPredicates(q, []any{}, opts)
@@ -1057,14 +840,6 @@ func (s *Postgres) CountGraphRuns(ctx context.Context, opts core.ListGraphRunsOp
 	return n, nil
 }
 
-// ListNodeRuns is core.NodeRunReader: one run's timeline, projected in SQL.
-//
-// The wide read this replaces on the run viewer's poll returned twenty
-// columns and decoded two JSON documents per step to render eight fields.
-// Nine of those columns are ids the caller already has (the run it asked
-// for, the tenant it scoped by) or queue bookkeeping no view shows, and the
-// `job` document is read for one member of it — so the projection asks
-// Postgres for that member instead of the document.
 func (s *Postgres) ListNodeRuns(ctx context.Context, graphRunID string, limit int) ([]core.NodeRun, error) {
 	if limit <= 0 {
 		limit = 100
@@ -1090,9 +865,6 @@ func (s *Postgres) ListNodeRuns(ctx context.Context, graphRunID string, limit in
 			&n.StartedAt, &n.FinishedAt, &n.Attempt, &n.AvailableAt); err != nil {
 			return nil, wrapPgErr(err)
 		}
-		// A missing member and a stored JSON null both arrive here: the first
-		// as no bytes, the second as the four bytes `null`, which decodes into
-		// an empty map rather than the nil the full read produces.
 		if !isJSONNull(inputJSON) {
 			if err := json.Unmarshal(inputJSON, &n.Inputs); err != nil {
 				return nil, fmt.Errorf("unmarshal node input: %w", err)
@@ -1122,11 +894,6 @@ func (s *Postgres) ListNodeRecords(ctx context.Context, opts core.ListNodeRecord
 	             enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual
 	        FROM jobs WHERE kind = 'node'`, opts)
 	args = append(args, limit)
-	// id DESC is a deterministic tiebreaker: enqueued_at ties are common (a
-	// scheduler/webhook fan-out submits many runs in the same instant), and
-	// without a unique secondary key LIMIT/OFFSET pagination can repeat or skip
-	// a row across page boundaries. id is random, not chronological, but it
-	// gives a stable total order, which is all pagination needs.
 	order := "enqueued_at DESC, id DESC"
 	if opts.NewestByFinished {
 		order = "finished_at DESC NULLS LAST, id DESC"
@@ -1152,12 +919,6 @@ func (s *Postgres) ListNodeRecords(ctx context.Context, opts core.ListNodeRecord
 	return out, rows.Err()
 }
 
-// nodeRecordWhere appends the ListNodeRecordsOpts predicate to a SELECT whose
-// FROM already restricts to node-kind rows, returning the query and its
-// arguments. Shared by ListNodeRecords and CountNodeRecords so the two cannot
-// drift: a count that filtered differently from the list it counts would
-// render a badge disagreeing with the page it links to, which is the one
-// mistake this projection must not make.
 func nodeRecordWhere(q string, opts core.ListNodeRecordsOpts) (string, []any) {
 	args := []any{}
 	if opts.Tenant != "" {
@@ -1182,20 +943,11 @@ func nodeRecordWhere(q string, opts core.ListNodeRecordsOpts) (string, []any) {
 	}
 	if opts.HasOutputPort != "" {
 		args = append(args, opts.HasOutputPort)
-		// jsonb_exists, not the `?` operator: `?` is a placeholder in most
-		// drivers and reads as one to every human skimming the query, and the
-		// function form is what the matching partial index in schema.sql is
-		// declared with.
 		q += fmt.Sprintf(" AND jsonb_exists(result->'output', $%d)", len(args))
 	}
 	return q, args
 }
 
-// CountNodeRecords implements core.NodeRunReader. The ceiling is applied as a
-// LIMIT inside a subquery rather than as a bound on COUNT, so Postgres stops
-// walking the index once it has enough — the badge's answer is "how many, up
-// to 200", and counting a workspace's whole approval history to render "200"
-// is work with no reader.
 func (s *Postgres) CountNodeRecords(ctx context.Context, opts core.ListNodeRecordsOpts) (int, error) {
 	q, args := nodeRecordWhere(`SELECT 1 FROM jobs WHERE kind = 'node'`, opts)
 	if opts.Offset > 0 {
@@ -1214,8 +966,6 @@ func (s *Postgres) CountNodeRecords(ctx context.Context, opts core.ListNodeRecor
 	return n, nil
 }
 
-// Row covers both pgx.Row (QueryRow) and pgx.Rows (Query) so scanRecord can
-// serve both call sites.
 type row interface {
 	Scan(dest ...any) error
 }
@@ -1262,19 +1012,8 @@ func scanRecord(r row) (core.JobRecord, error) {
 	return rec, nil
 }
 
-// pgUniqueViolation is SQLSTATE 23505 — unique_violation. Enqueue's only
-// realistic constraint failure is the jobs primary key, i.e. "this job ID is
-// already enqueued", which is exactly core.ErrConflict.
 const pgUniqueViolation = "23505"
 
-// wrapPgErr normalizes a pgx error into the store-agnostic sentinels callers
-// branch on, falling back to an opaque wrap.
-//
-// Mapping unique_violation is what keeps the two JobStore backends
-// behaviourally identical: Memory.Enqueue returns core.ErrConflict for a
-// duplicate ID, so without this errors.Is(err, core.ErrConflict) was true on
-// the in-memory store and false on Postgres for the same operation — a
-// divergence the conformance suite missed because it only asserted err != nil.
 func wrapPgErr(err error) error {
 	if err == nil {
 		return nil

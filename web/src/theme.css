@@ -1,14 +1,9 @@
 /* SPDX-FileCopyrightText: 2026 Angels' Ware
    SPDX-License-Identifier: AGPL-3.0-or-later */
 
-/* Dazyflow visual editor theme.
-   Tokens ported from the sibling ../dazy project (synthwave/violet dark
-   palette). Light mode kept available for completeness but the editor
-   leans dark — the canvas reads better on a near-black surface. */
 
 :root,
 :root[data-theme="dark"] {
-  /* Brand violets */
   --accent: #9f83fe;
   --accent-2: #bf7ff8;
   --accent-deep: #5d09c7;
@@ -22,7 +17,6 @@
      brand, so a brand colour changes in both files or in neither. */
   --accent-3: #6ba8ff;
 
-  /* Ink */
   --ink: #e9ecf3;
   --ink-soft: #d2caff;
   --muted: #9e9abb;
@@ -35,17 +29,14 @@
      it for chrome, not for text a user must read. */
   --faint: #918bb0;
 
-  /* Surfaces */
   --bg: #070513;
   --surface: #140d30;
   --surface-2: #28243f;
   --surface-3: #383451;
 
-  /* Borders */
   --border: #383451;
   --border-strong: #4f4a6a;
 
-  /* Status palette */
   --status-pending: #6b7f96;
   --status-running: #9f83fe;
   --status-completed: #4ec96d;
@@ -59,32 +50,17 @@
   --warning: var(--status-warning);
   --info: var(--accent);
 
-  /* React Flow canvas dot-grid colour (faint light dots on the
-     near-black canvas). Themed so light mode can flip it to dark. */
-  /* Per-node accents. NodeCard overrides these inline on the element — a
-     trigger node sets --node-accent to its integration's colour, and an
-     operator node sets --op-color — so what is defined here is the DEFAULT for
-     every node that sets neither. They lived as `var(--node-accent)`
-     repeated at eleven call sites, which is a default with no home. */
   --node-accent: #aa66dd;
   --op-color: #46c46e;
 
   --canvas-dot: rgba(255, 255, 255, 0.05);
-  /* Canvas line-grid, two tiers (dim→bright): a fine 20px grid plus a
-     stronger major line every 5th cell (graph-paper feel). Themed for
-     light mode. */
   --canvas-grid: rgba(255, 255, 255, 0.05);
   --canvas-grid-major: rgba(255, 255, 255, 0.22);
-  /* Minimap dimming mask over the off-viewport area. */
   --canvas-minimap-mask: rgba(10, 6, 26, 0.6);
 
-  /* Copyable code/value family (.dz-code): terminal-style in the dark
-     theme, themed light in light mode so the code stays readable. */
   --code-bg: #0a0918;
   --code-fg: #d8d4ec;
 
-  /* JSON syntax-highlight token colours (dz-json-editor). Tuned for the
-     dark --code-bg well; the light theme overrides them below. */
   --json-key: #9f83fe;
   --json-string: #4ec96d;
   --json-number: #6cb6ff;
@@ -122,11 +98,8 @@
     rgba(255, 255, 255, 0.04) 34%,
     rgba(255, 255, 255, 0) 62%
   );
-  /* Barely-there divider, for glass surfaces where --border reads as a drawn
-     box rather than a seam. */
   --hairline: rgba(255, 255, 255, 0.07);
 
-  /* Shadows + synthwave glow */
   --shadow: 0 1px 2px rgba(8, 2, 30, 0.45);
   --shadow-lg: 0 2px 10px rgba(8, 2, 30, 0.55);
   --shadow-pop: 0 6px 22px rgba(8, 2, 30, 0.65);
@@ -141,7 +114,6 @@
     0 1px 2px rgba(0, 0, 0, 0.35),
     0 4px 12px color-mix(in srgb, var(--accent) 16%, transparent);
 
-  /* Typography */
   --font-sans:
     system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
     "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
@@ -172,9 +144,6 @@
   --text-2xl: 1.5rem; /*    24px */
   --text-3xl: 1.875rem; /*  30px */
 
-  /* Spacing scale — gaps, margins and paddings come from here.
-     --space-0 and --space-1h cover the hairline/chip sizes that sat
-     between the original steps. */
   --space-0: 2px;
   --space-1: 4px;
   --space-1h: 6px;
@@ -196,16 +165,12 @@
   --r-5: 24px;
   --r-pill: 999px;
 
-  /* Motion — one source of truth for durations + easings so every transition
-     in the app feels like it belongs to the same system. --ease-out for things
-     entering/responding, --dur-1/2/3 for micro / default / larger movements. */
   --ease-out: cubic-bezier(0.22, 0.7, 0.3, 1);
   --ease-in-out: cubic-bezier(0.5, 0, 0.3, 1);
   --dur-1: 90ms;
   --dur-2: 160ms;
   --dur-3: 240ms;
 
-  /* Layout */
   --topbar-h: 56px;
   --sidebar-w: 240px;
   --sidebar-rail-w: 56px;
@@ -248,8 +213,6 @@
   --z-sidebar: 50;
   --z-popover: 110;
   --z-help-popover: 120;
-  /* The editor's Errors/Warnings panels: above the canvas and the inspector
-     sheet, below every modal — a row can open one. */
   --z-issues-pop: 130;
   --z-modal: 200;
   --z-context-menu: 210;
@@ -266,8 +229,6 @@
    via data-theme="light" on <html>.
    ============================================================ */
 :root[data-theme="light"] {
-  /* Brand violet, deepened for legibility on light surfaces — reads
-     as a premium indigo-violet rather than the neon dark-mode lilac. */
   --accent: #6d28d9;       /* violet-700 — links, active accents */
   --accent-2: #9333ea;     /* purple-600 — gradient partner */
   --accent-deep: #4c1d95;  /* violet-900 */
@@ -275,8 +236,6 @@
   --btn: #6d28d9;
   --btn-hover: #5b21b6;    /* violet-800 */
   --accent-3: #2563eb;     /* blue-600 — cool third stop, AA on white */
-  /* The lit-edge rim inverts on light surfaces: a white highlight on white
-     is invisible, so the rim becomes a soft ink shadow instead. */
   --grad-rim: linear-gradient(
     150deg,
     rgba(27, 34, 51, 0.1) 0%,
@@ -285,25 +244,16 @@
   );
   --hairline: rgba(27, 34, 51, 0.08);
 
-  /* Ink — slate rather than pure black, softer and more professional. */
   --ink: #1b2233;
   --ink-soft: #39415a;
   --muted: #5b6577;
-  /* Same fix as dark, and light was the worse of the two: #8b93a7 measured
-     2.87:1 on --bg and 2.53:1 on --surface-3. */
   --faint: #656e85;
 
-  /* Surfaces — a tinted off-white app canvas with pure-white cards
-     floating on top, plus two progressively deeper neutral fills for
-     hovers and wells. The slight cool cast keeps it from feeling
-     clinical. */
   --bg: #f6f7fb;
   --surface: #ffffff;
   --surface-2: #f0f2f8;
   --surface-3: #e6e9f2;
 
-  /* Borders — hairline cool grays; the strong one is for inputs and
-     emphasized dividers. */
   --border: #e4e8f0;
   --border-strong: #ccd3e0;
 
@@ -318,40 +268,29 @@
   --status-warning: #d97706;
   --status-awaiting: #ca8a04;  /* yellow-600 */
 
-  /* Faint dark dots for the canvas grid (light-on-dark flips to
-     dark-on-light). */
   --canvas-dot: rgba(28, 35, 51, 0.07);
   --canvas-grid: rgba(28, 35, 51, 0.025);
   --canvas-grid-major: rgba(28, 35, 51, 0.045);
   --canvas-minimap-mask: rgba(120, 130, 150, 0.25);
 
-  /* Copyable code blocks: a cool light well with slate ink — the
-     dark terminal box reads as a hole punched in a light page. */
   --code-bg: #eef0f8;
   --code-fg: #1b2233;
 
-  /* JSON token colours for the light theme well (see dark block). */
   --json-key: #6d28d9;
   --json-string: #1a7f37;
   --json-number: #0969da;
   --json-bool: #9a6700;
   --json-punct: #57606a;
 
-  /* Script token colours for the light theme well (see dark block). */
   --script-comment: #6a7280;
   --script-string: #1a7f37;
   --script-keyword: #6d28d9;
   --script-number: #0969da;
   --script-var: #9a6700;
 
-  /* Soft, neutral elevation — light themes want diffuse gray shadows,
-     not the heavy near-black drops the dark theme uses. */
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
   --shadow-lg: 0 4px 14px rgba(16, 24, 40, 0.08);
   --shadow-pop: 0 10px 30px rgba(16, 24, 40, 0.12);
-  /* Primary-button elevation: a top inner highlight for a subtle
-     "pressed plastic" sheen plus a tinted violet shadow so the CTA
-     lifts off the page. */
   --glow-accent:
     inset 0 1px 0 rgba(255, 255, 255, 0.25),
     0 1px 2px rgba(76, 29, 149, 0.28),
@@ -390,8 +329,6 @@ body {
   line-height: 1.45;
 }
 
-/* Background nebula on dark mode — pulled from ../dazy. Two radial
-   gradient washes that anchor the violet brand at the corners. */
 :root[data-theme="dark"] body {
   background:
     radial-gradient(
@@ -408,8 +345,6 @@ body {
   background-attachment: fixed;
 }
 
-/* Light mode gets the same two-corner brand wash, dialled way down so
-   it reads as a faint tint behind the white cards rather than a glow. */
 :root[data-theme="light"] body {
   background:
     radial-gradient(
@@ -426,9 +361,6 @@ body {
   background-attachment: fixed;
 }
 
-/* Canvas grid colour is themed — drive the React Flow background pattern
-   from CSS so it flips with the theme. Dots (legacy) use --canvas-dot; the
-   line grid strokes each tier by its className. */
 .react-flow__background circle {
   fill: var(--canvas-dot);
 }
@@ -439,9 +371,6 @@ body {
   stroke: var(--canvas-grid-major);
 }
 
-/* Hide the canvas grid on small and medium screens (below the large
-   breakpoint) — the graph-paper lines add clutter without aiding layout
-   when there's little room to pan, so only large screens show the grid. */
 @media (max-width: 1024px) {
   .react-flow__background.dz-grid-fine,
   .react-flow__background.dz-grid-major {
@@ -493,13 +422,6 @@ button,
   font-family: inherit;
   font-size: inherit;
   cursor: pointer;
-  /* Center label + any leading icon on the cross axis so icons sit on the
-     optical midline without per-call-site verticalAlign nudges, and space
-     them with `gap`.
-     The gap used to be left to each icon's own marginRight, to avoid
-     double-spacing buttons that set one. The cost of that was 67 call sites
-     hand-spacing their own icon at five different values — 3, 4, 5, 6 and 8px
-     for the identical relationship. One gap here, and every button agrees. */
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -545,11 +467,6 @@ button.ghost:hover:not(:disabled),
 .btn.ghost:hover {
   background: var(--surface-2);
 }
-/* Destructive default: red text + red border on a transparent fill. The
-   global rule that was missing — bare .danger buttons used to fall through
-   to the plain gray look. Filled-red is the `filled` modifier just below
-   (dialog confirms, and Run→Stop in the editor toolbar); .ghost.danger drops
-   the border for quiet inline destructive actions. */
 button.danger,
 .btn.danger {
   background: transparent;
@@ -582,7 +499,6 @@ button.danger.filled:hover:not(:disabled),
   background: var(--danger);
   filter: brightness(1.08);
 }
-/* Link variant: chromeless, reads as inline text. */
 button.link,
 .btn.link {
   background: none;
@@ -605,8 +521,6 @@ button.icon,
   height: 36px;
   padding: 0;
 }
-/* Ghost icon button: muted glyph that lifts to ink on hover — the dense
-   toolbar / row-action affordance (absorbs the old .icon-button). */
 button.ghost.icon,
 .btn.ghost.icon {
   color: var(--muted);
@@ -629,7 +543,6 @@ button.ghost.icon.danger:hover:not(:disabled),
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   border-color: transparent;
 }
-/* Compact size for dense rows, chips, and inline actions. */
 button.sm,
 .btn.sm {
   padding: var(--space-1) var(--space-2);
@@ -641,7 +554,6 @@ button.sm.icon,
   height: 28px;
   padding: 0;
 }
-/* Full-width CTA (e.g. stacked under a description on narrow screens). */
 button.btn-block,
 .btn.btn-block {
   width: 100%;

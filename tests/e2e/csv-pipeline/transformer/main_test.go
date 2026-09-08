@@ -12,9 +12,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-// fakeExecStream captures events the server sends. It satisfies
-// nodepb.NodeService_ExecuteServer (grpc.ServerStreamingServer[Event]) by
-// embedding grpc.ServerStream for the unused methods.
 type fakeExecStream struct {
 	grpc.ServerStream
 	events []*nodepb.Event
@@ -85,7 +82,6 @@ func TestExecuteUppercasesJSONString(t *testing.T) {
 	if out.Mime != "text/csv" {
 		t.Fatalf("mime=%q", out.Mime)
 	}
-	// progress event should have been sent before result
 	var sawProgress bool
 	for _, e := range stream.events {
 		if e.GetProgress() != nil {

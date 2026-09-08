@@ -1,16 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package rendertext is the shared core of the render_text drop: it turns a
-// list of rows into one text string by rendering a per-row CEL template (or
-// taking a single column), joining the lines with a separator, and wrapping
-// the result in a prefix/suffix. With zero rows it emits a fixed `Empty`
-// fallback.
-//
-// It exists as its own package — like internal/htmltmpl backs render_template
-// — so the drop (drops/transform) and the editor's live-preview endpoint
-// (daemon) render through the EXACT same code: the preview a non-technical
-// user sees while picking a template is byte-identical to what the flow sends.
 package rendertext
 
 import (
@@ -27,9 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/internal/rowcel"
 )
 
-// Spec is the render_text configuration. A per-row CEL Template (seeing the
-// row as `row`) takes precedence over a single Column; lines are joined with
-// Separator and wrapped in Prefix/Suffix. With zero rows the output is Empty.
 type Spec struct {
 	Template  string
 	Column    string
@@ -39,23 +26,15 @@ type Spec struct {
 	Empty     string
 }
 
-// ErrNoRenderer means neither a Template expression nor a Column was given.
 var ErrNoRenderer = errors.New("render_text needs either a 'template' expression or a 'column' name")
 
-// ErrTooLarge is returned when the rendered output exceeds maxBytes.
 var ErrTooLarge = errors.New("rendered text exceeds the size limit")
 
-// ParseError wraps a CEL compile failure — a mistake in the Template
-// expression, expected while a user is editing. The live preview surfaces its
-// message inline; the drop maps it to a bad_param error.
 type ParseError struct{ Err error }
 
 func (e *ParseError) Error() string { return e.Err.Error() }
 func (e *ParseError) Unwrap() error { return e.Err }
 
-// EvalError wraps a per-row evaluation failure (a runtime CEL error on some
-// row). The drop maps it to an eval error; a half-rendered message is worse
-// than a clear failure, so one bad row fails the whole render.
 type EvalError struct{ Err error }
 
 func (e *EvalError) Error() string { return e.Err.Error() }
@@ -136,9 +115,6 @@ func paramStringOr(p map[string]any, key, def string) string {
 	return def
 }
 
-// unwrapCEL converts a CEL ref.Val back to a plain Go value: primitives come
-// out as their natural Go type; composite types are unwrapped recursively via
-// ConvertToNative so a computed list/map doesn't surface as a CEL wrapper.
 func unwrapCEL(v ref.Val) (any, error) {
 	raw := v.Value()
 	switch raw.(type) {
@@ -153,10 +129,6 @@ func unwrapCEL(v ref.Val) (any, error) {
 	return native, nil
 }
 
-// StringifyCell renders a single cell value as the text that lands in a line.
-// Strings pass through unquoted; numbers/bools use their natural Go form;
-// composite values are JSON-encoded so they don't surface as Go's map[...]
-// debug form.
 func StringifyCell(v any) string {
 	switch t := v.(type) {
 	case nil:

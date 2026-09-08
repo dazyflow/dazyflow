@@ -9,15 +9,6 @@ import (
 	"testing"
 )
 
-// A dropdown with no `enumNames` shows the RAW value: the Regex step's mode
-// offered "extract / replace / split / match", lowercase, in every language,
-// because nothing said what to call them. The values are API vocabulary and
-// have to stay as they are; the labels are what a person reads, and they are a
-// separate field nobody is forced to fill in — which is why fourteen of them
-// were missing at once.
-//
-// So this asks for them. Add an enum without labels and it fails here, while
-// the drop is being written, rather than showing an internal word to a user.
 type enumProps struct {
 	Properties map[string]struct {
 		Enum      []json.RawMessage `json:"enum"`

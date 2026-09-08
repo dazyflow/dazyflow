@@ -11,8 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/internal/rendertext"
 )
 
-// ===== helpers.go normalizers =========================================
-
 func TestCov_NormalizeStringSlice(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -72,7 +70,6 @@ func TestCov_NormalizeAnyArrayMap(t *testing.T) {
 	if err != nil || len(got["a"]) != 2 {
 		t.Errorf("any array: got=%v err=%v", got, err)
 	}
-	// Lenient: []string value coerced.
 	got2, err := normalizeAnyArrayMap(map[string]any{"a": []string{"x"}}, "filter_in")
 	if err != nil || len(got2["a"]) != 1 || got2["a"][0] != "x" {
 		t.Errorf("string slice value: got=%v err=%v", got2, err)
@@ -92,8 +89,6 @@ func TestCov_KeyString(t *testing.T) {
 		t.Errorf("int 30 and string 30 should produce same key: %q vs %q", k1, k2)
 	}
 }
-
-// ===== compute_rows.go ================================================
 
 func TestCov_ComputeFilterNonStringRejected(t *testing.T) {
 	res, _ := executeComputeRows(t.Context(), core.Job{
@@ -137,8 +132,6 @@ func TestCov_ComputeMapResultUnwrapped(t *testing.T) {
 		map[string]any{"compute": map[string]any{"obj": "{'k': row.a}"}},
 		[]map[string]any{{"a": int64(7)}},
 		nil)
-	// CEL maps unwrap via ConvertToNative to a Go map (key/value types
-	// are interface{}); the point is it is no longer a CEL wrapper.
 	got := rows[0]["obj"]
 	if m, ok := got.(map[any]any); ok {
 		if m["k"] != int64(7) {
@@ -154,8 +147,6 @@ func TestCov_ComputeMapResultUnwrapped(t *testing.T) {
 	}
 	t.Errorf("obj = %#v (%T), want an unwrapped Go map", got, got)
 }
-
-// ===== sort_rows.go ===================================================
 
 func TestCov_SortKeysErrors(t *testing.T) {
 	cases := []struct {
@@ -197,14 +188,12 @@ func TestCov_CompareCellsNilAndBool(t *testing.T) {
 	if compareCells(true, true) != 0 {
 		t.Error("true == true")
 	}
-	// String fallback equal case.
 	if compareCells("a", "a") != 0 {
 		t.Error("a == a")
 	}
 }
 
 func TestCov_SortFloatVariants(t *testing.T) {
-	// Exercise sort over many numeric Go types via toFloat.
 	got := runSort(t,
 		map[string]any{"by": "n"},
 		[]map[string]any{
@@ -217,10 +206,7 @@ func TestCov_SortFloatVariants(t *testing.T) {
 	}
 }
 
-// ===== render_template.go ============================================
-
 func TestCov_TemplateTextInputOr(t *testing.T) {
-	// Unwired → fallback.
 	if s, ok := templateTextInputOr(core.Job{}, "fb"); !ok || s != "fb" {
 		t.Errorf("unwired: s=%q ok=%v", s, ok)
 	}
@@ -228,7 +214,6 @@ func TestCov_TemplateTextInputOr(t *testing.T) {
 	if s, ok := templateTextInputOr(j, "fb"); !ok || s != "hi" {
 		t.Errorf("string: s=%q ok=%v", s, ok)
 	}
-	// Empty string input → fallback.
 	j2 := core.Job{Input: map[string]core.Ref{"template": {Inline: ""}}}
 	if s, ok := templateTextInputOr(j2, "fb"); !ok || s != "fb" {
 		t.Errorf("empty string: s=%q ok=%v", s, ok)
@@ -237,12 +222,10 @@ func TestCov_TemplateTextInputOr(t *testing.T) {
 	if s, ok := templateTextInputOr(j3, "fb"); !ok || s != "bytes" {
 		t.Errorf("bytes: s=%q ok=%v", s, ok)
 	}
-	// Empty []byte → fallback.
 	j4 := core.Job{Input: map[string]core.Ref{"template": {Inline: []byte{}}}}
 	if s, ok := templateTextInputOr(j4, "fb"); !ok || s != "fb" {
 		t.Errorf("empty bytes: s=%q ok=%v", s, ok)
 	}
-	// Non-text type → not ok.
 	j5 := core.Job{Input: map[string]core.Ref{"template": {Inline: 42}}}
 	if _, ok := templateTextInputOr(j5, "fb"); ok {
 		t.Error("non-text input should return ok=false")
@@ -295,8 +278,6 @@ func TestCov_RenderTemplateNonTextTemplateInput(t *testing.T) {
 	}
 }
 
-// ===== render_text.go stringifyCell ===================================
-
 func TestCov_StringifyCell(t *testing.T) {
 	cases := []struct {
 		in   any
@@ -317,10 +298,7 @@ func TestCov_StringifyCell(t *testing.T) {
 	}
 }
 
-// ===== parse_json.go edge cases =======================================
-
 func TestCov_ParseJSONFenceFalse(t *testing.T) {
-	// fence=false: a bare JSON array with no fence still parses.
 	res := runParseJSON(t, `[{"a":1}]`, map[string]any{"fence": false})
 	if res.Status != core.StatusOK {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
@@ -349,12 +327,10 @@ func TestCov_ParseJSONInvalidJSON(t *testing.T) {
 }
 
 func TestCov_ParseJSONPathErrors(t *testing.T) {
-	// path into a non-object.
 	res := runParseJSON(t, `{"a":5}`, map[string]any{"path": "a.b"})
 	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
 		t.Errorf("status=%q code=%q, want bad_param", res.Status, res.Error.Code)
 	}
-	// missing path segment.
 	res2 := runParseJSON(t, `{"a":{}}`, map[string]any{"path": "a.missing"})
 	if res2.Status != core.StatusError {
 		t.Errorf("missing segment: status=%q", res2.Status)
@@ -374,7 +350,6 @@ func TestCov_ParseJSONFenceWithLangTag(t *testing.T) {
 }
 
 func TestCov_ParseJSONFenceNoClose(t *testing.T) {
-	// Opening fence, no closing fence: rest is taken verbatim.
 	in := "```\n{\"a\":1}"
 	res := runParseJSON(t, in, nil)
 	if res.Status != core.StatusOK {
@@ -396,10 +371,7 @@ func TestCov_ParseJSONNullRejected(t *testing.T) {
 	}
 }
 
-// ===== unwrap_results.go edge cases ===================================
-
 func TestCov_UnwrapResultsFromJSONString(t *testing.T) {
-	// results arriving as a JSON string (post round-trip).
 	jsonStr := `[{"status":"ok","nodes":{"body":{"status":"ok","output":{"out":{"mime":"application/json","data":{"x":1}}}}}}]`
 	rows := unwrappedRows(t, map[string]any{"port": "out"}, jsonStr)
 	if len(rows) != 1 || rows[0]["x"] != float64(1) {
@@ -422,7 +394,6 @@ func TestCov_UnwrapResultsUnsupportedType(t *testing.T) {
 }
 
 func TestCov_UnwrapResultsScalarPortWrapped(t *testing.T) {
-	// A scalar port value lands as {"value": v}.
 	rows := unwrappedRows(t, map[string]any{"port": "out"},
 		[]core.Ref{wrap("out", "hello")})
 	if len(rows) != 1 || rows[0]["value"] != "hello" {
@@ -480,7 +451,6 @@ func TestCov_UnwrapResultsMissingResultsInput(t *testing.T) {
 }
 
 func TestCov_SelectNodeAndPortAmbiguous(t *testing.T) {
-	// Two body nodes with no `node` param → ambiguous error.
 	results := []core.Ref{{Inline: map[string]any{
 		"status": core.StatusOK,
 		"nodes": map[string]any{
@@ -495,21 +465,17 @@ func TestCov_SelectNodeAndPortAmbiguous(t *testing.T) {
 }
 
 func TestCov_RefInlineSerializedRef(t *testing.T) {
-	// A serialized Ref {mime,data} unwraps to its data.
 	got := refInline(map[string]any{"mime": "application/json", "data": map[string]any{"k": 1}})
 	m, ok := got.(map[string]any)
 	if !ok || m["k"] != 1 {
 		t.Errorf("refInline = %#v", got)
 	}
-	// A plain map without mime passes through unchanged.
 	plain := map[string]any{"data": "x"}
 	back, ok2 := refInline(plain).(map[string]any)
 	if !ok2 || back["data"] != "x" {
 		t.Errorf("plain map should pass through")
 	}
 }
-
-// ===== group_aggregate.go coerceNumeric ===============================
 
 func TestCov_CoerceNumericVariants(t *testing.T) {
 	cases := []struct {
@@ -543,8 +509,6 @@ func TestCov_CoerceNumericVariants(t *testing.T) {
 }
 
 func TestCov_GroupCollectEmptyGroupNonNil(t *testing.T) {
-	// collect on a populated group returns a slice; verifies finalize's
-	// collect branch.
 	res := runGroup(t,
 		map[string]any{
 			"by":        []any{"g"},
@@ -580,21 +544,16 @@ func TestCov_GroupAvgFloatResult(t *testing.T) {
 	}
 }
 
-// ===== dedupe_rows.go parseDedupeBy / parseKeep =======================
-
 func TestCov_ParseDedupeBy(t *testing.T) {
-	// absent → headers fallback.
 	got, err := parseDedupeBy(map[string]any{}, []string{"a", "b"}, nil)
 	if err != nil || !reflect.DeepEqual(got, []string{"a", "b"}) {
 		t.Errorf("headers fallback: got=%v err=%v", got, err)
 	}
-	// absent + no headers → derive from rows.
 	got2, err := parseDedupeBy(map[string]any{}, nil,
 		[]map[string]any{{"x": 1, "y": 2}})
 	if err != nil || len(got2) != 2 {
 		t.Errorf("derive fallback: got=%v err=%v", got2, err)
 	}
-	// []string.
 	got3, _ := parseDedupeBy(map[string]any{"by": []string{"c"}}, nil, nil)
 	if !reflect.DeepEqual(got3, []string{"c"}) {
 		t.Errorf("typed slice: %v", got3)
@@ -603,11 +562,9 @@ func TestCov_ParseDedupeBy(t *testing.T) {
 	if !reflect.DeepEqual(got4, []string{"d"}) {
 		t.Errorf("any slice: %v", got4)
 	}
-	// bad element.
 	if _, err := parseDedupeBy(map[string]any{"by": []any{1}}, nil, nil); err == nil {
 		t.Error("bad element should error")
 	}
-	// wrong type.
 	if _, err := parseDedupeBy(map[string]any{"by": 5}, nil, nil); err == nil {
 		t.Error("wrong type should error")
 	}
@@ -640,8 +597,6 @@ func TestCov_ParseKeep(t *testing.T) {
 		}
 	}
 }
-
-// ===== map_rows.go parseMapSpec errors ================================
 
 func TestCov_MapSpecErrors(t *testing.T) {
 	cases := []struct {

@@ -16,16 +16,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-// Integration tests for the mysql_* drops. Skipped unless
-// DAZYFLOW_TEST_MYSQL is set:
-//
-//   DAZYFLOW_TEST_MYSQL='user:pass@tcp(localhost:3306)/dazyflow_test?parseTime=true' \
-//     go test ./drops/db/
-//
-// Use a dedicated test database. We create + drop tables named
-// dz_test_*_<unix-ns> per test, so concurrent runs in the same DB
-// don't collide.
-
 func mysqlTestSetup(t *testing.T) (dsn, table string) {
 	t.Helper()
 	dsn = os.Getenv("DAZYFLOW_TEST_MYSQL")
@@ -181,7 +171,6 @@ func TestMySQLUpsert_InsertAndUpdate(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	// First pass: pure inserts.
 	res, _ := executeMySQLUpsertRows(ctx, core.Job{
 		Params: map[string]any{
 			"dsn":              dsn,
@@ -200,7 +189,6 @@ func TestMySQLUpsert_InsertAndUpdate(t *testing.T) {
 		t.Fatalf("first: status=%q err=%+v", res.Status, res.Error)
 	}
 
-	// Second pass: re-insert with new values + one new id.
 	res, _ = executeMySQLUpsertRows(ctx, core.Job{
 		Params: map[string]any{
 			"dsn":              dsn,
@@ -222,7 +210,6 @@ func TestMySQLUpsert_InsertAndUpdate(t *testing.T) {
 	if got := res.Output["processed"].Inline; got != 3 {
 		t.Errorf("processed = %v, want 3", got)
 	}
-	// Verify the updates landed.
 	var name string
 	if err := db.QueryRowContext(ctx, fmt.Sprintf(
 		"SELECT name FROM `%s` WHERE id = 1", table)).Scan(&name); err != nil {
@@ -251,7 +238,6 @@ func TestMySQLUpsert_PartialUpdate(t *testing.T) {
 		},
 	}, nil)
 
-	// Only update name; score should stay at 5.
 	res, _ := executeMySQLUpsertRows(ctx, core.Job{
 		Params: map[string]any{
 			"dsn": dsn, "table": table,
@@ -281,8 +267,6 @@ func TestMySQLUpsert_PartialUpdate(t *testing.T) {
 }
 
 func TestMySQLUpsert_DoNothingEquivalent(t *testing.T) {
-	// update_columns=[] should set the conflict column to itself —
-	// a no-op write that leaves the existing row untouched.
 	dsn, table := mysqlTestSetup(t)
 	ctx := t.Context()
 	db, _ := sql.Open("mysql", dsn)
@@ -324,14 +308,6 @@ func TestMySQLUpsert_DoNothingEquivalent(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// Unit tests — no MySQL required.
-// ----------------------------------------------------------------------
-
-// Only the genuinely-unsafe shapes are pre-rejected now. Names like
-// "with space" or "with-dash" are valid MySQL identifiers when
-// backtick-quoted, so they go through to the driver — which lands
-// at the connect stage in unit tests without a real MySQL server.
 func TestMySQLInsert_RejectsUnsafeTableName(t *testing.T) {
 	for _, name := range []string{"", "tab\x00le"} {
 		t.Run(name, func(t *testing.T) {
@@ -433,10 +409,6 @@ func TestMySQLUpsert_UnsafeConflictColumn(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// SQL DB registry tests (parallel to TestPGRegistry_*).
-// ----------------------------------------------------------------------
-
 func TestSQLDBRegistry_BadDSNDoesNotPoison(t *testing.T) {
 	r := newSQLDBRegistry("mysql", time.Hour, time.Hour)
 	_, err := r.sqlDB(t.Context(), "acme", "totally-not-a-valid-mysql-dsn")
@@ -466,19 +438,6 @@ func TestSQLDBRegistry_SweepEvictsIdle(t *testing.T) {
 	}
 }
 
-// mysql_cov2_test.go is the second-round coverage push for the MySQL
-// execute paths and the database/sql conn/registry branches that only
-// become reachable with a live MySQL server. All tests are gated on
-// DAZYFLOW_TEST_MYSQL via the shared mysqlTestSetup helper (mysql_test.go).
-
-// ----------------------------------------------------------------------
-// Registry: live-connection branches in sqlDB / sweepLocked.
-// ----------------------------------------------------------------------
-
-// TestSQLDBRegistry_LiveConnectAndCacheHit covers the success path of
-// sqlDB (sql.Open + PingContext + store) and the cache-hit reuse branch:
-// a second call with the same (tenant, dsn) returns the same handle
-// without opening a new one.
 func TestSQLDBRegistry_LiveConnectAndCacheHit(t *testing.T) {
 	dsn, _ := mysqlTestSetup(t)
 	r := newSQLDBRegistry("mysql", time.Hour, time.Hour)
@@ -505,7 +464,6 @@ func TestSQLDBRegistry_LiveConnectAndCacheHit(t *testing.T) {
 		t.Errorf("registry size = %d, want 1 (cache hit must not add)", len(r.dbs))
 	}
 
-	// Clean up the live handle the registry opened.
 	r.mu.Lock()
 	for _, e := range r.dbs {
 		if e.db != nil {
@@ -515,14 +473,7 @@ func TestSQLDBRegistry_LiveConnectAndCacheHit(t *testing.T) {
 	r.mu.Unlock()
 }
 
-// TestSQLDBRegistry_PingFailureClosesHandle covers the PingContext-error
-// branch: a parseable TCP DSN whose host/port nothing listens on passes
-// the DSN parse + SSRF pre-flight (private egress is on for the test
-// process) but fails the Ping, so sqlDB closes the handle and returns the
-// error without poisoning the registry.
 func TestSQLDBRegistry_PingFailureClosesHandle(t *testing.T) {
-	// Gate on DAZYFLOW_TEST_MYSQL so this only runs where the MySQL
-	// paths are exercised, matching the rest of this file.
 	mysqlTestSetup(t)
 
 	r := newSQLDBRegistry("mysql", time.Hour, time.Hour)
@@ -537,9 +488,6 @@ func TestSQLDBRegistry_PingFailureClosesHandle(t *testing.T) {
 	}
 }
 
-// TestSQLDBRegistry_SweepClosesLiveHandle covers the sweep branch that
-// closes a non-nil *sql.DB (conns.go:300-302). We connect for real, then
-// backdate the entry past the idle window and sweep.
 func TestSQLDBRegistry_SweepClosesLiveHandle(t *testing.T) {
 	dsn, _ := mysqlTestSetup(t)
 	r := newSQLDBRegistry("mysql", 10*time.Millisecond, 0)
@@ -552,8 +500,6 @@ func TestSQLDBRegistry_SweepClosesLiveHandle(t *testing.T) {
 		t.Fatal("nil db")
 	}
 
-	// Backdate so the entry is past the idle window, then sweep — this
-	// exercises the d.Close() on a real handle.
 	r.mu.Lock()
 	for k := range r.dbs {
 		r.dbs[k].lastUse = time.Now().Add(-time.Hour)
@@ -571,14 +517,6 @@ func TestSQLDBRegistry_SweepClosesLiveHandle(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// Query: too_many_rows guard over a real MySQL connection.
-// ----------------------------------------------------------------------
-
-// TestMySQLQuery_TooManyRows covers the queryGuard ceiling stop in
-// sqlConn.query (conn_sql.go:64-66) and the too_many_rows error mapping
-// in runQueryParsed, driven through a live MySQL SELECT with the row
-// ceiling lowered.
 func TestMySQLQuery_TooManyRows(t *testing.T) {
 	dsn, table := mysqlTestSetup(t)
 	ctx := t.Context()
@@ -607,9 +545,6 @@ func TestMySQLQuery_TooManyRows(t *testing.T) {
 	}
 }
 
-// TestMySQLQuery_UserLimitStop covers the user-limit stop branch of
-// queryGuard (limit>0) over a live MySQL connection: more rows exist than
-// the limit, so iteration stops early and exactly `limit` rows come back.
 func TestMySQLQuery_UserLimitStop(t *testing.T) {
 	dsn, table := mysqlTestSetup(t)
 	ctx := t.Context()
@@ -640,8 +575,6 @@ func TestMySQLQuery_UserLimitStop(t *testing.T) {
 	}
 }
 
-// TestMySQLQuery_BadSQL covers the db-error mapping in runQueryParsed (a
-// query against a missing table) over a live connection.
 func TestMySQLQuery_BadSQL(t *testing.T) {
 	dsn, table := mysqlTestSetup(t)
 	res, _ := executeMySQLQuery(t.Context(), core.Job{
@@ -655,13 +588,6 @@ func TestMySQLQuery_BadSQL(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// Insert / upsert: live execBatch and create-table branches.
-// ----------------------------------------------------------------------
-
-// TestMySQLInsert_EmptyRowsCreatesTableOnly covers runInsert's
-// create-table-then-zero-rows path: create_table true with headers but no
-// rows returns inserted=0 and an empty table over a live connection.
 func TestMySQLInsert_EmptyRowsCreatesTableOnly(t *testing.T) {
 	dsn, table := mysqlTestSetup(t)
 	res, err := executeMySQLInsertRows(t.Context(), core.Job{
@@ -691,9 +617,6 @@ func TestMySQLInsert_EmptyRowsCreatesTableOnly(t *testing.T) {
 	}
 }
 
-// TestMySQLInsert_CreateTableBadColumnType covers runInsert's
-// create-table error mapping: an invalid column type makes the CREATE
-// TABLE fail at the driver, returning a db error.
 func TestMySQLInsert_CreateTableBadColumnType(t *testing.T) {
 	dsn, table := mysqlTestSetup(t)
 	res, _ := executeMySQLInsertRows(t.Context(), core.Job{
@@ -713,9 +636,6 @@ func TestMySQLInsert_CreateTableBadColumnType(t *testing.T) {
 	}
 }
 
-// TestMySQLUpsert_CreateTableWithUnique covers runUpsert's create-table
-// branch (with the UNIQUE on conflict_columns) followed by a live upsert,
-// when the table does not already exist.
 func TestMySQLUpsert_CreateTableWithUnique(t *testing.T) {
 	dsn, table := mysqlTestSetup(t)
 	res, err := executeMySQLUpsertRows(t.Context(), core.Job{
@@ -767,8 +687,6 @@ func TestMySQLUpsert_CreateTableWithUnique(t *testing.T) {
 	}
 }
 
-// TestMySQLUpsert_EmptyRowsCreatesTableOnly covers runUpsert's
-// create-table-then-zero-rows early return (processed=0).
 func TestMySQLUpsert_EmptyRowsCreatesTableOnly(t *testing.T) {
 	dsn, table := mysqlTestSetup(t)
 	res, _ := executeMySQLUpsertRows(t.Context(), core.Job{
@@ -790,13 +708,6 @@ func TestMySQLUpsert_EmptyRowsCreatesTableOnly(t *testing.T) {
 		t.Errorf("processed = %v, want 0", got)
 	}
 }
-
-// ----------------------------------------------------------------------
-// execute* error-return branches (no live MySQL needed): the dsn
-// bad-type returns and the sqlDB connect-error returns. A malformed DSN
-// fails the registry's DSN parse, so the connect path returns a "db"
-// error without ever reaching a server.
-// ----------------------------------------------------------------------
 
 func TestMySQLQuery_DSNWrongType(t *testing.T) {
 	res, _ := executeMySQLQuery(t.Context(), core.Job{
@@ -877,8 +788,6 @@ func TestMySQLUpsert_UnsafeTableName(t *testing.T) {
 }
 
 func TestMySQLUpsert_BadRowsInput(t *testing.T) {
-	// A rows Inline that normalizeRows can't handle drives the
-	// parseRowsInput error return.
 	res, _ := executeMySQLUpsertRows(t.Context(), core.Job{
 		Params: map[string]any{"dsn": "x", "table": "t", "conflict_columns": []string{"id"}},
 		Input:  map[string]core.Ref{"rows": {Inline: 12345}},
@@ -903,12 +812,6 @@ func TestMySQLUpsert_ConnectError(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// verify: live success path for verifyMySQL.
-// ----------------------------------------------------------------------
-
-// TestVerifyMySQL_Live covers verifyMySQL's success return (verify.go:91)
-// against the live test server.
 func TestVerifyMySQL_Live(t *testing.T) {
 	dsn, _ := mysqlTestSetup(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)

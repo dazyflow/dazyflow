@@ -100,8 +100,6 @@ function mount(id = "coffee-reorder") {
   );
 }
 
-// A dropped stream: watchFlow's promise settling IS the drop, since it only
-// resolves once the response body has ended.
 const drops = () => Promise.resolve(undefined);
 
 describe("live flow-watch reconnect", () => {
@@ -136,8 +134,6 @@ describe("live flow-watch reconnect", () => {
     await act(() => vi.advanceTimersByTimeAsync(1100)); // 1s  -> attempt 2
     expect(watchFlow).toHaveBeenCalledTimes(2);
 
-    // The next wait is doubled, so the same elapsed time yields ONE more
-    // attempt, not another one per second.
     await act(() => vi.advanceTimersByTimeAsync(1100));
     expect(watchFlow).toHaveBeenCalledTimes(2);
 
@@ -179,7 +175,6 @@ describe("live flow-watch reconnect", () => {
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    // visibilityState is "visible" in jsdom by default: the phone-unlock case.
     expect(watchFlow).toHaveBeenCalledTimes(3);
   });
 });

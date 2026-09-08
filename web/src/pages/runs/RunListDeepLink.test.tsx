@@ -5,8 +5,6 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-// Same stable-identity mocks as the other RunList tests: the load effect
-// depends on `t` and `me`, so a fresh object per render re-fires it forever.
 vi.mock("react-i18next", () => {
   const t = (k: string) => k;
   const value = { t };
@@ -40,11 +38,6 @@ vi.mock("../../api", () => ({
 
 import { RunList } from "./RunList";
 
-// The dashboard's stat tiles are the main way into this page, and each one
-// counts by a filter — "Runs today" by a day, "Needs attention" by status. A
-// tile that dropped you on the unfiltered list showed a different number than
-// the one you clicked. ?status= was already honoured; ?since=/?until= are the
-// date half of the same contract.
 describe("RunList deep links", () => {
   beforeEach(() => {
     listAllRuns.mockReset();
@@ -91,8 +84,6 @@ describe("RunList deep links", () => {
     expect(from.value).toBe("");
     await waitFor(() => expect(listAllRuns).toHaveBeenCalled());
     expect(listAllRuns.mock.calls[0][1].since).toBeUndefined();
-    // No filter was applied, so an empty response is a first-run state, not a
-    // filter that matched nothing.
     expect(await screen.findByText("runList.emptyFirstTitle")).toBeTruthy();
   });
 });

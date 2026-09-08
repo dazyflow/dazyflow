@@ -9,7 +9,7 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestStore_AmendRevertToParent reproduces the silent data-loss bug where an
+// Reproduces the silent data-loss bug where an
 // autosave burst that nets back to the pre-autosave content left HEAD carrying
 // the change the user had reverted.
 //
@@ -32,13 +32,11 @@ func TestStore_AmendRevertToParent(t *testing.T) {
 	}
 	const author = "anna@acme.com"
 
-	// Baseline checkpoint: just node "a".
 	if _, err := s.Save(graph("a"), author); err != nil {
 		t.Fatalf("save baseline: %v", err)
 	}
 	baseCommits := countCommits(t, s)
 
-	// Autosave adds node "b" — a fresh autosave commit on top of the checkpoint.
 	if _, err := s.SaveCoalescing(graph("a", "b"), author); err != nil {
 		t.Fatalf("autosave add: %v", err)
 	}
@@ -46,8 +44,6 @@ func TestStore_AmendRevertToParent(t *testing.T) {
 		t.Fatalf("after add: commits %d, want %d", n, baseCommits+1)
 	}
 
-	// Same burst reverts the addition: delete "b" again, back to just "a".
-	// This amends the autosave; the staged tree now matches its parent.
 	if _, err := s.SaveCoalescing(graph("a"), author); err != nil {
 		t.Fatalf("autosave revert: %v", err)
 	}

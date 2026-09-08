@@ -7,9 +7,6 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 
 type Props = {
-  // lines is append-only — we only write the slice past lastWrittenRef
-  // each render so a 5000-line buffer doesn't redraw on every update.
-  // Reset the buffer (back to length 0) to clear the terminal.
   lines: string[];
 };
 

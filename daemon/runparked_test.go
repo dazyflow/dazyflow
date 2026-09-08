@@ -16,9 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// waitForRunStatus polls a job record until it reaches want, and returns
-// whatever it actually settled on so failures can report it. jobID is a run id
-// or a node id (daemon.NodeJobID) — both are records in the same store.
 func waitForRunStatus(
 	t *testing.T,
 	jobs core.JobStore,
@@ -42,7 +39,7 @@ func waitForRunStatus(
 	return last
 }
 
-// TestRunStatus_ParksAndResumes pins the run-level status a person reads off
+// Pins the run-level status a person reads off
 // the runs list. A run sitting on an approver reported "Running" — indistinguishable
 // from one burning CPU — and the list's Waiting filter matched nothing, because
 // only the NODE record carried `awaiting`. The run now carries it too.
@@ -54,7 +51,6 @@ func TestRunStatus_ParksAndResumes(t *testing.T) {
 	t.Parallel()
 	h := newWorkerHarness(t, 1)
 
-	// Two independent gates, so the run has two approvals open at once.
 	g := core.Graph{
 		ID: "two-gates", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -67,7 +63,6 @@ func TestRunStatus_ParksAndResumes(t *testing.T) {
 		t.Fatalf("SubmitGraph: %v", err)
 	}
 
-	// Both park → the run reports awaiting.
 	if got := waitForRunStatus(t, h.jobs, runID, core.JobStatusAwaiting, 5*time.Second); got != core.JobStatusAwaiting {
 		t.Fatalf("run status while parked = %q, want awaiting", got)
 	}
@@ -98,8 +93,6 @@ func TestRunStatus_ParksAndResumes(t *testing.T) {
 		t.Errorf("run status with one approval still open = %q, want awaiting", rec.Status)
 	}
 
-	// Decide the second: nothing is waiting on a person any more, so the run
-	// stops reporting awaiting. With no downstream steps it finishes outright.
 	if err := h.svc.Approve(t.Context(), runID, "gate-b", daemon.ApprovalDecision{
 		Decision: "approve", Approver: "someone",
 	}); err != nil {
@@ -114,11 +107,11 @@ func TestRunStatus_ParksAndResumes(t *testing.T) {
 	}
 }
 
-// TestRunStatus_SubgraphPauseStaysRunning guards the line the run status draws.
-// A subgraph node parks as `awaiting` too, but that run is not waiting on a
-// person — its child graph is executing. Labelling it "Waiting for approval"
-// would send someone looking for a decision to make that doesn't exist, so
-// only a pause that emitted a pending_url counts.
+// Guards the line the run status draws. A subgraph node parks as `awaiting`
+// too, but that run is not waiting on a person — its child graph is executing.
+// Labelling it "Waiting for approval" would send someone looking for a
+// decision to make that doesn't exist, so only a pause that emitted a
+// pending_url counts.
 func TestRunStatus_SubgraphPauseStaysRunning(t *testing.T) {
 	t.Parallel()
 	ks := auth.NewMemKeyStore()
@@ -130,7 +123,6 @@ func TestRunStatus_SubgraphPauseStaysRunning(t *testing.T) {
 	}
 	p := core.Principal{Subject: "u", Tenant: "t", Workspace: "ws", Roles: []core.Role{role}}
 
-	// A pause with no pending_url — the shape a subgraph node parks in.
 	reg := engine.NewRegistry()
 	if err := reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
@@ -173,13 +165,10 @@ func TestRunStatus_SubgraphPauseStaysRunning(t *testing.T) {
 		t.Fatalf("SubmitGraph: %v", err)
 	}
 
-	// The NODE parks...
 	nodeStatus := waitForRunStatus(t, jobs, daemon.NodeJobID(runID, "sub"), core.JobStatusAwaiting, 5*time.Second)
 	if nodeStatus != core.JobStatusAwaiting {
 		t.Fatalf("node status = %q, want awaiting", nodeStatus)
 	}
-	// ...but the RUN keeps reporting running: there is nothing to approve.
-	// Given a moment, in case the park is carried up asynchronously.
 	time.Sleep(150 * time.Millisecond)
 	rec, err := jobs.Get(t.Context(), runID)
 	if err != nil {

@@ -11,9 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// PgPlanStore is the durable PlanStore — one row per tenant, upserted
-// whole on every change (plan flips are rare; no need for per-field
-// updates).
 type PgPlanStore struct {
 	pool *pgxpool.Pool
 }
@@ -56,7 +53,6 @@ func (s *PgPlanStore) GetPlan(ctx context.Context, tenant string) (TenantPlan, e
 		&p.StripeSubscriptionID, &p.SubscriptionStatus, &periodEnd,
 		&p.CancelAtPeriodEnd)
 	if err != nil {
-		// No row = free plan, same contract as the memory store.
 		if isPgNoRows(err) {
 			return TenantPlan{Tenant: tenant, Plan: PlanFree}, nil
 		}
@@ -97,7 +93,6 @@ func (s *PgPlanStore) MarkStripeEvent(ctx context.Context, id string) (bool, err
 	return tag.RowsAffected() == 1, nil
 }
 
-// StripeEventProcessed reports whether the event id was already recorded.
 func (s *PgPlanStore) StripeEventProcessed(ctx context.Context, id string) (bool, error) {
 	var exists bool
 	err := s.pool.QueryRow(ctx,

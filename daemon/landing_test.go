@@ -12,9 +12,6 @@ import (
 	"testing"
 )
 
-// TestLandingAuthGate covers the optional marketing landing served
-// alongside the SPA: GET / is gated on the session, marketing
-// pages/assets serve publicly, and the SPA owns everything else.
 func TestLandingAuthGate(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -34,8 +31,6 @@ func TestLandingAuthGate(t *testing.T) {
 	get := func(path string, withSession bool) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		if withSession {
-			// A browser navigation carries the session cookie, not a
-			// bearer header; the harness token authenticates either way.
 			req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: h.token})
 		}
 		rw := httptest.NewRecorder()
@@ -63,7 +58,6 @@ func TestLandingAuthGate(t *testing.T) {
 		if rw.Code != http.StatusOK || !strings.Contains(rw.Body.String(), "SPA-APP-SHELL") {
 			t.Fatalf("subdomain / = %d %q, want SPA shell", rw.Code, rw.Body.String())
 		}
-		// The apex still serves marketing for an anonymous visitor.
 		req = httptest.NewRequest(http.MethodGet, "/", nil)
 		req.Host = "dazyflow.app"
 		rw = httptest.NewRecorder()
@@ -81,13 +75,10 @@ func TestLandingAuthGate(t *testing.T) {
 	})
 
 	t.Run("marketing page serves publicly", func(t *testing.T) {
-		// Canonical directory URL serves the page directly...
 		rw := get("/pricing/", false)
 		if rw.Code != http.StatusOK || !strings.Contains(rw.Body.String(), "PRICING-PAGE") {
 			t.Fatalf("/pricing/ = %d %q, want pricing page", rw.Code, rw.Body.String())
 		}
-		// ...and the no-slash form 301s to it (standard FileServer /
-		// nginx directory-index behaviour; the browser follows it).
 		rw = get("/pricing", false)
 		if rw.Code != http.StatusMovedPermanently {
 			t.Fatalf("/pricing = %d, want 301 redirect to /pricing/", rw.Code)

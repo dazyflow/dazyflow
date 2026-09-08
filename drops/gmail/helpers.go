@@ -1,11 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package gmail hosts the native Gmail connectors (gmail_search_messages,
-// gmail_get_message, gmail_send_email), migrated from the scripted TS
-// drops. They authenticate with Google OAuth (the "google" provider),
-// resolved via the SetTokenLookup hook the daemon wires at startup, or an
-// explicit `token` param.
 package gmail
 
 import (
@@ -26,9 +21,6 @@ import (
 // OOM the daemon by streaming an unbounded body.
 const maxResponseBytes = 64 << 20 // 64 MiB
 
-// SetTokenLookup wires the shared Google OAuth token resolver (one provider
-// serves every Google connector — see drops/internal/google). Retained as a
-// package entry point for tests.
 func SetTokenLookup(fn google.TokenLookup) { google.SetTokenLookup(fn) }
 
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
@@ -37,11 +29,8 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 
 var httpBase = apibase.New("https://gmail.googleapis.com/gmail/v1")
 
-// SetHTTPBase swaps the Gmail API root (tests point it at httptest).
 func SetHTTPBase(base string) { httpBase.Set(base) }
 
-// baseURL honors a per-job base_url verbatim (no trailing-slash trim — Gmail
-// endpoints are concatenated as-is by the callers), else the package default.
 func baseURL(job core.Job) string {
 	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
 		return b
@@ -49,12 +38,10 @@ func baseURL(job core.Job) string {
 	return httpBase.Get()
 }
 
-// gmailDo runs one authenticated Gmail API call. Returns status + body.
 func gmailDo(ctx context.Context, method, url, token, contentType string, body []byte, timeoutMS int) (int, []byte, error) {
 	return google.Do(ctx, method, url, token, contentType, body, timeoutMS, maxResponseBytes)
 }
 
-// extractGmailError pulls error.message out of a Gmail error body.
 func extractGmailError(body []byte) string { return google.ErrMessage(body, 200) }
 
 // friendlyMessage reduces a flattened message (see flatten) to the friendly
@@ -97,9 +84,6 @@ func friendlyMessage(msg map[string]any) map[string]any {
 	}
 }
 
-// flatten turns a raw Gmail message into convenience fields: id, threadId,
-// snippet, the headers map, and decoded text/html bodies. The raw payload
-// is preserved under "raw" for advanced use. Mirrors the scripted drop.
 func flatten(raw map[string]any) map[string]any {
 	out := map[string]any{
 		"id":               str(raw["id"]),
@@ -159,8 +143,6 @@ func findTextPart(payload map[string]any, mimeType string) string {
 	return ""
 }
 
-// stripB64Pad removes any '=' padding so RawURLEncoding (which rejects it)
-// can decode Gmail's base64url payloads whether or not they're padded.
 func stripB64Pad(s string) string {
 	for len(s) > 0 && s[len(s)-1] == '=' {
 		s = s[:len(s)-1]

@@ -84,9 +84,6 @@ func TestBehaviorEqual_CatchesRealChanges(t *testing.T) {
 		{"renamed", func(g *Graph) { g.Name = "Weekly report" }},
 		{"visibility", func(g *Graph) { g.Visibility = VisibilityPrivate }},
 		{"graph timeout", func(g *Graph) { g.TimeoutSeconds = 600 }},
-		// The flow's output language changes the WORDS a run writes (day and
-		// month names), so publishing it is a behaviour change, not a display
-		// preference.
 		{"output language", func(g *Graph) { g.Language = "sv" }},
 		{"failure notify", func(g *Graph) {
 			g.FailureNotify = &FailureNotify{Webhook: "https://hooks.example/x"}
@@ -121,24 +118,12 @@ func TestBehaviorEqual_DoesNotMutateInput(t *testing.T) {
 	}
 }
 
-// A field added to Graph or Node is a decision: does publishing it change
-// what the live flow does? BehaviorEqual's DeepEqual answers "yes" by
-// default, which is the safe direction but not always the right one — and
-// web/src/lib/diffGraphs.ts has to itemize whatever counts, or the editor
-// goes back to prompting for a change its diff view calls no change.
-//
-// This test fails when the shape changes so that decision gets made, in both
-// places, instead of being inherited by accident.
 func TestBehaviorEqual_FieldSetIsReviewed(t *testing.T) {
 	want := map[string][]string{
 		"Graph": {
 			"ID", "Version", "Tenant", "Workspace", "Nodes", "Edges", "Triggers",
 			"Frames", "Name", "Icon", "Description", "Visibility", "Owner",
 			"FailureNotify", "TimeoutSeconds", "Language", "Disabled",
-			// Graph-level ContinueOnError is read nowhere in the daemon or the
-			// engine (the flag that works is Node.ContinueOnError). It stays
-			// counted as behaviour: the safe answer for a field whose meaning
-			// nobody has settled.
 			"ContinueOnError",
 		},
 		"Node": {

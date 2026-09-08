@@ -15,7 +15,6 @@
 // entries in ClearURLs / AdGuard URL-tracking rules — the ~everyone-sees-these
 // set, not an exhaustive mirror.
 const TRACKER_KEYS = new Set<string>([
-  // Google Ads / Analytics
   "gclid",
   "gclsrc",
   "dclid",
@@ -23,44 +22,31 @@ const TRACKER_KEYS = new Set<string>([
   "wbraid",
   "gad_source",
   "_ga",
-  // Facebook / Meta
   "fbclid",
   "fb_action_ids",
   "fb_action_types",
   "fb_source",
   "fb_ref",
-  // Microsoft / Bing
   "msclkid",
-  // X / Twitter
   "twclid",
-  // Instagram
   "igshid",
-  // TikTok
   "ttclid",
-  // LinkedIn
   "li_fat_id",
-  // Yandex
   "yclid",
   "_openstat",
-  // Mailchimp
   "mc_cid",
   "mc_eid",
-  // HubSpot
   "_hsenc",
   "_hsmi",
   "__hssc",
   "__hstc",
   "__hsfp",
   "hsctatracking",
-  // Marketo
   "mkt_tok",
-  // Vero
   "vero_id",
   "vero_conv",
-  // Omeda / Oly
   "oly_anon_id",
   "oly_enc_id",
-  // Drip / others
   "s_cid",
   "ml_subscriber",
   "ml_subscriber_hash",
@@ -117,9 +103,6 @@ export function detectTrackingParams(url: string): string[] {
   return found;
 }
 
-// stripTrackingParams returns the URL with every tracking param removed, leaving
-// the base, non-tracking params, and fragment byte-for-byte intact. A trailing
-// "?" is dropped when no params remain.
 export function stripTrackingParams(url: string): string {
   if (!url) return url;
   const { base, query, fragment } = splitURL(url);

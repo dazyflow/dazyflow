@@ -19,7 +19,6 @@ func TestValidGraphID_StartCharacterClassEdges(t *testing.T) {
 			t.Errorf("ValidGraphID(%q) = %v, want nil", id, err)
 		}
 	}
-	// The bytes immediately outside each range stay out.
 	for _, id := range []string{"`", "{", "@", "[", "/", ":"} {
 		if err := ValidGraphID(id); err == nil {
 			t.Errorf("ValidGraphID(%q) = nil, want a rejection", id)
@@ -31,7 +30,6 @@ func TestValidGraphID_StartCharacterClassEdges(t *testing.T) {
 // renders as a replacement character in some mail clients and breaks
 // quoted-printable encoding in others.
 func TestClipRunes_CutsOnRuneBoundary(t *testing.T) {
-	// "ää" is four bytes, so a cut at 3 lands inside the second rune.
 	if got, want := clipRunes("ää", 3), "ä…"; got != want {
 		t.Errorf("clipRunes(%q, 3) = %q, want %q", "ää", got, want)
 	}
@@ -42,14 +40,11 @@ func TestClipRunes_CutsOnRuneBoundary(t *testing.T) {
 	if got, want := clipRunes("ääx", 4), "ää…"; got != want {
 		t.Errorf("clipRunes(%q, 4) = %q, want %q", "ääx", got, want)
 	}
-	// Nothing over the limit is left alone, ellipsis included.
 	if got := clipRunes("abc", 3); got != "abc" {
 		t.Errorf("clipRunes(%q, 3) = %q, want it unchanged", "abc", got)
 	}
 }
 
-// A string of nothing but continuation bytes has no rune start to walk back
-// to. The search has to stop at the beginning rather than step behind it.
 func TestClipRunes_ContinuationOnlyStopsAtStart(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -61,8 +56,6 @@ func TestClipRunes_ContinuationOnlyStopsAtStart(t *testing.T) {
 	}
 }
 
-// A poll interval at exactly the ceiling is one the scheduler will run, so
-// the flow counts as scheduled. Only a value PAST the ceiling is ignored.
 func TestClassifyTriggers_PollIntervalCeilingIsInclusive(t *testing.T) {
 	build := func(secs int) Graph {
 		return Graph{Nodes: []Node{{
@@ -78,9 +71,6 @@ func TestClassifyTriggers_PollIntervalCeilingIsInclusive(t *testing.T) {
 	}
 }
 
-// The hosted form renders at most MaxHostedFormFields, and that many is
-// exactly what it renders — so a form declaring the limit is fine and only
-// one more loses its tail.
 func TestLintTriggers_FormFieldCeilingIsInclusive(t *testing.T) {
 	build := func(n int) Graph {
 		names := make([]string, n)
@@ -119,8 +109,6 @@ func TestLintTriggers_RequestNeedsAKey(t *testing.T) {
 	}
 }
 
-// Request and Reply only pay off as a pair: each half alone is called out,
-// and the complete pair draws neither complaint.
 func TestLintTriggers_RequestAndReplyPairing(t *testing.T) {
 	req := Node{ID: "r", Module: RequestInputModule, Params: map[string]any{"secrets": []string{"k"}}}
 	rep := Node{ID: "p", Module: ReplyModule}
@@ -140,11 +128,6 @@ func TestLintTriggers_RequestAndReplyPairing(t *testing.T) {
 	}
 }
 
-// The extra sentence pointing at the Replacements table belongs only to the
-// modes where a table can actually stand in for the pattern. Offering it in
-// a mode that has no table sends the author looking for a field that is not
-// there; withholding it in "replace" hides the only other way to configure
-// the step.
 func TestLintRegexPattern_TableHintOnlyWhereATableApplies(t *testing.T) {
 	const hint = "Replacements table"
 	build := func(mode string) Graph {
@@ -172,9 +155,6 @@ func TestLintRegexPattern_TableHintOnlyWhereATableApplies(t *testing.T) {
 	}
 }
 
-// A flow notifies on failure if EITHER channel is configured — the email-only
-// case is the one an "or" written backwards drops, because a webhook-only
-// flow short-circuits before the second test is even reached.
 func TestBundleHeader_NotifiesOnFailureFromEitherChannel(t *testing.T) {
 	for name, tc := range map[string]struct {
 		notify *FailureNotify
@@ -212,8 +192,6 @@ func TestRedactEnv_KeepsKeys(t *testing.T) {
 	}
 }
 
-// Values mode keeps a non-secret scalar as it stands; structure-only mode
-// strips even that, so the bundle reveals no literal config at all.
 func TestRedactValue_ScalarsFollowTheMode(t *testing.T) {
 	if got := redactValue("timeout", 30, RedactStructurePlusValues); got != 30 {
 		t.Errorf("values mode: redactValue = %v, want the literal 30", got)
@@ -221,7 +199,6 @@ func TestRedactValue_ScalarsFollowTheMode(t *testing.T) {
 	if got := redactValue("timeout", 30, RedactStructureOnly); got == 30 {
 		t.Error("structure-only mode kept a literal scalar")
 	}
-	// A scalar under a secret-shaped key is redacted even in values mode.
 	if got := redactValue("api_token", 12345, RedactStructurePlusValues); got == 12345 {
 		t.Error("a scalar under a secret-shaped key was kept in values mode")
 	}
@@ -245,7 +222,6 @@ func TestLintTriggers_FormFieldNameLengthIsInclusive(t *testing.T) {
 		t.Errorf("a field name of %d characters was not flagged", MaxHostedFormFieldLen+1)
 	}
 
-	// countOver reports how many names are over, not merely that one is.
 	names := []string{
 		strings.Repeat("a", MaxHostedFormFieldLen),   // at the limit
 		strings.Repeat("b", MaxHostedFormFieldLen+1), // over

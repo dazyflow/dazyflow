@@ -24,8 +24,6 @@ import (
 	yaml "go.yaml.in/yaml/v3"
 )
 
-// catalogAPI serves the step-catalog and drop-metadata endpoints. Its fields are the whole of what
-// those handlers touch.
 type catalogAPI struct {
 	auditor
 	svc    *Service
@@ -36,7 +34,6 @@ type catalogAPI struct {
 	noCompression bool
 }
 
-// catalogAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) catalogAPI() *catalogAPI {
 	return &catalogAPI{auditor: h.auditor(), svc: h.svc, whoami: h.authAPI().whoami, noCompression: h.DisableCompression}
 }
@@ -51,11 +48,6 @@ var openapiYAML []byte
 var openapiJSON []byte
 
 func init() {
-	// yaml.v3 decodes into map[string]interface{} keyed by string, but
-	// for arbitrary YAML the safest target is `any` and then a
-	// recursive shape-fix so json.Marshal accepts it (yaml.v3 produces
-	// map[any]any for nested maps in some shapes; we coerce to
-	// map[string]any).
 	var doc any
 	if err := yaml.Unmarshal(openapiYAML, &doc); err != nil {
 		panic("openapi.yaml is unparseable: " + err.Error())
@@ -68,13 +60,6 @@ func init() {
 	openapiJSON = b
 }
 
-// normalizeYAMLForJSON walks a YAML-decoded interface and rewrites any
-// map[any]any to map[string]any. yaml.v3 prefers map[string]any when
-// keys are strings, but older yaml decoders or non-string keys can
-// produce map[any]any which json.Marshal refuses with
-// "unsupported type". This is defensive — under yaml.v3's default
-// behavior with a string-keyed spec, the cast normally isn't needed,
-// but the cost of the walk is negligible at startup.
 func normalizeYAMLForJSON(v any) any {
 	switch x := v.(type) {
 	case map[any]any:
@@ -104,7 +89,6 @@ func toString(v any) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
-	// Numeric keys (rare in OpenAPI) get coerced via fmt.
 	return jsonStringOf(v)
 }
 
@@ -147,9 +131,6 @@ type IntegrationDrop struct {
 	Role  string `json:"role"`
 }
 
-// CatalogSummary is the one-page overview. Sized to fit comfortably
-// in one LLM context window — a few hundred lines of JSON regardless
-// of how many drops are installed.
 type CatalogSummary struct {
 	Integrations []struct {
 		ID    string `json:"id"`
@@ -161,18 +142,10 @@ type CatalogSummary struct {
 	Links      map[string]string `json:"links"`
 }
 
-// ServiceDescriptor is the GET /api/v1 response — the single entry
-// point. An LLM lands here and follows links to everything else.
 type ServiceDescriptor struct {
 	Service string `json:"service"`
-	// Version is the API contract version (apiVersion). It moves only
-	// when the HTTP surface changes shape — distinct from the daemon
-	// build below, which advances every release.
 	Version string `json:"version"`
-	// Build is the running binary's release metadata, stamped at build
-	// time (see core/buildinfo). The web UI reads it for its footer and
-	// operators can curl GET /api/v1 to confirm which version is live.
-	Build struct {
+	Build   struct {
 		Version string `json:"version"` // git describe, "dev" if unstamped
 		Commit  string `json:"commit"`
 		Date    string `json:"date"`
@@ -189,7 +162,6 @@ const (
 	apiService = "dazyflow"
 )
 
-// serviceDescriptor handles GET /api/v1.
 func (h *catalogAPI) serviceDescriptor(rw http.ResponseWriter, _ *http.Request) {
 	d := ServiceDescriptor{
 		Service: apiService,
@@ -213,15 +185,11 @@ func (h *catalogAPI) serviceDescriptor(rw http.ResponseWriter, _ *http.Request) 
 	writeJSON(rw, http.StatusOK, d)
 }
 
-// openAPISpec serves the cached JSON form of openapi.yaml. Public —
-// the LLM client may not yet have a token when it asks for the spec.
 func (h *catalogAPI) openAPISpec(rw http.ResponseWriter, _ *http.Request) {
 	rw.Header().Set("Content-Type", "application/json")
 	_, _ = rw.Write(openapiJSON)
 }
 
-// catalogSummary handles GET /api/v1/catalog. Returns the one-page
-// overview by walking the registry once.
 func (h *catalogAPI) catalogSummary(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	groups, manifests, cats, err := h.collectCatalog(r.Context(), p)
 	if err != nil {
@@ -251,9 +219,6 @@ func (h *catalogAPI) catalogSummary(rw http.ResponseWriter, r *http.Request, p c
 	writeJSON(rw, http.StatusOK, out)
 }
 
-// listIntegrationsHandler handles GET /api/v1/catalog/integrations.
-// Filtering supports ?q= (label/summary substring) and
-// ?category= (any drop in the group has this category).
 func (h *catalogAPI) listIntegrationsHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	groups, _, _, err := h.collectCatalog(r.Context(), p)
 	if err != nil {
@@ -290,7 +255,6 @@ func (h *catalogAPI) listIntegrationsHandler(rw http.ResponseWriter, r *http.Req
 	})
 }
 
-// getIntegrationHandler handles GET /api/v1/catalog/integrations/{id}.
 func (h *catalogAPI) getIntegrationHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	id := r.PathValue("id")
 	groups, _, _, err := h.collectCatalog(r.Context(), p)
@@ -313,7 +277,6 @@ func (h *catalogAPI) getIntegrationHandler(rw http.ResponseWriter, r *http.Reque
 	writeAPIError(rw, http.StatusNotFound, "integration_not_found", "no such integration: "+id)
 }
 
-// listDropsHandler handles GET /api/v1/catalog/drops.
 func (h *catalogAPI) listDropsHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	search := DropSearch{
 		Query: r.URL.Query().Get("q"),
@@ -327,11 +290,7 @@ func (h *catalogAPI) listDropsHandler(rw http.ResponseWriter, r *http.Request, p
 	if t := r.URL.Query()["tag"]; len(t) > 0 {
 		search.Tags = t
 	}
-	// The editor opts in to seeing platform-disabled drops (rendered greyed-out
-	// and un-pickable) rather than having them vanish from the palette.
 	search.IncludeDisabled = isTruthyQuery(r.URL.Query().Get("include_disabled"))
-	// Integration filter is not part of DropSearch (legacy), so apply
-	// it here as a post-filter.
 	integration := strings.TrimSpace(r.URL.Query().Get("integration"))
 
 	results, err := h.svc.SearchDrops(r.Context(), p, search)
@@ -348,15 +307,12 @@ func (h *catalogAPI) listDropsHandler(rw http.ResponseWriter, r *http.Request, p
 		}
 		results = filtered
 	}
-	// Cached: this is the same catalog the palette serves, in the paginated
-	// envelope, and compressing it is most of the request.
 	writeCachedJSON(rw, r, map[string]any{
 		"items": results,
 		"page":  map[string]any{"next": nil, "size": len(results), "total": len(results)},
 	}, !h.noCompression)
 }
 
-// getDropHandler handles GET /api/v1/catalog/drops/{id}.
 func (h *catalogAPI) getDropHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	id := r.PathValue("id")
 	manifests, err := h.svc.ListDrops(r.Context(), p)
@@ -372,9 +328,6 @@ func (h *catalogAPI) getDropHandler(rw http.ResponseWriter, r *http.Request, p c
 	writeJSON(rw, http.StatusOK, m)
 }
 
-// integrationGroup is the intermediate shape used while collecting
-// drops into integrations. dropCategories is kept separately so the
-// listIntegrationsHandler can filter on it without recomputing.
 type integrationGroup struct {
 	IntegrationSummary
 	Drops          []IntegrationDrop
@@ -415,15 +368,6 @@ var integrationSummaries = map[string]string{
 	"standard-library": "Everything that isn't a particular app: branching, looping, waiting for approval, files, tidying up lists, your own database, and starting a flow on a schedule or an incoming call.",
 }
 
-// collectCatalog walks the registry once, groups manifests by
-// Manifest.Integration, and returns:
-//   - groups sorted by label
-//   - the flat manifests map (for the dropCount, categories, etc.)
-//   - the unique sorted category list
-//
-// Drops with empty Integration fall under a synthetic "standard
-// library" group so they remain reachable from the integrations
-// endpoint instead of disappearing from the catalog.
 func (h *catalogAPI) collectCatalog(ctx context.Context, p core.Principal) (
 	groups []integrationGroup,
 	manifests map[string]core.Manifest,
@@ -458,10 +402,6 @@ func (h *catalogAPI) collectCatalog(ctx context.Context, p core.Principal) (
 			byInteg[integID] = g
 		}
 		g.DropCount++
-		// Use the first non-empty BrandLogo/Provider/Icon we see for the
-		// group — manifests in one integration usually agree on these,
-		// but if they differ we prefer the first observation rather than
-		// overwriting on every iteration.
 		if g.BrandLogo == "" {
 			g.BrandLogo = m.BrandLogo
 		}
@@ -505,10 +445,6 @@ func (h *catalogAPI) collectCatalog(ctx context.Context, p core.Principal) (
 	return groups, manifests, categories, nil
 }
 
-// meHandler is the GET /api/v1/me endpoint — the new canonical name
-// for what /api/v1/whoami serves. We delegate to the existing handler
-// rather than duplicate the principal-flattening logic; eventually
-// /api/v1/whoami will be retired in favor of /me.
 func (h *catalogAPI) meHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	h.whoami(rw, r, p)
 }
@@ -584,8 +520,6 @@ func (h *catalogAPI) revokeMyAPIKeyHandler(rw http.ResponseWriter, r *http.Reque
 		return
 	}
 	if k.Subject != p.Subject {
-		// 404 (not 403) — don't acknowledge keys belonging to other users
-		// to avoid leaking key-id existence.
 		writeAPIError(rw, http.StatusNotFound, "key_not_found", "no such key: "+id)
 		return
 	}
@@ -597,21 +531,10 @@ func (h *catalogAPI) revokeMyAPIKeyHandler(rw http.ResponseWriter, r *http.Reque
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// triggerKindsHandler is GET /api/v1/catalog/trigger-kinds. Returns
-// the typed schema for every supported trigger kind — what fields a
-// GraphTrigger of that kind accepts, with worked examples. This is
-// the LLM's discovery path for "how do I make this run on a schedule
-// / accept a webhook / show a hosted form?" without scraping
-// hardcoded knowledge from training.
 func (h *catalogAPI) triggerKindsHandler(rw http.ResponseWriter, _ *http.Request, _ core.Principal) {
 	writeJSON(rw, http.StatusOK, map[string]any{"kinds": triggerKinds()})
 }
 
-// triggerKinds is the source of truth for the trigger catalog. Kept
-// inline (rather than reflection over GraphTrigger) so the human-
-// readable explanation lives next to the schema and stays in sync.
-// When a new GraphTrigger field lands, update both this function and
-// core.GraphTrigger in the same change.
 func triggerKinds() []map[string]any {
 	return []map[string]any{
 		{
@@ -657,11 +580,6 @@ func triggerKinds() []map[string]any {
 	}
 }
 
-// dropRole maps a drop's category to the "role" the integration page
-// surfaces. Triggers are special because they're what an LLM looks
-// for first when composing a new flow ("how does this start?");
-// transformation drops are the second-class verb; everything else is
-// a plain action.
 func dropRole(m core.Manifest) string {
 	switch m.Category {
 	case "trigger":

@@ -102,9 +102,6 @@ func executePDFMerge(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 		return *bad, nil
 	}
 
-	// The page count comes from reading the result back rather than adding up
-	// the inputs: with a divider page inserted the arithmetic differs, and a
-	// count that disagrees with the file is worse than no count.
 	pages := 0
 	if info, err := pdfapi.PDFInfo(bytes.NewReader(out.Bytes()), dest, nil, false, conf()); err == nil && info != nil {
 		pages = info.PageCount

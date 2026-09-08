@@ -10,11 +10,10 @@ import (
 	"testing"
 )
 
-// TestResolveDir_RejectsSymlinkEscape is the reason ResolveDir exists. Rel()
-// is a pure string check, so "link" — a symlink inside the workspace pointing
-// outside it — passes cleaning and would then be followed by cmd.Dir/go-git,
-// running the command outside the sandbox. Resolving through *os.Root makes
-// the kernel refuse it.
+// The reason ResolveDir exists. Rel() is a pure string check, so "link" — a
+// symlink inside the workspace pointing outside it — passes cleaning and would
+// then be followed by cmd.Dir/go-git, running the command outside the sandbox.
+// Resolving through *os.Root makes the kernel refuse it.
 func TestResolveDir_RejectsSymlinkEscape(t *testing.T) {
 	outside := t.TempDir()
 	ws := t.TempDir()
@@ -22,7 +21,6 @@ func TestResolveDir_RejectsSymlinkEscape(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 
-	// The string-cleaning check accepts it — that's the gap being closed.
 	if _, err := Rel("escape"); err != nil {
 		t.Fatalf("Rel rejected a plain name: %v", err)
 	}
@@ -33,7 +31,6 @@ func TestResolveDir_RejectsSymlinkEscape(t *testing.T) {
 		t.Errorf("error = %v, want an escapes-workspace rejection", err)
 	}
 
-	// A nested path through the symlink is refused too.
 	if _, _, err := ResolveDir(ws, "escape/deeper"); err == nil {
 		t.Error("ResolveDir followed a path through an escaping symlink")
 	}
@@ -76,15 +73,12 @@ func TestResolveDir_RejectsTraversalAndFiles(t *testing.T) {
 			t.Errorf("ResolveDir(%q) accepted a traversal", in)
 		}
 	}
-	// A regular file is not a working directory.
 	if _, _, err := ResolveDir(ws, "afile"); err == nil {
 		t.Error("ResolveDir accepted a regular file as a directory")
 	}
-	// A missing directory is an error, not a silent pass-through.
 	if _, _, err := ResolveDir(ws, "nope"); err == nil {
 		t.Error("ResolveDir accepted a nonexistent directory")
 	}
-	// No workspace configured at all.
 	if _, _, err := ResolveDir("", "a"); err == nil {
 		t.Error("ResolveDir accepted an empty root")
 	}

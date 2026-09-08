@@ -28,7 +28,6 @@ func TestApproxValueSize_WalksRefs(t *testing.T) {
 			len(list), len(payload), got, want)
 	}
 
-	// Nested, the shape a chain of Merge steps builds.
 	nested := any(list)
 	for i := 0; i < 3; i++ {
 		nested = []Ref{{Inline: nested}, {Inline: nested}}
@@ -56,8 +55,6 @@ func TestApproxValueSize_RefWalkStaysBounded(t *testing.T) {
 	}
 }
 
-// A plain struct is walked too, so a future payload-carrying one isn't a fresh
-// hole; unexported fields keep the word charge.
 func TestApproxValueSize_WalksExportedStructFields(t *testing.T) {
 	type carrier struct {
 		Body   string

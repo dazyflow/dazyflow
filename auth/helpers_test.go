@@ -14,8 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// ---- orgprofile pure helpers ---------------------------------------
-
 func TestDefaultOrgDisplayName_Cov(t *testing.T) {
 	cases := map[string]struct {
 		email string
@@ -41,8 +39,6 @@ func TestDefaultOrgDisplayName_Cov(t *testing.T) {
 }
 
 func TestDefaultOrgDisplayName_AllGenericLabels(t *testing.T) {
-	// A domain made entirely of generic prefixes falls back to the
-	// local-part (loop strips down to one label, the brand path titleizes).
 	if got := DefaultOrgDisplayName("alice@my.team.mail"); got == "" {
 		t.Errorf("expected non-empty name, got empty")
 	}
@@ -96,8 +92,6 @@ func TestOrgProfile_Suspended_Cov(t *testing.T) {
 	}
 }
 
-// ---- blocklist pure helpers ----------------------------------------
-
 func TestNormalizeBlockEmail_Cov(t *testing.T) {
 	cases := map[string]string{
 		"  Alice@ACME.com ": "alice@acme.com",
@@ -126,8 +120,6 @@ func TestEmailDomain_Cov(t *testing.T) {
 	}
 }
 
-// ---- password hashing / verification --------------------------------
-
 func TestHashPassword_Cov(t *testing.T) {
 	if _, err := HashPassword(""); err == nil {
 		t.Error("HashPassword(\"\") should error")
@@ -151,32 +143,26 @@ func TestVerifyPassword_Cov(t *testing.T) {
 	if err := store.PutUser(ctx, User{Email: "Alice@Example.com", PasswordHash: hash, Subject: "alice"}); err != nil {
 		t.Fatalf("PutUser: %v", err)
 	}
-	// no-password user, exercising the len(PasswordHash)==0 branch.
 	if err := store.PutUser(ctx, User{Email: "sso@example.com", Subject: "sso"}); err != nil {
 		t.Fatalf("PutUser sso: %v", err)
 	}
 
-	// Success, case-insensitive lookup.
 	u, err := VerifyPassword(ctx, store, "alice@example.com", "correct horse")
 	if err != nil || u.Subject != "alice" {
 		t.Errorf("VerifyPassword success = %+v, %v", u, err)
 	}
-	// Wrong password.
 	if _, err := VerifyPassword(ctx, store, "alice@example.com", "nope"); err != ErrInvalidCredential {
 		t.Errorf("wrong password err = %v, want ErrInvalidCredential", err)
 	}
-	// Empty email / password short-circuit.
 	if _, err := VerifyPassword(ctx, store, "", "x"); err != ErrInvalidCredential {
 		t.Errorf("empty email err = %v", err)
 	}
 	if _, err := VerifyPassword(ctx, store, "alice@example.com", ""); err != ErrInvalidCredential {
 		t.Errorf("empty password err = %v", err)
 	}
-	// Unknown user (timing-equalizer path).
 	if _, err := VerifyPassword(ctx, store, "ghost@example.com", "x"); err != ErrInvalidCredential {
 		t.Errorf("unknown user err = %v", err)
 	}
-	// SSO-only user with no password set.
 	if _, err := VerifyPassword(ctx, store, "sso@example.com", "x"); err != ErrInvalidCredential {
 		t.Errorf("no-password user err = %v", err)
 	}
@@ -196,7 +182,6 @@ func TestUserHelpers_Cov(t *testing.T) {
 	if !(User{Status: StatusSuspended}).Suspended() {
 		t.Error("suspended user should report Suspended")
 	}
-	// NotifyPrefs tri-state.
 	if !(NotifyPrefs{}).EmailOnFlowFailureEnabled() {
 		t.Error("unset notify pref defaults ON")
 	}
@@ -210,8 +195,6 @@ func TestUserHelpers_Cov(t *testing.T) {
 	}
 }
 
-// ---- JSONUserStore file round-trip ---------------------------------
-
 func TestJSONUserStore_FileRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "users.json")
 	ctx := context.Background()
@@ -223,12 +206,10 @@ func TestJSONUserStore_FileRoundTrip(t *testing.T) {
 	if err := s1.PutUser(ctx, u); err != nil {
 		t.Fatalf("PutUser: %v", err)
 	}
-	// PutUser with empty email rejected.
 	if err := s1.PutUser(ctx, User{Email: "  "}); err == nil {
 		t.Error("empty email should be rejected")
 	}
 
-	// Reopen: data should load + normalize (lowercased key).
 	s2, err := OpenJSONUserStore(path)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
@@ -241,11 +222,9 @@ func TestJSONUserStore_FileRoundTrip(t *testing.T) {
 	if err != nil || len(list) != 1 {
 		t.Errorf("ListUsers = %v, %v", list, err)
 	}
-	// GetByEmail unknown.
 	if _, err := s2.GetByEmail(ctx, "ghost@example.com"); err != ErrUnknownUser {
 		t.Errorf("unknown user err = %v", err)
 	}
-	// DeleteUser idempotent.
 	if err := s2.DeleteUser(ctx, "BOB@example.com"); err != nil {
 		t.Fatalf("DeleteUser: %v", err)
 	}
@@ -258,7 +237,6 @@ func TestJSONUserStore_FileRoundTrip(t *testing.T) {
 }
 
 func TestJSONFileStore_LoadErrors(t *testing.T) {
-	// Malformed JSON should surface a parse error.
 	bad := filepath.Join(t.TempDir(), "bad.json")
 	if err := os.WriteFile(bad, []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
@@ -266,14 +244,11 @@ func TestJSONFileStore_LoadErrors(t *testing.T) {
 	if _, err := OpenJSONUserStore(bad); err == nil {
 		t.Error("expected parse error for malformed file")
 	}
-	// Missing file is fine (empty store).
 	missing := filepath.Join(t.TempDir(), "nope.json")
 	if _, err := OpenJSONUserStore(missing); err != nil {
 		t.Errorf("missing file should be ok, got %v", err)
 	}
 }
-
-// ---- JSONInvitationStore --------------------------------------------
 
 func TestJSONInvitationStore_Cov(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "inv.json")
@@ -290,7 +265,6 @@ func TestJSONInvitationStore_Cov(t *testing.T) {
 	if err := s.PutInvitation(ctx, inv); err != nil {
 		t.Fatalf("PutInvitation: %v", err)
 	}
-	// Validation paths.
 	if err := s.PutInvitation(ctx, Invitation{Tenant: "acme"}); err == nil {
 		t.Error("missing token should be rejected")
 	}
@@ -309,7 +283,6 @@ func TestJSONInvitationStore_Cov(t *testing.T) {
 		t.Error("fresh invite should be pending")
 	}
 
-	// A second invite for the same email in another tenant.
 	if err := s.PutInvitation(ctx, Invitation{Token: "inv_2", Email: "bob@example.com", Tenant: "globex", ExpiresAt: now.Add(time.Hour)}); err != nil {
 		t.Fatalf("PutInvitation 2: %v", err)
 	}
@@ -320,7 +293,6 @@ func TestJSONInvitationStore_Cov(t *testing.T) {
 		t.Errorf("ListByEmail = %v, %v", list, err)
 	}
 
-	// MarkAccepted / MarkRevoked, and their unknown-token paths.
 	if err := s.MarkAccepted(ctx, "inv_1", now); err != nil {
 		t.Fatalf("MarkAccepted: %v", err)
 	}
@@ -338,7 +310,6 @@ func TestJSONInvitationStore_Cov(t *testing.T) {
 		t.Error("accepted invite should not be pending")
 	}
 
-	// DeleteByEmail / DeleteByTenant.
 	if n, err := s.DeleteByTenant(ctx, "globex"); err != nil || n != 1 {
 		t.Errorf("DeleteByTenant = %d, %v", n, err)
 	}

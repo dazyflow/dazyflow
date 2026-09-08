@@ -16,91 +16,31 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 )
 
-// Mirroring pushes this workspace's repository — the one that already holds
-// every flow as graphs/<id>.json plus the environment tags — to a remote the
-// customer owns. Because the store IS a git repository, "mirror my flows to
-// my own git server" is a push, not an export format.
-//
-// The remote is a REPLICA, not a peer. There is no fetch/merge side: the
-// daemon is the single writer, so a mirror push forces every ref and deletes
-// the ones that no longer exist locally, and a commit made directly on the
-// remote is overwritten by the next push. That contract is what makes the
-// feature safe to run unattended — the alternative (reconciling two writers)
-// collides with the editor's autosave and the amend/coalesce head, and is a
-// different feature entirely.
-//
-// Forcing is not optional here, which is worth stating because it looks
-// aggressive: SaveCoalescing AMENDS the previous autosave commit inside its
-// window, so a workspace's history is legitimately rewritten during ordinary
-// editing. A non-forced mirror would start rejecting pushes the first time a
-// user typed two params half a minute apart.
+// Pushes the repository that already holds every flow, so nothing is re-serialized.
 
-// ErrUnrelatedRemote is returned when the remote holds a repository that
-// shares no history with this workspace — none of its refs names an object we
-// have. A forced mirror push would destroy it, and the realistic cause is a
-// misconfiguration rather than an intention:
-//
-//   - a restored deployment whose data volume was lost, mirroring its fresh
-//     empty workspace over the very backup it should have been restored FROM;
-//   - a mirror URL pointing at the wrong repository (another org's, or an
-//     unrelated project);
-//   - a remote someone has been committing to directly, whose work the next
-//     push would erase.
-//
-// Refusing turns all three from silent data loss into a message. The
-// interactive path can override it — see PushOverwritingUnrelated — so a user
-// who genuinely means to repoint a mirror still can, deliberately.
+// The remote holds a repository sharing no history with this one, so pushing
+// would overwrite somebody else's work. Refused unless explicitly overridden.
 var ErrUnrelatedRemote = errors.New("the remote holds a repository that shares no history with this workspace")
 
-// mirrorRemoteName names the ephemeral remote each push constructs. It is
-// never written to the repository's config — see Push.
 const mirrorRemoteName = "dazyflow-mirror"
 
-// mirroredPrefixes are the ref namespaces a mirror carries. Tags matter as
-// much as branches: PromoteToEnvironment records the published revision as
-// refs/tags/graphs/<id>/<env>, so a mirror without tags would hold every
-// flow but lose which revision is live.
+// Tags matter as much as branches: publish state lives in a tag.
 var mirroredPrefixes = []string{"refs/heads/", "refs/tags/"}
 
-// PushResult reports what one mirror push did. Changed is false for the
-// common no-op case (nothing new since the last push), which callers
-// surface as a successful mirror rather than an error — go-git signals it
-// with NoErrAlreadyUpToDate, an error value that means success.
+// Changed is false when the remote was already up to date.
 type PushResult struct {
-	// Head is the local HEAD commit at push time — the revision the remote
-	// now holds. Empty only for a repo with no commits.
-	Head string
-	// Changed reports whether the remote actually moved.
+	Head    string
 	Changed bool
-	// Pushed and Deleted count the refs updated and removed on the remote.
-	// Surfaced so the UI can say what a push did rather than only that it
-	// succeeded.
 	Pushed  int
 	Deleted int
 }
 
-// Push mirrors the repository to remoteURL, authenticating with auth.
-//
-// The remote is addressed by URL rather than by a named remote in the repo's
-// config: the config is the customer's own repository state (it travels to
-// the mirror), and writing a remote into it would both leak the mirror
-// target into every clone and make the daemon's push destination stateful.
-// Constructing an ephemeral remote keeps the target a runtime argument.
-//
-// Callers must treat a returned error as "the mirror is stale", never as a
-// failure of whatever triggered the push — a save or publish has already
-// succeeded by the time we get here.
+// Refuses a remote with unrelated history; see PushOverwritingUnrelated.
 func (s *gitBackend) Push(ctx context.Context, remoteURL string, auth transport.AuthMethod) (PushResult, error) {
 	return s.push(ctx, remoteURL, auth, false)
 }
 
-// PushOverwritingUnrelated is Push with the shared-history check disabled: it
-// will overwrite a remote holding an unrelated repository.
-//
-// Only ever call this for an action a human just confirmed. The automatic
-// mirror path must use Push, so that a misconfigured or repurposed remote
-// fails loudly instead of being erased by a background job nobody was
-// watching.
+// Push with the shared-history check disabled: it WILL overwrite the remote.
 func (s *gitBackend) PushOverwritingUnrelated(ctx context.Context, remoteURL string, auth transport.AuthMethod) (PushResult, error) {
 	return s.push(ctx, remoteURL, auth, true)
 }
@@ -109,12 +49,7 @@ func (s *gitBackend) push(ctx context.Context, remoteURL string, auth transport.
 	if strings.TrimSpace(remoteURL) == "" {
 		return PushResult{}, errors.New("remote URL required")
 	}
-	// The whole push happens under the store lock. go-git's repository and
-	// storer are not safe for concurrent use, and the scheduler's rescan
-	// reads run concurrently with this — see the Store doc comment. A push is
-	// network-bound, so it does block saves to the same workspace for its
-	// duration; that is why the caller (the daemon's mirror queue) coalesces
-	// and runs it off the request path.
+	// Under the store lock: go-git's repository object is not safe for concurrent use.
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -137,30 +72,14 @@ func (s *gitBackend) push(ctx context.Context, remoteURL string, auth transport.
 		return res, err
 	}
 
-	// Shared-history check, BEFORE anything is sent. Every refspec below
-	// either force-overwrites or deletes a remote ref, so this is the last
-	// point at which a wrong remote can be distinguished from a right one.
-	//
-	// "Related" is deliberately generous: ONE remote ref naming an object we
-	// hold is enough. That keeps the normal cases quiet — an ordinary push is
-	// a fast-forward, and an autosave amend leaves the amended-away commit in
-	// our object store, so the remote's tip is still an object we have — while
-	// a wholly foreign repository, which shares nothing, is caught.
+	// BEFORE anything is sent: every refspec below is a force-push.
 	if !allowUnrelated && len(remoteHashes) > 0 && !s.sharesHistory(remoteHashes) {
 		return res, fmt.Errorf("%w (%d ref(s) on the remote, none of them known here) — check the URL, or overwrite it deliberately if this really is the repository you want to replace",
 			ErrUnrelatedRemote, len(remoteHashes))
 	}
 
-	// Explicit per-ref refspecs rather than a "+refs/heads/*:refs/heads/*"
-	// wildcard with PushOptions.Prune. That combination is broken in go-git:
-	// Force rewrites each spec to prepend '+', and Prune then calls
-	// RefSpec.Reverse(), which moves the '+' onto the destination side
-	// ("refs/heads/*:+refs/heads/*"). Its Dst() therefore yields
-	// "+refs/heads/master", which matches no real local ref, so prune
-	// concludes every remote branch is stale and emits a deletion for it —
-	// the remote's current branch included, which the server rejects. Naming
-	// each ref sidesteps the reversal entirely and makes the two intents
-	// (update these, delete those) separately reviewable.
+	// Explicit per-ref refspecs rather than a wildcard, so a ref deleted locally is
+	// deleted on the remote instead of lingering there for ever.
 	specs := make([]config.RefSpec, 0, len(local)+len(remoteHas))
 	for _, name := range local {
 		specs = append(specs, config.RefSpec("+"+name+":"+name))
@@ -170,16 +89,11 @@ func (s *gitBackend) push(ctx context.Context, remoteURL string, auth transport.
 		if _, ok := local.has(name); ok {
 			continue
 		}
-		// Leading colon with an empty source = delete this remote ref. This
-		// is what keeps an unpublished flow from being advertised as live on
-		// the mirror forever: unpublishing removes the published tag
-		// locally (ClearEnvironment), and nothing else would propagate that.
+		// A leading colon with an empty source deletes the remote ref.
 		specs = append(specs, config.RefSpec(":"+name))
 		deleted++
 	}
 	if len(specs) == 0 {
-		// Nothing local and nothing to clean up — an empty workspace. Not an
-		// error; there is simply nothing to mirror yet.
 		return res, nil
 	}
 
@@ -188,10 +102,8 @@ func (s *gitBackend) push(ctx context.Context, remoteURL string, auth transport.
 		RemoteURL:  remoteURL,
 		RefSpecs:   specs,
 		Auth:       auth,
-		// Force stays off: every update spec already carries its own '+', so
-		// setting it would only re-trigger the rewrite described above.
-		Force: false,
-		Prune: false,
+		Force:      false,
+		Prune:      false,
 	})
 	switch {
 	case err == nil:
@@ -200,17 +112,12 @@ func (s *gitBackend) push(ctx context.Context, remoteURL string, auth transport.
 		res.Deleted = deleted
 		return res, nil
 	case errors.Is(err, git.NoErrAlreadyUpToDate):
-		// Success: the remote already matches. Reported as unchanged so the
-		// UI can say "up to date" instead of implying a transfer happened.
 		return res, nil
 	default:
 		return res, fmt.Errorf("push to mirror: %w", err)
 	}
 }
 
-// refSet is the set of ref names being mirrored, kept ordered so the
-// generated refspec list (and therefore any log line describing a push) is
-// stable across runs.
 type refSet []string
 
 func (r refSet) has(name string) (int, bool) {
@@ -222,9 +129,6 @@ func (r refSet) has(name string) (int, bool) {
 	return 0, false
 }
 
-// mirroredRefs lists this repo's branch and tag refs. Caller holds s.mu.
-// Symbolic refs (HEAD) are skipped: a mirror pushes the refs HEAD points
-// through, and pushing HEAD itself is neither needed nor meaningful here.
 func (s *gitBackend) mirroredRefs() (refSet, error) {
 	iter, err := s.repo.References()
 	if err != nil {
@@ -244,15 +148,10 @@ func (s *gitBackend) mirroredRefs() (refSet, error) {
 	return out, err
 }
 
-// listRemoteMirroredRefs asks the remote what it currently holds, so the
-// push can name the refs that need deleting. An empty remote is the normal
-// first-run state, not a failure.
 func listRemoteMirroredRefs(ctx context.Context, remote *git.Remote, auth transport.AuthMethod) (refSet, []plumbing.Hash, error) {
 	refs, err := remote.ListContext(ctx, &git.ListOptions{Auth: auth})
 	if errors.Is(err, transport.ErrEmptyRemoteRepository) {
-		// A brand-new empty repository: nothing to overwrite, nothing to
-		// compare against. This is the expected state of a first push, so it
-		// must NOT read as an unrelated remote.
+		// A brand-new empty remote has nothing to overwrite.
 		return nil, nil, nil
 	}
 	if err != nil {
@@ -273,13 +172,7 @@ func listRemoteMirroredRefs(ctx context.Context, remote *git.Remote, auth transp
 	return out, hashes, nil
 }
 
-// sharesHistory reports whether any of the remote's ref targets is an object
-// this repository holds — the test for "these are the same repository".
-//
-// It asks the object store directly rather than walking commits: a mirror
-// remote's tip is normally either our HEAD or an ancestor of it, and both are
-// present locally. Walking would cost the whole history to answer a question
-// one lookup settles.
+// Any remote ref target present in this repository proves shared history.
 func (s *gitBackend) sharesHistory(remoteHashes []plumbing.Hash) bool {
 	for _, h := range remoteHashes {
 		if h.IsZero() {

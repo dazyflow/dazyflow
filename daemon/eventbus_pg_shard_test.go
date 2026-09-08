@@ -61,8 +61,6 @@ func TestPgBus_UnwatchedTrafficDoesNotDisturbAWatchedRun(t *testing.T) {
 	defer cancel()
 	time.Sleep(200 * time.Millisecond)
 
-	// A burst of traffic for runs nobody here is watching, interleaved with the
-	// one that is.
 	for i := range 20 {
 		publisher.Publish("noise-"+string(rune('a'+i%5)), BusEvent{
 			NodeStatus: &NodeStatusEvent{NodeID: "x", Status: core.JobStatusRunning},
@@ -76,7 +74,6 @@ func TestPgBus_UnwatchedTrafficDoesNotDisturbAWatchedRun(t *testing.T) {
 	if ev.NodeStatus == nil || ev.NodeStatus.NodeID != "mine" {
 		t.Fatalf("watched run received %+v, want its own event", ev)
 	}
-	// And nothing from the noise leaked in.
 	select {
 	case extra := <-ch:
 		t.Fatalf("received an event for a run this replica does not watch: %+v", extra)
@@ -98,7 +95,6 @@ func TestPgBus_SubscribingAfterUnwatchedTrafficDoesNotReplay(t *testing.T) {
 	}
 	time.Sleep(200 * time.Millisecond)
 
-	// History for a run, published while nobody is subscribed anywhere.
 	for i := range 10 {
 		publisher.Publish("run-later", BusEvent{
 			NodeStatus: &NodeStatusEvent{
@@ -109,7 +105,6 @@ func TestPgBus_SubscribingAfterUnwatchedTrafficDoesNotReplay(t *testing.T) {
 	}
 	time.Sleep(400 * time.Millisecond) // let the idle replica move its cursor
 
-	// Now somebody watches it. They are owed what comes next, not the backlog.
 	ch, cancel := idle.Subscribe("run-later")
 	defer cancel()
 	time.Sleep(200 * time.Millisecond)
@@ -124,9 +119,6 @@ func TestPgBus_SubscribingAfterUnwatchedTrafficDoesNotReplay(t *testing.T) {
 	}
 }
 
-// Publishing is buffered now, which puts a window between "an event was
-// published" and "the row exists". Erasure has to see through it, or an org's
-// events are written to disk moments after it was erased.
 func TestPgBus_ErasureSeesBufferedEvents(t *testing.T) {
 	pool, ctx := pgBusPool(t)
 	js, err := jobstore.NewPostgresFromPool(ctx, pool)
@@ -148,7 +140,6 @@ func TestPgBus_ErasureSeesBufferedEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Published and erased inside the flush window, deliberately: no sleep.
 	bus.Publish("run-doomed", BusEvent{
 		NodeStatus: &NodeStatusEvent{NodeID: "n", Status: core.JobStatusRunning},
 	})
@@ -156,8 +147,6 @@ func TestPgBus_ErasureSeesBufferedEvents(t *testing.T) {
 		t.Fatalf("erase: %v", err)
 	}
 
-	// Give the writer more than a flush interval to write anything it still
-	// holds, then confirm nothing of that org's landed.
 	time.Sleep(200 * time.Millisecond)
 	bus.Flush(ctx)
 	var left int

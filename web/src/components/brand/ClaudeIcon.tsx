@@ -3,9 +3,6 @@
 
 import type { SVGProps } from "react";
 
-// ClaudeIcon renders the official Claude wordmark (Anthropic / Wikimedia
-// Commons). Shaped like a LucideIcon so it slots into the iconFor()
-// registry. Uses Claude's signature warm-orange unless overridden.
 type Props = SVGProps<SVGSVGElement> & {
   size?: number | string;
   color?: string;

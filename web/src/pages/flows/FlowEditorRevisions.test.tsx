@@ -107,18 +107,11 @@ function mount(id = "coffee-reorder") {
   );
 }
 
-// Open the history panel and pick a revision. Rows are identified by author,
-// which is the only per-revision text a stubbed `t` leaves intact (the dates go
-// through the shared formatter, and the newest row reads "editor.historyLatest").
 async function openHistoryAndPick(author: string) {
   await userEvent.click(await screen.findByText("editor.history"));
   await userEvent.click(await screen.findByText(author));
 }
 
-// A graph carrying a breakpoint, so the editor loads with breakpoints.size > 0
-// and the "d" shortcut (clear breakpoints) becomes available. That shortcut is
-// the cheapest reachable way to make the graph dirty from a test without
-// simulating canvas drags — it sets dirty unconditionally.
 function graphWithBreakpoint() {
   const g = twoStepGraph();
   return {
@@ -158,7 +151,6 @@ describe("editor version history", () => {
     await screen.findByText("editor.run");
     loadGraph.mockClear();
     await openHistoryAndPick("carol@acme.se");
-    // The commit is the 5th argument to loadGraph; HEAD loads pass undefined.
     await waitFor(() =>
       expect(loadGraph).toHaveBeenCalledWith("tok", "acme", "main", "coffee-reorder", "aaaa111"),
     );
@@ -193,7 +185,6 @@ describe("editor version history", () => {
   // change what a newly opened flow offers. It takes a stack that exists first,
   // and then a replacement.
   it("fences the undo stack when a revision replaces the document", async () => {
-    // makeDirty clears breakpoints, so the flow has to load with one.
     loadGraph.mockResolvedValue(graphWithBreakpoint());
     mount();
     await screen.findByText("editor.run");
@@ -237,8 +228,6 @@ describe("editor version history", () => {
     await waitFor(() =>
       expect(restoreFlow).toHaveBeenCalledWith("tok", "acme", "main", "coffee-reorder", "aaaa111"),
     );
-    // History is preserved: a restore is a fresh commit on top, so the list has
-    // to be re-fetched rather than assumed unchanged.
     await waitFor(() => expect(flowHistory).toHaveBeenCalledTimes(2));
     await waitFor(() =>
       expect(screen.queryByText("editor.backToLatest")).not.toBeInTheDocument(),
@@ -274,8 +263,6 @@ describe("preview blocks autosave", () => {
     await openHistoryAndPick("carol@acme.se");
     await screen.findByText("editor.backToLatest");
     saveGraph.mockClear();
-    // Dirty the graph WHILE the preview is up — the reachable hazard, since the
-    // flag survives opening the history panel.
     await makeDirty();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(4000);

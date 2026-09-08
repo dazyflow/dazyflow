@@ -49,9 +49,7 @@ type ModerationGate struct {
 	Users UserStore
 	Orgs  OrgProfileStore
 
-	// CacheTTL is the memo window; <= 0 disables caching.
 	CacheTTL time.Duration
-	// CacheMax bounds each cache's entry count; <= 0 picks a default.
 	CacheMax int
 
 	once  sync.Once
@@ -59,8 +57,6 @@ type ModerationGate struct {
 	orgs  *suspensionCache
 }
 
-// initCaches builds the two caches on first use so a zero-value
-// ModerationGate (struct literal, as every call site builds it) works.
 func (g *ModerationGate) initCaches() {
 	g.once.Do(func() {
 		if g.CacheTTL <= 0 {
@@ -71,10 +67,6 @@ func (g *ModerationGate) initCaches() {
 	})
 }
 
-// Invalidate drops the cached moderation answers for a subject and/or a
-// tenant, so a suspend/unsuspend applied on this instance is enforced on
-// the very next request instead of waiting out the TTL. Either argument
-// may be empty. Safe on a gate with caching disabled.
 func (g *ModerationGate) Invalidate(subject, tenant string) {
 	if g == nil {
 		return
@@ -88,8 +80,6 @@ func (g *ModerationGate) Invalidate(subject, tenant string) {
 	}
 }
 
-// CacheStats reports cumulative hit/miss counts across both caches, for
-// the /metrics endpoint. Mirrors CachingSessionStore.Stats.
 func (g *ModerationGate) CacheStats() (hits, misses int64) {
 	g.initCaches()
 	for _, c := range []*suspensionCache{g.users, g.orgs} {
@@ -107,20 +97,14 @@ func (g *ModerationGate) Authenticate(ctx context.Context, credential string) (c
 		return core.Principal{}, err
 	}
 	g.initCaches()
-	// Org lockout first: it's the broader hammer (every member, every
-	// service account in the tenant) and a single lookup.
 	if g.Orgs != nil && p.Tenant != "" {
 		if g.suspended(g.orgs, p.Tenant, func() (bool, error) {
 			prof, err := g.Orgs.GetOrgProfile(ctx, p.Tenant)
-			// ErrUnknownOrgProfile (no profile row) is normal — active.
 			return err == nil && prof.Suspended(), unlessUnknown(err, ErrUnknownOrgProfile)
 		}) {
 			return core.Principal{}, ErrAccountSuspended
 		}
 	}
-	// User lockout: the subject is the user's email for password/session
-	// principals. API-key/service-account subjects that aren't real users
-	// return ErrUnknownUser and fall through (only the org check applies).
 	if g.Users != nil && p.Subject != "" {
 		if g.suspended(g.users, p.Subject, func() (bool, error) {
 			u, err := g.Users.GetByEmail(ctx, p.Subject)
@@ -132,9 +116,6 @@ func (g *ModerationGate) Authenticate(ctx context.Context, credential string) (c
 	return p, nil
 }
 
-// suspended answers one half of the gate, through cache when one is
-// configured. lookup returns the verdict plus the error that decides
-// whether the verdict is worth remembering: nil means definitive.
 func (g *ModerationGate) suspended(cache *suspensionCache, key string, lookup func() (bool, error)) bool {
 	if cache == nil {
 		v, _ := lookup()

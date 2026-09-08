@@ -17,23 +17,14 @@ import (
 	"github.com/dazyflow/dazyflow/engine/mcp"
 )
 
-// fakeMCPEndpoint is a minimal streamable-HTTP MCP server: enough to
-// handshake, list one tool, and record the credential it was given.
 type fakeMCPEndpoint struct {
-	toolNames []string
-	// titles, when set, gives a tool the display name the server offers for
-	// it. Absent means the tool publishes none, which is most of them.
-	titles map[string]string
-	// instructions is the server's own prose from the handshake.
+	toolNames    []string
+	titles       map[string]string
 	instructions string
-	// icons, when set, gives a tool an icon source by name.
-	icons map[string]string
-	// schemas, when set, gives a tool its inputSchema by name. Tools not
-	// listed here are published with no schema, which is the shape most of
-	// these tests want.
-	schemas  map[string]string
-	authSeen atomic.Value
-	status   int
+	icons        map[string]string
+	schemas      map[string]string
+	authSeen     atomic.Value
+	status       int
 }
 
 func (f *fakeMCPEndpoint) start(t *testing.T) *httptest.Server {
@@ -88,7 +79,6 @@ func (f *fakeMCPEndpoint) start(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// newTestMCPServers builds the service over in-memory stores.
 func newTestMCPServers(t *testing.T) (*MCPServers, *mcp.Catalog) {
 	t.Helper()
 	key := make([]byte, 32)
@@ -134,8 +124,6 @@ func TestMCPServers_SaveConnectsAndScopesToTenant(t *testing.T) {
 	}
 }
 
-// TestMCPServers_TokenIsNeverReturned guards the property the wire shape
-// depends on: the stored credential is not on the struct that leaves here.
 func TestMCPServers_TokenIsNeverReturned(t *testing.T) {
 	srv := (&fakeMCPEndpoint{toolNames: []string{"t"}}).start(t)
 	svc, _ := newTestMCPServers(t)
@@ -170,7 +158,6 @@ func TestMCPServers_EditKeepsStoredToken(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("first Save: %v", err)
 	}
-	// No Token this time — the edit form leaves it blank when unchanged.
 	saved, err := svc.Save(ctx, "acme", "a", MCPServerInput{
 		Name: "vendor", URL: secondSrv.URL, AuthKind: MCPAuthBearer, Enabled: true,
 	})
@@ -191,8 +178,6 @@ func TestMCPServers_EditKeepsStoredToken(t *testing.T) {
 	}
 }
 
-// TestMCPServers_SaveRecordsFailureWithoutLosingTheRow: a server that will not
-// connect is still saved, so the fix is an edit rather than a retype.
 func TestMCPServers_SaveRecordsFailureWithoutLosingTheRow(t *testing.T) {
 	srv := (&fakeMCPEndpoint{status: http.StatusUnauthorized}).start(t)
 	svc, cat := newTestMCPServers(t)
@@ -261,9 +246,8 @@ func TestMCPServers_Delete(t *testing.T) {
 	}
 }
 
-// TestMCPServers_ReconcileConnectsAnotherReplicasRow is the multi-node
-// property: this process holds no registration for a row it never saved, and
-// the reconcile pass is what brings it up.
+// The multi-node property: this process holds no registration for a row it
+// never saved, and the reconcile pass is what brings it up.
 func TestMCPServers_ReconcileConnectsAnotherReplicasRow(t *testing.T) {
 	srv := (&fakeMCPEndpoint{toolNames: []string{"a"}}).start(t)
 	svc, cat := newTestMCPServers(t)
@@ -285,7 +269,6 @@ func TestMCPServers_ReconcileConnectsAnotherReplicasRow(t *testing.T) {
 		t.Fatal("reconcile did not connect the stored server")
 	}
 
-	// And the reverse: a row removed elsewhere goes away here too.
 	if err := svc.Store.Delete(ctx, "acme", "vendor"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
@@ -322,9 +305,6 @@ func TestMCPServers_ReconcileSkipsUnchangedRows(t *testing.T) {
 	}
 }
 
-// TestMCPServers_TokenCanReferenceAStoredSecret covers the ${secret.NAME}
-// form, so a credential the org already rotates in one place need not be
-// pasted here as well.
 func TestMCPServers_TokenCanReferenceAStoredSecret(t *testing.T) {
 	fake := &fakeMCPEndpoint{toolNames: []string{"a"}}
 	srv := fake.start(t)
@@ -381,9 +361,6 @@ func TestMCPServers_SaveRejectsBadInput(t *testing.T) {
 	}
 }
 
-// TestMCPServers_SaveRefusesCleartextHTTP has to restore the production egress
-// default: daemon/main_test.go turns private egress ON for the whole package,
-// which is exactly the switch that makes http an acceptable scheme here.
 func TestMCPServers_SaveRefusesCleartextHTTP(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(false)
 	defer hfnet.SetAllowPrivateEgress(true)
@@ -404,8 +381,6 @@ func TestMCPServers_SaveRefusesCleartextHTTP(t *testing.T) {
 	}
 }
 
-// TestMCPServers_EditToAddAuthNeedsAToken: a server saved without auth and
-// then switched to bearer has nothing stored to keep.
 func TestMCPServers_EditToAddAuthNeedsAToken(t *testing.T) {
 	srv := (&fakeMCPEndpoint{toolNames: []string{"a"}}).start(t)
 	svc, _ := newTestMCPServers(t)
@@ -474,17 +449,14 @@ func TestSlugMCPServerName(t *testing.T) {
 		"GitHub":              "github",
 		"  Vendor   Tools  ":  "vendor-tools",
 		"Kundregister (test)": "kundregister-test",
-		// Diacritics fold to their base letter rather than being dropped: the
-		// id is read by people, and "bokf-ring" is not a name.
-		"Bokföring":  "bokforing",
-		"Grüße":      "grusse",
-		"Ærø Data":   "aero-data",
-		"---weird--": "weird",
-		"v2.1 API":   "v2-1-api",
-		// Nothing slug-able at all. The caller substitutes a generic base.
-		"日本語": "",
-		"!!!": "",
-		"":    "",
+		"Bokföring":           "bokforing",
+		"Grüße":               "grusse",
+		"Ærø Data":            "aero-data",
+		"---weird--":          "weird",
+		"v2.1 API":            "v2-1-api",
+		"日本語":                 "",
+		"!!!":                 "",
+		"":                    "",
 	}
 	for in, want := range cases {
 		if got := slugStepSourceName(in); got != want {
@@ -499,9 +471,6 @@ func TestSlugMCPServerName(t *testing.T) {
 	}
 }
 
-// TestMCPServers_SaveDerivesIdFromLabel is the whole point of labels: an admin
-// types a name with a space and a capital in it, and the step ids their flows
-// will hold are still ids.
 func TestMCPServers_SaveDerivesIdFromLabel(t *testing.T) {
 	srv := (&fakeMCPEndpoint{toolNames: []string{"search"}}).start(t)
 	svc, cat := newTestMCPServers(t)
@@ -533,9 +502,9 @@ func TestMCPServers_SaveDerivesIdFromLabel(t *testing.T) {
 	}
 }
 
-// TestMCPServers_DerivedIdsDoNotCollide covers two servers a human would call
-// different things that slug to the same id. The second gets a number rather
-// than replacing the first, which would silently re-point every flow using it.
+// Covers two servers a human would call different things that slug to the same
+// id. The second gets a number rather than replacing the first, which would
+// silently re-point every flow using it.
 func TestMCPServers_DerivedIdsDoNotCollide(t *testing.T) {
 	srv := (&fakeMCPEndpoint{toolNames: []string{"search"}}).start(t)
 	svc, _ := newTestMCPServers(t)
@@ -558,9 +527,9 @@ func TestMCPServers_DerivedIdsDoNotCollide(t *testing.T) {
 	}
 }
 
-// TestMCPServers_DerivedIdAvoidsAnInstanceWideName guards a save that would
-// otherwise store a row that can never connect: the catalog refuses a tenant
-// server whose name collides with an operator's instance-wide one.
+// Guards a save that would otherwise store a row that can never connect: the
+// catalog refuses a tenant server whose name collides with an operator's
+// instance-wide one.
 func TestMCPServers_DerivedIdAvoidsAnInstanceWideName(t *testing.T) {
 	srv := (&fakeMCPEndpoint{toolNames: []string{"search"}}).start(t)
 	svc, cat := newTestMCPServers(t)
@@ -581,9 +550,6 @@ func TestMCPServers_DerivedIdAvoidsAnInstanceWideName(t *testing.T) {
 	}
 }
 
-// TestMCPServers_LabelEditsWithoutMovingTheId is what labels buy an admin:
-// renaming a server is now an ordinary edit, because the ids the flows hold
-// are not the name any more.
 func TestMCPServers_LabelEditsWithoutMovingTheId(t *testing.T) {
 	srv := (&fakeMCPEndpoint{toolNames: []string{"search"}}).start(t)
 	svc, cat := newTestMCPServers(t)
@@ -620,8 +586,6 @@ func TestMCPServers_LabelEditsWithoutMovingTheId(t *testing.T) {
 	}
 }
 
-// TestMCPServers_SaveWithNeitherNameNorLabel keeps the empty case an error
-// rather than a server called "mcp-server".
 func TestMCPServers_SaveWithNeitherNameNorLabel(t *testing.T) {
 	svc, _ := newTestMCPServers(t)
 	_, err := svc.Save(context.Background(), "acme", "a", MCPServerInput{URL: "https://x.test/mcp"})
@@ -630,8 +594,8 @@ func TestMCPServers_SaveWithNeitherNameNorLabel(t *testing.T) {
 	}
 }
 
-// TestMCPServers_LabelWithNoSlugStillGetsAnId covers a name in a script the
-// slug rule has nothing to say about. It must still save.
+// Covers a name in a script the slug rule has nothing to say about. It must
+// still save.
 func TestMCPServers_LabelWithNoSlugStillGetsAnId(t *testing.T) {
 	srv := (&fakeMCPEndpoint{toolNames: []string{"search"}}).start(t)
 	svc, _ := newTestMCPServers(t)
@@ -649,9 +613,8 @@ func TestMCPServers_LabelWithNoSlugStillGetsAnId(t *testing.T) {
 	}
 }
 
-// TestMCPServers_HandshakeInstructionsReachTheAdmin covers the server's own
-// prose about itself: read at handshake, carried on the live status, and never
-// acted on.
+// Covers the server's own prose about itself: read at handshake, carried on
+// the live status, and never acted on.
 func TestMCPServers_HandshakeInstructionsReachTheAdmin(t *testing.T) {
 	fake := &fakeMCPEndpoint{
 		toolNames:    []string{"search"},
@@ -677,9 +640,6 @@ func TestMCPServers_HandshakeInstructionsReachTheAdmin(t *testing.T) {
 	}
 }
 
-// TestMCPServers_ToolTitleCaptionsTheStep is the same fact one layer up from
-// the engine's own test: a title from a real handshake reaches the palette,
-// and the step id is unchanged by it.
 func TestMCPServers_ToolTitleCaptionsTheStep(t *testing.T) {
 	fake := &fakeMCPEndpoint{
 		toolNames: []string{"search"},
@@ -702,12 +662,6 @@ func TestMCPServers_ToolTitleCaptionsTheStep(t *testing.T) {
 	}
 }
 
-// TestMCPServers_ToolIconReachesThePalette follows an icon the whole way: a
-// real handshake over HTTP, through the tenant's catalog, onto the manifest
-// field the palette renders.
-//
-// The icon is a data: URI so the test needs no second server. What the fetch
-// path does with an https one is engine/mcp's own business, and tested there.
 func TestMCPServers_ToolIconReachesThePalette(t *testing.T) {
 	const png = "data:image/png;base64," +
 		"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -732,9 +686,6 @@ func TestMCPServers_ToolIconReachesThePalette(t *testing.T) {
 	}
 }
 
-// TestMCPServers_NegotiatedProtocolIsRecorded: icons need revision 2025-11-25,
-// so the revision a server actually settled on is the first thing to look at
-// when they do not appear.
 func TestMCPServers_NegotiatedProtocolIsRecorded(t *testing.T) {
 	srv := (&fakeMCPEndpoint{toolNames: []string{"search"}}).start(t)
 	svc, cat := newTestMCPServers(t)
@@ -756,10 +707,6 @@ func TestMCPServers_NegotiatedProtocolIsRecorded(t *testing.T) {
 	}
 }
 
-// TestMCPServers_LostConnectionKeepsTheStepsDescribed is the reported bug: a
-// server goes down and every flow using it opens looking like it lost its
-// ports and edges, because the manifests that DEFINE those ports went away
-// with the connection.
 func TestMCPServers_LostConnectionKeepsTheStepsDescribed(t *testing.T) {
 	fake := &fakeMCPEndpoint{
 		toolNames: []string{"create_issue"},
@@ -789,7 +736,6 @@ func TestMCPServers_LostConnectionKeepsTheStepsDescribed(t *testing.T) {
 		t.Fatalf("the live manifest has %d inputs; the test needs argument ports", wantPorts)
 	}
 
-	// The endpoint starts refusing — a rotated token, in effect.
 	fake.status = http.StatusUnauthorized
 	broken, err := svc.Refresh(ctx, "acme", "vendor-tools")
 	if err != nil {
@@ -799,7 +745,6 @@ func TestMCPServers_LostConnectionKeepsTheStepsDescribed(t *testing.T) {
 		t.Fatal("a refused handshake was recorded as success")
 	}
 
-	// The step is still there, still fully described.
 	man, ok := cat.ManifestsFor("acme")["mcp:vendor-tools:create_issue"]
 	if !ok {
 		t.Fatal("the step vanished when the server went down — flows lose their wiring")
@@ -814,7 +759,6 @@ func TestMCPServers_LostConnectionKeepsTheStepsDescribed(t *testing.T) {
 		t.Errorf("Label = %q, want the cached caption", man.Label)
 	}
 
-	// It comes back on its own when the endpoint does.
 	fake.status = 0
 	fixed, err := svc.Refresh(ctx, "acme", "vendor-tools")
 	if err != nil {
@@ -867,7 +811,6 @@ func TestMCPServers_EditDoesNotClearTheSnapshot(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	// An edit pointing at nothing: the save succeeds, the connection does not.
 	edited, err := svc.Save(ctx, "acme", "a", MCPServerInput{
 		Name: "vendor", URL: "https://127.0.0.1:1/mcp", Enabled: true,
 	})

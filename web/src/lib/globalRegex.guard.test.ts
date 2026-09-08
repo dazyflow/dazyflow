@@ -31,13 +31,8 @@ import { join, relative } from "node:path";
 
 const SRC = join(__dirname, "..");
 
-// A regex literal assigned to a binding, capturing its flags. Deliberately
-// anchored on the assignment form: a bare `/` in an expression is ambiguous
-// with division, and `= /…/flags` is not.
 const DECL = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\/(?:[^/\\\n[]|\\.|\[(?:[^\]\\]|\\.)*\])+\/([gimsuy]*)/g;
-// new RegExp(…, "…g…") assigned to a binding.
 const CTOR = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*new RegExp\([^;]*?["'`]([gimsuy]*)["'`]\s*\)/g;
-// A literal tested inline, with no binding at all: /…/g.test(x)
 const INLINE = /\/(?:[^/\\\n[]|\\.|\[(?:[^\]\\]|\\.)*\])+\/[gimsuy]*[gy][gimsuy]*\s*\.test\(/;
 
 function sourceFiles(dir: string, out: string[] = []): string[] {

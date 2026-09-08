@@ -1,19 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Connecting an app over OAuth from an ORG SUBDOMAIN.
-//
-// The provider only ever redirects to the apex callback — that is the one
-// registered redirect_uri — so a flow begun on "acme.dazyflow.app" finishes on
-// "dazyflow.app". Two things have to survive that hop, and neither did:
-//
-//   - the browser-binding cookie, which was host-only and therefore simply not
-//     sent to the apex, so every such flow was rejected with "OAuth state did
-//     not match this browser session";
-//   - the return trip, which was path-relative and so left the user on the
-//     apex, where their host-only session cookie does not exist — the
-//     connection worked but they appeared to be signed out.
-
 package daemon
 
 import (
@@ -29,7 +16,6 @@ const (
 	orgHost  = "acme.dazyflow.app"
 )
 
-// authorizeFrom starts a flow with the browser on the given host.
 func authorizeFrom(t *testing.T, h *gatewayHarness, host, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest("GET", path, nil)
@@ -202,7 +188,6 @@ func TestOAuthSubdomain_ForeignHostIsNotRedirectedTo(t *testing.T) {
 	}
 }
 
-// Starting on the apex itself needs no absolute redirect — it is already there.
 func TestOAuthSubdomain_ApexFlowStaysRelative(t *testing.T) {
 	t.Parallel()
 	h, _ := newOAuthHarness(t)
@@ -232,7 +217,6 @@ func TestSignInCookie_ClearMatchesTheDomainItWasSetWith(t *testing.T) {
 	h.gw.svc.PublicBaseURL = "https://" + apexHost
 	api := h.gw.authAPI()
 
-	// A flow that began on an org subdomain: the cookie is scoped to the apex.
 	set := httptest.NewRecorder()
 	api.setGoogleSignInCookie(set, "nonce-abc", orgHost)
 	setC := cookieNamed(set, googleSignInCookie)
@@ -256,7 +240,6 @@ func TestSignInCookie_ClearMatchesTheDomainItWasSetWith(t *testing.T) {
 	}
 }
 
-// An apex-origin sign-in stays host-only on both halves.
 func TestSignInCookie_ApexFlowStaysHostOnly(t *testing.T) {
 	t.Parallel()
 	h, _ := newOAuthHarness(t)

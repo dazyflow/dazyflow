@@ -48,8 +48,6 @@ interface UploadsCtx {
   ) => void;
   cancel: (id: string) => void;
   dismiss: (id: string) => void;
-  // Bumps on each successful upload; lastDone carries where it landed so a
-  // visible Files view can refresh itself when relevant.
   completedNonce: number;
   lastDone: { tenant: string; workspace: string; dir: string } | null;
 }
@@ -87,9 +85,6 @@ export function UploadsProvider({ children }: { children: ReactNode }) {
     setTasks((ts) => ts.filter((t) => t.id !== id));
   }, []);
 
-  // Drives the queue: at most one upload in flight at a time. Re-invoked by
-  // an effect whenever tasks change (enqueue, or a task finishing), so it
-  // self-pumps to the next queued item.
   const pump = useCallback(() => {
     if (running.current) return;
     const next = tasksRef.current.find((t) => t.status === "queued");
@@ -121,11 +116,6 @@ export function UploadsProvider({ children }: { children: ReactNode }) {
           update(next.id, { status: "canceled" });
           window.setTimeout(() => dismiss(next.id), 2500);
         } else {
-          // Run through explainApiError so a failed upload shows plain
-          // guidance ("the file is too large", "your session expired")
-          // instead of a raw Go/HTTP string. The pump callback has no React
-          // `t` in scope, so use the i18n singleton's `t` (same instance the
-          // UI renders with, so it tracks the active language).
           update(next.id, {
             status: "error",
             error: explainApiError(e, i18n.t),

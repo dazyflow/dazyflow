@@ -62,9 +62,7 @@ func init() {
 			}`),
 			Idempotent:        true,
 			SubmitsChildGraph: true,
-			// input_map / output_map name this step's real ports, so the
-			// in/out pair above is a placeholder — see Manifest.DynamicPorts.
-			DynamicPorts: true,
+			DynamicPorts:      true,
 		},
 		Execute: executeSubgraph,
 	})
@@ -102,7 +100,6 @@ func executeSubgraph(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		return params.Err(job, "bad_param", fmt.Sprintf("output_map: %v", err)), nil
 	}
 
-	// Build the per-child-node seeds from the parent's input map.
 	seeds := map[string]core.Result{}
 	for parentPort, childNodeID := range inputMap {
 		ref, ok := job.Input[parentPort]
@@ -152,10 +149,6 @@ func parseInputMap(raw any) (map[string]string, error) {
 	return out, nil
 }
 
-// SubgraphOutputBinding names a child node and one of its output ports
-// that should be projected to a parent output port. Exported (and
-// JSON-tagged) so the dispatcher in daemon/ can deserialize the same
-// structure the module wrote.
 type SubgraphOutputBinding struct {
 	Node string `json:"node"`
 	Port string `json:"port"`

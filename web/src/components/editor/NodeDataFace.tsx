@@ -9,13 +9,7 @@ import { portTypeLabel } from "../../lib/ports";
 import { cell, dataFaceSource, dataFaceView, type DataFaceTier } from "../../lib/dataFace";
 import type { Port, Ref } from "../../types";
 
-// The card's data face: what the step emitted, uncovered when the header
-// folds down. One rendering per port kind — a table of Items reads nothing
-// like a blob of Text, and collapsing both into pretty-printed JSON is what
-// made the output unreadable on the card in the first place.
 
-// The badge per tier. Literal class names, one per row — see the note at the
-// call site.
 const PROV: Record<DataFaceTier, { cls: string; key: string }> = {
   run: { cls: "dz-face-prov dz-face-prov-run", key: "nodeCard.face.fromRun" },
   example: { cls: "dz-face-prov dz-face-prov-example", key: "nodeCard.face.example" },
@@ -23,23 +17,16 @@ const PROV: Record<DataFaceTier, { cls: string; key: string }> = {
 };
 
 type Props = {
-  // Output ports worth a tab (facePorts has already dropped the pass pin).
   ports: Port[];
-  // This node's port values from the latest run, when it has run.
   outputs?: Record<string, Ref>;
   active: string;
   onSelect: (port: string) => void;
-  // Opens the dialog on the port the face is currently showing. Omitted when
-  // there is nothing to open onto — an empty face has no data to browse.
   onExpand?: () => void;
 };
 
 export function NodeDataFace({ ports, outputs, active, onSelect, onExpand }: Props) {
   const port = ports.find((p) => p.port === active) ?? ports[0];
   const { tier, view } = dataFaceSource(port ? outputs?.[port.port] : undefined, port);
-  // An empty face has nothing to open onto, and the caller may not offer the
-  // dialog at all — so the corner button, and the room the head leaves for it,
-  // both hang off this one condition.
   const expandable = !!onExpand && tier !== "none";
 
   return (
@@ -165,9 +152,6 @@ function FaceSummary({ view }: { view: ReturnType<typeof dataFaceView> }) {
   }
 }
 
-// Exported so the dialog renders the SAME markup as the card's dialog-side
-// renderings rather than a second table that drifts from it. Only the caps
-// and the CSS differ: the dialog scopes its own sizing off .dz-datamodal.
 export function FaceBody({ view }: { view: ReturnType<typeof dataFaceView> }) {
   switch (view.kind) {
     case "table":
@@ -246,8 +230,6 @@ export function FaceBody({ view }: { view: ReturnType<typeof dataFaceView> }) {
   }
 }
 
-// countLabel is the left half of the footer: how much came out. Only a list
-// has a count worth stating — "1 item" on a single record is noise.
 function countLabel(view: ReturnType<typeof dataFaceView>, tier: DataFaceTier): string {
   // An example's row count is illustrative — "2 items" beside a shipped
   // example would read as a fact about the last run.

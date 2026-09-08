@@ -26,9 +26,6 @@ import (
 // They differ only in what they carry, so one store backs all of them, keyed by
 // a `kind` that keeps their namespaces apart.
 
-// ErrEphemeralNotFound means the token is unknown, already consumed, or past
-// its expiry — which callers treat identically, since none of them may reveal
-// which.
 var ErrEphemeralNotFound = errors.New("ephemeral auth state not found")
 
 // EphemeralStore holds short-lived, single-use auth state.
@@ -38,7 +35,6 @@ var ErrEphemeralNotFound = errors.New("ephemeral auth state not found")
 // can accept a stale token because a sweep was late.
 type EphemeralStore interface {
 	Put(ctx context.Context, kind, token string, payload []byte, expiresAt time.Time) error
-	// Get returns the payload and the attempt count.
 	Get(ctx context.Context, kind, token string) ([]byte, int, error)
 	Delete(ctx context.Context, kind, token string) error
 	// IncrAttempts atomically increments and returns the failed-guess count.
@@ -46,7 +42,6 @@ type EphemeralStore interface {
 	// read the same count and lose increments, which would weaken a
 	// per-challenge brute-force cap.
 	IncrAttempts(ctx context.Context, kind, token string) (int, error)
-	// Sweep removes expired rows and reports how many went.
 	Sweep(ctx context.Context) (int, error)
 }
 
@@ -65,9 +60,6 @@ type ephemeralEntry struct {
 	expiresAt time.Time
 }
 
-// MemEphemeralStore keeps state in process memory — the single-node default,
-// and what tests use. Expired entries are swept lazily on access so abandoned
-// flows don't accumulate.
 type MemEphemeralStore struct {
 	mu    sync.Mutex
 	items map[string]ephemeralEntry
@@ -137,9 +129,6 @@ func (s *MemEphemeralStore) sweepLocked(now time.Time) int {
 	return n
 }
 
-// PgEphemeralStore is the durable EphemeralStore: state minted on one replica
-// is redeemable on any other, which is what removes the sticky-session
-// requirement from a multi-replica deployment.
 type PgEphemeralStore struct {
 	pool *pgxpool.Pool
 }
@@ -204,10 +193,6 @@ func (s *PgEphemeralStore) Sweep(ctx context.Context) (int, error) {
 	return int(tag.RowsAffected()), nil
 }
 
-// EphemeralTOTPChallengeStore adapts an EphemeralStore to the challenge
-// interface, so a Postgres-backed deployment carries a half-finished 2FA
-// sign-in across replicas instead of losing it when the second request lands
-// elsewhere.
 type EphemeralTOTPChallengeStore struct {
 	store EphemeralStore
 }
@@ -236,8 +221,6 @@ func (s *EphemeralTOTPChallengeStore) Get(ctx context.Context, token string) (TO
 	if err := json.Unmarshal(payload, &c); err != nil {
 		return TOTPChallenge{}, err
 	}
-	// The count lives in the store's own column so increments stay atomic; the
-	// copy inside the payload is whatever it was when the challenge was minted.
 	c.Attempts = attempts
 	return c, nil
 }

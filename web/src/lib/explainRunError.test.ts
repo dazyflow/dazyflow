@@ -113,7 +113,6 @@ describe("explainRunError", () => {
       const r = explainRunError(code, "some low-level go error");
       expect(r, code).not.toBeNull();
       expect(r!.headlineKey, code).toBe(headlineKey);
-      // Infra codes are headline-only — no misleading fix-it button.
       expect(r!.action, code).toBeUndefined();
     }
   });
@@ -188,8 +187,6 @@ describe("app-specific fix-it destination", () => {
     "Expected OAuth 2 access token, login cookie or other valid authentication credential.";
 
   it("sends you to the app that broke, and names the account", () => {
-    // The real production error: nothing in the text says "Gmail" as an app
-    // or which account, but the caller knows both from the failing step.
     const r = explainRunError("gmail_error", gmail401, {
       slug: "gmail",
       account: "default",

@@ -5,9 +5,6 @@ import { describe, expect, it } from "vitest";
 import { isImageIcon, fileToIconDataURL } from "./iconImage";
 
 describe("isImageIcon", () => {
-  // The branch decides HOW an icon renders: an image goes through <img>, a
-  // logical name goes through iconFor. Getting it wrong either shows a broken
-  // image or prints a data: URL as text.
   it("recognises image references", () => {
     for (const icon of [
       "data:image/svg+xml;base64,PHN2Zy8+",
@@ -58,7 +55,6 @@ describe("isImageIcon", () => {
 
 describe("fileToIconDataURL", () => {
   function file(name: string, type: string, bytes: number): File {
-    // A real Blob body so File.size is genuine rather than stubbed.
     return new File([new Uint8Array(bytes)], name, { type });
   }
 
@@ -71,8 +67,6 @@ describe("fileToIconDataURL", () => {
     expect(got).toContain("image/svg+xml");
   });
 
-  // Type is taken from the MIME type OR the filename, because a file picked on
-  // some platforms arrives with an empty type.
   it("accepts an SVG identified only by its extension", async () => {
     const svg = new File(["<svg/>"], "logo.svg", { type: "" });
     await expect(fileToIconDataURL(svg)).resolves.toContain("data:");
@@ -108,8 +102,6 @@ describe("fileToIconDataURL", () => {
     }
   });
 
-  // The message is shown to a person in the upload dialog, so it has to name
-  // what to do rather than surface a type string.
   it("gives a user-facing message on the wrong type", async () => {
     await expect(fileToIconDataURL(file("a.gif", "image/gif", 10)))
       .rejects.toThrow("Please choose an SVG or PNG image.");

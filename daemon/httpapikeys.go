@@ -3,9 +3,6 @@
 
 package daemon
 
-// API-key and tenant administration: issuing and revoking keys, and listing
-// the tenants and users an admin can see.
-
 import (
 	"errors"
 	"net/http"
@@ -14,24 +11,16 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// apiKeyAPI serves the API-key management endpoints. Its fields are the whole of what
-// those handlers touch.
 type apiKeyAPI struct {
 	auditor
 	svc *Service
 }
 
-// apiKeyAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) apiKeyAPI() *apiKeyAPI {
 	return &apiKeyAPI{auditor: h.auditor(), svc: h.svc}
 }
 
-// listAPIKeys, issueAPIKey, revokeAPIKey power the Admin UI's API
-// keys card. All three require organization:admin (enforced in Service);
-// without an AdminKeys store wired up they return 501.
 func (h *apiKeyAPI) listAPIKeys(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	// ?tenant= narrows to a specific tenant. Platform admins may pass
-	// any tenant; everyone else is force-scoped to their own.
 	keys, err := h.svc.ListAPIKeys(r.Context(), p, r.URL.Query().Get("tenant"))
 	if err != nil {
 		adminError(rw, err)
@@ -40,8 +29,6 @@ func (h *apiKeyAPI) listAPIKeys(rw http.ResponseWriter, r *http.Request, p core.
 	writeJSON(rw, http.StatusOK, map[string]any{"keys": keys})
 }
 
-// listTenants returns the set of tenants on this dzd. Platform admins
-// only. Powers the tenant switcher in the top bar for super-admin UIs.
 func (h *apiKeyAPI) listTenants(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenants, err := h.svc.ListTenants(r.Context(), p)
 	if err != nil {
@@ -65,8 +52,6 @@ func (h *apiKeyAPI) issueAPIKey(rw http.ResponseWriter, r *http.Request, p core.
 	writeJSON(rw, http.StatusCreated, issued)
 }
 
-// listUsers derives one entry per distinct Subject from the API keys
-// in the principal's tenant. Roles + permissions are rolled up.
 func (h *apiKeyAPI) listUsers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	users, err := h.svc.ListUsers(r.Context(), p, r.URL.Query().Get("tenant"))
 	if err != nil {
@@ -103,8 +88,6 @@ func adminError(rw http.ResponseWriter, err error) {
 	case errors.Is(err, errAdminNotConfigured):
 		writeJSONError(rw, http.StatusNotImplemented, msg)
 	case errors.Is(err, errAdminBadRequest),
-		// A malformed / unparseable key id is bad client input, not a
-		// server fault — e.g. DELETE /admin/api-keys/{id} with a junk id.
 		errors.Is(err, auth.ErrInvalidCredential):
 		writeJSONError(rw, http.StatusBadRequest, msg)
 	default:

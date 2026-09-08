@@ -4,8 +4,6 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
-// One size for every empty-state glyph. It was 28px on four surfaces and 24px
-// on a fifth, which is the kind of difference nobody decides on.
 const GLYPH = 28;
 
 // EmptyState is the placeholder for a list, page or panel with nothing in it
@@ -30,9 +28,7 @@ export function EmptyState({
 }: {
   icon: LucideIcon;
   title?: ReactNode;
-  // The one sentence. Rendered as a paragraph, so pass text, not blocks.
   children: ReactNode;
-  // One button, or several — `.empty-state-actions` lays them out in a row.
   action?: ReactNode;
   className?: string;
 }) {

@@ -62,9 +62,6 @@ func executeNumber(_ context.Context, job core.Job, _ chan<- core.Progress) (cor
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			// Emitted as a JSON number so it wires straight into the numeric
-			// ports (In Range, Compare, operators, Delay ms), whose coercion
-			// accepts float64/int/json.Number.
 			"out": {MIME: "application/json", Inline: v},
 		},
 	}, nil

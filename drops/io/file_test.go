@@ -43,7 +43,6 @@ func TestFileRead_MissingSandbox(t *testing.T) {
 
 func TestFileRead_PathTraversalBlocked(t *testing.T) {
 	root := t.TempDir()
-	// Put a victim file outside the sandbox.
 	victim := filepath.Join(filepath.Dir(root), "secret.txt")
 	if err := os.WriteFile(victim, []byte("hidden"), 0o644); err != nil {
 		t.Fatalf("seed victim: %v", err)
@@ -64,9 +63,6 @@ func TestFileRead_PathTraversalBlocked(t *testing.T) {
 				t.Fatalf("status=%q (read succeeded — sandbox bypassed?)", res.Status)
 			}
 			if res.Error == nil || !strings.Contains(res.Error.Code, "sandbox") {
-				// Some attempts may surface as plain "io" (file not found
-				// when os.Root resolves the path inside the sandbox); the
-				// important thing is the read DIDN'T succeed.
 				t.Logf("blocked via %q: %s", res.Error.Code, res.Error.Message)
 			}
 		})
@@ -81,7 +77,6 @@ func TestFileRead_SymlinkEscapeBlocked(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Remove(victim) })
 
-	// Plant a symlink inside the sandbox pointing outside.
 	link := filepath.Join(root, "escape")
 	if err := os.Symlink(victim, link); err != nil {
 		t.Fatalf("symlink: %v", err)
@@ -139,12 +134,6 @@ func TestFileWrite_FromFileRef(t *testing.T) {
 	}
 }
 
-// The redundant workspace:// spelling, which this drop's own example carried.
-// Nothing resolved the prefix, so the path cleaned to
-// "workspace:/reports/summary.json": the step reported success and wrote the
-// file into a directory literally named "workspace:", which is not where the
-// author asked for it and shows up on the Files page as junk. Only the excel
-// drops stripped it, so the same path worked there and misfired here.
 func TestFileWrite_LegacyWorkspaceScheme(t *testing.T) {
 	root := t.TempDir()
 	res, err := executeFileWrite(t.Context(), core.Job{
@@ -165,7 +154,6 @@ func TestFileWrite_LegacyWorkspaceScheme(t *testing.T) {
 	if string(data) != "hello" {
 		t.Errorf("contents = %q, want hello", data)
 	}
-	// And nothing was created under the prefix.
 	if _, err := os.Stat(filepath.Join(root, "workspace:")); err == nil {
 		t.Error(`a "workspace:" directory was created from the scheme prefix`)
 	}
@@ -257,9 +245,6 @@ func TestFileWrite_QuotaCheck(t *testing.T) {
 
 func TestFileWrite_QuotaCountsRefInputSize(t *testing.T) {
 	root := t.TempDir()
-	// Source file is 200 bytes; tenant limit is 100. Even though
-	// QuotaUsed = 0, the engine snapshot can't see the input size
-	// (only the module can), so this is the choke point.
 	src := filepath.Join(root, "src.bin")
 	if err := os.WriteFile(src, make([]byte, 200), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)

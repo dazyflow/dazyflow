@@ -52,9 +52,6 @@ func TestApplyFieldMapping(t *testing.T) {
 	})
 }
 
-// TestParseRowsInput_FieldMapping confirms the mapper runs inside the shared
-// parse path: headers are re-derived from the OUTPUT columns and validated, so
-// a mapped column name still goes through identifier validation.
 func TestParseRowsInput_FieldMapping(t *testing.T) {
 	job := core.Job{
 		Params: map[string]any{

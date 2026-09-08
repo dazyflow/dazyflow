@@ -48,7 +48,6 @@ func TestJSON_ParsesObject(t *testing.T) {
 	if !ok {
 		t.Fatalf("Inline = %T, want map[string]any", res.Output["out"].Inline)
 	}
-	// JSON numbers decode to float64 by default.
 	if got, _ := obj["retries"].(float64); got != 3 {
 		t.Errorf("retries = %v, want 3", obj["retries"])
 	}
@@ -83,7 +82,6 @@ func TestJSON_ParsesScalars(t *testing.T) {
 }
 
 func TestJSON_StructuredParamPassthrough(t *testing.T) {
-	// A non-string param (e.g. built programmatically) is emitted untouched.
 	want := []any{map[string]any{"type": "section"}}
 	res, _ := executeJSON(t.Context(), core.Job{
 		Params: map[string]any{"json": want},
@@ -118,7 +116,6 @@ func TestJSON_EmptyAndWhitespace(t *testing.T) {
 }
 
 func TestJSON_InvalidJSON(t *testing.T) {
-	// Trailing comma — invalid. badJSON should carry the parser detail.
 	res, _ := executeJSON(t.Context(), core.Job{
 		Params: map[string]any{"json": `[1, 2,]`},
 	}, nil)

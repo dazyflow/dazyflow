@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// TestWorkSignalWaiterTakenBeforeNotify pins the ordering property the worker
+// Pins the ordering property the worker
 // loop depends on: a waiter captured BEFORE the enqueue still sees it.
 //
 // This is the whole correctness argument for cutting a poll short. The worker
@@ -41,7 +41,6 @@ func TestWorkSignalWakesEveryWaiter(t *testing.T) {
 		w := s.Waiter()
 		go func() { defer wg.Done(); <-w }()
 	}
-	// Give the goroutines a moment to park on their waiters.
 	time.Sleep(10 * time.Millisecond)
 	s.Notify()
 

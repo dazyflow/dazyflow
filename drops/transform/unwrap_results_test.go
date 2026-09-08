@@ -9,8 +9,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// wrap builds a for_each body-pin result wrapper for a single-node body:
-// {status:ok, nodes:{"body":{status:ok, output:{port:value}}}}.
 func wrap(port string, value any) core.Ref {
 	return core.Ref{Inline: map[string]any{
 		"status": core.StatusOK,
@@ -45,7 +43,6 @@ func unwrappedRows(t *testing.T, params map[string]any, results any) []map[strin
 }
 
 func TestUnwrapResults_NamedPort(t *testing.T) {
-	// The Gmail shape: each result's single body node has a `message` output.
 	rows := unwrappedRows(t,
 		map[string]any{"port": "message"},
 		[]core.Ref{
@@ -71,7 +68,6 @@ func TestUnwrapResults_InfersSingleNodeAndPort(t *testing.T) {
 }
 
 func TestUnwrapResults_NamedNode(t *testing.T) {
-	// A multi-node body: name which node (and port) to flatten.
 	results := []core.Ref{{Inline: map[string]any{
 		"status": core.StatusOK,
 		"nodes": map[string]any{
@@ -86,7 +82,6 @@ func TestUnwrapResults_NamedNode(t *testing.T) {
 }
 
 func TestUnwrapResults_AmbiguousNode(t *testing.T) {
-	// Two body nodes, none named → can't infer which to unwrap.
 	results := []core.Ref{{Inline: map[string]any{
 		"status": core.StatusOK,
 		"nodes": map[string]any{
@@ -130,7 +125,6 @@ func TestUnwrapResults_IncludeErrorsAsRows(t *testing.T) {
 }
 
 func TestUnwrapResults_FlattensListValuedPort(t *testing.T) {
-	// A body node whose output port carries a rows list contributes many rows.
 	rows := unwrappedRows(t,
 		map[string]any{"port": "rows"},
 		[]core.Ref{
@@ -152,8 +146,6 @@ func TestUnwrapResults_ScalarWrappedAsValue(t *testing.T) {
 }
 
 func TestUnwrapResults_SerializedRefShape(t *testing.T) {
-	// After a JSON round-trip the output port is a serialized Ref
-	// {"mime":…,"data":…} nested under nodes.<id>.output inside a []any list.
 	results := []any{
 		map[string]any{
 			"status": "ok",
@@ -180,8 +172,6 @@ func TestUnwrapResults_EmptyList(t *testing.T) {
 	}
 }
 
-// --- Error paths -----------------------------------------------------
-
 func TestUnwrapResults_MissingInput(t *testing.T) {
 	res, _ := executeUnwrapResults(t.Context(), core.Job{Params: map[string]any{"port": "message"}}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "missing_input" {
@@ -198,7 +188,6 @@ func TestUnwrapResults_UnknownPort(t *testing.T) {
 }
 
 func TestUnwrapResults_AmbiguousPort(t *testing.T) {
-	// One body node with two output ports, none named → can't infer.
 	results := []core.Ref{{Inline: map[string]any{
 		"status": core.StatusOK,
 		"nodes": map[string]any{

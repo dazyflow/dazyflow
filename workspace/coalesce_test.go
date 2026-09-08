@@ -28,9 +28,6 @@ func countCommits(t *testing.T, s *Store) int {
 	return n
 }
 
-// TestStore_AutosaveCoalesces verifies that consecutive autosaves of the same
-// graph by the same author amend into a single commit, while explicit saves
-// always start a fresh one — so editor autosave doesn't flood the history.
 func TestStore_AutosaveCoalesces(t *testing.T) {
 	s, err := OpenFS("")
 	if err != nil {
@@ -50,7 +47,6 @@ func TestStore_AutosaveCoalesces(t *testing.T) {
 		t.Fatalf("explicit save: commits %d, want %d", afterExplicit, base+1)
 	}
 
-	// First autosave after an explicit commit starts its own commit.
 	if _, err := s.SaveCoalescing(g("b"), "anna@acme.com"); err != nil {
 		t.Fatalf("autosave 1: %v", err)
 	}
@@ -58,7 +54,6 @@ func TestStore_AutosaveCoalesces(t *testing.T) {
 		t.Fatalf("autosave 1: commits %d, want %d", n, afterExplicit+1)
 	}
 
-	// Subsequent autosaves of the same flow+author amend — no new commit.
 	for range 3 {
 		if _, err := s.SaveCoalescing(g("c"), "anna@acme.com"); err != nil {
 			t.Fatalf("autosave coalesce: %v", err)
@@ -68,7 +63,6 @@ func TestStore_AutosaveCoalesces(t *testing.T) {
 		t.Fatalf("coalesced autosaves: commits %d, want %d (should amend)", n, afterExplicit+1)
 	}
 
-	// Latest content is preserved through the amends.
 	got, err := s.Load("flow1")
 	if err != nil {
 		t.Fatalf("load: %v", err)
@@ -77,7 +71,6 @@ func TestStore_AutosaveCoalesces(t *testing.T) {
 		t.Fatalf("loaded node = %+v, want node id 'c'", got.Nodes)
 	}
 
-	// A different author does not coalesce onto anna's autosave.
 	beforeBob := countCommits(t, s)
 	if _, err := s.SaveCoalescing(g("d"), "bob@acme.com"); err != nil {
 		t.Fatalf("autosave bob: %v", err)

@@ -70,7 +70,6 @@ func (s *WorkSignal) Waiter() <-chan struct{} {
 	if c := s.ch.Load(); c != nil {
 		return *c
 	}
-	// Zero-valued rather than built by NewWorkSignal. Rare and once.
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if c := s.ch.Load(); c != nil {

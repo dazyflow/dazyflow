@@ -51,15 +51,11 @@ func mkMsg(id, ticketID, author, body string, kind core.AuthorKind, at time.Time
 	}
 }
 
-// ---- ticket erasure --------------------------------------------------------
-
-// ticketErasureConformance pins the behaviour both ticket stores must share:
-// an erased person's identifier disappears from every column that can hold it
-// and their own words are cleared, while the org's thread survives with
-// everyone else untouched — and the RETURNED COUNT agrees, since the erase
-// report shows it to an operator as a number of tickets.
-//
-// Run against both impls, mirroring ticketStoreLifecycle.
+// ticketErasureConformance pins what both ticket stores must share: an erased
+// person's identifier leaves every column that can hold it and their own words
+// are cleared, while the org's thread survives with everyone else untouched. The
+// RETURNED COUNT matters too — the erase report shows it to an operator as a
+// number of tickets.
 func ticketErasureConformance(t *testing.T, s core.TicketStore) {
 	t.Helper()
 	ctx := context.Background()
@@ -93,7 +89,6 @@ func ticketErasureConformance(t *testing.T, s core.TicketStore) {
 		t.Errorf("AnonymizeSubject = %d, want 2 (1 ticket + 1 message)", n)
 	}
 
-	// The ticket survives — it is the ORG's record — but carries no identity.
 	got, err := s.Get(ctx, "t-erase")
 	if err != nil {
 		t.Fatalf("get after anonymize: %v", err)
@@ -121,7 +116,6 @@ func ticketErasureConformance(t *testing.T, s core.TicketStore) {
 			if m.Author != core.ErasedIdentity {
 				t.Errorf("m1 author = %q, want %q", m.Author, core.ErasedIdentity)
 			}
-			// Their own words go — the row keeps only the shape of what happened.
 			if m.Body != "" {
 				t.Errorf("m1 body = %q, want cleared", m.Body)
 			}
@@ -145,9 +139,6 @@ func TestMemTicketStore_Erasure(t *testing.T) {
 	ticketErasureConformance(t, NewMemTicketStore())
 }
 
-// TestMemTicketStore_DeleteByTenant covers the tenantEraser half: an org's
-// tickets leave WITH their threads, and a second org on the same store is
-// unaffected.
 func TestMemTicketStore_DeleteByTenant(t *testing.T) {
 	ctx := context.Background()
 	now := time.Unix(1_700_000_000, 0).UTC()
@@ -165,7 +156,6 @@ func TestMemTicketStore_DeleteByTenant(t *testing.T) {
 	_ = s.AppendMessage(ctx, mkMsg("m-a1", "a1", "u@acme.com", "hi", core.AuthorUser, now))
 	_ = s.AppendMessage(ctx, mkMsg("m-g1", "g1", "u@globex.com", "hi", core.AuthorUser, now))
 
-	// Counts TICKETS, not messages — the erase report tallies user-visible objects.
 	n, err := s.DeleteByTenant(ctx, "acme")
 	if err != nil {
 		t.Fatalf("DeleteByTenant: %v", err)
@@ -179,7 +169,6 @@ func TestMemTicketStore_DeleteByTenant(t *testing.T) {
 	if msgs, _ := s.ListMessages(ctx, "a1"); len(msgs) != 0 {
 		t.Errorf("a1 thread survived its ticket: %d messages", len(msgs))
 	}
-	// Globex is untouched.
 	if _, err := s.Get(ctx, "g1"); err != nil {
 		t.Errorf("globex ticket collateral-damaged: %v", err)
 	}
@@ -196,23 +185,16 @@ func TestMemTicketStore_DeleteByTenant(t *testing.T) {
 		t.Errorf("re-appending a deleted message id failed: %v — id-set leaked", err)
 	}
 
-	// Erasing an org with nothing on file is a no-op, not an error.
 	if n, err := s.DeleteByTenant(ctx, "nobody"); err != nil || n != 0 {
 		t.Errorf("DeleteByTenant(unknown) = %d, %v; want 0, nil", n, err)
 	}
 }
 
-// ---- grant erasure ---------------------------------------------------------
-
-// grantErasureConformance pins the access-grant trail's erasure contract: the
-// grant ROWS stay (they are the record that someone read a tenant's flow, and
-// when) but every column that can name a person is scrubbed.
 func grantErasureConformance(t *testing.T, s core.GrantStore) {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Unix(1_700_000_000, 0).UTC()
 
-	// agent-leaver requested it; admin-stays decided it.
 	g := reqGrant("g-erase", "agent-leaver", now)
 	if err := s.Create(ctx, g); err != nil {
 		t.Fatalf("create: %v", err)
@@ -242,7 +224,6 @@ func grantErasureConformance(t *testing.T, s core.GrantStore) {
 	if got.RequestedBy != core.ErasedIdentity {
 		t.Errorf("RequestedBy = %q, want %q", got.RequestedBy, core.ErasedIdentity)
 	}
-	// The deciding admin is a different person and stays on the record.
 	if got.DecidedBy != "admin-stays" {
 		t.Errorf("DecidedBy = %q, want admin-stays untouched", got.DecidedBy)
 	}
@@ -250,8 +231,6 @@ func grantErasureConformance(t *testing.T, s core.GrantStore) {
 		t.Errorf("scope changed: %+v — anonymise keeps what was accessed", got)
 	}
 
-	// An erased agent's identifier no longer resolves to an active grant, so
-	// the scrub also closes the access it described.
 	if _, ok, _ := s.ActiveGrant(ctx, "agent-leaver", "acme", "daily-invoice", now); ok {
 		t.Error("erased agent still has an active grant")
 	}
@@ -265,8 +244,7 @@ func TestMemGrantStore_Erasure(t *testing.T) {
 	grantErasureConformance(t, NewMemGrantStore())
 }
 
-// TestMemGrantStore_ListForAgent covers the agent-scoped listing (the "my
-// requests" view) including its newest-first order and its scoping.
+// The "my requests" view, including its newest-first order and its scoping.
 func TestMemGrantStore_ListForAgent(t *testing.T) {
 	ctx := context.Background()
 	now := time.Unix(1_700_000_000, 0).UTC()
@@ -321,8 +299,6 @@ func TestMemGrantStore_DeleteByTenant(t *testing.T) {
 	}
 }
 
-// ---- bundle erasure --------------------------------------------------------
-
 func TestMemBundleStore_Erasure(t *testing.T) {
 	ctx := context.Background()
 	now := time.Unix(1_700_000_000, 0).UTC()
@@ -351,8 +327,6 @@ func TestMemBundleStore_Erasure(t *testing.T) {
 	if got.CreatedBy != core.ErasedIdentity {
 		t.Errorf("b1 CreatedBy = %q, want %q", got.CreatedBy, core.ErasedIdentity)
 	}
-	// The bundle itself survives — it is redacted by construction and still
-	// answers the ticket it was taken for.
 	if got.Payload == nil || got.FlowID != "daily-invoice" {
 		t.Errorf("b1 lost its content: %+v", got)
 	}
@@ -363,8 +337,6 @@ func TestMemBundleStore_Erasure(t *testing.T) {
 		t.Errorf("AnonymizeSubject(blank) = %d, %v; want 0, nil", n, err)
 	}
 
-	// Deleting the org takes its bundles: redacted or not, they describe that
-	// org's flow structure.
 	dn, err := s.DeleteByTenant(ctx, "acme")
 	if err != nil {
 		t.Fatalf("DeleteByTenant: %v", err)
@@ -380,11 +352,6 @@ func TestMemBundleStore_Erasure(t *testing.T) {
 	}
 }
 
-// ---- support-agent role erasure -------------------------------------------
-
-// TestMemAgentStore_AnonymizeGrantedBy covers the roleRevoker half of the
-// cascade: when the OPERATOR who granted someone else's support-agent role is
-// erased, their email must leave the grantee's row — the grantee keeps the role.
 func TestMemAgentStore_AnonymizeGrantedBy(t *testing.T) {
 	ctx := context.Background()
 	s := NewMemAgentStore()
@@ -430,11 +397,6 @@ func TestMemAgentStore_AnonymizeGrantedBy(t *testing.T) {
 	}
 }
 
-// TestMemAgentStore_AnonymizeGrantedByNormalizes is the memory twin of
-// TestPgAgentStore_AnonymizeGrantedByNormalizes. Grant() normalizes the
-// grantee's email but stores grantedBy exactly as the admin form supplied it,
-// so erasure has to compare on the normalized form or the erased person's
-// address survives in the granter column.
 func TestMemAgentStore_AnonymizeGrantedByNormalizes(t *testing.T) {
 	ctx := context.Background()
 	s := NewMemAgentStore()
@@ -455,11 +417,8 @@ func TestMemAgentStore_AnonymizeGrantedByNormalizes(t *testing.T) {
 	}
 }
 
-// ---- run-snapshot projection ----------------------------------------------
-
-// TestRunSnapshotFromRecords covers the adapter feeding core.BuildSupportBundle.
-// Its contract is narrow but load-bearing: pass the RAW refs and errors through
-// (core owns redaction) and never read the stored graph JSON.
+// The adapter's contract is narrow but load-bearing: pass the RAW refs and errors
+// through, core owning redaction, and never read the stored graph JSON.
 func TestRunSnapshotFromRecords(t *testing.T) {
 	enq := time.Unix(1_700_000_000, 0).UTC()
 	started := enq.Add(time.Second)

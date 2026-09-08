@@ -10,9 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/limits"
 )
 
-// TestNormalizeRows_RejectsOversizedInput proves the shared row reader refuses
-// an input list larger than the ceiling — the chokepoint every transform drop
-// goes through — so no transform can be made to hold an unbounded list.
 func TestNormalizeRows_RejectsOversizedInput(t *testing.T) {
 	defer limits.SetMaxRows(3)()
 
@@ -38,10 +35,10 @@ func TestNormalizeRows_RejectsOversizedInput(t *testing.T) {
 	}
 }
 
-// TestJoinRows_ManyToManyOutputCapped proves the join's output guard fires:
-// both sides share one key, so a 4×4 inner join cartesians to 16 rows. With a
-// 5-row ceiling — and inputs (4 each) under the input cap — only the OUTPUT
-// guard can catch this, and it must, rather than building the full product.
+// Proves the join's output guard fires: both sides share one key, so a 4×4
+// inner join cartesians to 16 rows. With a 5-row ceiling — and inputs (4 each)
+// under the input cap — only the OUTPUT guard can catch this, and it must,
+// rather than building the full product.
 func TestJoinRows_ManyToManyOutputCapped(t *testing.T) {
 	defer limits.SetMaxRows(5)()
 

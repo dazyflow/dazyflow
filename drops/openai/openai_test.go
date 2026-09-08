@@ -46,7 +46,6 @@ func TestCall_TextResponse(t *testing.T) {
 	if res.Text != "Hello!" {
 		t.Errorf("text = %q", res.Text)
 	}
-	// System becomes the first chat message; user second.
 	msgs := gotBody["messages"].([]any)
 	if msgs[0].(map[string]any)["role"] != "system" || msgs[1].(map[string]any)["content"] != "Say hi" {
 		t.Errorf("messages = %+v", msgs)
@@ -98,9 +97,6 @@ func TestCall_SSRFGuardBlocksPrivate(t *testing.T) {
 	}
 }
 
-// TestCall_MessagesPassthrough exercises the branch where req.Messages is
-// supplied directly (overriding System/UserText) and Temperature/Model are
-// forwarded into the request body.
 func TestCall_MessagesPassthrough(t *testing.T) {
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -138,10 +134,6 @@ func TestCall_MessagesPassthrough(t *testing.T) {
 	}
 }
 
-// TestCall_DefaultsApplied checks the empty-model / non-positive-maxTokens
-// defaulting branches and that an empty BaseURL falls through to defaultBase
-// (verified indirectly via the SSRF guard rejecting the public host dial when
-// private egress is disabled).
 func TestCall_ServerErrorClassified(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(500)
@@ -204,8 +196,6 @@ func TestVerifyKey_Unreachable(t *testing.T) {
 	}
 }
 
-// TestExtractText_EdgeCases drives the nil/wrong-type branches of message and
-// extractText through a real Call so the parser is exercised end to end.
 func TestExtractText_EdgeCases(t *testing.T) {
 	cases := []struct {
 		name string
@@ -236,8 +226,6 @@ func TestExtractText_EdgeCases(t *testing.T) {
 	}
 }
 
-// TestExtractToolArgs_EdgeCases drives every nil-return branch of
-// extractToolArgs. Each calls with a forced Tool so extractToolArgs runs.
 func TestExtractToolArgs_EdgeCases(t *testing.T) {
 	tc := func(message map[string]any) map[string]any {
 		return map[string]any{"choices": []any{map[string]any{"message": message}}}
@@ -282,8 +270,6 @@ func TestExtractToolArgs_EdgeCases(t *testing.T) {
 	}
 }
 
-// TestOpenaiError_PlainBodyFallback checks the branch where the body is not a
-// structured {error:{message}} object: openaiError returns the raw body.
 func TestOpenaiError_PlainBodyFallback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(400)
@@ -296,11 +282,6 @@ func TestOpenaiError_PlainBodyFallback(t *testing.T) {
 	}
 }
 
-// OpenAI wants two different shapes for what is conceptually one thing: an
-// image as an `image_url` part holding a data: URI, a PDF as a `file` part
-// holding the same encoding under `file_data` with a filename. Getting either
-// wrong fails at OpenAI with an error about our request, so the assertion is
-// on the body we send.
 func TestCall_FilesBecomeContentParts(t *testing.T) {
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -356,7 +337,6 @@ func TestCall_FilesBecomeContentParts(t *testing.T) {
 	}
 }
 
-// No files means the plain-string content every existing flow sends.
 func TestCall_NoFilesKeepsPlainStringContent(t *testing.T) {
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

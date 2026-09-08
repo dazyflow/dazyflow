@@ -96,8 +96,6 @@ func (c *CachingSessionStore) GetSession(ctx context.Context, id string) (Sessio
 	return sess, nil
 }
 
-// Stats returns cumulative cache hit/miss counts for metrics. Safe to
-// call concurrently with lookups.
 func (c *CachingSessionStore) Stats() (hits, misses int64) {
 	return c.hits.Load(), c.misses.Load()
 }
@@ -117,9 +115,6 @@ func (c *CachingSessionStore) DeleteSession(ctx context.Context, id string) erro
 	return c.inner.DeleteSession(ctx, id)
 }
 
-// RevokeSubjectSessions forwards to the inner store and drops the
-// subject's cached entries so the revocation is immediate, not
-// TTL-delayed.
 func (c *CachingSessionStore) RevokeSubjectSessions(ctx context.Context, subject string) (int, error) {
 	rev, ok := c.inner.(SessionRevoker)
 	if !ok {

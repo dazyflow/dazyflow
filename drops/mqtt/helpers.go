@@ -26,9 +26,6 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// publishConfig is the resolved set of values one publish needs — the seam
-// between the drop's Execute (which validates/resolves params) and the broker
-// client (which tests replace).
 type publishConfig struct {
 	Broker    string
 	ClientID  string
@@ -42,13 +39,8 @@ type publishConfig struct {
 	TimeoutMS int
 }
 
-// publishFn is the broker-publish seam. It defaults to the real paho-backed
-// implementation; tests swap it to capture the config without a live broker.
 var publishFn = pahoPublish
 
-// normalizeBroker ensures the broker address carries a scheme paho understands.
-// A bare "host:1883" becomes "tcp://host:1883"; an explicit tcp/ssl/ws/wss
-// scheme passes through unchanged.
 func normalizeBroker(broker string) string {
 	broker = strings.TrimSpace(broker)
 	if broker == "" {
@@ -60,20 +52,16 @@ func normalizeBroker(broker string) string {
 	return broker
 }
 
-// brokerIsTLS reports whether the broker scheme implies TLS (ssl/tls/wss).
 func brokerIsTLS(broker string) bool {
 	lower := strings.ToLower(broker)
 	return strings.HasPrefix(lower, "ssl://") || strings.HasPrefix(lower, "tls://") || strings.HasPrefix(lower, "wss://")
 }
 
-// brokerHostPort extracts the "host:port" from a normalized broker URL for the
-// pre-dial SSRF check, defaulting the port to MQTT's 1883 when absent.
 func brokerHostPort(broker string) string {
 	s := broker
 	if i := strings.Index(s, "://"); i >= 0 {
 		s = s[i+3:]
 	}
-	// Strip any path (ws/wss brokers may carry one).
 	if i := strings.IndexAny(s, "/"); i >= 0 {
 		s = s[:i]
 	}
@@ -86,8 +74,6 @@ func brokerHostPort(broker string) string {
 	return s
 }
 
-// pahoPublish connects to the broker, publishes one message, and disconnects.
-// The dialer's Control hook applies the SSRF policy on the resolved address.
 func pahoPublish(_ context.Context, cfg publishConfig) error {
 	to := time.Duration(cfg.TimeoutMS) * time.Millisecond
 	if to <= 0 {

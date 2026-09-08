@@ -14,12 +14,6 @@ import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { Loading } from "../../components/ui/Loading";
 
-// AdminOAuthProviders is the paste-client-credentials surface that
-// replaces "edit env vars + restart the daemon" for an operator setting
-// up Google / Slack / GitHub / Notion. Each known provider shows up as a
-// row whether or not it's configured; saving persists encrypted-at-rest
-// and live-registers the provider so the next /oauth/authorize works
-// without a restart.
 export function AdminOAuthProviders() {
   const { t } = useTranslation();
   const { token, hasPerm } = useAuth();

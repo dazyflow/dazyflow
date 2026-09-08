@@ -14,8 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// slackTestServer stands in for the Slack Web API: it records the last
-// request and returns the configured envelope.
 type slackTestServer struct {
 	*httptest.Server
 	lastPath string
@@ -40,8 +38,6 @@ func newSlackTestServer(t *testing.T, resp map[string]any) *slackTestServer {
 	return s
 }
 
-// withSlackEnv points the package at the test server and a fixed token,
-// restoring globals afterwards.
 func withSlackEnv(t *testing.T, base string) {
 	t.Helper()
 	SetHTTPBase(base)
@@ -84,7 +80,6 @@ func TestSlackSendMessage_TextInputOverridesParam(t *testing.T) {
 	srv := newSlackTestServer(t, map[string]any{"ok": true, "channel": "C1", "ts": "1"})
 	withSlackEnv(t, srv.URL)
 
-	// A wired 'text' input wins over the typed param.
 	res, _ := executeSlackSendMessage(context.Background(), core.Job{
 		Params: map[string]any{"channel": "#c", "text": "from-param"},
 		Input:  map[string]core.Ref{"text": {Inline: "from-text"}},

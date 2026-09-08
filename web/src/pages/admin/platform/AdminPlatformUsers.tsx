@@ -174,20 +174,12 @@ export function AdminPlatformUsers() {
 // job. We just catch obvious typos before a round-trip.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// absoluteSignupURL turns a path-only signup_url (returned when the
-// daemon has no --public-base-url) into a clickable absolute URL by
-// rewriting against the current window origin. Already-absolute URLs
-// pass through unchanged.
 function absoluteSignupURL(url: string): string {
   if (/^https?:\/\//i.test(url)) return url;
   if (typeof window !== "undefined") return window.location.origin + url;
   return url;
 }
 
-// SignupInviteSection is the platform-owner tool for onboarding people
-// on a deployment where self-serve signup is disabled. Each invite
-// emails a /signup link with the address pre-filled — the recipient sets
-// a password and gets their OWN account, not a membership in this org.
 function SignupInviteSection() {
   const { t } = useTranslation();
   const { token } = useAuth();
@@ -203,8 +195,6 @@ function SignupInviteSection() {
       const r = await api.listSignupInvites(token);
       setInvites(r.invites ?? []);
     } catch {
-      // 501 on stores without an invitations backend — stay quiet, the
-      // create form just won't have a list to show.
     }
   }, [token]);
 

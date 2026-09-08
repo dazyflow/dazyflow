@@ -10,11 +10,6 @@ import (
 	"strings"
 )
 
-// LintSeverity classifies a finding. Validate() rejects graphs that
-// don't pass; LintGraph() returns advisory issues users should see at
-// save time but that don't block persistence — letting a real human
-// override the lint in the rare case it's wrong is the right shape
-// for a security-flavored heuristic.
 type LintSeverity string
 
 const (
@@ -22,51 +17,26 @@ const (
 	LintError LintSeverity = "error"
 )
 
-// LintIssue is one finding from LintGraph. Multiple issues on the same
-// rule are emitted separately so the UI can pin error markers per
-// node pair (the source node that uses the secret, the persistence
-// sink it reaches).
 type LintIssue struct {
 	Code     string       `json:"code"`
 	Severity LintSeverity `json:"severity"`
 	Message  string       `json:"message"`
 	NodeIDs  []string     `json:"node_ids,omitempty"`
-	// Fields are the param paths (e.g. "spreadsheet_id", "headers.Authorization",
-	// "env.API_KEY") this finding points at. The UI uses these to name the
-	// offending input the way the Inspector does — by its schema title, not its
-	// raw key — so the surfaced help text carries no module/node/field slugs.
-	// Message keeps the slug-bearing phrasing as a fallback for CLI/API readers.
-	Fields []string `json:"fields,omitempty"`
-	// Values are the data a finding needs quoted in its sentence — a language
-	// name, an interpreter — so the UI can build a LOCALISED sentence instead of
-	// falling back to Message, which is English. Fields cannot carry these:
-	// those are param paths, and the UI resolves them against a schema.
-	//
-	// Keys are per-code and documented by the rule that sets them.
+	Fields   []string     `json:"fields,omitempty"`
+	// Data the UI needs to build a LOCALISED sentence instead of falling back to the
+	// English Message. Fields cannot carry these: those are param paths resolved
+	// against a schema. Keys are per-code, documented by the rule setting them.
 	Values map[string]string `json:"values,omitempty"`
 }
 
-// secretPlaceholderPattern matches the `${scheme.<path>}` schemes that
-// resolve to a secret at execution time: the scoped store (secret/tenant/
-// workspace/flow), builtin, and vault. Mirrors engine.placeholderPattern
-// (dot separator) but restricted to the resolvers the lint cares about
-// (upstream/item placeholders are graph-internal, not secrets).
+// Mirrors engine.placeholderPattern, restricted to the schemes that resolve to a
+// secret. Upstream and item placeholders are graph-internal, not secrets.
 var secretPlaceholderPattern = regexp.MustCompile(`\$\{(secret|builtin|vault)\.[^}]*\}`)
 
-// templatePattern matches ANY `${scheme.path}` placeholder (secret or
-// upstream/item). A value containing one isn't a hardcoded literal, so
-// the hardcoded-secret rule skips it.
 var templatePattern = regexp.MustCompile(`\$\{[a-z0-9_-]+\.[^}]*\}`)
 
-// secretKeyName matches param/env key names that conventionally hold a
-// credential. A literal (non-placeholder) value under such a key is the
-// "I pasted my token into the graph" anti-pattern.
 var secretKeyName = regexp.MustCompile(`(?i)(token|secret|password|passwd|api[_-]?key|apikey|auth|authorization|credential|private[_-]?key|access[_-]?key|client[_-]?secret)`)
 
-// knownSecretValue matches values that are almost certainly real
-// credentials regardless of the field they sit in: provider key
-// prefixes and PEM private-key blocks. Conservative on purpose — these
-// patterns don't fire on ordinary config strings.
 var knownSecretValue = regexp.MustCompile(
 	`(sk_live_[0-9A-Za-z]{8,}` + // Stripe live
 		`|sk_test_[0-9A-Za-z]{8,}` + // Stripe test
@@ -78,81 +48,34 @@ var knownSecretValue = regexp.MustCompile(
 		`|-----BEGIN [A-Z ]*PRIVATE KEY-----` + // PEM private key
 		`)`)
 
-// secretValueMarkers are literal substrings that every alternative of
-// knownSecretValue must contain: sk_live_/sk_test_ hold "sk_", gh[pousr]_ and
-// github_pat_ hold "gh", and the rest carry their own prefix verbatim. A string
-// holding none of them therefore cannot match, which makes the check below a
-// sound pre-filter rather than a heuristic.
-//
-// It exists because this lint runs on EVERY param string of every step on
-// every save, and the editor autosaves while a person types. The alternation
-// backtracks over each candidate at each position; six substring scans do not.
-// Measured over a realistic set of param strings: 32.7µs → 1.7µs, 19x.
+// A substring every alternative of knownSecretValue must contain, so a string
+// holding none cannot match — a sound pre-filter, not a heuristic. Needed because
+// this lint runs on every param string on every autosave: 32.7µs → 1.7µs.
 var secretValueMarkers = [...]string{"sk_", "gh", "xox", "AKIA", "AIza", "-----BEGIN "}
 
-// minKnownSecretLen is the shortest string knownSecretValue can match — the
-// Slack alternative, `xox[baprs]-` plus its ten-character minimum tail. Every
-// other alternative is longer.
 const minKnownSecretLen = 15
 
-// matchesKnownSecret is knownSecretValue.MatchString with that pre-filter in
-// front. FuzzKnownSecretPrefilter pins the two to the same answer: a lint that
-// silently stopped catching pasted credentials is the failure that matters
-// here, not a slow one.
 func matchesKnownSecret(s string) bool {
 	if len(s) < minKnownSecretLen {
 		return false
 	}
 	for _, m := range secretValueMarkers {
 		if strings.Contains(s, m) {
-			// The regex decides for the whole string, so its answer is final
-			// whichever marker got us here.
 			return knownSecretValue.MatchString(s)
 		}
 	}
 	return false
 }
 
-// minLiteralSecretLen avoids flagging short placeholder-ish values
-// ("changeme", "x") under a secret-shaped key — real pasted secrets are
-// long. Content-prefix matches (knownSecretValue) ignore this floor.
 const minLiteralSecretLen = 12
 
-// upstreamRefPattern captures the node-ID segment of an
-// `${upstream.<nodeID>.<port>…}` reference — the first run of characters
-// after `upstream.`, up to the next `.`, `[`, or `}`. Node IDs are slugs,
-// so the captured segment is the whole ID even when it carries `-`/`_`.
-// `${item.…}` (loop body) and secret schemes use different prefixes and
-// are intentionally not matched.
 var upstreamRefPattern = regexp.MustCompile(`\$\{upstream\.([^.}\[]+)`)
 
-// templatePlaceholderPattern matches the `REPLACE_WITH_<TOKEN>` markers
-// that ship inside template graph fixtures (sheet IDs, Notion DB UUIDs,
-// …) for fields a user must fill in before the flow can do real work.
-// A forked template that still carries one will silently fail at run
-// time — the placeholder is a literal string the API rejects only when
-// the run actually fires. Flagging it at save/validate time is the
-// nudge that prevents "I forked the template, hit run, got an unhelpful
-// error" sequence.
 var templatePlaceholderPattern = regexp.MustCompile(`REPLACE_WITH_[A-Z0-9_]+`)
 
-// persistenceModules is the set of native drops whose output is
-// written to a place a third party (or the user later, with broader
-// access) could retrieve. Wiring a secret-bearing node's output
-// transitively into one of these is the canonical "I accidentally
-// persisted a secret in plaintext" footgun the secret_to_persistence
-// rule catches.
-//
-// External API sends (slack_send_message, gmail_send_email,
-// http_request, github_*, etc.) are NOT included — those exchange
-// the secret with the service that legitimately holds it. The
-// threat model here is local or re-readable persistence after the
-// fact.
-//
-// secret_set is included because while writing secrets to the
-// tenant store is sometimes intentional (cursor storage, OAuth
-// callbacks), it's also a place where graph wiring mistakes
-// silently expose values; the lint is a nudge to confirm intent.
+// Drops whose output lands somewhere re-readable. External API sends are
+// deliberately absent: those exchange the secret with the service that
+// legitimately holds it, and the threat model here is later re-readability.
 var persistenceModules = map[string]bool{
 	"file_write":           true,
 	"excel_write":          true,
@@ -166,23 +89,8 @@ var persistenceModules = map[string]bool{
 	"secret_set":           true,
 }
 
-// LintGraph runs every advisory rule on g and returns the findings.
-// Pure function; no I/O, no manifests required — the rule set works
-// against module IDs and graph topology, which is enough for the
-// security-flavored checks today.
-//
-// Rules in V1:
-//
-//   - secret_to_persistence: a node that resolves a secret in its
-//     params/env has a forward edge path (any number of intermediate
-//     nodes) into a persistence sink. The lint can't tell whether
-//     the secret value actually flows through the data, so it errs
-//     on the side of warning — the user knows their graph, the lint
-//     surfaces the question.
-//   - script_language_mismatch / script_language_unrunnable: a step that
-//     executes a script it is handed, wired to a step that says the script is
-//     in a language that step will not run. See lint_script.go for why this is
-//     a warning rather than the interpreter being chosen automatically.
+// The rules cannot tell whether a secret VALUE actually flows down a path they
+// find, so they err towards warning.
 func LintGraph(g Graph) []LintIssue {
 	nodesByID := make(map[string]Node, len(g.Nodes))
 	for _, n := range g.Nodes {
@@ -204,11 +112,6 @@ func LintGraph(g Graph) []LintIssue {
 	return issues
 }
 
-// lintTemplatePlaceholders flags REPLACE_WITH_… markers still present
-// in a node's params or env — the canonical "user forked a template
-// but didn't fill in the sheet ID / DB UUID" trap. Emits one issue per
-// node (first hit), severity error because the run is guaranteed to
-// fail at the placeholder field.
 func lintTemplatePlaceholders(g Graph) []LintIssue {
 	issues := make([]LintIssue, 0)
 	for _, n := range g.Nodes {
@@ -246,14 +149,8 @@ func placeholderIssue(nodeID, module, field, marker string) LintIssue {
 	}
 }
 
-// walkParams performs the depth-first traversal of a param value (string /
-// map / slice) shared by every lint rule that scans node params. For each
-// string leaf it calls visit(path, str), where path is the dotted/indexed
-// key path to that leaf (keyPath for the root). Maps are visited in sorted
-// key order and slices in index order, so the traversal — and therefore the
-// "first hit" any caller observes — is deterministic. If visit returns true
-// the walk stops immediately and walkParams returns true (first-match
-// short-circuit); otherwise it returns false after visiting every leaf.
+// Maps are walked in sorted key order and slices in index order, so the "first
+// hit" a caller observes is deterministic.
 func walkParams(keyPath string, v any, visit func(path, str string) bool) bool {
 	switch t := v.(type) {
 	case string:
@@ -279,8 +176,6 @@ func walkParams(keyPath string, v any, visit func(path, str string) bool) bool {
 	return false
 }
 
-// findTemplatePlaceholder walks params depth-first and returns the
-// first (field path, matched marker) it finds, or ("","") if none.
 func findTemplatePlaceholder(keyPath string, v any) (string, string) {
 	field, marker := "", ""
 	walkParams(keyPath, v, func(path, str string) bool {
@@ -293,19 +188,6 @@ func findTemplatePlaceholder(keyPath string, v any) (string, string) {
 	return field, marker
 }
 
-// lintDanglingReferences warns when a node interpolates
-// `${upstream.<id>.…}` for an <id> that isn't a step in the graph — the
-// classic "the step this field pointed at was deleted or renamed" breakage
-// (e.g. a form question renamed so a saved reference now dangles). The
-// reference only fails at run time, when the engine can't find the node;
-// surfacing it at save time turns a silent dead end into an obvious fix.
-//
-// Scope: node existence only. Port- and field-level validation needs the
-// upstream node's manifest or live output shape, which this pure pass
-// doesn't have — so a reference to a real node's wrong/renamed FIELD isn't
-// caught here (that's the reference picker's job, and a future live check).
-// Conservative by construction: it only flags an id that matches no node,
-// so it never warns about a valid reference.
 func lintDanglingReferences(g Graph, nodesByID map[string]Node) []LintIssue {
 	issues := make([]LintIssue, 0)
 	for _, n := range g.Nodes {
@@ -313,9 +195,6 @@ func lintDanglingReferences(g Graph, nodesByID map[string]Node) []LintIssue {
 		missing := make([]string, 0)
 		fieldSeen := map[string]bool{}
 		fields := make([]string, 0)
-		// isMissing records the referenced node ID if it's absent from the
-		// graph and reports whether it was missing, so the caller can also
-		// note the field path the dangling reference sits in.
 		isMissing := func(id string) bool {
 			if _, ok := nodesByID[id]; ok {
 				return false
@@ -369,7 +248,6 @@ func lintDanglingReferences(g Graph, nodesByID map[string]Node) []LintIssue {
 	return issues
 }
 
-// upstreamRefIDs returns the upstream node IDs referenced in s.
 func upstreamRefIDs(s string) []string {
 	m := upstreamRefPattern.FindAllStringSubmatch(s, -1)
 	if m == nil {
@@ -384,7 +262,6 @@ func upstreamRefIDs(s string) []string {
 	return out
 }
 
-// quotedList renders ["a","b"] as `"a", "b"` for human-readable messages.
 func quotedList(ids []string) string {
 	parts := make([]string, len(ids))
 	for i, id := range ids {
@@ -393,10 +270,7 @@ func quotedList(ids []string) string {
 	return strings.Join(parts, ", ")
 }
 
-// lintSecretToPersistence is the original rule: a secret-bearing node
-// with a forward path into a persistence sink.
 func lintSecretToPersistence(g Graph, nodesByID map[string]Node) []LintIssue {
-	// Identify nodes whose params or env reference a secret.
 	secretSources := make([]string, 0)
 	for _, n := range g.Nodes {
 		if nodeUsesSecret(n) {
@@ -406,12 +280,8 @@ func lintSecretToPersistence(g Graph, nodesByID map[string]Node) []LintIssue {
 	if len(secretSources) == 0 {
 		return nil
 	}
-	// Stable order keeps the issue stream reproducible across runs
-	// (graph node order is preserved on save, but tests like to
-	// pin expectations).
-	sort.Strings(secretSources)
+	sort.Strings(secretSources) // reproducible issue stream
 
-	// Forward adjacency for the BFS.
 	forward := make(map[string][]string, len(g.Nodes))
 	for _, e := range g.Edges {
 		forward[e.From] = append(forward[e.From], e.To)
@@ -432,17 +302,12 @@ func lintSecretToPersistence(g Graph, nodesByID map[string]Node) []LintIssue {
 				seen[next] = true
 				if persistenceModules[nodesByID[next].Module] {
 					reached = append(reached, next)
-					// Don't traverse past a sink — the warning is
-					// about the path into THAT sink. A persistence
-					// node downstream of another persistence node
-					// still gets its own warning via the outer
-					// loop's BFS from the original source.
 					continue
 				}
 				queue = append(queue, next)
 			}
 		}
-		sort.Strings(reached) // stable test expectations
+		sort.Strings(reached)
 		for _, sinkID := range reached {
 			sink := nodesByID[sinkID]
 			src := nodesByID[srcID]
@@ -460,10 +325,6 @@ func lintSecretToPersistence(g Graph, nodesByID map[string]Node) []LintIssue {
 	return issues
 }
 
-// nodeUsesSecret reports whether n's Params or Env contain any
-// placeholder resolving against the env/tenant/builtin schemes.
-// Walks Params recursively so secrets nested inside object/array
-// param shapes still trigger.
 func nodeUsesSecret(n Node) bool {
 	if hasSecretRef(n.Params) {
 		return true
@@ -476,38 +337,19 @@ func nodeUsesSecret(n Node) bool {
 	return false
 }
 
-// hasSecretRef walks an arbitrary param value (string, map, slice)
-// looking for a secret placeholder. Other scalar types can't carry
-// a placeholder (bools, numbers, nil) so they're skipped.
 func hasSecretRef(v any) bool {
 	return walkParams("", v, func(_, str string) bool {
 		return secretPlaceholderPattern.MatchString(str)
 	})
 }
 
-// hardcodedSecretExempt lists params (per module) where a literal
-// secret value is the design, not the anti-pattern: trigger bearer
-// secrets live in the graph on purpose — the /trigger endpoint
-// authenticates callers against them, the editor offers a Generate
-// button, and trigger_webhook_no_secret *requires* one. Without this
-// exemption the two lints contradict each other ("set a secret" →
-// "don't hardcode that secret"). Only the key-name heuristic is
-// suppressed: a pasted provider credential (ghp_…, sk_live_…) in an
-// exempted field still fires via knownSecretValue.
+// Params where a literal secret IS the design — trigger bearer keys, which
+// trigger_webhook_no_secret requires — so without the exemption the two lints
+// contradict each other. Only the key-name heuristic is suppressed.
 var hardcodedSecretExempt = map[string]map[string]bool{
-	// The multi-key `secrets` list (zero-downtime rotation) holds generated
-	// trigger keys by design.
 	"webhook_input": {"secrets": true},
 }
 
-// lintHardcodedSecrets flags literal credentials pasted into a node's
-// params/env instead of referenced via ${secret.name}. Two triggers:
-//   - a value matching a known provider-key/PEM pattern, anywhere; or
-//   - a long literal string under a secret-shaped key name (token,
-//     password, api_key, authorization, …) that isn't a ${...} template.
-//
-// One issue per node (de-duplicated) so a node with several pasted keys
-// doesn't spam the banner.
 func lintHardcodedSecrets(g Graph) []LintIssue {
 	issues := make([]LintIssue, 0)
 	for _, n := range g.Nodes {
@@ -527,7 +369,6 @@ func lintHardcodedSecrets(g Graph) []LintIssue {
 			issues = append(issues, hardcodedIssue(n.ID, n.Module, flagged))
 		}
 	}
-	// Stable order for reproducible output/tests.
 	sort.Slice(issues, func(i, j int) bool {
 		return issues[i].NodeIDs[0] < issues[j].NodeIDs[0]
 	})
@@ -547,12 +388,6 @@ func hardcodedIssue(nodeID, module, field string) LintIssue {
 	}
 }
 
-// findHardcodedSecret walks params depth-first and returns the first
-// field path (e.g. "headers.Authorization") that looks like a pasted
-// secret, or "" if none. keyPath is the dotted path to v's container.
-// exempt holds top-level param names where the key-name heuristic is
-// suppressed (see hardcodedSecretExempt); provider-pattern values are
-// flagged regardless.
 func findHardcodedSecret(keyPath string, v any, exempt map[string]bool) string {
 	field := ""
 	walkParams(keyPath, v, func(path, str string) bool {
@@ -560,10 +395,6 @@ func findHardcodedSecret(keyPath string, v any, exempt map[string]bool) string {
 			field = orSelf(path)
 			return true
 		}
-		// Key-name heuristic only applies when we know the key (path
-		// non-empty) — a bare top-level string param has no key context.
-		// Exemption matches the ROOT param so a list like `secrets`
-		// covers its elements (`secrets[0]`, `secrets[1]`, …).
 		if path != "" && !exempt[rootParam(path)] && secretKeyNameLeaf(path) && isLiteralSecret(str) {
 			field = path
 			return true
@@ -573,17 +404,10 @@ func findHardcodedSecret(keyPath string, v any, exempt map[string]bool) string {
 	return field
 }
 
-// isLiteralSecret reports whether s is a non-template literal long
-// enough to plausibly be a real credential.
 func isLiteralSecret(s string) bool {
 	return len(s) >= minLiteralSecretLen && !templatePattern.MatchString(s)
 }
 
-// rootParam returns the top-level param name of a key path — the part
-// before the first "." or "[". So "secrets[0]" → "secrets" and
-// "headers.Authorization" → "headers". Used to match field-level
-// exemptions against whole params (a `secrets` exemption covers every
-// `secrets[i]` element).
 func rootParam(keyPath string) string {
 	for i := 0; i < len(keyPath); i++ {
 		if keyPath[i] == '.' || keyPath[i] == '[' {
@@ -593,9 +417,6 @@ func rootParam(keyPath string) string {
 	return keyPath
 }
 
-// secretKeyNameLeaf checks the LAST path segment against the secret-key
-// pattern (so "headers.Authorization" matches on "Authorization", not
-// the whole path).
 func secretKeyNameLeaf(keyPath string) bool {
 	leaf := keyPath
 	if i := lastSep(keyPath); i >= 0 {
@@ -628,42 +449,17 @@ func orSelf(keyPath string) string {
 	return keyPath
 }
 
-// MaxApprovalRecipients caps how many addresses one await_approval step
-// notifies. The approver list is a comma-separated param, so its only ceiling
-// was the graph byte budget it is charged against — about 650,000 addresses —
-// and the notifier sends ONE MESSAGE PER ADDRESS in a serial loop, twice per
-// approval (once when the run parks, once when someone decides).
-//
-// Two things made that worse than a long list. The mail goes out through the
-// OPERATOR'S transactional mailer, not a connected account the author had to
-// authorize, so any tenant could aim the deployment's own sending domain at
-// arbitrary addresses. And the loop runs synchronously on the worker goroutine
-// that parked the run (worker.go's OnNodeAwaiting hook), so at a realistic SMTP
-// round trip a single parked run held one of the two default worker slots for
-// hours.
-//
-// 50 is the same number the hosted form uses, and far above a real approval
-// list — the people who can say yes to one step.
+// The notifier sends ONE MESSAGE PER ADDRESS, serially, twice per approval,
+// through the OPERATOR'S mailer rather than an account the author authorized —
+// and on the worker goroutine that parked the run, so one parked run held a
+// worker slot for hours.
 const MaxApprovalRecipients = 50
 
-// MaxGraphApprovalRecipients bounds the addresses one RUN can notify, summed
-// across every approval step in the flow. The per-step cap alone bounded the
-// wrong unit: the same flood came back split across STEPS instead of listed in
-// one, since parallel gates all park in the same run — 40 gates carrying a full
-// list each sent 2000 messages from a single run, and the node ceiling puts
-// 50,000 in reach. Nothing throttles approval mail the way FailureEmailWindow
-// throttles failure mail, because an approval that silently isn't sent is a run
-// nobody can unblock.
-//
-// Same shape as MaxGraphTriggers counting trigger steps and the Triggers array
-// against ONE budget: splitting the list across gates has to buy nothing.
+// Summed across every approval step, because parallel gates all park in the same
+// run: the per-step cap alone let the flood back in split across STEPS. Nothing
+// throttles approval mail, an unsent approval being a run nobody can unblock.
 const MaxGraphApprovalRecipients = 200
 
-// lintApprovalRecipients tells the author at save time when a step names more
-// approvers than will be notified, rather than letting them publish a flow
-// whose tail silently never hears about it. The cap itself is applied where the
-// list is read (daemon.approvalParamApprovers), which is the choke point both
-// the request and the decision mail reach.
 func lintApprovalRecipients(g Graph) []LintIssue {
 	var issues []LintIssue
 	for _, n := range g.Nodes {
@@ -679,14 +475,8 @@ func lintApprovalRecipients(g Graph) []LintIssue {
 	return issues
 }
 
-// ApprovalModuleID is the step that parks a run on a human decision, named
-// here because the recipient rules are read off the graph without a manifest —
-// how many people a step mails is not a port-level property.
 const ApprovalModuleID = "await_approval"
 
-// GraphApprovalRecipients sums the approval addresses a graph declares, per
-// step capped the way the notifier caps its own read, so the total reflects
-// what a run would actually send rather than what was typed.
 func GraphApprovalRecipients(g Graph) int {
 	total := 0
 	for _, n := range g.Nodes {
@@ -698,8 +488,6 @@ func GraphApprovalRecipients(g Graph) int {
 	return total
 }
 
-// countApprovalAddresses counts the addresses in an await_approval step's
-// approver param, splitting it the same way the notifier does.
 func countApprovalAddresses(params map[string]any) int {
 	raw, _ := params["approvers"].(string)
 	if strings.TrimSpace(raw) == "" {

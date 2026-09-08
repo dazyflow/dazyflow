@@ -3,12 +3,6 @@
 
 package daemon
 
-// The page the emailed approval link opens. For a long time the only method
-// registered on /approve was POST, so the button in the mail — a GET, like
-// every link — answered a raw method_not_allowed JSON body. These pin the
-// halves that has to keep working: a page for a person, JSON for a script, and
-// a GET that decides nothing.
-
 import (
 	"encoding/json"
 	"fmt"
@@ -23,8 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/jobstore"
 )
 
-// parkedApproval builds a service with run-1/gate parked awaiting, carrying
-// the prompt the module stashes, plus a signed listener over it.
 func parkedApproval(t *testing.T, lang string) (*ApprovalListener, core.JobStore, string) {
 	t.Helper()
 	store := jobstore.NewMemory()
@@ -53,7 +45,6 @@ func parkedApproval(t *testing.T, lang string) (*ApprovalListener, core.JobStore
 	return NewApprovalListener(svc, signer), store, q
 }
 
-// browserGet is what a mail client's browser sends when someone taps the link.
 func browserGet(t *testing.T, a *ApprovalListener, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest("GET", path, nil)
@@ -80,13 +71,9 @@ func TestApprovalPage_TappedLinkRendersTheDecision(t *testing.T) {
 			t.Errorf("page is missing %q", want)
 		}
 	}
-	// The form has to post back to the SAME signed URL, or the token is lost
-	// and the decision 401s.
 	if !strings.Contains(body, "token=") {
 		t.Errorf("the form action drops the token: %s", body)
 	}
-	// Not embeddable: a decision button inside someone else's page is a
-	// clickjacking target.
 	if got := rw.Header().Get("Content-Security-Policy"); !strings.Contains(got, "frame-ancestors 'none'") {
 		t.Errorf("CSP = %q, want frame-ancestors 'none'", got)
 	}
@@ -125,7 +112,6 @@ func TestApprovalPage_BadTokenIsADeadEndPage(t *testing.T) {
 	if strings.Contains(body, "Approve") || strings.Contains(body, "<form") {
 		t.Errorf("an unsigned caller was offered the buttons: %s", body)
 	}
-	// Matched without the apostrophe: html/template escapes it to &#39;.
 	if !strings.Contains(body, "approval link") {
 		t.Errorf("body=%s, want the not-valid page", body)
 	}
@@ -134,7 +120,6 @@ func TestApprovalPage_BadTokenIsADeadEndPage(t *testing.T) {
 func TestApprovalPage_AlreadyDecidedSaysSoInWords(t *testing.T) {
 	t.Parallel()
 	a, store, q := parkedApproval(t, "")
-	// Somebody else got there first.
 	_ = store.Complete(t.Context(), NodeJobID("run-1", "gate"), core.JobStatusSucceeded,
 		&core.Result{Status: core.StatusOK})
 
@@ -147,8 +132,6 @@ func TestApprovalPage_AlreadyDecidedSaysSoInWords(t *testing.T) {
 	}
 }
 
-// The approver has no account, so the page speaks the flow's own language —
-// the same resolution the approval email and the hosted form use.
 func TestApprovalPage_SpeaksTheFlowsLanguage(t *testing.T) {
 	t.Parallel()
 	a, _, q := parkedApproval(t, "sv")
@@ -160,8 +143,6 @@ func TestApprovalPage_SpeaksTheFlowsLanguage(t *testing.T) {
 	}
 }
 
-// Clicking Approve posts the form. The person gets a page; the scripts that
-// have been posting this URL all along keep their JSON.
 func TestApprovalPage_ButtonPostGetsAPageAndScriptKeepsJSON(t *testing.T) {
 	t.Parallel()
 	a, store, q := parkedApproval(t, "")
@@ -183,12 +164,10 @@ func TestApprovalPage_ButtonPostGetsAPageAndScriptKeepsJSON(t *testing.T) {
 	if rec.Status != core.JobStatusSucceeded {
 		t.Errorf("node is %s, want succeeded", rec.Status)
 	}
-	// The comment from the form body reached the decision.
 	if got, _ := rec.Result.Output["comment"].Inline.(string); got != "looks fine" {
 		t.Errorf("comment = %q, want the form's value", got)
 	}
 
-	// Same endpoint, no Accept: the machine contract is untouched.
 	a2, _, q2 := parkedApproval(t, "")
 	req2 := httptest.NewRequest("POST", "/approve/run-1/gate"+q2+"&decision=reject", nil)
 	rw2 := httptest.NewRecorder()

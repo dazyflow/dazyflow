@@ -37,8 +37,6 @@ export function VerifyEmail() {
       .then(async () => {
         setState("ok");
         if (sessionToken) {
-          // Refresh whoami so the pending banner clears, then return the
-          // user to the welcome flow they came from to keep onboarding.
           await refreshMe();
           navigate("/welcome", { replace: true });
         }

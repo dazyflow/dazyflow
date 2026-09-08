@@ -13,12 +13,8 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// iconRegistryBlock isolates the object literal assigned to iconRegistry, so a
-// name appearing anywhere else in icons.tsx (a lucide import, categoryFallback,
-// a comment) can't be mistaken for a registered key.
 var iconRegistryBlock = regexp.MustCompile(`(?s)const iconRegistry[^{]*\{(.*?)\n\};`)
 
-// iconRegistryKey matches one `key: Component,` line, quoted or not.
 var iconRegistryKey = regexp.MustCompile(`(?m)^\s*"?([A-Za-z0-9-]+)"?\s*:`)
 
 // A drop's Manifest.Icon is a name the FRONTEND has to know: iconFor() looks it
@@ -53,8 +49,6 @@ func TestManifestIconsAreRegisteredInTheWebUI(t *testing.T) {
 	var missing []string
 	checked := 0
 	for id, m := range engine.Default.Manifests() {
-		// No declared icon is fine and intended: iconFor falls back by
-		// category, which is what categoryFallback exists for.
 		if m.Icon == "" {
 			continue
 		}

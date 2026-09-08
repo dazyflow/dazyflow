@@ -68,9 +68,6 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Not required: the text can equally be typed on the step —
-				// which is how it reaches a step inside a For each, as
-				// "${item.description}". A wired value wins.
 				{Port: "in", Label: "Text", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
@@ -94,8 +91,6 @@ func init() {
 	})
 }
 
-// replacementTable reads the `replacements` param: what to look for on the
-// left, what to write on the right. Empty when the param is absent.
 func replacementTable(params map[string]any) (map[string]string, error) {
 	raw, present := params["replacements"]
 	if !present || raw == nil {
@@ -243,9 +238,6 @@ func executeRegex(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 	}
 }
 
-// regexExtract emits one row per match — the whole match under "match" plus a
-// column per capture group (named groups by name, unnamed by position) — and
-// the first whole match on 'out' for the common "grab one thing" case.
 func regexExtract(job core.Job, re *regexp.Regexp, text string) (core.Result, error) {
 	matches := re.FindAllStringSubmatch(text, -1)
 	if err := capRows(len(matches)); err != nil {
@@ -283,8 +275,6 @@ func regexExtract(job core.Job, re *regexp.Regexp, text string) (core.Result, er
 	}, nil
 }
 
-// groupKey names capture group i: its (?P<name>) name if it has one, else its
-// 1-based position as a string.
 func groupKey(names []string, i int) string {
 	if i < len(names) && names[i] != "" {
 		return names[i]
@@ -292,12 +282,9 @@ func groupKey(names []string, i int) string {
 	return strconv.Itoa(i)
 }
 
-// regexText reads a text input, accepting a string or raw []byte.
 func regexText(ref core.Ref) (string, bool) {
 	switch v := ref.Inline.(type) {
 	case nil:
-		// Unwired (or empty) — not a mistake: the text may be typed on the
-		// step instead. The caller falls back to the param.
 		return "", true
 	case string:
 		return v, true
@@ -308,7 +295,6 @@ func regexText(ref core.Ref) (string, bool) {
 	}
 }
 
-// textOut is the single-text-value OK epilogue shared by the replace path.
 func textOut(job core.Job, s string) core.Result {
 	return core.Result{
 		JobID:  job.ID,

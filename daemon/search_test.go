@@ -9,9 +9,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// catalog returns a representative manifest set covering each category
-// the platform ships with today. Tests assert filter + search behaviour
-// against this fixed corpus.
 func catalog() map[string]core.Manifest {
 	return map[string]core.Manifest{
 		"sleep": {
@@ -149,8 +146,6 @@ func TestSearch_QueryMatchesTags(t *testing.T) {
 
 func TestSearch_QueryRelevanceRanking(t *testing.T) {
 	t.Parallel()
-	// "file" matches several manifests; the prefix-on-ID matches should
-	// rank above body-of-description matches.
 	got := searchManifests(catalog(), DropSearch{Query: "file"})
 	if len(got) < 2 {
 		t.Fatalf("expected ≥2 matches; got %d", len(got))
@@ -191,7 +186,6 @@ func TestSearch_QueryCaseInsensitive(t *testing.T) {
 func TestSearch_FiltersCaseInsensitive(t *testing.T) {
 	t.Parallel()
 	got := searchManifests(catalog(), DropSearch{Providers: []string{"INTERNAL"}})
-	// 5 internal modules in catalog: sleep, branch, file_read, file_write, http_request
 	if len(got) != 5 {
 		t.Errorf("got %d, want 5", len(got))
 	}
@@ -199,8 +193,6 @@ func TestSearch_FiltersCaseInsensitive(t *testing.T) {
 
 func TestSearch_MatchScore_ExactBeatsPartial(t *testing.T) {
 	t.Parallel()
-	// Direct test of the scoring function — exact ID match should rank
-	// way higher than a description hit.
 	m := core.Manifest{ID: "claude", Description: "claude is a chatbot"}
 	exact := matchScore(m, "claude")
 	if exact < 100 {

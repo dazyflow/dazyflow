@@ -14,8 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// clockedScheduler runs a scheduler over the harness's service on a clock the
-// test drives, so a case can jump over cron boundaries instead of waiting.
 type clockedScheduler struct {
 	sched *daemon.Scheduler
 	mu    sync.Mutex
@@ -46,8 +44,6 @@ func (cs *clockedScheduler) advance(d time.Duration) {
 	cs.mu.Unlock()
 }
 
-// publish stores a graph through the REAL save gate, then publishes it, so
-// the trigger paths (which require a published commit) can see it.
 func (h *harness) publish(t *testing.T, g core.Graph) error {
 	t.Helper()
 	commit, err := h.svc.SaveGraph(t.Context(), h.p, g)
@@ -57,10 +53,6 @@ func (h *harness) publish(t *testing.T, g core.Graph) error {
 	return h.ws.PromoteToEnvironment(g.ID, workspace.PublishedEnv, commit)
 }
 
-// One flow used to fire itself as often as its author cared to type: nothing
-// capped len(Triggers), and the scheduler keyed entries by position in the
-// array, so 2000 pasted copies of "* * * * *" were 2000 entries and 2000 runs
-// a minute.
 func TestTriggerArray_IsCapped(t *testing.T) {
 	h := newHarness(t)
 	flood := graph("trigflood", []core.Node{textNode("a", "x")}, nil)
@@ -73,7 +65,6 @@ func TestTriggerArray_IsCapped(t *testing.T) {
 		t.Logf("refused at the save gate: %v", firstLine(err))
 	}
 
-	// At the cap, and every trigger identical: one entry, one run per minute.
 	g := graph("trigdupe", []core.Node{textNode("a", "x")}, nil)
 	for range core.MaxGraphTriggers {
 		g.Triggers = append(g.Triggers, core.GraphTrigger{Type: "cron", Cron: "* * * * *"})

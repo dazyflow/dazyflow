@@ -37,10 +37,10 @@ func resultContains(out dropOutcome, secret string) bool {
 	return false
 }
 
-// TestIODrops_NoPathEscape proves the file drops cannot read or write outside
-// their sandbox root, no matter what traversal trick the path uses. A sentinel
-// file is planted OUTSIDE the workspace; file_read must never return its
-// contents and file_write must never modify it or create a sibling.
+// Proves the file drops cannot read or write outside their sandbox root, no
+// matter what traversal trick the path uses. A sentinel file is planted
+// OUTSIDE the workspace; file_read must never return its contents and
+// file_write must never modify it or create a sibling.
 func TestIODrops_NoPathEscape(t *testing.T) {
 	base := t.TempDir()
 	workspace := filepath.Join(base, "ws")
@@ -117,10 +117,6 @@ func TestIODrops_NoPathEscape(t *testing.T) {
 	}
 }
 
-// TestNetDrops_EgressLockdownBlocksAll confirms the package egress lockdown
-// (TestMain) stops every HTTP drop from reaching any real host — including
-// cloud-metadata and localhost — so a flow can't be used for SSRF or
-// internal-network probing.
 func TestNetDrops_EgressLockdownBlocksAll(t *testing.T) {
 	urls := []string{
 		"http://127.0.0.1/",
@@ -154,11 +150,6 @@ func TestNetDrops_EgressLockdownBlocksAll(t *testing.T) {
 	}
 }
 
-// TestNetDrops_SSRFGuardBlocksPrivate proves the IP-level SSRF guard blocks
-// loopback/private/link-local targets even with NO egress allowlist active —
-// the guard is independent of the allowlist. The allowlist is cleared for this
-// test and restored afterward; only unroutable private targets are used so no
-// real traffic leaves the host.
 func TestNetDrops_SSRFGuardBlocksPrivate(t *testing.T) {
 	if err := net.SetEgressAllowlist(nil); err != nil { // allow-all → only the SSRF guard stands
 		t.Fatal(err)
@@ -191,9 +182,6 @@ func TestNetDrops_SSRFGuardBlocksPrivate(t *testing.T) {
 	}
 }
 
-// TestTransform_PathologicalInputs hits the data-shaping drops with inputs
-// engineered to blow up time or memory: deeply nested JSON, huge row sets,
-// and CEL templates. None may panic or hang.
 func TestTransform_PathologicalInputs(t *testing.T) {
 	ctx := context.Background()
 
@@ -211,8 +199,6 @@ func TestTransform_PathologicalInputs(t *testing.T) {
 		if out.timedOut {
 			t.Fatalf("parse_json HANG on deep JSON")
 		}
-		// Go's encoding/json caps nesting depth and returns an error — the
-		// drop should surface that, not crash.
 	})
 
 	hugeRows := make([]map[string]any, 200000)

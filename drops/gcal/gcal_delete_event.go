@@ -107,10 +107,6 @@ func executeGcalDeleteEvent(ctx context.Context, job core.Job, _ chan<- core.Pro
 	}, nil
 }
 
-// resolveGcalEventID works out which event a step was pointed at: an id
-// (text, e.g. ${item.id} inside a For each) or List events' record/list wired
-// straight in, in which case the first entry is used. Same shape as the
-// Mailbox and Calendar steps, so the idiom is one idiom.
 func resolveGcalEventID(job core.Job) (string, bool) {
 	fallback := strings.TrimSpace(params.StringDefault(job.Params, "id", ""))
 	in, present := job.Input["id"]

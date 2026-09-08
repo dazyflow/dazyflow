@@ -37,9 +37,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// Links to the hand-written guide pages the reference leans on. Absolute
-// site-root paths so they resolve regardless of how deep the reference pages
-// are nested; override if the guide lives elsewhere.
 var (
 	conceptsURL = flag.String("concepts-url", "/guide/concepts", "site path of the Concepts page")
 	glossaryURL = flag.String("glossary-url", "/guide/glossary", "site path of the Glossary page")
@@ -61,8 +58,6 @@ func run(outDir string) error {
 		return fmt.Errorf("no drops registered — is the umbrella import present?")
 	}
 
-	// Group by Integration (a vendor/app) when set, else by the friendly name of
-	// the drop's Category (the standard library: triggers, flow control, …).
 	groups := map[string][]core.Manifest{}
 	for _, m := range manifests {
 		groups[groupName(m)] = append(groups[groupName(m)], m)
@@ -78,7 +73,6 @@ func run(outDir string) error {
 	}
 	sort.Strings(names)
 
-	// One page per group.
 	for _, name := range names {
 		drops := groups[name]
 		sort.Slice(drops, func(i, j int) bool { return dropTitle(drops[i]) < dropTitle(drops[j]) })
@@ -89,7 +83,6 @@ func run(outDir string) error {
 		}
 	}
 
-	// Index.
 	if err := os.WriteFile(filepath.Join(outDir, "index.md"), []byte(renderIndex(names, groups)), 0o644); err != nil {
 		return err
 	}
@@ -99,8 +92,6 @@ func run(outDir string) error {
 	return nil
 }
 
-// --- rendering ---------------------------------------------------------------
-
 func renderIndex(names []string, groups map[string][]core.Manifest) string {
 	var b strings.Builder
 	frontMatter(&b, "Step catalog", "")
@@ -109,7 +100,6 @@ func renderIndex(names []string, groups map[string][]core.Manifest) string {
 	b.WriteString("Every step you can add to a flow. **Apps & services** connect an outside account; " +
 		"**Triggers** decide when a flow starts; **Building blocks** are the standard toolkit for moving and shaping data.\n\n")
 
-	// Bucket the groups into the three reader-facing sections.
 	byBucket := map[string][]string{}
 	for _, name := range names {
 		byBucket[bucketOf(groups[name][0])] = append(byBucket[bucketOf(groups[name][0])], name)
@@ -159,10 +149,8 @@ func renderGroup(name string, drops []core.Manifest) string {
 }
 
 func renderDrop(b *strings.Builder, m core.Manifest) {
-	// A stable anchor on the drop ID so the index can deep-link to it.
 	fmt.Fprintf(b, "## %s {#%s}\n\n", mdSafe(dropTitle(m)), m.ID)
 
-	// Connection setup, in plain terms.
 	if conn := connectionNote(m); conn != "" {
 		fmt.Fprintf(b, "**Connect first:** %s\n\n", conn)
 	}
@@ -240,8 +228,6 @@ func renderExamples(b *strings.Builder, m core.Manifest) {
 			fmt.Fprintf(b, "**Example — %s**\n\n", ex.Title)
 		}
 		if emptyParams(ex.Params) {
-			// An empty {} means "nothing to fill in" — a bare code block here just
-			// confuses. Say so in words; the note below explains the wiring.
 			b.WriteString("*No settings to fill in for this example — it's about how the step is connected (see below).*\n\n")
 		} else {
 			var pretty bytes.Buffer
@@ -256,16 +242,11 @@ func renderExamples(b *strings.Builder, m core.Manifest) {
 	}
 }
 
-// --- helpers -----------------------------------------------------------------
-
-// banner is the "new here?" pointer at the top of every page.
 func banner() string {
 	return fmt.Sprintf("> 🧭 **New to Dazyflow?** Start with [Concepts](%s) and the [Glossary](%s) — "+
 		"they explain flows, steps, wiring, triggers, and the words used below.\n\n", *conceptsURL, *glossaryURL)
 }
 
-// tableLegend explains, once per group page, the Input/Setting split and the
-// value-type words the tables use — the two things a first-time reader trips on.
 func tableLegend() string {
 	return "**Reading the tables below:** an **Input** is a value you connect from an earlier step; " +
 		"a **Setting** is a value you fill in on the step itself. Value types: " +
@@ -273,16 +254,10 @@ func tableLegend() string {
 		"and the plural forms — *items (a table)*, *texts*, *files* — for many at once.\n\n"
 }
 
-// groupName is the catalog heading a drop lives under: its Integration (an app
-// like "Klarna"), else the friendly name of its Category (the standard library).
 func groupName(m core.Manifest) string {
 	if strings.TrimSpace(m.Integration) != "" {
 		return m.Integration
 	}
-	// A branded drop with no Integration (e.g. RSS) is a connectionless source
-	// with its own identity — give it a dedicated group (by Label), with its
-	// brand mark, instead of lumping it into a category catch-all like Network &
-	// HTTP. bucketOf is unchanged, so it still reads as a building block.
 	if strings.TrimSpace(m.BrandLogo) != "" {
 		return m.Label
 	}
@@ -295,7 +270,6 @@ func groupName(m core.Manifest) string {
 	return "Other"
 }
 
-// titleWords capitalises the first letter of each ASCII word.
 func titleWords(s string) string {
 	words := strings.Fields(s)
 	for i, w := range words {
@@ -304,9 +278,6 @@ func titleWords(s string) string {
 	return strings.Join(words, " ")
 }
 
-// bucketOf sorts a drop into one of the index's three reader-facing sections.
-// Integration wins (an app-specific trigger belongs with its app), then a bare
-// trigger category, else the standard-library "building blocks".
 func bucketOf(m core.Manifest) string {
 	if strings.TrimSpace(m.Integration) != "" {
 		return "apps"
@@ -317,7 +288,6 @@ func bucketOf(m core.Manifest) string {
 	return "blocks"
 }
 
-// categoryNames maps the manifest Category slugs onto reader-friendly headings.
 var categoryNames = map[string]string{
 	"trigger":        "Triggers",
 	"flow_control":   "Flow control",
@@ -330,8 +300,6 @@ var categoryNames = map[string]string{
 	"system":         "System",
 }
 
-// dropTitle is the drop's display title: "Label — Subtitle" when a subtitle
-// disambiguates several actions under one app, else just the Label.
 func dropTitle(m core.Manifest) string {
 	if strings.TrimSpace(m.Subtitle) != "" {
 		return m.Label + " — " + m.Subtitle
@@ -409,8 +377,6 @@ func connectionNote(m core.Manifest) string {
 	return ""
 }
 
-// behavior turns the retry/idempotency flags into a reassurance a non-technical
-// reader can act on ("safe to retry" vs "runs once").
 func behavior(m core.Manifest) string {
 	switch {
 	case m.RetryPolicy == core.RetryNever && m.DedupeWrites:
@@ -422,8 +388,6 @@ func behavior(m core.Manifest) string {
 	}
 	return ""
 }
-
-// --- params schema parsing ---------------------------------------------------
 
 type paramProp struct {
 	Title       string          `json:"title"`
@@ -489,9 +453,6 @@ func settingRows(props map[string]paramProp, required map[string]bool) []setting
 		if name == "base_url" {
 			continue // internal testing override, not user-facing
 		}
-		// timeout_ms / account / token are technical plumbing present on many
-		// steps — sink them to the advanced band so they stop crowding the
-		// settings a reader actually cares about.
 		adv := p.Advanced || forcedAdvanced[name]
 		desc := p.Description
 		if desc == "" {
@@ -509,7 +470,6 @@ func settingRows(props map[string]paramProp, required map[string]bool) []setting
 		})
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
-		// Band: required (0) < optional (1) < advanced (2).
 		bi, bj := band(rows[i].required, rows[i].advanced), band(rows[j].required, rows[j].advanced)
 		if bi != bj {
 			return bi < bj
@@ -519,9 +479,6 @@ func settingRows(props map[string]paramProp, required map[string]bool) []setting
 	return rows
 }
 
-// forcedAdvanced are param keys that are connection/plumbing knobs on many
-// steps; the generator sinks them to the advanced band regardless of the
-// manifest, so the settings a reader cares about stay up top.
 var forcedAdvanced = map[string]bool{
 	"timeout_ms": true,
 	"account":    true,
@@ -553,7 +510,6 @@ func displayName(key, title string) string {
 	return prettify(key)
 }
 
-// prettify turns a snake_case key into Sentence case: create_table → "Create table".
 func prettify(key string) string {
 	s := strings.ReplaceAll(key, "_", " ")
 	if s == "" {
@@ -590,13 +546,9 @@ func defaultString(raw json.RawMessage, advanced bool) string {
 	return "`" + s + "`"
 }
 
-// --- text utilities ----------------------------------------------------------
-
 func frontMatter(b *strings.Builder, title, icon string) {
 	fmt.Fprintf(b, "---\ntitle: %s\n", title)
 	if icon != "" {
-		// The vendor mark (e.g. /brands/gmail.svg) so the docs sidebar + page
-		// header render the app's brand icon for this group.
 		fmt.Fprintf(b, "icon: %s\n", icon)
 	}
 	b.WriteString("generated: true\n---\n")
@@ -625,7 +577,6 @@ func yesNo(v bool) string {
 	return "No"
 }
 
-// oneLine collapses internal newlines so a summary sits on one Markdown line.
 func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
@@ -666,8 +617,6 @@ func mdSafe(s string) string {
 	return b.String()
 }
 
-// emptyParams reports whether an example's params are absent or an empty object
-// — the case where a raw {} code block reads as a confusing non-example.
 func emptyParams(raw json.RawMessage) bool {
 	s := strings.TrimSpace(string(raw))
 	return s == "" || s == "{}"
@@ -680,7 +629,6 @@ func escapeCell(s string) string {
 	return strings.ReplaceAll(s, "|", "\\|")
 }
 
-// slug turns a group name into a filesystem- and URL-safe basename.
 func slug(name string) string {
 	var b strings.Builder
 	prevDash := false

@@ -15,8 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// renewStub is a JobStore whose Renew returns a fixed error. Only Renew
-// is exercised by renewLease, so the embedded nil interface is fine.
 type renewStub struct {
 	core.JobStore
 	err error

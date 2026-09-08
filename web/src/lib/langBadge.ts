@@ -16,12 +16,8 @@
 // ones would read as broken. A terminal, a database, a pair of braces: those
 // group the seven honestly, and the label carries the identity.
 
-// LangGlyph is the shape of thing, which is what a small icon can carry.
 export type LangGlyph = "terminal" | "database" | "braces" | "code" | "text";
 
-// glyphFor maps a language onto its kind. Unknown values get the generic code
-// glyph rather than nothing: a flow built by the API can carry anything here,
-// and a chip with a label and no icon looks like a rendering bug.
 export function glyphFor(lang: string): LangGlyph {
   switch (lang) {
     case "shell":

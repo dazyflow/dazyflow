@@ -17,23 +17,16 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// orgProfileAPI serves the organization-profile endpoints. Its fields are the whole of what
-// those handlers touch.
 type orgProfileAPI struct {
 	auditor
 	WildcardDomain string
 	Profiles       auth.OrgProfileStore
 }
 
-// orgProfileAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) orgProfileAPI() *orgProfileAPI {
 	return &orgProfileAPI{auditor: h.auditor(), WildcardDomain: h.WildcardDomain, Profiles: h.Profiles}
 }
 
-// getOrgProfile returns the per-org display name + last-edited time.
-// Always returns a row (even if the profile hasn't been written yet)
-// so the UI can show the current value (empty) and the tenant ID side
-// by side without distinguishing "no row" from "blank row".
 func (h *orgProfileAPI) getOrgProfile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Profiles == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "org profiles not configured")
@@ -52,7 +45,6 @@ func (h *orgProfileAPI) getOrgProfile(rw http.ResponseWriter, r *http.Request, p
 	}
 	pr, err := h.Profiles.GetOrgProfile(r.Context(), tenant)
 	if err != nil {
-		// Empty row is the right shape — the UI fills in a default.
 		writeJSON(rw, http.StatusOK, map[string]any{
 			"tenant":          tenant,
 			"display_name":    "",
@@ -61,21 +53,15 @@ func (h *orgProfileAPI) getOrgProfile(rw http.ResponseWriter, r *http.Request, p
 		return
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{
-		"tenant":       pr.Tenant,
-		"display_name": pr.DisplayName,
-		"icon":         pr.Icon,
-		"subdomain":    pr.Subdomain,
-		"updated_at":   pr.UpdatedAt,
-		// The apex the subdomain hangs off (e.g. "dazyflow.app"), so the
-		// editor renders "<label>.<domain>" and only shows the field when the
-		// deploy supports per-org subdomains. Empty = feature off.
+		"tenant":          pr.Tenant,
+		"display_name":    pr.DisplayName,
+		"icon":            pr.Icon,
+		"subdomain":       pr.Subdomain,
+		"updated_at":      pr.UpdatedAt,
 		"wildcard_domain": h.WildcardDomain,
 	})
 }
 
-// maxOrgIconBytes caps the inline org icon (data: URL). Icons are
-// downscaled client-side; this is a backstop against an oversized blob
-// bloating the profile store.
 const maxOrgIconBytes = 256 * 1024
 
 func (h *orgProfileAPI) putOrgProfile(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -159,7 +145,6 @@ func (h *orgProfileAPI) putOrgSubdomain(rw http.ResponseWriter, r *http.Request,
 			"a subdomain may only use lowercase letters, numbers and hyphens (and can't be a reserved name)")
 		return
 	}
-	// Load-merge-write so the name/icon already on the profile survive.
 	pr := auth.OrgProfile{Tenant: p.Tenant, UpdatedAt: time.Now().UTC()}
 	if existing, gerr := h.Profiles.GetOrgProfile(r.Context(), p.Tenant); gerr == nil {
 		pr.DisplayName = existing.DisplayName
@@ -202,7 +187,6 @@ func (h *orgProfileAPI) orgSubdomainAvailable(rw http.ResponseWriter, r *http.Re
 	}
 	owner, err := h.Profiles.GetOrgProfileBySubdomain(r.Context(), label)
 	if err != nil {
-		// No org holds it → free.
 		writeJSON(rw, http.StatusOK, map[string]any{"available": true})
 		return
 	}
@@ -213,12 +197,6 @@ func (h *orgProfileAPI) orgSubdomainAvailable(rw http.ResponseWriter, r *http.Re
 	writeJSON(rw, http.StatusOK, map[string]any{"available": false, "reason": "taken"})
 }
 
-// resolveSubdomain is the PUBLIC (pre-auth) lookup the sign-in page uses to map
-// a wildcard host label ("klahr" from klahr.dazyflow.app) back to the org's
-// real tenant ID, so the SSO probe + Google start target the right org. Only
-// the tenant + display name are returned (both already public on the sign-in
-// surface); 404 when the label isn't claimed. No auth: a subdomain is public
-// by nature, and this leaks nothing a visit to the host wouldn't.
 func (h *orgProfileAPI) resolveSubdomain(rw http.ResponseWriter, r *http.Request) {
 	if h.Profiles == nil || h.WildcardDomain == "" {
 		writeAPIError(rw, http.StatusNotFound, "not_found", "no such organization")
@@ -237,9 +215,7 @@ func (h *orgProfileAPI) resolveSubdomain(rw http.ResponseWriter, r *http.Request
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"tenant":       pr.Tenant,
 		"display_name": pr.DisplayName,
-		// The org logo (data: URL or glyph name), so the sign-in page can
-		// brand itself for the org behind the subdomain. Already public.
-		"icon": pr.Icon,
+		"icon":         pr.Icon,
 	})
 }
 

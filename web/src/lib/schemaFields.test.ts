@@ -5,8 +5,6 @@ import { describe, expect, it } from "vitest";
 import { isFieldVisible } from "./schemaFields";
 import type { JSONSchema } from "../types";
 
-// The real shape this exists for: the Date & time step's Custom format field,
-// gated on a Format dropdown whose default is a DIFFERENT value.
 const siblingSchemas: Record<string, JSONSchema> = {
   format: { type: "string", default: "iso", enum: ["iso", "date", "custom"] } as JSONSchema,
   mode: { type: "string", default: "extract", enum: ["extract", "replace"] } as JSONSchema,
@@ -62,7 +60,6 @@ describe("isFieldVisible", () => {
     expect(isFieldVisible(both, { format: "custom", mode: "extract" }, siblingSchemas)).toBe(false);
   });
 
-  // Missing sibling schemas is the API/preview path, not a crash.
   it("survives absent sibling schemas", () => {
     expect(isFieldVisible(gated, { format: "custom" }, undefined)).toBe(true);
     expect(isFieldVisible(gated, {}, undefined)).toBe(false);

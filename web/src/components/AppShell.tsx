@@ -52,9 +52,6 @@ import { POLL } from "../lib/timing";
 import { savedCollapsePref, initialNavCollapsed } from "../lib/navCollapse";
 import { resendOutcome } from "../lib/verifyResend";
 
-// orgGlyph renders an org's icon: an uploaded image (data: URL) as an
-// <img>, otherwise the generic Building2 mark. Shared by the tenant
-// switcher trigger + rows.
 function orgGlyph(icon: string | undefined, size: number) {
   return isImageIcon(icon) ? (
     <img
@@ -70,13 +67,7 @@ function orgGlyph(icon: string | undefined, size: number) {
   );
 }
 
-// COLLAPSE_KEY persists the sidebar collapsed/expanded choice across
-// reloads. The sidebar is always visible; small viewports just default
-// to the icons-only rail until the user expands it.
 const COLLAPSE_KEY = "dazyflow.sidebar.collapsed";
-// APPROVAL_SEEN_KEY is the sticky local flag the Approvals nav link
-// uses to stay visible after the user has used the approval inbox
-// at least once. See the everHadApproval state below.
 const APPROVAL_SEEN_KEY = "dazyflow.approvalsEverSeen";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -93,13 +84,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     reloadTenants,
   } = useAuth();
   const [orgModalOpen, setOrgModalOpen] = useState(false);
-  // Drives the "Connect an assistant" guided modal (mints a personal,
-  // workspace-scoped API key + hands back the MCP client config). Opened
-  // from the account menu; the modal pulls auth context itself.
   const [connectingMcp, setConnectingMcp] = useState(false);
-  // Daemon version for the account-menu footer. Public GET /api/v1, so
-  // no token needed; fetched once on mount. Stays null (footer hidden)
-  // if the request fails — it's purely informational.
+  // A public endpoint, so it needs no auth and cannot fail the shell.
   const [serverVersion, setServerVersion] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
@@ -115,21 +101,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       live = false;
     };
   }, []);
-  // navCollapsed drives the icons-only rail. We persist the user's
-  // explicit choice across reloads; if they haven't picked one yet we
-  // default to collapsed on small viewports (where the full sidebar
-  // would eat too much of a phone/tablet screen) and expanded on
-  // desktops. The initial read runs synchronously so the first paint
-  // matches — no flicker between the two widths.
+  // Persisted per-viewer; localStorage access can throw, so it is guarded.
   const [navCollapsed, setNavCollapsed] = useState<boolean>(() =>
     initialNavCollapsed(COLLAPSE_KEY),
   );
-  // Keep the rail in sync with the viewport: collapse when we cross into
-  // a small screen, and restore the saved desktop preference when we
-  // cross back out. matchMedia's change event fires only on crossing the
-  // breakpoint (not on every resize), so a user who expands the rail on a
-  // phone keeps it expanded for the session. Viewport-driven changes are
-  // deliberately NOT persisted — the stored value is the desktop choice.
+  // Collapses on crossing into the narrow breakpoint, not on every resize.
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const mq = window.matchMedia(mediaQuery(MOBILE));
@@ -139,37 +115,17 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", apply);
   }, []);
   const location = useLocation();
-  // On small screens, close the slide-in drawer after navigating — the
-  // user picked a menu item, so the drawer has done its job and
-  // shouldn't keep covering the page. No-op on desktop (inline sidebar)
-  // and on first mount (the drawer already starts closed there).
   useEffect(() => {
     if (isNarrower(MOBILE)) {
       setNavCollapsed(true);
     }
   }, [location.pathname]);
-  // Pending approvals count — surfaces a badge on the sidebar nav so
-  // operators see "you have N decisions waiting" without visiting the
-  // page. Polled on the `background` tier; updates immediately on visibility
-  // change.
   const [pendingCount, setPendingCount] = useState(0);
-  // supportUnread badges the Support nav entry: for a user, tickets now waiting
-  // on them (support replied); for an agent, tickets waiting on support. Closes
-  // the loop — otherwise a reply is invisible until the user thinks to look.
   const [supportUnread, setSupportUnread] = useState(0);
-  // All flows in the active workspace, listed under the "Flows" nav entry.
   const [flows, setFlows] = useState<FlowSummary[]>([]);
-  // Global ⌘K command bar (jump to any page/flow). Mounted app-wide but only
-  // bound to ⌘K OUTSIDE the flow editor, where ⌘K stays "Add step".
   const [cmdOpen, setCmdOpen] = useState(false);
-  // Help (header "?" button + "?" key): docs, support, keyboard shortcuts.
   const [helpOpen, setHelpOpen] = useState(false);
-  // everHadApproval is a sticky local flag: once a user has seen ANY
-  // pending approval in this browser, the Approvals nav link stays
-  // visible even after the count drops back to zero — flows with
-  // await_approval nodes shouldn't lose their inbox link the moment
-  // it empties. New non-tech users (who never touch await_approval)
-  // never see the link at all.
+  // Sticky: the nav entry must not vanish once a user has seen an approval.
   const [everHadApproval, setEverHadApproval] = useState<boolean>(() => {
     try {
       return localStorage.getItem(APPROVAL_SEEN_KEY) === "1";
@@ -178,17 +134,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   });
   useEffect(() => {
-    // `me` for the same reason refreshFlows waits for it: before whoami lands
-    // the org is unresolved, and asking then answers for the wrong scope and
-    // is immediately superseded.
     if (!token || !me) return;
     let cancelled = false;
     const fetch = () =>
       api
-        // Match the inbox's workspace narrow so the badge count
-        // doesn't disagree with what the user sees when they click it.
-        // Counted server-side: this fires on every page, on a timer and
-        // again on each navigation, and a number is all it renders.
         .countPendingApprovals(token, {
           workspace: activeWorkspace || undefined,
           tenant: activeTenant || undefined,
@@ -223,11 +172,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     activeWorkspace,
     everHadApproval,
   ]);
-  // Support unread count: agents count queue tickets awaiting support; users
-  // count their own tickets awaiting them. Same `background` tier as the
-  // approvals badge above — it used to poll at 60s against that one's 30s, a
-  // distinction nothing justified when both drive only a sidebar number.
-  // Skipped entirely when the ticket surface is off.
   const isAgent = hasPerm("support:agent");
   const supportOn = !!me?.support_tickets_enabled || isAgent;
   useEffect(() => {
@@ -237,11 +181,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     let cancelled = false;
     const fetch = () => {
-      // Agents count the whole cross-org queue, which is what the summary
-      // aggregate answers — and it is both cheaper and more correct than
-      // counting a page of full ticket rows, since the listing is capped by
-      // the store's page limit and a busy queue exceeds it. A requester's own
-      // tickets are few enough that the list is the count.
       const p = isAgent
         ? api
             .ticketQueueSummary(token)
@@ -262,15 +201,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       window.clearInterval(iv);
     };
   }, [token, supportOn, isAgent, location.pathname]);
-  // Load the workspace's flows for the sidebar list.
-  // Wait for `me` before asking, not just for a token. activeWorkspace falls
-  // back to the DEFAULT the moment a token exists — before whoami has landed
-  // — so without this the sidebar fires once against an unresolved org and
-  // again when the real one arrives. The flow list is the most expensive read
-  // on the page (it decodes every flow in the workspace, under the lock that
-  // serializes the workspace), and this runs on every navigation, so the
-  // discarded first answer was the single most repeated piece of waste in the
-  // app.
   const refreshFlows = useCallback(() => {
     if (!token || !me || !activeWorkspace) {
       setFlows([]);
@@ -283,31 +213,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         /* ignore — sidebar list is non-essential */
       });
   }, [token, me, activeTenant, activeWorkspace]);
-  // Refetch on navigation (covers create/delete via the flow list).
   useEffect(refreshFlows, [refreshFlows, location.pathname]);
-  // Refetch immediately when a flow's name/icon is saved in the editor —
-  // the editor fires FLOWS_CHANGED_EVENT after the save persists, so the
-  // sidebar reflects a renamed flow / new icon without a navigation.
   useEffect(() => {
     const onChanged = () => refreshFlows();
     window.addEventListener(FLOWS_CHANGED_EVENT, onChanged);
     return () => window.removeEventListener(FLOWS_CHANGED_EVENT, onChanged);
   }, [refreshFlows]);
-  // Editor pages need a full-bleed canvas — remove the main padding. Match the
-  // canonical /flows/:id or the legacy /pipelines/:id path so an incoming
-  // legacy link still gets the right layout during the one-render redirect.
-  // EXCLUDE /flows/new — that's the Create-flow page, a normal padded page, not
-  // an editor canvas (without the exclusion it matches :id and loses its margins).
-  // The support-agent flow view is a full-bleed read-only canvas too, so it
-  // wants the same padding-free main as the editor.
   const inEditor =
     /^\/(flows|pipelines)\/(?!new(?:$|\/))[^/]+/.test(location.pathname) ||
     /^\/support\/flows\//.test(location.pathname);
   const showAdmin = hasPerm("organization:admin") || hasPerm("graph:admin");
 
-  // ⌘K / Ctrl+K opens the global command bar — except in the flow editor,
-  // which owns ⌘K for its step palette (per the agreed keybinding split).
-  // "?" opens the keyboard-shortcuts reference (ignored while typing).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
@@ -332,17 +248,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [inEditor]);
 
-  // activeFlowName is published by the editor (via ActiveFlowContext) so
-  // the top bar can show which flow is open in place of the wordmark.
-  // Cleared whenever we navigate away from an editor route so a stale
-  // name never lingers on the flow list / runs / admin pages.
   const [activeFlowName, setActiveFlowName] = useState<string | null>(null);
-  // activeFlowIcon mirrors the open flow's icon so the top bar can show
-  // it next to the name (only when the flow has a non-default icon set).
   const [activeFlowIcon, setActiveFlowIcon] = useState<string | null>(null);
-  // openSettings is registered by the editor so the top-right "current
-  // flow" three-dots can open the flow-settings modal it owns. Stored
-  // as a 0-arg callback; null when no editor is mounted.
   const [openSettings, setOpenSettings] = useState<(() => void) | null>(null);
   useEffect(() => {
     if (!inEditor) {
@@ -352,12 +259,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }, [inEditor]);
 
-  // The hamburger toggles between the full sidebar and the icons-only
-  // rail (full ↔ icons-only) on desktop, and the slide-in drawer
-  // (open ↔ off-canvas) on small screens. We persist the choice only on
-  // desktop: on a small screen the open/closed state is transient, so a
-  // phone toggle must not overwrite the saved desktop layout (the
-  // matchMedia listener re-applies the right state on breakpoint cross).
   const toggleNav = () =>
     setNavCollapsed((x) => {
       const next = !x;
@@ -370,14 +271,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       }
       return next;
     });
-  // closeNav always closes (collapses) — used by the mobile drawer's
-  // scrim and on navigation. No persistence: closing the drawer is a
-  // mobile-transient action, not a desktop layout preference.
   const closeNav = () => setNavCollapsed(true);
 
-  // Top-bar branding. In the editor the open flow takes the slot; the
-  // org's name/logo replaces the product wordmark once the org has a
-  // profile set; otherwise it's the Dazyflow mark.
+  // In the editor the open flow takes this slot.
   const curTenant = activeTenant || me?.tenant || "";
   const orgMembership = me?.memberships?.find((m) => m.tenant === curTenant);
   const orgName = orgMembership?.display_name;
@@ -512,9 +408,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                   ?.roles.some((r) =>
                     r.permissions.includes("organization:admin"),
                   ) ?? false;
-              // Deletable when it isn't your home org AND you're either a platform
-              // admin (any org) or an org admin of the org you're currently in
-              // (the daemon requires p.Tenant == tenant for non-platform deletes).
               const deletable = (tid: string) =>
                 tid !== homeTenant &&
                 (isPlatformAdmin || (tid === active && isOrgAdmin(tid)));
@@ -537,17 +430,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                   showId={shouldShowTenantID(me, tenants.length)}
                   onPick={(tid) => {
                     setOrgModalOpen(false);
-                    // Switching org deep-reloads the app so the active page can't
-                    // keep showing the previous org's data. No-op if it's already
-                    // the active org.
+                    // A deep reload, or the active page keeps rendering the previous org's data.
                     if (tid !== active) setActiveTenant(tid, { reload: true });
                   }}
                   onCreate={async (displayName) => {
                     if (!token) return;
                     const res = await api.createOrg(token, displayName);
-                    // Switch into the new org with a deep reload: the cold boot
-                    // rebuilds the tenant catalogue (so it appears) and refetches
-                    // in the new scope, so no page keeps the previous org's data.
                     setOrgModalOpen(false);
                     setActiveTenant(res.tenant, { reload: true });
                   }}
@@ -559,7 +447,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                   onDelete={async (tid, password) => {
                     if (!token) return;
                     await api.deleteOrg(token, tid, password);
-                    // Leave the org if it was the active one, then refresh.
                     if (tid === active) setActiveTenant(homeTenant);
                     reloadTenants();
                     setOrgModalOpen(false);
@@ -768,12 +655,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-// AccountMenu is the lower-left sidebar account control — the entry
-// point to per-user actions (Settings, Sign out). Modelled on the
-// sibling `dazy` app, whose account/settings menu lives in the sidebar
-// footer. The trigger shows a user icon + email (the email hides via
-// .nav-label in the collapsed rail, leaving just the icon); the menu
-// pops upward so it doesn't run off the bottom of the viewport.
 function AccountMenu({
   email,
   onSignOut,
@@ -793,18 +674,10 @@ function AccountMenu({
   const navigate = useNavigate();
   const { token, activeTenant } = useAuth();
   const [open, setOpen] = useState(false);
-  // Whether to show the "Upgrade to Pro" CTA: true only on a free plan where
-  // Stripe upgrades are configured. Best-effort and server-cached; a failed or
-  // unconfigured billing lookup simply hides the CTA.
   const [canUpgrade, setCanUpgrade] = useState(false);
-  // Whether this deployment runs paid billing at all. When false (a self-host
-  // without Stripe), the account entry reads "Usage" not "Plan & usage".
   const [billingEnabled, setBillingEnabled] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  // The pop is rendered in a portal at document.body (see below) so the
-  // sidebar's overflow clip + stacking context can't hide it behind the
-  // editor canvas. That means we position it ourselves from the
-  // trigger's on-screen rect: anchored above the trigger (bottom-up).
+  // Portaled to body, so the sidebar's overflow cannot clip it.
   const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
   const place = () => {
     const r = triggerRef.current?.getBoundingClientRect();
@@ -843,7 +716,6 @@ function AccountMenu({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    // Re-place on resize/scroll so the fixed pop tracks the trigger.
     const onReflow = () => place();
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -988,17 +860,6 @@ function AccountMenu({
   );
 }
 
-// FlowMenu is the top-right three-dots menu acting on the current flow
-// (mirrors dazy's per-context menu). Today it has one action — open the
-// flow-settings modal, which lives inside the editor and is invoked via
-// the callback the editor registered on ActiveFlowContext.
-//
-// Portaled to <body> like the account menu, for the same reason: .topbar is a
-// stacking context (z-index var(--z-topbar), 20), so an absolute dropdown
-// inside it can never rise above the editor's inspector, which is
-// var(--z-inspector-sheet) — 30 — as a full-height sheet below 1100px. The
-// menu's own z-index competed only with the topbar's other children, so the
-// inspector painted straight over it. Fixed coords also keep it on screen.
 function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -1010,9 +871,6 @@ function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      // .flow-menu-pop as well as .flow-menu: the pop is portaled out of the
-      // trigger's subtree, and closing on its own mousedown would unmount the
-      // row before the click that should have opened flow settings landed.
       if (!target.closest(".flow-menu") && !target.closest(".flow-menu-pop")) {
         setOpen(false);
       }
@@ -1067,19 +925,6 @@ function FlowMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
   );
 }
 
-// VerifyEmailBanner nags an unverified account to confirm its address,
-// with a resend button. Dismissal is per-render-tree only (state, not
-// storage) — the nag should come back next visit until verified.
-//
-// The banner only claims what it can actually stand behind. It used to open
-// with "we sent you a link when you signed up", which is not something this
-// component knows: signup reports `verification_email_sent`, and on a
-// deployment whose mailer is unconfigured or failing that comes back false.
-// So the first thing a new owner read was a claim about an email that was
-// never sent, and the resend button — their one way out — swallowed its own
-// 502 and left the same sentence on screen. Now the banner states the fact
-// (the address isn't confirmed), names what it costs them, and reports
-// honestly what each resend actually did.
 function VerifyEmailBanner() {
   const { t } = useTranslation();
   const { token, refreshMe } = useAuth();
@@ -1093,8 +938,6 @@ function VerifyEmailBanner() {
     if (!token) return;
     setBusy(true);
     setFailed(false);
-    // Trust the server's account of what happened rather than the absence of a
-    // throw — see resendOutcome for why those are different facts.
     let res: { sent?: boolean; already_verified?: boolean } | null = null;
     try {
       res = await api.resendVerification(token);

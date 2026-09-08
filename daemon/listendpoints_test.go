@@ -11,8 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestListModules_Filters covers listModules with query filters (q, category,
-// provider, tag, include_disabled) exercising the param-collection branches.
 func TestListModules_Filters(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -26,7 +24,6 @@ func TestListModules_Filters(t *testing.T) {
 	if err := json.Unmarshal(rw.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	// Both legacy + new keys are emitted.
 	if _, ok := resp["drops"]; !ok {
 		t.Fatalf("response missing drops key: %s", rw.Body.String())
 	}
@@ -35,20 +32,15 @@ func TestListModules_Filters(t *testing.T) {
 	}
 }
 
-// TestListPendingApprovals_Cov covers listPendingApprovals: an empty list, an
-// awaiting node with a pending_url (surfaced), and a subgraph-style awaiting
-// node (filtered out).
 func TestListPendingApprovals_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 
-	// Empty to start.
 	rw := h.do(t, "GET", "/api/v1/approvals/pending", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("pending(empty) = %d, want 200; body=%s", rw.Code, rw.Body.String())
 	}
 
-	// A human-approval awaiting node (carries pending_url + prompt).
 	if err := h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: "run1::approve", Kind: core.JobKindNode, Tenant: "t", Workspace: "ws",
 		GraphRunID: "run1", GraphID: "g", NodeID: "approve", Status: core.JobStatusAwaiting,

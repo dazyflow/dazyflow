@@ -57,13 +57,6 @@ func (h *authAPI) validSignupInvite(ctx context.Context, email, token string) bo
 		strings.EqualFold(inv.Email, strings.ToLower(strings.TrimSpace(email)))
 }
 
-// signupInviteURL builds the clickable link mailed to the recipient:
-// the /signup page with the email pre-filled and the token attached.
-// SignUp.tsx reads signup_invite to render the email field readonly,
-// skip the invite-only bounce, and post the token back through signUp.
-// Falls back to a path-only URL when no public base URL is configured
-// (useless in an inbox, but the create response still returns it for
-// copy/paste, and the UI rewrites it against window.origin).
 func (h *authAPI) signupInviteURL(email, token string) string {
 	q := "/signup?email=" + url.QueryEscape(email) + "&signup_invite=" + url.QueryEscape(token)
 	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
@@ -73,10 +66,6 @@ func (h *authAPI) signupInviteURL(email, token string) string {
 	return base + q
 }
 
-// createSignupInvite handler: POST /api/v1/admin/signup-invites {email}.
-// Platform-admin only. Mints a pending signup-invite for the email and,
-// when a mailer is wired, sends the link. The response always carries
-// the link so the owner can copy/paste it regardless.
 func (h *authAPI) createSignupInvite(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Invitations == nil || h.Users == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
@@ -131,9 +120,6 @@ func (h *authAPI) createSignupInvite(rw http.ResponseWriter, r *http.Request, p 
 	signupURL := h.signupInviteURL(email, token)
 	emailSent := false
 	if h.svc.Mailer != nil && strings.HasPrefix(signupURL, "http") {
-		// The invitee has no account by definition, so there is no preference
-		// of theirs to read: follow the inviter, who knows who they are
-		// writing to.
 		lang := h.inviteLang(r.Context(), email, p.Subject)
 		m := maillang.For(lang)
 		expFmt := datenames.FormatDate(inv.ExpiresAt, lang)
@@ -163,10 +149,6 @@ func (h *authAPI) createSignupInvite(rw http.ResponseWriter, r *http.Request, p 
 	})
 }
 
-// listSignupInvites handler: GET /api/v1/admin/signup-invites. Platform-
-// admin only. Returns the deployment's pending + recently-resolved
-// signup-invites so the owner can see who's been invited and re-share or
-// revoke a link.
 func (h *authAPI) listSignupInvites(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Invitations == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")

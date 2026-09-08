@@ -26,60 +26,30 @@ import (
 	"strings"
 )
 
-// Button is the single primary call-to-action. URL is the destination; Label
-// is the visible text. Optional — notification-only mails (none, currently)
-// can omit it.
 type Button struct {
 	Label string
 	URL   string
 }
 
-// Fact is one label/value row in the optional details table — used by the
-// flow-failure mail to lay out "Failed step / Error / Finished at" without
-// burying them in a paragraph.
 type Fact struct {
 	Label string
 	Value string
 }
 
-// Content is everything the theme needs to render one email. Fields are
-// composed top-to-bottom: eyebrow → heading → intro paragraphs → facts →
-// button → outro paragraphs → footer note.
 type Content struct {
-	// Subject doubles as the document <title>. The mail transport sets the
-	// real Subject header; this keeps the two in sync for previews.
-	Subject string
-	// Preheader is the hidden snippet inbox lists show next to the subject.
-	// Kept short and specific ("Confirm your address to finish signing up").
-	Preheader string
-	// Eyebrow is a small uppercase kicker above the heading ("Confirm your
-	// email", "Run failed"). Optional.
-	Eyebrow string
-	// Heading is the one-line headline. Required.
-	Heading string
-	// Intro paragraphs sit above the button; Outro paragraphs (expiry,
-	// "if you didn't request this") sit below it, rendered quieter.
-	Intro []string
-	Facts []Fact
-	// Button is the primary CTA. Optional.
-	Button *Button
-	Outro  []string
-	// FooterNote overrides the default footer line when set (e.g. "You're
-	// receiving this because someone invited you to Dazyflow").
+	Subject    string
+	Preheader  string
+	Eyebrow    string
+	Heading    string
+	Intro      []string
+	Facts      []Fact
+	Button     *Button
+	Outro      []string
 	FooterNote string
-	// LogoURL is an absolute URL to a hosted PNG of the brand mark
-	// (typically {PublicBaseURL}/logo.png). When set, the header shows it as
-	// an <img> — the reliable choice for real inboxes, since Gmail and others
-	// strip inline SVG. When empty, the header falls back to the inline SVG
-	// mark (renders in the browser preview and SVG-capable clients); the
-	// "Dazyflow" wordmark shows either way.
-	LogoURL string
-	// Tone selects the accent. "" is the default brand purple; "danger"
-	// tints the eyebrow and the details box red for failure notifications.
-	Tone string
+	LogoURL    string
+	Tone       string
 }
 
-// Render returns the full HTML document for one email.
 func Render(c Content) (string, error) {
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, c); err != nil {
@@ -88,11 +58,6 @@ func Render(c Content) (string, error) {
 	return buf.String(), nil
 }
 
-// The brand mark: the two interlocking loops from web/public/logo.svg, drawn
-// small for the header. Inline SVG renders in the browser preview and in
-// SVG-capable clients (Apple Mail); clients that strip it (Gmail) still show
-// the "Dazyflow" wordmark beside it. A production send that wants the mark
-// everywhere should swap this for a hosted PNG at {PublicBaseURL}/logo.png.
 const logoSVG template.HTML = `<svg width="26" height="26" viewBox="-10 -10 84 84" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Dazyflow">
   <defs><linearGradient id="dz" x1="0" y1="64" x2="64" y2="0" gradientUnits="userSpaceOnUse">
     <stop offset="0" stop-color="#1fb6d4"/><stop offset=".4" stop-color="#4c84e8"/>
@@ -103,7 +68,6 @@ const logoSVG template.HTML = `<svg width="26" height="26" viewBox="-10 -10 84 8
   </g>
 </svg>`
 
-// tmpl is parsed once at init; a parse error is a programmer bug, so panic.
 var tmpl = template.Must(
 	template.New("email").
 		Funcs(template.FuncMap{
@@ -118,15 +82,6 @@ var tmpl = template.Must(
 		Parse(htmlTemplate),
 )
 
-// htmlTemplate is the shared shell. Conventions baked in:
-//   - 600px container, centred on a #f4f5fa page.
-//   - White card with a thin gradient top bar (the brand colours).
-//   - font stack: -apple-system / Segoe UI / Roboto / Helvetica / Arial.
-//   - accent #6d28d9 (violet-700) for the button + links; #dc2626 for the
-//     danger tone; ink #1b2233; muted #5b6577.
-//   - the button is rendered both as a padded <a> and inside a bgcolor <td>
-//     so Outlook (which ignores the <a> background) still shows a filled
-//     button.
 const htmlTemplate = `<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
@@ -227,8 +182,6 @@ func PlainText(c Content) string {
 	for _, p := range c.Intro {
 		para(p)
 	}
-	// Facts as an aligned block, so a long error value doesn't make the
-	// labels unreadable. Width from the longest label present.
 	if len(c.Facts) > 0 {
 		width := 0
 		for _, f := range c.Facts {

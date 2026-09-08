@@ -21,8 +21,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// recorder collects the (subject, to) a body node saw after ${item.…}
-// substitution, so the test can assert each row produced the right values.
 type recorder struct {
 	mu   sync.Mutex
 	seen []string
@@ -42,15 +40,10 @@ func (r *recorder) sorted() []string {
 	return out
 }
 
-// loopE2EHarness wires the REAL for_each drop (so body-mode runs through the
-// worker's bodyRunner injection) plus a source emitting rows and a body
-// fixture that records its post-substitution params.
 func newLoopE2EHarness(t *testing.T, rec *recorder) *loopHarness {
 	t.Helper()
 	reg := engine.NewRegistry()
 
-	// Real for_each + everything else from the default registry (so the
-	// for_each the worker runs is the actual drop, with body-mode logic).
 	for id, mf := range engine.Default.Manifests() {
 		mf := mf
 		nativeT, _ := engine.Default.Get(id)
@@ -63,7 +56,6 @@ func newLoopE2EHarness(t *testing.T, rec *recorder) *loopHarness {
 		})
 	}
 
-	// rows — emits a list of {name,email} maps on "out".
 	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID: "rows", Version: "1.0", Summary: "rows",
@@ -80,9 +72,6 @@ func newLoopE2EHarness(t *testing.T, rec *recorder) *loopHarness {
 		},
 	})
 
-	// sendfx — a body node. Records the "line" param it received (which the
-	// graph sets to "Hi ${item.name} <${item.email}>"), proving per-item
-	// substitution reached a body node's params via the engine.
 	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID: "sendfx", Version: "1.0", Summary: "send fixture",
@@ -100,8 +89,6 @@ func newLoopE2EHarness(t *testing.T, rec *recorder) *loopHarness {
 		},
 	})
 
-	// rows_fail — like rows, but each row carries a "fail" flag the body
-	// fixture keys on, so a test can make exactly one row fail.
 	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID: "rows_fail", Version: "1.0", Summary: "rows with fail flag",
@@ -119,8 +106,6 @@ func newLoopE2EHarness(t *testing.T, rec *recorder) *loopHarness {
 		},
 	})
 
-	// mayfail — a body node that errors when its "f" param (set from
-	// ${item.fail}) is "yes". Records every "name" it saw regardless.
 	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID: "mayfail", Version: "1.0", Summary: "conditionally-failing body",
@@ -173,9 +158,6 @@ func newLoopE2EHarness(t *testing.T, rec *recorder) *loopHarness {
 	return &loopHarness{svc: svc, jobs: jobs, bus: bus, principal: p}
 }
 
-// A body node inherits the PARENT run's scratch space, so file-writing drops
-// (e.g. sheets_export_pdf) work inside a loop. The fixture writes a per-row
-// file into job.ScratchRoot and fails the row if scratch is absent.
 func TestLoopBody_BodyNodesGetParentScratch(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
@@ -196,7 +178,6 @@ func TestLoopBody_BodyNodesGetParentScratch(t *testing.T) {
 				}}}}, nil
 		},
 	})
-	// scratchfx — writes name.txt into the run's scratch and reads it back.
 	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID: "scratchfx", Version: "1.0", Summary: "scratch fixture",
@@ -288,8 +269,6 @@ func TestLoopBody_BodyNodesGetParentScratch(t *testing.T) {
 	}
 }
 
-// End-to-end: a wired for_each body runs the body node once per row, with
-// ${item.…} resolved per row, and the graph completes with results.
 func TestLoopBody_RunsBodyPerItem(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
@@ -325,12 +304,10 @@ func TestLoopBody_RunsBodyPerItem(t *testing.T) {
 		t.Fatalf("body params per item = %v, want %v", got, want)
 	}
 
-	// The body node ran inside the loop — it has no standalone parent record.
 	if _, err := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, "send")); err == nil {
 		t.Error("body node 'send' should have no parent-run record (loop-owned)")
 	}
 
-	// for_each succeeded with a results entry per row.
 	loopRec, err := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, "loop"))
 	if err != nil || loopRec.Status != core.JobStatusSucceeded {
 		t.Fatalf("loop status = %q (err=%v), want succeeded", loopRec.Status, err)
@@ -347,9 +324,6 @@ func TestLoopBody_RunsBodyPerItem(t *testing.T) {
 	}
 }
 
-// fail_fast OFF: one failing row doesn't sink the loop — the other rows still
-// run, the loop succeeds, and the failure surfaces (keyed by index) on the
-// errors port.
 func TestLoopBody_PerItemErrorIsolation(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
@@ -380,7 +354,6 @@ func TestLoopBody_PerItemErrorIsolation(t *testing.T) {
 		t.Fatalf("graph status = %q, want succeeded (failures isolated)", terminal.Status)
 	}
 
-	// All three rows ran (the failing one didn't stop the others).
 	if got := rec.sorted(); len(got) != 3 {
 		t.Errorf("rows run = %v, want 3", got)
 	}
@@ -394,8 +367,6 @@ func TestLoopBody_PerItemErrorIsolation(t *testing.T) {
 	if !ok {
 		t.Fatalf("errors = %#v, want list of failed rows", errsRef.Inline)
 	}
-	// Exactly the one failing row (Bo, 1-based row 2) is recorded, carrying
-	// the row's own data so the entry is self-describing.
 	if len(errsList) != 1 {
 		t.Fatalf("errors = %v, want exactly 1 failed row", errsList)
 	}
@@ -409,7 +380,6 @@ func TestLoopBody_PerItemErrorIsolation(t *testing.T) {
 	}
 }
 
-// fail_fast ON: a failing row fails the loop, which propagates to the graph.
 func TestLoopBody_FailFastFailsGraph(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}

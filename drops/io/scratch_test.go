@@ -11,10 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestScratchScheme_WriteThenRead proves the scratch:// scheme end to
-// end: file_write lands the bytes under ScratchRoot (not the persistent
-// workspace), the output Ref preserves the scheme, and file_read resolves
-// the same scheme back to the same bytes.
 func TestScratchScheme_WriteThenRead(t *testing.T) {
 	workspace := t.TempDir()
 	scratch := t.TempDir()
@@ -28,7 +24,6 @@ func TestScratchScheme_WriteThenRead(t *testing.T) {
 	if err != nil || wres.Status != core.StatusOK {
 		t.Fatalf("write: status=%q err=%v (%+v)", wres.Status, err, wres.Error)
 	}
-	// Output Ref keeps the scheme so downstream nodes resolve it the same.
 	if got := wres.Output["out"].Ref; got != "scratch://tmp/note.txt" {
 		t.Errorf("output Ref = %q, want scratch://tmp/note.txt", got)
 	}
@@ -53,9 +48,8 @@ func TestScratchScheme_WriteThenRead(t *testing.T) {
 	}
 }
 
-// TestScratchScheme_NoScratchRootConfigured verifies a scratch:// path
-// fails clearly when the run has no scratch area, rather than silently
-// falling back to the workspace.
+// Verifies a scratch:// path fails clearly when the run has no scratch area,
+// rather than silently falling back to the workspace.
 func TestScratchScheme_NoScratchRootConfigured(t *testing.T) {
 	res, _ := executeFileWrite(t.Context(), core.Job{
 		WorkspaceRoot: t.TempDir(), // workspace present, scratch absent
@@ -67,8 +61,6 @@ func TestScratchScheme_NoScratchRootConfigured(t *testing.T) {
 	}
 }
 
-// TestScratchScheme_CopyWorkspaceToScratch covers a mixed-root copy: the
-// source ref is workspace-relative, the destination is scratch://.
 func TestScratchScheme_CopyWorkspaceToScratch(t *testing.T) {
 	workspace := t.TempDir()
 	scratch := t.TempDir()

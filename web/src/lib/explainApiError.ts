@@ -23,17 +23,8 @@ import { APIError } from "../api";
 
 type TFunc = (k: string, o?: Record<string, unknown>) => string;
 
-// ApiErrorContext disambiguates auth surfaces where the same status carries a
-// different meaning. Omit it for the generic mapping.
 export type ApiErrorContext = "signin" | "signup" | "totp" | "approval";
 
-// featureUnavailable reports whether a status means "this surface isn't
-// available to you" rather than "something went wrong": 501 the daemon has the
-// feature switched off, 401/403 the caller isn't permitted. Callers use it to
-// fall back to an empty state instead of showing an error — a secrets page that
-// the operator disabled is not a failure the user should be alarmed by.
-//
-// Was defined identically in Secrets, AdminSecretManager and Apps.
 export function featureUnavailable(status: number): boolean {
   return status === 501 || status === 401 || status === 403;
 }
@@ -44,8 +35,6 @@ export function explainApiError(
   context?: ApiErrorContext,
 ): string {
   if (!(err instanceof APIError)) {
-    // A thrown non-APIError (programmer error, rejected string). Never trust
-    // its text in the UI — it's not a server-authored human message.
     return t("apiError.generic");
   }
 
@@ -67,8 +56,6 @@ export function explainApiError(
     return t(CODE_MESSAGES[code] ?? "apiError.generic");
   }
 
-  // Context-specific auth failures take precedence: the user is staring at a
-  // login form, not a session that drifted out from under them.
   if (context === "signin" && (status === 401 || status === 403)) {
     return t("apiError.signinInvalid");
   }
@@ -87,17 +74,11 @@ export function explainApiError(
     ) {
       return t("apiError.signupExists");
     }
-    // The server's own password/email rule is short and actionable — keep it.
     if (status === 400 && !looksTechnical(lc) && msg) return msg;
     if (status === 400) return t("apiError.signupBad");
   }
 
-  // Structured code map — the stable, surface-independent discriminator.
   if (code && CODE_MESSAGES[code]) {
-    // One exception, and only on a real 403: a refusal that names the remedy
-    // beats the generic headline. Scoped to the status so the code map stays
-    // surface-independent everywhere else — a permission_denied riding a 400
-    // still resolves by code.
     if (
       status === 403 &&
       PERMISSION_CODES.has(code) &&
@@ -108,28 +89,17 @@ export function explainApiError(
     return t(CODE_MESSAGES[code]);
   }
 
-  // A server-side failure carries no detail the user can act on.
   if (status >= 500) return t("apiError.server");
 
-  // Status-based fallbacks for routes that don't (yet) set a structured code.
   if (status === 401) return t("apiError.sessionExpired");
   if (status === 403) {
     return keepForbiddenMessage(msg, lc) ? msg : t("apiError.forbidden");
   }
   if (status === 404) return t("apiError.notFound");
-  // An approval that 409s is not a collision the user needs to fix — the
-  // decision was simply already made, most often by the other approve control
-  // on the same screen or by someone else holding the link. "It conflicts with
-  // something that already exists or is in use" reads like a fault; it isn't.
   if (status === 409 && context === "approval")
     return t("apiError.approvalDecided");
   if (status === 409) return t("apiError.conflict");
   if (status === 429) return t("apiError.rateLimited");
-  // Payload too large (an oversized upload, or a body that trips the global
-  // request-size guard). Prefer the server's own message when it's clean and
-  // human (the upload route names the actual limit, e.g. "the file is too
-  // large — the upload limit is 200 MB"); fall back to a localized generic
-  // when it's a raw "request body exceeds N bytes" guard string.
   if (status === 413) {
     return msg && !looksTechnical(lc) ? msg : t("apiError.tooLarge");
   }
@@ -211,10 +181,6 @@ function looksLikeScopeDemand(lc: string): boolean {
   );
 }
 
-// CODE_MESSAGES maps a daemon ErrorEnvelope code to a friendly i18n key. Only
-// codes whose generic headline beats the raw message; anything not listed
-// falls through to the status/message logic above. The PERMISSION_CODES are a
-// partial exception — see keepForbiddenMessage.
 const CODE_MESSAGES: Record<string, string> = {
   // The browser sent a state-changing request the daemon would not accept
   // from this origin. Correct, and entirely about deployment configuration —
@@ -226,8 +192,6 @@ const CODE_MESSAGES: Record<string, string> = {
   forbidden: "apiError.forbidden",
   not_found: "apiError.notFound",
   conflict: "apiError.conflict",
-  // Replay refusals. A generic "conflicts with something in use" hides the
-  // only two things the reader can do about either one, and they differ.
   replay_no_trigger_data: "apiError.replayNoTriggerData",
   replay_trigger_changed: "apiError.replayTriggerChanged",
   replay_trigger_off: "apiError.replayTriggerOff",

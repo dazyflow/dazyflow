@@ -62,7 +62,7 @@ func TestBuiltinProvider_Set(t *testing.T) {
 	}
 }
 
-// ---- Namespaced (per-tenant ACL) mode ------------------------------
+// Namespaced (per-tenant ACL) mode
 //
 // In Namespaced mode the provider rejects cross-tenant reads. The
 // security property: tenant "acme" cannot resolve a secret that
@@ -85,7 +85,6 @@ func TestBuiltinProvider_Namespaced_NoTenantRejected(t *testing.T) {
 	p := daemon.NewBuiltinProvider()
 	p.Namespaced = true
 	p.Set("acme.token", "x")
-	// No tenant in context.
 	if _, err := p.Get(context.Background(), "acme.token"); err == nil {
 		t.Fatal("missing-tenant read should be rejected")
 	}
@@ -112,7 +111,6 @@ func TestBuiltinProvider_Namespaced_CrossTenantRejected(t *testing.T) {
 	p.Namespaced = true
 	p.Set("acme.api_key", "sk_acme")
 	p.Set("globex.api_key", "sk_globex")
-	// Globex shouldn't see acme's even though both are in the store.
 	ctx := core.WithTenant(t.Context(), "globex")
 	_, err := p.Get(ctx, "acme.api_key")
 	if err == nil {

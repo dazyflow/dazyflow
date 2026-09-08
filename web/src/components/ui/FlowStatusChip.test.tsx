@@ -5,8 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { FlowStatusChip } from "./FlowStatusChip";
 
-// i18n is stubbed to echo the key, so assertions are stable without loading
-// the translation bundle.
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (k: string) => k }),
 }));

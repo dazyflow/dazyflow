@@ -24,11 +24,6 @@ import { slugify } from "../../lib/format";
 // repair loop, so what reaches here is the residue worth a human glance.
 type GenIssue = { code: string; severity: string; message: string; node_ids?: string[] };
 
-// AI_STARTERS seed the describe box with plain-English examples so a first-time,
-// non-technical user isn't staring at a blank field wondering what to type. Each
-// maps to a flow the catalog can actually build (Sheets / Gmail / Slack / Stripe)
-// and carries a glyph so the suggestion list reads as polished rows, not raw
-// pills. Clicking a row drops its text straight into the describe box.
 const AI_STARTERS = [
   { Icon: Mail, key: "createAI.starterSheetSummary" },
   { Icon: MessageSquare, key: "createAI.starterFormToSlack" },
@@ -87,10 +82,6 @@ export function CreateFlow() {
   );
 }
 
-// FromScratch holds the blank-vs-AI creation form, driven by the `mode` the
-// parent tab selects. "blank" saves an empty graph and opens the editor; "ai"
-// streams a draft from the server (same grounded+validated path the old modal
-// used) and opens it for review — nothing is run either way.
 function FromScratch({ mode }: { mode: "ai" | "blank" }) {
   const { t, i18n } = useTranslation();
   const { token, me, activeTenant, activeWorkspace, hasPerm } = useAuth();
@@ -105,9 +96,6 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // pendingDraft holds an AI draft that came back with heads-up issues: we
-  // pause on a review step (instead of dropping the user straight into the
-  // canvas) so they see "what to check before running" up front.
   const [pendingDraft, setPendingDraft] = useState<{ graph: Graph; issues: GenIssue[] } | null>(null);
 
   // AI-mode state (mirrors the former CreateWithAIModal).
@@ -118,9 +106,6 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
   const [provider, setProvider] = useState(
     () => localStorage.getItem("dazyflow.aiProvider") ?? "",
   );
-  // manifests power the plain-language "what this flow does" summary on the
-  // review step (module id → friendly label/subtitle). refineText holds the
-  // user's plain-English change request.
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [refineText, setRefineText] = useState("");
 
@@ -171,9 +156,6 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
       edges: [],
       name: name.trim(),
       description: description.trim() || undefined,
-      // See the note in TemplateGallery: a flow's output language is what its
-      // hosted form says to visitors, and empty means English. Default it to
-      // the language the person building it is working in.
       language: primaryLanguage(i18n.language),
     });
     navigate(`/flows/${encodeURIComponent(id)}`);
@@ -194,8 +176,6 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
       edges: graph.edges ?? [],
       name: flowName,
       description: graph.description,
-      // The generator may have picked a language from the prompt; keep that
-      // over the UI's when it did.
       language: graph.language || primaryLanguage(i18n.language),
     });
     // animateBuild signals the editor to play the build animation on first
@@ -271,9 +251,6 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
     void runGenerate(aiDesc);
   };
 
-  // Draft-ready review step: show WHAT was built in plain language, surface any
-  // heads-up issues, and let the user refine it in plain English — all before
-  // they ever touch the node canvas. This is the non-techy heart of the feature.
   if (pendingDraft) {
     const summary = flowSummary(pendingDraft.graph, manifests, i18n.language);
     return (
@@ -484,9 +461,6 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
             (canConnect ? (
               <p className="ai-connect-hint">{t("createAI.connectHint")}</p>
             ) : (
-              // No permission to connect: a warning callout makes the
-              // "ask an admin" message register as a blocked state rather
-              // than easily-missed muted text.
               <Callout variant="warning">{t("createAI.connectHintNoPerm")}</Callout>
             ))}
           <div className="create-flow-actions">
@@ -523,9 +497,6 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
   );
 }
 
-// flowSummary turns a graph into a plain-language, ordered list of what each
-// step does (module id → friendly "Label — subtitle"), so a non-technical user
-// sees what was built without reading the node canvas.
 function flowSummary(
   graph: Graph,
   manifests: Manifest[],
@@ -541,8 +512,6 @@ function flowSummary(
   });
 }
 
-// friendlyIssueHead maps a generator issue code to a short, plain-language
-// headline a non-technical user can act on; the raw message follows as detail.
 function friendlyIssueHead(code: string, t: (k: string) => string): string {
   switch (code) {
     case "template_placeholder":
@@ -559,9 +528,6 @@ function friendlyIssueHead(code: string, t: (k: string) => string): string {
   }
 }
 
-// dedupeSteps collapses runs of identical progress messages into one entry, so
-// the agentic loop's repeated frames (reading several steps, validating more
-// than once) render as a clean activity log.
 function dedupeSteps(steps: { phase: string; message: string }[]) {
   const out: { phase: string; message: string }[] = [];
   for (const s of steps) {

@@ -13,7 +13,6 @@ import (
 	"testing"
 )
 
-// serveCompressed runs one handler through the compression middleware.
 func serveCompressed(t *testing.T, acceptEncoding string, h http.HandlerFunc) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest("GET", "/x", nil)
@@ -217,8 +216,6 @@ func TestGzip_OverRealTransport(t *testing.T) {
 
 	t.Run("explicit gzip is compressed on the wire", func(t *testing.T) {
 		req, _ := http.NewRequest("GET", srv.URL, nil)
-		// Setting it by hand turns OFF the transport's transparent
-		// decompression, so what arrives is what went over the wire.
 		req.Header.Set("Accept-Encoding", "gzip")
 		resp, err := srv.Client().Do(req)
 		if err != nil {

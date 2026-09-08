@@ -33,10 +33,6 @@ import { NodeDataFace } from "./NodeDataFace";
 import { NodeDataModal } from "./NodeDataModal";
 import { facePorts, firstPortWithValue } from "../../lib/dataFace";
 
-// PICKER_FORMATS are the string-param formats whose value is an opaque
-// resource ID chosen from a dropdown. On the card they render read-only as
-// the resolved resource name (editing happens via the inspector picker).
-// google-sheet-tab's value is already the human tab name, so it shows as-is.
 const PICKER_FORMATS = new Set([
   "google-form",
   "google-spreadsheet",
@@ -52,17 +48,9 @@ const PICKER_FORMATS = new Set([
   "slack-channel",
   "homeassistant-entity",
   "homeassistant-service",
-  // A collection's value is already its human name (like google-sheet-tab),
-  // so the card shows it read-only; it's chosen from the inspector dropdown,
-  // never typed on the card.
   "collection",
 ]);
 
-// peekValue renders a port's run value as a short, single-line string for
-// the hover peek. Strings show verbatim (truncated); other types as JSON;
-// an empty string reads as "(empty)" (not the MIME — that looked like a
-// stray "text/plain" type label). A FILE output (ref set, no inline value)
-// shows its file name — "Svar.pdf" reads better than "application/pdf".
 function peekValue(ref: Ref): string {
   const v = ref.data;
   const cap = (s: string) => (s.length > 200 ? s.slice(0, 200) + "…" : s);
@@ -81,24 +69,6 @@ function peekValue(ref: Ref): string {
   }
 }
 
-// Layout: outputs always render as labeled rows on the right so every
-// node names what it emits — a one-output drop (e.g. Text) reads as
-// clearly as a multi-output one (branch's then/else, await_approval's
-// approved/rejected). A single input stays a compact, label-less dot on
-// the left edge; only once there's more than one input do we label them,
-// since that's where "which handle was that?" ambiguity actually arises.
-//
-// Each labeled handle lives INSIDE its label row (not as a free sibling)
-// so the dot is always vertically centered on its description — they
-// can't drift apart when the title wraps or the card grows. The dot is
-// then pinned back onto the card's outer edge via CSS transform, so it
-// still reads as a perimeter connection point. Label text is tinted to
-// match its dot's color so eye can pair "green dot ↔ green label" at a
-// glance.
-// OP_SYMBOL maps the logic-primitive drop IDs to the big glyph the compact
-// "operator chip" shows (Unreal-style). Falls back to the middle token of an
-// "A <op> B" label, so future operators (AND, +, …) render without a change
-// here.
 const OP_SYMBOL: Record<string, string> = {
   eq: "=",
   neq: "≠",
@@ -115,45 +85,26 @@ function operatorSymbol(m: Manifest): string {
   return m.label ?? "?";
 }
 
-// DazyNodeImpl is wrapped in React.memo (exported as DazyNode below) so a node
-// only re-renders when its own props change. This pairs with FlowEditor's
-// granular per-node memoisation of `data`: unchanged nodes keep a stable data
-// reference, so editing one field redraws only that card, not every node.
 function DazyNodeImpl({ data, selected }: NodeProps) {
   const d = data as DazyNodeData;
   const Icon = iconFor(d.manifest?.icon, d.manifest?.category);
   const color = dropColor(d.manifest?.category, d.manifest?.color);
 
-  // Default to "in"/"out" when the manifest didn't ship port lists —
-  // matches the engine's fallback ports.
   const inputs: Port[] = d.manifest?.inputs?.length
     ? d.manifest.inputs
     : [{ port: "in" }];
   const outputs: Port[] = d.manifest?.outputs?.length
     ? d.manifest.outputs
     : [{ port: "out" }];
-  // Show labelled input rows whenever the drop actually declares inputs
-  // (single or multi) — symmetric with outputs, which always name what
-  // they emit. Sources/triggers declare none and fall back to the bare
-  // "in" dot below, so we don't splatter a meaningless "in" label on them.
   const hasDeclaredInputs = !!d.manifest?.inputs?.length;
 
-  // The data face: the panel below the header expands to show what this step
-  // emits. `dataView` is the canvas-wide toggle; a chevron click overrides it
-  // for one card until the toggle moves again, so "show me everything" and
-  // "show me this one" don't fight over the same state.
   const faceOut = facePorts(outputs);
   const [faceOverride, setFaceOverride] = useState<boolean | null>(null);
   const [facePort, setFacePort] = useState<string | undefined>(undefined);
-  // The dialog behind the face's "show all" button: the card's caps make it a
-  // glance, and this is where the whole value is readable.
   const [faceModal, setFaceModal] = useState(false);
   useEffect(() => setFaceOverride(null), [d.dataView]);
   const faceOpen = faceOut.length > 0 && (faceOverride ?? d.dataView ?? false);
   const activePort = facePort ?? firstPortWithValue(faceOut, d.outputs) ?? "";
-  // Rendered on whichever face the viewer is looking at — the header while
-  // shut, the folded strip once open. One copy, so the toggle is never a
-  // keyboard stop on a face that is turned away.
   const foldToggle = faceOut.length > 0 && (
     <button
       type="button"
@@ -172,8 +123,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
     </button>
   );
 
-  // Minimize, beside the data-face chevron. Only when FlowEditor supplied the
-  // setter (the support view renders the same card read-only and passes none).
   const minimizeToggle = d.setCollapsed && (
     <button
       type="button"
@@ -189,11 +138,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
     </button>
   );
 
-  // Inline default editing (#7): on the SELECTED card, a compact field for
-  // each input PORT that maps to a primitive param and isn't currently
-  // wired — the Blueprint "unconnected pins get a default widget" idea.
-  // Once a wire connects the port, the field disappears (the wire wins).
-  // Advanced fields and rich types (arrays/objects) stay in the Inspector.
   const isAdvanced = (s: JSONSchema) => !!(s.x_advanced || s["x-advanced"]);
   const isPrimitive = (s: JSONSchema) =>
     s.type === "string" ||
@@ -204,58 +148,27 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
   const connectedInputs = d.connectedInputs ?? [];
   const connectedOutputs = d.connectedOutputs ?? [];
   const inputPortIds = new Set((d.manifest?.inputs ?? []).map((p) => p.port));
-  // A required input that's unset/unwired recolours its pin red (#13) — keyed
-  // by port so the problem reads on the pin itself. The card also keeps a red
-  // border (config-err) while any config error stands.
   const missingByPort = new Map(
     (d.configErrors ?? [])
       .filter((e) => inputPortIds.has(e.key))
       .map((e) => [e.key, e.message]),
   );
   const required = d.manifest?.params_schema?.required ?? [];
-  // A conditional field (x_visible_when) is only eligible while the sibling it
-  // depends on has the right value, same as in the Inspector — otherwise a
-  // field could be conditional in one form and permanent in the other.
   const inlineEligible = (s?: JSONSchema): s is JSONSchema =>
     !!s && !isAdvanced(s) && isPrimitive(s) && isFieldVisible(s, d.params, schemaProps);
 
-  // Inline value editors come from two sources:
-  //   1. Unconnected input PORTS backed by a primitive param (e.g. HTTP
-  //      Request's url). These render their editor right on the pin row —
-  //      Unreal-style — and stay visible so values read at a glance; the
-  //      editor disappears once the pin is wired (the connection wins).
-  //   2. REQUIRED primitive params with NO input port (a mandatory literal,
-  //      e.g. the Text source's `text`). There's no pin to sit on, so they
-  //      stay in a small section shown only for the sole-selected node.
   const inlineByPort: Record<string, JSONSchema> = {};
   if (schemaProps) {
     for (const p of d.manifest?.inputs ?? []) {
       if (connectedInputs.includes(p.port)) continue;
       const s = schemaProps[p.port];
-      // Picker-format params (spreadsheet/form) keep their read-only name
-      // display below — never a raw-id text box on the pin row.
       if (s?.format && PICKER_FORMATS.has(s.format)) continue;
-      // A folder picker (git_log / git_diff repository folder) is edited in
-      // the inspector dropdown; on the card it's a wire-only pin, no inline
-      // box. Skipping it here (without PICKER_FORMATS) also keeps it out of
-      // the read-only literal section, so the card shows just the pin.
       if (s?.format === "workspace-dir") continue;
-      // Multiline strings (e.g. render_template's HTML `template`) are long
-      // blobs that don't read as a card preview — they're edited in the
-      // Inspector (with its live preview), so the card shows just the pin.
       if (s?.format === "multiline") continue;
-      // A script (Run on your machine) is the same case, and more so: the whole
-      // point of the box is that it is many lines with the syntax coloured, and
-      // a one-line preview of it on the card would be the input the field used
-      // to be. The card shows the pin; the Inspector shows the script.
       if (s?.format === "script") continue;
       if (inlineEligible(s)) inlineByPort[p.port] = s;
     }
   }
-  // Required primitive params that have NO input port — mandatory literals
-  // typed on the node itself (e.g. Text's `text`, Number's `value`). Params
-  // with format:"cron" join even when optional: a Schedule card must say
-  // WHEN it fires at a glance.
   const literalKeys = schemaProps
     ? [
         ...new Set([
@@ -264,12 +177,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
             (k) =>
               schemaProps[k]?.format === "cron" ||
               schemaProps[k]?.format === "duration-seconds" ||
-              // The map picker lives on the card itself (not just the
-              // inspector), so the geo-point field shows even when optional.
               schemaProps[k]?.format === "geo-point" ||
-              // A channel picker shows even when optional — for a trigger like
-              // On mention, WHICH channel it reacts to is key info to read at
-              // a glance (same reasoning as the Schedule card showing WHEN).
               schemaProps[k]?.format === "slack-channel",
           ),
         ]),
@@ -277,19 +185,11 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
     : [];
   const literalFields = schemaProps
     ? literalKeys
-        // Drop params that live on an input pin — EXCEPT picker-format ones
-        // (spreadsheet/form), which keep their read-only identity display even
-        // when they're also a wireable port (the wire just overrides them).
         .filter((k) => {
           const sch = schemaProps[k];
           const isPicker = !!(sch?.format && PICKER_FORMATS.has(sch.format));
           return isPicker || !inputPortIds.has(k);
         })
-        // Same label the Inspector shows for the same param: the manifest's
-        // English through the reader's vocabulary, or the humanized key when a
-        // param carries no title. The card used to print the raw manifest
-        // string, so a Swedish reader saw "Collection" on the node and
-        // "Samling" in the panel beside it — one setting, two languages.
         .map((k) => ({
           key: k,
           label: schemaProps[k]?.title
@@ -302,21 +202,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
             inlineEligible(f.schema),
         )
     : [];
-  // A value source (Text, Number): no inputs, and the value it emits lives
-  // in a required primitive param. It's its own kind of node — it shows the
-  // value field always (that field IS the node) and an output pin, but no
-  // input connector, since you can't wire a value into a literal. Triggers
-  // are input-less too but carry no literal field, so they're not sources.
   const isValueSource = !hasDeclaredInputs && literalFields.length > 0;
-  // The language a text field on this node is written in, when it says so.
-  //
-  // Read from whichever field carries x_lang_param, so this works for Text's
-  // "Written in" and the runner step's "Run it with" without the card knowing
-  // either name. Empty when the node is on its param's own default, which is
-  // how both steps spell "no language chosen".
-  //
-  // Two values, one lookup: the raw one picks the glyph, the localised one is
-  // the label. Computed together so they can never describe different fields.
   const language = (() => {
     if (!schemaProps) return { value: "", label: "" };
     for (const key of Object.keys(schemaProps)) {
@@ -324,35 +210,16 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
       if (!langParam) continue;
       const value = languageOf(d.params, langParam, schemaProps[langParam]?.default);
       if (!value) continue;
-      // Localised through the param's own enumNames, so the chip reads
-      // "JavaScript" and not "javascript" — and reads Swedish in Swedish.
       return { value, label: enumValueLabel(schemaProps[langParam], value, i18n.language) };
     }
     return { value: "", label: "" };
   })();
-  // Required literal fields show ALWAYS — no hidden config on a card. They
-  // identify the node at a glance (the spreadsheet, the ntfy topic) the way
-  // the Google Form trigger always shows its form. Pickers and ordinary
-  // literals render READ-ONLY (edit via the inspector); only a value
-  // source's literal (Text's text, Number's value — the field IS the node)
-  // stays editable on the card.
   const visibleLiteralFields = literalFields;
   const showLiteralFields = visibleLiteralFields.length > 0;
 
   const statusClass = d.status ? " status-" + d.status : "";
-  // Triggers are the graph's entry points — render them with an inverted,
-  // accent-filled treatment so they stand out from ordinary steps. The
-  // category tint is threaded to CSS as --node-accent (purple for triggers).
   const isTrigger = d.manifest?.category === "trigger";
 
-  // Compact "operator chip" for logic primitives (==, >, <, …): a small
-  // square showing just the operator glyph, Unreal-Blueprint style — no icon
-  // box, no title. A/B pins on the left, Result on the right; unconnected-pin
-  // defaults are edited in the Inspector (deliberately kept off the chip).
-  // Falls through to the standard card for any logic drop that isn't the
-  // two-operand shape these primitives use — e.g. In Range, whose three pins
-  // (Value/Min/Max) don't fit the chip's fixed A/B layout, so it renders as a
-  // normal node card.
   if (d.manifest?.category === "logic" && inputs.length === 2) {
     return (
       <OperatorChip
@@ -368,18 +235,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
     );
   }
 
-  // Folded card (node.collapsed): the icon, the name, and one pin a side.
-  //
-  // The real pins stay MOUNTED and stack — dotStyle already centres every pin
-  // at top:50%, so rendering them all with no per-row offset piles them at one
-  // point on the edge. That is the whole trick: each wire keeps the handle id
-  // it was drawn to and simply converges here, so folding and unfolding a card
-  // needs no edge bookkeeping and cannot lose a connection. They carry
-  // opacity:0 (which still takes pointer events, unlike visibility:hidden) and
-  // the one dot the reader sees is drawn beneath them by .dz-collapsed-pin.
   if (d.collapsed) {
-    // Mirror the open card's rule for whether there is an input pin at all:
-    // value sources and triggers have nothing upstream to wire from.
     const inPins = hasDeclaredInputs
       ? inputs
       : isValueSource || isTrigger
@@ -499,8 +355,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
         (d.paused ? " paused" : "") +
         (d.enterDelay != null ? " dz-enter" : "")
       }
-      // Identify the card to assistive tech: a labelled group naming the step,
-      // its module, and (via aria-selected) whether it's the current selection.
       role="group"
       aria-label={`${d.label || d.moduleID} (${d.moduleID})${d.disabled ? ", disabled" : ""} flow step`}
       aria-selected={selected}
@@ -649,21 +503,11 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
       )}
 
       {showLiteralFields && (
-        // nodrag: keep React Flow from dragging the node while the user
-        // interacts with a field. nowheel similarly lets the field behave
-        // like a normal input inside the canvas.
         <div className="dz-node-params nodrag nowheel" inert={d.locked || undefined}>
           {visibleLiteralFields.map(({ key, label, schema: s }) => {
-            // The map picker renders live on the card (not only in the
-            // inspector): search/click/drag to set the point. A wired Place
-            // input overrides it at run time, so note that on the card.
             if (s.format === "geo-point") {
-              // The override input is "place" (Location) or "coordinate"
-              // (Reverse geocode) — either supersedes the map pin.
               const placeWired = connectedInputs.includes("place");
               const overrideWired = placeWired || connectedInputs.includes("coordinate");
-              // When wired from a literal Text, show the resolved place
-              // (d.wiredPlace); else the typed Place param.
               const effectivePlace = placeWired
                 ? typeof d.wiredPlace === "string"
                   ? d.wiredPlace
@@ -672,7 +516,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                   ? (d.params.place as string)
                   : undefined;
               const pointVal = typeof d.params?.[key] === "string" ? (d.params[key] as string) : "";
-              // show_map toggle (inspector): keep the canvas card light when off.
               if (d.params?.show_map === false) {
                 const summary = overrideWired
                   ? i18n.t("nodeCard.geoWired", { defaultValue: "Set by the wired input" })
@@ -707,28 +550,14 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                 </div>
               );
             }
-            // Resource-picker params show read-only as the resolved resource
-            // name — never the opaque id. Until the name resolves (it's
-            // fetched + cached by the editor) a value shows a neutral "…"
-            // placeholder; an unset param shows the choose-prompt. You change
-            // them via the inspector picker, not by typing on the card.
             if (s.format && PICKER_FORMATS.has(s.format)) {
               const raw = d.params?.[key];
               const idStr = typeof raw === "string" ? raw : "";
               const name = d.resourceLabels?.[key];
-              // An unset OPTIONAL channel filter (On mention's "everywhere"
-              // default) reads as "Any channel", not the "Not set" prompt a
-              // required picker shows — empty is a valid, meaningful choice.
               const unsetText =
                 s.format === "slack-channel" && !required.includes(key)
                   ? i18n.t("nodeCard.channelAny")
                   : i18n.t("nodeCard.pickerUnset");
-              // A wired input port overrides the picker. Prefer the resolved
-              // name (traced from the upstream step) so the card shows the
-              // real sheet; fall back to "From upstream" only if we can't.
-              // A collection's value IS its human name (no opaque id to
-              // resolve), so show it directly instead of the "…" name-lookup
-              // placeholder the other pickers use.
               const text =
                 s.format === "collection"
                   ? connectedInputs.includes(key)
@@ -754,12 +583,8 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                 </label>
               );
             }
-            // An interval shows in words ("Every 5 minutes"), never raw
-            // seconds; edited via the inspector's value+unit field.
             if (s.format === "duration-seconds") {
               const secs = d.params?.[key] ?? s.default;
-              // An interval set from a reference can't be put into words —
-              // show the reference, not "no interval".
               const secsRef = typeof secs === "string" && hasToken(secs) ? secs : null;
               return (
                 <label key={key} className="dz-param">
@@ -774,8 +599,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                 </label>
               );
             }
-            // A schedule shows in words ("Every day at 09:00"), never as a
-            // cron expression; edited via the inspector's schedule picker.
             if (s.format === "cron") {
               const cronVal = typeof d.params?.[key] === "string"
                 ? (d.params[key] as string)
@@ -795,9 +618,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                 </label>
               );
             }
-            // A value source's literal IS the node — keep it editable.
-            // Every other required literal renders read-only: visible at all
-            // times, edited via the inspector.
             if (isValueSource) {
               return (
                 <label key={key} className="dz-param">
@@ -807,10 +627,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                     value={d.params?.[key] ?? s.default ?? ""}
                     onChange={(v) => d.setParam?.(key, v)}
                     tokenLabels={d.tokenLabels}
-                    // Code in a proportional font is the wrong shape: the
-                    // indentation that carries a script's structure does not
-                    // line up. Highlighted for the same reason the JSON node's
-                    // card box is.
                     lang={language.value ? scriptLangFor(language.value) : undefined}
                   />
                 </label>
@@ -818,13 +634,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
             }
             const rawVal = d.params?.[key] ?? s.default ?? "";
             const strVal = typeof rawVal === "string" ? rawVal : String(rawVal);
-            // An enum's VALUE is API vocabulary ("not_equals", "in_range");
-            // enumNames is what a person reads. The Inspector's form renders
-            // through enumNames, so without this the card and the Inspector
-            // disagree about the same field — the card showing an identifier
-            // the UI never uses anywhere else. Same mapping the language chip
-            // above does, and the reason enum_labels_test insists every enum
-            // carries labels at all.
             const display = enumValueLabel(s, rawVal, i18n.language);
             return (
               <label key={key} className="dz-param">
@@ -850,8 +659,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
             {inputs.map((p) => {
               const c = portColor(p.mime);
               const isPass = p.port === "pass";
-              // Inline value editor for an unconnected, primitive-backed pin —
-              // sits right after the name, Unreal-style (see inlineByPort).
               const field = inlineByPort[p.port];
               return (
                 <div key={"il-" + p.port} className="dz-port-in-row">
@@ -1018,9 +825,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
         d.setupNeeded &&
         (() => {
           const name = d.setupNeeded.integration;
-          // A user without secret:write can't connect apps (the Apps card is
-          // hidden for them) — show a non-actionable "ask an admin" note
-          // instead of a Connect link that would dead-end.
           const locked = d.canConnect === false;
           const icon = d.manifest?.brand_logo ? (
             <img src={d.manifest.brand_logo} alt="" className="dz-node-setup-logo" draggable={false} />
@@ -1054,14 +858,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
   );
 }
 
-// LangGlyphIcon draws the KIND of thing a language is — a terminal, a
-// database, a pair of braces — rather than the language itself.
-//
-// Only three of the languages on offer have a mark anyone would recognise
-// (Python, JavaScript, PowerShell); SQL is a standard rather than a product,
-// and YAML and shell have no logo at all. A row where three chips carry real
-// brand marks and four carry invented ones reads as broken, so none of them
-// does: the glyph groups, and the label beside it identifies.
 function LangGlyphIcon({ glyph }: { glyph: LangGlyph }) {
   const Glyph =
     glyph === "terminal"
@@ -1076,15 +872,8 @@ function LangGlyphIcon({ glyph }: { glyph: LangGlyph }) {
   return <Glyph size={ICON.xs} strokeWidth={2.2} />;
 }
 
-// DazyNode is the memoised node renderer registered with React Flow. With
-// FlowEditor handing each node a referentially-stable `data` object, memo lets
-// an unedited card skip re-rendering when another node's field changes.
 export const DazyNode = memo(DazyNodeImpl);
 
-// ParamInput renders the editor for one primitive param. The control follows
-// the schema: enum → select, boolean → switch, integer/number → number
-// input, multiline string → textarea, otherwise a text input. Shared by the
-// on-pin inline editors and the param-only section so the two never drift.
 function ParamInput({
   schema: s,
   value,
@@ -1096,19 +885,9 @@ function ParamInput({
   value: unknown;
   onChange: (v: unknown) => void;
   tokenLabels?: TokenLabels;
-  // The language this box is written in, when the node says. Set, it renders
-  // the highlighted editor instead of a plain textarea.
   lang?: ScriptLang;
 }) {
-  // When the whole value is one ${…} reference, show it the way the {}
-  // menu words it ("Gmail · Matching emails → first → id") — the raw
-  // syntax is NEVER revealed. The × clears the value (an empty box then
-  // appears); re-pick a reference via the field's {} menu in the inspector.
   const rawStr = typeof value === "string" ? value : "";
-  // A value carrying ANY reference renders as chips-and-text, not as an input:
-  // the syntax is never shown, and text mixed with chips is not editable in an
-  // <input> — the Inspector's field is. The × clears the value, which puts the
-  // plain editor back.
   if (rawStr && hasToken(rawStr)) {
     return (
       <span className="dz-token-chip-line nodrag">
@@ -1126,9 +905,6 @@ function ParamInput({
   }
   if (s.enum) {
     const current = String(value ?? s.default ?? "");
-    // A stored value the enum no longer offers keeps an option of its own, so
-    // the box shows what the flow actually holds rather than the first option
-    // (see the same guard in SchemaForm).
     const unlisted =
       current !== "" && !s.enum.some((o) => String(o) === current) ? current : undefined;
     return (
@@ -1157,8 +933,6 @@ function ParamInput({
   }
   if (s.type === "integer" || s.type === "number") {
     const text = value === "" || value == null ? "" : String(Number(value));
-    // Clamp to the schema's bounds so an out-of-range value (e.g. a negative
-    // quantity) can't be entered here — mirrors the inspector's number field.
     const clamp = (n: number) => {
       if (typeof s.minimum === "number") n = Math.max(s.minimum, n);
       if (typeof s.maximum === "number") n = Math.min(s.maximum, n);
@@ -1190,10 +964,6 @@ function ParamInput({
     return <JsonEditor value={text} onChange={onChange} rows={4} invalid={isInvalidJSON(text)} />;
   }
   if (s.type === "string" && s.format === "multiline") {
-    // A node that says its text is a language gets the same treatment on the
-    // card that the JSON node has always had: the real editor, highlighted.
-    // There is no reason for the two to differ — a card is where you read a
-    // flow, and coloured code is easier to read than a grey block of it.
     if (lang) {
       return (
         <ScriptEditor
@@ -1208,10 +978,6 @@ function ParamInput({
       <textarea rows={2} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />
     );
   }
-  // format:"tel" shows a live flag beside the field — but only for an
-  // international number (+44 → 🇬🇧, 0045 → 🇩🇰), read from its own calling
-  // code. A local number shows no flag (its country is ambiguous). A display
-  // cue; the `phone` drop does the authoritative parse at run time.
   if (s.type === "string" && s.format === "tel") {
     const text = String(value ?? "");
     const info = telFieldFlag(text);
@@ -1246,20 +1012,8 @@ function ParamInput({
   );
 }
 
-// fitSize gives the inline editor a width hint that hugs its content.
-// field-sizing:content (app.css) does this in Chrome, but Firefox/Safari
-// fall back to the input's default ~20ch box; driving the `size` attribute
-// off the current value keeps the box content-width everywhere. Clamped to
-// match the 3ch/24ch min/max-width bounds the CSS enforces on top.
 const fitSize = (text: string) => Math.max(3, Math.min(24, text.length || 1));
 
-// OperatorChip is the compact "operator chip" render for logic primitives
-// (==, >, <, …): a small square showing just the operator glyph, no icon box
-// or title. A/B pins on the left, Result on the right; unconnected-pin
-// defaults are edited in the Inspector (deliberately kept off the chip).
-//
-// It's a separate component so only the chips subscribe to viewport zoom (via
-// useStore) — regular nodes must not re-render on every zoom change.
 function OperatorChip({
   d,
   selected,
@@ -1280,18 +1034,6 @@ function OperatorChip({
   statusClass: string;
 }) {
   const sym = operatorSymbol(d.manifest!);
-  // React Flow scales nodes with the viewport, so a fixed 28px glyph turns
-  // tiny when zoomed out. Counter-scale it to hold a legible on-screen size:
-  // grow the node-space font as zoom drops (fontSize * zoom ≈ OP_MIN_PX), but
-  // never below the 28px base (so zooming IN keeps it crisp, not shrunk) and
-  // never past OP_MAX_FONT (so the glyph can't overflow the 60px chip).
-  //
-  // The editor uses React Flow's default zoom floor (minZoom 0.5), so the
-  // reachable range is [0.5, 2]. OP_MIN_PX 16 means the clamp engages for
-  // zoom < ~0.57 — i.e. across the zoomed-out band the operator stays ≥16px
-  // on-screen while surrounding node text shrinks away. If minZoom is ever
-  // lowered, the same formula keeps the glyph legible further out (capped by
-  // OP_MAX_FONT, below which it finally shrinks with everything else).
   const zoom = useStore((s) => s.transform[2]);
   const OP_BASE_FONT = 28;
   const OP_MAX_FONT = 40;
@@ -1300,7 +1042,6 @@ function OperatorChip({
     OP_MAX_FONT,
     Math.max(OP_BASE_FONT, OP_MIN_PX / (zoom || 1)),
   );
-  // Missing required operands recolour their pin red (#13), same as the full card.
   const inputPortIds = new Set(inputs.map((p) => p.port));
   const missingByPort = new Map(
     (d.configErrors ?? [])
@@ -1368,40 +1109,13 @@ function OperatorChip({
   );
 }
 
-// dotStyle paints a handle by its port's MIME (color) and required-ness
-// (fill) and positions it.
-//
-//   place omitted → single port: keep React Flow's default centering on
-//     the card's vertical midpoint.
-//   place "in"/"out" → multi port: the handle is rendered inside its
-//     label row (the positioning context), so top:50% centers the dot on
-//     that row's text. We then translate it out onto the card's outer
-//     edge: -50%/+50% recenters the 10px dot, and the extra
-//     (--space-3 + 1.5px) walks it across the body padding and the card
-//     border so it lands on the perimeter — independent of label width or
-//     header height, which is what kept the old absolute-px math drifting.
-//
-// Visual encoding (Blueprint-style):
-//   - color → first listed MIME on the port (see portColor)
-//   - fill  → CONNECTION STATE (#11): a wired port is a solid, full-strength
-//             dot; an unwired port is a faint, thinner hollow ring. (Required
-//             vs optional is shown by an asterisk on the label, not the fill.)
 function dotStyle(color: string, filled: boolean, place?: "in" | "out", missing?: boolean) {
-  // A required input that's neither wired nor filled in flags the problem on
-  // the pin itself (#13) — but only its BORDER turns red. The fill stays on the
-  // port's MIME colour so the TYPE is still legible: flooding the whole dot red
-  // (the old behaviour) hid the type underneath. Missing pins are always
-  // unwired; bump their fill tint a little so the type reads inside the red ring.
   const borderColor = missing
     ? "var(--danger)"
     : filled
       ? color
       : `color-mix(in srgb, ${color} 80%, transparent)`;
   const base = {
-    // Empty pins were a faint 1px, half-transparent outline that washed
-    // out on the card surface. Give them a tinted fill plus a thicker,
-    // higher-contrast ring so an unconnected port is easy to spot and aim
-    // at; connected pins stay solid-colour.
     background: filled
       ? color
       : `color-mix(in srgb, ${color} ${missing ? 40 : 22}%, var(--surface))`,
@@ -1430,12 +1144,6 @@ function dotStyle(color: string, filled: boolean, place?: "in" | "out", missing?
   return base;
 }
 
-// PassPinIcon draws the universal passthrough pin as an Unreal-style exec
-// arrow: a rounded white triangle pointing right (same orientation for the
-// in-pin on the left edge and the out-pin on the right edge, mirroring UE's
-// exec flow). It's hollow when idle and fills in when a value is threaded
-// through — both states, plus the hover colour, are driven by CSS off the
-// .dz-pass-pin / .connected classes via currentColor.
 function PassPinIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -1444,10 +1152,6 @@ function PassPinIcon() {
   );
 }
 
-// passPinStyle positions the universal passthrough pin on the card edge.
-// Shape (the triangle) and colour come from the .dz-pass-pin CSS class — this
-// only supplies the edge offset, matching dotStyle's placement so pass and
-// data pins line up.
 function passPinStyle(place: "in" | "out") {
   if (place === "in") {
     return {
@@ -1465,40 +1169,18 @@ function passPinStyle(place: "in" | "out") {
   } as const;
 }
 
-// portColor picks a hue from the port's first listed MIME. Three rules
-// of thumb apply: keep the palette small (≤5 hues) so the canvas stays
-// readable, prefer broad MIME prefixes over exact strings so unknown
-// subtypes still get a sensible color, and fall back to the neutral
-// border color for ports that don't declare a MIME (the common case for
-// legacy manifests we haven't yet annotated).
-// portTooltip is rendered as the handle's HTML title attribute — the
-// browser shows it on hover. Cheap discoverability for single-port
-// nodes where there's no in-card port label to read.
 function portTooltip(port: Port): string {
-  // The pin name is localized; the raw port id stays as-is, since that is the
-  // handle the templates and the API refer to.
   const parts = [
     port.label ? `${portLabel(port.label, i18n.language)} (${port.port})` : port.port,
   ];
-  // Lead with the plain-language kind×cardinality ("Items (a table)", "Text")
-  // instead of raw MIME — what's flowing, in words a non-techie reads.
   parts.push(portTypeLabel(port, (k, d) => i18n.t(k, d)));
   parts.push(port.required ? i18n.t("nodeCard.portRequired") : i18n.t("nodeCard.portOptional"));
-  // A runner's input takes a value, never a file. Said on the pin's tooltip
-  // because that is the moment someone is deciding what to wire in — the
-  // alternative is finding out from a run that refused the job.
   if (port.inline_only) {
     parts.push(i18n.t("nodeCard.portValueOnly"));
   }
   return parts.join(" — ");
 }
 
-// NodeApproveBar is the canvas-side approve/reject pair. It owns only the
-// in-flight flag: the decision itself flips the node's status over SSE, which
-// removes this bar, so there is no success state to render. Both buttons
-// disable together — a double-click that raced would 409 anyway (the record
-// is no longer `awaiting`), but showing the click landed is clearer than
-// letting the second one error.
 function NodeApproveBar({
   onApprove,
 }: {
@@ -1506,8 +1188,6 @@ function NodeApproveBar({
 }) {
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
   const decide = (decision: "approve" | "reject") => async (e: React.MouseEvent) => {
-    // nodrag handles the pointer drag; this stops the click selecting the node
-    // and bubbling to the canvas behind it.
     e.stopPropagation();
     if (busy) return;
     setBusy(decision);

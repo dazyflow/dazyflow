@@ -79,8 +79,6 @@ func attrValue(s sdktrace.ReadOnlySpan, key string) string {
 	return ""
 }
 
-// recordSpans installs a recording tracer provider for the duration of a
-// test and hands back the recorder.
 func recordSpans(t *testing.T) *tracetest.SpanRecorder {
 	t.Helper()
 	recorder := tracetest.NewSpanRecorder()
@@ -133,9 +131,6 @@ func TestEngine_SuccessfulNodeSpanHasNoError(t *testing.T) {
 	}
 }
 
-// A step can fail without Execute returning a Go error: the failure rides
-// in the Result. That still has to mark the span, or a failed step is
-// invisible in the trace.
 func TestEngine_ErrorResultMarksNodeSpanFailed(t *testing.T) {
 	recorder := recordSpans(t)
 	e := newEngineWith(t, NativeDrop{

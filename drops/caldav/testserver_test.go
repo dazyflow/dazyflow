@@ -21,14 +21,8 @@ import (
 )
 
 const (
-	testUser = "ada@example.test"
-	testPass = "app-password"
-	// go-webdav's CalDAV handler derives what a path IS from its DEPTH:
-	// 1 = principal, 2 = calendar home set, 3 = calendar, 4 = object. So the
-	// test paths have to sit at those depths for its own routing to work.
-	// That is a constraint of this test server, not of CalDAV — real servers
-	// lay out paths however they like, which is exactly why the client does a
-	// discovery walk instead of assuming a shape.
+	testUser  = "ada@example.test"
+	testPass  = "app-password"
 	principal = "/ada/"
 	homeSet   = "/ada/calendars/"
 )
@@ -112,10 +106,6 @@ func (b *memBackend) ListCalendarObjects(ctx context.Context, p string, req *dav
 	return out, nil
 }
 
-// QueryCalendarObjects applies the time-range filter the same way a real
-// server does: an event is in the window when it starts before the end and
-// ends after the start. Implemented rather than ignored, so the window tests
-// are actually testing a window.
 func (b *memBackend) QueryCalendarObjects(ctx context.Context, p string, query *dav.CalendarQuery) ([]dav.CalendarObject, error) {
 	all, err := b.ListCalendarObjects(ctx, p, nil)
 	if err != nil {
@@ -166,7 +156,6 @@ func (b *memBackend) DeleteCalendarObject(ctx context.Context, p string) error {
 	return nil
 }
 
-// put plants an event on the backend directly, for the listing tests.
 func (b *memBackend) put(t *testing.T, calendar, uid, summary string, start, end time.Time) {
 	t.Helper()
 	cal := buildCalendar(uid, summary, "", "", "", start, end, false)
@@ -176,16 +165,12 @@ func (b *memBackend) put(t *testing.T, calendar, uid, summary string, start, end
 	}
 }
 
-// count returns how many objects the backend holds — the assertion for
-// "did the write land, and exactly once".
 func (b *memBackend) count() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return len(b.objects)
 }
 
-// startCalDAV serves the backend over HTTP with basic auth, and returns its
-// base URL.
 func startCalDAV(t *testing.T, b *memBackend) string {
 	t.Helper()
 	handler := &dav.Handler{Backend: b}
@@ -202,9 +187,6 @@ func startCalDAV(t *testing.T, b *memBackend) string {
 	return srv.URL + "/"
 }
 
-// job is a job wired to the test server the way the engine wires a real one:
-// the connection fields arrive as params (injectConnectionDefaults), with the
-// per-event fields alongside them.
 func job(t *testing.T, url string, p map[string]any) core.Job {
 	t.Helper()
 	full := map[string]any{

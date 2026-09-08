@@ -85,8 +85,6 @@ func TestInputFields_GoogleFormStructuralKeys(t *testing.T) {
 }
 
 func TestInputFields_GoogleFormLiveFetcher(t *testing.T) {
-	// When the live fetcher is wired (cmd/dzd does this with gform.FieldNames),
-	// the Google Form source returns the form's actual question titles.
 	SetGoogleFormFieldFetcher(func(_ context.Context, n core.Node) ([]string, error) {
 		if n.Params["form_id"] != "F1" {
 			t.Errorf("fetcher got form_id %v", n.Params["form_id"])
@@ -116,8 +114,6 @@ func TestInputFields_GoogleFormLiveFetcher(t *testing.T) {
 }
 
 func TestInputFields_GoogleFormFallsBackOnFetchError(t *testing.T) {
-	// A failing live fetch (no token, form not shared, …) degrades to the
-	// structural keys rather than erroring the endpoint.
 	SetGoogleFormFieldFetcher(func(_ context.Context, _ core.Node) ([]string, error) {
 		return nil, context.DeadlineExceeded
 	})

@@ -15,16 +15,10 @@ import (
 	"github.com/dazyflow/dazyflow/internal/sftputil"
 )
 
-// Connection verification for the SFTP integration, registered so the Apps
-// page can test credentials before storing them. The label matches the
-// drops' Manifest.Integration.
 func init() {
 	engine.RegisterConnectionVerifier(integration, verifySFTP)
 }
 
-// verifyTimeout bounds the probe. Someone is watching a spinner, and an SFTP
-// server that needs longer than this to complete a handshake is a finding in
-// itself.
 const verifyTimeout = 20 * time.Second
 
 // verifySFTP connects, authenticates, and stats the configured folder, then
@@ -42,11 +36,6 @@ func verifySFTP(ctx context.Context, conn map[string]string) error {
 		return err
 	}
 
-	// CheckDialHost fails for two very different reasons: the host doesn't
-	// resolve at all (a typo) vs. it resolves to a private/LAN address (the
-	// egress guard). Don't tell someone with a typo to enable private-network
-	// access — say the address looks wrong. Checked here as well as inside
-	// Dial so the message can be about this form.
 	if err := hfnet.CheckDialHost(cfg.Addr()); err != nil {
 		if strings.Contains(err.Error(), "cannot resolve") {
 			return fmt.Errorf("couldn't find a server at %q — check the address", cfg.Host)

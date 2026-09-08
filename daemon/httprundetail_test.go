@@ -95,7 +95,6 @@ func TestNewNodeRunView_RetrySignal(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(30 * time.Second)
 	at := &future
-	// A node between attempts: queued, attempt>0, with a future horizon.
 	requeued := core.NodeRun{
 		NodeID:      "n",
 		Status:      core.JobStatusQueued,
@@ -116,7 +115,6 @@ func TestNewNodeRunView_RetrySignal(t *testing.T) {
 		t.Errorf("terminal failure must not set retry signal, got will_retry=%v retry_at=%v", fv.WillRetry, fv.RetryAt)
 	}
 
-	// A first-time queued node (attempt 0, no horizon) is not a retry.
 	fresh := core.NodeRun{NodeID: "n", Status: core.JobStatusQueued}
 	if fv := newNodeRunView(fresh); fv.WillRetry {
 		t.Error("a fresh queued node should not set will_retry")
@@ -134,9 +132,6 @@ func TestHTTPGateway_ListRunNodes_UnknownRunIs404(t *testing.T) {
 
 func TestHTTPGateway_ListRunNodes_EmptyListForRunWithNoNodes(t *testing.T) {
 	t.Parallel()
-	// A graph that ran but recorded zero node records (degenerate
-	// case) should return an empty array, not nil — keeps the UI
-	// code simple.
 	h := newGatewayHarness(t)
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID:           "run-empty",

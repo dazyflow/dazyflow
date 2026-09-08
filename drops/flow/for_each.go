@@ -52,10 +52,6 @@ func init() {
 				Label: "List",
 			}},
 			Outputs: []core.Port{
-				// body is a control pin (not data): wiring it to a node marks
-				// that node + its downstream chain as the loop body the engine
-				// runs once per item. The dispatcher excludes those nodes from
-				// normal execution (see loopBodyOwners).
 				{Port: "body", Label: "Loop body", MIME: []string{"application/x-dazyflow-exec"}},
 				{Port: "results", Label: "Results", MIME: []string{MIMEList}},
 				{Port: "errors", Label: "Failed rows", MIME: []string{"application/json"}},
@@ -91,10 +87,6 @@ func executeForEach(ctx context.Context, job core.Job, progress chan<- core.Prog
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
-	// The daemon hands us a runner that executes the body subgraph — the nodes
-	// wired to the `body` pin — in-process, once per item. Each row reaches the
-	// body nodes through their ${item.…} params (resolved by the engine per
-	// iteration). A for_each with no wired body has nothing to run.
 	runner, ok := engine.BodyRunnerFromContext(ctx)
 	if !ok {
 		return params.Err(job, "bad_param", "connect the For each `body` pin to the step(s) that handle one item"), nil
@@ -129,9 +121,6 @@ const defaultForEachConcurrency = 8
 // radius on the multi-tenant daemon.
 const maxForEachConcurrency = 64
 
-// itemFunc runs one iteration. It returns the Ref to record at results[idx]
-// and, when the iteration failed, a JSON-serializable error entry to record
-// under errors[idx] (nil on success).
 type itemFunc func(ctx context.Context, idx int, item core.Ref) (core.Ref, any)
 
 // runForEachItems is the shared fan-out skeleton for both modes: it runs
@@ -159,10 +148,6 @@ func runForEachItems(
 	}
 
 	results := make([]core.Ref, len(items))
-	// failures collects one entry per failed row, ordered by row at the end.
-	// Each entry is {row, data, error}: row is 1-based (people count rows
-	// from 1), data is the row itself (so "Failed rows" is self-describing —
-	// you can see WHO failed without cross-referencing), error is the cause.
 	type failure struct {
 		idx   int
 		entry map[string]any
@@ -250,10 +235,6 @@ func runForEachItems(
 		failedRows[i] = f.entry
 	}
 
-	// Say what happened in the run log whatever the outcome. A partial failure
-	// used to be invisible unless the author had wired the `errors` port:
-	// the step was green, the run was green, and "3 of 400 invoices were not
-	// sent" was discoverable only by someone who already suspected it.
 	if len(failures) > 0 {
 		params.EmitProgress(progress, job, 1, fmt.Sprintf(
 			"%d of %d item(s) failed — see the Failed rows output", len(failures), len(items)))
@@ -279,17 +260,6 @@ func runForEachItems(
 			Message: fmt.Sprintf("every item failed (%d/%d) — see the failed rows", len(failures), len(items)),
 		}
 	case len(failures)*2 > len(items):
-		// MOST of it failed. The all-or-nothing guard above already conceded
-		// that there is a line past which "partial success" is the wrong
-		// word; it just drew that line at 100%, which left 99 failures out of
-		// 100 reported as a successful run — green in the Runs list, no
-		// notification, and the next step marking the work done. Half is the
-		// honest place for the line: below it a few bad rows among many, above
-		// it something is broken and the run should say so.
-		//
-		// The rows that DID succeed are still on `results`, and `errors` still
-		// carries the failures, so nothing is thrown away by failing here —
-		// what changes is that somebody is told.
 		status = core.StatusError
 		jobErr = &core.JobError{
 			Code: "most_items_failed",
@@ -310,10 +280,6 @@ func runForEachItems(
 	}
 }
 
-// bodyResultPayload summarizes one body-subgraph run for the results list:
-// the overall status plus each body node's status/output/error. Downstream
-// consumers of the for_each `results` port read a node's output from
-// results[idx].nodes.<nodeID>.output.
 func bodyResultPayload(gr engine.GraphResult) map[string]any {
 	nodes := make(map[string]any, len(gr.Nodes))
 	for id, r := range gr.Nodes {
@@ -343,11 +309,6 @@ func capItems(n int) error {
 	return nil
 }
 
-// normalizeItems coerces the items input into a list of Refs that can be
-// fed into the step. The list arrives as either:
-//   - []core.Ref     (from merge or another for_each)
-//   - []any          (parsed JSON array, the common webhook case)
-//   - []map[string]any
 func normalizeItems(ref core.Ref) ([]core.Ref, error) {
 	switch v := ref.Inline.(type) {
 	case []core.Ref:

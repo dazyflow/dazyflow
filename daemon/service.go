@@ -1,11 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package daemon contains the orchestration layer that ties auth, workspace
-// storage, job persistence, and the execution engine together. Both the
-// gRPC server in cmd/dzd and the integration tests in tests/e2e depend on
-// it, which is why it lives in its own importable package rather than
-// inside cmd/dzd.
 package daemon
 
 import (
@@ -32,33 +27,17 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// WorkspaceLookup resolves a (tenant, workspace) pair to its backing Git
-// store. Production wires a real lookup against a workspaces table; tests
-// use MapWorkspaces.
 type WorkspaceLookup interface {
 	Open(tenant, workspace string) (*workspace.Store, error)
-	// List returns every workspace directory present under the supplied
-	// tenant. It is no longer user-facing (one workspace per org); the
-	// event-routing handlers (github/slack/stripe webhooks, GDPR export)
-	// use it to scan a tenant's stores for matching flows.
 	List(tenant string) ([]string, error)
 }
 
-// WorkspaceEnumerator is the optional capability the cron/poll scheduler
-// needs: walk every known (tenant, workspace) store so it can scan their
-// graphs for time-based triggers. Keyed "tenant/workspace". Both
-// MapWorkspaces and AutoFSWorkspaces implement it; a lookup that can't
-// enumerate (e.g. a lazy remote registry) simply won't drive the
-// scheduler.
+// The optional capability the scheduler needs: without it a deployment can serve
+// requests but never fire a schedule.
 type WorkspaceEnumerator interface {
-	// All yields every known (tenant, workspace) store, one at a time. It is a
-	// sequence rather than a map so a caller sweeping a large install doesn't
-	// force every workspace to be open at once — AutoFSWorkspaces evicts as
-	// the iteration advances. Callers must not retain a store past its yield.
 	All() iter.Seq2[string, *workspace.Store]
 }
 
-// MapWorkspaces is a static lookup keyed by "tenant/workspace".
 type MapWorkspaces map[string]*workspace.Store
 
 func (m MapWorkspaces) Open(tenant, ws string) (*workspace.Store, error) {
@@ -68,8 +47,6 @@ func (m MapWorkspaces) Open(tenant, ws string) (*workspace.Store, error) {
 	return nil, fmt.Errorf("no workspace store for %q/%q", tenant, ws)
 }
 
-// List walks the static map and returns the workspace half of every
-// key matching the supplied tenant. Sorted for stable output.
 func (m MapWorkspaces) List(tenant string) ([]string, error) {
 	prefix := tenant + "/"
 	out := make([]string, 0)
@@ -83,50 +60,28 @@ func (m MapWorkspaces) List(tenant string) ([]string, error) {
 	return out, nil
 }
 
-// All iterates the underlying map directly — MapWorkspaces already keys by
-// "tenant/workspace", and its stores are caller-owned, so nothing is evicted.
 func (m MapWorkspaces) All() iter.Seq2[string, *workspace.Store] { return maps.All(m) }
 
-// AutoFSWorkspaces lazily provisions a git-backed workspace.Store per
-// (tenant, workspace) under a base directory. The first access to a
-// new pair opens (and, if absent, initializes) its store — so a
-// self-serve signup that mints tenant usr_<hex> can save graphs
-// without any pre-registration step. This is the single-node FS
-// stand-in for the eventual Postgres-backed workspace registry.
-//
-// Path components are sanitized to a conservative charset so a
-// crafted tenant/workspace name can't escape the base directory.
+// Provisions a git-backed store per (tenant, workspace) on first use. Each open
+// store holds a git handle, so the resident set is bounded by maxOpen.
 type AutoFSWorkspaces struct {
 	base string
 
 	mu sync.Mutex
-	// open indexes order by key; order is most-recently-used first. A store
-	// stays open until it is evicted, so this bounds how much of a large
-	// install is resident at once — see maxOpen and evictLocked.
+	// order is most-recently-used first.
 	open  map[string]*list.Element
 	order *list.List
-	// maxOpen caps the open set. 0 means unlimited, which is mandatory in
-	// memory mode: an in-memory store IS the tenant's graphs, so evicting one
-	// deletes them.
+	// 0 is unlimited, which memory mode requires: an evicted memory store loses data.
 	maxOpen int
 }
 
-// openWorkspace is one entry of the open set, carrying its key so an eviction
-// picked off the back of the list can find its map entry.
 type openWorkspace struct {
 	key   string
 	store *workspace.Store
 }
 
-// defaultMaxOpenWorkspaces bounds the resident workspace set. Each open store
-// holds a go-git repository plus its object cache, so without a cap a single
-// sweep over every tenant leaves all of them resident for the life of the
-// process. Generous enough that an install's actively-edited workspaces all
-// stay hot; a miss costs one repository open, not a lost edit.
 const defaultMaxOpenWorkspaces = 512
 
-// NewAutoFSWorkspaces returns a lookup rooted at base. Each tenant
-// gets base/<tenant>/<workspace> as its git store directory.
 func NewAutoFSWorkspaces(base string) *AutoFSWorkspaces {
 	a := &AutoFSWorkspaces{
 		base:  base,
@@ -139,9 +94,7 @@ func NewAutoFSWorkspaces(base string) *AutoFSWorkspaces {
 	return a
 }
 
-// SetMaxOpen overrides how many stores stay resident. Ignored in memory mode,
-// where eviction would discard the only copy of a tenant's graphs. n <= 0
-// disables eviction.
+// Ignored in memory mode, where eviction would lose data.
 func (a *AutoFSWorkspaces) SetMaxOpen(n int) {
 	if a.base == "" {
 		return
@@ -164,9 +117,6 @@ func (a *AutoFSWorkspaces) Open(tenant, ws string) (*workspace.Store, error) {
 		a.order.MoveToFront(el)
 		return el.Value.(*openWorkspace).store, nil
 	}
-	// Empty base = in-memory mode: OpenFS("") returns a memory store.
-	// We still cache per key so a tenant's graphs persist across
-	// requests within the process lifetime.
 	dir := ""
 	if a.base != "" {
 		dir = filepath.Join(a.base, st, wsClean)
@@ -180,10 +130,6 @@ func (a *AutoFSWorkspaces) Open(tenant, ws string) (*workspace.Store, error) {
 	return s, nil
 }
 
-// evictLocked drops least-recently-used stores until the open set fits.
-// Dropping a store does not close anything: a caller still holding one keeps
-// using it, and a reopen of the same directory shares its lock (see
-// workspace.dirMutex), so the two cannot corrupt each other. Caller holds a.mu.
 func (a *AutoFSWorkspaces) evictLocked() {
 	if a.maxOpen <= 0 {
 		return
@@ -198,10 +144,6 @@ func (a *AutoFSWorkspaces) evictLocked() {
 	}
 }
 
-// List returns the workspace directories present under base/<tenant>.
-// A tenant with no directory yet (never saved anything) lists empty
-// rather than erroring — the switcher then shows the default. In
-// memory mode (empty base) it reports the workspaces opened so far.
 func (a *AutoFSWorkspaces) List(tenant string) ([]string, error) {
 	st, _, err := safeWorkspaceSegment(tenant, "main")
 	if err != nil {
@@ -237,10 +179,6 @@ func (a *AutoFSWorkspaces) List(tenant string) ([]string, error) {
 	return out, nil
 }
 
-// RemoveTenant deletes a tenant's entire workspace subtree (every
-// workspace and its git history) and evicts any cached open stores — the
-// workspace half of the GDPR erasure cascade (Art. 17). Idempotent. In
-// memory mode (empty base) it just drops the cached stores.
 func (a *AutoFSWorkspaces) RemoveTenant(tenant string) error {
 	st, _, err := safeWorkspaceSegment(tenant, "main")
 	if err != nil {
@@ -261,16 +199,9 @@ func (a *AutoFSWorkspaces) RemoveTenant(tenant string) error {
 	return os.RemoveAll(filepath.Join(a.base, st))
 }
 
-// All enumerates every (tenant, workspace) store on disk under base,
-// opening (and caching) each. Used by the scheduler's periodic rescan
-// to discover cron/poll triggers across all tenants. In memory mode
-// (empty base) it returns the stores opened so far this process.
 func (a *AutoFSWorkspaces) All() iter.Seq2[string, *workspace.Store] {
 	return func(yield func(string, *workspace.Store) bool) {
 		if a.base == "" {
-			// Memory mode: nothing is on disk, so the open set IS the set.
-			// Snapshot it rather than yielding under the lock, so the consumer
-			// is free to Open (or remove) a workspace while iterating.
 			a.mu.Lock()
 			snapshot := make([]*openWorkspace, 0, len(a.open))
 			for el := a.order.Front(); el != nil; el = el.Next() {
@@ -302,9 +233,7 @@ func (a *AutoFSWorkspaces) All() iter.Seq2[string, *workspace.Store] {
 					continue
 				}
 				ws := we.Name()
-				// Opening here is what makes the eviction bound work: each
-				// step admits one store and drops the least-recently-used, so
-				// a sweep costs maxOpen resident stores, not one per tenant.
+				// Opening here is what makes the eviction bound work.
 				s, err := a.Open(tenant, ws)
 				if err != nil {
 					continue
@@ -317,9 +246,8 @@ func (a *AutoFSWorkspaces) All() iter.Seq2[string, *workspace.Store] {
 	}
 }
 
-// safeWorkspaceSegment validates tenant and workspace as single path
-// segments — no empty, no separators, no "." / ".." — so joining them
-// under a base directory can't traverse outside it.
+// Validates tenant and workspace as single path segments, so neither can escape
+// the base directory.
 func safeWorkspaceSegment(tenant, ws string) (string, string, error) {
 	for _, v := range []string{tenant, ws} {
 		if v == "" || v == "." || v == ".." ||
@@ -330,233 +258,90 @@ func safeWorkspaceSegment(tenant, ws string) (string, string, error) {
 	return tenant, ws, nil
 }
 
-// Service is the daemon's business logic. Each method enforces authz,
-// touches whatever storage it needs, and writes a JobStore record for
-// auditing where applicable.
-//
-// Service is decoupled from execution: SubmitGraph enqueues a job and a
-// Worker (running in the same process or another dzd instance) picks it up
-// and runs it. The Bus stitches the two together so streaming RPCs can
-// follow a job's progress regardless of which worker handled it.
-//
-// Cohesive concerns are factored into focused services rather than living as
-// Service methods: OAuth into OAuthRegistry, the encrypted secret store into
-// EncryptedSecrets, and the free-tier billing gates into BillingService
-// (reached via s.billing()). Service holds their dependencies and acts as the
-// facade that wires them to the request path.
 type Service struct {
 	Auth       auth.Authenticator
 	Workspaces WorkspaceLookup
 	Jobs       core.JobStore
 
-	// Schedules projects what the scheduler enrolls. Nil falls the scheduler
-	// back to deriving its set by walking every workspace on every rescan.
 	Schedules ScheduleStore
 	Engine    *engine.Engine
 	Bus       Bus
 	WorkerID  string // identifies this dzd instance in JobStore records
 
-	// Wake, when set, is signalled after this Service enqueues runnable work
-	// so an idle worker in this process starts on it immediately rather than
-	// on its next poll. Share the pointer with WorkerConfig.Wake. Nil-safe:
-	// without it the workers simply poll. See WorkSignal.
+	// Signalled after runnable work is enqueued, so a submit starts a run now.
 	Wake *WorkSignal
 
-	// AdminKeys, when set, powers the API key admin endpoints. Without
-	// it those endpoints return 501. Splitting from Auth keeps the
-	// read-only Authenticator interface minimal; the admin path needs
-	// list + revoke + put which would bloat that contract otherwise.
 	AdminKeys auth.AdminKeyStore
 
-	// MaxGraphTimeoutSeconds is a hard ceiling on a run's wall-time: an
-	// explicit per-graph TimeoutSeconds larger than this is clamped down
-	// to it, so a tenant can't pin a worker for an unbounded duration.
-	// Zero = no ceiling. Configured by `-max-graph-timeout`.
+	// A hard ceiling a tenant cannot raise.
 	MaxGraphTimeoutSeconds int
 
-	// MaxGraphNodes rejects a SubmitGraph whose node count exceeds it,
-	// guarding against resource-exhaustion via pathologically large
-	// graphs. Zero = unlimited. Configured by `-max-graph-nodes`.
 	MaxGraphNodes int
 
-	// MaxGraphEdges rejects a graph with more wires than this. A node
-	// ceiling alone does not bound the work: readiness is re-evaluated per
-	// dependent per completion, so cost scales with edges, and a graph
-	// inside the node limit can carry hundreds of thousands of them.
-	// Operator-wide rather than per-tier (unlike MaxGraphNodes) — no plan
-	// distinguishes flows by wire count. Zero = unlimited.
 	MaxGraphEdges int
 
-	// subtreeBudget caps total descendant runs per root run-tree, bounding
-	// subgraph fan-out (see subgraph_budget.go). Lazily initialized via
-	// subtreeBudgetInst so a zero-value Service literal works.
 	subtreeOnce    sync.Once
 	subtreeBudgetV *subtreeBudget
 
-	// modelsCache holds the per-tenant live model catalogs the AI steps'
-	// pickers are built from (llmmodels.go). Lazily initialized via
-	// modelsOnce so a zero-value Service literal works.
 	modelsOnce  sync.Once
 	modelsCache *modelCatalog
 
-	// runsCache is the process-wide cache of parsed run payloads, shared with
-	// the workers (see RunCache). The read paths want it as much as the
-	// execution path does: the run viewer polls every couple of seconds and
-	// each poll otherwise re-reads and re-decodes the run's whole flow JSON.
-	// Lazily initialized via runsOnce so a zero-value Service literal works.
 	runsOnce  sync.Once
 	runsCache *RunCache
 
-	// EncryptedSecrets is the per-tenant encrypted secret store that
-	// integration drops (Gmail OAuth, Claude API key, etc.) read from.
-	// Nil leaves the store CRUD endpoints + any drop that depends on
-	// encrypted secrets disabled. Comes up only when --master-key is set.
 	EncryptedSecrets *EncryptedSecrets
 
-	// PublicBaseURL is the externally-reachable origin of the daemon,
-	// used by failure_notify to construct UI links to the failing
-	// run. Empty = no link in the notification payload. Same value
-	// dzd already collects via --public-base-url for the OAuth flow.
 	PublicBaseURL string
 
-	// SupportContact is an operator-configured email or URL the web
-	// UI surfaces to end users when a feature isn't usable on this
-	// install (e.g. OAuth disabled, encrypted secret store off). The
-	// UI shows it as the action target on "your administrator hasn't
-	// finished setup" prompts. Empty = the UI falls back to a generic
-	// "contact your administrator" message with no link.
 	SupportContact string
 
-	// Logger receives daemon-side warnings (failure-notify delivery
-	// failures, etc.). Nil disables those logs — handy in tests
-	// that don't want stderr noise.
 	Logger *log.Logger
 
-	// Usage, when set, counts each submitted graph run per tenant per
-	// month (T3 metering). Best-effort: a metering failure is logged,
-	// never surfaced — billing must not break runs.
 	Usage UsageStore
 
-	// Plans, when set, resolves each tenant's billing plan (free/pro)
-	// for the run gate and the billing endpoints. Nil = everyone free.
 	Plans PlanStore
 
-	// FreeRunsPerMonth caps how many runs a free-plan tenant may submit
-	// per calendar month. Zero (the default) disables enforcement
-	// entirely — self-hosted deployments without billing never hit a
-	// gate. Requires Usage + Plans to enforce.
+	// Enforced on the submit path, so a trigger is refused rather than queued.
 	FreeRunsPerMonth int
 
-	// FreePollingDisabled keeps schedule/poll triggers off the free plan
-	// (the scheduler skips firing them; manual Run still works). False
-	// (the default) leaves scheduling open to everyone. Configured by
-	// DAZYFLOW_FREE_POLLING_TRIGGERS=0; requires Plans to enforce.
 	FreePollingDisabled bool
 
-	// Free-plan caps for the entitlement dimensions added with the
-	// three-tier model. Each is the deployment-global default a free-plan
-	// tenant resolves against (a tier/override can raise it); pro/comped/
-	// trial tenants bypass these gates entirely, mirroring FreeRunsPerMonth.
-	// Zero = no enforcement (self-hosted deployments without billing never
-	// gate). Configured by DAZYFLOW_FREE_RETENTION_DAYS /
-	// DAZYFLOW_FREE_MAX_CONCURRENCY / DAZYFLOW_FREE_MAX_MEMBERS.
 	FreeRetentionDays  int
 	FreeMaxConcurrency int
 	FreeMaxMembers     int
 
-	// Mailer, when set, delivers the platform's transactional email
-	// (invitation links, failure-notification emails). Nil = those
-	// channels are off; everything degrades to its link/webhook form.
 	Mailer *Mailer
 
-	// Users, when set, is the password-auth user store. failure_notify
-	// reads it to resolve a flow owner's notification preferences (the
-	// account-level "email me when my flow fails" channel). Nil leaves
-	// only the per-flow FailureNotify.Email/Webhook channels active. The
-	// same store the HTTP gateway authenticates against.
 	Users auth.UserStore
 
-	// RunLogs, when set, is the persisted run-log store (written by the
-	// RecordingBus, read by `dzctl job logs` / the logs endpoints). Nil
-	// = logs aren't persisted on this deployment.
 	RunLogs RunLogStore
 
-	// Shares, when set, persists the per-workspace public overview share
-	// links (the read-only TV-dashboard surface). Nil leaves the /me/share
-	// CRUD endpoints + the public overview endpoint disabled.
 	Shares ShareStore
 
-	// CollectionShares, when set, persists the per-collection public links
-	// (the login-free read-only table at /board/{token}). Nil leaves the
-	// /me/collection-shares CRUD + the public collection endpoint disabled,
-	// which is the right default for a deployment without Postgres: a link
-	// that cannot be revoked after a restart must not be mintable.
 	CollectionShares CollectionShareStore
 
-	// OrgProfiles, when set, resolves a tenant's human-facing org display
-	// name. The public overview uses it to title the TV board with the org
-	// name instead of a generic label. Nil = the board falls back to its
-	// generic title. Same store the gateway reads for org display names.
 	OrgProfiles auth.OrgProfileStore
 
-	// DropSwitches, when set, is the platform-admin drop killswitch. The
-	// engine resolver consults it per node (the actual enforcement); the
-	// catalog (ListDrops) reads it to hide globally-disabled drops from the
-	// palette. Nil = no drops are ever switched off.
 	DropSwitches DropSwitchStore
 
-	// Entitlements, when set, resolves per-org tiers + limit overrides +
-	// manual plan/trial/comp grants. The limit gates (runs, polling, node
-	// count, timeout, disk, flow count) read effective values through it;
-	// nil leaves every org on the global defaults + Stripe plan.
 	Entitlements EntitlementStore
 
-	// suggestMu guards suggestCache, the memo backing DropSuggestions.
-	// Keyed by (tenant, workspace, visibility-view); each entry remembers
-	// the workspace HEAD it was computed at, so a save (which moves HEAD)
-	// transparently invalidates it on the next read.
-	//
-	// Service has no constructor (it's built as a struct literal in cmd/dzd
-	// and in tests), so suggestCache is created lazily on first write — but
-	// always under suggestMu, and the nil-map read in DropSuggestions is also
-	// taken under suggestMu, so the lazy init is race-free.
-	// Bounded FIFO (suggestOrder + suggestCacheMax): the key includes the
-	// principal's subject for private-flow visibility, so the key space is
-	// tenants × users and entries were never evicted — a long-lived process
-	// with many users accumulated one entry per user per workspace forever.
-	// Mirrors the eviction the idempotency store already does.
 	suggestMu    sync.Mutex
 	suggestCache map[string]suggestEntry
 	suggestOrder []string
 
-	// OnWorkspaceCommit, when set, is called after any change that lands a
-	// commit or moves a ref in a workspace's git store — save, delete,
-	// publish, unpublish, label, environment promotion.
-	//
-	// It exists so the git mirror has ONE place to hook. The alternative
-	// (calling the pusher from each HTTP handler) silently misses every
-	// path that doesn't have a handler of its own — the MCP save path,
-	// duplicate, restore, the publish migration — and "my mirror is missing
-	// last Tuesday" is a bug nobody can reproduce. Every store write in
-	// this file routes through here instead.
-	//
-	// trigger is PushOnPublish or PushOnSave, letting a consumer honour a
-	// "mirror on publish only" preference. Contract: fire-and-forget and
-	// non-blocking — the caller has already committed, so an implementation
-	// must never block the request or turn its own failure into the user's.
+	// Called after any change that lands a commit, which is what the git mirror and
+	// the suggestion memo hang off — so a new write path must call it or they go
+	// stale.
 	OnWorkspaceCommit func(tenant, workspace, trigger string)
 }
 
-// logf writes a daemon-side warning when a Logger is configured. Nil-safe so
-// best-effort paths stay one-liners.
 func (s *Service) logf(format string, args ...any) {
 	if s.Logger != nil {
 		s.Logger.Printf(format, args...)
 	}
 }
 
-// workspaceCommitted fans a store write out to OnWorkspaceCommit. Nil-safe
-// so every call site is a plain one-liner.
 func (s *Service) workspaceCommitted(tenant, ws, trigger string) {
 	if s.OnWorkspaceCommit == nil || tenant == "" || ws == "" {
 		return
@@ -564,8 +349,6 @@ func (s *Service) workspaceCommitted(tenant, ws, trigger string) {
 	s.OnWorkspaceCommit(tenant, ws, trigger)
 }
 
-// suggestCacheMax caps the DropSuggestions memo. Generous — the entries are
-// small and the point is only to stop unbounded growth, not to be frugal.
 const suggestCacheMax = 512
 
 type suggestEntry struct {
@@ -575,15 +358,11 @@ type suggestEntry struct {
 
 func (s *Service) bus() Bus {
 	if s.Bus == nil {
-		// Sensible default so single-process tests don't have to wire one.
 		s.Bus = NewMemoryBus()
 	}
 	return s.Bus
 }
 
-// Authenticate is exposed so transport layers (gRPC interceptor, HTTP
-// middleware) can resolve a bearer token into a principal without leaking
-// the auth chain into their packages.
 func (s *Service) Authenticate(ctx context.Context, credential string) (core.Principal, error) {
 	if s.Auth == nil {
 		return core.Principal{}, fmt.Errorf("authenticator not configured")
@@ -591,10 +370,7 @@ func (s *Service) Authenticate(ctx context.Context, credential string) (core.Pri
 	return s.Auth.Authenticate(ctx, credential)
 }
 
-// orgSuspended reports whether a platform admin has suspended the tenant.
-// Best-effort: a nil profile store, an empty tenant, a missing profile,
-// or a lookup error all read as "not suspended" so a transient DB blip
-// can't silently halt every flow on the deployment.
+// A suspended org is refused on the run and trigger paths.
 func (s *Service) orgSuspended(ctx context.Context, tenant string) bool {
 	if s.OrgProfiles == nil || tenant == "" {
 		return false
@@ -603,10 +379,6 @@ func (s *Service) orgSuspended(ctx context.Context, tenant string) bool {
 	return err == nil && prof.Suspended()
 }
 
-// limitDefaults are the deployment-global fallbacks every limit resolves
-// against when neither a tier nor an override sets a value — built from the
-// Service.* knobs. Shared by effectiveLimits and the /me/plans handler so the
-// catalog the user sees and the limits actually enforced agree exactly.
 func (s *Service) limitDefaults() LimitDefaults {
 	return LimitDefaults{
 		RunsPerMonth:      s.FreeRunsPerMonth,
@@ -619,11 +391,6 @@ func (s *Service) limitDefaults() LimitDefaults {
 	}
 }
 
-// effectiveLimits resolves a tenant's limits + plan from its entitlement,
-// its tier, the deployment-global defaults (the Service.* knobs), and the
-// Stripe plan. With no Entitlements store wired it reflects exactly the
-// pre-entitlement behaviour: global defaults + Stripe plan. Read on the
-// run/trigger/node hot paths, so it leans on the store's in-memory cache.
 func (s *Service) effectiveLimits(ctx context.Context, tenant string) EffectiveLimits {
 	def := s.limitDefaults()
 	stripePlan := PlanFree
@@ -649,24 +416,14 @@ func (s *Service) effectiveLimits(ctx context.Context, tenant string) EffectiveL
 	return ResolveEffective(entP, tierP, def, stripePlan, time.Now())
 }
 
-// RunLogRetentionDays is the run-log retention window (in days) for a tenant.
-// The effective value already encodes the plan: a free tenant gets its tier/
-// default window, and Pro defaults to 0 (uncapped — only the global sweep
-// bounds it) but honors an explicit retention cap set on its tier/override.
-// 0 = no per-tenant cap.
 func (s *Service) RunLogRetentionDays(ctx context.Context, tenant string) int {
 	return s.effectiveLimits(ctx, tenant).RetentionDays
 }
 
-// EffectiveLimitsFor is the exported accessor cmd/dzd uses to wire the
-// FSQuota disk-quota override to the entitlement resolver.
 func (s *Service) EffectiveLimitsFor(ctx context.Context, tenant string) EffectiveLimits {
 	return s.effectiveLimits(ctx, tenant)
 }
 
-// hasActiveRun reports whether any non-terminal graph-record exists
-// for (tenant, workspace, graphID). One Limit=1 query per non-terminal
-// status keeps the cost bounded regardless of run history.
 func (s *Service) hasActiveRun(ctx context.Context, tenant, ws, graphID string) (bool, error) {
 	for _, st := range []core.JobStatus{core.JobStatusQueued, core.JobStatusRunning, core.JobStatusAwaiting} {
 		n, err := core.CountRuns(ctx, s.Jobs, core.ListGraphRunsOpts{
@@ -686,13 +443,6 @@ func (s *Service) hasActiveRun(ctx context.Context, tenant, ws, graphID string) 
 	return false, nil
 }
 
-// SetFlowEnabled toggles the Disabled flag on a flow. When disabled,
-// the scheduler skips cron + poll triggers and webhook/form endpoints
-// reject inbound calls — but manual runs and explicit test triggers
-// still work. Surfaced via enable_flow / disable_flow MCP tools.
-//
-// Idempotent: enabling an already-enabled flow (or disabling a
-// disabled one) returns nil without touching the store.
 func (s *Service) SetFlowEnabled(ctx context.Context, p core.Principal, tenant, ws, id string, enabled bool) (string, error) {
 	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
 		return "", err
@@ -716,19 +466,12 @@ func (s *Service) SetFlowEnabled(ctx context.Context, p core.Principal, tenant, 
 	if err != nil {
 		return "", err
 	}
-	// Pausing/resuming a flow changes what fires, so it counts as a publish
-	// -level change even though it lands as an ordinary commit.
+	// Pausing changes what fires, so it counts as a publish for the mirror.
 	s.reprojectSchedule(ctx, tenant, ws, id)
 	s.workspaceCommitted(tenant, ws, PushOnPublish)
 	return commit, nil
 }
 
-// DeleteGraph removes a flow from the workspace's git-backed store.
-// Permission: workspace scope + the principal must be authorized to
-// edit the existing flow (owner / org-visible / admin). Refuses with
-// core.ErrConflict if a non-terminal run exists for the flow.
-// Idempotent at the store layer: removing an already-missing flow
-// surfaces success.
 func (s *Service) DeleteGraph(ctx context.Context, p core.Principal, tenant, ws, id string) error {
 	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
 		return err
@@ -737,11 +480,6 @@ func (s *Service) DeleteGraph(ctx context.Context, p core.Principal, tenant, ws,
 	if err != nil {
 		return err
 	}
-	// Load to enforce edit permission on the existing flow. A genuine
-	// not-found is OK — we exit early with success (idempotent delete).
-	// Any other error must surface: reporting a successful delete because
-	// the store was unreadable tells the caller the flow is gone when it
-	// is still there, and skips AuthorizeGraphEdit on the way out.
 	existing, loadErr := store.Load(id)
 	if loadErr != nil {
 		if errors.Is(loadErr, workspace.ErrGraphNotFound) {
@@ -762,21 +500,13 @@ func (s *Service) DeleteGraph(ctx context.Context, p core.Principal, tenant, ws,
 	if _, err := store.Delete(id, p.Subject); err != nil {
 		return err
 	}
-	// Remove the flow's auto-assigned git_checkout cache (gitcache/<flow>)
-	// so clones don't orphan in the workspace after the flow is gone.
-	// Best-effort: a cleanup failure must not fail the delete.
 	s.removeGitCache(tenant, ws, id)
 	s.reprojectSchedule(ctx, tenant, ws, id)
-	// A deletion is a commit like any other, and mirroring it is the point:
-	// the mirror's history is where a flow deleted by mistake is recovered
-	// from. PushOnPublish because a delete also takes a live flow offline.
+	// A deletion is a commit like any other, and mirroring it is the point.
 	s.workspaceCommitted(tenant, ws, PushOnPublish)
 	return nil
 }
 
-// removeGitCache deletes a flow's git_checkout cache subtree
-// (gitcache/<flow>) from the workspace sandbox. No-op when the sandbox is
-// not filesystem-backed (tests / in-memory).
 func (s *Service) removeGitCache(tenant, ws, id string) {
 	if s.Engine == nil || s.Engine.Sandbox == nil {
 		return
@@ -791,27 +521,6 @@ func (s *Service) removeGitCache(tenant, ws, id string) {
 	}
 }
 
-// pruneGitCache removes the checkout caches under gitcache/<flow> whose
-// owning node is no longer part of the flow.
-//
-// Flow deletion was for a long time the ONLY thing that reclaimed a
-// checkout, which left the per-node caches to leak: the cache directory is
-// keyed by node ID, so deleting a git_checkout step — or rebuilding it,
-// which mints a fresh node ID — stranded its clone forever. Nothing
-// referenced it, no TTL swept it, and it kept counting against the org's
-// disk quota. An edit-heavy flow could accumulate a full repository per
-// edit cycle.
-//
-// Pruning is by node-ID membership alone, not by module: a directory
-// survives when ANY node in the saved graph still carries that ID. That is
-// the conservative reading — it reclaims exactly the orphans, and it can
-// never delete a live step's clone just because module naming shifted
-// under it.
-//
-// Best-effort, and called only after the graph has been committed: the
-// saved node set is the authority for what's live, so pruning against a
-// graph that then failed to save could delete a clone whose step still
-// exists. A cleanup failure must never fail the save.
 func (s *Service) pruneGitCache(tenant, ws string, g core.Graph) {
 	if s.Engine == nil || s.Engine.Sandbox == nil {
 		return
@@ -825,10 +534,6 @@ func (s *Service) pruneGitCache(tenant, ws string, g core.Graph) {
 	if err != nil {
 		return // no cache for this flow yet — the common case
 	}
-	// The on-disk directory name is the SANITIZED node ID, so derive the
-	// live set through the same helper that placed it rather than from the
-	// raw IDs; otherwise a node whose ID needed sanitizing would never
-	// match its own folder and would be pruned out from under itself.
 	live := make(map[string]struct{}, len(g.Nodes))
 	for _, n := range g.Nodes {
 		live[filepath.Base(filepath.FromSlash(core.GitCheckoutRel(g.ID, n.ID)))] = struct{}{}
@@ -846,31 +551,11 @@ func (s *Service) pruneGitCache(tenant, ws string, g core.Graph) {
 	}
 }
 
-// DuplicateGraph creates an independent copy of an existing flow under a
-// fresh, immutable ID. The copy carries over the source's nodes, edges,
-// triggers, frames, and display metadata, but starts as a DISABLED draft
-// owned by the duplicating principal. Returns the new flow's ID, the saved
-// graph, and the commit hash.
-//
-// Why a new ID and why disabled — both fall out of the data model:
-//   - Graph.ID is the handle webhook/trigger URLs and run history key off,
-//     so the copy MUST get its own. It then gets fresh trigger URLs and an
-//     empty run history for free (both are keyed by ID).
-//   - A copy starts unpublished, so nothing fires it until the user
-//     deliberately publishes. Starting Disabled as well makes "duplicate,
-//     then review before it goes live" the default even after a publish —
-//     the user flips it on from the editor when ready.
-//
-// Permission: view on the source (enforced by LoadGraph — a source the
-// caller can't see comes back as ErrNotFound, never 403, so private flows
-// don't leak) plus graph:edit to create (enforced by SaveGraph).
+// Reuses SaveGraph's create path rather than re-implementing its guards, so a
+// copy cannot bypass a check the original was held to.
 func (s *Service) DuplicateGraph(ctx context.Context, p core.Principal, tenant, ws, srcID, newName string) (string, core.Graph, string, error) {
 	src, err := s.LoadGraph(ctx, p, tenant, ws, srcID, "")
 	if err != nil {
-		// Any load failure — an authz miss (already ErrNotFound), a missing
-		// graph file, or an unborn HEAD in an empty workspace — is "no such
-		// source" from the caller's view. Collapse to ErrNotFound so the
-		// handler 404s, mirroring loadFlowForRequest.
 		return "", core.Graph{}, "", fmt.Errorf("%w: %v", core.ErrNotFound, err)
 	}
 	store, err := s.Workspaces.Open(tenant, ws)
@@ -884,9 +569,6 @@ func (s *Service) DuplicateGraph(ctx context.Context, p core.Principal, tenant, 
 
 	dup := src
 	dup.ID = uniqueGraphID(existing, srcID)
-	// Clear Owner so SaveGraph's create path stamps the duplicating principal
-	// as the new owner — a private source stays private, now owned by the
-	// copier.
 	dup.Owner = ""
 	dup.Disabled = true
 	if newName != "" {
@@ -899,9 +581,6 @@ func (s *Service) DuplicateGraph(ctx context.Context, p core.Principal, tenant, 
 		dup.Name = "Copy of " + base
 	}
 
-	// Reuse SaveGraph's create path rather than re-implementing its guards:
-	// it enforces graph:edit, the per-tenant MaxFlows ceiling, validation,
-	// and the owner stamp.
 	commit, err := s.SaveGraph(ctx, p, dup)
 	if err != nil {
 		return "", core.Graph{}, "", err
@@ -910,10 +589,6 @@ func (s *Service) DuplicateGraph(ctx context.Context, p core.Principal, tenant, 
 	return dup.ID, dup, commit, nil
 }
 
-// uniqueGraphID derives a fresh flow ID from base that doesn't collide with
-// any existing ID in the workspace. It suffixes "-copy" (then "-copy-2",
-// "-copy-3", …) so the duplicate's webhook/trigger URLs stay human-readable
-// rather than an opaque hash.
 func uniqueGraphID(existing []string, base string) string {
 	taken := make(map[string]bool, len(existing))
 	for _, id := range existing {
@@ -926,15 +601,10 @@ func uniqueGraphID(existing []string, base string) string {
 	return candidate
 }
 
-// SaveGraph persists a graph as principal. Tenant/workspace on the graph
-// must match the principal's scope. Returns the new commit hash.
-// SaveGraph persists an explicit save — its own commit (checkpoint).
 func (s *Service) SaveGraph(ctx context.Context, p core.Principal, g core.Graph) (string, error) {
 	return s.saveGraph(ctx, p, g, false)
 }
 
-// SaveGraphCoalescing persists an editor autosave: consecutive autosaves of
-// the same flow coalesce into one commit (see workspace.Store.SaveCoalescing).
 func (s *Service) SaveGraphCoalescing(ctx context.Context, p core.Principal, g core.Graph) (string, error) {
 	return s.saveGraph(ctx, p, g, true)
 }
@@ -943,19 +613,10 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 	if err := core.RequireWorkspace(p, g.Tenant, g.Workspace); err != nil {
 		return "", err
 	}
-	// Ahead of everything else so the caller gets "that isn't a usable flow id"
-	// rather than a git error from the store, which enforces the same rule.
 	if err := core.ValidGraphID(g.ID); err != nil {
 		return "", err
 	}
-	// Counting nodes and wires is O(1) per element and validating is not, so
-	// the size ceilings come first: an oversized graph is refused without
-	// being walked at all.
-	// Resource-exhaustion guard at the persistence boundary, mirroring the
-	// run-path check in submitGraphWithSeed: refuse to STORE a graph whose
-	// node count exceeds the tenant's effective ceiling. Without this a tenant
-	// could persist arbitrarily large graphs (storage + per-job unmarshal
-	// pressure) even if they never reach the run gate.
+	// Cheap ceilings before the expensive validation, so a hostile graph costs little.
 	if maxNodes := s.effectiveLimits(ctx, g.Tenant).MaxGraphNodes; maxNodes > 0 && len(g.Nodes) > maxNodes {
 		return "", fmt.Errorf("%w: graph has %d nodes, limit is %d",
 			core.ErrGraphTooLarge, len(g.Nodes), maxNodes)
@@ -971,58 +632,32 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 	if err != nil {
 		return "", err
 	}
-	// Look up the existing flow (if any) so we can run the per-flow
-	// edit gate. Only workspace.ErrGraphNotFound is the new-flow case;
-	// it falls through to the owner-stamp below.
-	//
-	// Every other error has to fail closed. The create path deliberately
-	// skips AuthorizeGraphEdit (there is no prior record to authorize
-	// against) and the active-run lock, and enforces only the weaker
-	// PermGraphEdit — so treating "the store could not be read" as "the
-	// flow doesn't exist" hands a non-owner a write to an existing private
-	// flow whenever a transient git or I/O fault makes Load fail. Now that
-	// the store returns a typed not-found, anything else is an error.
 	prior, loadErr := store.Load(g.ID)
 	if loadErr != nil && !errors.Is(loadErr, workspace.ErrGraphNotFound) {
 		return "", fmt.Errorf("load flow %q: %w", g.ID, loadErr)
 	}
 	if loadErr == nil {
-		// Update path: enforce edit + ownership + visibility on the
-		// EXISTING flow's record. A client-supplied Owner / Visibility
-		// in the incoming payload is honored only when the principal
-		// is allowed to edit the prior flow — that's where the actual
-		// permission check needs to land.
 		if err := core.AuthorizeGraphEdit(p, prior); err != nil {
 			return "", err
 		}
-		// Lock the flow while any run of it is still active. Runs pin
-		// the graph payload at submit time so edits aren't a
-		// correctness hazard, but the UX promise is "what you see is
-		// what's running" — a silent in-place edit while someone is
-		// staring at a live run breaks that.
+		// A run pins the revision it started with, so editing under it would leave the
+		// run and the editor disagreeing about what is executing.
 		if active, err := s.hasActiveRun(ctx, g.Tenant, g.Workspace, g.ID); err != nil {
 			return "", fmt.Errorf("check active runs: %w", err)
 		} else if active {
 			return "", fmt.Errorf("flow %q has an active run: %w", g.ID, core.ErrConflict)
 		}
-		// Preserve the original Owner unless an admin is explicitly
-		// transferring it. Mirror Visibility from the new payload so
-		// owners can flip private↔org without losing other fields.
 		if g.Owner == "" {
 			g.Owner = prior.Owner
 		} else if g.Owner != prior.Owner && !core.IsFlowAdminPrincipal(p) {
-			// Non-admin trying to reassign owner — silently restore.
+			// Non-admin reassigning owner: silently restore.
 			g.Owner = prior.Owner
 		}
 	} else {
-		// Create path: edit permission alone is enough; stamp the
-		// principal as Owner so future updates can be authorized.
 		if err := core.Require(p, core.PermGraphEdit); err != nil {
 			return "", err
 		}
-		// Flow-count ceiling: a new flow can push the tenant past its
-		// effective MaxFlows. Only counts on the create path, and only
-		// when a limit is set, so the common edit path pays nothing.
+		// Only a NEW flow counts against the ceiling, so an existing one stays editable.
 		if maxFlows := s.effectiveLimits(ctx, g.Tenant).MaxFlows; maxFlows > 0 {
 			if ids, err := store.ListGraphs(); err == nil && len(ids) >= maxFlows {
 				return "", fmt.Errorf("%w: flow limit of %d reached for this organization",
@@ -1042,13 +677,7 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 	if err != nil {
 		return "", err
 	}
-	// Reclaim the checkout caches of steps this save removed or renamed.
-	// After the commit, so the saved node set is what we prune against.
 	s.pruneGitCache(g.Tenant, g.Workspace, g)
-	// Notify any editor watching this flow so it can live-reflect the change
-	// (e.g. an AI assistant editing through MCP). Fire-and-forget, mirroring
-	// the rest of the Bus contract; Commit lets the saver suppress the echo
-	// of its own write so it doesn't re-animate what it just did.
 	s.bus().Publish(flowBusKey(g.Tenant, g.Workspace, g.ID), BusEvent{
 		FlowUpdated: &FlowUpdatedEvent{
 			FlowID:   g.Tenant + "/" + g.Workspace + "/" + g.ID,
@@ -1057,17 +686,11 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 			Autosave: coalesce,
 		},
 	})
-	// Same fan-out for the git mirror. Autosaves come through here too, so
-	// the consumer debounces rather than pushing per keystroke pause.
 	s.reprojectSchedule(ctx, g.Tenant, g.Workspace, g.ID)
 	s.workspaceCommitted(g.Tenant, g.Workspace, PushOnSave)
 	return commit, nil
 }
 
-// LoadGraph reads a graph from a tenant/workspace at the given ref
-// (empty ref = HEAD). Applies the visibility check — private flows
-// the principal doesn't own (and isn't admin over) come back as
-// "not found" so the existence of private flows doesn't leak.
 func (s *Service) LoadGraph(ctx context.Context, p core.Principal, tenant, ws, id, ref string) (core.Graph, error) {
 	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
 		return core.Graph{}, err
@@ -1086,20 +709,14 @@ func (s *Service) LoadGraph(ctx context.Context, p core.Principal, tenant, ws, i
 		return core.Graph{}, err
 	}
 	if vErr := core.AuthorizeGraphView(p, g); vErr != nil {
-		// Translate to "not found" at the API boundary so the
-		// existence of private flows doesn't leak via 403 vs 404.
+		// "not found" at the boundary, so a private flow does not leak its existence.
 		return core.Graph{}, fmt.Errorf("graph %q: %w", id, core.ErrNotFound)
 	}
 	return g, nil
 }
 
-// LoadGraphForSupport loads a graph by identity WITHOUT the normal
-// tenant/visibility authorization. The caller MUST have already authorized
-// access through an AccessGrant (core.AuthorizeGraphSupportView) — the grant,
-// not the principal's tenant, is the authority on the support path. This is the
-// only load path that bypasses the ownership/visibility gate; it exists so a
-// support agent (whose own tenant differs) can reach the flow the org consented
-// to.
+// WITHOUT the normal authz, gated instead on an approved AccessGrant. Callers
+// MUST serve the redacted view.
 func (s *Service) LoadGraphForSupport(_ context.Context, tenant, ws, id string) (core.Graph, error) {
 	store, err := s.Workspaces.Open(tenant, ws)
 	if err != nil {
@@ -1112,9 +729,6 @@ func (s *Service) LoadGraphForSupport(_ context.Context, tenant, ws, id string) 
 	return g, nil
 }
 
-// FlowHistory returns the commit history of a flow, newest first. Gated on
-// the same view permission as LoadGraph so private flows don't leak their
-// existence (or edit cadence) to non-viewers.
 func (s *Service) FlowHistory(ctx context.Context, p core.Principal, tenant, ws, id string, limit int) ([]workspace.Revision, error) {
 	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
 		return nil, err
@@ -1123,8 +737,7 @@ func (s *Service) FlowHistory(ctx context.Context, p core.Principal, tenant, ws,
 	if err != nil {
 		return nil, err
 	}
-	// Authorize against the current HEAD revision, mirroring LoadGraph: if
-	// the principal can't view the flow, report it as absent.
+	// Against current HEAD, mirroring LoadGraph.
 	g, err := store.Load(id)
 	if err != nil {
 		return nil, err
@@ -1135,12 +748,6 @@ func (s *Service) FlowHistory(ctx context.Context, p core.Principal, tenant, ws,
 	return store.History(id, limit)
 }
 
-// RestoreFlow makes a past revision the new HEAD: it loads the flow's
-// content at ref and saves it as a fresh commit on top. History is never
-// rewritten — restoring is just an edit whose content happens to match an
-// older revision (the Google-Docs model). The save reuses SaveGraph's edit
-// authorization and active-run lock, so restoring a locked flow 409s like
-// any other edit. Returns the new commit and the resulting HEAD graph.
 func (s *Service) RestoreFlow(ctx context.Context, p core.Principal, tenant, ws, id, ref string) (string, core.Graph, error) {
 	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
 		return "", core.Graph{}, err
@@ -1154,7 +761,6 @@ func (s *Service) RestoreFlow(ctx context.Context, p core.Principal, tenant, ws,
 		return "", core.Graph{}, err
 	}
 	old.Tenant, old.Workspace, old.ID = tenant, ws, id
-	// Explicit (non-coalescing) save: a restore is an intentional checkpoint.
 	commit, err := s.saveGraph(ctx, p, old, false)
 	if err != nil {
 		return "", core.Graph{}, err
@@ -1166,9 +772,6 @@ func (s *Service) RestoreFlow(ctx context.Context, p core.Principal, tenant, ws,
 	return commit, head, nil
 }
 
-// ListGraphs returns every graph ID in a workspace at HEAD that the
-// principal is allowed to see. Org-visible flows always appear;
-// private flows only appear to their owner and to admins.
 func (s *Service) ListGraphs(ctx context.Context, p core.Principal, tenant, ws string) ([]string, error) {
 	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
 		return nil, err
@@ -1177,17 +780,9 @@ func (s *Service) ListGraphs(ctx context.Context, p core.Principal, tenant, ws s
 	if err != nil {
 		return nil, err
 	}
-	// Admin principals see everything, so they need only the ids.
 	if core.IsFlowAdminPrincipal(p) {
 		return store.ListGraphs()
 	}
-	// Everyone else needs each flow's Visibility/Owner, which only the flow
-	// itself carries — so read the workspace in one pass rather than opening
-	// a flow at a time. An unloadable flow is absent from that read, which is
-	// the same "hide rather than list what the user cannot open" outcome the
-	// per-flow path reached by skipping its error.
-	//
-	// Headers: this reads two fields off each flow and no step's params.
 	flows, err := store.ListHeadersAtHead("")
 	if err != nil {
 		return nil, err
@@ -1201,33 +796,17 @@ func (s *Service) ListGraphs(ctx context.Context, p core.Principal, tenant, ws s
 	return visible, nil
 }
 
-// FlowSummary is the slim per-flow payload the UI list view consumes —
-// adds Visibility + Owner to the bare ID so the catalog can render
-// badges without a second round-trip per flow.
 type FlowSummary struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name,omitempty"`
-	Icon        string          `json:"icon,omitempty"`
-	Description string          `json:"description,omitempty"`
-	Owner       string          `json:"owner,omitempty"`
-	Visibility  core.Visibility `json:"visibility,omitempty"`
-	// RunStatus is "live" / "manual" / "paused" / "needs_publish" — whether
-	// the flow fires on its own. The list already loads each full graph, so
-	// classifying it here is free and saves the UI an N+1 fetch to show the
-	// status chip. "needs_publish" means it has a scheduler trigger but hasn't
-	// been published yet (the scheduler only runs published flows).
-	RunStatus core.FlowRunStatus `json:"run_status,omitempty"`
-	// Published is true once the flow has a published revision. An unpublished
-	// flow is a draft regardless of trigger type — its (test) runs are kept out
-	// of the overview/TV health + attention stats. No omitempty: the explicit
-	// false is meaningful to the UI's "counts toward health" filter.
-	Published bool `json:"published"`
+	ID          string             `json:"id"`
+	Name        string             `json:"name,omitempty"`
+	Icon        string             `json:"icon,omitempty"`
+	Description string             `json:"description,omitempty"`
+	Owner       string             `json:"owner,omitempty"`
+	Visibility  core.Visibility    `json:"visibility,omitempty"`
+	RunStatus   core.FlowRunStatus `json:"run_status,omitempty"`
+	Published   bool               `json:"published"`
 }
 
-// ListFlowSummaries is the HTTP-list flavor of ListGraphs — same
-// visibility filter, but returns Owner + Visibility per entry so the
-// UI can show a private-flow badge without N extra fetches. Sorted
-// alphabetically by ID for stable ordering.
 func (s *Service) ListFlowSummaries(ctx context.Context, p core.Principal, tenant, ws string) ([]FlowSummary, error) {
 	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
 		return nil, err
@@ -1236,14 +815,6 @@ func (s *Service) ListFlowSummaries(ctx context.Context, p core.Principal, tenan
 	if err != nil {
 		return nil, err
 	}
-	// One pass over the workspace rather than a load and a published-pointer
-	// lookup per flow: on the Postgres store that was three round trips per
-	// flow, and on the git one it re-resolved the same HEAD, commit and tree
-	// every time.
-	// Headers: the summary is name/icon/description/owner/visibility plus a
-	// run status, and the status only reads TRIGGER params — which a header
-	// keeps. Ordinary steps' params are the bulk of the decode and nothing
-	// here looks at them.
 	flows, err := store.ListHeadersAtHead(workspace.PublishedEnv)
 	if err != nil {
 		return nil, err
@@ -1254,8 +825,7 @@ func (s *Service) ListFlowSummaries(ctx context.Context, p core.Principal, tenan
 		if !isAdmin && core.AuthorizeGraphView(p, f.Graph) != nil {
 			continue
 		}
-		// Publish-aware status: a scheduler-triggered flow that's never been
-		// published shows "needs publish" (the scheduler won't run it yet).
+		// A never-published flow does not fire, whatever its triggers say.
 		published := f.EnvCommit != ""
 		out = append(out, FlowSummary{
 			ID:          f.ID,
@@ -1271,15 +841,6 @@ func (s *Service) ListFlowSummaries(ctx context.Context, p core.Principal, tenan
 	return out, nil
 }
 
-// DropAdjacency is one directed port-to-port co-occurrence mined from a
-// workspace's own graphs: across the flows this principal can see, the
-// `FromPort` output of module `From` was wired to the `ToPort` input of
-// module `To`. Keying on ports (not just modules) lets the editor give
-// precise suggestions for drops with several semantically distinct outputs
-// — e.g. a router's `matched` vs `unmatched` pins lead to different next
-// steps. Flows is the count of distinct graphs containing such an edge (the
-// primary ranking signal, so one busy graph can't dominate); Edges is the
-// raw edge count. Powers the editor's "Suggested next drop" group.
 type DropAdjacency struct {
 	From     string `json:"from"`
 	FromPort string `json:"from_port"`
@@ -1289,12 +850,6 @@ type DropAdjacency struct {
 	Edges    int    `json:"edges"`
 }
 
-// DropSuggestions mines directed module co-occurrence from the workspace's
-// own graphs — the basis for "drops you usually wire after this one". It
-// iterates exactly like ListFlowSummaries (including the visibility
-// filter), so a non-admin never counts another member's private flow and
-// no flow structure leaks across the view boundary. Sorted by distinct-flow
-// count descending for a stable, ranked payload. Memoized per HEAD.
 func (s *Service) DropSuggestions(ctx context.Context, p core.Principal, tenant, ws string) ([]DropAdjacency, error) {
 	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
 		return nil, err
@@ -1304,8 +859,6 @@ func (s *Service) DropSuggestions(ctx context.Context, p core.Principal, tenant,
 		return nil, err
 	}
 
-	// The viewable set depends only on admin-ness and (for private flows)
-	// the subject, so those fully determine the cache key alongside HEAD.
 	isAdmin := core.IsFlowAdminPrincipal(p)
 	view := "sub:" + p.Subject
 	if isAdmin {
@@ -1324,14 +877,11 @@ func (s *Service) DropSuggestions(ctx context.Context, p core.Principal, tenant,
 	}
 	s.suggestMu.Unlock()
 
-	// Headers: the miner reads each step's id and module and the edges
-	// between them — never a param.
 	flows, err := store.ListHeadersAtHead("")
 	if err != nil {
 		return nil, err
 	}
 	type counts struct{ flows, edges int }
-	// Key: [from, fromPort, to, toPort].
 	agg := map[[4]string]*counts{}
 	for _, f := range flows {
 		g := f.Graph
@@ -1391,8 +941,7 @@ func (s *Service) DropSuggestions(ctx context.Context, p core.Principal, tenant,
 	if s.suggestCache == nil {
 		s.suggestCache = map[string]suggestEntry{}
 	}
-	// Track insertion order only for keys that are genuinely new, so a
-	// refreshed entry doesn't get a second slot in the queue.
+	// Insertion order for genuinely new keys only, so the result is deterministic.
 	if _, existed := s.suggestCache[cacheKey]; !existed {
 		s.suggestOrder = append(s.suggestOrder, cacheKey)
 	}
@@ -1406,15 +955,6 @@ func (s *Service) DropSuggestions(ctx context.Context, p core.Principal, tenant,
 	return out, nil
 }
 
-// PublishInfo describes a flow's draft-vs-published state for the editor's
-// publish control. Published is false when the flow has never been
-// published; Dirty means the draft (HEAD) would BEHAVE differently from the
-// live published revision (always true when never published — there's
-// nothing live yet).
-//
-// Dirty is not "the revisions differ": canvas layout, notes, wire routing
-// and the pause switch are all excluded, because publishing is not what
-// carries them. See core.BehaviorEqual.
 type PublishInfo struct {
 	Published       bool   `json:"published"`
 	PublishedCommit string `json:"published_commit,omitempty"`
@@ -1423,18 +963,6 @@ type PublishInfo struct {
 	Dirty           bool   `json:"dirty"`
 }
 
-// PublishFlow promotes a flow revision to "live": automatic triggers
-// (cron/poll/webhook) run the published revision, while the editor and
-// manual/test runs keep using HEAD (the draft). ref defaults to HEAD
-// ("publish my current draft"); passing an older commit hash performs a
-// rollback to that version. Returns the published commit hash. Gated on
-// graph:admin — the same bar as environment promotion. No active-run lock
-// is needed: publishing moves a tag, it doesn't mutate the draft.
-//
-// label is an optional human name for the published revision (e.g. "Black
-// Friday config"); it's attached to the resolved commit, so a later rollback
-// to it brings the name back. An empty label leaves any existing label on
-// that commit intact.
 func (s *Service) PublishFlow(ctx context.Context, p core.Principal, tenant, ws, id, ref, label string) (string, error) {
 	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
 		return "", err
@@ -1450,8 +978,6 @@ func (s *Service) PublishFlow(ctx context.Context, p core.Principal, tenant, ws,
 	if target == "" {
 		target = "HEAD"
 	}
-	// Authorize against the target revision's content (mirrors LoadGraph):
-	// publishing a flow you can't view should 404, not leak its existence.
 	g, err := store.LoadAt(target, id)
 	if err != nil {
 		return "", err
@@ -1476,15 +1002,6 @@ func (s *Service) PublishFlow(ctx context.Context, p core.Principal, tenant, ws,
 	return commit, nil
 }
 
-// UnpublishFlow clears a flow's published pointer, the inverse of PublishFlow.
-// It takes the flow fully offline: the scheduler only enrolls flows with a
-// published commit, and the webhook, hosted-form and provider-event paths all
-// reject an unpublished flow (Store.LoadPublished returns ErrNotPublished).
-// The draft is untouched, so the flow reverts to "needs publish" and a manual
-// Run still works.
-// The draft (HEAD) is untouched, so manual/test runs still work and
-// re-publishing promotes HEAD again. Gated on graph:admin, the same bar as
-// PublishFlow. Idempotent — unpublishing a never-published flow succeeds.
 func (s *Service) UnpublishFlow(ctx context.Context, p core.Principal, tenant, ws, id string) error {
 	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
 		return err
@@ -1496,8 +1013,6 @@ func (s *Service) UnpublishFlow(ctx context.Context, p core.Principal, tenant, w
 	if err != nil {
 		return err
 	}
-	// Authorize against the flow content (mirrors PublishFlow): unpublishing a
-	// flow you can't view should 404, not leak its existence.
 	g, err := store.Load(id)
 	if err != nil {
 		return err
@@ -1509,14 +1024,10 @@ func (s *Service) UnpublishFlow(ctx context.Context, p core.Principal, tenant, w
 		return err
 	}
 	s.reprojectSchedule(ctx, tenant, ws, id)
-	// The published TAG is gone; a mirror that misses this keeps advertising
-	// the flow as live (see workspace.Push's delete refspecs).
 	s.workspaceCommitted(tenant, ws, PushOnPublish)
 	return nil
 }
 
-// PublishedInfo reports the flow's draft-vs-published state. Gated on the
-// same view permission as LoadGraph so private flows don't leak.
 func (s *Service) PublishedInfo(ctx context.Context, p core.Principal, tenant, ws, id string) (PublishInfo, error) {
 	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
 		return PublishInfo{}, err
@@ -1541,8 +1052,6 @@ func (s *Service) PublishedInfo(ctx context.Context, p core.Principal, tenant, w
 		return PublishInfo{}, err
 	}
 	if pub == "" {
-		// Never published: nothing is live, so the draft is "dirty" by
-		// definition — the UI prompts the user to publish.
 		info.Dirty = true
 		return info, nil
 	}
@@ -1555,28 +1064,12 @@ func (s *Service) PublishedInfo(ctx context.Context, p core.Principal, tenant, w
 	if err != nil {
 		return PublishInfo{}, err
 	}
-	// Content compare rather than commit-hash compare: the workspace repo
-	// is shared across flows, so an unrelated flow's edit advances repo
-	// HEAD without changing this flow.
-	//
-	// BehaviorEqual rather than DeepEqual: Dirty drives a "publish your
-	// changes" prompt, so it has to mean "the live version would behave
-	// differently", not "the bytes differ". Moving a step, adding a note or
-	// bending a wire changes the bytes and nothing else — prompting for
-	// those left the editor contradicting its own diff view, which reported
-	// the draft as identical to what's live. See core.BehaviorEqual for the
-	// exact set it ignores and why.
+	// Content compare, not commit-hash: the repo gains commits for things that do
+	// not change behaviour, so a hash compare reports drift that is not there.
 	info.Dirty = !core.BehaviorEqual(head, pubGraph)
 	return info, nil
 }
 
-// LabelRevision sets (or clears) the human label on a flow revision,
-// decoupled from publishing — it names a version without making it live.
-// ref defaults to HEAD ("name my current draft"); an older commit hash
-// names that revision. An empty label clears any existing label. Returns
-// the resolved commit the label was written to. Gated on graph:admin (the
-// same bar as publish); no active-run lock — it only moves a tag, leaving
-// the draft and HEAD untouched.
 func (s *Service) LabelRevision(ctx context.Context, p core.Principal, tenant, ws, id, ref, label string) (string, error) {
 	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
 		return "", err
@@ -1592,8 +1085,6 @@ func (s *Service) LabelRevision(ctx context.Context, p core.Principal, tenant, w
 	if target == "" {
 		target = "HEAD"
 	}
-	// Authorize against the target revision's content (mirrors PublishFlow):
-	// labeling a flow you can't view should 404, not leak its existence.
 	g, err := store.LoadAt(target, id)
 	if err != nil {
 		return "", err
@@ -1612,7 +1103,6 @@ func (s *Service) LabelRevision(ctx context.Context, p core.Principal, tenant, w
 	return commit, nil
 }
 
-// PromoteGraph moves the environment tag (e.g. "production") to commit.
 func (s *Service) PromoteGraph(ctx context.Context, p core.Principal, tenant, ws, graphID, env, commit string) error {
 	if err := core.RequireWorkspace(p, tenant, ws); err != nil {
 		return err
@@ -1627,36 +1117,19 @@ func (s *Service) PromoteGraph(ctx context.Context, p core.Principal, tenant, ws
 	if err := store.PromoteToEnvironment(graphID, env, commit); err != nil {
 		return err
 	}
-	// Only the published env changes what the scheduler enrols, but
-	// re-deriving on any promote is cheap and keeps the rule in one place.
 	s.reprojectSchedule(ctx, tenant, ws, graphID)
 	s.workspaceCommitted(tenant, ws, PushOnPublish)
 	return nil
 }
 
-// SubmitGraph creates a graph-record (status=running) plus a queued
-// node-record for every root node, and returns the graph-run ID. Workers
-// pick up the root nodes, run them, and as each completes the worker
-// enqueues whatever downstream node has become ready.
-//
-// This is the manual-submission path (dzctl graph run). For trigger-fed
-// runs that need to deliver event data into the graph, see
-// SubmitGraphWithSeed.
 func (s *Service) SubmitGraph(ctx context.Context, p core.Principal, g core.Graph) (string, error) {
 	return s.SubmitGraphWithSeed(ctx, p, g, nil)
 }
 
-// NodeJobID is the stable ID a worker can derive for any node in a graph
-// run without consulting the store. Workers use it to look up predecessor
-// results when assembling a node's input.
 func NodeJobID(graphRunID, nodeID string) string {
 	return graphRunID + ":" + nodeID
 }
 
-// WaitGraph subscribes to bus events for jobID, forwards progress to the
-// caller's channel, and returns when the worker publishes a terminal
-// event (or ctx is cancelled). The principal is enforced against the
-// stored JobRecord to keep cross-tenant subscribers out.
 func (s *Service) WaitGraph(
 	ctx context.Context,
 	p core.Principal,
@@ -1674,18 +1147,10 @@ func (s *Service) WaitGraph(
 	events, cancel := s.bus().Subscribe(jobID)
 	defer cancel()
 
-	// Re-fetch AFTER subscribing: the worker might have finished
-	// between our initial Get and Subscribe (in-memory store + several
-	// workers race especially hard here), and that publish would have
-	// gone to no subscribers. Without the post-subscribe peek we'd
-	// then wait forever on the bus.
 	fresh, err := s.Jobs.Get(ctx, jobID)
 	if err == nil && isTerminal(fresh.Status) {
 		return graphResultFromRecord(fresh), nil
 	}
-	// Also keep the original check using the auth-time snapshot in
-	// case the re-fetch itself failed but the first read showed
-	// terminal — defensive, ~free.
 	if isTerminal(rec.Status) {
 		return graphResultFromRecord(rec), nil
 	}
@@ -1696,7 +1161,6 @@ func (s *Service) WaitGraph(
 			return engine.GraphResult{}, ctx.Err()
 		case ev, ok := <-events:
 			if !ok {
-				// Subscription closed without a terminal event; recheck store.
 				rec, err := s.Jobs.Get(context.Background(), jobID)
 				if err != nil {
 					return engine.GraphResult{}, err
@@ -1720,9 +1184,6 @@ func (s *Service) WaitGraph(
 	}
 }
 
-// RunGraph is the convenience that combines Submit + Wait so callers who
-// just want "do this graph and tell me when it's done" can do it in one
-// call. The progress channel is closed on return.
 func (s *Service) RunGraph(
 	ctx context.Context,
 	p core.Principal,
@@ -1770,19 +1231,6 @@ func graphResultFromRecord(rec core.JobRecord) engine.GraphResult {
 	return out
 }
 
-// GetJob fetches a job record, enforcing TENANT isolation. This gates every
-// /me/runs/* route (loadRunScoped) plus run-log read/delete.
-//
-// Despite the name, core.RequireWorkspace does not check the workspace: the
-// platform settled on exactly one workspace per org, so workspace stopped
-// being an authorization dimension and the parameter is retained only to
-// spare ~25 call sites (see core/authz.go). An earlier version of this
-// comment claimed workspace isolation was enforced here, which was never
-// true — a workspace-scoped API key can read sibling-workspace runs of the
-// same tenant. That is currently unreachable (no org has two workspaces),
-// but the claim was the dangerous part: it invited callers to rely on a
-// boundary that doesn't exist. If per-workspace scoping is ever
-// reintroduced, RequireWorkspace and this method are where it lands.
 func (s *Service) GetJob(ctx context.Context, p core.Principal, jobID string) (core.JobRecord, error) {
 	rec, err := s.Jobs.Get(ctx, jobID)
 	if err != nil {
@@ -1794,10 +1242,6 @@ func (s *Service) GetJob(ctx context.Context, p core.Principal, jobID string) (c
 	return rec, nil
 }
 
-// GetRunSummary is GetJob for the callers that show a run's HEADER rather
-// than replay it: same authorization, without fetching the flow JSON the run
-// pinned at submit. The run-detail view re-polls this while a run is live,
-// and nothing it renders comes from that payload.
 func (s *Service) GetRunSummary(ctx context.Context, p core.Principal, jobID string) (core.RunSummary, error) {
 	sum, err := core.GetRunSummary(ctx, s.Jobs, jobID)
 	if err != nil {
@@ -1809,16 +1253,8 @@ func (s *Service) GetRunSummary(ctx context.Context, p core.Principal, jobID str
 	return sum, nil
 }
 
-// ErrRunLogsDisabled means this deployment has no persistent run-log store
-// wired, so the run-log endpoints cannot work here at all — a 501, distinct
-// from "that run id is unknown" (404). Typed so runStoreError classifies it
-// by sentinel rather than by matching "not enabled" in the message.
 var ErrRunLogsDisabled = errors.New("run logs are not enabled on this deployment")
 
-// RunLogPage returns a page of a run's persisted log, authorized the
-// same way GetJob is: the run record's tenant must be the caller's.
-// The Get also distinguishes "no such run" (NotFound) from "run exists,
-// log empty" for the callers.
 func (s *Service) RunLogPage(ctx context.Context, p core.Principal, runID string, afterSeq int64, limit int) ([]RunLogEntry, error) {
 	if s.RunLogs == nil {
 		return nil, ErrRunLogsDisabled
@@ -1829,12 +1265,6 @@ func (s *Service) RunLogPage(ctx context.Context, p core.Principal, runID string
 	return s.RunLogs.ListRunLogs(ctx, runID, afterSeq, limit)
 }
 
-// DeleteRunLog erases one run's persisted log lines (GDPR P2.1 —
-// per-run deletion of potentially personal data). Authorized exactly like
-// reading the log: the run must be visible to the principal (GetJob scopes
-// to the tenant), so a caller can only delete logs for their own runs.
-// Returns the number of lines removed. No-op (0) when the store doesn't
-// support deletion.
 func (s *Service) DeleteRunLog(ctx context.Context, p core.Principal, runID string) (int, error) {
 	if s.RunLogs == nil {
 		return 0, ErrRunLogsDisabled
@@ -1851,7 +1281,6 @@ func (s *Service) DeleteRunLog(ctx context.Context, p core.Principal, runID stri
 	return deleter.DeleteRun(ctx, runID)
 }
 
-// ListJobsForGraph returns every job for a graph that the principal can see.
 func (s *Service) ListJobsForGraph(ctx context.Context, p core.Principal, graphID string) ([]core.JobRecord, error) {
 	all, err := s.Jobs.ListByGraph(ctx, graphID)
 	if err != nil {
@@ -1859,13 +1288,6 @@ func (s *Service) ListJobsForGraph(ctx context.Context, p core.Principal, graphI
 	}
 	out := make([]core.JobRecord, 0, len(all))
 	for _, r := range all {
-		// Mirror GetJob's gate (RequireWorkspace) instead of a bare tenant-equals
-		// check: it scopes consistently with the rest of the run surface and lets
-		// a platform admin (whose principal carries no tenant, so r.Tenant ==
-		// p.Tenant would match nothing) see records across tenants as intended.
-		// Guard r.Tenant != "" explicitly: RequireTenant skips its tenant-match
-		// check for an empty target tenant, which would otherwise expose a
-		// (malformed, tenant-less) record to any authenticated principal.
 		if r.Tenant != "" && core.RequireWorkspace(p, r.Tenant, r.Workspace) == nil {
 			out = append(out, r)
 		}
@@ -1873,88 +1295,46 @@ func (s *Service) ListJobsForGraph(ctx context.Context, p core.Principal, graphI
 	return out, nil
 }
 
-// ListGraphRuns returns graph-kind records (the runs) scoped to the
-// principal's tenant. opts.Tenant is overridden to the principal's
-// tenant before hitting the store — clients can't read across tenant
-// boundaries even by passing a tenant they don't own.
 func (s *Service) ListGraphRuns(ctx context.Context, p core.Principal, opts core.ListGraphRunsOpts) ([]core.JobRecord, error) {
 	return s.Jobs.ListGraphRuns(ctx, s.scopeRunOpts(p, opts))
 }
 
-// ListGraphRunSummaries is ListGraphRuns for the callers that show a run
-// LIST: same scoping, without fetching each run's pinned flow JSON. See
-// core.RunSummary — the run list is polled, so that payload was by far the
-// largest thing on the response's critical path and nothing read it.
 func (s *Service) ListGraphRunSummaries(ctx context.Context, p core.Principal, opts core.ListGraphRunsOpts) ([]core.RunSummary, error) {
 	return core.ListRunSummaries(ctx, s.Jobs, s.scopeRunOpts(p, opts))
 }
 
-// scopeRunOpts applies the tenant/workspace scope both run reads share, so
-// the narrow one cannot drift from the one that enforces it today.
 func (s *Service) scopeRunOpts(p core.Principal, opts core.ListGraphRunsOpts) core.ListGraphRunsOpts {
-	// Platform admins may pass any tenant; everyone else is
-	// force-scoped to their own. When no tenant is supplied at all,
-	// fall back to the principal's tenant (preserves the original
-	// "scope to me" default for SaaS-style admin views).
 	if !p.Has(core.PermPlatformAdmin) || opts.Tenant == "" {
 		opts.Tenant = p.Tenant
 	}
-	// When p.Workspace is set, restrict to that workspace too — the
-	// principal can't see runs from siblings within their tenant.
 	if p.Workspace != "" {
 		opts.Workspace = p.Workspace
 	}
 	return opts
 }
 
-// PendingApproval is the slim payload the inbox uses — JobRecord +
-// surfaced approval fields (prompt, the canonical URL the await_approval
-// module emitted). Built by ListPendingApprovals; the UI never sees the
-// raw node-record.
 type PendingApproval struct {
-	RunID   string `json:"run_id"`
-	GraphID string `json:"graph_id"`
-	NodeID  string `json:"node_id"`
-	Prompt  string `json:"prompt,omitempty"`
-	// Context is the value the flow wired into the step's "Value" port — the
-	// thing being decided about. Without it the inbox can only say which step
-	// is waiting, which asks someone to approve a decision sight unseen.
-	// Omitted when nothing was wired, or when the value is too big to ride
-	// along in a list (see ContextTooLarge).
-	Context any `json:"context,omitempty"`
-	// ContextTooLarge marks a carried value that exceeded the preview cap. The
-	// inbox says so and points at the run, rather than silently looking like a
-	// step with nothing attached.
-	ContextTooLarge bool `json:"context_too_large,omitempty"`
-	// ContextOrder is the value's own column order when it carries one (see
-	// core.Ref.Headers) — for a hosted form, the order its fields were
-	// declared in. JSON objects have no order the browser can rely on and Go
-	// serializes map keys sorted, so without this the card renders a
-	// submission alphabetically: "What you like about us" above "Your name".
-	ContextOrder []string  `json:"context_order,omitempty"`
-	URL          string    `json:"url,omitempty"`
-	Since        time.Time `json:"since"`
-	Workspace    string    `json:"workspace"`
+	RunID           string    `json:"run_id"`
+	GraphID         string    `json:"graph_id"`
+	NodeID          string    `json:"node_id"`
+	Prompt          string    `json:"prompt,omitempty"`
+	Context         any       `json:"context,omitempty"`
+	ContextTooLarge bool      `json:"context_too_large,omitempty"`
+	ContextOrder    []string  `json:"context_order,omitempty"`
+	URL             string    `json:"url,omitempty"`
+	Since           time.Time `json:"since"`
+	Workspace       string    `json:"workspace"`
 }
 
-// approvalContextCap bounds how much of a carried value rides along in the
-// pending list. The inbox returns up to 200 rows and the value is whatever the
-// flow wired in — a form submission, but equally a scraped page or a whole
-// spreadsheet. The card only has to answer "what am I deciding about"; the run
-// page holds the full value either way.
 const approvalContextCap = 4096
 
-// approvalContextPreview returns the carried value if it is small enough to
-// send with a list row, else (nil, true) meaning "there is one, but look at the
-// run for it".
 func approvalContextPreview(ref core.Ref) (any, bool) {
 	if ref.Inline == nil {
 		return nil, false
 	}
 	b, err := json.Marshal(ref.Inline)
 	if err != nil {
-		// Not representable over the wire (a channel, a cycle). Say something
-		// is attached rather than pretend nothing was wired.
+		// Not representable over the wire, so say something rather than fail the read.
 		return nil, true
 	}
 	if len(b) > approvalContextCap {
@@ -1963,16 +1343,6 @@ func approvalContextPreview(ref core.Ref) (any, bool) {
 	return ref.Inline, false
 }
 
-// ListPendingApprovals returns awaiting node-records that were
-// produced by the await_approval module — distinguished from other
-// awaiting nodes (today: subgraph callers) by the presence of a
-// `pending_url` output port.
-//
-// Scope rules:
-//   - Tenant is always the principal's tenant.
-//   - Workspace is the principal's binding when set; otherwise the
-//     optional `narrowWorkspace` argument is used (admin switcher).
-//     Pass "" to see across every workspace in the tenant.
 func (s *Service) ListPendingApprovals(ctx context.Context, p core.Principal, narrowTenant, narrowWorkspace string) ([]PendingApproval, error) {
 	tenant, ws := approvalScope(p, narrowTenant, narrowWorkspace)
 	recs, err := s.Jobs.ListNodeRecords(ctx, pendingApprovalsQuery(tenant, ws))
@@ -1982,20 +1352,11 @@ func (s *Service) ListPendingApprovals(ctx context.Context, p core.Principal, na
 	return buildPendingApprovals(recs), nil
 }
 
-// CountPendingApprovals answers the sidebar badge, which renders one integer
-// and nothing else. The list above is capped at 200 and so is this, by the
-// shared query — the badge counts what the inbox would show, not what exists.
-//
-// Its own endpoint rather than a flag on the list, because it is a different
-// read: every signed-in browser re-asks for it on a timer and on every
-// navigation, while the list is fetched when someone opens the inbox.
 func (s *Service) CountPendingApprovals(ctx context.Context, p core.Principal, narrowTenant, narrowWorkspace string) (int, error) {
 	tenant, ws := approvalScope(p, narrowTenant, narrowWorkspace)
 	return core.CountNodeRecords(ctx, s.Jobs, pendingApprovalsQuery(tenant, ws))
 }
 
-// approvalScope resolves the tenant and workspace an approval read runs
-// against. Shared so the badge and the inbox cannot scope differently.
 func approvalScope(p core.Principal, narrowTenant, narrowWorkspace string) (string, string) {
 	tenant := p.Tenant
 	if p.Has(core.PermPlatformAdmin) && narrowTenant != "" {
@@ -2008,26 +1369,17 @@ func approvalScope(p core.Principal, narrowTenant, narrowWorkspace string) (stri
 	return tenant, ws
 }
 
-// pendingApprovalsQuery is the one definition of "a parked approval", shared
-// by the inbox list and the sidebar badge's count. They must select the same
-// rows or the badge reports a number the inbox does not show.
+// The ONE definition of "a parked approval", shared so the two cannot drift.
 func pendingApprovalsQuery(tenant, ws string) core.ListNodeRecordsOpts {
 	return core.ListNodeRecordsOpts{
-		Tenant:    tenant,
-		Workspace: ws,
-		Status:    core.JobStatusAwaiting,
-		// Only await_approval nodes: a subgraph caller parks too, and it is
-		// the `pending_url` port that tells the two apart. The Go-side check
-		// in buildPendingApprovals stays — it has to read the value anyway —
-		// but the query no longer spends its 200-row budget on rows it will
-		// discard. It is also what lets the badge COUNT this query: the
-		// filter is in the store, so a count needs no records to apply it.
+		Tenant:        tenant,
+		Workspace:     ws,
+		Status:        core.JobStatusAwaiting,
 		HasOutputPort: approvalMarkerPort,
 		Limit:         200,
 	}
 }
 
-// buildPendingApprovals projects the parked records onto the inbox rows.
 func buildPendingApprovals(recs []core.JobRecord) []PendingApproval {
 	out := make([]PendingApproval, 0, len(recs))
 	for _, rec := range recs {
@@ -2036,8 +1388,6 @@ func buildPendingApprovals(recs []core.JobRecord) []PendingApproval {
 		}
 		urlRef, ok := rec.Result.Output["pending_url"]
 		if !ok {
-			// Subgraph awaiting (pending_child_graph_id) and any future
-			// "paused but not for human" cases are filtered out.
 			continue
 		}
 		urlStr, _ := urlRef.Inline.(string)
@@ -2049,10 +1399,6 @@ func buildPendingApprovals(recs []core.JobRecord) []PendingApproval {
 		if rec.StartedAt != nil {
 			since = *rec.StartedAt
 		}
-		// The step stashes whatever was wired into its Value port on the same
-		// awaiting output we're already reading. Carrying it here is what lets
-		// the inbox show the submission, the refund, the draft reply — instead
-		// of a step id.
 		var approvalCtx any
 		var ctxTooLarge bool
 		var ctxOrder []string
@@ -2078,84 +1424,26 @@ func buildPendingApprovals(recs []core.JobRecord) []PendingApproval {
 	return out
 }
 
-// approvalMarkerPort is the output port that identifies an await_approval
-// node-record. The module emits it when it parks (the canonical URL an
-// approver opens) and Approve copies it onto the resumed Result, so it marks
-// the record for its whole life — which is what lets one filter find both the
-// inbox and the history. Kept as a constant because the store's partial index
-// in schema.sql hardcodes the same string.
 const approvalMarkerPort = "pending_url"
 
-// DecidedApproval is one settled approval: who decided, which way, when, and
-// the note they left. The history list beneath the inbox is built from these.
-//
-// It carries the same Context preview as PendingApproval, from the same value:
-// the pause stashes what the flow wired into the step's Value port, and the
-// decision routes it out `approved` or `rejected`. Reading it back means the
-// history row shows WHAT was decided — the refund, the submission — and not
-// just that someone once clicked approve on a step id.
 type DecidedApproval struct {
-	RunID   string `json:"run_id"`
-	GraphID string `json:"graph_id"`
-	NodeID  string `json:"node_id"`
-	Prompt  string `json:"prompt,omitempty"`
-	// Decision is "approve", "reject", or "cancelled" — the last meaning
-	// nobody decided: the run was cancelled out from under the request. It is
-	// not a decision, but it IS how a pending approval ends, and leaving it
-	// out of the history made requests look like they were still waiting
-	// somewhere when in fact they had been called off.
-	Decision string `json:"decision"`
-	// Approver is the authenticated subject the decision was attributed to.
-	// May be empty for a decision made through the unauthenticated HMAC email
-	// link before that path recorded one, and is always empty for a
-	// cancellation — see Reason.
-	Approver string `json:"approver,omitempty"`
-	Comment  string `json:"comment,omitempty"`
-	// Reason is the cancel message ("cancelled by ada@acme.se", or whatever
-	// the caller passed). Cancellations only. Kept apart from Comment because
-	// the two come from opposite places: a comment is what an approver chose
-	// to say, a reason is what happened to the run.
-	Reason          string   `json:"reason,omitempty"`
-	Context         any      `json:"context,omitempty"`
-	ContextTooLarge bool     `json:"context_too_large,omitempty"`
-	ContextOrder    []string `json:"context_order,omitempty"`
-	// DecidedAt is when the approval was settled — decided or cancelled.
-	DecidedAt time.Time `json:"decided_at"`
-	Workspace string    `json:"workspace"`
+	RunID           string    `json:"run_id"`
+	GraphID         string    `json:"graph_id"`
+	NodeID          string    `json:"node_id"`
+	Prompt          string    `json:"prompt,omitempty"`
+	Decision        string    `json:"decision"`
+	Approver        string    `json:"approver,omitempty"`
+	Comment         string    `json:"comment,omitempty"`
+	Reason          string    `json:"reason,omitempty"`
+	Context         any       `json:"context,omitempty"`
+	ContextTooLarge bool      `json:"context_too_large,omitempty"`
+	ContextOrder    []string  `json:"context_order,omitempty"`
+	DecidedAt       time.Time `json:"decided_at"`
+	Workspace       string    `json:"workspace"`
 }
 
-// decidedApprovalsCap bounds one page of history. The list is a "what happened
-// recently" companion to the inbox, not an audit export — the audit log
-// (action "approval") is the durable record, and the run page holds the full
-// detail of any single decision.
 const decidedApprovalsCap = 200
 
-// ListDecidedApprovals returns settled await_approval node-records, newest
-// first. Scope rules match ListPendingApprovals: the principal's tenant, their
-// workspace binding when they have one, else the caller's narrowWorkspace (the
-// admin switcher), and "" for tenant-wide.
-//
-// "Settled" is two record states, not one, which is why this runs two queries:
-//
-//   - SUCCEEDED — someone decided. A rejection lands here too: the step ran to
-//     completion and routed the value out its `rejected` port, so the verdict
-//     lives in which port the result carries, never in the status.
-//   - CANCELLED — nobody decided; the run was called off while the request sat
-//     waiting. ListNodeRecordsOpts filters one status at a time, and fetching
-//     both in one pass would mean a status-blind query over every terminal node
-//     of every run. Two indexed queries and a merge is cheaper than that and
-//     exact: taking the newest `limit` of each and keeping the newest `limit`
-//     of the union is the same set as the newest `limit` of the whole.
-//
-// Ordering is by finish time, not enqueue time, and that is load-bearing
-// rather than cosmetic: an approval that sat parked for three weeks and was
-// decided this morning is the most recent OUTCOME but one of the oldest
-// records. Under a LIMIT, ordering by the wrong column doesn't just shuffle
-// the page — it drops that row off it.
-//
-// Cancellations recorded before cancel preserved a parked node's output carry
-// no `pending_url` and cannot be recognised as approvals at all; they stay
-// absent rather than appearing half-rendered.
 func (s *Service) ListDecidedApprovals(ctx context.Context, p core.Principal, narrowTenant, narrowWorkspace string, limit int) ([]DecidedApproval, error) {
 	tenant := p.Tenant
 	if p.Has(core.PermPlatformAdmin) && narrowTenant != "" {
@@ -2190,9 +1478,6 @@ func (s *Service) ListDecidedApprovals(ctx context.Context, p core.Principal, na
 			}
 		}
 	}
-	// Merge the two runs of already-sorted rows. Stable so a tie between a
-	// decision and a cancellation stamped in the same instant keeps a fixed
-	// order instead of shuffling between page loads.
 	sort.SliceStable(out, func(i, j int) bool { return out[i].DecidedAt.After(out[j].DecidedAt) })
 	if len(out) > limit {
 		out = out[:limit]
@@ -2200,13 +1485,6 @@ func (s *Service) ListDecidedApprovals(ctx context.Context, p core.Principal, na
 	return out, nil
 }
 
-// settledApproval turns one terminal await_approval node-record into a history
-// row, or reports false when the record can't be read as a settled approval.
-//
-// The outcome is read from the record's own shape rather than its status: the
-// decision ports are how Approve writes a verdict (and the same presence test
-// downstream edges fork on), and a cancel is a cancelled record that still
-// carries the ports the pause emitted.
 func settledApproval(rec core.JobRecord) (DecidedApproval, bool) {
 	if rec.Result == nil || rec.Result.Output == nil {
 		return DecidedApproval{}, false
@@ -2225,8 +1503,6 @@ func settledApproval(rec core.JobRecord) (DecidedApproval, bool) {
 	switch {
 	case rec.Status == core.JobStatusCancelled:
 		decision = "cancelled"
-		// The value is still on the internal `context` key: only a decision
-		// moves it to a port, and this request never got one.
 		carried = out["context"]
 		if rec.Result.Error != nil {
 			reason = rec.Result.Error.Message
@@ -2237,9 +1513,7 @@ func settledApproval(rec core.JobRecord) (DecidedApproval, bool) {
 		} else if ref, ok := out["rejected"]; ok {
 			decision, carried = "reject", ref
 		} else {
-			// Carries the marker port but no decision port: a record written
-			// by an older build, or a resume that isn't an approval. Skip it
-			// rather than render an outcome we'd have to invent.
+			// Marker port but no decision port: written before the resume landed.
 			return DecidedApproval{}, false
 		}
 	}
@@ -2270,28 +1544,12 @@ func settledApproval(rec core.JobRecord) (DecidedApproval, bool) {
 	}, true
 }
 
-// ListModules returns every manifest the engine's resolver knows about.
-// Module visibility is not currently filtered per tenant; that's a future
-// improvement once tenant-scoped module catalogs land.
 func (s *Service) ListDrops(ctx context.Context, p core.Principal) (map[string]core.Manifest, error) {
 	return s.listDrops(ctx, p, false)
 }
 
-// manifestsSnapshot returns the engine's manifest map with no authz — used by
-// the support-view path to run core.ValidateGraphFull for the bundle's issues
-// (safe by design: validation references node IDs / field names, never values).
-// Returns nil when the resolver exposes no manifests.
-//
-// TENANT-SCOPED, and it has to be. A tenant's runner drops live in the remote
-// catalog keyed by (tenant, id), so the unscoped map does not contain them by
-// construction. Validating a flow against that map accuses a working flow of
-// `references unknown module "csv-transform"` and then SKIPS every dependent
-// structural check on that node — so the diagnostic that exists to explain a
-// failure leads with a fabricated one, and hides the real issue behind it.
+// No authz: callers must not hand this to a tenant unfiltered.
 func (s *Service) manifestsSnapshot(tenant string) map[string]core.Manifest {
-	// A Service can legitimately have no engine (a store-only instance, a
-	// unit harness): no catalog then, and the callers degrade to the
-	// structural rules rather than failing.
 	if s.Engine == nil || s.Engine.Resolver == nil {
 		return nil
 	}
@@ -2309,31 +1567,17 @@ func (s *Service) manifestsSnapshot(tenant string) map[string]core.Manifest {
 	return mp.Manifests()
 }
 
-// listDrops is the shared body of ListDrops/SearchDrops. includeDisabled
-// controls what happens to drops a platform admin has switched off:
-//   - false (the default everywhere except the editor): they're hidden,
-//     deleted from the returned map so they don't surface in the palette,
-//     search, flow generation, or the control API.
-//   - true (editor catalog endpoints only): they're kept and stamped
-//     Disabled=true, so the editor can show them greyed-out and un-pickable
-//     instead of having them silently vanish.
-//
-// Either way the engine resolver still hard-blocks execution if a disabled
-// drop is referenced; this only shapes the build-time UI.
+// Shared body of ListDrops and SearchDrops, so the two cannot drift.
 func (s *Service) listDrops(ctx context.Context, p core.Principal, includeDisabled bool) (map[string]core.Manifest, error) {
-	// Tenant-scoped: native and MCP drops are instance-wide, but a runner's
-	// drops belong to the org that registered it. Asking for the unscoped map
-	// here would put another tenant's private steps in this one's palette.
+	// Tenant-scoped: a runner's drops belong to one tenant, and showing them to
+	// another would name a runner that org cannot reach.
 	mp, ok := s.Engine.Resolver.(interface {
 		ManifestsForTenant(string) map[string]core.Manifest
 	})
 	if !ok {
 		return map[string]core.Manifest{}, nil
 	}
-	// Manifests() hands back a fresh map of value copies, so it's safe to
-	// stamp the computed ConnectionVerifiable flag without mutating the
-	// registry. The flag tells the Apps page which connections it can test
-	// (and verify before saving) vs which just store.
+	// Value copies, so mutating them here cannot reach the registry.
 	out := mp.ManifestsForTenant(p.Tenant)
 	for id, m := range out {
 		if len(m.ConnectionFields) > 0 && m.Integration != "" {
@@ -2356,29 +1600,15 @@ func (s *Service) listDrops(ctx context.Context, p core.Principal, includeDisabl
 			}
 		}
 	}
-	// An unavailable drop (an MCP server that is registered but not reachable)
-	// is shaped like a disabled one for picking purposes: the editor keeps it
-	// so a flow already using it renders with its real ports, and every other
-	// surface — search, flow generation, the control API — hides it, because
-	// building something NEW on a step that cannot run today is not a choice
-	// worth offering. Unlike Disabled the flag is set at registration, by the
-	// MCP catalog, so this only has to filter.
 	for id, m := range out {
 		if m.Unavailable && !includeDisabled {
 			delete(out, id)
 		}
 	}
-	// Last, so it only runs over the drops that survived: swap each AI step's
-	// compiled-in model list for what this tenant's credential can actually
-	// call. Non-blocking — see llmmodels.go.
 	s.overlayLiveModels(p, out)
 	return out, nil
 }
 
-// SearchDrops applies the supplied filters and free-text query to the
-// resolver's manifest set, returning matches in relevance order (or
-// alphabetical when query is empty). Same tenant-visibility caveat as
-// ListModules.
 func (s *Service) SearchDrops(ctx context.Context, p core.Principal, q DropSearch) ([]core.Manifest, error) {
 	manifests, err := s.listDrops(ctx, p, q.IncludeDisabled)
 	if err != nil {
@@ -2395,12 +1625,6 @@ func newID() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-// manifestsForModules resolves port metadata for exactly the modules a graph
-// uses. See NodeResolver.ManifestsForSubset for why this is not ListDrops.
-//
-// Returns nil when there is no resolver, or one that predates the subset API:
-// callers degrade to structural edge resolution, which is what they already do
-// when ListDrops fails.
 func (s *Service) manifestsForModules(tenant string, ids ...string) map[string]core.Manifest {
 	if s.Engine == nil || s.Engine.Resolver == nil {
 		return nil
@@ -2414,7 +1638,6 @@ func (s *Service) manifestsForModules(tenant string, ids ...string) map[string]c
 	return mp.ManifestsForSubset(tenant, ids)
 }
 
-// manifestsForGraph is manifestsForModules over every module a graph uses.
 func (s *Service) manifestsForGraph(tenant string, g core.Graph) map[string]core.Manifest {
 	ids := make([]string, 0, len(g.Nodes))
 	for _, n := range g.Nodes {

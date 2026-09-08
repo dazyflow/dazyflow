@@ -34,7 +34,6 @@ const allAllowed = new Set(byId.keys());
 describe("suggestNextDrops", () => {
   it("ranks downstream modules when dragging from an output", () => {
     const out = suggestNextDrops(ADJ, "http_fetch", true, "out", allAllowed, byId);
-    // Sorted by summed flows: parse_json (5) then shell (2).
     expect(out.map((m) => m.id)).toEqual(["parse_json", "shell"]);
   });
 
@@ -44,7 +43,6 @@ describe("suggestNextDrops", () => {
   });
 
   it("keys on the dragged output port for multi-output drops", () => {
-    // A router with two distinct output pins leading to different drops.
     const router: DropAdjacency[] = [
       adj("route", "matched", "ntfy", "in", 9),
       adj("route", "unmatched", "shell", "in", 9),
@@ -68,7 +66,6 @@ describe("suggestNextDrops", () => {
       allAllowed,
       byId,
     );
-    // No entry has that port, so it widens to all of http_fetch's outputs.
     expect(out.map((m) => m.id)).toEqual(["parse_json", "shell"]);
   });
 
@@ -86,8 +83,6 @@ describe("suggestNextDrops", () => {
       adj("a", "p1", "z", "in", 6),
     ];
     const ids = new Map(["x", "y", "z"].map((id) => [id, man(id)]));
-    // No exact-port match for "px", so it falls back to all ports: x scores
-    // 9+8=17 (highest), then y, then z — capped at 2.
     const out = suggestNextDrops(dupAdj, "a", true, "px", new Set(ids.keys()), ids, 2);
     expect(out.map((m) => m.id)).toEqual(["x", "y"]);
   });
@@ -101,7 +96,6 @@ describe("suggestNextDrops", () => {
 
 describe("topDropsByUsage", () => {
   it("ranks by total flows across both edge endpoints", () => {
-    // Totals: http_fetch 5+2+1=8, parse_json 5+1=6, shell 2+4=6, ntfy 4.
     const out = topDropsByUsage(ADJ, allAllowed, byId, 3);
     expect(out[0].id).toBe("http_fetch");
     expect(out.map((m) => m.id)).toHaveLength(3);

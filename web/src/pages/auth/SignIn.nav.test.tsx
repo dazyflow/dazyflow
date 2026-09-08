@@ -50,8 +50,6 @@ function mountAt(entry: string) {
 
 async function signIn() {
   const user = userEvent.setup();
-  // Query by id/type rather than label text: the t() mock renders raw keys, and
-  // the password reveal toggle's aria-label also contains "password".
   await user.type(document.getElementById("email") as HTMLInputElement, "a@b.c");
   await user.type(document.getElementById("password") as HTMLInputElement, "pw");
   await user.click(screen.getByRole("button", { name: "common.signIn" }));

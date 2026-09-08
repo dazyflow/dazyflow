@@ -17,9 +17,8 @@ import (
 	"github.com/dazyflow/dazyflow/internal/schemaports"
 )
 
-// Transport is the per-operation core.Transport. It holds a COPY of the
-// descriptor, so an edit that re-registers the catalog cannot change what a
-// call already in flight sends.
+// Transport holds a COPY of the descriptor, so an edit that re-registers the
+// catalog cannot change what a call already in flight sends.
 type Transport struct {
 	desc     Descriptor
 	op       Operation
@@ -29,16 +28,12 @@ type Transport struct {
 func (t *Transport) Manifest() core.Manifest { return t.manifest }
 
 func (t *Transport) Execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	// Which last mile this catalog uses. A catalog with runner tags is reaching
-	// a service the daemon cannot dial at all, so it needs no Doer; one without
-	// needs nothing else.
+	// A catalog with runner tags reaches a service the daemon cannot dial at all, so
+	// it needs no Doer; one without needs nothing else.
 	viaRunner := t.desc.Runner.Enabled()
 
 	do, ok := currentDoer()
 	if !ok && !viaRunner {
-		// A wiring fault, not the author's mistake: no HTTP caller was
-		// installed. Reported as an error too (not just a node error) because
-		// nothing about the graph can fix it.
 		err := fmt.Errorf("web api steps are not available on this deployment: no guarded HTTP caller is wired")
 		return errResult(job, "webapi_unwired", err.Error()), err
 	}
@@ -67,9 +62,6 @@ func (t *Transport) Execute(ctx context.Context, job core.Job, progress chan<- c
 
 	emitProgress(progress, job, 0.1, req.method+" "+req.url)
 
-	// The two transports converge here: both yield a status, a body and flat
-	// headers, so everything below — expect_status, MIME sniffing, the three
-	// output ports — is written once and does not know which one ran.
 	var (
 		status  int
 		body    []byte
@@ -88,11 +80,10 @@ func (t *Transport) Execute(ctx context.Context, job core.Job, progress chan<- c
 		if ctx.Err() != nil {
 			return errResult(job, "cancelled", ctx.Err().Error()), ctx.Err()
 		}
-		// The doer's errors are already classified prose from the guards it
-		// runs (egress_blocked, an SSRF refusal, a body cap); the runner's name
-		// the machine or quote its stderr. Passing the message through beats
-		// re-deriving a code from its text here, which would couple this
-		// package to drops/net's wording.
+		// The doer's errors are already classified prose from its guards, and the
+		// runner's name the machine or quote its stderr. Passing the message through beats
+		// re-deriving a code from its text, which would couple this package to drops/net's
+		// wording.
 		return errResult(job, "http", err.Error()), nil
 	}
 
@@ -103,9 +94,6 @@ func (t *Transport) Execute(ctx context.Context, job core.Job, progress chan<- c
 		if snippet := bodySnippet(body); snippet != "" {
 			msg += ": " + snippet
 		}
-		// A node error with no transport error, exactly as http_request
-		// classifies it: the call completed, the service said no. The run
-		// reports it; a retry edge decides whether to try again.
 		return errResult(job, "unexpected_status", msg), nil
 	}
 
@@ -125,15 +113,12 @@ func (t *Transport) Execute(ctx context.Context, job core.Job, progress chan<- c
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
 			"response_body": {MIME: contentType, Inline: inline},
-			// A bare JSON number so a Branch's numeric comparison can test it
-			// with no parse step in between. Same as http_request.
-			"status":  {MIME: "application/json", Inline: status},
-			"headers": {MIME: "application/json", Inline: headers},
+			"status":        {MIME: "application/json", Inline: status},
+			"headers":       {MIME: "application/json", Inline: headers},
 		},
 	}, nil
 }
 
-// request is one assembled call.
 type request struct {
 	method  string
 	url     string
@@ -141,12 +126,9 @@ type request struct {
 	body    []byte
 }
 
-// buildRequest turns the assembled arguments into an HTTP call.
-//
-// The order is load-bearing in one place: the base address is resolved before
-// anything else, because everything else is relative to it and an empty base is
-// the single most likely misconfiguration (a catalog imported before its
-// connection was filled in).
+// buildRequest resolves the base address first, because everything else is
+// relative to it and an empty base is the likeliest misconfiguration — a catalog
+// imported before its connection was filled in.
 func (t *Transport) buildRequest(args map[string]any, job core.Job) (request, error) {
 	base := strings.TrimSpace(stringArg(args, "base_url"))
 	if base == "" {
@@ -178,7 +160,6 @@ func (t *Transport) buildRequest(args map[string]any, job core.Job) (request, er
 		}
 		switch a.In {
 		case InPath:
-			// Already rendered into the path.
 		case InQuery:
 			s, ok := scalarString(v)
 			if !ok {
@@ -196,22 +177,17 @@ func (t *Transport) buildRequest(args map[string]any, job core.Job) (request, er
 			if s == "" && !a.Required {
 				continue
 			}
-			// A header VALUE arrives at run time from a param or an upstream
-			// node, so it is the one part of the request an author (or a
-			// compromised upstream) can put a newline in. Go's transport would
-			// reject it when writing the request; refusing it here makes the
-			// message name the argument instead of the wire format.
+			// A header VALUE is the one part of the request an author, or a compromised
+			// upstream, can put a newline in. Go's transport would reject it when writing;
+			// refusing here makes the message name the argument instead of the wire format.
 			if strings.ContainsAny(s, "\r\n") {
 				return request{}, fmt.Errorf("%s must not contain a line break", a.Name)
 			}
 			headers[a.Name] = s
 		case InBody:
-			// Coerced back to the declared type. This matters because a value
-			// arriving over a port is text — numbers travel as text on every
-			// port in the product — and a JSON body whose schema says number
-			// must not carry "42". (engine/mcp has the same gap, uncorrected:
-			// its tool arguments are handed over as whatever the port gave.
-			// Worth fixing there separately, not by widening this commit.)
+			// Coerced back to the declared type: a value arriving over a port is text, and
+			// a JSON body whose schema says number must not carry "42". engine/mcp has the
+			// same gap, uncorrected.
 			coerced, err := coerceToType(v, a.Type)
 			if err != nil {
 				return request{}, fmt.Errorf("%s: %v", a.Name, err)
@@ -251,10 +227,9 @@ func (t *Transport) buildRequest(args map[string]any, job core.Job) (request, er
 	if err := t.applyAuth(args, headers); err != nil {
 		return request{}, err
 	}
-	// A stable Idempotency-Key on the verbs HTTP does not make idempotent, so a
-	// retry whose response was lost dedupes on any service honoring the
-	// convention. Mirrors http_request and webhook_send; a service that ignores
-	// the header is unaffected. Never overrides one the operation declared.
+	// A stable Idempotency-Key on the non-idempotent verbs, so a retry whose
+	// response was lost dedupes on any service honouring the convention. Never
+	// overrides one the operation declared.
 	method := strings.ToUpper(t.op.Method)
 	if method == http.MethodPost || method == http.MethodPatch {
 		if _, set := headers["Idempotency-Key"]; !set {
@@ -265,11 +240,9 @@ func (t *Transport) buildRequest(args map[string]any, job core.Job) (request, er
 	return request{method: method, url: target, headers: headers, body: body}, nil
 }
 
-// renderPath substitutes the path template's placeholders.
-//
-// Each value is path-escaped. That is the difference between an id and a path
-// traversal: an argument of "../../admin" must reach the service as a segment
-// it can reject, not as a URL that walked up out of the intended collection.
+// renderPath path-escapes each value, which is the difference between an id and
+// a path traversal: an argument of "../../admin" must reach the service as a
+// segment it can reject, not as a URL that walked out of the collection.
 func (t *Transport) renderPath(args map[string]any) (string, error) {
 	out := t.op.Path
 	for _, name := range pathPlaceholders(t.op.Path) {
@@ -308,8 +281,6 @@ func (t *Transport) applyAuth(args map[string]any, headers map[string]string) er
 	return nil
 }
 
-// statusAccepted decides success. Empty expect means 2xx, matching
-// http_request's default so the two steps agree about what a failure is.
 func statusAccepted(status int, expect []int) bool {
 	if len(expect) == 0 {
 		return status >= 200 && status < 300
@@ -333,9 +304,6 @@ func formatExpect(expect []int) string {
 	return strings.Join(parts, ", ")
 }
 
-// maxSnippet bounds how much of a failed response's body lands in the error
-// message. Enough to carry the service's own explanation, little enough not to
-// put a megabyte of HTML in a run record.
 const maxSnippet = 500
 
 func bodySnippet(body []byte) string {
@@ -346,14 +314,11 @@ func bodySnippet(body []byte) string {
 	return s
 }
 
-// coerceToType converts a value to what the argument's declared type needs,
-// accepting the text a port delivers.
 func coerceToType(v any, declared any) (any, error) {
 	mime, scalar := schemaports.ScalarMIME(declared)
 	if !scalar {
-		// An object or array argument: pass whatever the author supplied
-		// through untouched. Its shape is the params form's business, and
-		// guessing at it here would be inventing structure.
+		// An object or array argument passes through untouched: its shape is the params
+		// form's business, and guessing here would be inventing structure.
 		return v, nil
 	}
 	if len(mime) > 0 && mime[0] == core.MIMEBool {
@@ -399,7 +364,6 @@ func coerceToType(v any, declared any) (any, error) {
 	return s, nil
 }
 
-// rawBody accepts the shapes a wired value arrives in for a verbatim body.
 func rawBody(v any) ([]byte, error) {
 	switch x := v.(type) {
 	case string:
@@ -415,9 +379,9 @@ func rawBody(v any) ([]byte, error) {
 	}
 }
 
-// scalarString renders a single value as text. Objects and slices are refused
-// rather than marshalled: a query parameter that silently became `{"a":1}` is a
-// call that fails at the service with a message about the wrong thing.
+// scalarString refuses objects and slices rather than marshalling them: a query
+// parameter that silently became `{"a":1}` fails at the service with a message
+// about the wrong thing.
 func scalarString(v any) (string, bool) {
 	switch x := v.(type) {
 	case nil:
@@ -493,10 +457,8 @@ func intSliceArg(args map[string]any, key string) []int {
 }
 
 // isTextMIME mirrors drops/internal/mimetype.IsText, which this package cannot
-// import: that tree is walled off to drops/ by Go's internal rule. A copy of
-// seven lines beats moving a shared helper as a side effect of this commit —
-// but it does belong in internal/ eventually, and this is the second caller
-// that would use it.
+// import — that tree is walled off by Go's internal rule. It belongs in internal/
+// eventually; this is the second caller that would use it.
 func isTextMIME(mime string) bool {
 	if i := strings.IndexByte(mime, ';'); i >= 0 {
 		mime = mime[:i]
@@ -523,12 +485,8 @@ func flattenHeaders(h http.Header) map[string]string {
 	return out
 }
 
-// headerValue reads one header out of the flattened map, case-insensitively.
-//
-// http.Header canonicalises its keys on the way in and Get would have done this
-// for free; a runner's reply does not, because it is whatever the service put on
-// the wire, printed by python's email.message parser. So the lookup has to be
-// the case-insensitive one HTTP has always specified.
+// headerValue is case-insensitive because a runner's reply is not canonicalised
+// the way http.Header is: it is whatever the service put on the wire.
 func headerValue(headers map[string]string, key string) string {
 	if v, ok := headers[key]; ok {
 		return v
@@ -541,9 +499,9 @@ func headerValue(headers map[string]string, key string) string {
 	return ""
 }
 
-// b64/unb64 carry a request and response body across the runner boundary. A
-// task's stdin and stdout are text, and a body is not: a PDF, a gzip, or merely
-// a UTF-8 string with a stray byte would not survive being handed through as-is.
+// b64/unb64 carry a body across the runner boundary: a task's stdin and stdout
+// are text, and a PDF, a gzip, or a UTF-8 string with a stray byte would not
+// survive being handed through as-is.
 func b64(body []byte) string {
 	if len(body) == 0 {
 		return ""

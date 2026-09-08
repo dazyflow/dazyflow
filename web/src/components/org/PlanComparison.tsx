@@ -9,9 +9,6 @@ import type { PlanLimits, PlanOption, PlansInfo } from "../../api";
 import { ICON } from "../../icons";
 import { formatBytes } from "../../lib/format";
 
-// Unlimited renders the ∞ glyph for a no-limit value, keeping the localized
-// "Unlimited" as the accessible label (tooltip + screen reader) so the symbol
-// stays clear and translatable.
 function Unlimited({ label }: { label: string }) {
   return (
     <span className="plan-unlimited" title={label} aria-label={label}>
@@ -20,12 +17,6 @@ function Unlimited({ label }: { label: string }) {
   );
 }
 
-// The plan-comparison grid, lifted out of the old Plans page so the merged
-// Plan & usage page can render it inline below the usage counters. Limits are
-// resolved server-side (the same resolver the gates use), so this only formats
-// and *diffs* the numbers against the current plan — there is no per-tier
-// marketing copy to keep in sync. Editing a tier's limits changes what's shown
-// here automatically; only a brand-new limit field needs a new row in FEATURES.
 
 type FeatureKind = "capacity" | "bytes" | "duration" | "days" | "bool";
 
@@ -50,14 +41,10 @@ const FEATURES: Feature[] = [
 ];
 
 
-// score maps a numeric limit to a comparable magnitude where 0 = unlimited is
-// the largest. Used to decide whether a plan's value is an upgrade over the
-// current one, regardless of the specific numbers a tier carries.
 function score(v: number): number {
   return v === 0 ? Infinity : v;
 }
 
-// betterThan reports whether plan value `a` is an improvement over current `b`.
 function betterThan(f: Feature, a: number | boolean, b: number | boolean): boolean {
   if (f.kind === "bool") return a === true && b !== true;
   return score(a as number) > score(b as number);
@@ -124,10 +111,6 @@ export function PlanComparison({
             key={p.id}
             plan={p}
             current={current}
-            // Diff each tier against the one below it in the ladder (Free has
-            // none, Pro vs Free, Enterprise vs Pro) rather than the viewer's
-            // current plan — so the "what this tier adds" cues show each step's
-            // incremental value, not Enterprise's gap over Free.
             baseline={plans[i - 1]}
             info={info}
             redirecting={redirecting}
@@ -155,8 +138,6 @@ function PlanCard({
 }: {
   plan: PlanOption;
   current: PlanOption;
-  // The tier directly below this one in the ladder; undefined for the lowest
-  // card. The feature diff highlights what this tier adds over it.
   baseline?: PlanOption;
   info: PlansInfo;
   redirecting: boolean;
@@ -166,18 +147,10 @@ function PlanCard({
   onManage: () => void;
 }) {
   const isCurrent = plan.is_current;
-  // An upgrade target: a higher (pro) plan the org isn't already on. Stripe
-  // self-serve only handles Pro; custom comp tiers are admin-assigned, and the
-  // sales-led Enterprise card (is_contact) gets its own "Contact sales" CTA.
   const isUpgradeTarget =
     !isCurrent && !plan.is_contact && plan.plan === "pro" && current.plan !== "pro";
-  // The built-in Pro plan is the headline tier — flag it "Most popular" and
-  // give it the featured treatment (unless it's already the current plan).
   const isPopular = plan.id === "pro" && !isCurrent;
-  // Short marketing line per plan; falls back to nothing for custom comp tiers.
   const tagline = t(`plans.tagline.${plan.id}`, { defaultValue: "" });
-  // Price line: only Free has a public figure in-app; paid tiers point to the
-  // CTA / sales rather than committing a number here.
   const priceLine =
     plan.id === "free"
       ? t("plans.priceFree")
@@ -229,9 +202,6 @@ function PlanCard({
       <ul className="plan-feats">
         {FEATURES.map((f) => {
           const v = plan.limits[f.key];
-          // Highlight a feature as an upgrade when this tier beats the one
-          // below it (the baseline). The current plan and the lowest tier
-          // (no baseline) show no upgrade cues.
           const up =
             !isCurrent && baseline != null && betterThan(f, v, baseline.limits[f.key]);
           return (

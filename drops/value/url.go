@@ -72,8 +72,6 @@ func init() {
 }
 
 func executeURL(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	// Wired 'url' input wins over the inline param (params.TextInputOr), so the
-	// address can be computed upstream or set on the node.
 	raw, ok := params.TextInputOr(job, "url", params.StringDefault(job.Params, "url", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "the connected 'url' input must be text"), nil
@@ -110,11 +108,7 @@ func executeURL(_ context.Context, job core.Job, _ chan<- core.Progress) (core.R
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"out": {MIME: "text/plain", Inline: raw},
-			// Decomposed parts, from the same parse — host (u.Host keeps any
-			// :port) and the decoded path, so downstream can branch/template on
-			// them without re-parsing. Path is "" for a bare host (no trailing
-			// slash), matching net/url.
+			"out":   {MIME: "text/plain", Inline: raw},
 			"host":  {MIME: "text/plain", Inline: u.Host},
 			"path":  {MIME: "text/plain", Inline: u.Path},
 			"query": {MIME: "application/json", Inline: q},

@@ -25,16 +25,6 @@ import { integrationName } from "../lib/dropText";
 import { ErrorNotice } from "./ui/ErrorNotice";
 import { Loading } from "./ui/Loading";
 
-// TemplateGallery is the reusable card grid of pre-built workflows. It
-// lives inside the "From a template" tab of the Create-flow page (and is
-// reached via the /templates → /flows/new?tab=template redirect). On click
-// we fetch the template's graph file, generate a fresh graph ID, fill in
-// the user's tenant + workspace, and PUT through the normal saveGraph
-// endpoint — same code path as creating a graph by hand, just pre-populated
-// with nodes + edges.
-//
-// The gallery itself is static (web/public/templates/index.json). Adding a
-// template is a JSON file + a one-line index entry; no daemon code change.
 
 // SHARED_NTFY_PLACEHOLDER is the topic an ntfy template would ship with.
 // It's a guessable, world-readable shared topic, so applyTemplate swaps it
@@ -45,8 +35,6 @@ const SHARED_NTFY_PLACEHOLDER = "my-daily-hello";
 export function TemplateGallery() {
   const { t, i18n } = useTranslation();
   const { token, activeTenant, activeWorkspace, hasPerm } = useAuth();
-  // Forking a template creates a flow → needs graph:edit. Viewers can
-  // browse templates but the "Use this template" action is disabled.
   const canEdit = hasPerm("graph:edit");
   const navigate = useNavigate();
   const [templates, setTemplates] = useState<TemplateSummary[] | null>(null);
@@ -61,17 +49,11 @@ export function TemplateGallery() {
     null,
   );
   const [searchParams, setSearchParams] = useSearchParams();
-  // Goal-first entry can land here with ?category=… so the gallery opens
-  // already narrowed to the user's intent.
   const categoryFilter = searchParams.get("category");
   // ?template=<id> is a tighter focus than category: a deep-link can open
   // the gallery on one template instead of a category list it would
   // otherwise be buried in. Takes precedence over category.
   const templateFilter = searchParams.get("template");
-  // ?start=<id> goes one step further and COPIES that template immediately,
-  // landing the user in the editor with a working flow. Welcome's primary
-  // action uses it for the no-setup starter: the fastest honest answer to
-  // "what is this thing?" is a flow on screen, not a form to fill in.
   const autoStart = searchParams.get("start");
 
   useEffect(() => {
@@ -82,9 +64,6 @@ export function TemplateGallery() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch OAuth providers in parallel — kept independent so a 501 or
-  // 401 here doesn't blank the whole templates gallery. The map of
-  // available provider names drives per-card admin-blocked badges.
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
@@ -94,9 +73,6 @@ export function TemplateGallery() {
         if (!cancelled) setProviders(r.providers);
       })
       .catch(() => {
-        // 501 = OAuth not configured. Same outcome as "no providers
-        // available" for filtering: any OAuth-needing template gets
-        // flagged. Stash the empty list so the gating logic kicks in.
         if (!cancelled) setProviders([]);
       });
     return () => {
@@ -104,28 +80,16 @@ export function TemplateGallery() {
     };
   }, [token]);
 
-  // availableProviders is the set of OAuth provider names this install
-  // currently exposes. Empty when the feature is off or the daemon
-  // hasn't reported any configured providers — the same case from the
-  // template-gating POV.
   const availableProviders = useMemo(() => {
     if (providers === null) return null;
     return new Set(providers.map((p) => p.name));
   }, [providers]);
 
-  // Named applyTemplate, not useTemplate: this is the "use this template"
-  // ACTION, and a `use` prefix on a plain async function inside a component
-  // means both React's lint rules and a reader take it for a hook. It is
-  // called from a callback and from an effect, which is a rules-of-hooks
-  // violation if it really were one.
   const applyTemplate = async (tpl: TemplateSummary) => {
     if (!token) {
       setError(t("templates.notSignedIn"));
       return;
     }
-    // Signed in, but the workspace hasn't arrived yet. Saying "not signed in"
-    // here told the user something untrue about a session they can see in the
-    // sidebar, and offered no next step.
     if (!activeTenant || !activeWorkspace) {
       setError(t("templates.workspaceLoading"));
       return;
@@ -147,8 +111,6 @@ export function TemplateGallery() {
         id: newID,
         tenant: activeTenant,
         workspace: activeWorkspace,
-        // owner intentionally left blank — the daemon stamps the
-        // caller as owner on first save.
         owner: "",
         // The flow's OUTPUT language: what its hosted form says to visitors
         // ("Submit", "Thanks!"), and what steps that spell out words write.
@@ -159,11 +121,6 @@ export function TemplateGallery() {
         // language deliberately keeps it, and the owner can change it in
         // Settings → General.
         language: tplGraph.language || primaryLanguage(i18n.language),
-        // Name it what the card the user just clicked was called. The gallery
-        // renders titles through templateTitle(), so a Swedish reader picked
-        // "Webbformulär → Samling" and then found "Web form → Collection" in
-        // their sidebar — the graph file's raw English name. The name is the
-        // owner's from here on; they can rename it.
         name: templateTitle(tpl, i18n.language),
         // Per-fork personalisation of nodes that ship a placeholder default:
         //  - cron_trigger: stamp the forker's time zone. Templates are
@@ -247,13 +204,6 @@ export function TemplateGallery() {
     return <Loading />;
   }
 
-  // Group cards under their category heading so a non-technical visitor
-  // can scan by intent ("Get notified", "Scheduled reports"). Order is
-  // driven by first appearance in the index file, so curation controls
-  // the layout without a hard-coded category list here. Entries with no
-  // category fall into a catch-all bucket rendered last.
-  // focusedTpl resolves the ?template= id to its summary so the filter
-  // chip can name it; null when the param is absent or unknown.
   const focusedTpl = templateFilter
     ? templates.find((tpl) => tpl.id === templateFilter) ?? null
     : null;
@@ -262,9 +212,6 @@ export function TemplateGallery() {
     : categoryFilter
       ? templates.filter((tpl) => tpl.category === categoryFilter)
       : templates;
-  // Grouped by the ENGLISH category and translated at render, so which cards
-  // sit together — and the ?category= link that reproduces it — do not depend on
-  // the reader's language.
   const groups: { category: string; items: TemplateSummary[] }[] = [];
   for (const tpl of visible) {
     const cat = tpl.category?.trim() ?? "";
@@ -288,8 +235,6 @@ export function TemplateGallery() {
                     : templateFilter,
                 })
               : t("templates.filteredBy", {
-                  // Non-null in this branch — the chip only renders when one of
-                  // the two params is set, and templateFilter took the other.
                   category: templateCategory(categoryFilter ?? "", i18n.language),
                 })}
           </span>
@@ -322,13 +267,6 @@ export function TemplateGallery() {
           <div className="template-grid">
             {group.items.map((tpl) => {
               const Icon = iconFor(tpl.icon);
-              // missingIntegrationNames lists the OAuth-backed
-              // integrations this template references but that the
-              // current install hasn't enabled. Empty list = template
-              // is forkable. Computed against availableProviders,
-              // which itself is null until the providers fetch
-              // resolves — until then we don't block, so the gallery
-              // doesn't briefly grey every card on a slow network.
               const missingIntegrationNames =
                 availableProviders === null
                   ? []
@@ -418,18 +356,8 @@ function oauthBlockedIntegrations(
   return [...out].sort();
 }
 
-// templateIntegrationCap is how many brand logos we render before
-// collapsing the rest into a "+N" indicator. Four keeps cards visually
-// tidy at the most common widths; templates with more integrations
-// still surface that they're touching multiple services.
 const templateIntegrationCap = 4;
 
-// TemplateIntegrationRow draws a small row of vendor brand icons on
-// the template card so users can scan "this template touches Gmail
-// and Slack" without reading the title. Each slug maps 1:1 to
-// /brands/<slug>.svg under the public assets root; missing files
-// produce a broken-image (caught at content-curation time, not a
-// render hazard).
 function TemplateIntegrationRow({ slugs }: { slugs: string[] }) {
   const { t } = useTranslation();
   const shown = slugs.slice(0, templateIntegrationCap);

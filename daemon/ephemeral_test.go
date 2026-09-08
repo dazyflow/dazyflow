@@ -38,7 +38,6 @@ func TestEphemeralState_MintedOnOneReplicaRedeemedOnAnother(t *testing.T) {
 			got.Host != "acme.example.com" || got.Binding != "bind-nonce" || !got.Test {
 			t.Fatalf("state crossed replicas but lost content: %+v", got)
 		}
-		// Single-use across replicas too, or a stolen state is replayable.
 		if _, ok := podA.consumeGoogleState(ctx, state); ok {
 			t.Fatal("state was consumable twice across replicas")
 		}

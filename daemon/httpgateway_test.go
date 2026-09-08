@@ -21,9 +21,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// gatewayHarness assembles a minimal daemon stack + an HTTP gateway,
-// returning the Bearer token tests should send for an authenticated
-// principal scoped to t/ws.
 type gatewayHarness struct {
 	gw            *HTTPGateway
 	svc           *Service
@@ -63,8 +60,6 @@ func newGatewayHarness(t *testing.T) *gatewayHarness {
 	}
 }
 
-// adminDo runs the request with a organization:admin bearer token, minting
-// one on first use so individual tests don't have to wire it.
 func (h *gatewayHarness) adminDo(t *testing.T, method, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	if h.adminToken == "" {
@@ -135,9 +130,6 @@ func (h *gatewayHarness) do(t *testing.T, method, path string, body any) *httpte
 	return rw
 }
 
-// TestHTTPGateway_LabelRevision covers the label route: naming the current
-// draft (HEAD) attaches a per-commit label that surfaces in the history
-// listing, and an empty label clears it.
 func TestHTTPGateway_LabelRevision(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -149,7 +141,6 @@ func TestHTTPGateway_LabelRevision(t *testing.T) {
 		t.Fatalf("create flow: code=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// Name the current draft.
 	rw := h.do(t, "POST", "/api/v1/me/flows/"+fid+"/label", map[string]any{"label": "Black Friday config"})
 	if rw.Code != http.StatusOK {
 		t.Fatalf("label: code=%d body=%s", rw.Code, rw.Body.String())
@@ -165,7 +156,6 @@ func TestHTTPGateway_LabelRevision(t *testing.T) {
 		t.Fatalf("label resp = %+v, want labeled non-empty commit", lr)
 	}
 
-	// History surfaces the label keyed to that commit.
 	labelInHistory := func() string {
 		rw := h.do(t, "GET", "/api/v1/me/flows/"+fid+"/history", nil)
 		if rw.Code != http.StatusOK {
@@ -189,7 +179,6 @@ func TestHTTPGateway_LabelRevision(t *testing.T) {
 		t.Fatalf("history label = %q, want \"Black Friday config\"", got)
 	}
 
-	// Empty label clears it.
 	if rw := h.do(t, "POST", "/api/v1/me/flows/"+fid+"/label", map[string]any{"label": ""}); rw.Code != http.StatusOK {
 		t.Fatalf("clear label: code=%d body=%s", rw.Code, rw.Body.String())
 	}
@@ -244,12 +233,10 @@ func TestHTTPGateway_RequestIsHTTPS(t *testing.T) {
 		}
 		return r // httptest requests have r.TLS == nil
 	}
-	// TrustProxyHeaders off: forwarded-proto is ignored.
 	h.gw.TrustProxyHeaders = false
 	if h.gw.requestIsHTTPS(mk("https")) {
 		t.Error("must NOT trust X-Forwarded-Proto when TrustProxyHeaders is off")
 	}
-	// On: forwarded https counts as secure; http (or absent) doesn't.
 	h.gw.TrustProxyHeaders = true
 	if !h.gw.requestIsHTTPS(mk("https")) {
 		t.Error("should treat X-Forwarded-Proto:https as secure when trusted")
@@ -288,9 +275,6 @@ func TestHTTPGateway_RejectsBadBearer(t *testing.T) {
 func TestHTTPGateway_ListModules(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Require modules package to be linked so engine.Default has entries.
-	// The flow modules are imported transitively by the daemon's other
-	// files (worker), so the registry is populated.
 	rw := h.do(t, "GET", "/api/v1/modules", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
@@ -343,10 +327,6 @@ func TestHTTPGateway_SaveAndLoadGraph(t *testing.T) {
 
 func TestHTTPGateway_ListFlows_UsesPrincipalScope(t *testing.T) {
 	t.Parallel()
-	// The /me/flows route falls back to the caller's tenant +
-	// workspace from the session when ?tenant=&workspace= aren't
-	// supplied. Distinct from the legacy /api/v1/graphs which
-	// 400'd on missing params — the /me/ prefix means "use my scope".
 	h := newGatewayHarness(t)
 	rw := h.do(t, "GET", "/api/v1/me/flows", nil)
 	if rw.Code != http.StatusOK {
@@ -375,8 +355,6 @@ func TestHTTPGateway_NodeSnapshotMissingParentGraphIs404(t *testing.T) {
 func TestHTTPGateway_NodeSnapshotReturnsRecord(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Seed both records directly so we exercise the endpoint without
-	// having to drive a worker through a graph here.
 	graphRec := core.JobRecord{
 		ID:           "run-xyz",
 		Kind:         core.JobKindGraph,
@@ -428,7 +406,6 @@ func TestHTTPGateway_NodeSnapshotReturnsRecord(t *testing.T) {
 func TestHTTPGateway_ListRunsReturnsNewestFirst(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// First save the graph so the tenant-scope check passes.
 	if _, err := h.ws.Save(core.Graph{
 		ID: "g1", Tenant: "t", Workspace: "ws",
 	}, "test"); err != nil {
@@ -441,8 +418,6 @@ func TestHTTPGateway_ListRunsReturnsNewestFirst(t *testing.T) {
 			ID: id, Kind: core.JobKindGraph, GraphID: "g1",
 			Tenant: "t", Workspace: "ws",
 			Status: core.JobStatusSucceeded,
-			// EnqueuedAt is set by the store; use ordering by relying on
-			// each Enqueue happening sequentially.
 		})
 		_ = i
 	}
@@ -464,8 +439,6 @@ func TestHTTPGateway_ListRunsReturnsNewestFirst(t *testing.T) {
 	if len(out.Runs) != 3 {
 		t.Fatalf("runs = %+v, want 3 (no node-record)", out.Runs)
 	}
-	// Memory store sorts ListByGraph by enqueued_at DESC, so newest
-	// insertion comes first.
 	if out.Runs[0].ID != "run-c" {
 		t.Errorf("first = %q, want run-c", out.Runs[0].ID)
 	}
@@ -540,7 +513,6 @@ func TestHTTPGateway_ListRunsOffsetLimit(t *testing.T) {
 	if len(out.Runs) != 2 {
 		t.Fatalf("len = %d, want 2", len(out.Runs))
 	}
-	// newest first: r5, r4, [r3, r2], r1 — offset 2 + limit 2 = [r3, r2]
 	if out.Runs[0].ID != "r3" || out.Runs[1].ID != "r2" {
 		t.Errorf("got %+v, want [r3 r2]", out.Runs)
 	}
@@ -592,12 +564,10 @@ func TestHTTPGateway_ListAllRunsAcrossGraphs(t *testing.T) {
 func TestHTTPGateway_ListPendingApprovals(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Parent graph-record so any tenant-scope check downstream passes.
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: "run-1", Kind: core.JobKindGraph, GraphID: "g1",
 		Tenant: "t", Workspace: "ws", Status: core.JobStatusRunning,
 	})
-	// Awaiting await_approval node — should appear.
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: NodeJobID("run-1", "approval"), Kind: core.JobKindNode,
 		GraphRunID: "run-1", GraphID: "g1",
@@ -663,9 +633,6 @@ func TestHTTPGateway_ListPendingApprovals(t *testing.T) {
 func TestHTTPGateway_ApproveAuthedResumesAwaitingNode(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Need a parent graph-record + the awaiting node-record + a
-	// payload so AdvanceAfterCompletion can load the graph and not
-	// no-op on the dispatch.
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: "run-1", Kind: core.JobKindGraph,
 		GraphID: "g1", Tenant: "t", Workspace: "ws",
@@ -688,13 +655,10 @@ func TestHTTPGateway_ApproveAuthedResumesAwaitingNode(t *testing.T) {
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
 	}
-	// Record should now be succeeded with the decision recorded.
 	rec, _ := h.store.Get(t.Context(), NodeJobID("run-1", "a"))
 	if rec.Status != core.JobStatusSucceeded {
 		t.Errorf("status = %q, want succeeded", rec.Status)
 	}
-	// The decision is surfaced Branch-style: approve routes out the approved
-	// port (and not rejected).
 	if rec.Result == nil {
 		t.Fatalf("resume result is nil")
 	}
@@ -707,21 +671,17 @@ func TestHTTPGateway_ApproveAuthedResumesAwaitingNode(t *testing.T) {
 	if got, _ := rec.Result.Output["comment"].Inline.(string); got != "looks good" {
 		t.Errorf("comment = %q", got)
 	}
-	// "Approved by" defaults to the authenticated principal's subject.
 	if got, _ := rec.Result.Output["approver"].Inline.(string); got != "alice" {
 		t.Errorf("approver output = %q, want alice (principal subject)", got)
 	}
 }
 
-// TestHTTPGateway_ApproveAuthedIgnoresSpoofedApprover locks in that the
-// authenticated approval path attributes the approval to the proven
-// principal, never a client-supplied ?approver=. Otherwise a valid caller
-// could forge who approved in the audit trail and the node record.
+// Locks in that the authenticated approval path attributes the approval to the
+// proven principal, never a client-supplied ?approver=. Otherwise a valid
+// caller could forge who approved in the audit trail and the node record.
 func TestHTTPGateway_ApproveAuthedIgnoresSpoofedApprover(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// The approver is no longer a graph output; attribution lives in the
-	// audit trail, so wire a log to observe it.
 	h.gw.Audit = NewMemAuditLog()
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: "run-spoof", Kind: core.JobKindGraph,
@@ -739,7 +699,6 @@ func TestHTTPGateway_ApproveAuthedIgnoresSpoofedApprover(t *testing.T) {
 			Output: map[string]core.Ref{"pending_url": {Inline: "https://dzd/approve/run-spoof/a?token=x"}},
 		},
 	})
-	// Caller tries to attribute the approval to "mallory".
 	rw := h.do(t, "POST", "/api/v1/approvals/run-spoof/a?decision=approve&approver=mallory", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d body = %s", rw.Code, rw.Body.String())
@@ -768,7 +727,6 @@ func TestHTTPGateway_ApproveAuthedIgnoresSpoofedApprover(t *testing.T) {
 func TestHTTPGateway_ApproveAuthedRejectsCrossTenant(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Belongs to a different tenant — the bearer principal can't see it.
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: "run-other", Kind: core.JobKindGraph,
 		GraphID: "g", Tenant: "other", Workspace: "ws",
@@ -784,9 +742,6 @@ func TestHTTPGateway_ApproveAuthedRejectsCrossTenant(t *testing.T) {
 func TestHTTPGateway_ListAllRunsAcceptsWorkspaceNarrow(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// One run in our workspace, one in a sibling workspace within the
-	// same tenant. An admin without a workspace binding should be
-	// able to narrow to either via ?workspace=.
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: "r-ws", Kind: core.JobKindGraph, GraphID: "g",
 		Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded,
@@ -796,7 +751,6 @@ func TestHTTPGateway_ListAllRunsAcceptsWorkspaceNarrow(t *testing.T) {
 		Tenant: "t", Workspace: "ws2", Status: core.JobStatusSucceeded,
 	})
 
-	// Issue an unscoped admin key for this tenant.
 	role := core.Role{Name: "ta", Permissions: []core.Permission{core.PermOrganizationAdmin}}
 	_, adminTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-narrow-admin", "t", "", "root3", []core.Role{role}, nil)
 	if err != nil {
@@ -820,17 +774,14 @@ func TestHTTPGateway_ListAllRunsAcceptsWorkspaceNarrow(t *testing.T) {
 		}
 		return ids
 	}
-	// Unfiltered: both visible.
 	all := doAdmin("/api/v1/me/runs")
 	if len(all) != 2 {
 		t.Errorf("unfiltered len = %d, want 2 (saw %v)", len(all), all)
 	}
-	// Narrow to ws.
 	onlyWS := doAdmin("/api/v1/me/runs?workspace=ws")
 	if len(onlyWS) != 1 || onlyWS[0] != "r-ws" {
 		t.Errorf("workspace=ws filtered: %v, want [r-ws]", onlyWS)
 	}
-	// Narrow to ws2.
 	onlyWS2 := doAdmin("/api/v1/me/runs?workspace=ws2")
 	if len(onlyWS2) != 1 || onlyWS2[0] != "r-ws2" {
 		t.Errorf("workspace=ws2 filtered: %v, want [r-ws2]", onlyWS2)
@@ -840,7 +791,6 @@ func TestHTTPGateway_ListAllRunsAcceptsWorkspaceNarrow(t *testing.T) {
 func TestHTTPGateway_ListAllRuns_ScopedPrincipalIgnoresWorkspaceQuery(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Two workspaces with runs.
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: "mine", Kind: core.JobKindGraph, GraphID: "g",
 		Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded,
@@ -849,9 +799,6 @@ func TestHTTPGateway_ListAllRuns_ScopedPrincipalIgnoresWorkspaceQuery(t *testing
 		ID: "theirs", Kind: core.JobKindGraph, GraphID: "g",
 		Tenant: "t", Workspace: "ws2", Status: core.JobStatusSucceeded,
 	})
-	// h.do uses the bootstrap editor key bound to workspace "ws". Even
-	// if we pass ?workspace=ws2, the principal's binding wins and
-	// they only see their own workspace's runs.
 	rw := h.do(t, "GET", "/api/v1/me/runs?workspace=ws2", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d", rw.Code)
@@ -870,7 +817,6 @@ func TestHTTPGateway_ListAllRuns_ScopedPrincipalIgnoresWorkspaceQuery(t *testing
 func TestHTTPGateway_ListPendingApprovalsAcceptsWorkspaceNarrow(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Pending approval in ws and ws2.
 	for _, e := range []struct {
 		runID string
 		ws    string
@@ -914,12 +860,10 @@ func TestHTTPGateway_ListPendingApprovalsAcceptsWorkspaceNarrow(t *testing.T) {
 		}
 		return ids
 	}
-	// Unfiltered: both visible.
 	all := doAdmin("/api/v1/approvals/pending")
 	if len(all) != 2 {
 		t.Errorf("unfiltered: %v, want 2", all)
 	}
-	// Narrow to ws.
 	narrow := doAdmin("/api/v1/approvals/pending?workspace=ws")
 	if len(narrow) != 1 || narrow[0] != "r1" {
 		t.Errorf("narrowed: %v, want [r1]", narrow)
@@ -929,7 +873,6 @@ func TestHTTPGateway_ListPendingApprovalsAcceptsWorkspaceNarrow(t *testing.T) {
 func TestHTTPGateway_ListAllRunsScopedToTenant(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Run in OUR tenant + workspace
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: "ours", Kind: core.JobKindGraph, GraphID: "gA",
 		Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded,
@@ -952,7 +895,6 @@ func TestHTTPGateway_ListAllRunsScopedToTenant(t *testing.T) {
 func TestHTTPGateway_NodeSnapshotUnknownNodeIs404(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Parent graph exists; node doesn't.
 	_ = h.store.Enqueue(t.Context(), core.JobRecord{
 		ID:           "run-xyz",
 		Kind:         core.JobKindGraph,
@@ -984,17 +926,13 @@ func TestHTTPGateway_CORSHeadersOnPreflight(t *testing.T) {
 	}
 }
 
-// --- API key admin endpoints ------------------------------------------
-
 func TestHTTPGateway_AdminListAPIKeys_RequiresTenantAdmin(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Editor token (no organization:admin) should be denied.
 	rw := h.do(t, "GET", "/api/v1/admin/api-keys", nil)
 	if rw.Code != http.StatusForbidden {
 		t.Errorf("editor code = %d, want 403", rw.Code)
 	}
-	// Tenant-admin token succeeds and sees the bootstrap key.
 	rw = h.adminDo(t, "GET", "/api/v1/admin/api-keys", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("admin code = %d body = %s", rw.Code, rw.Body.String())
@@ -1032,7 +970,6 @@ func TestHTTPGateway_AdminIssueAPIKey_ReturnsSecretOnce(t *testing.T) {
 	if issued.Secret == "" {
 		t.Fatal("secret missing from issue response")
 	}
-	// The Authenticator should accept the brand-new key.
 	if _, err := h.svc.Authenticate(t.Context(), issued.Secret); err != nil {
 		t.Errorf("issued secret didn't authenticate: %v", err)
 	}
@@ -1041,14 +978,12 @@ func TestHTTPGateway_AdminIssueAPIKey_ReturnsSecretOnce(t *testing.T) {
 func TestHTTPGateway_AdminIssueAPIKey_RejectsMissingFields(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Missing subject
 	rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
 		"roles": []map[string]any{{"name": "r", "permissions": []string{"graph:run"}}},
 	})
 	if rw.Code != http.StatusBadRequest {
 		t.Errorf("missing-subject code = %d, want 400", rw.Code)
 	}
-	// Missing roles
 	rw = h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
 		"subject": "x",
 	})
@@ -1060,7 +995,6 @@ func TestHTTPGateway_AdminIssueAPIKey_RejectsMissingFields(t *testing.T) {
 func TestHTTPGateway_AdminRevokeAPIKey(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// First create a fresh key we'll then revoke.
 	rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
 		"id":      "doomed",
 		"subject": "doomed",
@@ -1072,7 +1006,6 @@ func TestHTTPGateway_AdminRevokeAPIKey(t *testing.T) {
 	var issued IssuedAPIKey
 	_ = json.Unmarshal(rw.Body.Bytes(), &issued)
 
-	// Authenticates before revoke.
 	if _, err := h.svc.Authenticate(t.Context(), issued.Secret); err != nil {
 		t.Fatalf("pre-revoke auth: %v", err)
 	}
@@ -1081,7 +1014,6 @@ func TestHTTPGateway_AdminRevokeAPIKey(t *testing.T) {
 	if rw.Code != http.StatusNoContent {
 		t.Fatalf("revoke code = %d body = %s", rw.Code, rw.Body.String())
 	}
-	// Fails to authenticate after revoke.
 	if _, err := h.svc.Authenticate(t.Context(), issued.Secret); err == nil {
 		t.Error("revoked key still authenticated")
 	}
@@ -1090,9 +1022,6 @@ func TestHTTPGateway_AdminRevokeAPIKey(t *testing.T) {
 func TestHTTPGateway_AdminListUsersGroupsBySubject(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Two keys for charlie (editor + runner) and one for bob. Distinct
-	// from the harness's bootstrap subjects ("alice", "root") so the
-	// roll-up counts only see what this test produced.
 	for _, params := range []map[string]any{
 		{
 			"subject": "charlie",
@@ -1121,8 +1050,6 @@ func TestHTTPGateway_AdminListUsersGroupsBySubject(t *testing.T) {
 	}
 	_ = json.Unmarshal(rw.Body.Bytes(), &out)
 
-	// Expect alice, bob, root (the admin harness key), and the editor
-	// bootstrap key — 4 distinct subjects.
 	bySubject := map[string]UserSummary{}
 	for _, u := range out.Users {
 		bySubject[u.Subject] = u
@@ -1134,7 +1061,6 @@ func TestHTTPGateway_AdminListUsersGroupsBySubject(t *testing.T) {
 	if charlie.ActiveKeys != 2 {
 		t.Errorf("charlie.ActiveKeys = %d, want 2", charlie.ActiveKeys)
 	}
-	// Permissions union: graph:edit + graph:run + secret:read
 	gotPerms := map[core.Permission]bool{}
 	for _, p := range charlie.Permissions {
 		gotPerms[p] = true
@@ -1144,7 +1070,6 @@ func TestHTTPGateway_AdminListUsersGroupsBySubject(t *testing.T) {
 			t.Errorf("charlie missing permission %q in %+v", want, charlie.Permissions)
 		}
 	}
-	// Role names union: editor + runner
 	if len(charlie.RoleNames) != 2 {
 		t.Errorf("charlie.RoleNames = %v, want 2 entries", charlie.RoleNames)
 	}
@@ -1191,18 +1116,13 @@ func TestHTTPGateway_AdminListUsers_RequiresTenantAdmin(t *testing.T) {
 	}
 }
 
-// --- Platform admin ---------------------------------------------------
-
 func TestHTTPGateway_PlatformAdminListsAcrossTenants(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Issue keys in two different tenants. The bootstrap key is in
-	// tenant "t" already; add one in "other-tenant".
 	role := core.Role{Name: "r", Permissions: []core.Permission{core.PermGraphRun}}
 	if _, _, err := auth.IssueAPIKey(h.ks, t.Context(), "k-other", "other-tenant", "ws", "stranger", []core.Role{role}, nil); err != nil {
 		t.Fatalf("issue other-tenant: %v", err)
 	}
-	// Mint a platform admin key (no tenant binding).
 	platform := core.Role{Name: "platform", Permissions: []core.Permission{core.PermPlatformAdmin}}
 	_, platformTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-platform", "", "", "op", []core.Role{platform}, nil)
 	if err != nil {
@@ -1217,8 +1137,6 @@ func TestHTTPGateway_PlatformAdminListsAcrossTenants(t *testing.T) {
 		return rw
 	}
 
-	// /api/v1/admin/tenants: returns both tenants observed in the
-	// key store. Platform admin only.
 	rw := doPlatform("/api/v1/admin/tenants")
 	if rw.Code != http.StatusOK {
 		t.Fatalf("tenants code = %d body = %s", rw.Code, rw.Body.String())
@@ -1231,8 +1149,6 @@ func TestHTTPGateway_PlatformAdminListsAcrossTenants(t *testing.T) {
 		t.Errorf("tenants = %v, want at least 2", tOut.Tenants)
 	}
 
-	// /api/v1/admin/api-keys?tenant=other-tenant should list the
-	// "stranger" key even though the platform admin has no tenant.
 	rw = doPlatform("/api/v1/admin/api-keys?tenant=other-tenant")
 	if rw.Code != http.StatusOK {
 		t.Fatalf("keys code = %d body = %s", rw.Code, rw.Body.String())
@@ -1270,7 +1186,6 @@ func TestHTTPGateway_PlatformAdminCanIssueInAnyTenant(t *testing.T) {
 	if issued.Tenant != "brand-new-tenant" {
 		t.Errorf("issued tenant = %q, want brand-new-tenant", issued.Tenant)
 	}
-	// The new key works for its tenant.
 	if _, err := h.svc.Authenticate(t.Context(), issued.Secret); err != nil {
 		t.Errorf("new tenant's bootstrap key didn't authenticate: %v", err)
 	}
@@ -1297,7 +1212,6 @@ func TestHTTPGateway_TenantAdminCantGrantPlatformAdmin(t *testing.T) {
 		return rw
 	}
 
-	// Tenant admin → refused.
 	taRole := core.Role{Name: "ta", Permissions: []core.Permission{core.PermOrganizationAdmin}}
 	_, taTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-ta-esc", "t", "ws", "root", []core.Role{taRole}, nil)
 	if err != nil {
@@ -1307,7 +1221,6 @@ func TestHTTPGateway_TenantAdminCantGrantPlatformAdmin(t *testing.T) {
 		t.Fatalf("tenant admin was allowed to mint a platform:admin key: %s", rw.Body.String())
 	}
 
-	// Platform admin → allowed.
 	paRole := core.Role{Name: "pa", Permissions: []core.Permission{core.PermPlatformAdmin}}
 	_, paTok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-pa-esc", "", "", "op", []core.Role{paRole}, nil)
 	if err != nil {
@@ -1349,19 +1262,9 @@ func TestHTTPGateway_AdminEndpoints501WhenUnconfigured(t *testing.T) {
 	}
 }
 
-// ---- Sample-node endpoint ------------------------------------------
-//
-// The "Sample this node" affordance fires a partial run that ends at
-// the chosen node. The handler filters the graph through
-// core.UpstreamSubset before calling SubmitGraph; these tests pin the
-// HTTP contract (accept / not-found / authz) and that the submitted
-// run carries the subset, not the full graph.
-
 func TestHTTPGateway_SampleNode_Accepts(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Three-node chain a → b → c. Sampling b should run a + b only;
-	// c stays untouched.
 	g := core.Graph{
 		ID: "chain", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -1435,7 +1338,6 @@ func TestHTTPGateway_SampleNode_UnknownNodeIs404(t *testing.T) {
 func TestHTTPGateway_SampleNode_UnknownGraphIs404(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// No save — graph doesn't exist.
 	rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fmissing/nodes/x/sample", nil)
 	if rw.Code != http.StatusNotFound {
 		t.Errorf("code = %d, want 404", rw.Code)
@@ -1446,7 +1348,6 @@ func TestHTTPGateway_SampleNode_RequiresAuth(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("POST", "/api/v1/me/flows/t%2Fws%2Fg/nodes/x/sample", nil)
-	// no Authorization header
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, req)
 	if rw.Code != http.StatusUnauthorized {
@@ -1454,7 +1355,7 @@ func TestHTTPGateway_SampleNode_RequiresAuth(t *testing.T) {
 	}
 }
 
-// ---- Cron validate endpoint ----------------------------------------
+// Cron validate endpoint
 //
 // The SettingsModal hits this on every keystroke to give users an
 // inline "this cron is bad" / "next fires" hint. The handler MUST
@@ -1486,7 +1387,6 @@ func TestHTTPGateway_ValidateCron_ValidExpression(t *testing.T) {
 func TestHTTPGateway_ValidateCron_InvalidExpression(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// 7 fields where 5 are allowed.
 	rw := h.do(t, "POST", "/api/v1/validate/cron", map[string]any{"expr": "totally not a cron"})
 	if rw.Code != http.StatusOK {
 		t.Fatalf("code = %d (validate endpoint returns 200 even for invalid input)", rw.Code)
@@ -1528,7 +1428,6 @@ func TestHTTPGateway_ValidateCron_RequiresAuth(t *testing.T) {
 	h := newGatewayHarness(t)
 	req := httptest.NewRequest("POST", "/api/v1/validate/cron", bytes.NewBufferString(`{"expr":"0 9 * * *"}`))
 	req.Header.Set("Content-Type", "application/json")
-	// no Authorization header
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, req)
 	if rw.Code != http.StatusUnauthorized {
@@ -1584,16 +1483,9 @@ func TestHTTPGateway_SaveGraph_IncludesLintInResponse(t *testing.T) {
 	}
 }
 
-// ---- CSRF defense (cookie-auth + verifyCookieOrigin) -----------------
-//
-// The middleware adds Origin-header verification to cookie-auth POST/PUT
-// /DELETE requests. Bearer-auth requests (no cookie) are unaffected.
-
 func TestHTTPGateway_CSRF_BearerAuthUnaffectedByOrigin(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Bearer-auth POST with arbitrary or no Origin — should pass
-	// (the new middleware only kicks in for cookie-auth).
 	rw := h.do(t, "PUT", "/api/v1/me/flows/t%2Fws%2Fg-bearer", core.Graph{
 		ID: "g-bearer", Tenant: "t", Workspace: "ws",
 	})
@@ -1606,8 +1498,6 @@ func TestHTTPGateway_CSRF_CookieAuthRequiresOrigin(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.AllowedOrigins = []string{"https://app.example.com"}
-	// Build a request that LOOKS like a CSRF attack: a session cookie
-	// is attached but no Origin header is set.
 	req := httptest.NewRequest("PUT", "/api/v1/me/flows/t%2Fws%2Fg-csrf", bytes.NewBufferString(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "dazyflow_session", Value: "any-session"})
@@ -1662,7 +1552,6 @@ func TestHTTPGateway_CSRF_GetMethodNotAffected(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/me", nil)
 	req.Header.Set("Authorization", "Bearer "+h.token)
 	req.AddCookie(&http.Cookie{Name: "dazyflow_session", Value: "any"})
-	// No Origin header — should still pass since it's a GET.
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, req)
 	if rw.Code == http.StatusForbidden {
@@ -1740,9 +1629,6 @@ func TestParseRunListTime(t *testing.T) {
 	}
 }
 
-// TestParseRunListOpts_DateRange confirms the ?since=/?until= query params land
-// on ListGraphRunsOpts, and that a malformed value leaves that bound unset
-// rather than erroring the request.
 func TestParseRunListOpts_DateRange(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest("GET",
@@ -1758,7 +1644,6 @@ func TestParseRunListOpts_DateRange(t *testing.T) {
 		t.Errorf("Until = %v, want %v", opts.Until, want)
 	}
 
-	// A malformed since is ignored (zero), not an error.
 	bad, err := parseRunListOpts(httptest.NewRequest("GET", "/api/v1/me/runs?since=nonsense", nil))
 	if err != nil {
 		t.Fatalf("a malformed since should not error: %v", err)
@@ -1820,7 +1705,6 @@ func TestHTTPGateway_CORSDisallowedOriginGetsNoACAO(t *testing.T) {
 	}
 }
 
-// The allowed origin is reflected exactly, with credentials enabled.
 func TestHTTPGateway_CORSAllowedOriginIsReflected(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -1839,7 +1723,7 @@ func TestHTTPGateway_CORSAllowedOriginIsReflected(t *testing.T) {
 	}
 }
 
-// TestHTTPGateway_PendingApprovalCarriesContext — the value a flow wired into
+// The value a flow wired into
 // the step's Value port rides along to the inbox.
 //
 // Without it the card can only name the step that is waiting, so an approver
@@ -1898,10 +1782,9 @@ func TestHTTPGateway_PendingApprovalCarriesContext(t *testing.T) {
 	}
 }
 
-// TestHTTPGateway_PendingApprovalContextTooLarge — an oversized carried value
-// is flagged, not shipped. The inbox lists up to 200 rows and the value is
-// whatever the flow wired in; the card says to open the run instead of
-// silently looking like a step with nothing attached.
+// An oversized carried value is flagged, not shipped. The inbox lists up to
+// 200 rows and the value is whatever the flow wired in; the card says to open
+// the run instead of silently looking like a step with nothing attached.
 func TestHTTPGateway_PendingApprovalContextTooLarge(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)

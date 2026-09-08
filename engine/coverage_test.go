@@ -20,10 +20,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/mcp"
 )
 
-// ----------------------------------------------------------------------
-// Sandbox / Quota providers — minimal stubs for populateSandbox tests.
-// ----------------------------------------------------------------------
-
 type fakeSandbox struct {
 	root    string
 	scratch string
@@ -47,8 +43,6 @@ func (f *fakeSandbox) ScratchRoot(tenant, ws, runID string) (string, error) {
 
 func (f *fakeSandbox) RemoveScratch(tenant, ws, runID string) error { return nil }
 
-// rootOnlySandbox implements only SandboxProvider (no ScratchProvider) to
-// exercise the "scratch unsupported" branch of populateSandbox.
 type rootOnlySandbox struct{ root string }
 
 func (s *rootOnlySandbox) Root(tenant, ws string) (string, error) { return s.root, nil }
@@ -61,10 +55,6 @@ type fakeQuota struct {
 
 func (q *fakeQuota) Limit(tenant string) int64         { return q.limit }
 func (q *fakeQuota) Used(tenant string) (int64, error) { return q.used, q.usedErr }
-
-// ----------------------------------------------------------------------
-// Engine.populateSandbox
-// ----------------------------------------------------------------------
 
 func TestEngine_populateSandbox_SandboxAndQuota(t *testing.T) {
 	e := &Engine{
@@ -148,10 +138,6 @@ func TestEngine_populateSandbox_UnlimitedQuotaSkipsUsedLookup(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// Engine.Run — error branches not covered by engine_test.go
-// ----------------------------------------------------------------------
-
 func TestEngine_Run_NoResolver(t *testing.T) {
 	e := &Engine{}
 	res, err := e.Run(t.Context(), core.Graph{ID: "g"}, nil)
@@ -208,10 +194,6 @@ func TestEngine_Run_CyclicGraphIsInvalid(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// Engine.RunNode — error branches
-// ----------------------------------------------------------------------
-
 func TestEngine_RunNode_UnknownNode(t *testing.T) {
 	e := newEngineWith(t)
 	g := core.Graph{ID: "g", Nodes: []core.Node{{ID: "a", Module: "noop"}}}
@@ -237,8 +219,6 @@ func TestEngine_RunNode_NoResolver(t *testing.T) {
 }
 
 func TestEngine_RunNode_ResolverFails(t *testing.T) {
-	// Resolver returns "no transport registered for module …" for
-	// modules not in any catalog — that surfaces as resolve_failed.
 	e := newEngineWith(t)
 	g := core.Graph{Nodes: []core.Node{{ID: "a", Module: "nowhere"}}}
 	res, err := e.RunNode(t.Context(), g, "run", "a", "rec-a", nil, nil)
@@ -291,8 +271,6 @@ func TestEngine_RunNode_SecretError(t *testing.T) {
 	}
 }
 
-// stubSigner records the (runID, nodeID) it was asked to sign and returns
-// a deterministic URL — lets RunNode's ApprovalSigner branch be observed.
 type stubSigner struct{ saw [2]string }
 
 func (s *stubSigner) SignApprovalURL(runID, nodeID string) string {
@@ -331,10 +309,6 @@ func TestEngine_RunNode_ApprovalURLAttached(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// NodeResolver chain
-// ----------------------------------------------------------------------
-
 func TestNodeResolver_ChainHitsRemote(t *testing.T) {
 	reg := NewRegistry()
 	remote := NewRemoteCatalog()
@@ -364,8 +338,6 @@ func TestNodeResolver_Manifests_MergesAllCatalogs(t *testing.T) {
 	remote := NewRemoteCatalog()
 	remote.nodes[remoteKey{tenant: "acme", id: "remote-mod"}] = &RemoteTransport{manifest: core.Manifest{ID: "remote-mod"}}
 	r := &NodeResolver{Native: reg, Remote: remote, MCP: mcp.NewCatalog()}
-	// ManifestsForTenant, not Manifests: a runner's drops belong to one tenant,
-	// so the unscoped map deliberately carries only the instance-wide catalogs.
 	m := r.ManifestsForTenant("acme")
 	for _, want := range []string{"native-mod", "remote-mod"} {
 		if _, ok := m[want]; !ok {
@@ -386,10 +358,6 @@ func manifestKeys(m map[string]core.Manifest) []string {
 	return out
 }
 
-// ----------------------------------------------------------------------
-// Registry.Register and package-level Register
-// ----------------------------------------------------------------------
-
 func TestRegistry_Register_RejectsEmptyID(t *testing.T) {
 	r := NewRegistry()
 	if err := r.Register(NativeDrop{Execute: noopExecute}); err == nil {
@@ -404,10 +372,6 @@ func TestRegistry_Register_RejectsNoExecute(t *testing.T) {
 	}
 }
 
-// validTestManifest returns a manifest that passes registration —
-// has the required Summary and Examples set. Used by the duplicate /
-// happy-path tests so they exercise the post-validation behavior
-// rather than tripping over the same fields they're not testing.
 func validTestManifest(id string) core.Manifest {
 	return core.Manifest{
 		ID:       id,
@@ -460,17 +424,8 @@ func TestPackageRegister_PanicsOnError(t *testing.T) {
 	Register(NativeDrop{}) // empty manifest ID — must panic.
 }
 
-// ----------------------------------------------------------------------
-// RemoteCatalog full lifecycle via bufconn — covers NewRemoteCatalog,
-// Register (success and bufconn dial), Get, Manifests, Close,
-// RemoteTransport.Close.
-// ----------------------------------------------------------------------
-
 func TestRemoteCatalog_Lifecycle(t *testing.T) {
 	c := NewRemoteCatalog()
-	// Pre-register a transport so we can exercise Get/Manifests/Close
-	// without standing up a real gRPC server again (TestRemoteTransport_RoundTrip
-	// already covers the dial+manifest path).
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
 	nodepb.RegisterNodeServiceServer(srv, &fakeServer{})
@@ -490,12 +445,10 @@ func TestRemoteCatalog_Lifecycle(t *testing.T) {
 		client:     nodepb.NewNodeServiceClient(conn),
 	}
 
-	// Manifest accessor on the transport.
 	if c.nodes[remoteKey{tenant: "acme", id: "remote-echo"}].Manifest().ID != "remote-echo" {
 		t.Errorf("Manifest.ID = %q", c.nodes[remoteKey{tenant: "acme", id: "remote-echo"}].Manifest().ID)
 	}
 
-	// Get hit + miss.
 	if tr, ok := c.Get("acme", "remote-echo"); !ok || tr.Manifest().ID != "remote-echo" {
 		t.Errorf("Get hit = (%v,%v)", tr, ok)
 	}
@@ -503,7 +456,6 @@ func TestRemoteCatalog_Lifecycle(t *testing.T) {
 		t.Errorf("Get miss = (%v,%v), want (nil,false)", tr, ok)
 	}
 
-	// ManifestsFor includes the registered remote, for its own tenant only.
 	m := c.ManifestsFor("acme")
 	if _, ok := m["remote-echo"]; !ok {
 		t.Errorf("ManifestsFor missing remote-echo: %v", manifestKeys(m))
@@ -512,7 +464,6 @@ func TestRemoteCatalog_Lifecycle(t *testing.T) {
 		t.Errorf("ManifestsFor leaked to another tenant: %v", manifestKeys(other))
 	}
 
-	// Close shuts the conn and clears the cache.
 	if err := c.Close(); err != nil {
 		t.Errorf("Close: %v", err)
 	}
@@ -521,11 +472,6 @@ func TestRemoteCatalog_Lifecycle(t *testing.T) {
 	}
 }
 
-// TestRemoteCatalog_Register_InsecureDialAndHandshake covers the
-// Register dial + GetManifest path against a real TCP gRPC server in
-// Insecure (cleartext-by-opt-in) mode. Distinct from
-// TestRemoteCatalog_Lifecycle which hand-injects a pre-built
-// transport — this one exercises the dial+manifest fetch end-to-end.
 func TestRemoteCatalog_Register_InsecureDialAndHandshake(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -552,10 +498,6 @@ func TestRemoteCatalog_Register_InsecureDialAndHandshake(t *testing.T) {
 	}
 }
 
-// The descriptor's ID names the RUNNER, and drop ids come from the manifests
-// the runner declares, so there is no longer an id to "mismatch". Registration
-// under a name unrelated to the drops it serves is now the normal case.
-// remote_multidrop_test.go covers what IS validated instead.
 func TestRemoteCatalog_Register_RemoteNameNeedNotMatchDropID(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -585,14 +527,8 @@ func TestRemoteCatalog_Register_RemoteNameNeedNotMatchDropID(t *testing.T) {
 	}
 }
 
-// TestRemoteCatalog_Register_DefaultTimeoutZeroed exercises the
-// "timeout <= 0 → 5s default" branch.
 func TestRemoteCatalog_Register_DefaultTimeoutZeroed(t *testing.T) {
 	c := &RemoteCatalog{nodes: map[remoteKey]*RemoteTransport{}} // DialTimeout=0
-	// No TLS, no Insecure → credentialsForDescriptor errors out fast,
-	// but only AFTER the default-timeout assignment runs. Tenant is set so
-	// the tenant check (which runs first) doesn't short-circuit the branch
-	// this test is actually about.
 	if err := c.Register(RemoteDescriptor{ID: "x", Tenant: "acme", Endpoint: "127.0.0.1:1"}); err == nil {
 		t.Error("Register without TLS/Insecure: want error")
 	}
@@ -610,16 +546,11 @@ func TestRemoteCatalog_Register_RejectsCleartextWithoutOptIn(t *testing.T) {
 }
 
 func TestRemoteTransport_Close_NilConn(t *testing.T) {
-	// A transport with no conn is harmless to Close (no-op, no panic).
 	tr := &RemoteTransport{}
 	if err := tr.Close(); err != nil {
 		t.Errorf("Close on nil conn = %v, want nil", err)
 	}
 }
-
-// ----------------------------------------------------------------------
-// Protobuf conversion edge cases
-// ----------------------------------------------------------------------
 
 func TestRefToPB_InlineRoundTrip(t *testing.T) {
 	ref := core.Ref{MIME: "application/json", Ref: "r1", Inline: map[string]any{"k": "v"}}
@@ -698,10 +629,6 @@ func TestPortFromPB_MinMax(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// Upstream-path helpers: extra map/slice flavors
-// ----------------------------------------------------------------------
-
 func TestUpstream_GetField_MapStringString(t *testing.T) {
 	prior := map[string]core.Result{
 		"reader": {Output: map[string]core.Ref{
@@ -769,20 +696,12 @@ func TestUpstream_IndexValue_OutOfRange_AllTypes(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// Template helpers — error surfacing in SubstituteString and value walk
-// ----------------------------------------------------------------------
-
 func TestSubstituteString_PassThroughWhenNoPlaceholder(t *testing.T) {
 	got, err := SubstituteString(t.Context(), "plain text, no placeholders", nil)
 	if err != nil || got != "plain text, no placeholders" {
 		t.Errorf("got %q err %v", got, err)
 	}
 }
-
-// ----------------------------------------------------------------------
-// resolveSlice — direct exercise of the slice walk
-// ----------------------------------------------------------------------
 
 func TestResolveSecrets_NestedSlice(t *testing.T) {
 	providers := newProviders(stubProvider{
@@ -828,11 +747,6 @@ func TestResolveSecrets_NestedSliceError(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// forwardProgress — ctx cancel mid-flight drops remaining events but
-// keeps draining the input channel so Execute can't block on it.
-// ----------------------------------------------------------------------
-
 func TestForwardProgress_DrainsAfterCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	in := make(chan core.Progress, 2)
@@ -855,12 +769,6 @@ func TestForwardProgress_DrainsAfterCancel(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// validate() falls back to core.Validate when the resolver doesn't
-// implement Manifests — covered by handing a bare interface that
-// implements Resolve only.
-// ----------------------------------------------------------------------
-
 type bareResolver struct {
 	fn func(string) (core.Transport, error)
 }
@@ -870,9 +778,6 @@ func (b bareResolver) Resolve(_ context.Context, id string) (core.Transport, err
 }
 
 func TestEngine_validate_FallsBackToCoreValidateWithoutManifests(t *testing.T) {
-	// A resolver that doesn't expose Manifests forces validate() onto
-	// the core.Validate path. Pass a graph that core.Validate accepts
-	// (no nodes) so we observe Run completing cleanly.
 	e := &Engine{Resolver: bareResolver{fn: func(id string) (core.Transport, error) {
 		return nil, errors.New("never reached")
 	}}}
@@ -884,12 +789,6 @@ func TestEngine_validate_FallsBackToCoreValidateWithoutManifests(t *testing.T) {
 		t.Errorf("status = %q, want ok", res.Status)
 	}
 }
-
-// ----------------------------------------------------------------------
-// resolveMap nested-map error annotation: the "%s.%w" branch only
-// fires when the failure comes from inside a nested map (not a string
-// or slice). Pin it explicitly.
-// ----------------------------------------------------------------------
 
 func TestResolveSecrets_NestedMapErrorAnnotated(t *testing.T) {
 	providers := newProviders(stubProvider{scheme: "secret", err: errors.New("backend down")})
@@ -907,11 +806,9 @@ func TestResolveSecrets_NestedMapErrorAnnotated(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
 // SubstituteString: after a substituter error, subsequent matches in
 // the same string skip rather than re-erroring. Without this branch
 // being exercised, the second ${...} in the string would never be hit.
-// ----------------------------------------------------------------------
 
 func TestSubstituteString_FirstErrorSkipsRemainingPlaceholders(t *testing.T) {
 	calls := 0
@@ -928,10 +825,6 @@ func TestSubstituteString_FirstErrorSkipsRemainingPlaceholders(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// getField on a non-object value returns a typed error.
-// ----------------------------------------------------------------------
-
 func TestUpstream_GetField_OnScalarFails(t *testing.T) {
 	prior := map[string]core.Result{
 		"n": {Output: map[string]core.Ref{"p": {Inline: "just a string"}}},
@@ -941,10 +834,6 @@ func TestUpstream_GetField_OnScalarFails(t *testing.T) {
 		t.Errorf("err = %v, want one mentioning 'expected object'", err)
 	}
 }
-
-// ----------------------------------------------------------------------
-// isValidScheme rejects empty + uppercase + special characters.
-// ----------------------------------------------------------------------
 
 func TestIsValidScheme(t *testing.T) {
 	good := []string{"env", "vault", "x-y", "env_1", "abc123"}
@@ -960,11 +849,6 @@ func TestIsValidScheme(t *testing.T) {
 		}
 	}
 }
-
-// ----------------------------------------------------------------------
-// cancelledResult — direct call so the function is exercised end-to-end
-// (it's also exercised by the Run cancel test, but pin the shape here).
-// ----------------------------------------------------------------------
 
 func TestCancelledResult(t *testing.T) {
 	res := cancelledResult("g", map[string]core.Result{"a": {Status: core.StatusOK}}, context.Canceled)

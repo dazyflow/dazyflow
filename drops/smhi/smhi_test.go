@@ -17,7 +17,6 @@ import (
 
 func init() { hfnet.SetAllowPrivateEgress(true) }
 
-// snow1g point response: a flat data map per step, symbol_code = Wsymb2.
 const sample = `{
   "createdTime":"2026-06-24T12:59:00Z","referenceTime":"2026-06-24T12:45:00Z",
   "geometry":{"type":"Point","coordinates":[18.077207,59.330360]},
@@ -84,7 +83,6 @@ func TestExecuteCurrent_Success(t *testing.T) {
 	if got := textPin(t, r, "conditions"); got != "Clear" {
 		t.Errorf("conditions = %q", got)
 	}
-	// lon BEFORE lat, 6 decimals; current asks for a single step.
 	if !strings.Contains(req.URL.Path, "/lon/18.068600/lat/59.329300/") {
 		t.Errorf("request path = %q", req.URL.Path)
 	}
@@ -155,25 +153,21 @@ func TestExecuteForecast_Success(t *testing.T) {
 	if daily[0].Conditions != "Clouds" || daily[0].TempMin != 18.3 || daily[0].TempMax != 20.0 {
 		t.Errorf("day-0 aggregate wrong: %+v", daily[0])
 	}
-	// Forecast asks for the full series — no timeseries=1.
 	if strings.Contains(req.URL.RawQuery, "timeseries=1") {
 		t.Errorf("forecast should NOT limit to one step, query = %q", req.URL.RawQuery)
 	}
 }
 
 func TestCovHTTPFailureSSRF(t *testing.T) {
-	// Plain transport error → smhi_http_error.
 	f := httpFailure(core.Job{}, 0, nil, context.DeadlineExceeded)
 	if f == nil || f.Error.Code != "smhi_http_error" {
 		t.Fatalf("want smhi_http_error, got %+v", f)
 	}
-	// Non-2xx, non-404, with long body truncation.
 	long := strings.Repeat("x", 500)
 	f = httpFailure(core.Job{}, 500, []byte(long), nil)
 	if f == nil || f.Error.Code != "smhi_error" {
 		t.Fatalf("want smhi_error, got %+v", f)
 	}
-	// Success returns nil.
 	if httpFailure(core.Job{}, 200, []byte("{}"), nil) != nil {
 		t.Fatal("200 should yield nil failure")
 	}
@@ -196,7 +190,6 @@ func TestCovCurrentSummaryNoSymbol(t *testing.T) {
 	e := smhiEntry{Data: map[string]any{"air_temperature": 5.0, "relative_humidity": 50.0, "wind_speed": 2.0}}
 	got := currentSummary(e)
 	if strings.Contains(got, ",") && strings.HasPrefix(got, "5.0") == false {
-		// Without a symbol the line begins with the temperature.
 		t.Fatalf("no-symbol summary = %q", got)
 	}
 	if !strings.HasPrefix(got, "5.0°C") {
@@ -246,7 +239,6 @@ func TestCovExecuteForecastEmptySeries(t *testing.T) {
 }
 
 func TestCovAggregateDaysEdge(t *testing.T) {
-	// Short time string skipped; entry with no temperature leaves Inf→0.
 	ts := []smhiEntry{
 		{Time: "short", Data: map[string]any{"air_temperature": 5.0}},
 		{Time: "2026-06-24T12:00:00Z", Data: map[string]any{"symbol_code": float64(1)}},
@@ -264,7 +256,6 @@ func TestCovForecastSummaryEmpty(t *testing.T) {
 	if forecastSummary(nil) != "No forecast available." {
 		t.Fatal("empty forecast summary")
 	}
-	// Bad date label falls through to raw string.
 	got := forecastSummary([]smhiDay{{Date: "bogus", TempMin: 1, TempMax: 2}})
 	if !strings.Contains(got, "bogus") {
 		t.Fatalf("bad date should pass through, got %q", got)
@@ -272,7 +263,6 @@ func TestCovForecastSummaryEmpty(t *testing.T) {
 }
 
 func TestCovExecuteForecastTimeoutClamp(t *testing.T) {
-	// Non-positive timeout_ms exercises the clamp branch in smhiGet.
 	stubSMHI(t, 200, sample, nil)
 	r, _ := executeForecast(context.Background(), core.Job{Params: map[string]any{"lat": 59.0, "lon": 18.0, "timeout_ms": 0}}, nil)
 	if r.Status != core.StatusOK {

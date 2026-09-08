@@ -1,8 +1,6 @@
 /* SPDX-FileCopyrightText: 2026 Angels' Ware
    SPDX-License-Identifier: AGPL-3.0-or-later */
 
-/* App shell layout — TopBar fixed at top, content fills the rest.
-   On desktop the sidebar lives inline; on mobile it slides over. */
 
 .app-shell {
   display: grid;
@@ -28,12 +26,9 @@
   padding-right: env(safe-area-inset-right);
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
-  /* The sidebar track width .body's grid reads. Flipped to the rail width
-     when the nav is collapsed (below). */
   --sidebar-current: var(--sidebar-w);
 }
 
-/* Top bar */
 .topbar {
   display: flex;
   align-items: center;
@@ -67,8 +62,6 @@
   flex-shrink: 0;
   border-radius: 6px;
 }
-/* Keep the brand title on one line and let it shrink/ellipsize instead
-   of pushing the toolbar off-screen when a long flow name lands here. */
 .topbar .brand-title {
   white-space: nowrap;
   overflow: hidden;
@@ -78,11 +71,6 @@
 .topbar .spacer {
   flex: 1;
 }
-/* Hamburger is the small-screen affordance for toggling the rail. On
-   large screens the sidebar's own collapse arrow handles that, so the
-   hamburger is hidden to avoid a redundant control. The 769px cutoff is
-   the exact complement of the mobile @media (max-width: 768px) rule and
-   mirrors AppShell's MOBILE_BREAK. */
 .topbar .hamburger {
   display: inline-flex;
 }
@@ -92,10 +80,6 @@
   }
 }
 
-/* The burger mark: three bars with a deliberately shorter bottom bar.
-   On open (aria-expanded="true") the top/bottom bars rotate into a
-   cross, the bottom bar grows to full width so the X is symmetric, and
-   the middle bar fades out. Toggling the button morphs it back. */
 .topbar .hamburger .burger {
   position: relative;
   display: inline-block;
@@ -166,10 +150,6 @@
   max-width: 22vw;
 }
 
-/* Layout body: sidebar + main content. The sidebar column reads from
-   --sidebar-current, which app-shell flips to --sidebar-rail-w when the
-   user collapses the nav. Animating the grid track keeps the canvas
-   reflowing smoothly instead of jumping. */
 .body {
   display: grid;
   /* minmax(0, 1fr) (not a bare 1fr) so the content column can shrink below its
@@ -182,17 +162,10 @@
 .app-shell[data-nav-collapsed="true"] {
   --sidebar-current: var(--sidebar-rail-w);
 }
-/* On desktop the sidebar is inline in the grid (full width, or the
-   icon-only rail when collapsed). On small screens it becomes an
-   off-canvas drawer that slides in over the content — see the mobile
-   media query further down. */
-/* Scrim behind the mobile drawer: inert on desktop, shown only on small
-   screens when the drawer is open (see the media query below). */
 .sidebar-scrim {
   display: none;
 }
 
-/* Sidebar */
 .sidebar {
   background: color-mix(in srgb, var(--surface) 70%, transparent);
   border-right: 1px solid var(--border);
@@ -218,10 +191,6 @@
     color 120ms;
   white-space: nowrap;
 }
-/* Collapsed (icons-only) rail. Hide the per-link text labels and the
-   uppercase group headings; centre the icons so a 56px-wide rail still
-   feels tidy. The native `title` attribute on each NavLink does
-   double-duty as a tooltip. */
 .sidebar[data-collapsed="true"] {
   padding: var(--space-4) var(--space-1);
   align-items: stretch;
@@ -230,15 +199,12 @@
   justify-content: center;
   gap: 0;
   padding: var(--space-2);
-  /* Anchors the approvals badge, which floats over the icon in this mode. */
   position: relative;
 }
 .sidebar[data-collapsed="true"] .nav-label,
 .sidebar[data-collapsed="true"] .group-label {
   display: none;
 }
-/* Approvals badge floats over the icon in collapsed mode so the user
-   still sees the count without the label. */
 .sidebar[data-collapsed="true"] .nav-badge {
   position: absolute;
   transform: translate(14px, -10px);
@@ -247,8 +213,6 @@
   padding: 1px var(--space-1);
   line-height: 13px;
 }
-/* Pushes the collapse-arrow to the bottom of the rail by absorbing the
-   remaining flex space above it. */
 .sidebar-spacer {
   flex: 1;
 }
@@ -287,17 +251,11 @@
   justify-content: center;
   padding: var(--space-2);
 }
-/* Mobile uses the hamburger's slide-over, so the rail collapse arrow
-   has nothing to do. Hide it there. */
 @media (max-width: 768px) {
   .sidebar-collapse-toggle,
   .sidebar-spacer {
     display: none;
   }
-  /* Off-canvas drawer: the sidebar leaves the grid and slides in over
-     the content from the left when opened (hamburger → data-nav-
-     collapsed="false"). A tap on the scrim — or picking a nav item —
-     closes it. */
   .body {
     grid-template-columns: 1fr;
     position: relative;
@@ -323,8 +281,6 @@
   .app-shell[data-nav-collapsed="false"] .sidebar {
     transform: translateX(0);
   }
-  /* Undo the icon-rail (data-collapsed) treatment inside the drawer so
-     labels and group headings always show while it slides. */
   .sidebar[data-collapsed="true"] a {
     justify-content: flex-start;
     gap: var(--space-3);
@@ -366,9 +322,6 @@
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--ink);
 }
-/* Flow list nested under the Flows nav entry. Inherits .sidebar a base
-   styling; these overrides make the rows compact and indented so they
-   read as children of "Flows". */
 .nav-flows {
   display: flex;
   flex-direction: column;
@@ -393,7 +346,6 @@
   flex-shrink: 0;
 }
 
-/* Shared icon-upload control (flow + org settings). */
 .icon-upload {
   display: flex;
   align-items: center;
@@ -434,9 +386,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Draft marker on a sidebar flow: an unpublished flow gets a quiet pencil at
-   the right edge (the name flexes to fill). Muted, not accent — it flags the
-   exception ("not live yet") without shouting. */
 .nav-flow-draft {
   flex: 0 0 auto;
   margin-left: var(--space-1);
@@ -463,10 +412,7 @@
   padding: var(--space-3) var(--space-3) var(--space-1);
 }
 
-/* Sidebar stays inline at every viewport — small screens just default
-   to the icons-only rail. No mobile slide-over to track. */
 
-/* Main content */
 .main {
   min-height: 0;
   overflow: auto;
@@ -476,15 +422,10 @@
   padding: 0;
 }
 
-/* Placeholder while a route's code chunk loads. Reserves the content area
-   so the shell does not collapse and reflow when the page arrives; empty on
-   purpose, since a cached chunk lands within a frame and a spinner that
-   appears for one frame reads as a glitch. */
 .page-loading {
   min-height: 60vh;
 }
 
-/* Page title */
 .page-title {
   display: flex;
   align-items: center;
@@ -511,19 +452,13 @@
   margin-top: var(--space-0);
 }
 
-/* Plans / change-tier page — a responsive grid of plan cards, each with a
-   feature list diffed against the current plan. */
 .plans-grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--space-4);
   align-items: stretch;
-  /* Cap the table so the three cards keep a readable width and don't stretch
-     edge-to-edge on wide screens. Left-aligned to match the page heading. */
   max-width: 1040px;
 }
-/* Two-up once there's room, three-up on a desktop-width content column — so
-   Free / Pro / Enterprise sit side by side like a typical pricing table. */
 @media (min-width: 560px) {
   .plans-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -545,8 +480,6 @@
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
 }
-/* The headline (Pro) tier: accent border, a faint accent wash, and a corner
-   ribbon — the one card the eye lands on first. */
 .plan-card-featured {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   box-shadow:
@@ -591,8 +524,6 @@
   font-weight: 600;
   color: var(--ink);
 }
-/* The CTA sits high (under the price) like a typical pricing table; a fixed
-   min-height keeps action-less cards aligned with the ones that have a button. */
 .plan-card-cta {
   min-height: 38px;
   margin: var(--space-2) 0 var(--space-3);
@@ -635,7 +566,6 @@
   line-height: 1;
   vertical-align: -0.05em;
 }
-/* A feature that's an upgrade over the current plan — the "what differs" cue. */
 .plan-feat-up {
   color: var(--ink);
 }
@@ -646,10 +576,6 @@
 .plan-contact {
   font-size: var(--text-sm);
 }
-/* Pages that put a bare <h1> straight under .page (Integrations,
-   Settings, Templates) should match the .page-title h1 size used by
-   the list pages — without this they fall back to the browser default
-   (~2em) and read oversized next to the others. */
 .page > h1 {
   margin: 0 0 var(--space-2);
   font-size: var(--text-2xl);
@@ -672,7 +598,6 @@
   color: var(--muted);
 }
 
-/* Card */
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -681,7 +606,6 @@
   box-shadow: var(--shadow);
 }
 
-/* List */
 .graph-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -692,8 +616,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  /* Equal-height cards: the footer pins to the bottom (margin-top:auto), so a
-     card with no description/schedule still matches one that has both. */
   min-height: 132px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -762,7 +684,6 @@
 .graph-card-lastrun.is-empty {
   color: var(--faint);
 }
-/* Last-run status dot — same semantic palette as the chips/sparkline. */
 .run-dot {
   width: 7px;
   height: 7px;
@@ -783,7 +704,6 @@
 .run-dot-awaiting {
   background: var(--status-awaiting);
 }
-/* Recent-run health strip on a flow card. */
 .run-spark {
   display: inline-flex;
   align-items: flex-end;
@@ -797,7 +717,6 @@
   opacity: 0.85;
 }
 
-/* Flows search / sort / filter toolbar */
 .flow-toolbar {
   display: flex;
   align-items: center;
@@ -835,8 +754,6 @@
   font-size: var(--text-sm);
   padding: var(--space-2) 0;
 }
-/* In the flow toolbar it shares the row with the filter and sort controls, so
-   it flexes rather than filling the width. */
 .flow-search {
   flex: 1;
   min-width: 200px;
@@ -862,7 +779,6 @@
   border-color: var(--accent);
 }
 
-/* Runs search / per-flow filter / count row (reuses .flow-search + .flow-filter) */
 .run-toolbar {
   display: flex;
   align-items: center;
@@ -876,7 +792,6 @@
   font-size: var(--text-sm);
 }
 
-/* --- Dashboard / workspace overview --- */
 .dash-new {
   display: inline-flex;
   align-items: center;
@@ -921,7 +836,6 @@
   color: var(--faint);
   font-size: var(--text-xs);
 }
-/* Tone tints the icon + value so a bad number reads red at a glance. */
 .dash-stat-good .dash-stat-icon {
   color: var(--status-completed);
 }
@@ -1023,7 +937,6 @@
   margin-left: var(--space-1);
 }
 
-/* --- Keyboard shortcuts modal --- */
 .shortcut-group-label {
   font-size: var(--text-xs);
   text-transform: uppercase;
@@ -1034,9 +947,6 @@
 .shortcut-group-label:first-child {
   margin-top: 0;
 }
-/* Help modal: the two "get unstuck" destinations sit above the shortcut
-   tables as tappable rows, so the docs and a human read as the primary
-   content of the dialog and the accelerators as reference below them. */
 .help-links {
   display: flex;
   flex-direction: column;
@@ -1046,11 +956,6 @@
 .help-link {
   display: flex;
   align-items: flex-start;
-  /* These rows come in two flavours — the docs row is an <a>, the support row
-     is a <button> — and the global button{} rule centers flex content. Without
-     this the button row alone centered its icon + text in a full-width row,
-     reading as a stray left margin next to the anchor above it. Same trap the
-     account menu rows document. */
   justify-content: flex-start;
   gap: var(--space-3);
   width: 100%;
@@ -1069,7 +974,6 @@
 .help-link:hover:not(:disabled) {
   background: var(--surface-3);
   border-color: var(--accent);
-  /* These are links styled as rows — keep the global a:hover underline off. */
   text-decoration: none;
 }
 .help-link-icon {
@@ -1124,8 +1028,6 @@
   font-size: var(--text-sm);
   color: var(--ink);
 }
-/* Per-flow schedule summary (folded in from the old Schedules page):
-   cadence + next run, with an inline pause/resume on the right. */
 .flow-schedule {
   display: flex;
   align-items: center;
@@ -1171,7 +1073,6 @@
   font-size: var(--text-sm);
 }
 
-/* Workspace switcher (top bar) */
 .workspace-pop {
   position: absolute;
   top: calc(100% + 6px);
@@ -1216,17 +1117,8 @@
   margin: var(--space-1) 0;
 }
 
-/* Account control (lower-left sidebar footer). Trigger looks like a
-   sidebar nav row; the email hides via .nav-label in the collapsed
-   rail, leaving the user icon. The menu pops UPWARD so it doesn't run
-   off the bottom of the viewport. */
 .account-menu {
   position: relative;
-  /* Pin to the bottom of the sidebar's flex column directly, rather
-     than relying on .sidebar-spacer — the spacer is display:none on
-     mobile, so without this the account control floated up under the
-     nav items there. margin-top:auto absorbs the free space on every
-     viewport. */
   margin-top: auto;
 }
 .account-menu-trigger {
@@ -1265,13 +1157,9 @@
 .account-pop {
   min-width: 200px;
 }
-/* Account menu rows are prose, not identifiers — drop the monospace
-   the workspace rows use and lay out icon + label on a line. */
 .account-pop-row {
   display: flex;
   align-items: center;
-  /* The global button{} rule centers flex content; these rows are a
-     menu list, so pin icon + label to the left instead. */
   justify-content: flex-start;
   gap: var(--space-2);
   font-family: inherit;
@@ -1282,8 +1170,6 @@
 .account-pop-row.danger:hover {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
-/* Upgrade CTA at the top of the account menu — accent so it reads as the
-   primary action, not just another link. */
 .account-pop-upgrade {
   color: var(--accent);
   font-weight: 600;
@@ -1291,8 +1177,6 @@
 .account-pop-upgrade:hover {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
-/* Version footer in the account pop — muted, non-interactive, monospace
-   so the version reads as an identifier. */
 .account-pop-version {
   padding: var(--space-1h) 10px var(--space-0);
   font-family: var(--font-mono);
@@ -1301,15 +1185,10 @@
   user-select: text;
 }
 
-/* App settings page (per-user prefs). Constrains the form column so a
-   single control doesn't stretch edge to edge on wide monitors. */
 .settings-page .settings-card {
   max-width: 520px;
 }
 
-/* The "what's in the export" list inside a settings card. Bulleted because it
-   is a list of contents a reader scans before deciding to download, and
-   indented just enough to hang the markers inside the card's padding. */
 .data-export-list {
   margin: var(--space-2) 0;
   padding-left: var(--space-4);
@@ -1327,8 +1206,6 @@
   margin-top: var(--space-5);
 }
 
-/* Theme picker — two selectable cards rather than a dropdown, so the
-   choice reads visually (a dark swatch vs a light one). */
 .theme-choice {
   display: flex;
   flex-wrap: wrap;
@@ -1367,8 +1244,6 @@
   flex-shrink: 0;
   border: 1px solid rgba(0, 0, 0, 0.12);
 }
-/* The swatches are fixed previews of each theme's canvas, independent
-   of the active theme, so both always show their true colour. */
 .theme-swatch-dark {
   background: #140d30;
   color: #cbb8ff;
@@ -1377,8 +1252,6 @@
   background: #ffffff;
   color: #6d28d9;
 }
-/* System follows the OS, so its swatch shows both canvases split down
-   the middle rather than claiming either one. */
 .theme-swatch-system {
   background: linear-gradient(105deg, #140d30 0 50%, #ffffff 50% 100%);
   color: #9f83fe;
@@ -1388,7 +1261,6 @@
   font-weight: 500;
 }
 
-/* Visibility radio rows (Settings → General) */
 .visibility-choice {
   display: flex;
   flex-direction: column;
@@ -1427,7 +1299,6 @@
   line-height: 1.4;
 }
 
-/* Visibility badges */
 .vis-badge {
   display: inline-flex;
   align-items: center;
@@ -1445,7 +1316,6 @@
   color: var(--accent);
 }
 
-/* SignIn */
 .signin-wrap {
   display: grid;
   place-items: center;
@@ -1465,9 +1335,6 @@
   font-size: var(--text-2xl);
   letter-spacing: -0.02em;
 }
-/* Org-branded sign-in header (klahr.dazyflow.app): the org logo centered
-   above a "Sign in to <Org>" title, so a member sees they're in the right
-   place. The h1 here drops its default bottom margin — the block owns it. */
 .signin-org {
   display: flex;
   flex-direction: column;
@@ -1506,8 +1373,6 @@
   color: var(--danger);
   font-size: var(--text-md);
 }
-/* Cross-link between signin and signup pages — small text at the
-   bottom of the form. */
 .signin-alt {
   margin-top: var(--space-3);
   font-size: var(--text-md);
@@ -1522,11 +1387,6 @@
   opacity: 0.8;
 }
 
-/* ── The frame around every signed-out screen (AuthLayout) ──────────────
-   The card used to be the whole page: nothing named the product, so a
-   password-reset link, an invite, or any mistyped URL (the signed-out
-   catch-all routes here too) opened an unlabelled box. Mark above, one quiet
-   legal line below, card unchanged between them. */
 .auth-frame {
   display: flex;
   flex-direction: column;
@@ -1567,16 +1427,10 @@
   color: var(--border-strong);
 }
 
-/* VerifyEmail's states are a glyph over centred prose, where the other five
-   are left-aligned forms — the one thing it does not share with them. */
 .auth-centered {
   text-align: center;
 }
 
-/* ── Crash screen (ErrorBoundary) ──────────────────────────────────────
-   Its own classes, not .card / .btn compositions, for the same reason the
-   component takes no imports: this renders when something has already gone
-   wrong, and it should depend on as little as possible to come up. */
 .crash-wrap {
   display: grid;
   place-items: center;
@@ -1631,7 +1485,6 @@
   word-break: break-word;
 }
 
-/* ── Signed-in 404 (NotFound) ─────────────────────────────────────────── */
 .notfound {
   display: grid;
   place-items: center;
@@ -1652,8 +1505,6 @@
   font-size: var(--text-2xl);
   letter-spacing: -0.02em;
 }
-/* The path that was asked for. Wraps rather than scrolls: it is evidence to
-   read, and a long id truncated to an ellipsis is evidence withheld. */
 .notfound-path {
   display: block;
   margin: var(--space-3) 0 var(--space-4);
@@ -1666,9 +1517,6 @@
   overflow-wrap: anywhere;
 }
 
-/* Why the sign-in form is on screen when the visitor did not ask for it. Set
-   above the heading because it is the answer to a question they are already
-   asking. */
 .signin-notice {
   margin-bottom: var(--space-4);
   padding: var(--space-2) var(--space-3);
@@ -1694,8 +1542,6 @@
   opacity: 0.8;
 }
 
-/* Two-factor card (Settings). Enrolment shows a QR + the manual secret;
-   the recovery panel lists the one-time codes in a monospace grid. */
 .totp-enrol,
 .totp-recovery,
 .totp-disable {
@@ -1744,8 +1590,6 @@
   color: var(--muted);
 }
 
-/* Enrolment QR + manual-secret layout: QR on the left, the "can't scan?"
-   secret + copy on the right, wrapping to a stack on narrow cards. */
 .totp-qr-row {
   display: flex;
   gap: var(--space-3);
@@ -1770,7 +1614,6 @@
   align-self: auto;
 }
 
-/* Action button rows (recovery panel, enrol confirm) — wrap on narrow. */
 .totp-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1779,9 +1622,6 @@
   margin-top: var(--space-1);
 }
 
-/* Six-segment grouped input for TOTP code entry. Each box is a separate
-   single-char <input> so the caret behaves as users expect (typing
-   advances, Backspace retreats); paste anywhere distributes the digits. */
 .otp-row {
   display: flex;
   gap: var(--space-2);
@@ -1822,14 +1662,7 @@
   }
 }
 
-/* Welcome / first-run wizard. Centered card with a three-step list
-   of CTAs — the lightest version of an onboarding flow that still
-   signals "you're in, here's what to do next." */
 .welcome {
-  /* A column, not a card. The page holds a greeting, a resume link, and a row
-     of option cards — nesting all of that inside one more card gave every
-     element a second border and left the row looking like a panel inside a
-     panel. */
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
@@ -1842,16 +1675,11 @@
   margin: 0;
 }
 .welcome-intro {
-  /* Above every action on the page. It is the line that says what this screen
-     is for, and it used to sit below the first thing you could click. */
   margin: var(--space-2) 0 0;
   color: var(--ink-soft);
   font-size: var(--text-lg);
 }
 
-/* "Continue where you left off" — the most-recent flow, from localStorage.
-   The only element here that knows anything about this particular user, which
-   is why it is the one carrying the accent. */
 .welcome-resume {
   display: flex;
   align-items: center;
@@ -1896,10 +1724,6 @@
   flex-shrink: 0;
 }
 
-/* The zero-setup demonstration, first run only. Same shape as the resume card
-   so the two read as one family — "here is a thing to open" — but neutral
-   rather than accented, because it is a demo and the resume link is the user's
-   own work. */
 .welcome-demo {
   display: flex;
   align-items: flex-start;
@@ -1923,7 +1747,6 @@
   display: inline-flex;
   flex-shrink: 0;
   color: var(--accent);
-  /* Optically level with the title rather than the box. */
   margin-top: 0.1em;
 }
 .welcome-demo-body {
@@ -1947,10 +1770,6 @@
   margin-top: 0.15em;
 }
 
-/* ── The three ways to start something new ─────────────────────────────
-   Equal cards in one row. They were an accent button, two 13px text links and
-   a bordered box at the foot of the page — three weights for four routes that
-   differ only by ?tab=. */
 .welcome-section-title {
   margin: 0 0 var(--space-3);
   font-size: var(--text-md);
@@ -2006,18 +1825,11 @@
 }
 
 @media (max-width: 768px) {
-  /* One per row. Three cards at phone width leaves each holding two words per
-     line, which is worse than a list. */
   .welcome-options {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-/* Verify-email nag banner. Message and Resend button sit side-by-side on
-   desktop, but on narrow
-   screens the button stacks full-width under the message instead of
-   getting squeezed against it. The button keeps the default (bordered)
-   button styling — not .ghost — so it reads clearly as a button. */
 .verify-banner {
   display: flex;
   align-items: center;
@@ -2041,8 +1853,6 @@
     flex-wrap: wrap;
     align-items: flex-start;
   }
-  /* Resend drops onto its own full-width row beneath the message; the
-     dismiss X stays on the first row with the icon and text. */
   .verify-banner-resend {
     order: 10;
     width: 100%;
@@ -2107,8 +1917,6 @@
   padding-top: var(--space-3);
   border-top: 1px solid var(--border);
 }
-/* OS tabs — a small segmented control selecting which config-file path
-   to show (macOS / Windows / Linux). */
 .mcp-os-tabs {
   display: inline-flex;
   gap: var(--space-0);
@@ -2155,9 +1963,6 @@
   color: var(--muted);
 }
 
-/* These CTAs are <Link> anchors, so they don't inherit the global
-   button {} rules — mirror those tokens here so they read as the app's
-   standard buttons rather than a one-off welcome-only style. */
 .welcome-cta {
   display: inline-flex;
   align-items: center;
@@ -2190,8 +1995,6 @@
   box-shadow: var(--glow-accent-hover);
 }
 
-/* Templates gallery: a responsive grid of forkable workflows.
-   Cards size to roughly two-up on a typical viewport. */
 .template-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -2208,12 +2011,6 @@
   letter-spacing: 0.04em;
   color: var(--muted);
 }
-/* ----- Integrations index + detail ----- */
-/* Section heading on the integrations index — "Connected" / "Available". */
-/* "Show all", in the filter toolbar. It was the clear control on a category
-   banner that the filter dropdowns replaced; the toolbar is where it belongs
-   now, and it stays link-weight rather than becoming a fourth button competing
-   with the two selects. */
 .integrations-filter-clear {
   padding: 0;
   background: none;
@@ -2226,17 +2023,10 @@
   opacity: 0.8;
   background: none;
 }
-/* The result count, between the toolbar and the grid. Quiet, but it is what
-   makes the filters legible: it names how many matched and which slice is on
-   screen, so a short page reads as "the end of the results" rather than as a
-   bug. */
 .integrations-count {
   margin: var(--space-2) 0 var(--space-3);
   font-size: var(--text-sm);
 }
-/* The card's own footer: step count on the left, connection state on the right.
-   It carries what the section headings used to say, per card, now that the list
-   is one flat paginated grid. */
 .integration-card-foot {
   display: flex;
   align-items: center;
@@ -2245,9 +2035,6 @@
   margin-top: var(--space-2);
   font-size: var(--text-xs);
 }
-/* The state word. Toned like the dot beside the name — green for connected,
-   amber for an account that needs reconnecting, plain for "needs setup", which
-   is a to-do and not a fault. */
 .integration-card-state {
   white-space: nowrap;
 }
@@ -2257,9 +2044,6 @@
 .integration-card-state.ailing {
   color: var(--warning);
 }
-/* The page strip. Centred under the grid, wrapping on narrow screens rather
-   than scrolling sideways — the windowed page list is short enough that two
-   rows is the worst case. */
 .integrations-pager {
   display: flex;
   flex-wrap: wrap;
@@ -2268,8 +2052,6 @@
   gap: var(--space-2);
   margin: var(--space-4) 0 var(--space-2);
 }
-/* The current page reads as pressed rather than as a link: with numbers this
-   small, weight alone is not enough of a difference to find at a glance. */
 .integrations-pager-current {
   border-color: var(--accent);
   color: var(--accent);
@@ -2284,10 +2066,6 @@
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: var(--space-3);
 }
-/* Match .graph-card visually so the Integrations index and the
-   Flows index feel like the same product surface. The wrapping
-   Link gets inline textDecoration:none + color:inherit; the inner
-   div carries the visible styling. */
 .integration-card {
   display: flex;
   flex-direction: column;
@@ -2348,17 +2126,12 @@
   font-size: var(--text-md);
   color: var(--muted);
   line-height: 1.5;
-  /* Clamp to 3 lines with a trailing ellipsis, and reserve those 3 lines
-     (min-height) so cards with a short or empty description stay the same
-     height as the rest. Title is one line + this is three → every card in
-     the grid is identical height. */
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   min-height: 4.5em;
 }
-/* ----- Connections panel (top of Integrations page) ----- */
 .connections {
   margin: var(--space-4) 0 var(--space-6);
 }
@@ -2388,8 +2161,6 @@
   font-style: italic;
 }
 
-/* Sign-up form hint under the password field, surfacing the 8-char
-   minimum before the user submits and reads it from an error. */
 /* Password input + reveal toggle (PasswordField). The button overlays the
    right end of the field, and the input reserves room for it so a long value
    never slides under the icon. */
@@ -2428,10 +2199,6 @@
   margin-top: var(--space-1);
 }
 
-/* "No setup needed" badge on the template gallery cards. Sits next
-   to the title — small enough to read as a tag, prominent enough
-   that a non-tech user can scan the gallery and spot the cards
-   they can actually use today without contacting their admin. */
 .connections-banner {
   display: flex;
   align-items: center;
@@ -2458,12 +2225,8 @@
   opacity: 0.8;
 }
 
-/* ----- Credentials manager ----- */
 .credentials {
   margin-top: var(--space-5);
-  /* Match the Apps page content column (.integration-detail's
-     --integration-col: 640px) so the secrets list + add-secret form
-     line up to the same width rather than stretching edge-to-edge. */
   max-width: 640px;
 }
 .credentials-list {
@@ -2506,15 +2269,12 @@
   font-size: var(--text-xs);
   color: var(--success);
 }
-/* Stacked add-secret form: name, value, and the Add button each on
-   their own row. */
 .credentials-add {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-/* Bring-your-own secret-manager config panel (Connections page). */
 .secret-manager {
   margin-top: var(--space-5);
 }
@@ -2570,7 +2330,6 @@
 .credentials-add input {
   width: 100%;
 }
-/* Multiline secret values (private keys, JSON blobs, multi-line tokens). */
 .credentials-add textarea {
   width: 100%;
   min-height: 76px;
@@ -2582,14 +2341,9 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  /* Its own row, but sized to its content rather than full width. */
   align-self: flex-start;
 }
 
-/* Per-integration "Connection" configure widget (integration detail
-   page). One card per credential requirement: a status headline (dot +
-   "Connected to X"), a labelled key field, and a primary action bottom-
-   right. Mirrors the AI-provider connect pattern. */
 .integration-connections {
   margin-top: var(--space-5);
   display: flex;
@@ -2624,9 +2378,6 @@
   background: var(--success);
 }
 
-/* One row per connected account: its own health, its own Reconnect. The
-   flagged row is the account a failing run pointed at, so someone arriving
-   from that error lands on the right line rather than hunting for it. */
 .connection-accounts {
   list-style: none;
   margin: 0 0 var(--space-4);
@@ -2667,8 +2418,6 @@
 .connection-dot.off {
   background: var(--muted);
 }
-/* Set up, but not working. Distinct from both green ("fine") and grey ("not
-   set up yet") — it is the state that needs a person to do something. */
 .connection-dot.ailing {
   background: var(--warning);
 }
@@ -2681,8 +2430,6 @@
   font-size: var(--text-base);
   font-weight: 600;
 }
-/* Setup guidance under a connection input. Sits below the field (not inside
-   it as a placeholder) so it is still on screen while the user types. */
 .connection-field-help {
   font-size: var(--text-sm);
   color: var(--muted);
@@ -2697,7 +2444,6 @@
   gap: var(--space-2);
   margin-top: var(--space-4);
 }
-/* Result of a "Test connection" check on an established connection. */
 .connection-test-result {
   margin-top: var(--space-3);
   font-size: var(--text-sm);
@@ -2708,15 +2454,10 @@
 .connection-test-result.fail {
   color: var(--danger);
 }
-/* Multi-field connection: stack the field inputs, and the connected-state
-   summary rows (label + set/unset). */
 .connection-card form .connection-field + .connection-field {
   margin-top: var(--space-3);
 }
 
-/* /admin/google: one card per connected Google account, with a
-   per-service permission matrix (✓ granted / ✗ missing) and top-up
-   actions. Reuses .connection-card for the frame. */
 .google-accounts {
   display: flex;
   flex-direction: column;
@@ -2750,7 +2491,6 @@
   gap: var(--space-2);
   font-size: var(--text-md);
 }
-/* Missing service: muted text + red mark. Granted: green mark, normal ink. */
 .google-coverage-icon {
   display: inline-flex;
   color: var(--danger);
@@ -2766,12 +2506,6 @@
   font-size: var(--text-sm);
   padding: var(--space-0) var(--space-2);
 }
-/* Icon + label buttons that collapse to icon-only on mobile.
-   The layout this class used to declare — inline-flex, centred, gapped — is now
-   what every button does, so all it carries is the collapse. It is emitted by
-   <Button collapseLabel>, which also wraps the label in .btn-label; three call
-   sites used to write both by hand, which worked but scoped the rule below to
-   one page. Keyed off the class, it now works wherever the prop is used. */
 @media (max-width: 768px) {
   .icon-text-btn .btn-label {
     display: none;
@@ -2809,7 +2543,6 @@ button.warning {
 button.warning:hover:not(:disabled) {
   background: color-mix(in srgb, var(--warning) 26%, transparent);
 }
-/* ----- Pre-run connection gate modal ----- */
 .conn-gate-lede {
   margin: 0 0 var(--space-3);
   color: var(--muted);
@@ -2852,22 +2585,15 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-sm);
 }
 
-/* "Connect another" link under the account dropdown in the inspector. */
 .sf-account-connect {
   margin-top: var(--space-1h);
   display: inline-block;
 }
-/* Standalone Connect-Gmail / Connect-Slack button rendered when zero
-   accounts are connected — replaces the dropdown so the field has
-   one obvious action instead of an empty list. */
 .sf-account-connect-cta {
   padding: var(--space-1h) var(--space-3);
   font-size: var(--text-md);
 }
 
-/* Proactive "this flow needs a connection" banner. Mirrors the error/lint
-   banner geometry with an accent border to read as actionable rather than
-   alarming. */
 /* All editor banners (error, lint, run finished, needs-setup, publish) live in
    this one flex column instead of each pinning itself with a magic-number top
    offset. That way any banner can wrap to multiple lines and the rest still
@@ -2904,11 +2630,6 @@ button.warning:hover:not(:disabled) {
 .editor-banner-stack:empty {
   display: none;
 }
-/* Continuous draft-vs-live readout under the toolbar. The whole point is
-   that it is ALWAYS there when a flow is published — the failure mode this
-   fixes is a user inferring "saved" means "running" from a chip they have
-   to hover. Quiet by default; the dot goes amber when the draft has
-   unpublished changes. */
 .editor-live-state {
   display: flex;
   align-items: center;
@@ -2917,10 +2638,6 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-sm);
   color: var(--muted);
   background: var(--surface);
-  /* No border of its own: this is the last row inside .editor-banner-stack,
-     which already closes the strip off from the canvas with the same 1px
-     border. Having both painted a stray line UNDER the text, a stack-padding
-     apart from the real separator below it. */
 }
 .editor-live-dot {
   flex: none;
@@ -2955,10 +2672,6 @@ button.warning:hover:not(:disabled) {
   gap: var(--space-2);
   flex-shrink: 0;
 }
-/* When the banner carries both a user-fixable line AND an admin-blocked
-   line, stack them on top of each other so the second line is visibly
-   secondary. The user-fixable line keeps the default colour; the
-   admin-side line is muted to read as informational. */
 .editor-conn-banner-text {
   display: flex;
   flex-direction: column;
@@ -2982,8 +2695,6 @@ button.warning:hover:not(:disabled) {
   height: 14px;
   object-fit: contain;
 }
-/* Admin-blocked rows inside the pre-run modal. Borderless list keeps it
-   visually distinct from the actionable "Connect this" rows above it. */
 .conn-gate-admin-head {
   color: var(--muted);
 }
@@ -2991,9 +2702,6 @@ button.warning:hover:not(:disabled) {
   color: var(--muted);
 }
 
-/* Shared content width for the integration detail page — the Connection
-   card(s) and the Drops cards align to the same column. Change here to
-   re-flow every integration page. */
 .integration-detail {
   --integration-col: 640px;
 }
@@ -3081,9 +2789,6 @@ button.warning:hover:not(:disabled) {
   margin: 0;
   font-size: var(--text-base);
 }
-/* The action half of a drop's name ("Google Sheets · Append rows"): present so
-   the card names the same thing the step palette does, dimmed so the product
-   still reads as the heading. */
 .drop-card-action {
   color: var(--muted);
   font-weight: 400;
@@ -3136,12 +2841,6 @@ button.warning:hover:not(:disabled) {
 .drop-card-ports .port-label {
   color: var(--muted);
 }
-/* One disclosure groups ports + params schema together. The
-   summary is the only "technical" surface on a drop card by
-   default; clicking expands to the full wiring contract. */
-/* Operator notes on an integration page (/apps/:slug). Shut by default and
-   quiet when open — this is reference for whoever deploys the instance, not
-   something the person connecting an account should have to read past. */
 .integration-notes {
   margin: var(--space-4) 0 0;
   border: 1px solid var(--border);
@@ -3224,9 +2923,6 @@ button.warning:hover:not(:disabled) {
   line-height: 1.5;
   flex: 1;
 }
-/* Row of vendor brand miniatures on each template card. Sized so
-   the row is recognizable at a glance ("this one touches Slack +
-   Gmail") without competing with the title or description. */
 .template-integrations {
   display: flex;
   align-items: center;
@@ -3268,11 +2964,6 @@ button.warning:hover:not(:disabled) {
   opacity: 0.6;
   cursor: default;
 }
-/* Cards for templates that need an OAuth provider the install hasn't
-   enabled. The card is greyed out but still readable — the user gets
-   to see what they'd be missing (so they know what to ask their
-   admin for), but the Use button is disabled and a single-line note
-   names the missing integration(s). */
 .template-card-admin-blocked {
   opacity: 0.65;
   border-style: dashed;
@@ -3290,10 +2981,6 @@ button.warning:hover:not(:disabled) {
   line-height: 1.4;
 }
 
-/* Run-detail page: failure banner, node timeline, expandable
-   per-node output blocks. Visual priority is "what went wrong" —
-   failed nodes get a red border, the top banner names the failing
-   step explicitly. */
 .back-link {
   display: inline-flex;
   align-items: center;
@@ -3339,16 +3026,11 @@ button.warning:hover:not(:disabled) {
   flex: 1;
   min-width: 0;
 }
-/* "This step won't retry on its own" footnote under a terminal failure —
-   quieter than the message, it tells the user the ball is in their court. */
 .run-error-needsyou {
   margin-top: var(--space-2);
   font-size: var(--text-sm);
   color: var(--muted);
 }
-/* Raw daemon code/message, tucked behind a disclosure when a friendly
-   headline already explained the failure. Quiet by default so the
-   non-technical reader isn't drawn to it; a developer can still open it. */
 .run-error-tech {
   margin-top: var(--space-2);
 }
@@ -3361,11 +3043,6 @@ button.warning:hover:not(:disabled) {
 .run-error-tech[open] > summary {
   margin-bottom: var(--space-1);
 }
-/* The plain-English headline + next-action sit above the raw
-   error code/message. Visually heavier than the technical layers
-   so a non-tech reader's eye lands on the actionable line first.
-   The headline span and the action button live on the same row at
-   wide widths and stack on narrow viewports. */
 .run-error-headline {
   display: flex;
   align-items: center;
@@ -3413,9 +3090,6 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-sm);
   text-transform: capitalize;
 }
-/* Schedules page: status pill + row pause/resume action. The "live"
-   variant tints green to read as "running on its own"; "paused" greys
-   out. btn-ghost is a borderless inline action sized for table rows. */
 .status-chip.live {
   color: var(--success);
   border-color: var(--success);
@@ -3440,8 +3114,6 @@ button.warning:hover:not(:disabled) {
   opacity: 0.5;
   cursor: default;
 }
-/* Publish control (FlowEditor toolbar). "publish" is a call-to-action when
-   the draft differs from live; "published" is the calm steady-state pill. */
 .editor-publish {
   display: inline-flex;
   align-items: center;
@@ -3501,7 +3173,6 @@ button.warning:hover:not(:disabled) {
 .editor-publish-toggle.on:hover:not(:disabled) {
   background: color-mix(in srgb, var(--success) 14%, transparent);
 }
-/* The switch track + sliding knob. currentColor inherits the off/on tint. */
 .editor-publish-track {
   position: relative;
   width: 30px;
@@ -3535,7 +3206,6 @@ button.warning:hover:not(:disabled) {
 .editor-publish-knob svg {
   color: var(--surface);
 }
-/* One-shot glow when a publish just landed (paired with the overlay). */
 .editor-publish-toggle.celebrate {
   animation: publish-pop 0.6s ease-out;
 }
@@ -3560,16 +3230,10 @@ button.warning:hover:not(:disabled) {
   inset: 0;
   z-index: var(--z-overlay);
   display: grid;
-  /* The top slot, under the toolbar — where .editor-trigger-hint sits, and a
-     few pixels from the control that caused this. Dead-centre put it on top of
-     the steps, which is the one place a confirmation about the whole flow
-     should not be. */
   place-items: start center;
   padding-top: 62px;
   pointer-events: none;
 }
-/* The card holds its own scale/fade so the mark and the words inside it can be
-   timed against each other rather than against the viewport. */
 .publish-live-card {
   display: flex;
   align-items: center;
@@ -3591,8 +3255,6 @@ button.warning:hover:not(:disabled) {
   width: 32px;
   height: 32px;
 }
-/* One halo, once. The old overlay had two rings in two colours racing each
-   other; this is a single breath of the success tone behind the mark. */
 .publish-live-halo {
   position: absolute;
   inset: 0;
@@ -3679,8 +3341,6 @@ button.warning:hover:not(:disabled) {
   .editor-publish-knob {
     transition: none;
   }
-  /* No travel, no drawing, no halo — the card just appears and goes. The
-     check is still a check; it is simply already made. */
   .publish-live-card {
     animation: publish-fade 1.1s ease-out both;
   }
@@ -3719,8 +3379,6 @@ button.warning:hover:not(:disabled) {
   opacity: 0.5;
   cursor: default;
 }
-/* "Label / Rename label" — same row-action treatment as Make live, but
-   muted so it reads as a secondary action next to it. */
 .history-label-btn {
   display: inline-flex;
   align-items: center;
@@ -3734,8 +3392,6 @@ button.warning:hover:not(:disabled) {
 .history-label-btn:hover {
   color: var(--ink);
 }
-/* Optional release-name field inside the publish/go-live modal. Stacked
-   label over input, sitting above the explanatory confirm message. */
 .publish-label-field {
   display: flex;
   flex-direction: column;
@@ -3839,8 +3495,6 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-sm);
   font-family: var(--font-mono);
 }
-/* Auto-retry pill on a node that's between attempts — a calm "the engine is
-   handling it" cue, distinct from the red error pill. */
 .node-retry {
   display: inline-flex;
   align-items: center;
@@ -3943,9 +3597,6 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-xs);
   font-family: var(--font-mono);
 }
-/* Run result: the "what did it produce" card above the timeline on a clean
-   run. Deliberately the plainest thing on the page — the value is the point,
-   so no port names, no MIME, no disclosure to open. */
 .run-result {
   display: flex;
   flex-direction: column;
@@ -3961,19 +3612,11 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-sm);
   color: var(--muted);
 }
-/* Copy / download sit on the head row, not above the value: they belong to
-   the result, and a reader scanning for the answer should meet the value
-   first. */
 .run-result-actions {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1h);
 }
-/* A rows result's table is inside the card's padding, so its own cell padding
-   pushed the first column's NAME 16px right of the "From …" label and of the
-   <pre> a text result renders in — a ragged left edge down the one card whose
-   job is to be read. The outer cells give their outside padding back; the
-   padding BETWEEN columns is untouched. */
 .run-result th:first-child,
 .run-result td:first-child {
   padding-left: 0;
@@ -3982,13 +3625,10 @@ button.warning:hover:not(:disabled) {
 .run-result td:last-child {
   padding-right: 0;
 }
-/* The row count under a rows result, and the show-everything toggle under a
-   long text one — the same quiet footnote in both shapes. */
 .run-result-note {
   font-size: var(--text-xs);
   color: var(--faint);
 }
-/* Files the run wrote. One row per file: name, which step, download. */
 .run-files {
   display: flex;
   flex-direction: column;
@@ -4012,8 +3652,6 @@ button.warning:hover:not(:disabled) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Pushes the trailing action to the right edge, so the download buttons line
-   up down the list however long the names are. */
 .run-file-meta {
   margin-left: auto;
   font-size: var(--text-xs);
@@ -4098,9 +3736,6 @@ button.warning:hover:not(:disabled) {
   font-style: italic;
 }
 
-/* Editor layout: canvas | inspector. The catalog used to live to the
-   left; it's been replaced by the Ctrl+K quick-drop palette + a toolbar
-   button, so this is a two-column grid now. */
 .editor {
   display: grid;
   /* Single column: the canvas — including the full-width toolbar — spans the
@@ -4176,10 +3811,6 @@ button.warning:hover:not(:disabled) {
     transform: translateX(0);
     pointer-events: auto;
   }
-  /* Keep the banner stack clear of the inspector panel, which is an absolute
-     overlay starting below the toolbar — so it paints over the docked strip's
-     right end. The strip's background may run under it; its text and buttons
-     may not (the publish nudge's own Publish button lives there). */
   .editor[data-has-selection="true"] .editor-banner-stack {
     padding-right: calc(var(--inspector-w) + 12px);
   }
@@ -4237,26 +3868,21 @@ button.warning:hover:not(:disabled) {
     transform: scale(1);
   }
 }
-/* The run / needs-setup banner drops in from the top. */
 .editor-conn-banner {
   animation: dz-slide-down 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-/* Modal backdrop fades in; the dialog pops in. */
 .modal-backdrop {
   animation: dz-fade-in 140ms ease-out;
 }
 .modal {
   animation: dz-pop-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-/* Quick-drop palette: backdrop fades, panel pops in. */
 .quick-palette-backdrop {
   animation: dz-fade-in 120ms ease-out;
 }
 .quick-palette {
   animation: dz-pop-in 150ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-/* Right-click actions menu over a node/edge (Blueprint-style). Fixed to the
-   cursor point; the component clamps it back on-screen at the edges. */
 .canvas-context-menu {
   position: fixed;
   z-index: var(--z-context-menu);
@@ -4317,8 +3943,6 @@ button.warning:hover:not(:disabled) {
   margin: 4px 6px;
   background: var(--border);
 }
-/* Caption over a group of items — the connection menu's "when does the next
-   step run?". Not focusable and not a menuitem; it only names the group. */
 .canvas-context-menu .context-menu-head {
   padding: 6px 10px 2px;
   color: var(--muted);
@@ -4327,8 +3951,6 @@ button.warning:hover:not(:disabled) {
   text-transform: uppercase;
   white-space: nowrap;
 }
-/* Tick gutter for a radio group. Fixed width whether or not this row is the
-   checked one, so every label in the group starts at the same x. */
 .canvas-context-menu .context-menu-check {
   display: inline-flex;
   align-items: center;
@@ -4337,7 +3959,6 @@ button.warning:hover:not(:disabled) {
   width: 14px;
   color: var(--accent);
 }
-/* The label takes the slack, so the tick stays left and the shortcut right. */
 .canvas-context-menu button .context-menu-label {
   flex: 1 1 auto;
 }
@@ -4346,9 +3967,6 @@ button.warning:hover:not(:disabled) {
     animation: none;
   }
 }
-/* Node cards lift gently on hover — selection keeps its own accent glow, so
-   only unselected nodes get the hover shadow (no transform, to keep wired
-   edges perfectly aligned). */
 .dz-node:not(.selected):hover {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
@@ -4369,16 +3987,11 @@ button.warning:hover:not(:disabled) {
     transition: none;
   }
 }
-/* Toolbar "Add drop" button — surfaces the Ctrl+K palette now that the
-   catalog panel is gone. The kbd hint stays on the right so the button
-   still reads as a primary action and not a shortcut chip. */
 .editor-add-drop {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1h);
 }
-/* Inspector head: groups the module-ID label and the close-X so they
-   sit together on the right of the panel head. */
 .inspector-head-right {
   display: inline-flex;
   align-items: center;
@@ -4396,9 +4009,6 @@ button.warning:hover:not(:disabled) {
   background: var(--surface-2);
   color: var(--ink);
 }
-/* Identity header: the drop's own icon + editable name stand in for the
-   old generic "INSPECTOR" title, so the panel reads as the thing being
-   edited. Overrides panel-head's uppercase/tracking for real-text content. */
 .inspector-head.panel-head {
   text-transform: none;
   letter-spacing: normal;
@@ -4431,8 +4041,6 @@ button.warning:hover:not(:disabled) {
   min-width: 0;
   gap: 1px;
 }
-/* The node's name, edited in place as the title. Looks like text until
-   hovered/focused, when it reveals it's an input. */
 .inspector-name {
   background: transparent;
   border: none;
@@ -4476,9 +4084,6 @@ button.warning:hover:not(:disabled) {
 .inspector-info:hover {
   color: var(--muted);
 }
-/* "Run this step" — the partial-run action, styled as the purple primary
-   button (icon + label) so it mirrors the flow-level Run and reads clearly
-   as an action rather than a faint link. Sized to its content. */
 .inspector-run-step {
   display: inline-flex;
   align-items: center;
@@ -4489,8 +4094,6 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-md);
   font-weight: 600;
 }
-/* Stop state of the run-step button while a run is live — danger-tinted so it
-   reads as "halt", matching the toolbar's stop affordance. */
 .inspector-stop-step {
   background: color-mix(in srgb, var(--danger) 16%, transparent);
   color: var(--danger);
@@ -4499,9 +4102,6 @@ button.warning:hover:not(:disabled) {
 .inspector-stop-step:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 26%, transparent);
 }
-/* Connect CTA at the top of the inspector when the node's app isn't set up.
-   Amber to match the node card's footer and the run banner, full-width so it
-   reads as the panel's primary next action. */
 .inspector-connect-cta {
   display: inline-flex;
   align-items: center;
@@ -4527,9 +4127,6 @@ button.warning:hover:not(:disabled) {
 .editor .canvas {
   position: relative;
   min-height: 0;
-  /* Keep the 1fr grid track from being blown out by React Flow's
-     min-content width — without this the canvas overflows its column
-     (so right-anchored overlays like the Inspect FAB land off-screen). */
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -4540,9 +4137,6 @@ button.warning:hover:not(:disabled) {
      thinks it's roomy and keeps every label, overflowing into overlap. */
   container: editor-canvas / inline-size;
 }
-/* ReactFlow's outer div is a direct child of .canvas; tell it to fill
-   the space below the toolbar, and animate its resize in step with the
-   inspector slide. */
 .editor .canvas > .react-flow {
   flex: 1;
   min-height: 0;
@@ -4561,7 +4155,6 @@ button.warning:hover:not(:disabled) {
   text-transform: uppercase;
 }
 
-/* Tiny capability pill on the right of each drop row. */
 .cat-pill {
   font-size: var(--text-2xs);
   letter-spacing: 0.04em;
@@ -4574,7 +4167,6 @@ button.warning:hover:not(:disabled) {
   text-transform: lowercase;
 }
 
-/* Inspector */
 .inspector-body {
   flex: 1;
   overflow-y: auto;
@@ -4606,7 +4198,6 @@ button.warning:hover:not(:disabled) {
   margin: 0;
 }
 
-/* React Flow node card */
 .dz-node {
   background: var(--surface);
   border: 1.5px solid var(--border);
@@ -4621,10 +4212,6 @@ button.warning:hover:not(:disabled) {
     border-color 120ms,
     box-shadow 120ms;
 }
-/* Trigger nodes are the graph's entry points (schedule, webhook, poll,
-   service events). Invert the usual dark-surface card into an accent-filled
-   one so the eye lands on "where this flow starts" at a glance. --node-accent
-   is the category tint passed inline by NodeCard (purple for triggers). */
 .dz-node.dz-node-trigger {
   background: linear-gradient(
     160deg,
@@ -4646,17 +4233,9 @@ button.warning:hover:not(:disabled) {
     var(--shadow);
 }
 .dz-node.dz-node-trigger .label {
-  /* Theme-aware ink, not hardcoded white: the card surface mixes the accent
-     with --surface, so it's dark purple in dark mode (near-white ink reads)
-     but pale purple in light mode (near-black ink reads). #fff was invisible
-     on the light card. */
   color: var(--ink);
   font-weight: 650;
 }
-/* Compact "operator chip" for logic primitives (==, >, <, …): a small
-   square that shows just the operator glyph, Unreal-Blueprint style. No
-   icon box or title — A/B pins on the left edge, Result on the right.
-   --op-color is the category tint (green) passed inline by NodeCard. */
 .dz-node.dz-op {
   min-width: 0;
   width: 60px;
@@ -4679,9 +4258,6 @@ button.warning:hover:not(:disabled) {
   user-select: none;
 }
 
-/* Header row: icon next to the title block. The ports section sits
-   below it spanning the full card width so its left/right columns line
-   up with the card edges (not indented under the icon). */
 /* The fold (data face). The header stays where it is and the data panel
    expands BELOW it via the grid 0fr->1fr idiom, so the header captions the
    data by sitting above it. No measured pixel values, so a card whose header
@@ -4764,9 +4340,6 @@ button.warning:hover:not(:disabled) {
      table overflows into .dz-face-scroll rather than pushing outward. */
   width: 0;
   min-width: 100%;
-  /* The well sits below the header now, so the breathing room goes above it.
-     --space-3 matches the card's own padding on both sides, so the well is
-     inset from the header above and the params/ports below by the same gap. */
   margin: var(--space-3) 0;
   padding: var(--space-2);
   background: var(--code-bg);
@@ -4798,8 +4371,6 @@ button.warning:hover:not(:disabled) {
   color: var(--status-completed);
   border: 1px solid var(--status-completed);
 }
-/* An example is dashed and muted, a real value solid and green — the badge
-   text says which, and the styling says it again at a glance. */
 .dz-face-prov-example {
   color: var(--accent);
   border: 1px dashed var(--accent);
@@ -4932,11 +4503,6 @@ button.warning:hover:not(:disabled) {
   color: var(--faint);
 }
 
-/* The card's shape line — field names, or a short value that is its own
-   summary. Monospace and wrapping: names are the payload, so all of them are
-   worth two lines on a narrow card rather than an ellipsis that hides the one
-   you needed. overflow-wrap breaks a single absurd key rather than letting it
-   push out of the well. */
 .dz-face-line {
   display: flex;
   align-items: baseline;
@@ -4946,16 +4512,12 @@ button.warning:hover:not(:disabled) {
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   line-height: 1.5;
-  /* The same colour the table's column headers use, because it is the same
-     thing: a field name rather than a value. */
   color: var(--json-key);
   overflow-wrap: anywhere;
 }
 .dz-face-line-names {
   min-width: 0;
 }
-/* A value, not a set of names: the run's own text reads as data rather than
-   as schema, so it takes the colour the table's cells use. */
 .dz-face-line-value {
   color: var(--code-fg);
 }
@@ -5031,8 +4593,6 @@ button.warning:hover:not(:disabled) {
   color: var(--ink);
   background: var(--surface-2);
 }
-/* Provenance badge + port tabs, on their own row under the title so a router
-   with several outputs has room for all of them. */
 .dz-datamodal-bar {
   display: flex;
   align-items: center;
@@ -5049,9 +4609,6 @@ button.warning:hover:not(:disabled) {
 .dz-datamodal-body {
   background: var(--code-bg);
 }
-/* The card caps cells at 28 characters; here they are not capped, so the
-   table sets its own width and scrolls inside the body rather than being
-   squeezed into the panel. */
 .dz-datamodal-body .dz-face-table {
   width: auto;
   min-width: 100%;
@@ -5062,8 +4619,6 @@ button.warning:hover:not(:disabled) {
   padding: var(--space-1h) var(--space-2);
   white-space: nowrap;
 }
-/* Column headers stay put while the rows scroll — the whole reason to open
-   this instead of squinting at the card. */
 .dz-datamodal-body .dz-face-table thead th {
   position: sticky;
   top: 0;
@@ -5088,10 +4643,6 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-2xs);
   color: var(--faint);
 }
-/* Fullscreen on mobile, the same shape the Ctrl+K palette takes: a 1100px
-   panel inset by 16px is most of a phone screen already, and the inset just
-   wastes the little width there is. 100dvh, not 100vh, so the URL bar
-   collapsing doesn't clip the footer. */
 @media (max-width: 768px) {
   .modal-backdrop:has(.dz-datamodal) {
     padding: 0;
@@ -5112,8 +4663,6 @@ button.warning:hover:not(:disabled) {
 }
 .dz-node-main {
   display: flex;
-  /* Title is a single line now (no sub-text), so center it against the
-     icon rather than top-aligning. */
   align-items: center;
   gap: var(--space-3);
 }
@@ -5121,10 +4670,6 @@ button.warning:hover:not(:disabled) {
   flex: 1;
   min-width: 0;
 }
-/* Optional action line under the node title (e.g. "Google Sheets" /
-   "Append rows"). Muted + smaller so the product name reads first. */
-/* A small chip under a node's label — "keeps state", "runs on your hardware".
-   One rule rather than two inline copies, so the chips stay a family. */
 .dz-node-chip {
   display: inline-flex;
   align-items: center;
@@ -5133,25 +4678,14 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-2xs);
   opacity: 0.6;
 }
-/* The runner chip is the exception that earns full opacity: it answers "does
-   this step leave the daemon?", which is the question someone wiring a secret
-   is asking, and a 60%-opacity answer is one they will not read. */
 .dz-node-runner {
   opacity: 1;
   color: var(--accent-2);
 }
-/* A step whose failure does not fail the run (node.continue_on_error). Full
-   opacity for the same reason as the runner chip: it answers "could this step
-   have turned the run red?", which is the question someone reading a green run
-   is asking. Amber, matching the tolerated-failure connection — the two are one
-   idea, on a wire and on a step at the end of a branch. */
 .dz-node-keepgoing {
   opacity: 1;
   color: var(--status-warning);
 }
-/* A locked step (node.locked). Full opacity like the chips above: it answers
-   "why won't this field take my typing?", and a 60%-opacity answer is one
-   nobody reads before filing it as a bug. */
 .dz-node-lockchip {
   opacity: 1;
   color: var(--faint);
@@ -5207,10 +4741,6 @@ button.warning:hover:not(:disabled) {
   color: var(--faint);
 }
 
-/* The stand-in pin. The real handles stack invisibly on top of this (see
-   NodeCard's folded branch), so this is the only pin the reader sees and every
-   wire on that side converges into it. Same 12px geometry and edge offset as
-   dotStyle's, so a wire does not jump when a card folds. */
 .dz-collapsed-pin {
   position: absolute;
   top: 50%;
@@ -5230,15 +4760,11 @@ button.warning:hover:not(:disabled) {
   right: 0;
   transform: translate(calc(50% + var(--space-3) + 1.5px), -50%);
 }
-/* Anything actually connected on that side fills the dot in, so a folded card
-   still reads as part of the chain rather than as an orphan. */
 .dz-collapsed-pin.wired {
   background: var(--faint);
   border-color: var(--faint);
 }
 
-/* Maximize: revealed on hover over the folded card, so a folded flow stays
-   clean until you reach for it. */
 .dz-node-max {
   flex: none;
   display: grid;
@@ -5265,9 +4791,6 @@ button.warning:hover:not(:disabled) {
   color: var(--accent);
   background: var(--surface-2);
 }
-/* No hover to reveal it with: on a touch screen the button is simply always
-   there. `hover: none` is the capability, not the width — a touch laptop gets
-   the hover reveal, a phone and a tablet get the permanent button. */
 @media (hover: none) {
   .dz-node-max {
     opacity: 1;
@@ -5286,16 +4809,10 @@ button.warning:hover:not(:disabled) {
   opacity: 0.55;
 }
 
-/* What the text on this node is written in. Full opacity like the other two
-   chips that answer a question about the node rather than decorate it. */
 .dz-node-lang {
   opacity: 1;
   color: var(--muted);
 }
-/* The code editor on a card sits in a tighter box than the inspector's. The
-   layers keep their own metrics (they are scoped under .dz-code-editor, which
-   is what stops the .dz-node-params rules above reaching into them) — this only
-   sizes the frame. */
 .dz-node-params .dz-code-editor {
   min-height: 0;
   resize: vertical;
@@ -5308,11 +4825,6 @@ button.warning:hover:not(:disabled) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Multi-port rows: input names left-aligned, output names right-aligned.
-   Each row is a positioning context (position: relative) so its handle
-   dot — rendered inside the row — centers on the label vertically and is
-   then pushed onto the card edge via transform (see dotStyle in
-   NodeCard.tsx). The dot therefore always tracks its description. */
 .dz-ports {
   display: flex;
   gap: var(--space-3);
@@ -5326,9 +4838,6 @@ button.warning:hover:not(:disabled) {
   gap: var(--space-1);
   min-width: 0;
 }
-/* margin-left:auto keeps the output column flush right even when a node
-   has outputs but a single (label-less) input, so no left column exists
-   to push it over. */
 .dz-port-col.right {
   align-items: flex-end;
   margin-left: auto;
@@ -5344,31 +4853,18 @@ button.warning:hover:not(:disabled) {
   line-height: 16px;
   white-space: nowrap;
 }
-/* Universal value-passthrough pin (port id "pass"): a triangle (Unreal
-   exec-pin look) instead of a round data dot, so it reads as "threads a
-   value through the node" rather than a typed data port. Neutral ink colour
-   sets it apart from the type-coloured data dots; turns accent on hover. */
 /* Unreal-style exec pin: a rounded white arrow drawn by PassPinIcon's SVG.
    The handle itself is just a transparent, correctly-sized hit area; the
    arrow's colour comes from `color` (inherited as currentColor by the SVG),
    so hover + connected are pure colour/fill swaps. z-index keeps it above
    the card border. */
-/* Live connection feedback: while dragging a wire, React Flow tags the handle
-   under the pointer `connectingto`, adding `valid` only when isValidConnection
-   (our portsConnectable) accepts it. So a `connectingto` handle WITHOUT `valid`
-   is an incompatible target — ring it red so the user sees the wire won't take
-   before releasing (the drop then explains why). A box-shadow ring is used so
-   it doesn't fight the dot's inline background/border colour. */
 .react-flow__handle.connectingto:not(.valid) {
   border-color: var(--danger) !important;
-  /* Soft pulsing red halo rather than a hard ring — reads as "no" without
-     being jarring. The ring also eases in/out via the base transition below. */
   animation: dz-handle-invalid 0.9s ease-in-out infinite;
 }
 .react-flow__handle.connectingto.valid {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 50%, transparent);
 }
-/* Ease the ring on/off as the pointer moves between handles. */
 .react-flow__handle.connectingto {
   transition:
     box-shadow 130ms ease-out,
@@ -5390,10 +4886,6 @@ button.warning:hover:not(:disabled) {
   background: transparent;
   border: none;
   border-radius: 0;
-  /* Theme-aware "white": near-white (#e9ecf3) in dark mode — the Unreal
-     exec-pin look — but dark ink in light mode so it doesn't vanish on the
-     pale card surface. Neutral, so it stays distinct from the type-coloured
-     data dots. */
   color: var(--ink);
   z-index: 1;
   display: flex;
@@ -5425,8 +4917,6 @@ button.warning:hover:not(:disabled) {
   fill: none;
 }
 
-/* Minimap — themed to match the canvas Controls (surface + border) rather
-   than React Flow's default white panel, which glared on the dark canvas. */
 .dz-minimap.react-flow__minimap {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -5436,8 +4926,6 @@ button.warning:hover:not(:disabled) {
 .dz-minimap .react-flow__minimap-node {
   stroke: none;
 }
-/* Idle: hollow white outline with rounded corners (linejoin) — the soft,
-   un-sharp arrow. */
 .react-flow__handle.dz-pass-pin svg path {
   fill: none;
   stroke: currentColor;
@@ -5445,7 +4933,6 @@ button.warning:hover:not(:disabled) {
   stroke-linejoin: round;
   stroke-linecap: round;
 }
-/* Connected: fill the arrow solid white. */
 .react-flow__handle.dz-pass-pin.connected svg path {
   fill: currentColor;
 }
@@ -5453,16 +4940,9 @@ button.warning:hover:not(:disabled) {
   color: var(--accent);
   background: transparent;
 }
-/* The pass row carries no label text (the exec arrow speaks for itself),
-   but the pin is positioned relative to this row — so hold its height to a
-   normal row line so the arrow centres correctly instead of collapsing. */
 .dz-port-label.dz-pass-row {
   min-height: 16px;
 }
-/* Input pin row: the pin name and its inline value editor share one line,
-   the editor sitting right after the name (Unreal-style). The name stays
-   nowrap so the dot/label keep their place. Rows with no inline editor
-   collapse to just the label. */
 .dz-port-in-row {
   display: flex;
   align-items: center;
@@ -5473,10 +4953,6 @@ button.warning:hover:not(:disabled) {
   flex: 0 1 auto;
   min-width: 0;
 }
-/* field-sizing lets each control shrink/grow to its own value, so the box
-   stays as small as the text it holds (Unreal-style). min-width keeps an
-   empty box clickable; max-width stops a long value from blowing out the
-   node — past it the field scrolls internally. */
 .dz-port-inline input,
 .dz-port-inline select,
 .dz-port-inline textarea {
@@ -5504,9 +4980,6 @@ button.warning:hover:not(:disabled) {
   border-color: var(--accent);
   box-shadow: var(--glow-accent-hover);
 }
-/* Lint warning: amber border + a triangle badge in the top-right.
-   Selected/status borders still win (more specific or later), so a
-   flagged node the user is editing reads as selected, not just warned. */
 .dz-node.lint-warn {
   border-color: var(--status-warning);
 }
@@ -5542,9 +5015,6 @@ button.warning:hover:not(:disabled) {
   border: 1px solid var(--surface);
   z-index: 2;
 }
-/* Breakpoints (#12): a red dot in the node's top-left corner; the node the
-   run is currently paused after gets an amber ring + soft glow so it stands
-   out from the green "succeeded" status. */
 .dz-node-bp {
   position: absolute;
   top: -6px;
@@ -5561,9 +5031,6 @@ button.warning:hover:not(:disabled) {
   box-shadow: 0 0 0 3px
     color-mix(in srgb, var(--status-on-hold) 35%, transparent);
 }
-/* Step switched off: dimmed + desaturated so it reads "not part of the run"
-   at a glance; the chip names the state. Hover restores most of the
-   opacity so the card stays inspectable. */
 .dz-node.dz-node-off {
   opacity: 0.45;
   filter: grayscale(0.7);
@@ -5598,11 +5065,6 @@ button.warning:hover:not(:disabled) {
   border-radius: 999px;
   z-index: 3;
 }
-/* Token chip on the canvas card's inline editor — a whole-value ${…}
-   reference rendered as readable words ("Gmail · Matching emails → first →
-   id"). Click switches to the raw editable token. */
-/* Wrapper for a value rendered as chips-and-text in place of an input: it
-   holds a row of chips, interleaved text and the clear button on one line. */
 .dz-token-chip-line {
   display: inline-flex;
   align-items: center;
@@ -5623,9 +5085,6 @@ button.warning:hover:not(:disabled) {
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
   border-radius: 999px;
 }
-/* A chip standing for a secret reads as one: the value is a credential, and
-   telling that from an ordinary upstream reference at a glance matters more on
-   a card (which you scan) than in the Inspector (which you read). */
 .dz-token-chip-secret {
   background: color-mix(in srgb, var(--warning) 12%, var(--surface));
   border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
@@ -5651,7 +5110,6 @@ button.warning:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 20%, var(--surface));
 }
 
-/* Inspector header on/off switch. */
 /* The lock, beside the step's on/off switch. Ghost until it is on, then it
    holds the accent — a lock you have to look twice at to read the state of is
    worse than none, since the whole point is explaining an inert form. */
@@ -5662,9 +5120,6 @@ button.warning:hover:not(:disabled) {
   color: var(--accent);
 }
 
-/* Everything in the inspector that edits the step, in one wrapper so `inert`
-   can switch it all off at once for a locked step. Run step, the Connect CTA,
-   the logs and Delete sit outside it on purpose. */
 .inspector-edits {
   display: contents;
 }
@@ -5678,8 +5133,6 @@ button.warning:hover:not(:disabled) {
   cursor: pointer;
   user-select: none;
 }
-/* The header On/Off is the compact Switch variant: smaller label,
-   muted until you hover. */
 .inspector-onoff .dz-switch {
   align-items: center;
 }
@@ -5700,20 +5153,12 @@ button.warning:hover:not(:disabled) {
 .dz-node.dz-loop-owned.selected {
   border-style: solid;
 }
-/* Toolbar breakpoint toggle reads as "armed" when active. */
 .editor-toolbar .editor-bp.on {
   color: var(--danger);
 }
-/* Data view toggle: accent while every card is folded open. */
 .editor-toolbar .editor-dataview.on {
   color: var(--accent);
 }
-/* Floating "Inspect" button (small screens): opens the inspector overlay.
-   Upper-right of the canvas, primary purple so it's clearly the way in. */
-/* Disabled = nothing selected. It keeps its place (see the JSX: a control that
-   only appears once you've already found the thing it operates on teaches
-   nobody it exists) but drops the glow, so it reads as waiting for a selection
-   instead of inviting a tap. */
 .inspect-fab.icon:disabled {
   box-shadow: none;
 }
@@ -5730,8 +5175,6 @@ button.warning:hover:not(:disabled) {
   box-shadow: var(--glow-accent);
 }
 
-/* Floating debug menu (#12): fixed in the canvas's upper-left while
-   debugging. Icon-only buttons; the Step icon highlights in step mode. */
 .debug-menu {
   position: absolute;
   top: 64px;
@@ -5749,9 +5192,6 @@ button.warning:hover:not(:disabled) {
   width: 32px;
   height: 32px;
 }
-/* Usable (enabled) actions read as primary purple so they clearly stand
-   out; disabled ones fall back to the muted default + the global
-   disabled opacity, so "what can I click" is obvious at a glance. */
 .debug-menu button.icon:not(:disabled) {
   background: var(--btn);
   color: #fff;
@@ -5762,12 +5202,6 @@ button.warning:hover:not(:disabled) {
   background: var(--btn-hover);
   box-shadow: var(--glow-accent-hover);
 }
-/* Step mode latched. The block comment above promised "the Step icon
-   highlights in step mode" and FlowEditor duly sets className="on", but no
-   rule ever implemented it — so the one control that tells you whether you
-   are mid-step looked identical either way. The enabled state is already
-   purple, so "on" reads as the brighter fill plus a ring rather than a
-   colour change, and stays visible without hovering. */
 .debug-menu button.icon.on:not(:disabled) {
   background: var(--btn-hover);
   box-shadow:
@@ -5775,25 +5209,14 @@ button.warning:hover:not(:disabled) {
     0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
-/* Config verification (#13): a red border + red badge for a drop that's
-   missing required values. More severe than lint, so it sits left of the
-   lint badge and uses the danger color. */
 .dz-node.config-err {
   border-color: var(--danger);
 }
 
-/* Needs-setup: a drop whose connection (OAuth account / API key / service
-   connection) isn't configured yet. Distinct from config-err (missing params,
-   red) and lint-warn (amber icon) — an amber dashed border plus a clickable
-   chip that deep-links to the app's connection card. */
 .dz-node.needs-setup {
   border-style: dashed;
   border-color: color-mix(in srgb, var(--btn) 70%, transparent);
 }
-/* Needs-setup footer: a CTA bar built into the bottom of the card rather than
-   a floating pill. Negative side/bottom margins cancel the card's padding so
-   it spans flush edge-to-edge; the bottom corners are rounded to nest inside
-   the card's border radius. The whole bar is the link target. */
 .dz-node-setup {
   display: flex;
   align-items: center;
@@ -5803,7 +5226,6 @@ button.warning:hover:not(:disabled) {
   border-top: 1px solid rgba(0, 0, 0, 0.2);
   border-bottom-left-radius: calc(var(--r-3) - 2px);
   border-bottom-right-radius: calc(var(--r-3) - 2px);
-  /* Purple accent, matching the Inspector's primary "Connect" button. */
   background: var(--btn);
   color: #fff;
   font-size: var(--text-sm);
@@ -5816,21 +5238,12 @@ button.warning:hover:not(:disabled) {
   background: var(--btn-hover);
   text-decoration: none;
 }
-/* Provider-unreachable footer: the needs-setup bar in a warning tone. It IS a
-   link — the admin page is where an MCP server is repaired — but amber rather
-   than purple, because this is something that broke rather than something the
-   author has yet to set up. */
 .dz-node-offline {
   background: var(--warning);
 }
 .dz-node-offline:hover {
-  /* No lighten/darken: --warning is a status colour and the hover only needs
-     to register as a hover, which the underline from :hover already does. */
   background: var(--warning);
 }
-/* Config-error footer: same flush CTA-bar shape as needs-setup, but danger
-   red and informational (not a link) — it names the missing config in words,
-   complementing the red pins. No hover/pointer since it doesn't navigate. */
 .dz-node-issues {
   background: var(--danger);
   cursor: default;
@@ -5838,9 +5251,6 @@ button.warning:hover:not(:disabled) {
 .dz-node-issues:hover {
   background: var(--danger);
 }
-/* When both a config-error and a needs-setup bar show on one card, stack them
-   flush: the upper (issues) bar drops its rounded bottom + bottom margin, and
-   the setup bar below closes the gap with a hairline divider. */
 .dz-node-issues:not(:last-child) {
   margin-bottom: 0;
   border-bottom-left-radius: 0;
@@ -5876,11 +5286,6 @@ button.warning:hover:not(:disabled) {
   object-fit: contain;
   flex-shrink: 0;
 }
-/* ---- the editor's issue buttons + panels (IssuesPopover.tsx) -----------
-   A count in the toolbar, the words in a panel under it. This replaced a
-   column of banners over the canvas (.editor-banner-stack), which hid the
-   flow at the moment its author was working on it. Tone comes from
-   data-kind, so the two buttons share every rule but their colour. */
 .editor-issues-btn {
   display: inline-flex;
   align-items: center;
@@ -5912,9 +5317,6 @@ button.warning:hover:not(:disabled) {
 .editor-issues-btn[data-kind="warning"][aria-expanded="true"] {
   background: color-mix(in srgb, var(--warning) 24%, transparent);
 }
-/* The count is the standing signal, so it reads as a number rather than as
-   part of a sentence — tabular figures keep the button from twitching as it
-   goes 9 → 10. */
 .editor-issues-count {
   font-variant-numeric: tabular-nums;
 }
@@ -5952,9 +5354,6 @@ button.warning:hover:not(:disabled) {
   overflow-y: auto;
   padding: var(--space-1) 0;
 }
-/* One row per message. The actions sit under the prose rather than beside it:
-   a sentence long enough to need this panel does not also leave a column
-   free, and a wrapped Connect button reads as part of the next row. */
 .editor-issues-row {
   display: flex;
   flex-direction: column;
@@ -5975,14 +5374,11 @@ button.warning:hover:not(:disabled) {
   align-items: center;
   gap: var(--space-2);
 }
-/* "Report a problem" / the support link, inline at the end of the sentence. */
 .editor-issues-link {
   color: var(--danger);
   text-decoration: underline;
   white-space: nowrap;
 }
-/* The "Connect to run this flow:" line with one chip per required connection —
-   each chip carries the provider's brand icon + name. */
 .editor-issues-needs {
   display: flex;
   flex-wrap: wrap;
@@ -5993,9 +5389,6 @@ button.warning:hover:not(:disabled) {
   color: var(--muted);
   font-size: var(--text-sm);
 }
-/* Org switcher dialog (OrgSwitcherModal): a centered list of the orgs you can
-   act in + an inline create form. Shares the .modal modal shell and
-   mirrors the config checklist's row styling. */
 .org-switcher-modal {
   max-width: 460px;
 }
@@ -6010,7 +5403,6 @@ button.warning:hover:not(:disabled) {
   flex-direction: column;
   gap: var(--space-1h);
 }
-/* Row = the selectable org button + an optional trash action beside it. */
 .org-switcher-row {
   display: flex;
   align-items: stretch;
@@ -6124,7 +5516,6 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-sm);
   color: var(--danger);
 }
-/* Export-first step inside the delete confirm dialog. */
 .org-switcher-export {
   display: flex;
   align-items: center;
@@ -6155,7 +5546,6 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-sm);
   color: var(--success);
 }
-/* Password step-up field inside the delete confirm dialog. */
 .org-switcher-pw {
   display: flex;
   flex-direction: column;
@@ -6174,9 +5564,6 @@ button.warning:hover:not(:disabled) {
   padding: 4px 10px;
 }
 
-/* "N to configure" dialog (ConfigChecklistModal): a click-to-jump checklist of
-   every node still missing required values, so the count is actionable rather
-   than a dead heads-up. Builds on the shared .modal modal shell. */
 .config-modal {
   max-width: 480px;
 }
@@ -6240,8 +5627,6 @@ button.warning:hover:not(:disabled) {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-/* The step's icon tile, mirroring the node on the canvas (.dz-node .icon).
-   The .branded / .brand-logo modifiers reuse the shared rules below. */
 .config-checklist-item .icon {
   width: 30px;
   height: 30px;
@@ -6344,17 +5729,11 @@ button.warning:hover:not(:disabled) {
   color: var(--accent-ink);
   flex-shrink: 0;
 }
-/* Branded icons (e.g. Git's official orange mark) carry their own
-   colour and need no gradient backdrop — render them flush. */
 .dz-node .icon.branded,
 .config-checklist-item .icon.branded {
   background: transparent !important;
   color: inherit;
 }
-/* Brand logos shipped as raster/vector assets (e.g. Excel green X)
-   fill the icon box edge-to-edge, no backdrop. The image is
-   constrained to 100% × 100% so a 32×32 source looks right inside
-   the 28px node icon box and the 32px module-row box. */
 .dz-node .icon.brand-logo,
 .config-checklist-item .icon.brand-logo {
   background: transparent !important;
@@ -6388,18 +5767,12 @@ img[src$="/brands/smhi.svg"] {
 :root[data-theme="dark"] img[src$="/brands/smhi.svg"] {
   filter: invert(1);
 }
-/* Integration-header logos in the catalog tree sit inside the 20px
-   header icon slot. object-fit keeps them readable when the source
-   isn't square. */
 
 .dz-node .label {
   font-weight: 500;
   color: var(--ink);
   line-height: 1.2;
 }
-/* Watch port values (#10): an output port that emitted a value on the last
-   run gets a dotted underline hint; hovering reveals a peek popover with
-   the value. */
 .dz-port-out.has-value {
   cursor: help;
   text-decoration: underline dotted
@@ -6411,7 +5784,6 @@ img[src$="/brands/smhi.svg"] {
   position: absolute;
   right: 0;
   bottom: calc(100% + 6px);
-  /* size to content (not the slim port row that anchors it), capped */
   width: max-content;
   max-width: 280px;
   padding: 5px var(--space-2);
@@ -6439,8 +5811,6 @@ img[src$="/brands/smhi.svg"] {
 .dz-port-out.has-value:hover .dz-port-peek {
   display: block;
 }
-/* Inline param editing (#7): a compact form revealed on the selected card.
-   Sits between the title and the port rows. Quiet labels, small inputs. */
 .dz-node-params {
   display: flex;
   flex-direction: column;
@@ -6459,9 +5829,6 @@ img[src$="/brands/smhi.svg"] {
   letter-spacing: 0.04em;
   color: var(--muted);
 }
-/* Read-only display for resource-picker params (the resolved form/sheet
-   name). Looks like a value, not an editable field — editing is in the
-   inspector picker. */
 .dz-param-readonly {
   font-size: var(--text-sm);
   padding: var(--space-1) var(--space-1h);
@@ -6489,9 +5856,6 @@ img[src$="/brands/smhi.svg"] {
   align-self: flex-start;
 }
 
-/* Live xterm.js console inside the inspector. Fixed height so the
-   terminal has a stable viewport to render into; xterm handles
-   scrollback internally. */
 .live-console {
   height: 280px;
   background: #0a0918;
@@ -6505,9 +5869,6 @@ img[src$="/brands/smhi.svg"] {
   background: transparent !important;
 }
 
-/* System log viewer (platform admin). The terminal fills the remaining
-   viewport height under the toolbar so the live tail gets as much room as
-   possible; the page itself doesn't scroll — xterm owns the scrollback. */
 .system-log {
   display: flex;
   flex-direction: column;
@@ -6589,16 +5950,12 @@ img[src$="/brands/smhi.svg"] {
   background: transparent !important;
 }
 
-/* Admin stub */
 .admin-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: var(--space-4);
 }
 
-/* Small uppercase section heading that groups the admin cards
-   (Organization vs Platform). Carries the scope so the cards don't need
-   to spell it out. */
 .admin-group-label {
   margin: var(--space-5) 0 var(--space-3);
   font-size: var(--text-xs);
@@ -6610,9 +5967,6 @@ img[src$="/brands/smhi.svg"] {
 .admin-group-label:first-of-type {
   margin-top: var(--space-4);
 }
-/* Advanced disclosure: a full-width header row that toggles the
-   rarely-used admin cards. Styled like the group label it replaces, but
-   clickable, with a chevron and an inline hint. */
 
 .admin-card {
   background: var(--surface);
@@ -6633,8 +5987,6 @@ img[src$="/brands/smhi.svg"] {
   border-color: var(--border-strong);
   transform: translateY(-1px);
   box-shadow: var(--shadow-lg);
-  /* These cards are links but read as buttons — keep the text-link
-     hover underline (from the global a:hover) off them. */
   text-decoration: none;
 }
 .admin-card-icon {
@@ -6664,13 +6016,6 @@ img[src$="/brands/smhi.svg"] {
   line-height: 1.4;
 }
 
-/* System section of the admin page — running daemon release vs. the
-   latest upstream tag, plus the CLI upgrade hint. A single surface panel
-   (not a grid of cards) since it shows status rather than navigation. */
-/* ===== Support-agent flow view =========================================
-   A full-bleed read-only canvas (reuses the editor's node/edge renderers)
-   with a slim header and a right-hand issues rail. Rendered in the padding-
-   free main (see AppShell inEditor). */
 .support-view-shell {
   display: flex;
   flex-direction: column;
@@ -6804,9 +6149,6 @@ img[src$="/brands/smhi.svg"] {
   flex-direction: column;
   gap: var(--space-3);
   max-width: 560px;
-  /* Sits directly after the System .admin-grid, which has no bottom
-     margin — match the grid's own gap so the Daemon card doesn't collide
-     with the card above it. */
   margin-top: var(--space-4);
 }
 .admin-system-head {
@@ -6860,9 +6202,6 @@ img[src$="/brands/smhi.svg"] {
   white-space: pre;
 }
 
-/* Service rows — third-party providers (OAuth connector apps, SSO).
-   Shared by the OAuth-providers and SSO admin pages so they read the
-   same. The ServiceIcon monogram carries the identity. */
 .svc-list {
   display: flex;
   flex-direction: column;
@@ -6947,8 +6286,6 @@ img[src$="/brands/smhi.svg"] {
   background: color-mix(in srgb, var(--warning) 18%, transparent);
   color: var(--warning);
 }
-/* Quiet inline destructive action: red glyph, no border or fill. Overrides
-   the global .danger border that the consolidated button system applies. */
 .ghost.danger {
   color: var(--danger);
   background: transparent;
@@ -6960,9 +6297,6 @@ img[src$="/brands/smhi.svg"] {
   border-color: transparent;
 }
 
-/* Provider strip — the row of SSO/identity-provider tiles. The active
-   provider is highlighted; the rest are placeholders awaiting their
-   integration (monogram tiles swap for real logos as they land). */
 .svc-providers {
   display: flex;
   flex-wrap: wrap;
@@ -6992,12 +6326,9 @@ img[src$="/brands/smhi.svg"] {
   color: var(--ink);
 }
 
-/* Schema-driven form (Inspector params) */
 .sf-field {
   margin-bottom: var(--space-3);
 }
-/* Subdomain editor: an input with the apex domain pinned to its right as a
-   non-editable suffix, so "your-org" reads as "your-org.dazyflow.app". */
 .subdomain-row {
   display: flex;
   align-items: stretch;
@@ -7028,9 +6359,6 @@ img[src$="/brands/smhi.svg"] {
   min-height: 18px;
   margin-top: var(--space-1);
 }
-/* Danger zone: the delete-flow section in Settings → General. A red-tinted
-   rule and label set it apart from the routine fields above so a destructive
-   action isn't mistaken for one more editable setting. */
 .sf-field.danger-zone {
   margin-top: var(--space-4);
   padding-top: var(--space-3);
@@ -7090,8 +6418,6 @@ img[src$="/brands/smhi.svg"] {
   border-color: var(--danger);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
 }
-/* Label + its (i) help icon sit together on the left of the label-row;
-   the row's space-between keeps any trailing action pinned right. */
 .sf-field .sf-label-group {
   display: inline-flex;
   align-items: center;
@@ -7110,10 +6436,6 @@ img[src$="/brands/smhi.svg"] {
   vertical-align: middle;
   accent-color: var(--accent);
 }
-/* Hosted-form settings group: everything that expands under the
-   "Host a form for me" switch. The accent-tinted left rule ties the
-   group to its switch; the gap gives the children one consistent
-   rhythm instead of ad-hoc margins. */
 .hosted-form-body {
   display: flex;
   flex-direction: column;
@@ -7130,11 +6452,6 @@ img[src$="/brands/smhi.svg"] {
   margin-top: 0;
 }
 
-/* Hosted-form share card: the form link on one ellipsized line with
-   real Copy/Open buttons (TriggersModal FormLinkCard). */
-/* Switch: the app's on/off toggle (components/Switch.tsx). The real
-   checkbox stays in the tree for keyboard/AT; the track + thumb is the
-   visible control. */
 .dz-switch {
   display: flex;
   align-items: flex-start;
@@ -7205,7 +6522,6 @@ img[src$="/brands/smhi.svg"] {
   font-size: var(--text-sm);
   color: var(--muted);
 }
-/* Compact variant for dense surfaces (inline pin rows, grids). */
 .dz-switch.compact .dz-switch-track {
   width: 26px;
   height: 16px;
@@ -7230,8 +6546,6 @@ img[src$="/brands/smhi.svg"] {
   font-size: var(--text-sm);
   color: var(--muted);
 }
-/* Tracking-param hint on URL fields: informational, not an error — a muted
-   line + inline "Remove them" action, distinct from the red missing-value cue. */
 .sf-tracking-hint {
   display: flex;
   align-items: baseline;
@@ -7250,9 +6564,6 @@ img[src$="/brands/smhi.svg"] {
   color: inherit;
   text-decoration: underline;
 }
-/* A hint that is a warning rather than a note: the field is filled in, and it
-   will still fail when the flow runs. Amber rather than red — nothing is
-   invalid, it is the fleet that is asleep. */
 .sf-docs-hint.sf-warn {
   color: var(--status-warning);
 }
@@ -7269,12 +6580,6 @@ img[src$="/brands/smhi.svg"] {
   white-space: nowrap;
 }
 
-/* Credential chip rendered in place of a plain string input when the
-   field's entire value is one ${tenant:NAME} expression. Visually
-   non-input (no border, no caret affordance) so a non-tech user
-   doesn't try to click in and type. The Lock glyph + label name
-   the credential; Set-up and Replace sit as link-buttons on the
-   right. */
 
 .sf-object {
   border: 1px solid var(--border);
@@ -7328,9 +6633,6 @@ img[src$="/brands/smhi.svg"] {
   padding: var(--space-1) var(--space-3);
 }
 
-/* string-multiselect editor (stripe_list_events' event types): a checklist
-   of curated options, a chip row for any hand-added customs, and a free-text
-   "add another" box. */
 .sf-multiselect {
   display: flex;
   flex-direction: column;
@@ -7388,9 +6690,6 @@ img[src$="/brands/smhi.svg"] {
   min-width: 0;
 }
 
-/* sheet-mapping editor: paired "column ← from field" rows. Both sides are
-   dropdowns (sheet columns / upstream fields) that flex; the arrow and the
-   move/remove buttons stay fixed-width. */
 .mapping-field {
   display: flex;
   flex-direction: column;
@@ -7411,9 +6710,6 @@ img[src$="/brands/smhi.svg"] {
   flex-shrink: 0;
   user-select: none;
 }
-/* Webhook inspector: the at-a-glance "can anything reach this?" line
-   above the config. Grey while unreachable, green once a form link or
-   secret key opens a door. */
 .webhook-status {
   display: flex;
   align-items: flex-start;
@@ -7435,15 +6731,11 @@ img[src$="/brands/smhi.svg"] {
   color: var(--success);
   border-color: color-mix(in srgb, var(--success) 35%, var(--border));
 }
-/* Published and reachable, but the draft has moved on: still a green tick
-   (a stranger CAN use the link right now), warned border because what they
-   get is not what's on screen. */
 .webhook-status.ok.stale {
   color: var(--warning);
   border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
 }
 
-/* Duration field: value + unit side by side ("5 [minutes ▾]"). */
 .sf-duration {
   display: flex;
   gap: var(--space-2);
@@ -7480,8 +6772,6 @@ img[src$="/brands/smhi.svg"] {
   cursor: default;
 }
 
-/* Account resource picker: a dropdown of the connected account's forms /
-   spreadsheets. The picker is the only entry path (no manual ID box). */
 .resource-picker {
   display: flex;
   flex-wrap: wrap;
@@ -7501,9 +6791,6 @@ img[src$="/brands/smhi.svg"] {
   font-size: var(--text-xs);
   color: var(--muted);
 }
-/* The provider's raw error under the hint when a connected account's list
-   call fails (e.g. a scope error). Wraps and clamps so a long Google message
-   stays readable without blowing out the inspector width. */
 .resource-picker-detail {
   flex-basis: 100%;
   font-size: var(--text-xs);
@@ -7515,14 +6802,11 @@ img[src$="/brands/smhi.svg"] {
   overflow: hidden;
 }
 
-/* Insert-reference picker: the "{ }" button sits flush after a string
-   input; the popover anchors to it and lists grouped ${…} tokens. */
 .field-with-ref {
   display: flex;
   align-items: stretch;
   gap: var(--space-1);
 }
-/* The "enter a value / pick from list" toggle under a resource picker. */
 .sf-picker-mode {
   display: inline-block;
   margin-top: var(--space-1);
@@ -7534,9 +6818,6 @@ img[src$="/brands/smhi.svg"] {
   min-width: 0;
 }
 
-/* Inline token editor: a contenteditable styled like a text input, where
-   ${…} references render as inline chips among the literal text — so a value
-   like `Bearer ${secret.X}` shows the word and the chip together. */
 .token-input {
   box-sizing: border-box;
   min-height: 32px;
@@ -7556,7 +6837,6 @@ img[src$="/brands/smhi.svg"] {
   outline: none;
   border-color: var(--accent);
 }
-/* Placeholder: only when truly empty (no text, no chips). */
 .token-input:empty::before {
   content: attr(data-placeholder);
   color: var(--muted);
@@ -7578,7 +6858,6 @@ img[src$="/brands/smhi.svg"] {
   user-select: none;
   vertical-align: baseline;
 }
-/* Secrets get the warn palette + a lock glyph, echoing the credential chip. */
 .token-chip--secret {
   background: color-mix(in srgb, var(--warning) 14%, transparent);
   border-color: color-mix(in srgb, var(--warning) 50%, transparent);
@@ -7630,14 +6909,9 @@ img[src$="/brands/smhi.svg"] {
   font-size: var(--text-sm);
   color: var(--muted);
 }
-/* The reference picker is a shared modal (ConfirmModal family): a centred
-   card on desktop, edge-to-edge on phones so its grouped list gets the
-   whole viewport. ref-dialog-body trims the default body padding since the
-   grouped rows carry their own. */
 .ref-dialog {
   max-width: 480px;
 }
-/* Search box pinned under the dialog head; the list below scrolls. */
 .ref-dialog-search {
   padding: var(--space-2) var(--space-2) 0;
 }
@@ -7738,10 +7012,6 @@ img[src$="/brands/smhi.svg"] {
   box-shadow: var(--shadow);
 }
 
-/* Collapsible Advanced section inside a node's param form: a hairline
-   separator, a clickable summary with a rotating disclosure triangle,
-   and the advanced fields below. Keeps the everyday form short while
-   leaving developer-flavored params one click away. */
 .sf-advanced {
   margin-top: var(--space-3);
   border-top: 1px solid var(--border);
@@ -7773,12 +7043,6 @@ img[src$="/brands/smhi.svg"] {
 .sf-advanced-body {
   margin-top: var(--space-3);
 }
-/* Code/markup multiline fields (x_mono) — e.g. render_template's HTML
-   template. Matches the code-box look used by the render_text / render_template
-   editors' sample fields (.rtp-sample): same monospace stack, --text-xs,
-   line-height, and code background, so a template and its sample read as the
-   same kind of "code" field. Prose multiline fields (an email body) keep the
-   default proportional style. */
 .sf-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: var(--text-xs);
@@ -7875,7 +7139,6 @@ img[src$="/brands/smhi.svg"] {
   }
 }
 
-/* Filter-chip row — shared by the Runs list and the Schedules page. */
 .run-history-filters {
   display: flex;
   flex-wrap: wrap;
@@ -7917,21 +7180,10 @@ img[src$="/brands/smhi.svg"] {
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border);
 }
-/* Collections' header row is DATA — the user's own column names — where every
-   other .run-table's headers are fixed labels we wrote. The uppercase, tracked
-   treatment above is right for "STATUS" and "STARTED"; on a column name it
-   misreports what is stored: `orderTotal` reads ORDERTOTAL, which is neither
-   the name to type into a step nor the name the CSV download writes. Data is
-   shown as it is. */
 .run-table.data-headers th {
   text-transform: none;
   letter-spacing: normal;
 }
-/* A sortable header: the whole label is the control, so the target is the
-   header you are already reading rather than a separate arrow to hit. The cell
-   keeps its own padding, so this button is padding-free and inherits the type
-   — a header that changes size or weight when it becomes clickable reads as a
-   different kind of thing. */
 .run-table th .col-sort {
   display: inline-flex;
   align-items: center;
@@ -7950,8 +7202,6 @@ img[src$="/brands/smhi.svg"] {
 .run-table th .col-sort:hover {
   color: var(--ink);
 }
-/* The sorted column is the one fact the header row carries beyond the names,
-   so it holds full ink against the muted others. */
 .run-table th .col-sort.active {
   color: var(--ink);
   font-weight: 600;
@@ -7968,14 +7218,6 @@ img[src$="/brands/smhi.svg"] {
   background: var(--surface-2);
 }
 
-/* The Runs table's name cell is the row's primary target — it opens the run.
-   A <tr> can't be wrapped in an anchor (HTML forbids it both ways), so the
-   next best hit area is the whole CELL: the padding moves off the td and onto
-   the link, which then fills it. Without that move the link stops short of the
-   cell edges and the surrounding gap looks clickable but isn't. Scoped to this
-   one cell on purpose — .run-table is shared with four non-navigable tables,
-   and the row hover they all share stays a reading aid rather than promising a
-   click those tables don't deliver. */
 .run-table td.run-name-cell {
   padding: 0;
 }
@@ -7986,8 +7228,6 @@ img[src$="/brands/smhi.svg"] {
   font-weight: 600;
   padding: var(--space-3) var(--space-4);
 }
-/* Per-row delete button in the Collections table — a muted trash icon that
-   stays out of the way until you hover the row, then reads as destructive. */
 .board-row-del {
   display: inline-flex;
   align-items: center;
@@ -8019,16 +7259,11 @@ img[src$="/brands/smhi.svg"] {
   opacity: 0.4;
   cursor: default;
 }
-/* Lets the runs table scroll horizontally inside its card on narrow
-   screens instead of overflowing the viewport. */
 .run-table-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 @media (max-width: 640px) {
-  /* Floor the width so columns stay readable and the wrapper scrolls,
-     rather than crushing the flow name / timestamp into each other. Tighter
-     cell padding reclaims space at this size. */
   .run-table {
     min-width: 520px;
   }
@@ -8038,7 +7273,6 @@ img[src$="/brands/smhi.svg"] {
   }
 }
 
-/* Inspector section header */
 .inspector-section {
   margin-top: var(--space-5);
   padding-top: var(--space-3);
@@ -8052,8 +7286,6 @@ img[src$="/brands/smhi.svg"] {
   color: var(--faint);
   font-weight: 500;
 }
-/* Destructive "Delete node" action at the bottom of the inspector —
-   the primary delete affordance on touch devices (no Delete key). */
 .inspector-delete {
   display: inline-flex;
   align-items: center;
@@ -8075,15 +7307,11 @@ img[src$="/brands/smhi.svg"] {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
   border-color: var(--danger);
 }
-/* Node actions grouped at the inspector's foot — Reset (neutral) sits above
-   the destructive Delete, sharing the same full-width button shape. */
 .inspector-actions {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
-/* Reset persisted node state — same shape as .inspector-delete but neutral,
-   since it's recoverable (re-baseline), not destructive. */
 .inspector-reset {
   display: inline-flex;
   align-items: center;
@@ -8106,8 +7334,6 @@ img[src$="/brands/smhi.svg"] {
   border-color: var(--faint);
 }
 
-/* Inline approval panel — same wedge as inspector-section but tinted
- * with the awaiting accent so it pops in a crowded inspector. */
 .inspector-section.approve-inline {
   border-top-color: var(--status-awaiting);
   background: color-mix(in srgb, var(--status-awaiting) 8%, transparent);
@@ -8118,7 +7344,6 @@ img[src$="/brands/smhi.svg"] {
   color: var(--status-awaiting);
 }
 
-/* Role templates (issue-key modal) */
 .role-template-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -8154,9 +7379,6 @@ img[src$="/brands/smhi.svg"] {
   line-height: 1.4;
 }
 
-/* Role permissions preview on InviteModal — chips appearing below the
-   role-template picker so the inviter can see exactly what they're
-   about to grant before they click. */
 .role-perms-preview {
   display: flex;
   flex-wrap: wrap;
@@ -8178,8 +7400,6 @@ img[src$="/brands/smhi.svg"] {
   color: var(--ink);
 }
 
-/* Invalid-state for the InviteModal email input so the user sees the
-   form pushing back before they click Create. */
 .modal input.invalid {
   border-color: var(--warning);
 }
@@ -8187,8 +7407,6 @@ img[src$="/brands/smhi.svg"] {
   outline-color: var(--warning);
 }
 
-/* Expiry picker on IssueKeyModal — 4 equal pills. Reuses .role-template
-   styling concepts but tighter (one-word labels). */
 .expiry-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -8226,7 +7444,6 @@ img[src$="/brands/smhi.svg"] {
   user-select: all;
 }
 
-/* Users admin */
 .user-list {
   display: flex;
   flex-direction: column;
@@ -8283,8 +7500,6 @@ img[src$="/brands/smhi.svg"] {
   justify-content: flex-start;
 }
 
-/* kv-grid: a compact two-column label/value list for the platform-admin
-   detail pages (user + org moderation). Labels are muted; values wrap. */
 .kv-grid {
   display: grid;
   grid-template-columns: max-content 1fr;
@@ -8301,9 +7516,6 @@ img[src$="/brands/smhi.svg"] {
   word-break: break-word;
 }
 
-/* Platform-admin identity avatars (org tiles + user monograms) and the
-   row/header layouts that frame them. Shared by the user/org list and
-   detail pages so the moderation surface reads as one polished set. */
 .pa-avatar {
   display: inline-flex;
   align-items: center;
@@ -8324,8 +7536,6 @@ img[src$="/brands/smhi.svg"] {
   line-height: 1;
   letter-spacing: 0.01em;
 }
-/* Tile for brand-logo / branded drop glyphs: a neutral surface so the
-   vendor mark sits on its own colours, not a gradient. */
 .pa-drop-glyph-plain {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -8333,14 +7543,12 @@ img[src$="/brands/smhi.svg"] {
 .pa-drop-glyph-plain img {
   object-fit: contain;
 }
-/* Left side of a list row: avatar + the name/meta text block. */
 .pa-row-main {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   min-width: 0;
 }
-/* The whole row reads as a clickable card; lift slightly on hover. */
 .pa-card {
   transition:
     border-color 0.12s ease,
@@ -8350,29 +7558,21 @@ a.pa-card:hover {
   border-color: var(--accent);
   background: var(--surface-2);
 }
-/* Detail-page header: a larger avatar beside the title block. */
 .pa-detail-head {
   display: flex;
   align-items: center;
   gap: var(--space-3);
 }
-/* Muted monospace id shown under a resolved name. */
 .pa-subtext {
   color: var(--muted);
   font-size: 0.85em;
 }
 
-/* A globally-disabled drop row reads as inactive: dim the glyph + text so
-   the "Off" pill and the live rows stand apart at a glance. */
 .pa-drop-off .pa-avatar,
 .pa-drop-off .subject {
   opacity: 0.55;
 }
 
-/* Actions section on the user/org detail pages — a framed list where each
-   moderation action is its own row (icon + title + description on the
-   left, the button on the right), instead of a cramped strip of buttons.
-   Modelled on the GitHub-style "danger zone". */
 .pa-actions {
   border: 1px solid var(--border);
   border-radius: var(--r-3);
@@ -8424,12 +7624,10 @@ a.pa-card:hover {
 .pa-action-row button {
   flex: 0 0 auto;
 }
-/* The destructive rows (ban/delete) get a danger-tinted accent bar. */
 .pa-action-row.is-danger .pa-action-info svg {
   color: var(--danger);
 }
 
-/* A section header row with a trailing action (e.g. "Plan & limits  [Edit]"). */
 .pa-section-head {
   display: flex;
   align-items: center;
@@ -8437,8 +7635,6 @@ a.pa-card:hover {
   gap: var(--space-3);
   margin-bottom: var(--space-2);
 }
-/* The tier / entitlement editor form: a clean stacked label grid inside
-   the settings dialog. Each label owns its control on the next line. */
 .pa-tier-form {
   display: grid;
   gap: var(--space-3);
@@ -8454,7 +7650,6 @@ a.pa-card:hover {
 .pa-tier-form label select {
   width: 100%;
 }
-/* Checkbox rows read horizontally, not stacked. */
 .pa-tier-form label.pa-tier-check {
   flex-direction: row;
   align-items: center;
@@ -8480,14 +7675,11 @@ a.pa-card:hover {
   color: var(--danger);
 }
 
-/* API keys admin */
 .perm-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: var(--space-1h);
 }
-/* A permission toggle's label: plain-language name on top, the raw
-   "graph:run"-style grant as a quiet monospace sublabel beneath. */
 .perm-label {
   display: flex;
   flex-direction: column;
@@ -8523,9 +7715,7 @@ a.pa-card:hover {
   color: var(--danger);
 }
 
-/* AdminAPIKeys polish ------------------------------------------------ */
 
-/* Toolbar above the keys table — search input + count summary. */
 .api-key-toolbar {
   display: flex;
   align-items: center;
@@ -8562,8 +7752,6 @@ a.pa-card:hover {
   font-size: var(--text-sm);
 }
 
-/* Inline confirm pattern on a table row — keeps the operator's eye on
-   the row they're about to mutate instead of bouncing to a modal. */
 .inline-confirm {
   display: inline-flex;
   align-items: center;
@@ -8587,7 +7775,6 @@ a.pa-card:hover {
   background: color-mix(in srgb, var(--danger) 6%, transparent);
 }
 
-/* Approvals inbox */
 .approval-list {
   display: flex;
   flex-direction: column;
@@ -8635,8 +7822,6 @@ a.pa-card:hover {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-/* Field rows: label above value, so a long free-text answer wraps under its
-   own label instead of fighting a fixed label column. */
 .approval-context-fields {
   display: flex;
   flex-direction: column;
@@ -8677,7 +7862,6 @@ a.pa-card:hover {
   gap: var(--space-2);
   flex-shrink: 0;
 }
-/* Optional decision note — full width below the prompt/actions row. */
 .approval-comment {
   width: 100%;
   margin-top: var(--space-3);
@@ -8741,7 +7925,6 @@ a.pa-card:hover {
 .approval-history-row:last-child {
   border-bottom: none;
 }
-/* The verdict, carried by colour and glyph rather than a repeated word. */
 .approval-history-mark {
   display: flex;
   flex-shrink: 0;
@@ -8771,8 +7954,6 @@ a.pa-card:hover {
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
-/* The decided value, when the prompt already took the headline. One line:
-   the run page has the whole of it. */
 .approval-history-summary {
   margin-top: var(--space-1);
   font-size: var(--text-xs);
@@ -8781,8 +7962,6 @@ a.pa-card:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The approver's note, quoted — it's the one part of the row written by a
-   person rather than assembled from the record. */
 .approval-history-comment {
   margin-top: var(--space-1);
   padding-left: var(--space-2);
@@ -8798,7 +7977,6 @@ a.pa-card:hover {
   font-size: var(--text-xs);
 }
 
-/* Settings modal */
 /* ── The dialog shell ────────────────────────────────────────────────────
    One backdrop + panel + head/body/foot, used by all 27 dialogs.
 
@@ -8875,7 +8053,6 @@ a.pa-card:hover {
   color: var(--ink);
   border-bottom-color: var(--accent);
 }
-/* Secret scope switch (Secrets page) + flow-secret reference chips. */
 
 .secret-scope-help {
   color: var(--muted);
@@ -8903,9 +8080,6 @@ a.pa-card:hover {
   overflow-y: auto;
   flex: 1;
 }
-/* Admin → Secrets reuses the .settings-tabs underline bar on a full page
-   (not in a modal): align the tabs flush with the page title and give the
-   body its own breathing room instead of the modal's padding. */
 .admin-secrets-tabs {
   padding-left: 0;
   padding-right: 0;
@@ -8914,8 +8088,6 @@ a.pa-card:hover {
 .admin-secrets-body {
   padding-top: var(--space-4);
 }
-/* ConfirmModal (components/ConfirmModal.tsx): a compact themed
-   replacement for window.confirm(). */
 .confirm-dialog {
   max-width: 440px;
 }
@@ -8931,8 +8103,6 @@ a.pa-card:hover {
   line-height: 1.5;
   color: var(--ink-soft);
 }
-/* The filled-red confirm button is defined once in theme.css, alongside the
-   `filled` danger modifier it shares its look with. */
 .modal-foot {
   display: flex;
   justify-content: flex-end;
@@ -8977,9 +8147,6 @@ a.pa-card:hover {
   padding: 1px var(--space-1h);
   border-radius: var(--r-1);
 }
-/* "Advanced" disclosure inside a settings panel — collapses developer-
-   oriented fields (e.g. the failure webhook) so they don't crowd the
-   simple option above. */
 .settings-advanced {
   margin-top: var(--space-3);
 }
@@ -8991,10 +8158,6 @@ a.pa-card:hover {
   margin-bottom: var(--space-2);
 }
 
-/* Cron preset picker — chips for the five cadences, plus per-preset
-   sub-controls (time-of-day, day-of-week, day-of-month). Visual
-   weight stays low so the trigger row doesn't dominate the modal,
-   but the active chip is clear at a glance. */
 .cron-preset-chips {
   display: flex;
   flex-wrap: wrap;
@@ -9088,11 +8251,6 @@ a.pa-card:hover {
   margin: 0;
   padding-left: var(--space-4);
 }
-/* ── Unified code/value family (TriggersModal CodeField/CodeBlock) ──
-   One themed well (--code-bg/--code-fg: terminal-dark in dark mode, a
-   light well in light mode) and one copy button skin, shared by every
-   copyable value and snippet in the inspector. Single-line (.dz-code-row)
-   and multi-line (.dz-code-block) are the only variants. */
 .dz-code {
   background: var(--code-bg);
   color: var(--code-fg);
@@ -9111,7 +8269,6 @@ a.pa-card:hover {
   letter-spacing: 0.04em;
   color: var(--muted);
 }
-/* Single-line: value ellipsizes, button(s) hug the right edge. */
 .dz-code-row {
   display: flex;
   align-items: center;
@@ -9127,8 +8284,6 @@ a.pa-card:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* HTTP-verb badge before the value ("POST https://…"). Display-only —
-   the copy button still yields the bare URL. */
 .dz-code-method {
   flex-shrink: 0;
   padding: var(--space-0) var(--space-1h);
@@ -9140,7 +8295,6 @@ a.pa-card:hover {
   font-weight: 600;
   letter-spacing: 0.04em;
 }
-/* Multi-line: wrapping <pre>, copy button pinned top-right. */
 .dz-code-block {
   position: relative;
   padding: var(--space-2) var(--space-3);
@@ -9154,9 +8308,6 @@ a.pa-card:hover {
   word-break: break-all;
   user-select: all;
 }
-/* The shared copy/action button — same skin in both layouts, so it
-   reads as one control wherever it appears. Sits on --surface so it
-   stands clear of the code well in both themes. */
 .dz-code-btn {
   flex-shrink: 0;
   display: inline-flex;
@@ -9182,7 +8333,6 @@ a.pa-card:hover {
   top: var(--space-1h);
   right: var(--space-1h);
 }
-/* Webhook key-rotation list: a stack of key rows + the add button. */
 .webhook-keys {
   display: flex;
   flex-direction: column;
@@ -9194,8 +8344,6 @@ a.pa-card:hover {
   padding: var(--space-1) var(--space-2);
 }
 
-/* "Connect your form" recipes — collapsed helper under the webhook
-   curl block. */
 .webhook-recipes {
   margin-top: var(--space-3);
   border: 1px solid var(--border);
@@ -9225,9 +8373,6 @@ a.pa-card:hover {
   flex-direction: column;
   gap: var(--space-2);
 }
-/* What still has to be true before the curl above works: no key generated
-   yet, or the key is a draft edit that isn't published. Sits directly under
-   the command so it can't be read as unrelated advice. */
 .webhook-curl-caveat {
   display: flex;
   align-items: flex-start;
@@ -9244,8 +8389,6 @@ a.pa-card:hover {
   flex-shrink: 0;
   margin-top: var(--space-0);
 }
-/* Head row of a populated trigger tab: help text on the left, remove
-   button pushed to the right. */
 .trigger-tab-head {
   display: flex;
   align-items: flex-start;
@@ -9353,8 +8496,6 @@ a.pa-card:hover {
   height: 1px;
   background: var(--border);
 }
-/* Flow version-history: a banner across the canvas top while previewing a
-   past revision, and a right-side panel listing the commit log. */
 .history-preview-banner {
   position: absolute;
   top: 0;
@@ -9371,7 +8512,6 @@ a.pa-card:hover {
   font-size: var(--text-md);
 }
 .history-preview-banner.with-panel {
-  /* Stop short of the open history panel so the Restore action stays visible. */
   right: var(--inspector-w);
 }
 .history-preview-msg {
@@ -9462,9 +8602,6 @@ a.pa-card:hover {
   font-size: var(--text-xs);
   font-weight: 600;
 }
-/* A revision's human name — a warm "name tag" distinct from the publish
-   (green) badge. May hold arbitrary user text, so let it wrap-truncate
-   rather than blow out the row. */
 .history-badge.label {
   display: inline-flex;
   align-items: center;
@@ -9548,9 +8685,6 @@ a.pa-card:hover {
 .sso-card-headings .desc {
   margin: 0;
 }
-/* Status pill: muted when SSO isn't configured, success-tinted once the
-   org's client is saved and live. Mirrors the at-a-glance state the
-   provider list uses, so the card and the list agree. */
 .sso-status-pill {
   flex: 0 0 auto;
   display: inline-flex;
@@ -9590,8 +8724,6 @@ a.pa-card:hover {
   align-items: center;
   gap: var(--space-2);
 }
-/* "Saved" acknowledgement. A quiet success chip, not loud green prose —
-   it fades on its own after a few seconds (see AdminOrgSSO). */
 .sso-saved-chip {
   display: inline-flex;
   align-items: center;
@@ -9719,10 +8851,6 @@ a.pa-card:hover {
   font-style: italic;
 }
 
-/* Editor top toolbar — fixed-height bar pinned above the canvas, full
-   width. Actions are grouped left-to-right (authoring · document state)
-   with the primary Run action pushed to the right edge by a flexible
-   spacer. ReactFlow lives in the remaining flex space below. */
 .editor-toolbar {
   flex: 0 0 52px;
   height: 52px;
@@ -9753,11 +8881,6 @@ a.pa-card:hover {
 .editor-toolbar .toolbar-scroll::-webkit-scrollbar {
   display: none;
 }
-/* Content fades into whichever edge still has controls behind it, so a cut-off
-   button reads as cut off rather than as a button that ends oddly. Driven by
-   measured overflow (data-fade-*), not applied unconditionally: a permanent
-   fade dimmed the last 24px of a bar that fit, which is where the trailing
-   control sits. */
 .editor-toolbar .toolbar-scroll[data-fade-left="false"][data-fade-right="true"] {
   -webkit-mask-image: linear-gradient(
     to right,
@@ -9786,9 +8909,6 @@ a.pa-card:hover {
     transparent
   );
 }
-/* Nudge arrows: narrower than a real toolbar button — they are a scroll
-   affordance, not an action — and quiet enough not to compete with the tools
-   they reveal. */
 .editor-toolbar .toolbar-nudge {
   width: 22px;
   min-width: 22px;
@@ -9809,15 +8929,12 @@ a.pa-card:hover {
 .editor-toolbar > * {
   flex-shrink: 0;
 }
-/* Related actions cluster tightly; clusters are separated by dividers
-   and the flexible spacer rather than by one uniform gap. */
 .editor-toolbar .toolbar-group {
   display: flex;
   align-items: center;
   gap: var(--space-0);
   min-width: 0;
 }
-/* Thin vertical rule between action clusters. */
 .editor-toolbar .toolbar-divider {
   flex: 0 0 auto;
   width: 1px;
@@ -9825,9 +8942,6 @@ a.pa-card:hover {
   margin: 0 var(--space-1h);
   background: var(--border);
 }
-/* One compact, evenly-aligned shape for every toolbar control so icons
-   and labels line up via flex gap — no per-element vertical-align or
-   margin hacks needed in the markup. */
 .editor-toolbar button,
 .editor-toolbar .editor-saved,
 .editor-toolbar .editor-saving {
@@ -9842,10 +8956,6 @@ a.pa-card:hover {
   line-height: 1;
   white-space: nowrap;
 }
-/* Coarse pointers get real touch targets. 34px tall / 36px square is fine for
-   a mouse but under the ~44px a finger needs, and the editor toolbar is the
-   densest control strip in the app. Only the hit area grows — the icons and
-   type stay put, so the bar reads the same on a desktop. */
 @media (pointer: coarse) {
   .editor-toolbar {
     flex: 0 0 60px;
@@ -9861,14 +8971,11 @@ a.pa-card:hover {
     min-width: 44px;
   }
 }
-/* Icons keep their size when horizontal space gets tight. */
 .editor-toolbar button svg,
 .editor-toolbar .editor-saved svg,
 .editor-toolbar .editor-saving svg {
   flex: 0 0 auto;
 }
-/* The primary action carries the most weight — a touch more padding and
-   heavier label so it reads as the focal point of the bar. */
 .editor-toolbar button.primary {
   padding: 0 14px;
   font-weight: 600;
@@ -9884,16 +8991,12 @@ a.pa-card:hover {
 .editor-toolbar button.run-stop {
   min-width: 5.5rem;
 }
-/* Save while there are unsaved changes: a calm accent outline so it's
-   clearly the next thing to do, without shouting for attention. */
 .editor-toolbar .editor-save:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
 .editor-toolbar .editor-save:not(:disabled):hover {
   border-color: var(--accent);
 }
-/* While a save is pending or in flight the icon is a spinning loader so the
-   toolbar shows continuous activity rather than a static floppy. */
 .editor-toolbar .editor-save .spin,
 .editor-toolbar .editor-saving .spin {
   animation: dz-spin 1s linear infinite;
@@ -9918,9 +9021,6 @@ a.pa-card:hover {
 .editor-saved svg {
   color: var(--success);
 }
-/* Trigger-discoverability nudge: a compact, dismissible tip pinned just
-   below the toolbar, centered over the canvas. Calm accent styling (not a
-   warning) — it's teaching, not alerting. */
 /* It floats at top:62, which is where the docked banner strip now is — so
    while any banner is up the hint would sit on top of it. A banner is always
    the more urgent, more transient message, so the teaching tip stands down
@@ -9939,9 +9039,6 @@ a.pa-card:hover {
   left: 50%;
   transform: translateX(-50%);
   z-index: 6;
-  /* Click-through like the conn banner: it floats over the top of the
-     canvas, so let taps reach a node beneath it; only the CTA and the
-     dismiss-X re-enable taps. */
   pointer-events: none;
   display: flex;
   align-items: center;
@@ -9973,8 +9070,6 @@ a.pa-card:hover {
   align-items: center;
   justify-content: center;
 }
-/* Respect users who prefer less motion: drop the entry animation and fall
-   back to a static ring on the handle that refused the wire. */
 @media (prefers-reduced-motion: reduce) {
   .react-flow__handle.connectingto:not(.valid) {
     animation: none;
@@ -9982,9 +9077,6 @@ a.pa-card:hover {
   }
 }
 
-/* Comment frame (#3): a resizable, titled box behind the nodes. The box
-   fills its React Flow node wrapper; background/border tints are set
-   inline from the frame's color. */
 .dz-frame {
   position: relative;
   width: 100%;
@@ -9993,9 +9085,6 @@ a.pa-card:hover {
   border-radius: var(--r-3);
   box-sizing: border-box;
 }
-/* Title and the selected-only tools (colour, delete) on one row. It wraps:
-   a frame is resized by hand down to 140px, and there the swatches drop
-   below the title instead of covering it. */
 .dz-frame-head {
   display: flex;
   align-items: flex-start;
@@ -10036,9 +9125,6 @@ a.pa-card:hover {
     0 0 0 2px var(--surface),
     0 0 0 3.5px var(--ink);
 }
-/* Delete affordance, shown only while the frame is selected — the touch
-   path to remove a comment (frames aren't in the Inspector, and a phone has
-   no Delete key). Sized as a comfortable tap target. */
 .dz-frame-delete {
   display: inline-flex;
   align-items: center;
@@ -10088,8 +9174,6 @@ a.pa-card:hover {
 .reroute-knot:hover {
   stroke: var(--ink);
 }
-/* Travelling data-flow dots (#9): don't intercept pointer events, and a
-   soft glow so they read as moving energy along the wire. */
 .reroute-flow {
   pointer-events: none;
   filter: drop-shadow(
@@ -10097,13 +9181,6 @@ a.pa-card:hover {
   );
 }
 
-/* ───────── Animated graph apply ─────────
- * When an AI/MCP build or edit lands on the canvas, the new graph animates
- * in instead of snapping: drops scale/fade in left→right, drops that moved
- * glide to their new spots, and new wires draw in after the drops they join.
- * Driven by applyGraphAnimated in FlowEditor, which stamps per-element
- * --enter-delay / --draw-delay and toggles .rf-animating on the canvas for
- * the duration of the build, then clears them. */
 
 /* While a build is playing, node position changes interpolate (a moved drop
    glides) instead of jumping. Scoped to nodes so the viewport pan/zoom
@@ -10130,9 +9207,6 @@ a.pa-card:hover {
   }
 }
 
-/* A freshly-added wire draws in source→target. pathLength=1 (set on the
-   element) normalises the dash so the sweep takes the same time on a short
-   or long wire; `both` keeps it hidden through its delay, then drawn. */
 .rf-edge-draw {
   fill: none;
   stroke-dasharray: 1 1;
@@ -10160,8 +9234,6 @@ a.pa-card:hover {
   }
 }
 
-/* Align/distribute: compact square icon buttons, present only during a
-   multi-select. Tighter than the labelled toolbar buttons. */
 .editor-toolbar .toolbar-align button {
   width: 30px;
   padding: 0;
@@ -10183,8 +9255,6 @@ a.pa-card:hover {
   .editor-toolbar button.primary .toolbar-label {
     display: inline;
   }
-  /* Same reasoning as the labels above: on a short bar the tick and "See the
-     full run" carry the message on their own. */
   .editor-toolbar .editor-run-status-text {
     display: none;
   }
@@ -10206,18 +9276,10 @@ a.pa-card:hover {
    it as the focal point, and the label would otherwise crowd out the
    status chip and pause toggle on phone widths. */
 @container editor-canvas (max-width: 640px) {
-  /* The primary label stays at every width now (an unlabelled purple glyph is
-     not a discoverable Run button); only its padding tightens. */
   .editor-toolbar button.primary {
     padding: 0 var(--space-2);
     justify-content: center;
   }
-  /* The status chip goes icon-only. Everything pinned to the right — chip,
-     config warning, the publish switch, "Update live", Diff, Run — has
-     flex-shrink:0, so at phone widths the widest label in that cluster
-     decides whether Run still fits on screen, and "Needs publish" is it. The
-     icon and colour carry the state (the publish switch beside it says the
-     same thing), and the chip keeps its title. */
   .editor-toolbar .flow-status-chip > span {
     display: none;
   }
@@ -10226,9 +9288,6 @@ a.pa-card:hover {
   }
 }
 
-/* Example-prompt chips below the empty-state copy. Soft pill style
-   reads as a suggestion, not a primary CTA — the user can ignore
-   them and type their own prompt. Click pre-fills the textarea. */
 
 @keyframes dz-spin {
   to {
@@ -10252,9 +9311,6 @@ a.pa-card:hover {
   }
 }
 
-/* Quick-drop palette (Ctrl+K) — Unreal Blueprint-style search popup.
-   The backdrop is dim but not blacked-out so the canvas behind stays
-   legible while the user types. */
 .quick-palette-backdrop {
   position: fixed;
   inset: 0;
@@ -10264,9 +9320,6 @@ a.pa-card:hover {
   -webkit-backdrop-filter: blur(3px);
   display: flex;
   justify-content: center;
-  /* Top-anchored, not centred, so the palette feels like a tool the
-     user invoked rather than a dialog interrupting them. 12vh leaves
-     room for the search input + several rows above the fold. */
   padding-top: 12vh;
 }
 .quick-palette {
@@ -10324,7 +9377,6 @@ a.pa-card:hover {
   font-size: var(--text-md);
   font-style: italic;
 }
-/* Group subheader separating the "Suggested" rows from the full catalog. */
 .quick-palette-group {
   padding: var(--space-2) var(--space-2) var(--space-1);
   font-size: var(--text-xs);
@@ -10350,7 +9402,6 @@ a.pa-card:hover {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
-/* Platform-disabled drop: visible for awareness, but greyed and un-pickable. */
 .quick-palette-row.disabled {
   cursor: not-allowed;
   opacity: 0.5;
@@ -10482,7 +9533,6 @@ a.pa-card:hover {
   }
   .quick-palette-search {
     padding: var(--space-4);
-    /* Pin the search row while results scroll under it. */
     position: sticky;
     top: 0;
     background: var(--surface);
@@ -10497,10 +9547,6 @@ a.pa-card:hover {
   }
 }
 
-/* ── Flow status chip (live / manual / paused) ─────────────────────────
-   At-a-glance "will this run on its own?" badge. One --c per state drives
-   a tinted bg + border + ink so the three read as a family. Used in the
-   editor header, the Triggers modal, and per-row in the flow list. */
 .flow-status-chip {
   display: inline-flex;
   align-items: center;
@@ -10537,16 +9583,12 @@ a.pa-card:hover {
   --c: var(--accent);
 }
 
-/* for_each editor: the chosen step's param form sits in a subtly inset block
-   under the "Run step" picker, so it reads as "the step this loop runs". */
 
 .for-each-hint {
   margin-top: var(--space-2);
   font-size: var(--text-sm);
   color: var(--muted);
 }
-/* "Runs once per row" banner — shown atop the for_each editor and atop a
-   loop-body node's form so the per-row behaviour is explicit. */
 .dz-loop-banner {
   margin-bottom: var(--space-3);
   padding: var(--space-2) var(--space-3);
@@ -10558,16 +9600,12 @@ a.pa-card:hover {
   border-left: 3px solid var(--accent);
   border-radius: var(--r-2);
 }
-/* Error variant: the body pin is unwired (or the loop is illegally nested) and
-   was jumped to from the "N to configure" modal. Red echoes the missing-field
-   highlight in the rest of the inspector + the node card's red port dots. */
 .dz-loop-banner.error {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, var(--surface));
   border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
   border-left-color: var(--danger);
 }
-/* The list of columns a row exposes, rendered as little code chips. */
 .for-each-columns {
   display: flex;
   flex-wrap: wrap;
@@ -10663,7 +9701,6 @@ a.pa-card:hover {
   outline: none;
   overflow: auto;
 }
-/* Token colours (themed in theme.css for dark + light). */
 .dz-j-key {
   color: var(--json-key);
 }
@@ -10709,14 +9746,6 @@ a.pa-card:hover {
   word-break: normal;
   overflow-wrap: normal;
 }
-/* Colour only. NOT italic, and not bold, and nothing else that changes how wide
-   a glyph is: the highlight layer has to advance character-for-character with
-   the transparent textarea over it, and an italic face is a different face. A
-   family with no true italic gets a synthesised oblique, whose advances differ
-   again — so a line with a comment on it pushed every following glyph out of
-   step with the caret, and pushed the WRAP POINT out of step too, which threw
-   off every line below. See check-overlay-metrics.mjs, which now fails the build
-   for this. */
 .dz-s-comment {
   color: var(--script-comment);
 }
@@ -10729,13 +9758,10 @@ a.pa-card:hover {
 .dz-s-number {
   color: var(--script-number);
 }
-/* Shell/PowerShell variables and, in every language, a ${…} reference the
-   server substitutes before the machine sees the script. */
 .dz-s-var {
   color: var(--script-var);
 }
 
-/* ── Files (workspace file manager) ─────────────────────────────────── */
 .files-toolbar {
   display: flex;
   align-items: center;
@@ -10845,10 +9871,6 @@ a.pa-card:hover {
   background: var(--danger);
 }
 
-/* ── Files: move picker + drag-and-drop ─────────────────────────────── */
-/* Two-stage drop affordance: while dragging, every valid destination shows
-   a soft dashed outline (data-droppable) so it's clear where the item can
-   go; the one under the cursor lights up solid (data-drop). */
 .files-table tr[data-droppable="true"] {
   outline: 1.5px dashed color-mix(in srgb, var(--accent) 55%, transparent);
   outline-offset: -3px;
@@ -10871,8 +9893,6 @@ a.pa-card:hover {
   border-radius: var(--r-2);
   outline: none;
 }
-/* The list area itself is a drop target for the current folder, so you can
-   drop onto an opened folder's body (not just a subfolder row). */
 .files-list[data-droppable="true"] {
   outline: 1.5px dashed color-mix(in srgb, var(--accent) 50%, transparent);
   outline-offset: -4px;
@@ -10882,7 +9902,6 @@ a.pa-card:hover {
   outline-offset: -4px;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
-/* Spring-loaded folders flash briefly as they open. */
 @keyframes files-spring-pulse {
   0% {
     background: color-mix(in srgb, var(--accent) 16%, transparent);
@@ -10910,7 +9929,6 @@ a.pa-card:hover {
   cursor: grab;
 }
 
-/* "Move to…" picker modal */
 .move-dialog {
   width: min(440px, 92vw);
 }
@@ -10954,7 +9972,6 @@ a.pa-card:hover {
   color: var(--muted);
 }
 
-/* ── Background uploads indicator ───────────────────────────────────── */
 .uploads-panel {
   position: fixed;
   right: 20px;
@@ -11043,7 +10060,6 @@ a.pa-card:hover {
   background: var(--muted);
 }
 
-/* ── Files: drag-from-desktop upload dropzone ───────────────────────── */
 /* Fill the available height so the whole visible area accepts a drop —
    otherwise a file dropped in the empty space below the (often short) file
    list misses the handler and the browser just opens the file instead. */
@@ -11052,7 +10068,6 @@ a.pa-card:hover {
   min-height: 100%;
 }
 .files-page[data-filedrag="true"]::after {
-  /* Subtle accent wash over the whole page while OS files are dragged in. */
   content: "";
   position: absolute;
   inset: 0;
@@ -11076,7 +10091,6 @@ a.pa-card:hover {
   pointer-events: none;
 }
 
-/* render_template live preview (Inspector pane). See RenderTemplatePreview.tsx. */
 /* CEL formula editor (CelInput) — a highlight <pre> painted under a
    transparent-text <textarea>. The two MUST share identical typography, padding
    and wrapping so the colored tokens sit under the real caret. */
@@ -11129,7 +10143,6 @@ a.pa-card:hover {
 .cel-editor .cel-textarea::placeholder {
   color: var(--faint);
 }
-/* Token colors — readable on the dark surface. */
 .cel-str {
   color: #7ee787;
 }
@@ -11151,7 +10164,6 @@ a.pa-card:hover {
 .cel-punct {
   color: var(--faint);
 }
-/* Linter feedback under the editor. */
 .cel-issue,
 .cel-ok {
   display: inline-flex;
@@ -11183,7 +10195,6 @@ a.pa-card:hover {
   letter-spacing: 0.03em;
 }
 
-/* Layout type picker (render_text) — a compact dropdown of presets. */
 .rtp-type {
   max-width: 18rem;
   border: 1px solid var(--border);
@@ -11220,8 +10231,6 @@ a.pa-card:hover {
   background: var(--code-bg);
   resize: vertical;
 }
-/* render_table column reorder editor — a draggable list with a 6-dot grip
-   handle (mirrors hazydo's task-row reordering). */
 .rtc {
   margin-bottom: var(--space-3);
 }
@@ -11242,22 +10251,16 @@ a.pa-card:hover {
   gap: var(--space-1);
   position: relative;
 }
-/* Each row is a slot: it translateY-shifts to open a gap during a reorder
-   drag, and clips its own swipe backdrop. The visible surface is .rtc-fg,
-   which slides sideways to reveal the Delete backdrop underneath. */
 .rtc-item {
   position: relative;
   border-radius: var(--r-2);
   overflow: hidden;
   transition: transform 0.15s ease;
 }
-/* The lifted row follows the finger with no transition; its neighbours keep
-   the shift transition so the gap opens smoothly. */
 .rtc-item.rtc-lift {
   z-index: 3;
   transition: none;
 }
-/* Red "Delete" backdrop revealed as the row is swiped aside (todo-list style). */
 .rtc-del-bg {
   position: absolute;
   inset: 0;
@@ -11282,15 +10285,12 @@ a.pa-card:hover {
   border-radius: var(--r-2);
   background: var(--surface);
   font-size: var(--text-sm);
-  /* pan-y lets a vertical drag scroll the inspector while we own horizontal
-     swipes; the transition animates the snap-back when a swipe is released. */
   touch-action: pan-y;
   transition:
     transform 0.18s ease,
     box-shadow 0.12s,
     border-color 0.12s;
 }
-/* Actively following the finger sideways — no transition lag. */
 .rtc-fg.rtc-swiping {
   transition: none;
 }
@@ -11325,18 +10325,11 @@ a.pa-card:hover {
   font-size: var(--text-2xs);
   overflow-wrap: anywhere;
 }
-/* A row is a pair: the data column, an arrow, then the heading the table will
-   show. The arrow is what makes the pair read as one statement instead of two
-   adjacent words — it is the same glyph in a resting row and in the two boxes
-   you type into, so editing looks like what it edits. */
 .rtc-arrow {
   flex: 0 0 auto;
   color: var(--faint);
   font-size: var(--text-xs);
 }
-/* The custom name. Prose, not an identifier — it is the text a reader of the
-   table will see — so it keeps the body font while the column name beside it
-   stays monospace. */
 .rtc-as {
   flex: 0 1 auto;
   min-width: 0;
@@ -11349,8 +10342,6 @@ a.pa-card:hover {
 .rtc-label-input {
   flex: 1 1 40%;
 }
-/* Hidden columns live in the same list, below the shown ones: dimmed, dashed,
-   with a + to bring them back. A faint divider labels the group. */
 .rtc-divider {
   font-size: var(--text-2xs);
   font-weight: 600;
@@ -11389,8 +10380,6 @@ a.pa-card:hover {
 .rtc-item.rtc-hidden-row .rtc-fg:hover .rtc-restore {
   color: var(--accent);
 }
-/* Inline rename + add-column input: reads as the row's text until focused,
-   then shows a field. */
 .rtc-edit-input {
   flex: 1 1 auto;
   min-width: 0;
@@ -11412,13 +10401,10 @@ a.pa-card:hover {
 .rtc-fg.rtc-editing {
   border-color: var(--border-strong);
 }
-/* Grip is shown but inert while a row is being renamed (keeps the layout from
-   jumping). */
 .rtc-grip-off {
   opacity: 0.35;
   pointer-events: none;
 }
-/* Add-column row: a dashed, muted affordance at the end of the shown list. */
 .rtc-item.rtc-add-row .rtc-fg {
   border-style: dashed;
   background: transparent;
@@ -11477,8 +10463,6 @@ a.pa-card:hover {
 .rtp-warn {
   color: var(--danger);
 }
-/* Plain-text preview (bulleted / comma presets): show the joined string as-is
-   with wrapping, rather than in the HTML iframe used for table output. */
 .rtp-pre {
   margin: 0;
   max-height: 280px;
@@ -11500,8 +10484,6 @@ a.pa-card:hover {
   white-space: pre-wrap;
 }
 
-/* render_template AI assist row (top of the preview pane). */
-/* AI flow-generation progress checklist (CreateWithAIModal). */
 .ai-steps {
   list-style: none;
   margin: var(--space-2) 0 0;
@@ -11549,13 +10531,7 @@ a.pa-card:hover {
   }
 }
 
-/* ── Create-flow surface ───────────────────────────────────────────────
-   The unified /flows/new page: a primary sidebar CTA, a two-tab page
-   (scratch / template), and the blank-vs-AI mode toggle inside the
-   scratch tab. The template tab reuses the existing .template-* styles. */
 
-/* Sidebar "+ New flow" — the one create CTA, styled as a primary action so
-   it reads above the muted nav links. Overrides the .sidebar a base. */
 .sidebar a.sidebar-new-flow {
   background: var(--btn);
   color: #fff;
@@ -11605,9 +10581,6 @@ a.pa-card:hover {
   border-bottom-color: var(--accent);
 }
 
-/* AI-first create surface: the describe box is the hero. No label, no hint —
-   the placeholder and example chips carry it, and the only other start path is
-   the quiet switch link below. */
 .ai-create-input {
   width: 100%;
   font-size: var(--text-base);
@@ -11615,8 +10588,6 @@ a.pa-card:hover {
   padding: var(--space-3) var(--space-4);
   resize: vertical;
 }
-/* The lone way out of AI mode (and back): a quiet text link under the card,
-   not a competing toggle. */
 
 .create-flow-scratch {
   display: flex;
@@ -11628,8 +10599,6 @@ a.pa-card:hover {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  /* Roomier than a stock .card — this is the page's focal surface, so give it
-     breathing space rather than the dense default padding. */
   padding: var(--space-5);
 }
 .create-flow-actions {
@@ -11637,8 +10606,6 @@ a.pa-card:hover {
   justify-content: flex-end;
 }
 
-/* AI draft-ready review step: the heads-up issues the generator returns,
-   shown before the user lands in the canvas. */
 .create-draft-review {
   max-width: 560px;
 }
@@ -11651,7 +10618,6 @@ a.pa-card:hover {
   flex-direction: column;
   gap: var(--space-2);
 }
-/* Friendly two-line draft issues: plain-language headline + raw detail. */
 .create-draft-issue {
   display: flex;
   flex-direction: column;
@@ -11670,9 +10636,6 @@ a.pa-card:hover {
   border-left-color: var(--warning);
 }
 
-/* AI describe-box example starters — the non-techy on-ramp, shown as clean
-   icon-led suggestion rows directly under the prompt (no label needed).
-   Clicking a row fills the describe box. */
 .ai-starters-list {
   display: flex;
   flex-direction: column;
@@ -11715,18 +10678,11 @@ a.pa-card:hover {
   line-height: 1.4;
 }
 
-/* "No AI provider yet" onboarding: a muted hint + a Connect CTA that mirrors
-   the node "Connect X" buttons (icon + label), not a red error card. The
-   button rides the shared .primary styling; this just aligns the glyph. */
 .ai-connect-hint {
   color: var(--muted);
   font-size: var(--text-sm);
   margin: 0;
 }
-/* Callout: shared bordered/tinted notice block (see components/Callout.tsx).
-   The leading icon and accent border/tint make it register as a state to
-   note or act on, unlike a bare muted line. One variant per intent so the
-   colour reads consistently wherever a callout appears. */
 .callout {
   display: flex;
   align-items: flex-start;
@@ -11792,7 +10748,6 @@ a.pa-card:hover {
   line-height: 1.4;
 }
 
-/* Draft review: plain-language summary + conversational refine. */
 .create-draft-section {
   font-weight: 600;
   margin: var(--space-3) 0 var(--space-2);
@@ -11826,8 +10781,6 @@ a.pa-card:hover {
    and never animates layout (width/height) so it can't introduce jank.
    ───────────────────────────────────────────────────────────────────────── */
 
-/* Cross-page fade — AppShell wraps non-editor pages in .route-fade keyed on the
-   path, so this entry animation re-runs on each navigation. */
 .route-fade {
   animation: route-fade-in var(--dur-3) var(--ease-out);
 }
@@ -11862,15 +10815,12 @@ textarea,
     opacity var(--dur-2) var(--ease-out),
     transform var(--dur-1) var(--ease-out);
 }
-/* A touch of physicality on press; settles back via the transition above. */
 button:active,
 .btn:active,
 [role="button"]:active {
   transform: translateY(0.5px) scale(0.985);
 }
 
-/* Loading & list settling: content fades up instead of popping in. Add the
-   class to a freshly-loaded container/list. */
 
 @keyframes dz-fade-in {
   from {
@@ -11904,12 +10854,7 @@ button:active,
   }
 }
 
-/* ───────────────────────────────────────────────────────────────────────
-   Workspace overview share button (Dashboard page-title) + the public
-   TV-dashboard status board (PublicOverview page).
-   ─────────────────────────────────────────────────────────────────────── */
 
-/* Share button sits beside "New flow" in the Overview page title. */
 .dash-title-actions {
   display: inline-flex;
   align-items: center;
@@ -11920,7 +10865,6 @@ button:active,
   align-items: center;
 }
 
-/* ── Public TV board ──────────────────────────────────────────────────── */
 /* Full-viewport, dark, large type for across-the-room legibility. This is the
    one surface strangers see without ever signing in — a screen on a wall in
    someone's office — so it is dressed like the marketing site rather than like
@@ -11933,10 +10877,6 @@ button:active,
    surface reads as one calm, coherent state at a glance. */
 .tv-view {
   --tv-accent: var(--accent);
-  /* Glass card fill + elevation, shared by the stat tiles and the flow tiles
-     so the board is built from one material. Translucent on purpose: the
-     nebula and the grid show through, which is what stops a wall of boxes
-     from reading as a stack of opaque bricks. */
   --tv-fill: linear-gradient(
     180deg,
     color-mix(in srgb, var(--surface) 88%, transparent) 0%,
@@ -11945,9 +10885,6 @@ button:active,
   --tv-elevation:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     0 18px 44px -26px rgba(0, 0, 0, 0.85);
-  /* Paper rules, derived from the editor's canvas grid. The major line is
-     dialled well back from the canvas value: that one is tuned for a viewport
-     you lean into, and at wall scale it draws a table across the board. */
   --tv-rule: var(--canvas-grid);
   --tv-rule-major: color-mix(
     in srgb,
@@ -11981,18 +10918,12 @@ button:active,
     var(--bg);
   transition: background 0.8s ease;
 }
-/* Graph paper, straight off the editor canvas: a fine grid with a brighter
-   major line every fifth cell, masked to a wash that fades out before it
-   reaches the middle of the board. The page you watch and the canvas you
-   build on sit on the same paper. */
 .tv-view::after {
   content: "";
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  /* The canvas grid tokens, so the paper flips with the theme instead of
-     drawing white lines on a white board. */
   background-image:
     linear-gradient(to right, var(--tv-rule-major) 1px, transparent 1px),
     linear-gradient(to bottom, var(--tv-rule-major) 1px, transparent 1px),
@@ -12011,13 +10942,10 @@ button:active,
   );
   opacity: 0.6;
 }
-/* Everything the board actually says sits above the paper. */
 .tv-view > * {
   position: relative;
   z-index: 1;
 }
-/* A whisper-thin luminous rule across the very top, health-tinted. Above the
-   content layer so nothing can paint over the board's status line. */
 .tv-view::before {
   content: "";
   position: fixed;
@@ -12057,16 +10985,11 @@ button:active,
     0 18px 40px -26px rgba(16, 24, 40, 0.45);
 }
 :root[data-theme="light"] .tv-view::after {
-  /* The light canvas grid is near-invisible by design — an editor that is
-     mostly nodes wants it out of the way. A board is mostly open space, so the
-     paper is redrawn a little stronger here or the texture simply is not
-     there. */
   --tv-rule: rgba(27, 34, 51, 0.045);
   --tv-rule-major: rgba(27, 34, 51, 0.07);
   opacity: 1;
 }
 
-/* Centered message states (loading / invalid link). */
 .tv-message {
   align-items: center;
   justify-content: center;
@@ -12085,10 +11008,6 @@ button:active,
   font-size: var(--text-lg);
 }
 
-/* ── Masthead ── */
-/* Org identity leads (this is the customer's board, not ours); the clock and
-   the live indicator anchor the right. A hairline under the row gives the
-   board a top edge to hang from instead of floating type. */
 .tv-head {
   display: flex;
   align-items: flex-end;
@@ -12098,8 +11017,6 @@ button:active,
   border-bottom: 1px solid var(--hairline);
   flex: 0 0 auto;
 }
-/* Left cluster: optional org logo + the title stack. min-width:0 lets the
-   title ellipsize instead of pushing the head-right controls off-screen. */
 .tv-head-left {
   display: flex;
   align-items: center;
@@ -12127,8 +11044,6 @@ button:active,
   gap: var(--space-1);
   min-width: 0;
 }
-/* Small uppercase context line above the org name, painted with the brand
-   gradient — the site's eyebrow, and the one gradient-text moment here. */
 .tv-eyebrow {
   font-size: var(--text-md);
   font-weight: 700;
@@ -12156,8 +11071,6 @@ button:active,
   align-items: center;
   gap: clamp(var(--space-3), 1.4vw, var(--space-5));
 }
-/* Clock over date, right-aligned — the two together read as a wall clock
-   rather than as a stray number. */
 .tv-time {
   display: flex;
   flex-direction: column;
@@ -12178,7 +11091,6 @@ button:active,
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
-/* Live / reconnecting indicator — a glassy pill tinted by the running hue. */
 .tv-pulse {
   display: inline-flex;
   align-items: center;
@@ -12236,10 +11148,6 @@ button:active,
   background: var(--surface-2);
 }
 
-/* ── Headline counters ── */
-/* Four glass tiles with a lit top-left rim. The number is the tile: a neutral
-   one wears the brand gradient, a meaningful one (failures, work in flight)
-   wears its status colour and lights the tile behind it. */
 .tv-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -12255,8 +11163,6 @@ button:active,
   gap: var(--space-2);
   padding: clamp(var(--space-4), 1.8vw, 30px);
   border-radius: var(--r-4);
-  /* Gradient hairline rim: fill clipped to the padding box, rim gradient
-     clipped to the border box. */
   background:
     var(--tv-fill) padding-box,
     var(--grad-rim) border-box;
@@ -12266,8 +11172,6 @@ button:active,
   -webkit-backdrop-filter: blur(7px);
   overflow: hidden;
 }
-/* Tone bloom: light pooling up from the bottom of a tile that is saying
-   something. Softer than a coloured border, and it leaves the rim alone. */
 .tv-stat::before {
   content: "";
   position: absolute;
@@ -12287,8 +11191,6 @@ button:active,
   line-height: 1;
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
-  /* Neutral default: the brand gradient, as on the site's stat row. Toned
-     tiles below paint over it with a flat status colour. */
   background: var(--grad-brand);
   background-clip: text;
   -webkit-background-clip: text;
@@ -12329,19 +11231,12 @@ button:active,
 .tv-stat-live {
   --tone: var(--status-running);
 }
-/* Only the tiles that are actually raising a hand get the bloom — a board of
-   four glowing tiles glows about as usefully as a board of none. */
 .tv-stat-bad::before,
 .tv-stat-warn::before,
 .tv-stat-live::before {
   opacity: 1;
 }
 
-/* ── The flow board ── */
-/* The grid composes itself for the number of flows: a handful get poster
-   tiles that fill the wall, a screenful get rows. Without this a two-flow
-   board is two slabs marooned in the middle of a 65" screen, which is the
-   single loudest way for a status display to look unfinished. */
 .tv-grid {
   flex: 1 1 auto;
   display: grid;
@@ -12352,29 +11247,16 @@ button:active,
      its share. Below, narrow viewports drop back to auto-fit — a board being
      previewed on a laptop or a phone is not a wall. */
   grid-template-columns: repeat(var(--tv-cols, 3), minmax(0, 1fr));
-  /* Rows share out whatever height is left, down to a floor. Packing them to
-     the top instead leaves a dead band under the board that reads as a bug;
-     stretching, the tiles simply breathe more when there are fewer of them.
-     Past the floor the rows stop growing and the board scrolls. */
   grid-auto-rows: minmax(96px, auto);
   align-content: stretch;
 }
-/* Few flows: poster tiles, generous but capped, and the block is centred on
-   the wall. Left to stretch they become voids with a border — there is only so
-   much a name and a status pill can fill. */
 .tv-grid[data-density="sparse"] {
   grid-auto-rows: minmax(clamp(220px, 32vh, 380px), auto);
   align-content: center;
 }
-/* A screenful: a slightly taller floor than the dense board's. */
 .tv-grid[data-density="roomy"] {
   grid-auto-rows: minmax(110px, auto);
 }
-/* Wall-of-flows: the same two lines as a roomy tile, squeezed. Everything on
-   one line was the obvious thing to try and it costs the wrong thing — the
-   pill, the pipes and "2 hours ago" take two thirds of a column, so every name
-   truncates to "Invoice…", and a status board whose flow names are unreadable
-   is not a status board. Stacked, the name gets the full width of the tile. */
 .tv-grid[data-density="dense"] {
   grid-auto-rows: minmax(78px, auto);
 }
@@ -12385,9 +11267,6 @@ button:active,
   isolation: isolate;
   display: flex;
   flex-direction: column;
-  /* Name pinned to the top of the tile, status to the bottom. Tiles in a grid
-     row are the same height, so this makes the row scan as a row — four
-     independently centred blocks do not line up with each other. */
   justify-content: space-between;
   gap: var(--space-3);
   padding: clamp(var(--space-4), 1.5vw, 26px);
@@ -12402,9 +11281,6 @@ button:active,
   -webkit-backdrop-filter: blur(7px);
   overflow: hidden;
 }
-/* Left status rail: a soft spindle rather than a hard bar — brightest at the
-   middle, gone at the corners, so it follows the tile's radius instead of
-   fighting it. */
 .tv-flow::before {
   content: "";
   position: absolute;
@@ -12419,8 +11295,6 @@ button:active,
   );
   box-shadow: 0 0 22px -2px color-mix(in srgb, var(--tone) 70%, transparent);
 }
-/* A failing flow also warms its whole fill, so the eye lands on it from the
-   doorway rather than having to read the rails. */
 .tv-flow-failed {
   --tone: var(--status-failed);
 }
@@ -12448,8 +11322,6 @@ button:active,
   gap: var(--space-3);
   min-width: 0;
 }
-/* Icon tile — the site's card-icon: a rounded well lit from inside, not a
-   grey square with a picture in it. */
 .tv-flow-ico {
   display: inline-flex;
   align-items: center;
@@ -12472,7 +11344,6 @@ button:active,
   font-weight: 650;
   letter-spacing: -0.015em;
   line-height: 1.2;
-  /* Wrap to at most two lines instead of harshly clipping mid-word. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -12491,7 +11362,6 @@ button:active,
   gap: var(--space-2);
   min-width: 0;
 }
-/* Status pill — tinted glass with a glowing dot, mirrors the rail colour. */
 .tv-pill {
   --pill: var(--faint);
   display: inline-flex;
@@ -12533,9 +11403,6 @@ button:active,
   color: var(--faint);
   white-space: nowrap;
 }
-/* Next scheduled fire — accented (vs the muted last-run time beside it) so a
-   glance separates "ran 5m ago" from "runs again in 5m". Only shown for live,
-   scheduler-driven flows; absent flows just don't render it. */
 .tv-flow-next {
   font-variant-numeric: tabular-nums;
   font-size: var(--text-md);
@@ -12543,8 +11410,6 @@ button:active,
   color: color-mix(in srgb, var(--status-running) 60%, var(--ink));
   white-space: nowrap;
 }
-/* Recent-run health pipes: one thin vertical bar per run, oldest→newest,
-   coloured by outcome — the same green/red palette as the status dots. */
 .tv-spark {
   display: inline-flex;
   align-items: flex-end;
@@ -12577,8 +11442,6 @@ button:active,
 .tv-spark-bar:last-child.queued {
   animation: tv-spark-pulse 1.6s ease-in-out infinite;
 }
-/* Same shape and timing as .status-dot.running's pulse, so the pipe and the
-   dot beside it breathe together rather than beating against each other. */
 @keyframes tv-spark-pulse {
   0%,
   100% {
@@ -12601,8 +11464,6 @@ button:active,
   background: var(--status-awaiting);
 }
 
-/* Poster tiles: the icon gets its own line above the name, and everything
-   scales up — at four flows on a 65" screen there is room to be generous. */
 .tv-grid[data-density="sparse"] .tv-flow {
   justify-content: space-between;
   gap: var(--space-5);
@@ -12631,10 +11492,6 @@ button:active,
   width: 6px;
 }
 
-/* Dense tiles trade detail for count: a smaller icon, one line of name, and
-   the second line back on a single row with the history and the last run
-   pushed to the right edge. The next scheduled run drops out — it is the least
-   urgent thing on a crowded board and the first thing worth the width. */
 .tv-grid[data-density="dense"] .tv-flow {
   padding: var(--space-3) var(--space-4);
   padding-left: var(--space-5);
@@ -12677,9 +11534,6 @@ button:active,
   font-size: var(--text-lg);
 }
 
-/* ── Footer ── */
-/* Our mark sits down here, quietly: the board belongs to whoever's wall it is
-   hanging on, and the product signs it rather than heading it. */
 .tv-foot {
   flex: 0 0 auto;
   display: flex;
@@ -12717,8 +11571,6 @@ button:active,
   font-variant-numeric: tabular-nums;
 }
 
-/* Narrow viewports: the computed column count assumes a wall, so hand the grid
-   back to auto-fit and let it find its own width. */
 @media (max-width: 1280px) {
   .tv-grid {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
@@ -12730,7 +11582,6 @@ button:active,
   }
 }
 
-/* ----- Timezone picker (format:"timezone", TimezoneField) ----- */
 /* A combobox, not a select: the list is the ~400 IANA zones filtered as you
    type, so it needs its own popup rather than a native dropdown. Anchored to
    the field and floated over the form — the Inspector scrolls, and a list that
@@ -12790,7 +11641,6 @@ button:active,
   font-size: var(--text-sm);
 }
 
-/* ----- Map picker (format:"geo-point", GeoPointField) ----- */
 .geo-point-field {
   display: flex;
   flex-direction: column;
@@ -12813,10 +11663,8 @@ button:active,
   border: 1px solid var(--border);
   border-radius: var(--r-2);
   overflow: hidden;
-  /* Leaflet panes sit at high z-indexes; keep them under the app's modals. */
   z-index: 0;
 }
-/* The emoji pin marker (divIcon) — center it on its anchor without a box. */
 .geo-pin {
   font-size: 22px;
   line-height: 22px;
@@ -12829,7 +11677,6 @@ button:active,
   font-size: var(--text-sm);
   color: var(--muted);
 }
-/* "Pin follows the Place" banner shown when a Place overrides the map pin. */
 .geo-following {
   font-size: var(--text-sm);
   color: var(--ink);
@@ -12838,12 +11685,9 @@ button:active,
   border-radius: var(--r-1);
   padding: var(--space-1) var(--space-2);
 }
-/* In follow mode the map is a read-only preview — no click-to-pick cursor. */
 .geo-map-readonly .leaflet-container {
   cursor: default;
 }
-/* Leaflet's controls/attribution inherit the app font; keep the attribution
-   legible on the dark theme. */
 .geo-map .leaflet-control-attribution {
   background: rgba(0, 0, 0, 0.6);
   color: var(--muted);
@@ -12851,8 +11695,6 @@ button:active,
 .geo-map .leaflet-control-attribution a {
   color: var(--accent);
 }
-/* The map picker rendered on the node card itself: a touch shorter than the
-   inspector's, with a minimum width so the canvas node is comfortable. */
 .dz-param-geo {
   display: flex;
   flex-direction: column;
@@ -12863,8 +11705,6 @@ button:active,
   height: 170px;
 }
 
-/* Email-template picker: action row + the "Preview email" modal iframe, plus
-   the template-management editor's side-by-side editor/preview. */
 .email-template-picker-actions {
   display: flex;
   align-items: center;
@@ -12923,7 +11763,6 @@ button:active,
   background: #fff;
 }
 
-/* "Send test" block in the email-template manager. */
 .template-test-send {
   border-top: 1px solid var(--border);
   margin-top: var(--space-3);
@@ -12941,7 +11780,6 @@ button:active,
   color: var(--success);
 }
 
-/* Monospace HTML editor in the email-template manager. */
 .template-html-input {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -12952,10 +11790,6 @@ button:active,
   overflow-x: auto;
 }
 
-/* ---- Support tickets + chat -------------------------------------------------
-   The native support surface (SupportTickets.tsx / ReportProblemModal.tsx).
-   Reuses the app's card/user-list vocabulary; these rules add the chat thread,
-   the composer, and a couple of form helpers the modals need. */
 .input {
   width: 100%;
   box-sizing: border-box;
@@ -13000,9 +11834,6 @@ button:active,
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-/* "Read by customer 14:32" under the agent's newest reply. Quieter than the
-   meta line above it: this answers a question the agent may not be asking, so
-   it should be findable without competing with the message itself. */
 .ticket-bubble-receipt {
   margin-top: var(--space-1);
   font-size: var(--text-xs);
@@ -13065,54 +11896,28 @@ button:active,
   padding: var(--space-3);
   box-shadow: none;
 }
-/* Keep the glyph on the first line of a wrapping message instead of letting it
-   stretch or shrink with the text block. */
 .card.error > svg {
   flex: 0 0 auto;
   margin-top: 1px;
 }
-/* The message takes the free space so any trailing action (Dismiss, Retry)
-   stays pinned to the end and a long message wraps instead of shoving it out. */
 .card.error > .card-error-body {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-/* ---- Names the markup was already asking for ------------------------------ */
-/* Each rule below backs a class that components render but no stylesheet
-   defined. Most of the 47 in that state turned out to be dead names — the
-   parent or a sibling class was already doing the work — and those classNames
-   were deleted instead. These nine are the ones that were really carrying
-   something: one that lost information outright, and eight whose look had been
-   written inline at the call site, so the name promised a style that lived
-   somewhere else. */
 
-/* A validation message under a field. With no rule at all it rendered as
-   ordinary body copy — same size, weight and colour as the help text two lines
-   above it, so an error did not read as an error. */
 .field-error {
   margin: var(--space-1) 0 0;
   color: var(--danger);
   font-size: var(--text-sm);
 }
 
-/* A neutral note under a field saying what the current value will DO — as
-   opposed to .field-error's "this is wrong". Used by the collection name box
-   to distinguish "adds to the collection you already have" from "starts a new
-   one", which is the difference a typo quietly destroys. */
 .field-hint {
   margin: var(--space-1) 0 0;
   color: var(--muted);
   font-size: var(--text-sm);
 }
 
-/* The board picker in the results sidebar. All of this was inline on the
-   Button, including the selected state — which was a ternary on `background`
-   rather than the `active` class sitting right beside it in the same
-   className. */
-/* The footer under a collection's table: the row range on the left, the
-   pager on the right. Only rendered once a collection is bigger than one
-   page, so a small one keeps a bare line of text. */
 .board-foot {
   display: flex;
   align-items: center;
@@ -13145,7 +11950,6 @@ button:active,
   background: var(--surface-2);
 }
 
-/* "Report a problem" under a failed run: a button that reads as a link. */
 .run-error-help {
   display: inline-flex;
   align-items: center;
@@ -13159,8 +11963,6 @@ button:active,
   cursor: pointer;
 }
 
-/* One condition in the row-filter builder: the field/operator/value controls
-   stack, and each row is separated from the next. */
 .sf-rowcond-row {
   display: flex;
   flex-direction: column;
@@ -13168,7 +11970,6 @@ button:active,
   margin-bottom: var(--space-3);
 }
 
-/* The detected-country hint under a telephone field. */
 .sf-tel-hint {
   display: flex;
   align-items: center;
@@ -13178,13 +11979,11 @@ button:active,
   opacity: 0.85;
 }
 
-/* Marks a port that carries a list rather than a single value. */
 .dz-port-many {
   margin-left: var(--space-1);
   opacity: 0.5;
 }
 
-/* Anchors the flow menu's dropdown. */
 .flow-menu {
   position: relative;
 }
@@ -13198,19 +11997,6 @@ button:active,
   position: fixed;
 }
 
-/* The toast that confirms a run finished, floating over the canvas. */
-/* "It worked" — a floating overlay, not a docked banner.
-   It shared .editor-banner-stack with everything else, and that strip grows to
-   40vh: announcing a success shrank the canvas its author was looking at, and
-   the last step's raw output was printed straight into it. Same geometry and
-   the same click-through rule as .editor-trigger-hint, which solved this for
-   the teaching tip; the two take turns in the top slot (see below). */
-/* Run outcome, in the toolbar beside the button that started it.
-   It used to be an absolutely-positioned panel at top-centre of the canvas
-   that stayed until dismissed — which is the one spot a flow always occupies,
-   since a flow reads from its top-left. The result now sits where the user was
-   already looking and fades on its own, so there is no dismiss control to
-   clutter the bar either. */
 .editor-run-status {
   display: inline-flex;
   align-items: center;
@@ -13249,10 +12035,6 @@ button:active,
   }
 }
 
-/* ---- Runners (AdminRunners.tsx) ------------------------------------------ */
-/* Machines the org owns, running scripts a flow sends them. There is no form on
-   this page — setup is one command — so the layout is a list plus the command
-   to copy. */
 /* overflow:hidden clips the table to the card's rounded corners. The table
    itself scrolls inside .run-table-scroll — without that wrapper this rule was
    the bug: on a narrow screen the table keeps a readable minimum width, and
@@ -13262,8 +12044,6 @@ button:active,
   padding: 0;
   overflow: hidden;
 }
-/* Labels and agent versions are machine strings: monospace so a typo in a label
-   is findable by eye. */
 .runner-labels,
 .runner-agent {
   font-family: var(--font-mono);
@@ -13272,13 +12052,9 @@ button:active,
 .runner-actions {
   text-align: right;
   padding-right: var(--space-3);
-  /* Two icon buttons (labels, remove) — kept on one line so the row height
-     does not change between a machine being acted on and not. */
   white-space: nowrap;
 }
 
-/* One machine's settings page (AdminRunnerDetail): what it is, then the tags
-   that decide what runs on it. */
 .runner-facts,
 .runner-tags {
   margin-bottom: var(--space-4);
@@ -13292,8 +12068,6 @@ button:active,
   gap: var(--space-2);
   margin: var(--space-3) 0;
 }
-/* Same chip as the schema form's multi-select, because it is the same idea: a
-   short set of values, each removable. */
 .runner-tag {
   display: inline-flex;
   align-items: center;
@@ -13305,8 +12079,6 @@ button:active,
   border: 1px solid var(--border);
   border-radius: 6px;
 }
-/* The machine's own name. Accented and unremovable: it is a tag like the others
-   as far as a step is concerned, and not one anybody can take away. */
 .runner-tag.is-name {
   border-color: var(--accent);
   padding-right: var(--space-1h);
@@ -13323,8 +12095,6 @@ button:active,
 }
 .runner-tag-add input {
   flex: 1;
-  /* A phone gets the whole width; a desktop does not need a 900px-wide box for
-     one word. */
   min-width: 12ch;
   max-width: 32ch;
   font-family: var(--font-mono);
@@ -13339,9 +12109,6 @@ button:active,
 .runner-install-head {
   margin-top: 0;
 }
-/* Wraps rather than scrolls: the command is meant to be read and understood
-   before it is pasted, and a line that runs off the edge invites pasting it
-   unread. */
 .runner-install-cmd {
   margin: var(--space-3) 0;
   padding: var(--space-3);
@@ -13366,9 +12133,6 @@ button:active,
   margin-top: var(--space-4);
 }
 
-/* ---- MCP servers --------------------------------------------------------- */
-/* Admin → MCP servers. It borrows the runner page's table and action column;
-   only the three columns that carry different content need rules of their own. */
 .mcp-form {
   margin-bottom: var(--space-4);
 }
@@ -13394,19 +12158,11 @@ button:active,
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-/* The id under a server's display name. Monospaced and quiet: it is what the
-   palette and flow JSON show, worth being able to find but not the thing being
-   read down the column. */
 .mcp-id {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-weight: 400;
 }
-/* A described API's brand mark beside its name in Admin → Web APIs, so the
-   admin sees the SAME image the palette and the Apps page will draw. The source
-   is a favicon we guessed (engine/webapi/icon.go), so it can be any aspect
-   ratio and any resolution: the fixed box keeps every row the same height and
-   object-fit stops a wide mark being stretched into one. */
 .step-source-name {
   display: flex;
   align-items: center;
@@ -13419,10 +12175,6 @@ button:active,
   object-fit: contain;
   border-radius: var(--r-1);
 }
-/* The icon chooser in the Web APIs form: the mark as it will appear, beside
-   where its source is chosen. A fixed box with a faint ground, so a pale logo is
-   still visible and the row does not change height when the fallback glyph is
-   swapped for an image. */
 .step-source-icon-row {
   display: flex;
   align-items: center;
@@ -13457,14 +12209,7 @@ button:active,
   gap: var(--space-2);
 }
 
-/* ---- Web APIs ------------------------------------------------------------ */
-/* Admin → Web APIs. The page reuses the MCP page's table, form and id/url
-   rules; what is new is the operation editor, which is the only nested form in
-   the admin section — an operation holds a list of arguments, and each argument
-   is a row of four controls. */
 
-/* One operation, as a card inside the form. The legend carries the operation
-   number and its remove button, so the two sit on one line. */
 .webapi-op {
   margin: var(--space-3) 0;
 }
@@ -13507,7 +12252,6 @@ button:active,
   }
 }
 
-/* ---- Glyphs sitting in text ---------------------------------------------- */
 /* A glyph inside a line of prose — a status line, a card heading, a label.
    Unlike a button, these containers can't simply be flexed: `.sso-test-ok` and
    friends hold a heading AND a description under the glyph, so flex would lay
@@ -13523,25 +12267,12 @@ button:active,
 .icon-inline {
   vertical-align: -0.15em;
 }
-/* The same glyph when it leads the line and needs a gap after it. */
 .icon-lede {
   vertical-align: -0.15em;
   margin-right: var(--space-1h);
 }
 
-/* ---- Quiet notices, loading and empty states ----------------------------- */
-/* Between them these three shapes are the whole vocabulary for "there is
-   nothing to show you yet". They exist because that message had been written by
-   hand roughly a hundred times: `common.loading` alone appeared inside ten
-   different wrappers, and 42 places built a quiet notice as
-   `<div className="card" style={{ color: "var(--muted)" }}>` inline.
-   See components/ui/{Notice,Loading,EmptyState}.tsx — nothing else should set a
-   muted colour from an inline style, and scripts/check-ui-primitives.mjs fails
-   the build if it does. */
 
-/* A card carrying a short, low-urgency message: a load in progress, a
-   nothing-here line, a "you don't have permission" note. Sibling of
-   .card.error — same box, quieter voice. */
 .card.notice {
   color: var(--muted);
 }
@@ -13555,11 +12286,6 @@ button:active,
   color: var(--muted);
 }
 
-/* The placeholder box: glyph, heading, one sentence, and the action that fills
-   it. Dashed, so it reads as an outline waiting to be filled rather than as
-   content. That one look replaced four: a dashed box on two admin pages, a
-   solid card on the flow list and the approvals inbox, and a borderless block
-   in the triggers dialog — all for the same state. */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -13590,8 +12316,6 @@ button:active,
   max-width: 44ch;
   line-height: 1.5;
 }
-/* A row, so a state offering two paths (start from a template, or from blank)
-   lays them side by side without needing a class of its own. */
 .empty-state-actions {
   display: flex;
   flex-wrap: wrap;
@@ -13600,7 +12324,6 @@ button:active,
   margin-top: var(--space-3);
 }
 
-/* ---- Support bundle view (BundleView.tsx) --------------------------------- */
 .bundle-view {
   display: flex;
   flex-direction: column;
@@ -13676,7 +12399,6 @@ button:active,
   padding: var(--space-2);
 }
 
-/* ---- (i) help popover (HelpPopover.tsx) -------------------------------- */
 /* Replaces the native `title=` tooltip that carried step and field guidance.
    A native tooltip never fires on touch, so this content was unreachable on a
    tablet; and it cannot scroll, which a 131-word drop description needs. */
@@ -13727,12 +12449,6 @@ button:active,
   text-transform: none;
 }
 
-/* ---- await_approval: decide from the canvas -------------------------- */
-/* Same flush footer bar as .dz-node-setup (Connect) and .dz-node-issues, so a
-   card that is waiting on a person reads with the same weight as one that is
-   waiting on configuration. Split down the middle: approve is the affirmative
-   action and takes the accent, reject stays quiet — this is a decision, not a
-   confirm dialog, so neither is styled as a danger. */
 .dz-node-approve {
   display: flex;
   gap: 1px;
@@ -13776,10 +12492,6 @@ button:active,
   opacity: 0.6;
 }
 
-/* ── Web API spec import (WebAPISpecImport.tsx) ─────────────────────────────
-   The operation picker. A spec can offer hundreds of rows, so the list is a
-   scrolling well rather than a page that grows without limit — the admin is
-   choosing from it, not reading it end to end. */
 .wa-import {
   margin-bottom: var(--space-4);
 }
@@ -13808,8 +12520,6 @@ button:active,
 }
 .wa-op-row {
   display: grid;
-  /* Method and path are fixed-ish columns so the list scans down them; the
-     title takes what is left and truncates rather than wrapping every row. */
   grid-template-columns: auto 4.5rem minmax(0, 1fr) minmax(0, 1.2fr);
   align-items: center;
   gap: var(--space-2);
@@ -13894,9 +12604,6 @@ button:active,
   background: var(--bg);
   color: var(--ink);
 }
-/* The dead-link and first-load states are the whole screen, so they centre
-   and carry the mark — an unsigned empty page reads as broken rather than as
-   a link that has been turned off. */
 .pub-message {
   align-items: center;
   justify-content: center;
@@ -13944,8 +12651,6 @@ button:active,
   gap: var(--space-1);
   min-width: 0;
 }
-/* The org name sits ABOVE the collection name, small: the reader knows who
-   sent them the link, and what they came for is the table's own name. */
 .pub-eyebrow {
   font-size: var(--text-xs);
   letter-spacing: 0.06em;

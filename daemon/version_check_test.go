@@ -33,8 +33,6 @@ func resetReleaseCache() {
 	releaseCache.mu.Unlock()
 }
 
-// versionServer is a stub upstream: a 200 returns a service descriptor with
-// the given build.version; any other status returns that status with no body.
 func versionServer(t *testing.T, status int, version string) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -48,7 +46,6 @@ func versionServer(t *testing.T, status int, version string) *httptest.Server {
 	return srv
 }
 
-// setVersion overrides the build stamp for a test, returning a restore func.
 func setVersion(v string) func() {
 	prev := buildinfo.Version
 	buildinfo.Version = v
@@ -137,9 +134,6 @@ func TestFetchLatestVersion(t *testing.T) {
 	}
 }
 
-// TestUpdateAvailableDecision pins the comparison the handler makes: a
-// stamped build behind the canonical version flags an update; equal or a
-// "-dirty" working build at the same version does not.
 func TestUpdateAvailableDecision(t *testing.T) {
 	t.Parallel()
 	latest, _ := parseSemver("0.2.0")
@@ -201,8 +195,6 @@ func TestLatestRelease(t *testing.T) {
 	})
 }
 
-// TestFetchLatestVersion_Unreachable covers the dial-error branch: a closed
-// server's port refuses connections, so the GET fails before any response.
 func TestFetchLatestVersion_Unreachable(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
@@ -213,9 +205,6 @@ func TestFetchLatestVersion_Unreachable(t *testing.T) {
 	}
 }
 
-// TestAdminVersion drives the handler through every branch: the platform-admin
-// gate, the disabled and unreachable degradations, and the three comparison
-// outcomes (update-available, up-to-date, dev-build-not-comparable).
 func TestAdminVersion(t *testing.T) {
 	t.Parallel()
 	adminP := core.Principal{Roles: []core.Role{{Name: "p", Permissions: []core.Permission{core.PermPlatformAdmin}}}}
@@ -297,13 +286,13 @@ func TestAdminVersion(t *testing.T) {
 	})
 }
 
-// TestRepoVersionFileIsARelease guards the ./VERSION file the Docker build
-// reads when compose is invoked without a VERSION build arg (the production
-// deploy path — see the Dockerfile ARGs and the Makefile release targets).
-// The stamped value has to be a comparable release: a typo'd, empty, or
-// "dev"-ish file silently ships a build that reports itself as unstamped, so
-// every operator's update check then degrades to "couldn't check" — including
-// on the canonical instance the check reads its answer from.
+// Guards the ./VERSION file the Docker build reads when compose is invoked
+// without a VERSION build arg (the production deploy path — see the Dockerfile
+// ARGs and the Makefile release targets). The stamped value has to be a
+// comparable release: a typo'd, empty, or "dev"-ish file silently ships a
+// build that reports itself as unstamped, so every operator's update check
+// then degrades to "couldn't check" — including on the canonical instance the
+// check reads its answer from.
 func TestRepoVersionFileIsARelease(t *testing.T) {
 	t.Parallel()
 	raw, err := os.ReadFile(filepath.Join("..", "VERSION"))

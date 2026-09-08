@@ -112,9 +112,6 @@ export function Admin() {
   );
 }
 
-// SystemSection shows the running daemon release and, when reachable,
-// whether a newer one has been tagged upstream — with the one-line CLI
-// command to upgrade. Platform admins only; the parent gates rendering.
 function SystemSection() {
   const { t } = useTranslation();
   const { token } = useAuth();
@@ -140,8 +137,6 @@ function SystemSection() {
     };
   }, [token]);
 
-  // A stamped release renders as "vX.Y.Z"; "dev"/"unknown" placeholders
-  // (an unstamped local build) are shown verbatim — no fake "v" prefix.
   const fmtVer = (v: string) =>
     v && v !== "dev" && v !== "unknown" ? `v${v}` : v;
 

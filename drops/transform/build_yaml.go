@@ -121,8 +121,6 @@ func executeBuildYAML(_ context.Context, job core.Job, _ chan<- core.Progress) (
 			}
 			parts = append(parts, strings.TrimRight(s, "\n"))
 		}
-		// The leading "---" is included: a stream that starts with one is
-		// unambiguous to every reader, and tools that emit bundles do it.
 		out = "---\n" + strings.Join(parts, "\n---\n") + "\n"
 	default:
 		list := make([]any, 0, len(projected))

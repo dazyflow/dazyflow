@@ -27,12 +27,8 @@ import (
 // email body, but turns a runaway render into a clean error instead of an OOM.
 const DefaultMaxBytes = 8 << 20 // 8 MiB
 
-// ErrTooLarge is returned (wrapped) when a render exceeds the byte cap.
 var ErrTooLarge = errors.New("rendered output exceeds the size limit")
 
-// ParseError wraps a template-parse failure (an authoring mistake: a bad
-// action or mismatched {{ }}), so callers can distinguish it from an
-// execution error and map it to the right error code / message.
 type ParseError struct{ Err error }
 
 func (e *ParseError) Error() string { return e.Err.Error() }
@@ -42,8 +38,6 @@ func (e *ParseError) Unwrap() error { return e.Err }
 // templates. Pure string/JSON ops only — nothing that touches the fs,
 // network, or process — so an authored template can't escape the render.
 var Funcs = template.FuncMap{
-	// default returns fallback when v is nil or an empty string; else v.
-	// Usage: {{.name | default "there"}}
 	"default": func(fallback, v any) any {
 		if v == nil {
 			return fallback
@@ -55,7 +49,6 @@ var Funcs = template.FuncMap{
 	},
 	"upper": strings.ToUpper,
 	"lower": strings.ToLower,
-	// join concatenates a list with sep; accepts []string or []any.
 	"join": func(sep string, list any) string {
 		switch xs := list.(type) {
 		case []string:

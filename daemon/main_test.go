@@ -10,7 +10,7 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// TestMain allows private egress for the whole daemon test package. Many tests
+// Allows private egress for the whole daemon test package. Many tests
 // dial fake servers on loopback (BYO secret managers, mailers, failure-notify
 // webhooks) which the shared SSRF guard refuses by default. Mirrors
 // drops/db/main_test.go. A test that needs to assert the guard BLOCKS a private

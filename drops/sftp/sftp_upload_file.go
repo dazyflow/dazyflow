@@ -45,17 +45,11 @@ func init() {
 			ProcessModel:     core.ProcessLongLived,
 			ConnectionFields: connectionFields(),
 			Inputs: []core.Port{
-				// A wired file overrides the 'path' param, exactly as Upload
-				// to Drive's File input does.
 				{Port: "in", Label: "File", Required: true},
 				// The name is usually computed — a dated export, a per-customer
 				// file — so it takes a wire as well as a typed value.
 				{Port: "name", Label: "Name", MIME: []string{"text/plain"}},
 			},
-			// No declared outputs beyond the details: putting a file somewhere
-			// is a "do" step — "after it's uploaded, do X" chains through the
-			// pass-through pin, which fires on success. Same shape as the send
-			// steps.
 			Outputs: []core.Port{
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
@@ -84,8 +78,6 @@ func executeSFTPUpload(ctx context.Context, job core.Job, _ chan<- core.Progress
 		return params.Err(job, "not_connected", err.Error()), nil
 	}
 
-	// A wired file wins over the typed path — the same precedence Upload to
-	// Drive applies.
 	srcPath := params.StringDefault(job.Params, "path", "")
 	if in, ok := job.Input["in"]; ok && in.Ref != "" {
 		srcPath = in.Ref

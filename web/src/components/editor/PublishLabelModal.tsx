@@ -42,7 +42,6 @@ export function PublishLabelModal({
   // connect offers the fix for that warning. When present it takes the
   // primary slot in the footer so "publish anyway" is never the default.
   connect?: { label: string; onClick: () => void };
-  // onPublish receives the trimmed label (empty string = publish unnamed).
   onPublish: (label: string) => void;
   onCancel: () => void;
 }) {

@@ -15,8 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fakeFortnox is a stand-in Fortnox API. Tests register handlers per path and
-// read back the last request body to assert the envelope shape.
 type fakeFortnox struct {
 	server   *httptest.Server
 	lastBody []byte
@@ -35,9 +33,6 @@ func newFakeFortnox(t *testing.T, handler http.HandlerFunc) *fakeFortnox {
 	return f
 }
 
-// job builds a job pointed at the fake server with an injected token (the
-// `token` param wins in the oauthtok resolve sequence, so no daemon lookup is
-// needed in unit tests).
 func (f *fakeFortnox) job(params map[string]any) core.Job {
 	p := map[string]any{"token": "test-token", "base_url": f.server.URL}
 	for k, v := range params {
@@ -191,16 +186,11 @@ func TestListCustomers_Picker(t *testing.T) {
 	if got[0].ID != "42" || got[0].Name != "Acme AB — 42" {
 		t.Errorf("option[0] = %+v, want {42, Acme AB — 42}", got[0])
 	}
-	// An unnamed customer falls back to the bare number for its label.
 	if got[1].Name != "43" {
 		t.Errorf("option[1].Name = %q, want 43", got[1].Name)
 	}
 }
 
-// TestResolveRows covers every shape the 'Rows' input can arrive in. Rows pass
-// through to Fortnox verbatim as InvoiceRow objects, so the only job here is to
-// get them into a []any — and to reject a shape that isn't one with a message
-// naming the port, rather than sending Fortnox something it will refuse.
 func TestResolveRows(t *testing.T) {
 	rowsJSON := `[{"ArticleNumber":"A1","DeliveredQuantity":2}]`
 
@@ -238,8 +228,6 @@ func TestResolveRows(t *testing.T) {
 	})
 
 	t.Run("a non-array shape is rejected", func(t *testing.T) {
-		// A single object, a bare scalar, and truncated JSON all fail the same
-		// way: the input is documented as an ARRAY of row objects.
 		for _, bad := range []any{
 			`{"ArticleNumber":"A1"}`,
 			`"just a string"`,
@@ -271,8 +259,6 @@ func TestResolveRows(t *testing.T) {
 	})
 
 	t.Run("nothing set is not an error", func(t *testing.T) {
-		// An invoice with no rows is the caller's business, not this helper's —
-		// the drop's own validation decides whether that is allowed.
 		got, err := resolveRows(core.Job{ID: "j"})
 		if err != nil || got != nil {
 			t.Errorf("resolveRows(empty) = %v, %v; want nil, nil", got, err)

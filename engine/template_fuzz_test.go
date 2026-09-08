@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// FuzzSubstituteString exercises the ${scheme.path} template parser against
+// Exercises the ${scheme.path} template parser against
 // arbitrary input bytes, pinning two contract invariants the example-based
 // tests in template_test.go only spot-check:
 //
@@ -57,7 +57,6 @@ func FuzzSubstituteString(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, s string) {
-		// Invariant 1: nothing resolved → input survives byte-for-byte.
 		got, err := SubstituteString(ctx, s, passthrough)
 		if err != nil {
 			t.Fatalf("passthrough substituter must not error, got %v", err)
@@ -66,8 +65,6 @@ func FuzzSubstituteString(f *testing.F) {
 			t.Fatalf("passthrough mangled input\n in: %q\nout: %q", s, got)
 		}
 
-		// Invariant 2: everything resolved to a brace-free constant → no
-		// placeholder of the matched form may remain.
 		out, err := SubstituteString(ctx, s, resolveAll)
 		if err != nil {
 			t.Fatalf("resolveAll substituter must not error, got %v", err)

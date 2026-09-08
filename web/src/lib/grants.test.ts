@@ -40,8 +40,6 @@ describe("isGrantActive", () => {
     expect(isGrantActive(grant())).toBe(true);
   });
 
-  // Only "approved" grants confer access. A requested one is still awaiting
-  // the org's consent, and denied/expired/revoked have all been withdrawn.
   it("is inactive for every non-approved status", () => {
     const others: GrantStatus[] = ["requested", "denied", "revoked", "expired"];
     for (const status of others) {
@@ -49,8 +47,6 @@ describe("isGrantActive", () => {
     }
   });
 
-  // A revoked_at stamp ends the grant immediately, even while the status still
-  // reads approved and the expiry is in the future.
   it("is inactive once revoked, whatever the expiry says", () => {
     expect(
       isGrantActive(grant({ revoked_at: "2026-06-23T11:30:00Z" })),

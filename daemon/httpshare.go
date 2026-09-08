@@ -12,15 +12,12 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// shareAPI serves the public-share endpoints. Its fields are the whole of what
-// those handlers touch.
 type shareAPI struct {
 	auditor
 	urlBuilder
 	svc *Service
 }
 
-// shareAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) shareAPI() *shareAPI {
 	return &shareAPI{auditor: h.auditor(), urlBuilder: h.urls(), svc: h.svc}
 }
@@ -44,15 +41,11 @@ type shareResponse struct {
 	CreatedBy string    `json:"created_by,omitempty"`
 }
 
-// shareURL builds the public TV page URL for a token against the daemon's
-// effective external origin. Path mirrors the SPA route (/tv/:token).
 func (h *shareAPI) shareURL(r *http.Request, token string) string {
 	base := strings.TrimRight(h.effectiveBaseURL(r), "/")
 	return base + "/tv/" + token
 }
 
-// getShareMe is GET /api/v1/me/share — the workspace's current overview link,
-// or 404 share_not_found when none has been minted yet.
 func (h *shareAPI) getShareMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, ok := resolveTenantWorkspaceScope(rw, r, p)
 	if !ok {
@@ -75,8 +68,6 @@ func (h *shareAPI) getShareMe(rw http.ResponseWriter, r *http.Request, p core.Pr
 	})
 }
 
-// createShareMe is POST /api/v1/me/share — mint or rotate the workspace's
-// overview link. Rotating invalidates whatever link was handed out before.
 func (h *shareAPI) createShareMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, ok := resolveTenantWorkspaceScope(rw, r, p)
 	if !ok {
@@ -96,8 +87,6 @@ func (h *shareAPI) createShareMe(rw http.ResponseWriter, r *http.Request, p core
 	})
 }
 
-// deleteShareMe is DELETE /api/v1/me/share — revoke the workspace's overview
-// link. Idempotent: a workspace with no link still returns 204.
 func (h *shareAPI) deleteShareMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, ok := resolveTenantWorkspaceScope(rw, r, p)
 	if !ok {
@@ -111,9 +100,6 @@ func (h *shareAPI) deleteShareMe(rw http.ResponseWriter, r *http.Request, p core
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// publicOverview is GET /api/v1/public/overview/{token} — the unauthenticated
-// status snapshot the TV page polls. The token is the credential; an unknown
-// or rotated token is a flat 404 (no hint about whether the workspace exists).
 func (h *shareAPI) publicOverview(rw http.ResponseWriter, r *http.Request) {
 	token := strings.TrimSpace(r.PathValue("token"))
 	if token == "" {
@@ -129,14 +115,10 @@ func (h *shareAPI) publicOverview(rw http.ResponseWriter, r *http.Request) {
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	// The page polls every few seconds; let intermediaries cache very
-	// briefly to blunt a hot link, but keep it effectively live.
 	rw.Header().Set("Cache-Control", "public, max-age=2")
 	writeJSON(rw, http.StatusOK, data)
 }
 
-// shareError maps the service-layer errors onto status codes: a forbidden
-// scope/permission is 403, a missing store is 501, everything else 500.
 func (h *shareAPI) shareError(rw http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, core.ErrUnauthorized):

@@ -3,11 +3,6 @@
 
 //go:build ignore
 
-// Prints every integration name the drop catalog ships, as JSON. The web
-// build's description guard reads the result, so adding a connector fails
-// that test until its /apps page has prose written for it.
-//
-//	go run ./scripts/integrations.go > web/src/integrationMeta.catalog.json
 package main
 
 import (

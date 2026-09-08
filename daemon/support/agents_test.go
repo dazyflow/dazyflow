@@ -18,7 +18,6 @@ func TestMemSupportAgentStore_GrantRevoke(t *testing.T) {
 	if err := s.Grant(ctx, "Agent@Vendor.com", "operator-1"); err != nil {
 		t.Fatalf("grant: %v", err)
 	}
-	// Lookup is case/space-insensitive (normalized like the platform-admin store).
 	if !s.Granted("agent@vendor.com") || !s.Granted("  AGENT@vendor.com ") {
 		t.Error("granted lookup should normalize email")
 	}

@@ -34,7 +34,6 @@ func newLoopHarness(t *testing.T) *loopHarness {
 	bodyRuns := &atomic.Int32{}
 	reg := engine.NewRegistry()
 
-	// source — emits a constant ref on "out".
 	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID: "source", Version: "1.0", Summary: "src",
@@ -48,9 +47,6 @@ func newLoopHarness(t *testing.T) *loopHarness {
 		},
 	})
 
-	// for_each — succeeds and emits a results ref. The "body" output pin is
-	// what the dispatcher keys on (via the edge's FromPort), so the manifest
-	// just needs the module ID to be "for_each".
 	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID: "for_each", Version: "1.0", Summary: "loop",
@@ -65,8 +61,6 @@ func newLoopHarness(t *testing.T) *loopHarness {
 		},
 	})
 
-	// body — counts invocations. Must NEVER run in Phase 1 (no per-item
-	// execution yet), so a non-zero count is a dispatch-exclusion bug.
 	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID: "bodyfx", Version: "1.0", Summary: "body fixture",
@@ -161,13 +155,11 @@ func TestLoopBody_NotDispatchedStandalone(t *testing.T) {
 	if n := h.bodyRuns.Load(); n != 0 {
 		t.Errorf("loop body ran %d time(s) standalone; want 0", n)
 	}
-	// Body nodes hold no record in the parent run.
 	for _, id := range []string{"body", "tail"} {
 		if _, err := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, id)); err == nil {
 			t.Errorf("%q should have no parent-run record (loop-owned)", id)
 		}
 	}
-	// Normal nodes ran.
 	for _, id := range []string{"src", "loop", "after"} {
 		rec, err := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, id))
 		if err != nil || rec.Status != core.JobStatusSucceeded {

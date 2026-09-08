@@ -18,19 +18,13 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/internal/pgstore"
 )
 
-// bundles.go is the daemon-side glue for the Support feature: it turns
-// the stored run records into the raw core.RunSnapshot that core.BuildSupportBundle
-// then redacts. The redaction itself lives entirely in core — this adapter only
-// projects JobRecords into the snapshot's shape and MUST NOT pre-filter values
-// (BuildSupportBundle owns the boundary). Deliberately it does NOT touch
+// bundles.go turns stored run records into the raw core.RunSnapshot that
+// core.BuildSupportBundle then redacts. Redaction lives entirely in core, so this
+// adapter only reshapes JobRecords and MUST NOT pre-filter values —
+// BuildSupportBundle owns the boundary. It deliberately does NOT touch
 // runRec.GraphPayload: the bundle's structure is rebuilt from the redacted
-// core.Graph, never from the stored raw graph JSON.
+// core.Graph, never from the stored raw JSON.
 
-// RunSnapshotFromRecords projects a run's graph-record + its node-records into a
-// core.RunSnapshot. runRec is the graph-kind record (the run itself); nodeRecs
-// are its node-kind records (typically from ListNodeRecords with GraphRunID set).
-// The snapshot carries RAW refs and errors — core.BuildSupportBundle drops the
-// payloads and JobError.Details.
 func RunSnapshotFromRecords(runRec core.JobRecord, nodeRecs []core.JobRecord) core.RunSnapshot {
 	enqueued := runRec.EnqueuedAt
 	rs := core.RunSnapshot{
@@ -61,24 +55,20 @@ func RunSnapshotFromRecords(runRec core.JobRecord, nodeRecs []core.JobRecord) co
 	return rs
 }
 
-// ErrBundleExists is returned when creating a record with a duplicate ID; a
-// missing record reports core.ErrNotFound.
 var ErrBundleExists = fmt.Errorf("support bundle already exists")
 
-// MemBundleStore is a mutex-guarded in-memory core.BundleStore.
 type MemBundleStore struct {
 	mu   sync.Mutex
 	byID map[string]core.SupportBundleRecord
 }
 
-// NewMemBundleStore returns an empty in-memory bundle store.
 func NewMemBundleStore() *MemBundleStore {
 	return &MemBundleStore{byID: map[string]core.SupportBundleRecord{}}
 }
 
 var _ core.BundleStore = (*MemBundleStore)(nil)
 
-// Create stores a record; ID is required and must be unique.
+// Create requires a unique ID.
 func (s *MemBundleStore) Create(_ context.Context, rec core.SupportBundleRecord) error {
 	if rec.ID == "" {
 		return fmt.Errorf("support bundle id is required")
@@ -92,7 +82,6 @@ func (s *MemBundleStore) Create(_ context.Context, rec core.SupportBundleRecord)
 	return nil
 }
 
-// Get returns the record, or core.ErrNotFound.
 func (s *MemBundleStore) Get(_ context.Context, id string) (core.SupportBundleRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -103,7 +92,6 @@ func (s *MemBundleStore) Get(_ context.Context, id string) (core.SupportBundleRe
 	return rec, nil
 }
 
-// ListForTenant returns every bundle record in tenant, newest first.
 func (s *MemBundleStore) ListForTenant(_ context.Context, tenant string) ([]core.SupportBundleRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -116,8 +104,6 @@ func (s *MemBundleStore) ListForTenant(_ context.Context, tenant string) ([]core
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
 	return out, nil
 }
-
-// ---- Postgres --------------------------------------------------------------
 
 const pgBundleSchema = `
 CREATE TABLE IF NOT EXISTS support_bundles (
@@ -133,18 +119,16 @@ CREATE TABLE IF NOT EXISTS support_bundles (
 CREATE INDEX IF NOT EXISTS support_bundles_tenant_idx ON support_bundles (tenant);
 `
 
-// EnsurePgBundleSchema creates the support_bundles table. Idempotent.
 func EnsurePgBundleSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return pgstore.ApplySchema(ctx, pool, pgBundleSchema)
 }
 
-// PgBundleStore is the Postgres core.BundleStore. Payload is stored as BYTEA to
-// preserve the redacted bundle JSON byte-for-byte (never re-serialized).
+// PgBundleStore stores Payload as BYTEA, preserving the redacted bundle JSON
+// byte-for-byte rather than re-serializing it.
 type PgBundleStore struct {
 	pool *pgxpool.Pool
 }
 
-// NewPgBundleStore creates the schema and returns the store.
 func NewPgBundleStore(ctx context.Context, pool *pgxpool.Pool) (*PgBundleStore, error) {
 	if err := EnsurePgBundleSchema(ctx, pool); err != nil {
 		return nil, err
@@ -212,9 +196,6 @@ func (s *PgBundleStore) ListForTenant(ctx context.Context, tenant string) ([]cor
 	return out, rows.Err()
 }
 
-// DeleteByTenant removes every stored diagnostic bundle belonging to one org.
-// Bundles are redacted by construction, but they still describe the org's flow
-// structure — so they leave with the org (gdpr.go tenantEraser).
 func (s *MemBundleStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
 	if ident == "" {
 		return 0, nil
@@ -245,10 +226,6 @@ func (s *MemBundleStore) DeleteByTenant(ctx context.Context, tenant string) (int
 	return n, nil
 }
 
-// DeleteByTenant removes an org's stored bundles.
-// AnonymizeSubject scrubs an erased person from created_by. Not on
-// core.BundleStore, matching DeleteByTenant: the cascade probes for both rather
-// than making every bundle store implement erasure.
 func (s *PgBundleStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
 	if ident == "" {
 		return 0, nil
@@ -269,25 +246,20 @@ func (s *PgBundleStore) DeleteByTenant(ctx context.Context, tenant string) (int,
 	return int(ct.RowsAffected()), nil
 }
 
-// Prune deletes stored diagnostic bundles older than the retention window,
-// oldest first, up to batch rows. A bundle is a point-in-time snapshot taken to
-// answer one ticket; once it's past retention and nothing points at it, it is
-// pure storage cost.
+// Prune deletes bundles past the retention window, oldest first. A bundle is a
+// snapshot taken to answer one ticket, so past retention with nothing pointing at
+// it, it is pure storage cost.
 //
-// A bundle referenced by ANY ticket is kept, whatever that ticket's status. The
-// obvious-looking version of this only spared bundles whose ticket was still
-// open, which quietly broke the pairing: the two prunes key on different
-// timestamps — a bundle on its `created_at`, a ticket on its `updated_at` — so a
-// ticket filed 13 months ago, conversed on for a year and resolved last week
-// stayed (its updated_at is recent) while its bundle was swept (its created_at
-// is not). `bundle_id` was still set, so "View diagnostic" 404'd for both the
-// customer and the agent.
+// A bundle referenced by ANY ticket is kept, whatever that ticket's status.
+// Sparing only bundles whose ticket was still open broke the pairing, because the
+// two prunes key on different timestamps — a bundle on created_at, a ticket on
+// updated_at — so a ticket filed 13 months ago and resolved last week stayed while
+// its bundle was swept, and "View diagnostic" 404'd for customer and agent alike.
 //
-// The invariant instead: a bundle outlives every ticket that references it. The
-// ticket's own retention decides when the pair goes, and because the sweep
-// prunes tickets before bundles, the freed bundle is collected in the same pass.
-// A bundle no ticket references (a filing that failed halfway) still ages out on
-// its own.
+// The invariant instead: a bundle outlives every ticket referencing it. The
+// ticket's own retention decides when the pair goes, and since the sweep prunes
+// tickets first, the freed bundle is collected in the same pass. A bundle no
+// ticket references still ages out on its own.
 func (s *PgBundleStore) Prune(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
 	if olderThan <= 0 {
 		return 0, nil

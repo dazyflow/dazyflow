@@ -1,19 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Results boards — an in-app, read-only view of the Collections.
-//
-// The Collections drops (drops/db/builtin_store.go) let a non-technical
-// user collect rows with zero setup; these endpoints let them *see* those
-// rows. A "board" is just a user table inside the workspace's built-in
-// store SQLite file. There is no new storage system here: the read path is
-// a thin, read-only open of the same `.dazyflow-store/data.db` the drops
-// write to, scoped to the caller's (tenant, workspace).
-//
-// Because the store lives under the sandbox subtree it already rides the
-// GDPR erasure cascade (FSSandbox.RemoveTenant) for free — boards need no
-// new deletion/export wiring.
-
 package daemon
 
 import (
@@ -39,10 +26,6 @@ import (
 // Keep in sync with drops/db/builtin_store.go.
 const builtinStoreRelPath = ".dazyflow-store/data.db"
 
-// boardRowLimit caps how many rows BoardRows returns in a single page,
-// even if a larger ?limit is requested. The page is meant to be browsed,
-// not bulk-exported (the UI offers CSV for the latter, built client-side
-// from what it fetched).
 const boardRowLimit = 1000
 
 // boardRowIDKey is the reserved key under which each row's SQLite rowid is
@@ -52,23 +35,17 @@ const boardRowLimit = 1000
 // column of the same name.
 const boardRowIDKey = "_dz_rowid"
 
-// Sentinel errors the HTTP layer maps to status codes. Mirrors the
-// not-configured / not-found / bad-input conventions in httpme.go.
 var (
 	errBoardsUnavailable = errors.New("Collections requires a workspace sandbox")
 	errBoardNotFound     = errors.New("no such board")
 	errBoardInvalidName  = errors.New("invalid board name")
 )
 
-// BoardSummary is one row of the board list: the table name and how many
-// rows it currently holds.
 type BoardSummary struct {
 	Name string `json:"name"`
 	Rows int64  `json:"rows"`
 }
 
-// BoardPage is a window onto one board's contents — its columns and a
-// page of rows, plus the full row count and whether the page was capped.
 type BoardPage struct {
 	Name      string           `json:"name"`
 	Columns   []string         `json:"columns"`
@@ -86,11 +63,6 @@ func quoteBoardIdent(name string) string {
 	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 }
 
-// validateBoardName rejects only genuinely unsafe names (empty, NUL byte,
-// absurdly long) — the same minimum drops/db.validateIdent enforces before
-// a name is quoted. Charset is intentionally unrestricted; quoting handles
-// the rest, and reads additionally confirm the name is a real table in
-// sqlite_master before querying it.
 func validateBoardName(name string) error {
 	if name == "" {
 		return fmt.Errorf("%w: must not be empty", errBoardInvalidName)
@@ -168,8 +140,6 @@ func (s *Service) ListBoards(ctx context.Context, p core.Principal, tenant, work
 
 	out := make([]BoardSummary, 0, len(names))
 	for _, n := range names {
-		// n comes straight from sqlite_master so it's a real table, but
-		// quote it anyway — the identifier is still being spliced into SQL.
 		var count int64
 		if err := db.QueryRowContext(ctx,
 			"SELECT COUNT(*) FROM "+quoteBoardIdent(n)).Scan(&count); err != nil {
@@ -216,10 +186,6 @@ func (s *Service) BoardRows(ctx context.Context, p core.Principal, tenant, works
 		return BoardPage{}, fmt.Errorf("count rows: %w", err)
 	}
 
-	// limit/offset are bound as parameters (only the validated, confirmed
-	// table name is spliced). The leading `rowid AS _dz_rowid` gives each row a
-	// stable handle for the delete endpoint; `*` still expands to just the
-	// user columns, so the displayed table is unchanged.
 	rows, err := db.QueryContext(ctx,
 		"SELECT rowid AS "+boardRowIDKey+", * FROM "+quoted+" LIMIT ? OFFSET ?", limit, offset)
 	if err != nil {
@@ -231,7 +197,6 @@ func (s *Service) BoardRows(ctx context.Context, p core.Principal, tenant, works
 	if err != nil {
 		return BoardPage{}, fmt.Errorf("columns: %w", err)
 	}
-	// scanned[0] is the rowid alias; the rest are the real, displayed columns.
 	columns := append([]string(nil), scanned[1:]...)
 	out := make([]map[string]any, 0, limit)
 	for rows.Next() {
@@ -244,8 +209,6 @@ func (s *Service) BoardRows(ctx context.Context, p core.Principal, tenant, works
 			return BoardPage{}, fmt.Errorf("scan row %d: %w", len(out), err)
 		}
 		rec := make(map[string]any, len(scanned))
-		// The rowid — the delete handle — under its reserved key, kept out of
-		// the displayed columns above.
 		rec[boardRowIDKey] = vals[0]
 		for i := 1; i < len(scanned); i++ {
 			c := scanned[i]
@@ -273,10 +236,6 @@ func (s *Service) BoardRows(ctx context.Context, p core.Principal, tenant, works
 	}, nil
 }
 
-// ClearBoard drops a board (its table) from the workspace's built-in
-// store. Idempotent: an absent store or absent table returns cleanly (an
-// empty store is not an error — same stance as the read path). The name is
-// validated and quoted before it touches SQL.
 func (s *Service) ClearBoard(ctx context.Context, p core.Principal, tenant, workspace, name string) error {
 	if err := validateBoardName(name); err != nil {
 		return err
@@ -323,10 +282,6 @@ func (s *Service) DeleteBoardRow(ctx context.Context, p core.Principal, tenant, 
 	return nil
 }
 
-// boardExists reports whether name is a real user table in the store. The
-// read path uses it so an unknown board is a clean 404 rather than a raw
-// "no such table" SQL error, and so we only ever SELECT from a name the
-// store actually holds.
 func (s *Service) boardExists(ctx context.Context, db *sql.DB, name string) bool {
 	var got string
 	err := db.QueryRowContext(ctx,
@@ -335,12 +290,6 @@ func (s *Service) boardExists(ctx context.Context, db *sql.DB, name string) bool
 	return err == nil
 }
 
-// --- HTTP handlers ----------------------------------------------------
-
-// boardScope is resolveScope for /me/boards. The cross-scope guard matters
-// most on this surface: unlike the flows surface (where the service re-checks
-// permissions per flow), the board service just opens whatever sandbox dir
-// it's handed, so this is the only barrier.
 func (h *flowAPI) boardScope(rw http.ResponseWriter, r *http.Request, p core.Principal) (string, string, bool) {
 	return resolveScope(rw, r, p, "read boards in")
 }

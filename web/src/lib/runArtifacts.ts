@@ -17,36 +17,18 @@
 
 import type { JobRecord, Ref } from "../types";
 
-// SCRATCH_SCHEME marks a path in the run's per-run scratch tree. Mirrors
-// drops/internal/sandbox.Scheme.
 const SCRATCH_SCHEME = "scratch://";
 
-// WORKSPACE_SCHEME is a redundant explicit spelling of "workspace-relative".
-// A step echoes its path param straight into its output ref, so a flow built
-// by copying a step example from before the prefix was retired still emits it
-// — the resolver strips it on the way to disk (drops/internal/sandbox), and
-// this strips it on the way to a download URL.
 const WORKSPACE_SCHEME = "workspace://";
 
-// The daemon hides its scratch subtree from every workspace file operation
-// (daemon/httpfiles.go isScratch), so a ref pointing into it is not
-// downloadable either. Mirrors daemon.scratchDirName.
 const SCRATCH_DIR = ".scratch";
 
 export type RunArtifact = {
-  // Which step emitted it, and on which port.
   nodeID: string;
   port: string;
-  // path is workspace-relative and ready for the file-download endpoint.
-  // Empty when the ref is ephemeral — there is nothing to ask for.
   path: string;
-  // raw is the ref exactly as the step emitted it, so the row can show the
-  // scratch:// spelling the flow author typed.
   raw: string;
   mime?: string;
-  // ephemeral: the bytes lived in the run's scratch tree and are gone. Listed
-  // anyway — "the file you asked for was temporary" is the answer to why
-  // there is nothing to download, and silence is not.
   ephemeral: boolean;
 };
 
@@ -67,8 +49,6 @@ function normalizeRef(raw: string): string | null {
   let p = raw.trim();
   if (p === "") return null;
   if (p.startsWith(WORKSPACE_SCHEME)) p = p.slice(WORKSPACE_SCHEME.length);
-  // A ref carrying any other scheme is not a sandbox path at all (an http
-  // URL, a blob handle); it is not this panel's business.
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(p)) return null;
   if (p.startsWith("/")) return null;
   const parts: string[] = [];

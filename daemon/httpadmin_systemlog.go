@@ -12,20 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// systemLogTail streams the daemon's own log output to a platform admin as
-// Server-Sent Events — the live "System log" viewer. It first backfills the
-// retained ring buffer (so the viewer isn't blank on connect) and then
-// forwards each new log line as it's written. Mirrors jobEvents' SSE
-// plumbing: text/event-stream headers, a flush after every frame, a 25s
-// keep-alive ping, and disconnect on request-context cancel.
-//
-// Each line is one `event: line` frame whose data is the raw log line encoded
-// as a JSON string — so embedded quotes, tabs, and ANSI escapes survive
-// transport intact and the client just JSON.parses it. Regex filtering is
-// done client-side in the viewer (responsive, no reconnect on filter change).
-//
-// "?tail=N" caps the backfill (default 500; N<=0 means no backfill, stream
-// live only). platform:admin only — the daemon log is instance-wide.
 func (h *orgAPI) systemLogTail(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
@@ -74,8 +60,6 @@ func (h *orgAPI) systemLogTail(rw http.ResponseWriter, r *http.Request, p core.P
 		case <-r.Context().Done():
 			return
 		case <-ping.C:
-			// SSE comment line — dropped by EventSource but keeps the
-			// connection alive through idle-timeout proxies.
 			_, _ = fmt.Fprintf(rw, ": ping\n\n")
 			flusher.Flush()
 		case line, ok := <-lines:

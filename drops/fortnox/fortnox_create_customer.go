@@ -80,7 +80,6 @@ func executeCreateCustomer(ctx context.Context, job core.Job, _ chan<- core.Prog
 		return params.Err(job, "bad_input", "'Email' input must be text"), nil
 	}
 
-	// Fortnox wraps the request body in a singular "Customer" envelope.
 	payload := map[string]any{"Name": name}
 	if email != "" {
 		payload["Email"] = email

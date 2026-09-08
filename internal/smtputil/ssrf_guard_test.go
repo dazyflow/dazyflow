@@ -12,9 +12,6 @@ import (
 	"time"
 )
 
-// fakeSMTP stands in for an internal mail relay / any TCP service an attacker
-// could rebind a tenant-supplied SMTP host onto. It speaks just enough of the
-// protocol for dial's NewClient + QUIT to succeed.
 func fakeSMTP(t *testing.T) (addr string, stop func()) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -64,10 +61,10 @@ func fakeSMTP(t *testing.T) (addr string, stop func()) {
 	return ln.Addr().String(), func() { ln.Close() }
 }
 
-// TestVerifyBlocksLoopback guards the SSRF fix: the tenant-facing SMTP path
-// (Verify / Send) must refuse to connect to a loopback/private address at dial
-// time, so DNS rebinding past the pre-flight CheckDialHost cannot reach
-// internal services or exfiltrate the configured AUTH credentials.
+// Guards the SSRF fix: the tenant-facing SMTP path (Verify / Send) must refuse
+// to connect to a loopback/private address at dial time, so DNS rebinding past
+// the pre-flight CheckDialHost cannot reach internal services or exfiltrate
+// the configured AUTH credentials.
 func TestVerifyBlocksLoopback(t *testing.T) {
 	addr, stop := fakeSMTP(t)
 	defer stop()
@@ -81,9 +78,6 @@ func TestVerifyBlocksLoopback(t *testing.T) {
 	}
 }
 
-// TestSendTrustedAllowsLoopback documents that the operator's own Mailer path
-// is intentionally exempt: its host comes from trusted instance config and may
-// legitimately be an internal/sidecar relay.
 func TestSendTrustedAllowsLoopback(t *testing.T) {
 	addr, stop := fakeSMTP(t)
 	defer stop()

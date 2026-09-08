@@ -31,9 +31,6 @@ function prefersDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-// getThemeMode returns the user's stored CHOICE. Anything unrecognised —
-// including the "" the server uses for "no explicit choice" and any value
-// written by a build that predates this — means "follow the system".
 export function getThemeMode(): ThemeMode {
   try {
     const v = localStorage.getItem(KEY);
@@ -44,7 +41,6 @@ export function getThemeMode(): ThemeMode {
   return "system";
 }
 
-// resolveTheme collapses a mode to the concrete theme to paint.
 export function resolveTheme(mode: ThemeMode): ResolvedTheme {
   if (mode === "dark" || mode === "light") return mode;
   return prefersDark() ? "dark" : "light";
@@ -55,7 +51,6 @@ export function getTheme(): ResolvedTheme {
   return resolveTheme(getThemeMode());
 }
 
-// applyTheme records the choice and stamps the resolved theme on <html>.
 export function applyTheme(mode: ThemeMode): void {
   document.documentElement.setAttribute("data-theme", resolveTheme(mode));
   try {
@@ -65,10 +60,6 @@ export function applyTheme(mode: ThemeMode): void {
   }
 }
 
-// watchSystemTheme keeps a "system" user in sync when the OS flips light/dark
-// mid-session (macOS/Windows auto-switching at dusk, most commonly). Re-reads
-// the stored mode on every event so a later explicit choice wins without
-// needing to tear the listener down. Registered once from initTheme.
 function watchSystemTheme(): void {
   if (typeof window === "undefined" || !window.matchMedia) return;
   const mq = window.matchMedia("(prefers-color-scheme: dark)");

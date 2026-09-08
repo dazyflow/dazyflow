@@ -16,7 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// maxForecastDays is the horizon the free 5-day/3-hour forecast covers.
 const maxForecastDays = 5
 
 func init() {
@@ -78,8 +77,6 @@ func init() {
 	})
 }
 
-// owmForecast is the /data/2.5/forecast response: 3-hourly slots over 5 days
-// plus a city block whose timezone offset lets us bucket slots into LOCAL days.
 type owmForecast struct {
 	List []owmSlot `json:"list"`
 	City struct {
@@ -88,7 +85,6 @@ type owmForecast struct {
 	} `json:"city"`
 }
 
-// owmSlot is one 3-hour forecast step.
 type owmSlot struct {
 	Dt   int64 `json:"dt"`
 	Main struct {
@@ -100,7 +96,6 @@ type owmSlot struct {
 	Weather []owmWeather `json:"weather"`
 }
 
-// dayAgg is one calendar day rolled up from the 3-hourly slots that fall in it.
 type dayAgg struct {
 	Date        string  `json:"date"` // local YYYY-MM-DD
 	Dt          int64   `json:"dt"`   // the representative (nearest-noon) slot
@@ -111,10 +106,6 @@ type dayAgg struct {
 	Description string  `json:"description"`
 }
 
-// executeForecast fetches the 5-day/3-hour forecast for the resolved
-// coordinate, aggregates the slots into per-day min/max + conditions, trims to
-// the requested number of days, and emits a readable summary plus the daily
-// array (and the full raw response).
 func executeForecast(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	lat, lon, err := geoloc.ResolveLatLon(job)
 	if err != nil {
@@ -184,8 +175,6 @@ func aggregateDaily(fc owmForecast, days int) []dayAgg {
 		if s.Pop > d.Pop {
 			d.Pop = s.Pop
 		}
-		// Seconds-of-day in local time; the slot closest to 12:00 wins the
-		// day's representative conditions.
 		sod := ((localUnix % 86400) + 86400) % 86400
 		delta := sod - 43200
 		if delta < 0 {
@@ -207,8 +196,6 @@ func aggregateDaily(fc owmForecast, days int) []dayAgg {
 	return out
 }
 
-// forecastSummary renders one line per day, e.g.
-// "Mon Jun 24: Light rain, 9–19°C, rain 20%".
 func forecastSummary(days []dayAgg, units string) string {
 	if len(days) == 0 {
 		return "No forecast available."

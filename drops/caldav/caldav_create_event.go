@@ -127,13 +127,8 @@ func executeCalDAVCreate(ctx context.Context, job core.Job, _ chan<- core.Progre
 	allDay := params.BoolDefault(job.Params, "all_day", false)
 	if !hasEnd {
 		if allDay {
-			// One day, expressed the way iCalendar wants it: DTEND is the day
-			// AFTER the last day of the span.
 			end = start.AddDate(0, 0, 1)
 		} else {
-			// An hour is the convention every calendar UI uses for a new
-			// event, and a zero-length event renders as a point most clients
-			// hide.
 			end = start.Add(time.Hour)
 		}
 	}
@@ -199,7 +194,6 @@ func executeCalDAVCreate(ctx context.Context, job core.Job, _ chan<- core.Progre
 	}, nil
 }
 
-// buildCalendar assembles the VCALENDAR one event goes out in.
 func buildCalendar(uid, summary, description, where, guests string, start, end time.Time, allDay bool) *ical.Calendar {
 	event := ical.NewEvent()
 	event.Props.SetText(ical.PropUID, uid)
@@ -208,8 +202,6 @@ func buildCalendar(uid, summary, description, where, guests string, start, end t
 	event.Props.SetDateTime(ical.PropDateTimeStamp, time.Now().UTC())
 	event.Props.SetText(ical.PropSummary, summary)
 	if allDay {
-		// SetDate writes VALUE=DATE, which is the whole difference between an
-		// all-day entry and a midnight-to-midnight timed one.
 		event.Props.SetDate(ical.PropDateTimeStart, start)
 		event.Props.SetDate(ical.PropDateTimeEnd, end)
 	} else {
@@ -232,16 +224,12 @@ func buildCalendar(uid, summary, description, where, guests string, start, end t
 	}
 
 	cal := ical.NewCalendar()
-	// PRODID and VERSION are both required. A missing VERSION is the more
-	// common reason a server refuses a hand-built VCALENDAR.
 	cal.Props.SetText(ical.PropProductID, "-//Dazyflow//Dazyflow//EN")
 	cal.Props.SetText(ical.PropVersion, "2.0")
 	cal.Children = append(cal.Children, event.Component)
 	return cal
 }
 
-// newUID mints the event's unique identifier, which also becomes its filename
-// on the server.
 func newUID() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {

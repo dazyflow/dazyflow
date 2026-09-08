@@ -25,7 +25,6 @@ func TestRetryHint_KeepsLongest(t *testing.T) {
 	if got := h.After(); got != 10*time.Second {
 		t.Errorf("After = %v, want 10s (longest wins)", got)
 	}
-	// Non-positive durations are ignored.
 	h.set(0)
 	h.set(-1 * time.Second)
 	if got := h.After(); got != 10*time.Second {

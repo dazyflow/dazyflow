@@ -36,7 +36,6 @@ vi.mock("../api", () => ({
 
 import { Apps, AppDetail } from "./Apps";
 
-// drop builds one manifest. Only the fields the index reads are set.
 function drop(id: string, integration: string, extra: Record<string, unknown> = {}) {
   return {
     id,
@@ -50,7 +49,6 @@ function drop(id: string, integration: string, extra: Record<string, unknown> = 
   };
 }
 
-// A catalog big enough to page: 30 apps named App 01 … App 30, one step each.
 function manyApps(n: number) {
   return Array.from({ length: n }, (_, i) =>
     drop(`step_${i}`, `App ${String(i + 1).padStart(2, "0")}`),
@@ -128,8 +126,6 @@ describe("Apps index", () => {
     ).toBeInTheDocument();
   });
 
-  // The difference between a search box and a useful one: the steps inside an
-  // app are searchable, because nobody knows the SMS app is called 46elks.
   it("finds an app by the name of a step inside it", async () => {
     listDrops.mockResolvedValue({
       drops: [drop("elks_send_sms", "46elks", { label: "Send an SMS" })],
@@ -175,8 +171,6 @@ describe("Apps index", () => {
     expect(screen.queryByText("Order Service")).toBeNull();
   });
 
-  // And it is searchable by it, which is the other half of a description
-  // earning its place on a page built to be read at catalog scale.
   it("finds an uncurated app by its own description", async () => {
     listDrops.mockResolvedValue({
       drops: [
@@ -201,7 +195,6 @@ describe("Apps index", () => {
     expect(screen.getByText("Order service")).toBeInTheDocument();
   });
 
-  // Diacritics fold, so a user types what their keyboard has.
   it("matches across diacritics", async () => {
     listDrops.mockResolvedValue({ drops: [drop("fortnox_x", "Bokföring")] });
     renderApps();
@@ -245,8 +238,6 @@ describe("Apps index", () => {
     expect(screen.getByText("Needy")).toBeInTheDocument();
   });
 
-  // The pre-existing deep link (?category=ai, from "Connect an AI provider")
-  // has to keep working: it is the same parameter the dropdown now writes.
   it("honours a ?category= deep link", async () => {
     listDrops.mockResolvedValue({
       drops: [
@@ -271,14 +262,11 @@ describe("Apps index", () => {
     );
     expect(screen.getByText("integrations.countNone")).toBeInTheDocument();
 
-    // Two of them: one in the toolbar, one in the empty state.
     const clears = screen.getAllByText("integrations.filterClear");
     await userEvent.click(clears[clears.length - 1]);
     await waitFor(() => expect(screen.getByText("App 01")).toBeInTheDocument());
   });
 
-  // Each card carries the state the section headings used to carry, now that the
-  // grid is flat.
   it("names each app's state on its card", async () => {
     listDrops.mockResolvedValue({
       drops: [
@@ -344,8 +332,6 @@ describe("AppDetail with two connections", () => {
       return found;
     });
 
-    // Distinct, and neither is the bare app name — the complaint was that both
-    // read "Connect Stripe", so telling them apart meant guessing.
     expect(new Set(prompts).size).toBe(2);
     expect(prompts.some((p) => p.includes("Webhook signing secret"))).toBe(true);
     expect(prompts.some((p) => p.includes("Secret API key"))).toBe(true);

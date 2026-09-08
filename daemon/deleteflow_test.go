@@ -19,8 +19,6 @@ import (
 // paths; the gateway harness's own token is an API key, so the password cases
 // need a session credential wired explicitly.
 
-// deleteFlowSessionHarness wires Users + Sessions + a session authenticator and
-// returns a signed-in session token for an editor in t/ws.
 func deleteFlowSessionHarness(t *testing.T, password string) (*gatewayHarness, string) {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -80,7 +78,6 @@ func TestDeleteFlowMe_SessionOK(t *testing.T) {
 	if rw.Code != http.StatusNoContent {
 		t.Fatalf("delete flow = %d (%s), want 204", rw.Code, rw.Body.String())
 	}
-	// Idempotent: deleting again is a no-op success (the flow is gone).
 	rw = sessionDo(t, h, tok, "DELETE", "/api/v1/me/flows/"+cov3FlowID, map[string]any{"password": "correct-pw"})
 	if rw.Code != http.StatusNoContent {
 		t.Fatalf("re-delete flow = %d (%s), want 204", rw.Code, rw.Body.String())
@@ -123,7 +120,6 @@ func TestDeleteFlowMe_APIKeyWithoutAdminScope(t *testing.T) {
 	if !strings.Contains(rw.Body.String(), "admin_scope_required") {
 		t.Fatalf("want admin_scope_required code, got %s", rw.Body.String())
 	}
-	// The message has to name the way out, or the caller just retries.
 	if !strings.Contains(rw.Body.String(), "graph:admin") {
 		t.Fatalf("error should name the missing permission: %s", rw.Body.String())
 	}
@@ -132,8 +128,6 @@ func TestDeleteFlowMe_APIKeyWithoutAdminScope(t *testing.T) {
 	}
 }
 
-// A key can't smuggle itself past the scope check by supplying a password in
-// the body — the credential kind picks the gate, not the body.
 func TestDeleteFlowMe_APIKeyCannotUsePasswordGate(t *testing.T) {
 	t.Parallel()
 	h, _ := deleteFlowSessionHarness(t, "correct-pw")

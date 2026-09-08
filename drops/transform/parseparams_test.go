@@ -9,8 +9,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// ===== parseRouteParams error branches ================================
-
 func TestCov_ParseRouteParamsErrors(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -35,8 +33,6 @@ func TestCov_ParseRouteParamsErrors(t *testing.T) {
 	}
 }
 
-// ===== parseJoinParams error branches ================================
-
 func TestCov_ParseJoinParamsBranches(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -56,7 +52,6 @@ func TestCov_ParseJoinParamsBranches(t *testing.T) {
 			}
 		})
 	}
-	// Happy path with explicit kind + suffix.
 	on, kind, suffix, err := parseJoinParams(map[string]any{
 		"on": map[string]any{"a": "b"}, "kind": "left", "right_suffix": "_r",
 	})
@@ -64,8 +59,6 @@ func TestCov_ParseJoinParamsBranches(t *testing.T) {
 		t.Errorf("happy: on=%v kind=%q suffix=%q err=%v", on, kind, suffix, err)
 	}
 }
-
-// ===== parseGroupParams error branches ===============================
 
 func TestCov_ParseGroupParamsBranches(t *testing.T) {
 	cases := []struct {
@@ -91,8 +84,6 @@ func TestCov_ParseGroupParamsBranches(t *testing.T) {
 		})
 	}
 }
-
-// ===== group finalize empty-group branches ===========================
 
 func TestCov_GroupMinMaxFirstLastEmptyGroup(t *testing.T) {
 	// A group whose aggregate column holds only nils: numeric path never
@@ -122,8 +113,6 @@ func TestCov_GroupMinMaxFirstLastEmptyGroup(t *testing.T) {
 		t.Errorf("first/last = %v / %v", r["fl"], r["ls"])
 	}
 }
-
-// ===== isFenceLang via stripFence (parse_json) =======================
 
 func TestCov_ParseJSONFenceBackticksInProse(t *testing.T) {
 	// Fence info line that's NOT a bare lang tag ("{") is treated as

@@ -17,10 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// subgraphHarness wires a Service + a worker whose SubGraphRunner points back
-// at the Service, so a parked subgraph node actually submits and resumes a
-// child graph end-to-end. It uses the real `subgraph` drop from the default
-// registry.
 type subgraphHarness struct {
 	svc       *daemon.Service
 	jobs      core.JobStore
@@ -65,16 +61,10 @@ func newSubgraphHarness(t *testing.T) *subgraphHarness {
 	return &subgraphHarness{svc: svc, jobs: jobs, bus: bus, ws: ws, principal: p}
 }
 
-// TestSubgraph_EndToEnd_OutputProjection covers SubmitChild,
-// submitGraphWithParent, maybeSubmitChild, maybeResumeParent and
-// projectChildOutputs: a parent subgraph node seeds a child node's input and
-// projects a child node's output back up to the parent's port.
 func TestSubgraph_EndToEnd_OutputProjection(t *testing.T) {
 	t.Parallel()
 	h := newSubgraphHarness(t)
 
-	// Child graph: a seeded start node feeding a downstream echo node. The
-	// subgraph seeds "start"'s input and projects "echo"'s pass output up.
 	child := core.Graph{
 		ID: "child", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -115,27 +105,20 @@ func TestSubgraph_EndToEnd_OutputProjection(t *testing.T) {
 		t.Fatalf("parent status = %q, want succeeded (err=%+v)", terminal.Status, terminal.Error)
 	}
 
-	// The "after" node ran, meaning the parent's subgraph node resumed
-	// successfully and dispatched downstream.
 	after, err := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, "after"))
 	if err != nil || after.Status != core.JobStatusSucceeded {
 		t.Fatalf("after status = %q (err=%v), want succeeded", after.Status, err)
 	}
-	// The subgraph node ("call") itself succeeded.
 	call, _ := h.jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, "call"))
 	if call.Status != core.JobStatusSucceeded {
 		t.Fatalf("call (subgraph) status = %q, want succeeded", call.Status)
 	}
 }
 
-// TestSubgraph_ChildFailurePropagates covers maybeResumeParent's child-failure
-// leg: a child node fails, the parent subgraph node is failed with
-// child_failed, and the parent graph fails.
 func TestSubgraph_ChildFailurePropagates(t *testing.T) {
 	t.Parallel()
 	h := newSubgraphHarness(t)
 
-	// Child graph whose only node references a nonexistent module -> fails.
 	child := core.Graph{
 		ID: "badchild", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{{ID: "boom", Module: "nonexistent"}},
@@ -167,15 +150,10 @@ func TestSubgraph_ChildFailurePropagates(t *testing.T) {
 	}
 }
 
-// TestSubgraph_DepthCapStopsRecursion covers subgraphDepth and the
-// nesting-cap leg of SubmitChild: a flow that references itself via a subgraph
-// node recurses until the depth cap, then the deepest submit is refused — so
-// the top-level run fails rather than spawning children forever.
 func TestSubgraph_DepthCapStopsRecursion(t *testing.T) {
 	t.Parallel()
 	h := newSubgraphHarness(t)
 
-	// A graph whose only node is a subgraph node pointing at ITSELF.
 	selfRef := core.Graph{
 		ID: "loopy", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -196,14 +174,9 @@ func TestSubgraph_DepthCapStopsRecursion(t *testing.T) {
 	}
 }
 
-// TestSubgraph_MissingChildGraphFailsParent covers SubmitChild's load-error
-// path (and worker.maybeSubmitChild's submit-failure handling): the referenced
-// child graph does not exist, so the parent node fails with subgraph_submit.
 func TestSubgraph_MissingChildGraphFailsParent(t *testing.T) {
 	t.Parallel()
 	h := newSubgraphHarness(t)
-	// Save *some* graph so the workspace has a HEAD to load from; the child
-	// we reference ("ghost") is absent.
 	_, _ = h.ws.Save(core.Graph{ID: "present", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{{ID: "n", Module: "delay", Params: map[string]any{"ms": 1}}}}, "u")
 

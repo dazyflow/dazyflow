@@ -63,13 +63,12 @@ func TestScrubSecrets(t *testing.T) {
 	}
 }
 
-// TestTicketQueueSummary_Add pins the terminal/non-terminal split the support
-// dashboard's tiles depend on: ByStatus/Total count every ticket, while
-// Open/Unassigned/ByAssignee count only live work. A resolved ticket nobody owns
-// must not inflate "needs a first responder".
+// Pins the terminal/non-terminal split the support dashboard's tiles depend
+// on: ByStatus/Total count every ticket, while Open/Unassigned/ByAssignee
+// count only live work. A resolved ticket nobody owns must not inflate "needs
+// a first responder".
 func TestTicketQueueSummary_Add(t *testing.T) {
 	s := NewTicketQueueSummary()
-	// Every status key is present up front so the UI can render stable options.
 	if len(s.ByStatus) != 5 {
 		t.Fatalf("fresh summary should carry all 5 status keys, got %d", len(s.ByStatus))
 	}

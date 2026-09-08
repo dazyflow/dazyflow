@@ -12,9 +12,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// TestBuiltinStore_AppendThenQuery exercises the no-DSN store end to
-// end: append rows (auto-creating the file + table), then read them
-// back via the query drop. No path is ever supplied — that's the point.
 func TestBuiltinStore_AppendThenQuery(t *testing.T) {
 	root := t.TempDir()
 
@@ -61,9 +58,6 @@ func TestBuiltinStore_AppendThenQuery(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_AppendSingleObject verifies the form/webhook path:
-// a single {field: value} object (not a list) is accepted and stored as
-// one row, so "form → save" needs no reshape step.
 func TestBuiltinStore_AppendSingleObject(t *testing.T) {
 	root := t.TempDir()
 	res, err := executeBuiltinStoreAppend(t.Context(), core.Job{
@@ -84,14 +78,6 @@ func TestBuiltinStore_AppendSingleObject(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_AppendEvolvesSchema covers the form-editing path:
-// a user appends submissions with one shape, then edits their form to
-// add a new field. The store's whole point is that the user doesn't
-// manage schema, so the second append should automatically ALTER the
-// table to add the new column — not fail with "table has no column
-// named X". sqlite_insert_rows still rejects this because that drop is
-// for users who manage their own schema; only the built-in path
-// evolves.
 func TestBuiltinStore_AppendEvolvesSchema(t *testing.T) {
 	root := t.TempDir()
 	base := core.Job{WorkspaceRoot: root, Params: map[string]any{"table": "leads"}}
@@ -118,8 +104,6 @@ func TestBuiltinStore_AppendEvolvesSchema(t *testing.T) {
 		t.Fatalf("schema evolution failed: status=%q err=%+v", second.Status, second.Error)
 	}
 
-	// Verify the phone value actually landed (not just that the
-	// statement was accepted).
 	q, err := executeBuiltinStoreQuery(t.Context(), core.Job{
 		WorkspaceRoot: root,
 		Params: map[string]any{
@@ -136,7 +120,6 @@ func TestBuiltinStore_AppendEvolvesSchema(t *testing.T) {
 	if rows[0]["phone"] != "+1 555 0123" {
 		t.Errorf("phone = %v, want +1 555 0123", rows[0]["phone"])
 	}
-	// Existing rows still readable and have NULL phones.
 	all, err := executeBuiltinStoreQuery(t.Context(), core.Job{
 		WorkspaceRoot: root,
 		Params:        map[string]any{"sql": "SELECT name, phone FROM leads ORDER BY name"},
@@ -158,9 +141,6 @@ func withInput(j core.Job, in map[string]core.Ref) core.Job {
 	return j
 }
 
-// TestBuiltinStore_AppendUniqueByUpsert verifies the opt-in idempotent path:
-// with unique_by set, re-saving a row with the same key updates it in place
-// instead of appending a duplicate.
 func TestBuiltinStore_AppendUniqueByUpsert(t *testing.T) {
 	root := t.TempDir()
 	base := core.Job{WorkspaceRoot: root, Params: map[string]any{"table": "forecast", "unique_by": []any{"date"}}}
@@ -176,7 +156,6 @@ func TestBuiltinStore_AppendUniqueByUpsert(t *testing.T) {
 		t.Fatalf("first save: status=%q err=%v %+v", first.Status, err, first.Error)
 	}
 
-	// Re-run: an overlapping date with a new value, plus a brand-new date.
 	second, err := executeBuiltinStoreAppend(t.Context(), withInput(base, map[string]core.Ref{
 		"rows": {Inline: []map[string]any{
 			{"date": "2026-06-25", "temp_max": "99"}, // updates the existing row
@@ -206,9 +185,9 @@ func TestBuiltinStore_AppendUniqueByUpsert(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_AppendUniqueByRejectsExistingDuplicates verifies that
-// switching a collection that already holds duplicate keys to unique_by fails
-// loudly (can't build the unique index) instead of silently doing nothing.
+// Verifies that switching a collection that already holds duplicate keys to
+// unique_by fails loudly (can't build the unique index) instead of silently
+// doing nothing.
 func TestBuiltinStore_AppendUniqueByRejectsExistingDuplicates(t *testing.T) {
 	root := t.TempDir()
 	// Plain append: two rows share a date — a duplicate on the would-be key.
@@ -241,8 +220,6 @@ func TestBuiltinStore_AppendUniqueByRejectsExistingDuplicates(t *testing.T) {
 	}
 }
 
-// findRows runs the no-SQL reader and returns its rows, failing the test on
-// any error/non-OK status.
 func findRows(t *testing.T, root string, params map[string]any) []map[string]any {
 	t.Helper()
 	res, err := executeBuiltinStoreFind(t.Context(), core.Job{WorkspaceRoot: root, Params: params}, nil)
@@ -259,8 +236,6 @@ func findRows(t *testing.T, root string, params map[string]any) []map[string]any
 	return rows
 }
 
-// TestBuiltinStore_Find exercises the no-code reader: filter (CEL from the
-// row-condition builder), in-memory numeric sort, and limit — all without SQL.
 func TestBuiltinStore_Find(t *testing.T) {
 	root := t.TempDir()
 	appendRes, err := executeBuiltinStoreAppend(t.Context(), core.Job{
@@ -279,7 +254,6 @@ func TestBuiltinStore_Find(t *testing.T) {
 		t.Fatalf("append: status=%q err=%v %+v", appendRes.Status, err, appendRes.Error)
 	}
 
-	// No filter → every row.
 	if got := findRows(t, root, map[string]any{"table": "invoices"}); len(got) != 3 {
 		t.Fatalf("no filter: got %d rows, want 3", len(got))
 	}
@@ -293,8 +267,6 @@ func TestBuiltinStore_Find(t *testing.T) {
 		t.Fatalf("unpaid filter: got %d rows, want 2", len(unpaid))
 	}
 
-	// Numeric filter + descending numeric sort: amount > 50 then by amount.
-	// Stored as TEXT, so this also proves numeric (not lexical) ordering.
 	big := findRows(t, root, map[string]any{
 		"table":    "invoices",
 		"filter":   `double(row.amount) > 50`,
@@ -321,8 +293,6 @@ func TestBuiltinStore_Find(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_FindCollectionFromInput verifies the Collection input
-// overrides the table param: a name wired in wins over the dropdown value.
 func TestBuiltinStore_FindCollectionFromInput(t *testing.T) {
 	root := t.TempDir()
 	if _, err := executeBuiltinStoreAppend(t.Context(), core.Job{
@@ -335,8 +305,6 @@ func TestBuiltinStore_FindCollectionFromInput(t *testing.T) {
 	}, nil); err != nil {
 		t.Fatalf("append: %v", err)
 	}
-	// Param points at a non-existent collection; the wired input names the real
-	// one. Getting 2 rows proves the input won.
 	res, err := executeBuiltinStoreFind(t.Context(), core.Job{
 		WorkspaceRoot: root,
 		Params:        map[string]any{"table": "does-not-exist"},
@@ -351,9 +319,6 @@ func TestBuiltinStore_FindCollectionFromInput(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_FindMissingCollection verifies that reading a collection
-// that doesn't exist fails loudly (rather than a silent empty result) so a
-// typo'd name surfaces instead of doing nothing.
 func TestBuiltinStore_FindMissingCollection(t *testing.T) {
 	res, err := executeBuiltinStoreFind(t.Context(), core.Job{
 		WorkspaceRoot: t.TempDir(),
@@ -367,9 +332,6 @@ func TestBuiltinStore_FindMissingCollection(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_FindExistingCollectionNoMatches verifies the kept-empty
-// case: an EXISTING collection where no row matches the filter is a valid
-// empty result, not an error.
 func TestBuiltinStore_FindExistingCollectionNoMatches(t *testing.T) {
 	root := t.TempDir()
 	if _, err := executeBuiltinStoreAppend(t.Context(), core.Job{
@@ -394,12 +356,6 @@ func TestBuiltinStore_FindExistingCollectionNoMatches(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_AppendEmptyBody verifies the empty-webhook-body path:
-// a webhook trigger that fires with no request body emits "" on
-// webhook_input.body; wired straight into a store's rows port that has
-// historically produced a JSON parse error. The store should accept it
-// as "nothing to insert" — same shape any non-techie hits when their
-// form tool sends a heartbeat or a misconfigured caller fires empty.
 func TestBuiltinStore_AppendEmptyBody(t *testing.T) {
 	res, err := executeBuiltinStoreAppend(t.Context(), core.Job{
 		WorkspaceRoot: t.TempDir(),
@@ -419,9 +375,6 @@ func TestBuiltinStore_AppendEmptyBody(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_QueryEmptyStore verifies that reading before anything
-// has ever been written returns an empty result, not an error — an
-// empty store is a valid state.
 func TestBuiltinStore_QueryEmptyStore(t *testing.T) {
 	res, err := executeBuiltinStoreQuery(t.Context(), core.Job{
 		WorkspaceRoot: t.TempDir(),
@@ -439,8 +392,6 @@ func TestBuiltinStore_QueryEmptyStore(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_AppendRequiresSandbox guards the no_sandbox path —
-// the store can't function without a workspace root.
 func TestBuiltinStore_AppendRequiresSandbox(t *testing.T) {
 	res, err := executeBuiltinStoreAppend(t.Context(), core.Job{
 		Params: map[string]any{"table": "leads"},
@@ -456,8 +407,6 @@ func TestBuiltinStore_AppendRequiresSandbox(t *testing.T) {
 	}
 }
 
-// seedStore writes the given rows into a collection in a fresh built-in store
-// and returns the workspace root.
 func seedStore(t *testing.T, table string, headers []string, rows []map[string]any) string {
 	t.Helper()
 	root := t.TempDir()
@@ -474,8 +423,6 @@ func seedStore(t *testing.T, table string, headers []string, rows []map[string]a
 	return root
 }
 
-// TestBuiltinStore_QueryTooManyRows covers the row-ceiling guard in the query
-// reader: with the ceiling lowered to 1, a 2-row uncapped SELECT trips it.
 func TestBuiltinStore_QueryTooManyRows(t *testing.T) {
 	root := seedStore(t, "leads", []string{"name"}, []map[string]any{{"name": "a"}, {"name": "b"}})
 	restore := limits.SetMaxRows(1)
@@ -492,8 +439,6 @@ func TestBuiltinStore_QueryTooManyRows(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_FindTooManyRows covers the scan-bound guard in the find
-// reader.
 func TestBuiltinStore_FindTooManyRows(t *testing.T) {
 	root := seedStore(t, "leads", []string{"name"}, []map[string]any{{"name": "a"}, {"name": "b"}})
 	restore := limits.SetMaxRows(1)
@@ -510,9 +455,6 @@ func TestBuiltinStore_FindTooManyRows(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_FindMissingCollectionLists covers the find reader's
-// "no such table" branch on a store that DOES have other collections, so the
-// error lists the available ones.
 func TestBuiltinStore_FindMissingCollectionLists(t *testing.T) {
 	root := seedStore(t, "leads", []string{"name"}, []map[string]any{{"name": "a"}})
 	res, err := executeBuiltinStoreFind(t.Context(), core.Job{
@@ -527,8 +469,6 @@ func TestBuiltinStore_FindMissingCollectionLists(t *testing.T) {
 	}
 }
 
-// TestParseUniqueBy covers the optional-key parsing: absent, empty, valid,
-// invalid identifier, and not-a-saved-column.
 func TestParseUniqueBy(t *testing.T) {
 	t.Run("absent → nil, no error", func(t *testing.T) {
 		keys, errRes := parseUniqueBy(core.Job{Params: map[string]any{}}, []string{"date"})
@@ -576,8 +516,6 @@ func TestParseUniqueBy(t *testing.T) {
 		}
 	})
 	t.Run("no headers skips membership check", func(t *testing.T) {
-		// With no headers (empty body), a valid identifier is accepted even
-		// though it can't be checked against columns yet.
 		keys, errRes := parseUniqueBy(core.Job{Params: map[string]any{"unique_by": []any{"date"}}}, nil)
 		if errRes != nil || len(keys) != 1 {
 			t.Fatalf("got (%v, %+v)", keys, errRes)
@@ -585,8 +523,6 @@ func TestParseUniqueBy(t *testing.T) {
 	})
 }
 
-// TestBuiltinStore_AppendBadTableName covers the validateIdent rejection of an
-// unsafe collection name.
 func TestBuiltinStore_AppendBadTableName(t *testing.T) {
 	res, err := executeBuiltinStoreAppend(t.Context(), core.Job{
 		WorkspaceRoot: t.TempDir(),
@@ -601,7 +537,6 @@ func TestBuiltinStore_AppendBadTableName(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_AppendMissingRowsInput covers the required-input guard.
 func TestBuiltinStore_AppendMissingRowsInput(t *testing.T) {
 	res, err := executeBuiltinStoreAppend(t.Context(), core.Job{
 		WorkspaceRoot: t.TempDir(),
@@ -615,7 +550,6 @@ func TestBuiltinStore_AppendMissingRowsInput(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_AppendBadColumnName covers the per-header identifier check.
 func TestBuiltinStore_AppendBadColumnName(t *testing.T) {
 	res, err := executeBuiltinStoreAppend(t.Context(), core.Job{
 		WorkspaceRoot: t.TempDir(),
@@ -633,8 +567,8 @@ func TestBuiltinStore_AppendBadColumnName(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_AppendBadColumnType covers the column_types validation
-// boundary (an unsafe type string is rejected as a db error).
+// Covers the column_types validation boundary (an unsafe type string is
+// rejected as a db error).
 func TestBuiltinStore_AppendBadColumnType(t *testing.T) {
 	res, err := executeBuiltinStoreAppend(t.Context(), core.Job{
 		WorkspaceRoot: t.TempDir(),
@@ -655,8 +589,6 @@ func TestBuiltinStore_AppendBadColumnType(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_AppendBadInputShape covers the normalizeRows error path
-// (an unsupported scalar input that isn't an empty string or object).
 func TestBuiltinStore_AppendBadInputShape(t *testing.T) {
 	res, err := executeBuiltinStoreAppend(t.Context(), core.Job{
 		WorkspaceRoot: t.TempDir(),
@@ -671,8 +603,6 @@ func TestBuiltinStore_AppendBadInputShape(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_QueryMissingSQL / EmptySQL / BadParams cover the param
-// validation in the query reader before any file is opened.
 func TestBuiltinStore_QueryParamErrors(t *testing.T) {
 	root := t.TempDir()
 	cases := []struct {
@@ -700,10 +630,8 @@ func TestBuiltinStore_QueryParamErrors(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_QueryBadSQL covers the db-error path on a real store.
 func TestBuiltinStore_QueryBadSQL(t *testing.T) {
 	root := t.TempDir()
-	// Materialize the store with one collection.
 	if _, err := executeBuiltinStoreAppend(t.Context(), core.Job{
 		WorkspaceRoot: root,
 		Params:        map[string]any{"table": "leads"},
@@ -726,8 +654,6 @@ func TestBuiltinStore_QueryBadSQL(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_QueryWithParamsAndLimit exercises the placeholder + limit
-// path of the query reader against real data.
 func TestBuiltinStore_QueryWithParamsAndLimit(t *testing.T) {
 	root := t.TempDir()
 	if _, err := executeBuiltinStoreAppend(t.Context(), core.Job{
@@ -764,7 +690,6 @@ func TestBuiltinStore_QueryWithParamsAndLimit(t *testing.T) {
 	}
 }
 
-// TestOpenBuiltinStore_NoSandbox covers the missing-workspace guard.
 func TestOpenBuiltinStore_NoSandbox(t *testing.T) {
 	db, errRes := openBuiltinStore(core.Job{}, false)
 	if db != nil {
@@ -775,8 +700,6 @@ func TestOpenBuiltinStore_NoSandbox(t *testing.T) {
 	}
 }
 
-// TestOpenBuiltinStore_ReadMissingIsEmpty covers the read-path where no file
-// exists yet: nil db, nil result (an empty store, not an error).
 func TestOpenBuiltinStore_ReadMissingIsEmpty(t *testing.T) {
 	db, errRes := openBuiltinStore(core.Job{WorkspaceRoot: t.TempDir()}, false)
 	if db != nil || errRes != nil {
@@ -784,10 +707,6 @@ func TestOpenBuiltinStore_ReadMissingIsEmpty(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_StampsSavedAt — a collection has to be able to answer
-// "when did this arrive". Without a time column the Find/Query steps offer a
-// "Sort by" with nothing to point at, so newest-first was impossible on the
-// form → save path this store exists for.
 func TestBuiltinStore_StampsSavedAt(t *testing.T) {
 	root := t.TempDir()
 	run := func(params map[string]any, row map[string]any) core.Result {
@@ -823,8 +742,6 @@ func TestBuiltinStore_StampsSavedAt(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_TimestampColumnRespectsCallerAndOptOut — the owner's own
-// value wins over ours, and the stamp can be renamed or turned off.
 func TestBuiltinStore_TimestampColumnRespectsCallerAndOptOut(t *testing.T) {
 	t.Run("caller supplies the column", func(t *testing.T) {
 		root := t.TempDir()
@@ -882,7 +799,7 @@ func TestBuiltinStore_TimestampColumnRespectsCallerAndOptOut(t *testing.T) {
 	})
 }
 
-// TestBuiltinStore_AppendCreatesColumnsInHeaderOrder — a collection's
+// A collection's
 // columns are created in the order the incoming value declares, not
 // alphabetically.
 //

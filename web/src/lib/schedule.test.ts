@@ -51,8 +51,6 @@ describe("describeSchedule", () => {
     expect(describeSchedule(entry({ kind: "cron" }), t)).toBe("—");
   });
 
-  // The unit is picked by exact divisibility, largest first, so a poll reads
-  // "every 2h" rather than "every 120m".
   it("picks the largest exact unit for a poll interval", () => {
     expect(describeSchedule(entry({ interval_seconds: 7200 }), t)).toBe("every 2h");
     expect(describeSchedule(entry({ interval_seconds: 3600 }), t)).toBe("every 1h");
@@ -61,8 +59,6 @@ describe("describeSchedule", () => {
     expect(describeSchedule(entry({ interval_seconds: 45 }), t)).toBe("every 45s");
   });
 
-  // A missing interval is treated as 0, which is divisible by 3600 — so this
-  // documents that a poll with no interval reads as "every 0h".
   it("treats a missing interval as zero", () => {
     expect(describeSchedule(entry({}), t)).toBe("every 0h");
   });
@@ -105,11 +101,8 @@ describe("formatNextRun", () => {
   });
 
   it("uses Today for a later fire on the same local day", () => {
-    // Two hours out is past the minute-countdown window.
     const in2h = new Date(now.getTime() + 2 * 3600_000);
     const got = formatNextRun(in2h.toISOString(), t);
-    // Only assert the Today branch when 2h really is still the same local day;
-    // near midnight in some zones it is tomorrow, and that is correct too.
     const expected = in2h.getDate() === now.getDate()
       ? `Today ${clock(in2h)}`
       : `Tomorrow ${clock(in2h)}`;
@@ -126,7 +119,6 @@ describe("formatNextRun", () => {
   it("falls back to the full timestamp further out", () => {
     const nextWeek = new Date(now.getTime() + 7 * 24 * 3600_000);
     const got = formatNextRun(nextWeek.toISOString(), t);
-    // The absolute branch is "YYYY-MM-DD HH:MM" — no relative wording.
     expect(got).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
   });
 
@@ -140,7 +132,6 @@ describe("formatNextRun", () => {
 describe("summarizeFlowSchedule", () => {
   it("reports nothing for a flow with no triggers", () => {
     const s = summarizeFlowSchedule([]);
-    // An empty flow is not "paused" — there is simply nothing scheduled.
     expect(s.flowDisabled).toBe(false);
     expect(s.active).toBe(false);
     expect(s.nextRun).toBeUndefined();

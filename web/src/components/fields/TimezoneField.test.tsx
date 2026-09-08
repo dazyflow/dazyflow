@@ -35,8 +35,6 @@ describe("TimezoneField", () => {
     expect(onChange).toHaveBeenCalledWith("Europe/Stockholm");
   });
 
-  // Underscores are how the tz database writes a two-word city and not how
-  // anyone types one.
   it("matches a space against an underscored name", async () => {
     render(<TimezoneField value="UTC" onChange={() => {}} />);
     await userEvent.type(screen.getByRole("combobox"), "new york");
@@ -96,7 +94,6 @@ describe("TimezoneField", () => {
   it("shows each zone's current offset", async () => {
     render(<TimezoneField value="UTC" onChange={() => {}} />);
     await userEvent.type(screen.getByRole("combobox"), "Asia/Tokyo");
-    // Tokyo has no daylight saving, so this holds whatever time of year it is.
     expect(screen.getByRole("option", { name: /GMT\+9/ })).toBeInTheDocument();
   });
 });

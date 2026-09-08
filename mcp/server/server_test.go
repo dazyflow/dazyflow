@@ -16,10 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/mcp/server"
 )
 
-// runServer wires Server.Serve over an in-memory pipe pair so tests
-// can drive it like a real client. Each test ships a full
-// initialize → request → response loop; the goroutine exits when
-// the test closes the client-side writer.
 func runServer(t *testing.T, s *server.Server, body string) string {
 	t.Helper()
 	in := strings.NewReader(body)
@@ -98,11 +94,6 @@ func TestServer_ToolsList(t *testing.T) {
 	}
 }
 
-// tools/call dispatches to the registered handler and surfaces its
-// result verbatim. A handler that returns an error (not a tool-error
-// result) should travel as a JSON-RPC error, because the spec
-// distinguishes "tool couldn't be invoked" from "tool reported a
-// failure to the user."
 func TestServer_ToolsCall_HandlerResult(t *testing.T) {
 	s := &server.Server{Name: "t", Version: "1"}
 	s.Register(server.Tool{
@@ -156,7 +147,6 @@ func TestServer_NotificationProducesNoResponse(t *testing.T) {
 	}
 }
 
-// TestServer_Ping covers the ping liveness method.
 func TestServer_Ping(t *testing.T) {
 	s := &server.Server{Name: "t", Version: "1"}
 	out := runServer(t, s, `{"jsonrpc":"2.0","id":7,"method":"ping"}`+"\n")
@@ -165,7 +155,6 @@ func TestServer_Ping(t *testing.T) {
 	}
 }
 
-// TestServer_BadJSONRPCVersion covers the jsonrpc!="2.0" guard.
 func TestServer_BadJSONRPCVersion(t *testing.T) {
 	s := &server.Server{Name: "t", Version: "1"}
 	out := runServer(t, s, `{"jsonrpc":"1.0","id":1,"method":"ping"}`+"\n")
@@ -174,7 +163,6 @@ func TestServer_BadJSONRPCVersion(t *testing.T) {
 	}
 }
 
-// TestServer_ParseError covers the malformed-line branch in handle.
 func TestServer_ParseError(t *testing.T) {
 	s := &server.Server{Name: "t", Version: "1"}
 	out := runServer(t, s, "not json at all\n")
@@ -183,7 +171,6 @@ func TestServer_ParseError(t *testing.T) {
 	}
 }
 
-// TestServer_UnknownMethod covers the default method-not-found arm.
 func TestServer_UnknownMethod(t *testing.T) {
 	s := &server.Server{Name: "t", Version: "1"}
 	out := runServer(t, s, `{"jsonrpc":"2.0","id":2,"method":"frobnicate"}`+"\n")
@@ -192,7 +179,6 @@ func TestServer_UnknownMethod(t *testing.T) {
 	}
 }
 
-// TestServer_ToolsCall_BadParams covers the params-decode failure arm.
 func TestServer_ToolsCall_BadParams(t *testing.T) {
 	s := &server.Server{Name: "t", Version: "1"}
 	out := runServer(t, s, `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":[1,2]}`+"\n")
@@ -201,8 +187,6 @@ func TestServer_ToolsCall_BadParams(t *testing.T) {
 	}
 }
 
-// TestServer_ToolsCall_HandlerError covers the handler-returns-error
-// path that surfaces as a JSON-RPC internal error.
 func TestServer_ToolsCall_HandlerError(t *testing.T) {
 	s := &server.Server{Name: "t", Version: "1"}
 	s.Register(server.Tool{
@@ -226,7 +210,6 @@ func TestServer_ToolsCall_HandlerError(t *testing.T) {
 	}
 }
 
-// TestServer_BlankLineSkipped covers the empty-line continue in Serve.
 func TestServer_BlankLineSkipped(t *testing.T) {
 	s := &server.Server{Name: "t", Version: "1"}
 	out := runServer(t, s, "\n"+`{"jsonrpc":"2.0","id":1,"method":"ping"}`+"\n")
@@ -235,8 +218,6 @@ func TestServer_BlankLineSkipped(t *testing.T) {
 	}
 }
 
-// TestServer_ToolsListEmptySchema covers the empty-inputSchema fallback
-// branch in handleToolsList (a tool registered with no schema).
 func TestServer_ToolsListEmptySchema(t *testing.T) {
 	s := &server.Server{Name: "t", Version: "1"}
 	s.Register(server.Tool{Name: "noschema"})
@@ -246,7 +227,6 @@ func TestServer_ToolsListEmptySchema(t *testing.T) {
 	}
 }
 
-// TestRPCError_Error covers the RPCError.Error string method.
 func TestRPCError_Error(t *testing.T) {
 	e := &server.RPCError{Code: -32603, Message: "boom"}
 	if !strings.Contains(e.Error(), "-32603") || !strings.Contains(e.Error(), "boom") {

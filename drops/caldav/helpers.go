@@ -1,14 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package caldav holds the drops that read and write a calendar over CalDAV —
-// the vendor-neutral counterpart to the Google Calendar steps. Fastmail,
-// mailbox.org, iCloud, Nextcloud and a Radicale box of your own all speak it,
-// so the reminder and booking flows stop being Google-only.
-//
-// The record shape deliberately matches gcal_list_events', so a flow built on
-// one becomes a flow on the other by swapping the step — the same reasoning
-// behind the Mailbox drops matching Gmail's.
 package caldav
 
 import (
@@ -24,12 +16,8 @@ import (
 	"github.com/dazyflow/dazyflow/internal/caldavutil"
 )
 
-// integration is the label every drop here shares — the name of the page a
-// tenant configures once, and the key its stored connection hangs off.
 const integration = "Calendar"
 
-// brandColor is shared by every step in the app so the cards read as one
-// group on the canvas.
 const brandColor = "#0891b2"
 
 // connectionFields is the calendar account, configured once on the
@@ -49,11 +37,6 @@ func connectionFields() []core.ConnectionField {
 	}
 }
 
-// configFromJob assembles the calendar connection from the params the engine
-// injected. `calendar` is declared as a param as well as a connection field,
-// so a step can point at another calendar while everything else comes from
-// the connection — injectConnectionDefaults leaves an author's per-step value
-// alone.
 func configFromJob(job core.Job) (caldavutil.Config, error) {
 	raw := map[string]string{
 		"url":      params.StringDefault(job.Params, "url", ""),
@@ -104,9 +87,6 @@ func resolveWindowEnd(job core.Job, port, param string, loc *time.Location, now 
 	if raw = strings.TrimSpace(raw); raw == "" {
 		return time.Time{}, false, nil
 	}
-	// reltime's own error already names the value and lists the forms that
-	// work, so it is returned as-is: wrapping it produced "couldn't read
-	// \"Thursday\" as a time: couldn't read \"Thursday\" as a time — …".
 	stamp, err := reltime.ResolveRFC3339(raw, loc, now)
 	if err != nil {
 		return time.Time{}, false, err
@@ -120,13 +100,6 @@ func resolveWindowEnd(job core.Job, port, param string, loc *time.Location, now 
 	return t, true, nil
 }
 
-// eventRecord reduces one calendar event to the friendly record a flow works
-// with.
-//
-// Deliberately the same shape gcal_list_events emits — {id, summary,
-// description, location, start, end, status, attendees} — so the idioms built
-// on that carry over unchanged, and a reminder flow becomes provider-neutral
-// by swapping the step.
 func eventRecord(event *ical.Event, loc *time.Location) map[string]any {
 	text := func(name string) string {
 		v, err := event.Props.Text(name)
@@ -154,9 +127,6 @@ func eventRecord(event *ical.Event, loc *time.Location) map[string]any {
 	return rec
 }
 
-// attendees lists the invitees' addresses, stripped of the "mailto:" prefix
-// iCalendar wraps them in — a flow wiring these into an email's To field
-// wants addresses, not URIs.
 func attendees(event *ical.Event) []string {
 	out := []string{}
 	for _, prop := range event.Props.Values(ical.PropAttendee) {
@@ -173,8 +143,6 @@ func attendees(event *ical.Event) []string {
 	return out
 }
 
-// cutPrefixFold is strings.CutPrefix, case-insensitively — "MAILTO:" is as
-// valid as "mailto:" in iCalendar, and both turn up.
 func cutPrefixFold(s, prefix string) (string, bool) {
 	if len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix) {
 		return s[len(prefix):], true

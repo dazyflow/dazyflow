@@ -11,10 +11,6 @@ import (
 	"time"
 )
 
-// newAdminOAuthHarness builds a gateway with EncryptedSecrets + an
-// OAuthRegistry that already knows about every default provider but
-// has no credentials set — the realistic "fresh install" starting
-// point the admin endpoint serves.
 func newAdminOAuthHarness(t *testing.T) *gatewayHarness {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -30,8 +26,6 @@ func newAdminOAuthHarness(t *testing.T) *gatewayHarness {
 	h.gw.OAuth = NewOAuthRegistry("https://example.test", es)
 	return h
 }
-
-// ---- Persistence layer ----------------------------------------------
 
 func TestProviderStore_RoundTrip(t *testing.T) {
 	t.Parallel()
@@ -87,18 +81,11 @@ func TestProviderStore_Delete(t *testing.T) {
 	}
 }
 
-// ---- Hydrate ---------------------------------------------------------
-
 func TestHydrate_PersistedOverridesEnv(t *testing.T) {
 	t.Parallel()
-	// Simulate: env wired one client_id; admin pasted a different
-	// one via the UI. After Hydrate, the registry holds the
-	// admin-pasted value.
 	es := newMemSecrets(t)
 	r := NewOAuthRegistry("https://example.test", es)
-	// "env-supplied"
 	r.Register(providerDefault("google").toProvider("env-client", "env-secret"))
-	// "admin pasted"
 	_ = saveProviderCreds(t.Context(), es, "google", providerCreds{
 		ClientID: "ui-client", ClientSecret: "ui-secret",
 	})
@@ -134,8 +121,6 @@ func TestHydrate_UnknownProviderSkipped(t *testing.T) {
 	}
 }
 
-// ---- Endpoints -------------------------------------------------------
-
 // OAuth provider credentials are an instance-wide setting shared by
 // every tenant, so only a platform admin may read or change them. An
 // editor and even a tenant admin (which every signup gets for its own
@@ -145,11 +130,9 @@ func TestAdminOAuth_ProviderConfigRequiresPlatformAdmin(t *testing.T) {
 	t.Parallel()
 	h := newAdminOAuthHarness(t)
 
-	// Editor (no admin at all) — rejected.
 	if rw := h.do(t, "GET", "/api/v1/admin/oauth-providers", nil); rw.Code != 403 {
 		t.Errorf("editor GET should be 403; got %d body=%s", rw.Code, rw.Body.String())
 	}
-	// Tenant admin (org owner) — also rejected now: this is instance-wide config.
 	if rw := h.adminDo(t, "GET", "/api/v1/admin/oauth-providers", nil); rw.Code != 403 {
 		t.Errorf("tenant admin GET should be 403 (instance-wide config); got %d body=%s", rw.Code, rw.Body.String())
 	}
@@ -161,7 +144,6 @@ func TestAdminOAuth_ProviderConfigRequiresPlatformAdmin(t *testing.T) {
 	if rw := h.adminDo(t, "DELETE", "/api/v1/admin/oauth-providers/google", nil); rw.Code != 403 {
 		t.Errorf("tenant admin DELETE should be 403; got %d body=%s", rw.Code, rw.Body.String())
 	}
-	// Platform admin (the operator) — allowed.
 	if rw := h.platformDo(t, "GET", "/api/v1/admin/oauth-providers", nil); rw.Code != 200 {
 		t.Errorf("platform admin GET should be 200; got %d body=%s", rw.Code, rw.Body.String())
 	}
@@ -206,11 +188,9 @@ func TestAdminOAuth_UpsertRegistersLiveAndPersists(t *testing.T) {
 	if rw.Code != 200 {
 		t.Fatalf("code = %d body=%s", rw.Code, rw.Body.String())
 	}
-	// In-memory registry sees it immediately.
 	if _, ok := h.gw.OAuth.Provider("google"); !ok {
 		t.Fatalf("registry should have google after PUT")
 	}
-	// Persisted on disk too — survives "restart" (hydrate).
 	c, err := loadProviderCreds(t.Context(), h.gw.EncryptedSecrets, "google")
 	if err != nil || c == nil {
 		t.Fatalf("load after PUT: (%+v, %v)", c, err)
@@ -247,7 +227,6 @@ func TestAdminOAuth_UpsertUnknownProvider(t *testing.T) {
 func TestAdminOAuth_DeleteUnregistersAndClearsStore(t *testing.T) {
 	t.Parallel()
 	h := newAdminOAuthHarness(t)
-	// Set first.
 	_ = h.platformDo(t, "PUT", "/api/v1/admin/oauth-providers/google", map[string]any{
 		"client_id": "abc", "client_secret": "xyz",
 	})
@@ -262,8 +241,6 @@ func TestAdminOAuth_DeleteUnregistersAndClearsStore(t *testing.T) {
 		t.Errorf("persisted creds should be gone after DELETE; got %+v", c)
 	}
 }
-
-// ---- scope_mismatch on user-facing listing -------------------------
 
 func TestStaleAccounts_MissingScopeFlagged(t *testing.T) {
 	t.Parallel()
@@ -321,8 +298,6 @@ func TestSplitScopes_HandlesSpacesAndCommas(t *testing.T) {
 		}
 	}
 }
-
-// ---- helpers --------------------------------------------------------
 
 func newMemSecrets(t *testing.T) *EncryptedSecrets {
 	t.Helper()

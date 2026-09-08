@@ -7,15 +7,6 @@ import { useTranslation } from "react-i18next";
 import { Button } from "./Button";
 import { useEscapeToClose } from "./useEscapeToClose";
 
-// PromptModal is the app's themed replacement for window.prompt() — a
-// single-line text input in the standard modal chrome. Used for
-// "new folder" and "rename / move". Mount it conditionally; it resolves
-// through onSubmit (with the trimmed value) or onCancel. Escape and a
-// backdrop click both cancel.
-//
-// On open the input is focused and its basename is selected (the part after
-// the last "/"), so renaming a path like "src/widgets/main.go" pre-selects
-// just "main.go" while leaving the folder prefix in place for a move.
 export function PromptModal({
   title,
   label,

@@ -24,20 +24,10 @@ import (
 // rather than silently passing, so the gap stays visible until fixed.
 var knownBrokenTemplates = map[string]string{}
 
-// variadicIndex matches the editor's `port[N]` convention for variadic
-// input ports (e.g. attachments[0]). The engine resolves these to the
-// base variadic port at run time; manifest validation only knows the
-// base name, so we normalize before validating.
 var variadicIndex = regexp.MustCompile(`\[\d+\]$`)
 
-// wholeReference matches a setting that is exactly one ${scheme.path}
-// reference — a loop item's field, a secret, a resource.
 var wholeReference = regexp.MustCompile(`^\s*\$\{[a-z0-9_-]+\.[^}]*\}\s*$`)
 
-// normalizeVariadicPorts rewrites edge ToPorts of the form name[N] to
-// name when the destination's base port exists and is variadic, so a
-// graph the editor produces (and the engine runs) isn't flagged as a
-// phantom "no such port".
 func normalizeVariadicPorts(g *core.Graph, manifests map[string]core.Manifest) {
 	mod := make(map[string]string, len(g.Nodes))
 	for _, n := range g.Nodes {
@@ -58,12 +48,6 @@ func normalizeVariadicPorts(g *core.Graph, manifests map[string]core.Manifest) {
 	}
 }
 
-// The shipped templates in web/public/templates are the non-technical
-// entry point: a newcomer forks one and runs it. So they deserve the
-// same composition guard as the scenario graphs — every module/port
-// exists, wiring is type-compatible, required inputs are connected, and
-// each for_each has its `body` pin wired. A failure here means a user
-// who forks that template hits a runtime error they can't diagnose.
 func TestShippedTemplatesCompose(t *testing.T) {
 	manifests := combinedManifests(t)
 
@@ -110,8 +94,6 @@ func TestShippedTemplatesCompose(t *testing.T) {
 				}
 			}
 
-			// A forked template should not ship a hard secret literal in
-			// params (the lint the editor runs). Cheap to check here too.
 			for _, n := range g.Nodes {
 				raw, _ := json.Marshal(n.Params)
 				if strings.Contains(string(raw), "sk-ant-") || strings.Contains(string(raw), "xoxb-") {
@@ -172,19 +154,6 @@ func TestShippedTemplatesCompose(t *testing.T) {
 	}
 }
 
-// A render_text step's `template` is a CEL expression, and nothing above
-// compiles it: ValidateWithManifests checks wiring, paramSchemaIssues checks
-// that the param is a string. So a template shipping an expression with a typo
-// — an unbalanced quote, a stray operator — composed cleanly and then failed at
-// run time with "bad_param", which is precisely the "runtime error they can't
-// diagnose" this file exists to prevent. Every template shipping a render_text
-// now has its expression compiled.
-//
-// It is compiled, not evaluated for a result: the row a real run supplies comes
-// from a Gmail message or a form submission, which this test has no way to
-// synthesize faithfully. So a missing field on the probe row (an EvalError) is
-// expected and ignored — only a ParseError, which is a defect in the shipped
-// expression whatever data arrives, fails the test.
 func TestShippedTemplateExpressionsCompile(t *testing.T) {
 	dir := filepath.Join("..", "..", "web", "public", "templates")
 	files, err := filepath.Glob(filepath.Join(dir, "*.json"))
@@ -286,11 +255,6 @@ func paramSchemaIssues(params map[string]any, schema json.RawMessage, wired map[
 	return issues
 }
 
-// jsonTypeMatches reports whether v (decoded by encoding/json, so numbers
-// are float64) matches a JSON-Schema primitive type. A setting that is
-// exactly one ${...} reference is a string in the JSON whatever the field's
-// declared type — the engine resolves it at run time, and a whole-value
-// reference keeps the real shape — so it satisfies any type.
 func jsonTypeMatches(t string, v any) bool {
 	if s, isStr := v.(string); isStr && wholeReference.MatchString(s) {
 		return true

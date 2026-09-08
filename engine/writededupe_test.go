@@ -14,7 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// dedupeManifest is a non-idempotent write that opts into engine dedupe.
 var dedupeManifest = core.Manifest{
 	ID:           "send_thing",
 	Summary:      "Test fixture non-idempotent write.",
@@ -113,8 +112,6 @@ func TestWriteDedupe_FailureNotRecorded(t *testing.T) {
 	}
 }
 
-// fanDedupeManifest is a non-idempotent write with a typed single-value input,
-// so a list wired into it auto-fans (one send per item).
 var fanDedupeManifest = core.Manifest{
 	ID:           "send_fan",
 	Summary:      "Test fixture fanned non-idempotent write.",
@@ -126,13 +123,12 @@ var fanDedupeManifest = core.Manifest{
 	DedupeWrites: true,
 }
 
-// TestWriteDedupe_FannedPartialFailureDoesNotReFire is the regression test for
-// the CRITICAL fan-out re-fire bug: a list fans the send node (one send per
-// recipient); the first run "sends" items 0..2, then fails on item 3 (a crash /
-// transient error mid-fan). On reclaim of the SAME record ID, items 0..2 must
-// NOT be sent again — only 3..4. With the old whole-node dedupe key, the first
-// run recorded nothing (the node never reached StatusOK), so the reclaim
-// re-fired every item, double-sending 0..2.
+// The regression test for the CRITICAL fan-out re-fire bug: a list fans the
+// send node (one send per recipient); the first run "sends" items 0..2, then
+// fails on item 3 (a crash / transient error mid-fan). On reclaim of the SAME
+// record ID, items 0..2 must NOT be sent again — only 3..4. With the old
+// whole-node dedupe key, the first run recorded nothing (the node never
+// reached StatusOK), so the reclaim re-fired every item, double-sending 0..2.
 func TestWriteDedupe_FannedPartialFailureDoesNotReFire(t *testing.T) {
 	var sent []string                       // items whose side effect (send) completed
 	failFirst := map[string]bool{"d": true} // item "d" (index 3) fails once
@@ -157,19 +153,14 @@ func TestWriteDedupe_FannedPartialFailureDoesNotReFire(t *testing.T) {
 		Nodes: []core.Node{{ID: "src", Module: "send_fan"}, {ID: "n", Module: "send_fan"}},
 		Edges: []core.Edge{{From: "src", FromPort: "out", To: "n", ToPort: "item"}},
 	}
-	// The send node's "item" input is the list of recipients, supplied as the
-	// upstream "src" result so RunNode assembles it via the edge.
 	prior := map[string]core.Result{"src": {Status: core.StatusOK, Output: map[string]core.Ref{
 		"out": {Inline: []any{"a", "b", "c", "d", "e"}},
 	}}}
 
-	// First run fails fast on "d"; "a","b","c" were sent and recorded per item.
 	r1, _ := e.RunNode(context.Background(), g, g.ID, "n", "job-1", prior, nil)
 	if r1.Status != core.StatusError {
 		t.Fatalf("first run should fail fast on item d, got %s", r1.Status)
 	}
-	// Reclaim: same record ID re-fans. "a","b","c" are dedupe hits (not re-sent);
-	// "d" (now succeeds) and "e" fire.
 	r2, _ := e.RunNode(context.Background(), g, g.ID, "n", "job-1", prior, nil)
 	if r2.Status != core.StatusOK {
 		t.Fatalf("reclaim run should succeed, got %s", r2.Status)
@@ -199,7 +190,6 @@ func TestWriteDedupe_DisabledWithoutStore(t *testing.T) {
 			return core.Result{Status: core.StatusOK}, nil
 		},
 	})
-	// No WriteDedupe store wired → every run executes.
 	g := dedupeGraph()
 	_, _ = e.RunNode(context.Background(), g, g.ID, "n", "job-1", nil, nil)
 	_, _ = e.RunNode(context.Background(), g, g.ID, "n", "job-1", nil, nil)
@@ -228,11 +218,10 @@ func TestWriteDedupe_NonOptedInModuleNotDeduped(t *testing.T) {
 	}
 }
 
-// TestMemoryWriteDedupe_GetReturnsIsolatedCopy is the regression test for the
-// HIGH aliasing bug: Get must not hand back the stored entry's map. The engine
-// mutates a dedupe-hit result in place (ApplyPassthrough writes a "pass" key,
-// redactResult rewrites ports), which previously corrupted the stored entry and
-// raced other readers.
+// The regression test for the HIGH aliasing bug: Get must not hand back the
+// stored entry's map. The engine mutates a dedupe-hit result in place
+// (ApplyPassthrough writes a "pass" key, redactResult rewrites ports), which
+// previously corrupted the stored entry and raced other readers.
 func TestMemoryWriteDedupe_GetReturnsIsolatedCopy(t *testing.T) {
 	d := NewMemoryWriteDedupe()
 	ctx := context.Background()
@@ -244,7 +233,6 @@ func TestMemoryWriteDedupe_GetReturnsIsolatedCopy(t *testing.T) {
 	if !ok {
 		t.Fatal("Get miss after Put")
 	}
-	// Mutate the returned result the way the engine does post-hit.
 	got.Output["out"] = core.Ref{Inline: "mutated"}
 	got.Output["pass"] = core.Ref{Inline: "injected"}
 
@@ -274,7 +262,6 @@ func TestMemoryWriteDedupe_TTLExpiry(t *testing.T) {
 
 func TestMemoryWriteDedupe_CapEviction(t *testing.T) {
 	d := NewMemoryWriteDedupe().(*memoryWriteDedupe)
-	// Fill past the cap; the oldest should be evicted (FIFO).
 	for i := range writeDedupeMaxItems + 5 {
 		d.Put(context.Background(), "k-"+strconv.Itoa(i), core.Result{Status: core.StatusOK})
 	}
@@ -317,7 +304,6 @@ func TestMemoryWriteDedupe_PutStoresIsolatedCopy(t *testing.T) {
 	out := map[string]core.Ref{"out": {Inline: "original"}}
 	d.Put(ctx, "k", core.Result{Status: core.StatusOK, Output: out})
 
-	// The caller still holds this map; the engine mutates results post-run.
 	out["out"] = core.Ref{Inline: "mutated"}
 	out["injected"] = core.Ref{Inline: "x"}
 
@@ -367,7 +353,6 @@ func TestMemoryWriteDedupe_StaleGetRemovesOnlyThatKeyFromOrder(t *testing.T) {
 	clock = clock.Add(time.Minute)
 	d.Put(ctx, "b", core.Result{Status: core.StatusOK})
 
-	// Age "a" past the TTL while "b" is still exactly at it.
 	clock = clock.Add(writeDedupeTTL)
 	if _, ok := d.Get(ctx, "a"); ok {
 		t.Fatal("a should be stale")
@@ -384,10 +369,6 @@ func TestMemoryWriteDedupe_StaleGetRemovesOnlyThatKeyFromOrder(t *testing.T) {
 	}
 }
 
-// The dedupe key is the job id plus a ZERO-BASED, ASCENDING fan index.
-// Its exact shape is a cross-version contract: a shared (Postgres) store
-// outlives any single binary, so a reclaim by a newer build has to look
-// up the very keys an older one wrote.
 func TestWriteDedupe_KeysAreJobIDWithAscendingFanIndex(t *testing.T) {
 	e := newEngineWith(t, NativeDrop{
 		Manifest: fanDedupeManifest,

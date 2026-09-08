@@ -20,9 +20,7 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// ----------------------------------------------------------------------
 // file_read / file_picker: missing-file stat io error (non-escape).
-// ----------------------------------------------------------------------
 
 func TestFileRead_MissingFileStatIO(t *testing.T) {
 	res, _ := executeFileRead(t.Context(), core.Job{
@@ -34,13 +32,6 @@ func TestFileRead_MissingFileStatIO(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// file_write: inline marshal error (both in the write and the quota-size
-// path), plus the empty-input determineWriteSize branch.
-// ----------------------------------------------------------------------
-
-// unmarshalable is a value json.Marshal refuses (a func can't be encoded), so
-// inlineToBytes returns an error.
 func unmarshalable() any { return map[string]any{"bad": func() {}} }
 
 func TestFileWrite_InlineMarshalError(t *testing.T) {
@@ -55,8 +46,6 @@ func TestFileWrite_InlineMarshalError(t *testing.T) {
 }
 
 func TestFileWrite_QuotaSizeMarshalError(t *testing.T) {
-	// QuotaLimit > 0 routes through determineWriteSize, whose inlineToBytes
-	// fails on the unmarshalable value before any disk write.
 	res, _ := executeFileWrite(t.Context(), core.Job{
 		WorkspaceRoot: t.TempDir(),
 		QuotaLimit:    1024,
@@ -68,9 +57,6 @@ func TestFileWrite_QuotaSizeMarshalError(t *testing.T) {
 	}
 }
 
-// TestFileWrite_EmptyInputUnderQuota covers determineWriteSize's final branch
-// (input has neither Ref nor Inline ⇒ size 0) under an active quota, and the
-// subsequent zero-byte write succeeds.
 func TestFileWrite_EmptyInputUnderQuota(t *testing.T) {
 	ws := t.TempDir()
 	res, _ := executeFileWrite(t.Context(), core.Job{
@@ -87,8 +73,6 @@ func TestFileWrite_EmptyInputUnderQuota(t *testing.T) {
 	}
 }
 
-// TestFileWrite_MkdirsSuccess covers the mkdirs success branch (nested folder
-// created before the write).
 func TestFileWrite_MkdirsSuccess(t *testing.T) {
 	ws := t.TempDir()
 	res, _ := executeFileWrite(t.Context(), core.Job{
@@ -104,8 +88,6 @@ func TestFileWrite_MkdirsSuccess(t *testing.T) {
 	}
 }
 
-// TestFileWrite_RefInputCopies covers the file-ref copy branch (input.Ref set,
-// src opened through its own root and io.Copy'd to dest).
 func TestFileWrite_RefInputCopies(t *testing.T) {
 	ws := t.TempDir()
 	if err := os.WriteFile(filepath.Join(ws, "src.txt"), []byte("copied"), 0o644); err != nil {
@@ -124,8 +106,6 @@ func TestFileWrite_RefInputCopies(t *testing.T) {
 	}
 }
 
-// TestFileWrite_RefInputMissingFile covers the open-input io-error branch (the
-// ref points at a file that doesn't exist).
 func TestFileWrite_RefInputMissingFile(t *testing.T) {
 	res, _ := executeFileWrite(t.Context(), core.Job{
 		WorkspaceRoot: t.TempDir(),
@@ -136,11 +116,6 @@ func TestFileWrite_RefInputMissingFile(t *testing.T) {
 		t.Errorf("code = %q, want io (open missing input ref)", errCode(res))
 	}
 }
-
-// ----------------------------------------------------------------------
-// http_download: egress allowlist block, cancelled context, ErrNotExist on a
-// nested path without mkdirs, and mkdirs success.
-// ----------------------------------------------------------------------
 
 func TestHTTPDownload_EgressBlocked(t *testing.T) {
 	t.Cleanup(func() { _ = hfnet.SetEgressAllowlist(nil) })
@@ -183,7 +158,6 @@ func TestHTTPDownload_NestedPathNoMkdirs(t *testing.T) {
 			"allow_private_networks": true,
 		},
 	}, nil)
-	// Parent folder doesn't exist and mkdirs is off ⇒ the friendly io error.
 	if res.Status != core.StatusError || res.Error.Code != "io" {
 		t.Errorf("code = %q, want io (nested path, mkdirs off)", errCode(res))
 	}
@@ -207,8 +181,6 @@ func TestHTTPDownload_MkdirsSuccess(t *testing.T) {
 	}
 }
 
-// TestDownloadRequestBody_MarshalError covers downloadRequestBody's
-// json.Marshal failure on an unmarshalable structured input.
 func TestDownloadRequestBody_MarshalError(t *testing.T) {
 	_, err := params.RequestBody(core.Job{
 		Input: map[string]core.Ref{"request_body": {Inline: func() {}}},
@@ -217,10 +189,6 @@ func TestDownloadRequestBody_MarshalError(t *testing.T) {
 		t.Error("expected marshal error for an unmarshalable request_body")
 	}
 }
-
-// ----------------------------------------------------------------------
-// http_upload: egress allowlist block, bad headers param, cancelled context.
-// ----------------------------------------------------------------------
 
 func TestHTTPUpload_EgressBlocked(t *testing.T) {
 	t.Cleanup(func() { _ = hfnet.SetEgressAllowlist(nil) })
@@ -274,12 +242,9 @@ func TestHTTPUpload_Cancelled(t *testing.T) {
 	}
 }
 
-// errResv is a non-quota reserve failure for the generic "quota" error branch.
 var errResv = errors.New("reserver unavailable")
 
-// ----------------------------------------------------------------------
 // file_picker: scratch://, inline, sandbox escape, missing-file io error.
-// ----------------------------------------------------------------------
 
 func TestFilePicker_MissingPathParam(t *testing.T) {
 	res, _ := executeFilePicker(t.Context(), core.Job{
@@ -328,9 +293,7 @@ func TestFilePicker_InlineBinaryMIME(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
 // file_read: directory error, sandbox escape, inline binary.
-// ----------------------------------------------------------------------
 
 func TestFileRead_NoSandbox(t *testing.T) {
 	res, _ := executeFileRead(t.Context(), core.Job{
@@ -382,9 +345,7 @@ func TestFileRead_InlineBinary(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
 // file_write: quota snapshot, mkdirs escape, sandbox escape on create.
-// ----------------------------------------------------------------------
 
 func TestFileWrite_QuotaSnapshotExceeded(t *testing.T) {
 	ws := t.TempDir()
@@ -483,10 +444,6 @@ func TestFileWrite_InlineStructMarshalsJSON(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// determineWriteSize: ref stat error (missing source) under quota.
-// ----------------------------------------------------------------------
-
 func TestFileWrite_QuotaSizeFromMissingRef(t *testing.T) {
 	ws := t.TempDir()
 	res, _ := executeFileWrite(t.Context(), core.Job{
@@ -516,10 +473,6 @@ func TestFileWrite_QuotaSizeFromRef(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// streamToFile: too_large (max_bytes) and quota_exceeded snapshot.
-// ----------------------------------------------------------------------
-
 func TestStreamToFile_TooLarge(t *testing.T) {
 	src := strings.NewReader("0123456789")
 	written, errRes := streamToFile(core.Job{ID: "j"}, src, &bytes.Buffer{}, noopRoot{}, "rel", 4)
@@ -546,8 +499,6 @@ func TestStreamToFile_LiveReserverRejects(t *testing.T) {
 	t.Cleanup(func() { SetQuotaReserver(nil) })
 	SetQuotaReserver(func(string, int64) (func(), error) { return nil, core.ErrQuotaExceeded })
 
-	// QuotaLimit set high so the snapshot passes and the live reserver is the
-	// one that rejects.
 	written, errRes := streamToFile(core.Job{ID: "j", QuotaLimit: 1 << 30}, strings.NewReader("data"), &bytes.Buffer{}, noopRoot{}, "rel", 0)
 	if errRes == nil || errRes.Error.Code != "quota_exceeded" {
 		t.Fatalf("got %+v, want quota_exceeded from live reserver", errRes)
@@ -596,10 +547,6 @@ func TestStreamToFile_Success(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// downloadRequestBody: each input shape + params.body.
-// ----------------------------------------------------------------------
-
 func TestDownloadRequestBody_Variants(t *testing.T) {
 	read := func(t *testing.T, job core.Job) string {
 		t.Helper()
@@ -623,22 +570,16 @@ func TestDownloadRequestBody_Variants(t *testing.T) {
 	if got := read(t, core.Job{Input: map[string]core.Ref{"request_body": {Inline: map[string]any{"a": 1}}}}); got != `{"a":1}` {
 		t.Errorf("struct input = %q, want JSON", got)
 	}
-	// nil inline falls through to params.body.
 	if got := read(t, core.Job{
 		Input:  map[string]core.Ref{"request_body": {Inline: nil}},
 		Params: map[string]any{"body": "param-body"},
 	}); got != "param-body" {
 		t.Errorf("param fallthrough = %q, want param-body", got)
 	}
-	// Nothing set ⇒ nil reader.
 	if got := read(t, core.Job{}); got != "" {
 		t.Errorf("no body = %q, want empty", got)
 	}
 }
-
-// ----------------------------------------------------------------------
-// http_download: too_large via max_bytes, request_body POST, method.
-// ----------------------------------------------------------------------
 
 func TestHTTPDownload_TooLarge(t *testing.T) {
 	ws := t.TempDir()
@@ -692,11 +633,6 @@ func TestHTTPDownload_BadScheme(t *testing.T) {
 		t.Errorf("code = %q, want bad_url", errCode(res))
 	}
 }
-
-// ----------------------------------------------------------------------
-// http_upload: bad scheme, expect_status, content_type override, response
-// body text/binary, uploadSrcPath from input ref.
-// ----------------------------------------------------------------------
 
 func TestHTTPUpload_BadScheme(t *testing.T) {
 	ws := t.TempDir()
@@ -760,7 +696,6 @@ func TestHTTPUpload_ContentTypeOverrideAndTextResponse(t *testing.T) {
 	if gotCT != "application/x-custom" {
 		t.Errorf("server saw content-type %q, want application/x-custom", gotCT)
 	}
-	// text/plain response inlines as a string.
 	if got, _ := res.Output["response_body"].Inline.(string); got != "server-reply" {
 		t.Errorf("response body = %v, want string 'server-reply'", res.Output["response_body"].Inline)
 	}

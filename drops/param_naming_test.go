@@ -35,9 +35,6 @@ type schemaProps struct {
 	} `json:"properties"`
 }
 
-// canonical maps a non-canonical param name to the name that should be used
-// instead. The lint flags any property whose name is a key here unless the
-// (drop, name) pair is grandfathered below.
 var canonical = map[string]string{
 	"max_results":      "limit",
 	"max_output_bytes": "max_bytes",
@@ -49,14 +46,12 @@ var canonical = map[string]string{
 // here (debt, not license): key is "<dropID>.<param>". New entries should be
 // rare and justified — prefer the canonical name.
 var legacyParamNames = map[string]bool{
-	// list-size: standardise on "limit"; these predate it.
 	"gmail_search_messages.max_results": true,
 	"gmail_get_message.max_results":     true,
 	"github_list_issues.max_results":    true,
-	// result caps: standardise on "max_bytes"; these predate it.
-	"http_request.max_body_bytes":  true,
-	"http_download.max_body_bytes": true,
-	"shell.max_output_bytes":       true,
+	"http_request.max_body_bytes":       true,
+	"http_download.max_body_bytes":      true,
+	"shell.max_output_bytes":            true,
 }
 
 func TestParamNaming_Conventions(t *testing.T) {

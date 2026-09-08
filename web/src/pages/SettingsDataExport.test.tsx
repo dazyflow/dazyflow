@@ -11,8 +11,6 @@ import userEvent from "@testing-library/user-event";
 vi.mock("react-i18next", () => {
   const t = (k: string) => k;
   const value = { t, i18n: { language: "en", changeLanguage: () => {} } };
-  // initReactI18next too: Settings imports the app's i18n instance for
-  // setLanguage, and that module installs this plugin at load.
   return { useTranslation: () => value, initReactI18next: { type: "3rdParty", init: () => {} } };
 });
 vi.mock("../auth", () => {
@@ -66,8 +64,6 @@ describe("Settings — your data", () => {
     expect(exportMyData).toHaveBeenCalledWith("session_tok");
     const [data, filename] = downloadJson.mock.calls[0];
     expect(data).toEqual({ profile: { email: "ada@example.com" } });
-    // Dated: a folder of files all called dazyflow-my-data.json says nothing
-    // about which one is current.
     expect(filename).toMatch(/^dazyflow-my-data-\d{4}-\d{2}-\d{2}\.json$/);
   });
 
@@ -88,7 +84,6 @@ describe("Settings — your data", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /dataExport.download/ }));
 
-    // explainApiError maps an unrecognised failure to the generic key.
     await waitFor(() => expect(screen.getByText("apiError.generic")).toBeInTheDocument());
     expect(downloadJson).not.toHaveBeenCalled();
   });

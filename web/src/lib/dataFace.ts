@@ -3,14 +3,6 @@
 
 import type { Port, Ref } from "../types";
 
-// Shaping a step's output for the card's data face — the panel that expands
-// below the header — and for the dialog behind its "show all" button.
-//
-// The card is 200px wide and the run may have produced a thousand rows, so
-// the card caps hard: it is the glance. The same shaping serves the dialog
-// with the caps lifted (see DataFaceCaps), so a table reads as a table on
-// both surfaces and only the truncation differs. Pure functions, so every cap
-// is testable without a canvas.
 
 export const MAX_ROWS = 3;
 export const MAX_COLUMNS = 4;
@@ -19,10 +11,6 @@ export const MAX_FIELDS = 4;
 export const MAX_TEXT_LINES = 5;
 export const MAX_TEXT = 220;
 
-// How much of a value a surface renders. The caps above are the card's, and
-// they are deliberately brutal — three rows in 200px is a glance, not a read.
-// The dialog is a reading surface with its own scroll, so it needs the same
-// shaping (a table is still a table) with the truncation lifted.
 export type DataFaceCaps = {
   rows: number;
   columns: number;
@@ -66,9 +54,6 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-// cell renders one value on a single line. Nested objects collapse to their
-// JSON so a column of them still shows SOMETHING recognisable — a row whose
-// every cell reads "[object Object]" is worse than no table at all.
 export function cell(v: unknown, max = MAX_CELL): string {
   let s: string;
   if (v === null || v === undefined) s = "—";
@@ -98,8 +83,6 @@ export function columnsOf(rows: Record<string, unknown>[]): string[] {
   return seen;
 }
 
-// fileNameOf reads the display name of an output held by reference — a blob in
-// storage rather than an inline value. "Faktura.pdf" beats the ref URI.
 function fileNameOf(ref: Ref): string | undefined {
   if (!ref.ref) return undefined;
   const base = ref.ref.replace(/^[a-z]+:\/\//, "").split("/").pop();
@@ -127,8 +110,6 @@ export function dataFaceView(
 
   if (Array.isArray(v)) {
     const records = v.filter(isRecord);
-    // A list of records is a table; a list of anything else (strings, numbers)
-    // has no columns to name, so it reads better as lines of text.
     if (records.length === v.length && records.length > 0) {
       const sample = records.slice(0, caps.rows);
       const all = columnsOf(sample);
@@ -180,9 +161,6 @@ function textView(raw: string, caps: DataFaceCaps): DataFaceView {
 // never there.
 export type DataFaceTier = "run" | "example" | "none";
 
-// dataFaceSource picks what a port's face shows and says where it came from.
-// A real value always wins; a port's shipped example fills in only when
-// nothing has run.
 export function dataFaceSource(
   ref: Ref | undefined,
   port: Port | undefined,
@@ -203,10 +181,6 @@ export function facePorts(outputs: Port[] | undefined): Port[] {
   return (outputs ?? []).filter((p) => p.port !== "pass");
 }
 
-// firstPortWithValue is the tab to open on: the port with the most real thing
-// to show, so a router's empty branch does not greet you with an empty panel
-// while its populated one sits behind a tab. Run data first, then a shipped
-// example, then whatever is declared first.
 export function firstPortWithValue(
   ports: Port[],
   outputs: Record<string, Ref> | undefined,

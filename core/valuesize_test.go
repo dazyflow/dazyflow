@@ -64,7 +64,6 @@ func TestRefTooLarge(t *testing.T) {
 	if size, too := RefTooLarge(Ref{Inline: strings.Repeat("x", 32)}); !too || size != 32 {
 		t.Errorf("RefTooLarge = (%d, %v), want (32, true)", size, too)
 	}
-	// Out-of-line refs carry their bytes in the blob store, not the record.
 	if _, too := RefTooLarge(Ref{Ref: "blob://" + strings.Repeat("p", 64)}); too {
 		t.Error("an out-of-line ref was measured as inline data")
 	}
@@ -82,11 +81,6 @@ func TestSetMaxValueBytes_Restores(t *testing.T) {
 	}
 }
 
-// The graph-byte walk skipped node IDs and module names as "already bounded by
-// the node and connection ceilings" — a bound on the COUNT, not the LENGTH.
-// Nothing validates a node ID (ValidGraphID covers the flow id only), so the
-// same oversize graph the ceiling exists to refuse came back with the payload
-// moved into the identifiers: 100 nodes with 256 KiB names measured 500 bytes.
 func TestApproxGraphBytes_WeighsIdentifiers(t *testing.T) {
 	const pad = 64 << 10
 	big := strings.Repeat("n", pad)
@@ -103,11 +97,6 @@ func TestApproxGraphBytes_WeighsIdentifiers(t *testing.T) {
 		}},
 		{"language", Graph{Language: big}},
 		{"failure webhook", Graph{FailureNotify: &FailureNotify{Webhook: big}}},
-		// The two repeated sub-records. Frames and triggers each had some of
-		// their strings charged and one missed — a frame's ID (nothing
-		// anywhere validates it; the engine ignores frames entirely) and a
-		// trigger's Type (the scheduler switches on it and ignores what it
-		// doesn't know). Their count ceilings bound how MANY, not how big.
 		{"frame id", Graph{Frames: []Frame{{ID: big}}}},
 		{"frame title", Graph{Frames: []Frame{{ID: "f", Title: big}}}},
 		{"trigger type", Graph{Triggers: []GraphTrigger{{Type: big}}}},
@@ -173,8 +162,6 @@ func TestClipNotificationLabel(t *testing.T) {
 	if len(long) > MaxNotificationLabelBytes+len("…") {
 		t.Errorf("clipped to %d bytes, want at most %d", len(long), MaxNotificationLabelBytes)
 	}
-	// Comfortably inside the RFC 5321 line limit, with room for the header
-	// name, the surrounding subject text and any encoding overhead.
 	if len(long) > 900 {
 		t.Errorf("a clipped subject is %d bytes — too close to the 1000-octet line limit", len(long))
 	}

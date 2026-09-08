@@ -27,8 +27,6 @@ import { ICON } from "../../icons";
 import { EmptyState } from "../ui/EmptyState";
 import { Switch } from "../ui/Switch";
 
-// TriggerEmpty is the per-tab "nothing set up yet" state with a single
-// call-to-action that creates the trigger of that type.
 function TriggerEmpty({
   icon: Icon,
   title,
@@ -58,15 +56,6 @@ function TriggerEmpty({
   );
 }
 
-// FormTab is the Form step's panel and the product's least technical surface:
-// the link people open, what it asks them, an embed snippet, and
-// recent-submission health. There is no on/off toggle — adding the step is the
-// opt-in.
-//
-// FormTab, WebhookTab and RequestTab are exported so the node Inspector can
-// render them for a selected trigger node; a node's params bag has the same
-// shape as the legacy GraphTrigger, so it is passed straight in and onChange
-// merges a patch.
 export function FormTab({
   graph,
   form,
@@ -91,11 +80,7 @@ export function FormTab({
     `<iframe src="${formURL}" title="${embedTitle}" ` +
     `width="100%" height="600" loading="lazy" style="border:0;max-width:480px"></iframe>`;
   const fieldsText = formFields.join(", ");
-  // While the fields input has focus, render the user's raw text — the
-  // canonical value round-trips through split(",")/join(", ") on every
-  // keystroke, which silently swallowed the comma the user just typed
-  // ("name," parses to ["name"] and re-renders as "name"). The draft
-  // clears on blur, snapping the display back to the normalized form.
+  // Raw text while focused, or normalisation fights the user's typing.
   const [fieldsDraft, setFieldsDraft] = useState<string | null>(null);
   return (
     <div>
@@ -171,9 +156,6 @@ export function FormTab({
   );
 }
 
-// WebhookTab is the developer surface: bearer secret + generate, a curl
-// recipe, and the no-code form-tool bridge recipes. When no webhook
-// trigger exists it shows an empty state whose CTA creates one.
 export function WebhookTab({
   graph,
   webhook,
@@ -193,8 +175,6 @@ export function WebhookTab({
   const { me } = useAuth();
   const baseURL = me?.public_base_url || "";
   if (!webhook) {
-    // In the node Inspector the config object always exists, so this empty
-    // state only shows in the legacy modal (where onCreate is provided).
     return onCreate ? (
       <TriggerEmpty
         icon={WebhookIcon}
@@ -265,9 +245,6 @@ export function WebhookTab({
   );
 }
 
-// RequestTab is the Request step's whole panel: the address callers POST to,
-// the keys that guard it, and a curl that prints the flow's own Reply. There is
-// no form half — a Request is always a system asking a question.
 export function RequestTab({
   graph,
   request,
@@ -326,8 +303,6 @@ export function RequestTab({
   );
 }
 
-// RequestStatusLine is the Request step's counterpart: can a caller reach this
-// right now, answered about the PUBLISHED flow, since /call serves that.
 export function RequestStatusLine({
   request,
   triggerLive,
@@ -366,16 +341,7 @@ export function RequestStatusLine({
   );
 }
 
-// CurlCaveat says what still has to be true before the command above works.
-//
-// The panel used to print the curl under a flat "The command works exactly as
-// shown" — which was false twice over. With no key generated the snippet
-// carries the literal <bearer-secret> placeholder and 401s; and because a
-// secret key is a draft edit like any other, even a real key 401s until the
-// flow is published again. Both are invisible from here, and the reader has
-// no way to tell a wrong copy-paste from a flow that simply isn't live.
-//
-// Renders nothing once the command genuinely does work as printed.
+// A curl that cannot work yet is worse than none.
 function CurlCaveat({
   webhook,
   triggerLive,
@@ -385,8 +351,6 @@ function CurlCaveat({
 }) {
   const { t } = useTranslation();
   const hasKey = webhookKeys(webhook).length > 0;
-  // Unknown publish state (still loading, or a surface that doesn't pass it)
-  // must not invent a warning — say nothing rather than something wrong.
   const notLive = triggerLive && (!triggerLive.published || triggerLive.dirty);
 
   if (!hasKey) {
@@ -414,21 +378,7 @@ function CurlCaveat({
   return null;
 }
 
-// WebhookStatusLine is the at-a-glance reachability answer the
-// Inspector shows above the webhook config: can anything start this
-// flow right now, and through which door (form link / secret key)?
-// It restates what the lint warning says — but as a live status that
-// flips to green the moment the user fixes it, instead of a warning
-// they have to re-save to clear.
-//
-// It answers about the LIVE flow, not the draft on screen, because that is
-// the question being asked: the form link sits directly beneath this line
-// with a Copy button, and the owner is deciding whether to send it to someone.
-// A door configured in the draft is not a door anyone can walk through yet —
-// /form and /trigger both serve the published revision. This line used to
-// ignore publish state entirely and show a green "Receiving — anyone with the
-// form link can start this flow" above a link that answered visitors with a
-// 404, which is the worst possible moment to be wrong.
+// The reachability answer, which is not the same as "a trigger exists".
 export function WebhookStatusLine({
   webhook,
   triggerLive,
@@ -438,16 +388,10 @@ export function WebhookStatusLine({
 }) {
   const { t } = useTranslation();
   const hasSecret = webhookKeys(webhook).length > 0;
-  // A step with no key is still receiving when the author opened it — saying
-  // "press Generate" over an endpoint the whole internet can already POST to
-  // would be the most misleading line on the page.
+  // A key-less but public step IS receiving.
   const isOpen = !hasSecret && webhookPublic(webhook);
   const canReceive = hasSecret || isOpen;
-  // Undefined publish state (still loading, or a surface that doesn't pass it)
-  // keeps the door-only answer rather than inventing a warning.
   const pending = triggerLive !== undefined && !triggerLive.published;
-  // Published, but the draft has moved on: the door IS open, it just leads to
-  // the last published version.
   const stale = triggerLive !== undefined && triggerLive.published && triggerLive.dirty;
   const key = !canReceive
     ? "off"
@@ -458,7 +402,6 @@ export function WebhookStatusLine({
         : isOpen
           ? "open"
           : "on";
-  // Green is reserved for "a caller can use this right now".
   const ok = canReceive && !pending;
   return (
     <div className={"webhook-status" + (ok ? " ok" : "") + (stale ? " stale" : "")}>
@@ -468,11 +411,6 @@ export function WebhookStatusLine({
   );
 }
 
-// FormStatusLine answers the one question that matters above a link someone is
-// about to send to a customer: does it work yet? The form itself needs no
-// configuration — its only precondition is that the flow is published, and
-// /form serves the published revision, so an unpublished draft's link answers
-// visitors with "not available".
 export function FormStatusLine({
   triggerLive,
 }: {
@@ -491,10 +429,7 @@ export function FormStatusLine({
   );
 }
 
-// randomHex returns a URL-safe hex string of the requested byte
-// length. Uses the browser's crypto.getRandomValues for cryptographic
-// randomness — secrets generated here are equivalent to
-// `openssl rand -hex 16`.
+// URL-safe: the key can travel in a query parameter.
 function randomHex(bytes: number): string {
   const buf = new Uint8Array(bytes);
   crypto.getRandomValues(buf);
@@ -503,17 +438,9 @@ function randomHex(bytes: number): string {
     .join("");
 }
 
-// webhookHostFallback is used only when the daemon has no
-// public-base-url configured. The web origin is the best guess then:
-// single-host deploys serve /trigger and /form same-origin from the
-// daemon, and the Vite dev server proxies both paths to it — so the
-// displayed command works copy-pasted in either case.
 const webhookHostFallback =
   typeof window !== "undefined" ? window.location.origin : "";
 
-// buildCurl assembles a multi-line curl invocation that hits this
-// graph's webhook trigger. We default to a plain-text body so
-// webhook_input.body lands as a string.
 function buildCurl(graph: Graph, secret: string, baseURL: string): string {
   const url = buildWebhookURL(graph, baseURL);
   const auth = secret || "<bearer-secret>";
@@ -525,17 +452,12 @@ function buildCurl(graph: Graph, secret: string, baseURL: string): string {
   ].join("\n");
 }
 
-// buildWebhookURL returns the public address callers POST to in order
-// to fire this graph.
 function buildWebhookURL(graph: Graph, baseURL: string): string {
   const host = (baseURL || webhookHostFallback).replace(/\/+$/, "");
   return `${host}/trigger/${graph.tenant}/${graph.workspace}/${graph.id}`;
 }
 
-// buildWebhookURLWithKey is the same address with the key in the query string —
-// the whole credential in one pasteable string, for a sender that cannot set a
-// header. Encoded because a generated key is hex today but the field takes
-// whatever an operator types.
+// For senders that can only be given a URL and no headers.
 function buildWebhookURLWithKey(
   graph: Graph,
   key: string,
@@ -544,18 +466,12 @@ function buildWebhookURLWithKey(
   return `${buildWebhookURL(graph, baseURL)}?key=${encodeURIComponent(key)}`;
 }
 
-// buildRequestURL returns the public address callers POST to when they want an
-// answer back. Distinct path from /trigger on purpose: one URL shape, one
-// contract.
 function buildRequestURL(graph: Graph, baseURL: string): string {
   const host = (baseURL || webhookHostFallback).replace(/\/+$/, "");
   return `${host}/call/${graph.tenant}/${graph.workspace}/${graph.id}`;
 }
 
-// buildRequestCurl prints the call AND what comes back — JSON by default,
-// since a system asking a question is the audience here.
-// buildRequestURLWithKey is the /call address with the key in the query string
-// — one pasteable credential for a caller that cannot set a header.
+// Shows what comes back too: half a contract is not a contract.
 function buildRequestURLWithKey(
   graph: Graph,
   key: string,
@@ -579,12 +495,6 @@ function buildRequestCurl(
   ].join("\n");
 }
 
-// RecentSubmissions surfaces the failure count for the per-graph runs
-// list. The hosted form renders "Thanks!" the moment the run is
-// accepted by the scheduler, *not* when downstream nodes finish — so a
-// silent post-submission failure leaves the visitor reassured but the
-// owner blind. This panel is where the owner finds out. One fetch on
-// mount; no polling.
 function RecentSubmissions({ graph }: { graph: Graph }) {
   const { t } = useTranslation();
   const { token, activeTenant, activeWorkspace } = useAuth();
@@ -663,18 +573,7 @@ function RecentSubmissions({ graph }: { graph: Graph }) {
   );
 }
 
-// ── Unified code/value family ──────────────────────────────────────
-//
-// Every copyable value or code snippet in the inspector shares one
-// visual language: a themed code well (.dz-code, --code-bg/--code-fg),
-// a mono value, and the same copy button (.dz-code-btn). The only
-// variant is single-line (CodeField) vs multi-line (CodeBlock); both
-// carry an optional caption above. This replaced three divergent
-// treatments — a tiny inline chip, a dark <pre> well, and a bordered
-// share card — that all meant "here is a value to copy".
 
-// useCopyButton renders the shared icon+label copy button and owns the
-// transient "copied" flip, so CodeField and CodeBlock stay identical.
 function useCopyButton(value: string) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
@@ -699,11 +598,6 @@ function useCopyButton(value: string) {
   );
 }
 
-// CodeField is the single-line copyable value: an optional caption,
-// then a code well holding one ellipsized value, the copy button, and
-// an optional trailing action (e.g. "Open" for the form link).
-// Exported so other inspectors (e.g. the ntfy subscribe panel) can reuse the
-// same copyable URL row + "Open" action without duplicating the markup/styles.
 export function CodeField({
   label,
   icon,
@@ -715,14 +609,8 @@ export function CodeField({
   label?: string;
   icon?: ReactNode;
   value: string;
-  // method renders an HTTP-verb badge before the value (reads as
-  // "POST https://…") but stays out of the copied string — the copy
-  // button must yield a bare URL pasteable into webhook fields.
   method?: string;
   action?: { href: string; label: string };
-  // trailing renders an extra control after the copy button (e.g. a
-  // Revoke button on a webhook key row), styled with .dz-code-btn so it
-  // matches the copy/Open buttons.
   trailing?: ReactNode;
 }) {
   const copyButton = useCopyButton(value);
@@ -757,13 +645,7 @@ export function CodeField({
   );
 }
 
-// WebhookKeys renders the rotation UI: every active bearer key as a
-// CodeField with a Revoke button, plus "Generate another key". Adding
-// a key is non-destructive (no confirm); revoking breaks any caller
-// still using THAT key, so it confirms first — and warns harder when
-// it's the last key (the flow stops accepting webhook calls). This is
-// what makes rotation zero-downtime: add new, migrate callers, revoke
-// old, never dropping a request.
+// /trigger accepts ANY active key, which is what makes rotation zero-downtime.
 function WebhookKeys({
   webhook,
   onChange,
@@ -771,16 +653,10 @@ function WebhookKeys({
 }: {
   webhook: GraphTrigger;
   onChange: (patch: Partial<GraphTrigger>) => void;
-  // Which door these keys guard. Both take keys the same way, but opening
-  // them is not the same decision — /trigger lets a stranger start the flow,
-  // /call also hands them its Reply — so the switch says different things.
   kind: "webhook" | "request";
 }) {
   const { t } = useTranslation();
   const keys = webhookKeys(webhook);
-  // pendingRevoke is the index of the key awaiting confirmation (null =
-  // no dialog). Drives the themed ConfirmModal below instead of a raw
-  // window.confirm().
   const [pendingRevoke, setPendingRevoke] = useState<number | null>(null);
   const writeKeys = (next: string[]) => onChange({ secrets: next });
   const addKey = () => writeKeys([...keys, randomHex(16)]);
@@ -867,8 +743,6 @@ function WebhookKeys({
   );
 }
 
-// CodeBlock is the multi-line sibling: the same well, with the copy
-// button pinned top-right over a wrapping <pre>.
 function CodeBlock({ value }: { value: string }) {
   const copyButton = useCopyButton(value);
   return (
@@ -879,12 +753,7 @@ function CodeBlock({ value }: { value: string }) {
   );
 }
 
-// ── moved verbatim from SettingsModal: cron preset picker ──
 
-// Schedule is the preset-picker model. Hourly/Daily/Weekly/Monthly
-// describe a round-trippable subset of standard 5-field cron; the
-// fifth shape ("custom") carries an opaque expression for everything
-// that doesn't fit.
 type Schedule =
   | { kind: "hourly"; minute: number }
   | { kind: "daily"; hour: number; minute: number }
@@ -892,8 +761,6 @@ type Schedule =
   | { kind: "monthly"; day: number; hour: number; minute: number }
   | { kind: "custom"; cron: string };
 
-// scheduleToCron serialises a preset back into a standard 5-field
-// cron expression the daemon's parser already accepts.
 function scheduleToCron(s: Schedule): string {
   switch (s.kind) {
     case "hourly":
@@ -911,9 +778,6 @@ function scheduleToCron(s: Schedule): string {
   }
 }
 
-// scheduleFromCron does the reverse — parsed only when the cron
-// expression cleanly matches one of the preset shapes. Anything
-// fancier falls through to { kind: "custom" }.
 export function scheduleFromCron(cron: string): Schedule {
   const trimmed = cron.trim();
   if (!trimmed) return { kind: "daily", hour: 9, minute: 0 };
@@ -959,15 +823,11 @@ export function scheduleFromCron(cron: string): Schedule {
   return { kind: "custom", cron: trimmed };
 }
 
-// strictInt parses a cron field that should be a bare non-negative
-// integer. Returns null for anything with extra characters.
 function strictInt(s: string): number | null {
   if (!/^\d+$/.test(s)) return null;
   return Number.parseInt(s, 10);
 }
 
-// shortDayLabel returns the locale's short weekday name without us
-// shipping a name table.
 function shortDayLabel(dayIndex: number, locale: string): string {
   const ref = new Date(Date.UTC(2024, 0, 7 + dayIndex)); // 2024-01-07 was a Sunday
   try {
@@ -987,8 +847,6 @@ type CronValidation =
   | { kind: "valid"; nextFires: string[] }
   | { kind: "invalid"; error: string };
 
-// useCronValidation lifts the validate-on-debounce dance out so the
-// preset picker can show the "next fires" preview and "invalid" banner.
 function useCronValidation(expr: string): CronValidation {
   const { token } = useAuth();
   const [state, setState] = useState<CronValidation>({ kind: "idle" });
@@ -1002,9 +860,7 @@ function useCronValidation(expr: string): CronValidation {
     setState({ kind: "checking" });
     const handle = setTimeout(async () => {
       try {
-        // Validate in the viewer's own timezone — the same value stamped
-        // onto the saved trigger — so the previewed fire times are exactly
-        // what the scheduler will produce.
+        // In the VIEWER's timezone: the same expression means different times elsewhere.
         const res = await api.validateCron(token, trimmed, browserTimeZone());
         if (res.valid) {
           setState({ kind: "valid", nextFires: res.next_fires ?? [] });
@@ -1020,9 +876,6 @@ function useCronValidation(expr: string): CronValidation {
   return state;
 }
 
-// TriggerScheduleField is the friendly cron picker: a chip row picks
-// the cadence, sub-controls collect the time/day, and a Custom escape
-// hatch keeps the raw expression. Emits a 5-field cron string upward.
 export function TriggerScheduleField({
   value,
   onChange,
@@ -1172,8 +1025,6 @@ export function TriggerScheduleField({
   );
 }
 
-// pickHour / pickMinute carry the user's current time-of-day across
-// preset switches when the new preset still has those fields.
 function pickHour(s: Schedule, fallback: number): number {
   switch (s.kind) {
     case "daily":
@@ -1196,8 +1047,6 @@ function pickMinute(s: Schedule, fallback: number): number {
   }
 }
 
-// SchedulePresetControls renders the right sub-controls for whichever
-// preset is currently selected.
 function SchedulePresetControls({
   schedule,
   locale,
@@ -1333,8 +1182,6 @@ function SchedulePresetControls({
   }
 }
 
-// TimeOfDayInput is an hour + minute picker rendered as two narrow
-// number boxes with a colon between them.
 function TimeOfDayInput({
   hour,
   minute,
@@ -1372,8 +1219,6 @@ function TimeOfDayInput({
   );
 }
 
-// DayOfWeekPicker renders the seven weekdays as toggleable chips using
-// locale-localised short labels. Empty selection isn't allowed.
 function DayOfWeekPicker({
   selected,
   locale,
@@ -1412,9 +1257,7 @@ function DayOfWeekPicker({
   );
 }
 
-// parseIntOr is the "controlled numeric input" trick: while the user is
-// typing, the input might briefly be blank; without a fallback the
-// controlled state would NaN out.
+// While mid-edit the raw text must survive, or backspacing is impossible.
 function parseIntOr(s: string, fallback: number): number {
   const n = Number.parseInt(s, 10);
   return Number.isInteger(n) ? n : fallback;
@@ -1423,17 +1266,11 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
-// formatCronTime renders a daemon-reported ISO timestamp in the user's
-// resolved locale + timezone.
-// Standard local "YYYY-MM-DD HH:MM". The cron preview always shows the
-// fire times in the viewer's local clock, even though the cron itself is
-// authored in a chosen timezone.
+// In the user's own timezone, which is not the daemon's.
 function formatCronTime(iso: string): string {
   return formatDateTime(iso);
 }
 
-// browserTimeZone returns the user's IANA timezone, or "UTC" if the
-// browser doesn't expose one.
 export function browserTimeZone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";

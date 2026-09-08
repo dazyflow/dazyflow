@@ -12,17 +12,11 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// The editor asks "what did each step of this flow last produce?" with no run
-// id — the canvas is open and nothing has run in this session. The answer is
-// folded out of the node records the runs already wrote.
-
 type samplesResponse struct {
 	Flow  string                         `json:"flow"`
 	Nodes map[string]map[string]core.Ref `json:"nodes"`
 }
 
-// seedSampleFlow saves a two-step flow so the endpoint's visibility gate has
-// something to load.
 func seedSampleFlow(t *testing.T, h *gatewayHarness) {
 	t.Helper()
 	if _, err := h.ws.Save(core.Graph{
@@ -37,7 +31,6 @@ func seedSampleFlow(t *testing.T, h *gatewayHarness) {
 	}
 }
 
-// seedNodeRecord writes one node record for a run of flow "g".
 func seedNodeRecord(t *testing.T, h *gatewayHarness, runID, nodeID string, res *core.Result) {
 	t.Helper()
 	if err := h.store.Enqueue(t.Context(), core.JobRecord{
@@ -91,9 +84,6 @@ func TestFlowSamples_ServesEachStepsLastOutput(t *testing.T) {
 
 func TestFlowSamples_MergesAcrossRunsNewestWins(t *testing.T) {
 	t.Parallel()
-	// This is the case reading only the newest run gets wrong: sampling one
-	// step runs its upstream chain alone, so the newest run covers `src` and
-	// only an older run ever covered `sink`.
 	h := newGatewayHarness(t)
 	seedSampleFlow(t, h)
 	seedNodeRecord(t, h, "run-old", "src", textResult("out", "stale"))
@@ -111,8 +101,6 @@ func TestFlowSamples_MergesAcrossRunsNewestWins(t *testing.T) {
 
 func TestFlowSamples_SkipsRecordsThatProducedNothing(t *testing.T) {
 	t.Parallel()
-	// A step that failed this morning should still show yesterday's output
-	// rather than being blanked by the newer, empty record.
 	h := newGatewayHarness(t)
 	seedSampleFlow(t, h)
 	seedNodeRecord(t, h, "run-old", "src", textResult("out", "yesterday"))
@@ -129,7 +117,6 @@ func TestFlowSamples_IsScopedToItsOwnFlow(t *testing.T) {
 	h := newGatewayHarness(t)
 	seedSampleFlow(t, h)
 	seedNodeRecord(t, h, "run-1", "src", textResult("out", "mine"))
-	// A node record belonging to a different flow, same workspace.
 	if err := h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: NodeJobID("run-other", "src"), Kind: core.JobKindNode, Tenant: "t", Workspace: "ws",
 		GraphID: "other", GraphRunID: "run-other", NodeID: "src", Status: core.JobStatusSucceeded,

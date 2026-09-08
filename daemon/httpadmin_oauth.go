@@ -85,10 +85,6 @@ func (h *oauthAPI) listAdminOAuthProviders(rw http.ResponseWriter, r *http.Reque
 				row.ClientID = c.ClientID
 			}
 		}
-		// HasEnv is "configured but no persisted creds" — i.e. the live
-		// values came from DAZYFLOW_OAUTH_<NAME>_CLIENT_ID env vars at
-		// boot. Useful so the admin UI can say "currently from env;
-		// saving here will override".
 		row.HasEnv = row.Configured && !row.HasPersisted
 		rows = append(rows, row)
 	}
@@ -135,7 +131,6 @@ func (h *oauthAPI) upsertAdminOAuthProvider(rw http.ResponseWriter, r *http.Requ
 		writeJSONError(rw, http.StatusInternalServerError, "persist: "+err.Error())
 		return
 	}
-	// Live-register so the change takes effect without a restart.
 	h.OAuth.Register(def.toProvider(creds.ClientID, creds.ClientSecret))
 	// Audit so an operator can trace who changed credentials when.
 	// secret values are NOT logged.
@@ -165,9 +160,6 @@ func (h *oauthAPI) deleteAdminOAuthProvider(rw http.ResponseWriter, r *http.Requ
 		writeJSONError(rw, http.StatusNotFound, fmt.Sprintf("unknown OAuth provider %q", name))
 		return
 	}
-	// Best-effort delete: the persisted store may simply not have an
-	// entry (provider was env-only) — in that case unregister from the
-	// in-memory registry only.
 	if err := deleteProviderCreds(r.Context(), h.EncryptedSecrets, name); err != nil &&
 		!strings.Contains(err.Error(), "not found") {
 		writeJSONError(rw, http.StatusInternalServerError, "persist: "+err.Error())
@@ -178,9 +170,6 @@ func (h *oauthAPI) deleteAdminOAuthProvider(rw http.ResponseWriter, r *http.Requ
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// knownProviderNames joins the known catalogue names for error
-// messages — operators can see at a glance which slug they should
-// have used.
 func knownProviderNames() string {
 	names := make([]string, len(KnownOAuthProviderDefaults))
 	for i, d := range KnownOAuthProviderDefaults {

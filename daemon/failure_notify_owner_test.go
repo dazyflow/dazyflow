@@ -13,11 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// attachOwnerEmail equips svc with a fake-SMTP mailer and a JSON user
-// store holding one owner account, so the account-level failure-email
-// path (resolve owner → check pref → send) is exercised end to end
-// without a real SMTP server or Postgres. Returns the fake SMTP to
-// assert on.
 func attachOwnerEmail(t *testing.T, svc *Service, owner auth.User) *fakeSMTP {
 	t.Helper()
 	srv := newFakeSMTP(t)
@@ -34,8 +29,6 @@ func attachOwnerEmail(t *testing.T, svc *Service, owner auth.User) *fakeSMTP {
 	return srv
 }
 
-// ownerEmailHarness is the bare-Service variant for tests that drive
-// fireFailureNotification directly (no bus/jobs needed).
 func ownerEmailHarness(t *testing.T, owner auth.User) (*Service, *fakeSMTP) {
 	t.Helper()
 	svc := &Service{}
@@ -45,8 +38,6 @@ func ownerEmailHarness(t *testing.T, owner auth.User) (*Service, *fakeSMTP) {
 
 func boolPtr(b bool) *bool { return &b }
 
-// waitForEmail polls the fake SMTP until a body arrives or the deadline
-// passes; returns the accumulated data + recipients.
 func waitForEmail(t *testing.T, srv *fakeSMTP, timeout time.Duration) (string, []string) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -85,8 +76,6 @@ func TestFailureNotify_OwnerEmailDefaultOn(t *testing.T) {
 	}
 }
 
-// An owner who explicitly turned the failure email off gets nothing,
-// and with no other channel configured no mail is sent at all.
 func TestFailureNotify_OwnerEmailOptedOut(t *testing.T) {
 	t.Parallel()
 	owner := auth.User{
@@ -107,8 +96,6 @@ func TestFailureNotify_OwnerEmailOptedOut(t *testing.T) {
 	}
 }
 
-// When the owner's account email equals the per-flow FailureNotify.Email,
-// the owner is deduped — exactly one message, not two.
 func TestFailureNotify_OwnerEmailDedupedAgainstPerFlow(t *testing.T) {
 	t.Parallel()
 	owner := auth.User{Email: "owner@example.com", Subject: "owner@example.com", Tenant: "t", Workspace: "ws"}
@@ -123,7 +110,6 @@ func TestFailureNotify_OwnerEmailDedupedAgainstPerFlow(t *testing.T) {
 		GraphID: graph.ID, RunID: "run-1", ErrorMessage: "boom",
 	})
 
-	// Give a possible second send time to (wrongly) arrive.
 	data, _ := waitForEmail(t, srv, 1*time.Second)
 	if data == "" {
 		t.Fatal("expected one failure email")

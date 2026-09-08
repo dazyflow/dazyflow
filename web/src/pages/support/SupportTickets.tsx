@@ -57,13 +57,11 @@ import { ConfirmModal } from "../../components/ui/ConfirmModal";
 // the user-facing responses omit which support agent owns or answered a ticket.
 
 
-// statusLabel resolves a ticket status to friendly copy (support.status.*).
 function useStatusLabel() {
   const { t } = useTranslation();
   return (s: TicketStatus) => t(`support.status.${s}`);
 }
 
-// ---- End-user ticket list --------------------------------------------------
 
 export function SupportTickets() {
   const { t } = useTranslation();
@@ -179,8 +177,6 @@ function NewTicketModal({ onClose, onCreated }: { onClose: () => void; onCreated
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // The user's flows populate the picker. A failure here is silent: the picker
-  // just stays hidden and the ticket is filed without flow context.
   useEffect(() => {
     if (!token || !activeWorkspace) return;
     let cancelled = false;
@@ -197,8 +193,6 @@ function NewTicketModal({ onClose, onCreated }: { onClose: () => void; onCreated
     };
   }, [token, activeTenant, activeWorkspace]);
 
-  // Look up the newest failed run for the chosen flow so the bundle can carry
-  // the run outcome. Cleared when the user picks "no specific flow".
   useEffect(() => {
     setRunId("");
     setRunAt("");
@@ -322,12 +316,7 @@ function NewTicketModal({ onClose, onCreated }: { onClose: () => void; onCreated
   );
 }
 
-// ---- Support-agent dashboard (the cross-org queue) -------------------------
 
-// QueueView is one saved view of the queue. Each dashboard tile IS a view, so a
-// tile both reports a number and is the way to reach the tickets behind it —
-// clicking "3 unassigned" shows those three rather than leaving the agent to
-// reconstruct the filter by hand.
 type QueueView = { own: TicketQueueFilter; status: TicketStatus | "all" };
 
 const VIEW_ALL: QueueView = { own: "all", status: "all" };
@@ -355,8 +344,6 @@ export function SupportQueue() {
     if (!token) return;
     setLoading(true);
     try {
-      // The tiles are counted server-side across the WHOLE queue, so they stay
-      // truthful no matter how the list below is filtered or how long it is.
       const [queue, counts] = await Promise.all([
         api.listTicketQueue(token, {
           status: view.status === "all" ? undefined : view.status,
@@ -379,7 +366,6 @@ export function SupportQueue() {
     void refresh();
   }, [refresh]);
 
-  // Claim from the list: triage without opening every ticket first.
   const claim = async (id: string) => {
     if (!token) return;
     setClaiming(id);
@@ -529,8 +515,6 @@ export function SupportQueue() {
   );
 }
 
-// QueueTile is a dashboard stat that doubles as the filter for what it counts.
-// A button rather than a Link: it changes the view in place instead of navigating.
 function QueueTile({
   icon,
   label,
@@ -566,8 +550,6 @@ function QueueTile({
   );
 }
 
-// QueueRow is one ticket in the queue: who filed it, who owns it, and — when
-// nobody does yet — a one-click claim.
 function QueueRow({
   ticket,
   mySubject,
@@ -617,7 +599,6 @@ function QueueRow({
   );
 }
 
-// ---- One ticket's thread (shared by user + agent) --------------------------
 
 export function TicketThread({ mode }: { mode: "user" | "agent" }) {
   const { t } = useTranslation();
@@ -630,10 +611,6 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [showBundle, setShowBundle] = useState(false);
-  // Closing is the requester saying "stop working on this", and it lands on
-  // support's side as well as their own — near enough to irreversible in the
-  // moment (it is undone by replying, not by an Undo) that a misclick on a
-  // button sitting between Release and the composer should not do it.
   const [confirmClose, setConfirmClose] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -749,8 +726,6 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
     }
   };
 
-  // The requester's own status control. They can withdraw a ticket or reopen a
-  // finished one; only support can declare it resolved (the server enforces it).
   const setMyStatus = async (status: "closed" | "awaiting_support") => {
     if (!token) return;
     setBusy(true);
@@ -778,8 +753,6 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
   };
 
   const backTo = mode === "agent" ? "/support/queue" : "/support";
-  // Name the parent, per the BackLink convention — which parent depends on
-  // where this thread was opened from.
   const backLabel = mode === "agent" ? t("support.queueTitle") : t("nav.support");
 
   if (loading) return <Loading />;
@@ -820,9 +793,6 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
               </>
             )}
             {tk.flow_id && (
-              // The customer's own flow lives at /flows/<id>; an agent is in a
-              // DIFFERENT tenant, where that route resolves to nothing. Their
-              // route into someone else's flow is the grant-gated support view.
               <Link
                 to={
                   mode === "agent"
@@ -990,18 +960,6 @@ function BundleModal({ ticketId, mode, onClose }: { ticketId: string; mode: "use
   );
 }
 
-// ChatBubble renders one message. "mine" = the reader's own side (right); the
-// other party and system notes render on the left / centered.
-// SYSTEM_NOTE maps the daemon's system_code to an i18n key. Mirrors the
-// SystemNote constants in core/ticket.go; the daemon composes the same notes in
-// English into `body`, which is what an API reader or an email digest gets and
-// what this falls back to for a code it does not know — an older row, or a
-// newer daemon than this build.
-//
-// Two of them have a "you" form. The customer's own close and reopen are the
-// only notes about something the reader did, and "The customer closed this
-// ticket" in your own thread is the third person talking about you — the same
-// complaint as an email address where your name should be.
 const SYSTEM_NOTE: Record<string, string> = {
   customer_closed: "support.note.customerClosed",
   customer_reopened: "support.note.customerReopened",
@@ -1017,8 +975,6 @@ const SYSTEM_NOTE_YOURS: Record<string, string> = {
   customer_reopened: "support.note.customerReopenedYou",
 };
 
-// Receipt is what the agent is told about their newest reply: read, with when,
-// or not read yet. Absent means "we do not know" — see customerRead above.
 type Receipt = { read: true; at: string } | { read: false };
 
 function ChatBubble({
@@ -1033,8 +989,6 @@ function ChatBubble({
   const { t } = useTranslation();
   const { me } = useAuth();
   if (m.author_kind === "system") {
-    // The customer is the reader on the user surface, so their own actions are
-    // narrated in the second person there and the third person to an agent.
     const key =
       (mode === "user" ? SYSTEM_NOTE_YOURS[m.system_code ?? ""] : undefined) ??
       SYSTEM_NOTE[m.system_code ?? ""];
@@ -1042,8 +996,6 @@ function ChatBubble({
       <div className="ticket-system-note">{key ? t(key) : m.body}</div>
     );
   }
-  // Which SIDE the bubble sits on is about the party, not the person: a
-  // colleague's reply belongs on the support side of an agent's screen.
   const mine = mode === "agent" ? m.author_kind === "support" : m.author_kind === "user";
   // Who it is FROM is about the person. "support.fromYou" was already here and
   // already meant this, but it only applied when the server sent no author —

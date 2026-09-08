@@ -28,23 +28,18 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// Block all outbound network for the whole package. 192.0.2.1/32 is
-	// TEST-NET-1 (RFC 5737) — guaranteed unroutable — so the allowlist is
-	// effectively "deny everything real" for the egress-gated HTTP drops.
 	if err := net.SetEgressAllowlist([]string{"192.0.2.1/32"}); err != nil {
 		panic("set egress lockdown: " + err.Error())
 	}
 	os.Exit(m.Run())
 }
 
-// registeredDrop pairs a drop's ID with its manifest and live transport.
 type registeredDrop struct {
 	id        string
 	manifest  core.Manifest
 	transport core.Transport
 }
 
-// allDrops returns every drop registered in the default engine.
 func allDrops(t testing.TB) []registeredDrop {
 	t.Helper()
 	out := make([]registeredDrop, 0, 128)
@@ -61,7 +56,6 @@ func allDrops(t testing.TB) []registeredDrop {
 	return out
 }
 
-// dropOutcome captures everything we need to assert on after one Execute.
 type dropOutcome struct {
 	result   core.Result
 	err      error
@@ -109,8 +103,6 @@ func runDropSafely(parent context.Context, tr core.Transport, job core.Job, budg
 		done <- completion{r, e}
 	}()
 
-	// A well-behaved drop returns at/under its ctx deadline. The extra slack
-	// distinguishes "slow but honors ctx" from "ignores ctx entirely".
 	watchdog := time.NewTimer(budget + 8*time.Second)
 	defer watchdog.Stop()
 
@@ -121,7 +113,6 @@ func runDropSafely(parent context.Context, tr core.Transport, job core.Job, budg
 		<-progressDone
 	case <-watchdog.C:
 		out.timedOut = true
-		// Leak the drainer; the drop goroutine is wedged. Test fails below.
 	}
 	return out
 }
@@ -137,7 +128,6 @@ func assertResultContract(t *testing.T, where string, out dropOutcome) {
 	}
 	switch out.result.Status {
 	case core.StatusOK, core.StatusError, core.StatusAwaiting:
-		// ok
 	case "":
 		t.Errorf("%s: empty Result.Status with nil error (must be ok/error/awaiting)", where)
 		return
@@ -154,9 +144,6 @@ func assertResultContract(t *testing.T, where string, out dropOutcome) {
 	}
 }
 
-// nastyValues is the adversarial palette thrown at every drop's params and
-// inputs: nil, empty, oversized, type-confused, traversal/injection strings,
-// and pathological nested/large structures.
 func nastyValues() []any {
 	deep := any("leaf")
 	for i := 0; i < 300; i++ {
@@ -200,8 +187,6 @@ func nastyValues() []any {
 	}
 }
 
-// commonParamKeys / commonInputPorts union the keys real drops read, so a
-// single nasty value can be sprayed across every place a drop might look.
 var commonParamKeys = []string{
 	"path", "url", "dsn", "sql", "table", "schema", "command", "args",
 	"ms", "timeout_ms", "max_body_bytes", "max_output_bytes", "limit",

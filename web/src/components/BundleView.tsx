@@ -15,8 +15,6 @@ export function BundleView({ bundle }: { bundle: SupportBundle }) {
   const run = bundle.run;
   const nodeStatus = new Map((run?.nodes ?? []).map((n) => [n.node_id, n]));
 
-  // nodes/edges arrive as null (not []) for a graph with none — Go marshals a
-  // nil slice as JSON null. Guard once here rather than at each use.
   const nodes = bundle.nodes ?? [];
 
   return (

@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// countingStore is a SessionStore that records how many times each
-// method is called, so tests can assert on cache hit/miss behaviour.
 type countingStore struct {
 	gets, puts, dels atomic.Int64
 	sess             Session
@@ -182,9 +180,6 @@ func sessionFor(id, subject string, exp time.Time) Session {
 	return Session{ID: id, Subject: subject, Tenant: "acme", ExpiresAt: exp}
 }
 
-// cachedIDs reports which ids currently sit in the cache. Eviction is not
-// observable through call counts alone once a miss re-populates the map,
-// so the bound is asserted on the map directly.
 func cachedIDs(c *CachingSessionStore) map[string]bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -266,8 +261,6 @@ func TestCachingSessionStore_RevokeSubjectEvictsOnlyThatSubject(t *testing.T) {
 	if got := inner.gets.Load(); got != 2 {
 		t.Errorf("inner gets = %d, want 2 (bystander must stay cached)", got)
 	}
-	// The revoked subject's entry is dropped from the cache, so the miss
-	// falls through to the inner store, which no longer holds it.
 	if _, err := c.GetSession(context.Background(), "a"); !errors.Is(err, ErrInvalidCredential) {
 		t.Errorf("get a after revoke: err = %v, want ErrInvalidCredential", err)
 	}
@@ -288,8 +281,6 @@ func TestCachingSessionStore_BoundedAtMaxEntries(t *testing.T) {
 	_, _ = c.GetSession(context.Background(), "b") // cache now at max
 	_, _ = c.GetSession(context.Background(), "c") // must trigger the bound
 
-	// Every entry is fresh, so the expiry sweep frees nothing and the map
-	// is dropped wholesale, leaving only the entry just written.
 	if ids := cachedIDs(c); len(ids) != 1 || !ids["c"] {
 		t.Errorf("cached ids = %v, want only {c} once max is reached", ids)
 	}
@@ -311,9 +302,6 @@ func TestCachingSessionStore_SweepDropsEntriesExactlyAtTTL(t *testing.T) {
 	_, _ = c.GetSession(context.Background(), "b") // cached at t0+30, fills to max
 	_, _ = c.GetSession(context.Background(), "c") // triggers the sweep
 
-	// The sweep reclaims "a" (exactly at the TTL counts as expired) and
-	// keeps the still-fresh "b"; freeing a slot means the map is not
-	// dropped wholesale.
 	if ids := cachedIDs(c); len(ids) != 2 || !ids["b"] || !ids["c"] {
 		t.Errorf("cached ids = %v, want {b,c} after the sweep", ids)
 	}

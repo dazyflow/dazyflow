@@ -87,10 +87,6 @@ func TestHTTPRequest_StampsTriggerDepthOnlyForSelf(t *testing.T) {
 	}
 }
 
-// Compared as raw strings, every spelling of one origin that a URL parser
-// treats as equal was a way to reach our own trigger endpoints as "a third
-// party" — and so without the depth header that breaks a self-triggering
-// flow.
 func TestIsSelfDirected_EquivalentSpellings(t *testing.T) {
 	defer SetSelfOrigin("")
 	cases := []struct {
@@ -121,9 +117,6 @@ func TestIsSelfDirected_EquivalentSpellings(t *testing.T) {
 	}
 }
 
-// A deployment is reachable at more than one address — the public name and
-// the one the daemon answers on inside its container — and a flow triggering
-// itself through either is triggering itself.
 func TestSetSelfOrigins_EveryConfiguredOrigin(t *testing.T) {
 	defer SetSelfOrigin("")
 	SetSelfOrigins("https://flows.example", "http://localhost:8642", "")

@@ -10,9 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestNativeTransport_RecoversPanic proves a drop that panics is converted
-// into a structured StatusError result instead of crashing the process — the
-// blast-radius containment the per-node recover() exists to provide.
 func TestNativeTransport_RecoversPanic(t *testing.T) {
 	tp := &nativeTransport{node: NativeDrop{
 		Manifest: core.Manifest{ID: "boom"},

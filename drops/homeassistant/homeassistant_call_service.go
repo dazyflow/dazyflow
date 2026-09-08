@@ -56,18 +56,9 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Named after their params so the card shows inline editable
-				// boxes (Unreal-style); a wired value overrides the typed one.
 				{Port: "service", Label: "Service", MIME: []string{"text/plain"}},
 				{Port: "entity_id", Label: "Entity", MIME: []string{"text/plain"}},
 			},
-			// Re-emit the targeted entity so a following step can check it —
-			// e.g. Call service (light.turn_on) → Get state (Entity wired) →
-			// Branch. Same "re-emit an id for chaining" pattern as Sheets'
-			// Spreadsheet ID. Omitted when the service targets no entity (the
-			// edge stays dormant, so the follow-up is skipped). The states Home
-			// Assistant reports as changed are still EMITTED under "meta" for run
-			// records (emitted-but-undeclared convention); chain control via pass.
 			Outputs: []core.Port{
 				{Port: "entity_id", Label: "Entity", MIME: []string{"text/plain"}, Example: json.RawMessage(`"light.kitchen_ceiling"`)},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"service":"light.turn_on","entity_id":"light.kitchen_ceiling","changed_count":1,"changed_entities":["light.kitchen_ceiling"]}`)},
@@ -90,11 +81,8 @@ func init() {
 			// So a transport blip after HA already executed would fire the
 			// physical action twice. Don't auto-retry; the author can wire an
 			// explicit on_error edge for the services they know are safe.
-			Idempotent:  false,
-			RetryPolicy: core.RetryNever,
-			// …and the engine dedupes a same-job re-execution (expired-lease
-			// reclaim / crash recovery) so a recovered run doesn't re-invoke
-			// the service.
+			Idempotent:   false,
+			RetryPolicy:  core.RetryNever,
 			DedupeWrites: true,
 		},
 		Execute: executeCallService,
@@ -126,8 +114,6 @@ func executeCallService(ctx context.Context, job core.Job, _ chan<- core.Progres
 	}
 	entityID = strings.TrimSpace(entityID)
 
-	// Build the service-data body: start from the 'data' param (if any), then
-	// layer entity_id on top so the targeted entity always wins.
 	body := map[string]any{}
 	if raw, present := job.Params["data"]; present && raw != nil {
 		if m, isMap := raw.(map[string]any); isMap {
@@ -150,8 +136,6 @@ func executeCallService(ctx context.Context, job core.Job, _ chan<- core.Progres
 		return *f, nil
 	}
 
-	// Home Assistant returns the array of states it changed. Keep it under
-	// "meta" for run records; it's not a declared pin.
 	var changed []entityState
 	_ = json.Unmarshal(respBody, &changed)
 	out := map[string]core.Ref{"meta": {MIME: "application/json", Inline: map[string]any{
@@ -160,8 +144,6 @@ func executeCallService(ctx context.Context, job core.Job, _ chan<- core.Progres
 		"changed_count":    len(changed),
 		"changed_entities": changed,
 	}}}
-	// Re-emit the targeted entity for chaining into a status check. Omit it
-	// for entity-less services so the downstream edge stays dormant.
 	if entityID != "" {
 		out["entity_id"] = core.Ref{MIME: "text/plain", Inline: entityID}
 	}

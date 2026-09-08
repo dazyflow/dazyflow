@@ -49,9 +49,6 @@ func TestFailureNotify_AppStartedRunStillEmailsTheOwner(t *testing.T) {
 }
 
 func TestFailureNotify_AppStartedRunStillEmailsThePerFlowAddress(t *testing.T) {
-	// The per-flow address is usually a shared inbox or an on-call alias. It
-	// was suppressed for manual runs too, which meant a flow driven entirely
-	// by API calls paged nobody, ever.
 	svc, srv := ownerEmailHarness(t, auth.User{Email: "owner@example.com"})
 	graph := core.Graph{
 		ID: "daily", Tenant: "t", Workspace: "ws",
@@ -96,8 +93,6 @@ func TestFailureNotify_ManualRunStillPostsTheWebhook(t *testing.T) {
 	t.Error("a manual run's failure did not reach the configured webhook")
 }
 
-// ---- the flag has to survive the trip ----------------------------------
-
 // A run can be PARKED at the concurrency limit and promoted minutes later, in a
 // goroutine that never saw the person who pressed Run. That is the whole reason
 // this is stored on the record rather than passed down a call stack — so the
@@ -123,8 +118,6 @@ func TestSubmitGraphOpts_RecordsWhoStartedTheRun(t *testing.T) {
 		t.Error("a run started from the app was not recorded as manual")
 	}
 
-	// And the default is the automatic one, because every trigger path — the
-	// scheduler, webhooks, forms — reaches the queue through the zero value.
 	autoID, err := h.svc.SubmitGraph(t.Context(), p, g)
 	if err != nil {
 		t.Fatalf("submit automatic: %v", err)
@@ -138,15 +131,6 @@ func TestSubmitGraphOpts_RecordsWhoStartedTheRun(t *testing.T) {
 	}
 }
 
-// ---- the throttle ------------------------------------------------------
-
-// A flow that breaks usually breaks repeatedly — a poll trigger every five
-// minutes against a service that is down is twelve identical failures an hour.
-// Twelve identical emails teach the reader to filter the lot, so the first one
-// speaks for the window and the rest are silent.
-
-// seedFailedRun writes a terminal failed graph-record, the shape the throttle
-// counts. enqueuedAt is explicit because the window is measured on it.
 func seedFailedRun(t *testing.T, svc *Service, graph core.Graph, id string, enqueuedAt time.Time) {
 	t.Helper()
 	if err := svc.Jobs.Enqueue(t.Context(), core.JobRecord{
@@ -238,8 +222,6 @@ func TestFailureEmailThrottle_CatchesAFlappingFlow(t *testing.T) {
 
 func TestFailureEmailThrottle_MailsAgainOnceTheWindowHasPassed(t *testing.T) {
 	svc, srv, graph := throttleHarness(t)
-	// Old enough to be outside the window: quiet for an hour means either fixed
-	// or not running, so the next failure is news again.
 	seedFailedRun(t, svc, graph, "run-old", time.Now().Add(-2*FailureEmailWindow))
 	seedFailedRun(t, svc, graph, "run-new", time.Now())
 
@@ -270,8 +252,6 @@ func TestFailureEmailThrottle_IsPerFlow(t *testing.T) {
 	}
 }
 
-// The webhook is a stream for machines, not a person's inbox. It is not
-// throttled, and this is the test that keeps the two from being conflated.
 func TestFailureEmailThrottle_DoesNotThrottleTheWebhook(t *testing.T) {
 	fw := newFakeWebhook(t)
 	svc := newFailureNotifyHarness(t)
@@ -300,8 +280,6 @@ func TestFailureEmailThrottle_DoesNotThrottleTheWebhook(t *testing.T) {
 }
 
 func TestFailureEmailThrottle_TurnsOffAtZero(t *testing.T) {
-	// DAZYFLOW_FAILURE_EMAIL_WINDOW=0 restores the pre-throttle behaviour, so an
-	// operator who wants one mail per failure can have it.
 	prev := FailureEmailWindow
 	FailureEmailWindow = 0
 	t.Cleanup(func() { FailureEmailWindow = prev })
@@ -319,11 +297,8 @@ func TestFailureEmailThrottle_TurnsOffAtZero(t *testing.T) {
 	}
 }
 
-// Fails OPEN. A throttle that eats an alert because the store could not answer
-// is worse than one that sends a duplicate.
 func TestFailureEmailThrottle_SendsWhenItCannotTell(t *testing.T) {
 	svc, srv := ownerEmailHarness(t, auth.User{Email: "owner@example.com"})
-	// No job store on this harness at all — the throttle has nothing to read.
 	graph := core.Graph{ID: "blind", Tenant: "t", Workspace: "ws", Owner: "owner@example.com"}
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
@@ -350,12 +325,10 @@ func TestFailureEmailThrottle_ContinuingOutageEscalates(t *testing.T) {
 	svc, srv, graph := throttleHarness(t)
 	window := time.Now().Truncate(FailureEmailWindow)
 
-	// A dozen failures in the PREVIOUS window: the outage the reader missed.
 	for i := 0; i < 12; i++ {
 		seedFailedRun(t, svc, graph, fmt.Sprintf("prev-%d", i),
 			window.Add(-FailureEmailWindow).Add(time.Duration(i)*time.Minute))
 	}
-	// The first failure of the CURRENT window — still broken.
 	seedFailedRun(t, svc, graph, "now-1", window.Add(time.Minute))
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
@@ -366,8 +339,6 @@ func TestFailureEmailThrottle_ContinuingOutageEscalates(t *testing.T) {
 	if data == "" {
 		t.Fatal("a continuing outage sent no email in the new window")
 	}
-	// The count has to be in the mail, or a repeat is indistinguishable from
-	// a first failure and the reader has no reason to treat it differently.
 	if !strings.Contains(data, "12") {
 		t.Errorf("email does not say how many other runs failed:\n%s", data)
 	}

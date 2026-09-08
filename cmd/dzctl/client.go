@@ -23,10 +23,6 @@ import (
 // it). The default implementation is daemonConnReal.
 var daemonConn = daemonConnReal
 
-// daemonConnReal dials dzd. Address comes from --server (default
-// localhost:50050) and the bearer token from DZCTL_TOKEN. TLS is enabled when
-// DZCTL_TLS_CA is set; client cert/key for mTLS come from DZCTL_TLS_CERT /
-// DZCTL_TLS_KEY. DZCTL_TLS_SERVER_NAME overrides the SNI/hostname when needed.
 func daemonConnReal(server string) (*grpc.ClientConn, error) {
 	if server == "" {
 		server = "localhost:50050"
@@ -58,11 +54,6 @@ func authCtx(ctx context.Context) (context.Context, error) {
 	return metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token), nil
 }
 
-// withConn dials the daemon, builds the authenticated context, and runs fn
-// with both, closing the connection afterwards. It folds the dial +
-// defer-Close + authCtx preamble repeated across every networked command
-// into one place while preserving the exact error behaviour (dial errors,
-// then the DZCTL_TOKEN message).
 func withConn(cmd *cobra.Command, fn func(ctx context.Context, conn *grpc.ClientConn) error) error {
 	conn, err := daemonConn(serverFlag)
 	if err != nil {

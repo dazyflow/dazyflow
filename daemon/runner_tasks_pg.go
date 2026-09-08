@@ -15,45 +15,20 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// PgRunnerTaskStore is the durable task queue.
-//
-// It exists for the same reason the job queue is in Postgres: a deployment may
-// run several daemons, and the agent's result can land on a different one from
-// the step that is waiting. Only the database is shared, so only the database
-// can carry the handoff. With the in-memory queue, that step waits for a result
-// that was delivered to a machine it cannot see.
 type PgRunnerTaskStore struct {
 	pool *pgxpool.Pool
-	// Cipher seals the script, stdin and env at rest. See the note on
-	// runnerTaskPayloadDomain for why the queue needs one at all.
-	//
-	// Nil means the rows are written in cleartext, which is the same posture as
-	// the rest of the deployment: without DAZYFLOW_MASTER_KEY there is no
-	// stored-secret encryption anywhere, and validateProductionConfig already
-	// refuses to call that configuration production.
+	// Seals script, stdin and env at rest: a task row otherwise holds cleartext.
 	Cipher PayloadCipher
 }
 
-// PayloadCipher seals a blob at rest under a tenant's key. Satisfied by
-// *EncryptedSecrets; an interface so this store does not depend on the whole
-// secret provider, and so a test can substitute one.
+// Sealed under the tenant's key, so a row is not readable across tenants.
 type PayloadCipher interface {
 	SealPayload(ctx context.Context, tenant, domain, id string, plaintext []byte) ([]byte, error)
 	OpenPayload(ctx context.Context, tenant, domain, id string, blob []byte) ([]byte, error)
 }
 
-// runnerTaskPayloadDomain names what these sealed blobs are, and the fields
-// below name which one, so a ciphertext cannot be moved between rows or between
-// columns of the same row.
-//
-// The queue needs sealing because it is a transport that happens to be durable.
-// engine/secrets.go states the contract — a resolved secret "exists only in the
-// transport.Execute call" — and engine/redact.go exists to keep resolved values
-// out of persisted Results. A script written as `./sync.sh --key
-// ${secret.STRIPE_KEY}` reaches Enqueue already expanded, so an unsealed row
-// would hold the tenant's live credential in cleartext until
-// DAZYFLOW_RUNNER_TASK_RETENTION elapsed — recoverable from a dump, a read
-// replica or a backup by someone with no Dazyflow permission at all.
+// Bound into the AAD, so a sealed blob cannot be moved to another column or
+// another row and still open.
 const runnerTaskPayloadDomain = "runner_task"
 
 const (
@@ -62,15 +37,9 @@ const (
 	runnerTaskFieldEnv    = "env"
 )
 
-// sealedPrefix marks a column as holding a sealed blob rather than cleartext.
-//
-// It exists so rows written before sealing — and rows written by a deployment
-// with no master key — still read back. Without the marker there is no way to
-// tell a base64 script from a script that happens to look like base64.
+// Marks a column as sealed, so old cleartext rows still read.
 const sealedPrefix = "sealed:v1:"
 
-// seal returns the value to store: the sealed, marked, base64 form when a
-// cipher is configured, and the plaintext when it is not.
 func (s *PgRunnerTaskStore) seal(ctx context.Context, tenant, id, field, plain string) (string, error) {
 	if s.Cipher == nil || plain == "" {
 		return plain, nil
@@ -82,12 +51,7 @@ func (s *PgRunnerTaskStore) seal(ctx context.Context, tenant, id, field, plain s
 	return sealedPrefix + base64.StdEncoding.EncodeToString(blob), nil
 }
 
-// unseal reverses seal, passing through anything not carrying the marker.
-//
-// A marked value with no cipher to open it is an ERROR rather than a
-// pass-through: handing the agent a base64 blob to execute would be worse than
-// failing the step, and it is the shape a deployment gets by losing its master
-// key.
+// Passes through anything without the marker, so old rows still read.
 func (s *PgRunnerTaskStore) unseal(ctx context.Context, tenant, id, field, stored string) (string, error) {
 	if !strings.HasPrefix(stored, sealedPrefix) {
 		return stored, nil
@@ -106,8 +70,6 @@ func (s *PgRunnerTaskStore) unseal(ctx context.Context, tenant, id, field, store
 	return string(plain), nil
 }
 
-// open decrypts a scanned row in place. Every read path goes through it, so a
-// caller can never accidentally hand a sealed blob onwards.
 func (s *PgRunnerTaskStore) open(ctx context.Context, t *RunnerTask) error {
 	var err error
 	if t.Script, err = s.unseal(ctx, t.Tenant, t.ID, runnerTaskFieldScript, t.Script); err != nil {
@@ -138,9 +100,7 @@ func NewPgRunnerTaskStore(ctx context.Context, pool *pgxpool.Pool) (*PgRunnerTas
 	return &PgRunnerTaskStore{pool: pool}, nil
 }
 
-// shell sits with script rather than among the sealed columns because it is not
-// secret-bearing: it is one of a fixed handful of words, and sealing it would
-// cost a decrypt on the hot claim path to learn "bash".
+// Not a secret: it names an interpreter, not a payload.
 const runnerTaskColumns = `id, tenant, tags, script, shell, env, stdin, timeout_ms,
 		state, claimed_by, progress, lease_until, result, created_at, finished_at`
 
@@ -162,10 +122,6 @@ func scanRunnerTask(row pgx.Row) (RunnerTask, error) {
 		t.FinishedAt = *finishedAt
 	}
 	if len(env) > 0 {
-		// The column holds either the map itself or, when sealed, a JSON
-		// string carrying the marked blob. Try the string first: a sealed
-		// value is not a valid map and a map is not a valid string, so the
-		// two shapes cannot be confused.
 		var sealed string
 		if err := json.Unmarshal(env, &sealed); err == nil {
 			t.sealedEnv = sealed
@@ -205,10 +161,7 @@ func (s *PgRunnerTaskStore) Enqueue(ctx context.Context, t RunnerTask) error {
 	return err
 }
 
-// sealEnv renders the env map for storage. Env goes through the same secret
-// substitution as params (see resolveTemplatesCollecting), so it is a secret
-// carrier too and gets the same treatment; sealed, it is stored as a JSON
-// string rather than an object.
+// Env carries credentials as often as stdin does.
 func (s *PgRunnerTaskStore) sealEnv(ctx context.Context, t RunnerTask) ([]byte, error) {
 	raw := jsonOrNil(t.Env)
 	if raw == nil || s.Cipher == nil {
@@ -221,25 +174,8 @@ func (s *PgRunnerTaskStore) sealEnv(ctx context.Context, t RunnerTask) ([]byte, 
 	return json.Marshal(sealed)
 }
 
-// claimRunnerTaskQuery takes the oldest task this runner may run, in the same
-// shape the job queue uses: the inner SELECT picks one row with FOR UPDATE SKIP
-// LOCKED so several agents polling at once each get a different task instead of
-// contending for the same one.
-//
-// Only 'queued' is claimable. A lapsed claim is never handed out again — see
-// the note at the top of runner_tasks.go.
-//
-// The eligibility clause is the tenant boundary, and it must agree exactly with
-// eligible() in runner_tasks.go — the memory store applies that function and
-// this store applies this SQL, and the two are meant to be indistinguishable.
-//
-// `tags <@ $3` is the AND rule: every tag the task asks for is in the set this
-// machine carries ($3 is Runner.Tags(), so the machine's own name is in there).
-// The cardinality guard is what makes it fail closed, and it is load-bearing
-// rather than tidy: in Postgres `'{}' <@ anything` is TRUE, so without it a task
-// with no tags would match EVERY machine — and a task with no target is a bug
-// upstream whose wrong answer is to run someone's script on an arbitrary
-// machine.
+// A runner must carry ALL of a task's tags. A lapsed claim is not re-offered:
+// the first agent may still be running the script.
 const claimRunnerTaskQuery = `
 		UPDATE runner_tasks
 		   SET state = 'running', claimed_by = $2, lease_until = $4
@@ -256,14 +192,10 @@ const claimRunnerTaskQuery = `
 		 RETURNING ` + runnerTaskColumns
 
 func (s *PgRunnerTaskStore) Claim(ctx context.Context, r Runner, now time.Time, lease time.Duration) (RunnerTask, error) {
-	// Everything this machine can be targeted by, its name included — the same
-	// set Runner.HasTags checks against.
 	tags := r.Tags()
 	if tags == nil {
 		tags = []string{}
 	}
-	// The lease is computed from the caller's clock rather than the database's
-	// now(), so the store honours an injected time the way the memory one does.
 	t, err := scanRunnerTask(s.pool.QueryRow(ctx, claimRunnerTaskQuery,
 		r.Tenant, r.Name, tags, now.Add(lease)))
 	if err != nil {
@@ -278,13 +210,7 @@ func (s *PgRunnerTaskStore) Claim(ctx context.Context, r Runner, now time.Time, 
 	return t, nil
 }
 
-// Extend and Complete both match on tenant as well as claimant. The name alone
-// is not an identity — tenant_runners is keyed on (tenant, name) — so without
-// the tenant predicate an agent could report on a same-named runner's task in
-// another organisation, and only the task id's randomness would be in its way.
 func (s *PgRunnerTaskStore) Extend(ctx context.Context, r Runner, id string, until time.Time, message string) error {
-	// COALESCE-shaped: an empty message leaves the previous line standing, so a
-	// bare heartbeat does not blank out what the script last said.
 	tag, err := s.pool.Exec(ctx, `
 		UPDATE runner_tasks
 		   SET lease_until = $4,
@@ -305,15 +231,10 @@ func (s *PgRunnerTaskStore) Complete(ctx context.Context, r Runner, id string, r
 	if err != nil {
 		return fmt.Errorf("encode task result: %w", err)
 	}
-	// A non-zero exit is a FAILED task, not a done one: the step fails the way
-	// any other step fails rather than succeeding with an error in its output.
 	state := TaskDone
 	if res.Error != "" || res.ExitCode != 0 {
 		state = TaskFailed
 	}
-	// `state = 'running'` in the WHERE clause is what refuses a result for a
-	// task we already gave up on. Accepting it would resurrect a step that has
-	// already failed.
 	tag, err := s.pool.Exec(ctx, `
 		UPDATE runner_tasks
 		   SET state = $5, result = $6, finished_at = $4
@@ -328,13 +249,6 @@ func (s *PgRunnerTaskStore) Complete(ctx context.Context, r Runner, id string, r
 	return nil
 }
 
-// FailAbandoned condemns a task whose runner went quiet.
-//
-// In a transaction, because the check and the write must not be separable: the
-// row is locked, re-tested against the same abandonment rule the caller used,
-// and only then failed. The alternative — trusting the caller's earlier read —
-// would let a result that arrived in between be overwritten by our guess that
-// the machine was gone.
 func (s *PgRunnerTaskStore) FailAbandoned(ctx context.Context, tenant, id string, now time.Time) (bool, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -370,11 +284,6 @@ func (s *PgRunnerTaskStore) FailAbandoned(ctx context.Context, tenant, id string
 	return true, nil
 }
 
-// CancelQueued closes an unclaimed task so nothing can run it later.
-//
-// `state = 'queued'` in the WHERE clause does the whole job: it is the atomic
-// test for "nobody has taken this yet", so a runner claiming it in the same
-// instant either wins the claim or loses to this cancel, never both.
 func (s *PgRunnerTaskStore) CancelQueued(ctx context.Context, tenant, id string, res RunnerTaskResult, now time.Time) (bool, error) {
 	body, err := json.Marshal(res)
 	if err != nil {
@@ -391,8 +300,6 @@ func (s *PgRunnerTaskStore) CancelQueued(ctx context.Context, tenant, id string,
 	if tag.RowsAffected() > 0 {
 		return true, nil
 	}
-	// Nothing updated: either it was claimed, or there is no such task. Tell
-	// those apart, because "not found" is a caller bug and "claimed" is not.
 	var exists bool
 	if err := s.pool.QueryRow(ctx,
 		`SELECT true FROM runner_tasks WHERE id = $1 AND tenant = $2`, id, tenant).Scan(&exists); err != nil {
@@ -420,17 +327,6 @@ func (s *PgRunnerTaskStore) Get(ctx context.Context, tenant, id string) (RunnerT
 	return t, nil
 }
 
-// OrphanedTasks lists non-terminal rows nobody is waiting for any more. See
-// the contract on RunnerTaskStore.
-//
-// A listing rather than a bulk UPDATE so the caller closes each row through
-// FailAbandoned / CancelQueued — those already carry the atomic re-check and
-// the wording, and duplicating either in SQL would let the two drift.
-//
-// The payload is deliberately NOT decrypted here: the sweeper only needs the
-// id, the tenant, the state and the claimant, and opening a sealed script to
-// throw it away would put plaintext secrets in the sweeper's memory for no
-// reason.
 func (s *PgRunnerTaskStore) OrphanedTasks(ctx context.Context, now time.Time, grace, queuedCeiling time.Duration, limit int) ([]RunnerTask, error) {
 	if limit <= 0 {
 		limit = 500
@@ -465,13 +361,6 @@ func (s *PgRunnerTaskStore) OrphanedTasks(ctx context.Context, now time.Time, gr
 	return out, rows.Err()
 }
 
-// Prune deletes finished task rows older than the cutoff, in bounded batches so
-// a large backlog does not lock the table in one statement.
-//
-// Only terminal rows go. A queued or running row is never touched however old
-// it looks: "old and still running" is a long script or a step whose lease has
-// not lapsed yet, and deleting it would make the waiting step fail to read its
-// own task back.
 func (s *PgRunnerTaskStore) Prune(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
 	if olderThan <= 0 {
 		return 0, nil
@@ -501,13 +390,6 @@ func (s *PgRunnerTaskStore) Prune(ctx context.Context, olderThan time.Duration, 
 	}
 }
 
-// DeleteByTenant removes every task row an org ever queued, whatever its state,
-// returning the count. The erasure cascade's hook (GDPR Art. 17).
-//
-// Unlike Prune this takes running and queued rows too. An org being erased has
-// nothing left that could legitimately claim them, and a queued row left behind
-// stays claimable — the machine that picks it up would run a deleted org's
-// script.
 func (s *PgRunnerTaskStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	tag, err := s.pool.Exec(ctx, `DELETE FROM runner_tasks WHERE tenant = $1`, tenant)
 	if err != nil {

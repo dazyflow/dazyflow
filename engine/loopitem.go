@@ -14,23 +14,8 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// This file wires the for_each "loop body" feature on the engine side. A
-// for_each whose `body` pin is wired runs the body subgraph once per item
-// (see daemon/loopbody.go for which nodes are the body). Two pieces live
-// here:
-//
-//   - WithLoopItem / itemSubstituter — make ${item.path} resolve to the
-//     current row inside every body node's params.
-//   - WithBodyRunner — the daemon hands the for_each drop a closure that
-//     runs the (already-extracted) body subgraph in-process via Engine.Run.
-//     The drop owns iteration semantics (concurrency, fail_fast, results);
-//     the engine owns running one body pass.
-
 type loopItemCtxKey struct{}
 
-// WithLoopItem carries the current iteration's item so ${item.path}
-// references in a body node's params resolve against it. The daemon's body
-// runner sets this once per item before calling Engine.Run.
 func WithLoopItem(ctx context.Context, item any) context.Context {
 	return context.WithValue(ctx, loopItemCtxKey{}, item)
 }
@@ -43,11 +28,6 @@ func loopItemFromContext(ctx context.Context) (any, bool) {
 	return v, true
 }
 
-// itemSubstituter resolves ${item.path} against the item on the context.
-// Any other scheme is left alone (ok=false) so the chain falls through to
-// upstream/secret/resource. When no item is on the context it also returns
-// ok=false — outside a loop body ${item.…} is just an unrecognized scheme
-// and passes through untouched, exactly like other inline references.
 func itemSubstituter(ctx context.Context) Substituter {
 	item, hasItem := loopItemFromContext(ctx)
 	return func(_ context.Context, scheme, path string) (string, bool, error) {
@@ -62,24 +42,16 @@ func itemSubstituter(ctx context.Context) Substituter {
 	}
 }
 
-// wholeItemPattern matches a param whose ENTIRE value is one ${item.…}
-// reference (leading/trailing space tolerated), which is the form that keeps
-// its structured shape — see itemWholeValue.
 var wholeItemPattern = regexp.MustCompile(`^\s*\$\{item\.([^}]*)\}\s*$`)
 
-// itemWholeValue resolves s when it is exactly one ${item.…} reference,
-// returning the item's value with its real type intact — a list stays a list,
-// an object stays an object. ok=false means s isn't a whole-string item ref
-// (or there is no item on the context), and the caller falls through to
-// ordinary string substitution.
+// itemWholeValue keeps the item's real type intact — a list stays a list, an
+// object stays an object.
 //
-// Why this exists: a loop body's steps see the current item ONLY through
-// ${item.…} in their own settings, because the body subgraph has no upstream
-// node to wire from. Without this, every such value arrived as text — so a
-// step wanting structured data (a shipment object, an email template's merge
-// data, a list of invoice lines) got a JSON *string* it could not read, and
-// "one X per row" was unbuildable for exactly the steps that need more than a
-// scalar. Mirrors the identical rule for ${resource.…}.
+// A loop body's steps see the current item ONLY through ${item.…} in their own
+// settings, the body subgraph having no upstream node to wire from. Without this
+// every such value arrived as text, so a step wanting structured data got a JSON
+// STRING it could not read, and "one X per row" was unbuildable for exactly the
+// steps needing more than a scalar. Mirrors the identical rule for ${resource.…}.
 func itemWholeValue(ctx context.Context, s string) (any, bool, error) {
 	item, hasItem := loopItemFromContext(ctx)
 	if !hasItem {
@@ -93,9 +65,6 @@ func itemWholeValue(ctx context.Context, s string) (any, bool, error) {
 	if err != nil {
 		return nil, true, err
 	}
-	// Scalars are handed back through the ordinary string path so a param
-	// declared as text keeps getting text (e.g. a number splices as "42",
-	// not float64) — only genuinely structured values need the shortcut.
 	switch v.(type) {
 	case map[string]any, []any:
 		return v, true, nil
@@ -103,8 +72,6 @@ func itemWholeValue(ctx context.Context, s string) (any, bool, error) {
 	return nil, false, nil
 }
 
-// traverseItemPath walks a dot-separated path into the item (maps by key,
-// slices by index). An empty path returns the whole item.
 func traverseItemPath(root any, path string) (any, error) {
 	if path == "" {
 		return root, nil
@@ -135,9 +102,6 @@ func traverseItemPath(root any, path string) (any, error) {
 	return current, nil
 }
 
-// stringifyItemValue renders a resolved item value for splicing into a
-// string param. Strings pass through unquoted; scalars use their natural
-// form; complex values fall back to JSON.
 func stringifyItemValue(v any) string {
 	switch t := v.(type) {
 	case string:
@@ -168,13 +132,10 @@ func stringifyItemValue(v any) string {
 
 type loopRunIDCtxKey struct{}
 
-// WithLoopRunID carries the parent graph-run's ID into an in-process body
-// run (Engine.Run) so body nodes inherit the parent run's per-run scratch
-// space. Without it, Engine.Run has no run ID and populateSandbox skips
-// scratch entirely — a body node that writes files (e.g. sheets_export_pdf)
-// would fail inside a loop. Scoping body files to the PARENT run is also
-// what makes cleanup correct: the dispatcher reclaims that scratch when the
-// parent run finishes.
+// WithLoopRunID lets body nodes inherit the parent run's per-run scratch. Without
+// it Engine.Run has no run ID and populateSandbox skips scratch entirely, so a body
+// node that writes files would fail inside a loop. Scoping to the PARENT run is
+// also what makes cleanup correct.
 func WithLoopRunID(ctx context.Context, runID string) context.Context {
 	if runID == "" {
 		return ctx
@@ -187,18 +148,10 @@ func loopRunIDFromContext(ctx context.Context) string {
 	return s
 }
 
-// BodyRunner runs a for_each body subgraph once for a single item and
-// returns the body's per-node results. The daemon builds this (capturing the
-// engine + the extracted body subgraph) and hands it to the for_each drop
-// via WithBodyRunner; the drop calls it per item, applying concurrency and
-// fail_fast.
 type BodyRunner func(ctx context.Context, item core.Ref) (GraphResult, error)
 
 type bodyRunnerCtxKey struct{}
 
-// WithBodyRunner carries the loop-body runner to the for_each drop. Present
-// only when the for_each's `body` pin is wired (the daemon sets it); absent
-// means the for_each has nothing to run.
 func WithBodyRunner(ctx context.Context, r BodyRunner) context.Context {
 	if r == nil {
 		return ctx
@@ -206,7 +159,6 @@ func WithBodyRunner(ctx context.Context, r BodyRunner) context.Context {
 	return context.WithValue(ctx, bodyRunnerCtxKey{}, r)
 }
 
-// BodyRunnerFromContext returns the runner set by WithBodyRunner, if any.
 func BodyRunnerFromContext(ctx context.Context) (BodyRunner, bool) {
 	r, ok := ctx.Value(bodyRunnerCtxKey{}).(BodyRunner)
 	return r, ok

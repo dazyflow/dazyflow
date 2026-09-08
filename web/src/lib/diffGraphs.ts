@@ -15,8 +15,6 @@ import type { Graph, Node, Edge } from "../types";
 // announces unpublished changes and this view calls the draft identical.
 type NodeChange = {
   id: string;
-  // Which fields changed — module swap and/or params edit. Empty for an
-  // added/removed node (the whole node is the change).
   fields: (
     | "module"
     | "params"
@@ -34,16 +32,9 @@ export type GraphDiff = {
   changedNodes: NodeChange[];
   addedEdges: string[];
   removedEdges: string[];
-  // metaChanged lists graph-level settings that differ (name, triggers,
-  // failure_notify, timeout, visibility) — they affect behaviour or
-  // routing even though they aren't nodes/edges. The catch-all "other"
-  // appears when the two revisions differ somewhere this diff doesn't
-  // itemize (see diffGraphs), so an empty diff always means "identical".
   metaChanged: string[];
 };
 
-// edgeKey identifies an edge by its execution-relevant endpoints, ignoring
-// waypoints (editor-only routing).
 function edgeKey(e: Edge): string {
   return `${e.from}:${e.from_port}→${e.to}:${e.to_port}[${e.on_error ?? ""}]`;
 }
@@ -69,9 +60,6 @@ function nodeFieldChanges(a: Node, b: Node): NodeChange["fields"] {
   if (stable(a.params ?? {}) !== stable(b.params ?? {})) fields.push("params");
   if (stable(a.env ?? {}) !== stable(b.env ?? {})) fields.push("env");
   if (!!a.disabled !== !!b.disabled) fields.push("disabled");
-  // Not cosmetic despite being setup-time aids: a breakpoint pauses the
-  // run, continue_on_error changes whether a failure fails the run, and a
-  // node timeout can cancel one.
   if (!!a.breakpoint !== !!b.breakpoint) fields.push("breakpoint");
   if (!!a.continue_on_error !== !!b.continue_on_error) fields.push("continue_on_error");
   if ((a.timeout_seconds ?? 0) !== (b.timeout_seconds ?? 0)) fields.push("timeout_seconds");
@@ -89,8 +77,6 @@ function stripCosmetic(g: Graph): unknown {
     ...g,
     disabled: false,
     frames: undefined,
-    // A step's name and position are both editor presentation — see
-    // core.BehaviorEqual for why the name is here and the FLOW's name isn't.
     nodes: (g.nodes ?? []).map((n) => ({ ...n, position: undefined, label: undefined })),
     edges: (g.edges ?? []).map((e) => ({ ...e, waypoints: undefined })),
   };
@@ -136,8 +122,6 @@ export function diffGraphs(baseline: Graph, draft: Graph): GraphDiff {
     metaChanged.push("timeout_seconds");
   if ((baseline.visibility ?? "org") !== (draft.visibility ?? "org"))
     metaChanged.push("visibility");
-  // The flow's output language: publishing it changes the words a run writes
-  // (day and month names), so it belongs in the diff a publish confirms.
   if ((baseline.language ?? "") !== (draft.language ?? "")) metaChanged.push("language");
   if ((baseline.icon ?? "") !== (draft.icon ?? "")) metaChanged.push("icon");
   if ((baseline.description ?? "") !== (draft.description ?? ""))
@@ -171,7 +155,6 @@ export function diffGraphs(baseline: Graph, draft: Graph): GraphDiff {
   };
 }
 
-// diffIsEmpty reports whether a diff has no execution-relevant changes.
 export function diffIsEmpty(d: GraphDiff): boolean {
   return (
     d.addedNodes.length === 0 &&

@@ -46,9 +46,6 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// channel and text are named after their params so the card
-				// shows inline editable boxes (Unreal-style); a wired value
-				// overrides the typed one.
 				{Port: "channel", Label: "Channel", MIME: []string{"text/plain"}},
 				{Port: "text", Label: "Message", MIME: []string{"text/plain"}},
 				{Port: "blocks", Label: "Blocks"},

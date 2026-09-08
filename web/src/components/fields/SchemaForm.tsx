@@ -52,45 +52,19 @@ import { Button } from "../ui/Button";
 import { ICON } from "../../icons";
 import { useEscapeToClose } from "../ui/useEscapeToClose";
 
-// SchemaForm renders manifest.params_schema as a typed form. The
-// happy path: a top-level object whose properties resolve to one of
-// {string, integer, number, boolean, enum, object, array, dict}.
-// Anything more exotic (oneOf, $ref, deeply nested array-of-object
-// with required fields) falls through to a raw JSON textarea via the
-// supportsSchemaForm() check in the parent.
 
-// WorkspaceCtx is the bag of state the workspace-path widget needs
-// (token + active tenant/workspace) to upload via the daemon. It's
-// threaded through the form so individual fields don't have to reach
-// into a global; when absent, format:"workspace-path" degrades to a
-// plain text input so the form still works in tests/storybook.
 export type WorkspaceCtx = {
   token: string;
   tenant: string;
   workspace: string;
 };
 
-// AccountPicker, when supplied, turns the string `account` field into a
-// dropdown of the tenant's connected accounts for this drop's OAuth
-// provider, plus a "Connect…" affordance — so a forked template doesn't
-// leave the user guessing what to type. Omitted for non-OAuth drops or
-// when OAuth is disabled, in which case `account` renders as plain text.
-//
-// providerLabel is the integration's display name ("Gmail", "Slack").
-// It's used to humanise the inline "Connect Gmail" button rendered
-// when no accounts are connected. Optional — the field falls back to
-// "Connect an account" when absent.
 export type AccountPicker = {
   options: string[];
   onConnect: () => void;
   providerLabel?: string;
 };
 
-// ReferenceCtx, when supplied, enables the "insert reference" picker on
-// string fields: a small button that lists the flow's referenceable data
-// (secrets, upstream node outputs, trigger fields, resources) from
-// GET /me/flows/{flow_id}/references and inserts the chosen ${…} token at
-// the cursor. Omitted in tests/standalone, where fields stay plain.
 export type ReferenceCtx = {
   token: string;
   tenant: string;
@@ -106,60 +80,25 @@ type Props = {
   workspace?: WorkspaceCtx;
   accountPicker?: AccountPicker;
   references?: ReferenceCtx;
-  // wiredKeys lists param keys fed by a connected input port. A wired param
-  // is overridden by the wire, so its editor (e.g. the spreadsheet picker)
-  // renders disabled — the wire decides the value.
   wiredKeys?: string[];
-  // omitKeys lists param keys the form must not render at all, because a
-  // dedicated editor above the form owns them (e.g. render_table's `columns`,
-  // handled by the drag/add/edit column editor — so it never also appears as a
-  // raw array field in the Advanced disclosure).
+  // Params the form must not render because a dedicated control already owns them.
   omitKeys?: string[];
-  // resourceLabels maps a picker key → its resolved resource name (traced
-  // from upstream when wired), so a disabled picker can name the resource.
   resourceLabels?: Record<string, string>;
-  // wiredSources maps a wired param key → a friendly label for the step/port
-  // feeding it ("New responses → Email"). Lets a wired NON-picker field show
-  // what's flowing in instead of a greyed, blank box (resource pickers use
-  // resourceLabels for the same purpose).
   wiredSources?: Record<string, string>;
-  // extraReferenceItems are extra insertable tokens offered on every string
-  // field's "{}" menu — used by the for_each step editor to expose
-  // ${item.<field>} for the iterated list's columns.
   extraReferenceItems?: { label: string; token: string }[];
-  // tokenLabels maps "nodeId.port" → friendly step·port names so a field
-  // whose value is one ${upstream.…} token renders as a readable chip.
   tokenLabels?: TokenLabels;
-  // missingKeys lists param keys flagged as "still needs a value" by the
-  // config check (the "N to configure" modal). Their field renders with a
-  // red marker + border so jumping from an error lands the eye on what to
-  // fill in.
   missingKeys?: Iterable<string>;
-  // The selected node's last-run coordinate ("lat,lon") — lets a geo-point map
-  // field recenter on the result after a run.
   geoRunCoordinate?: string;
 };
 
-// FormCtx carries the form-wide context that every field needs but none of
-// them vary: the workspace handle, the account picker, the reference
-// catalogue, the extra "{}" tokens, and the token-chip labels. Provided once
-// by SchemaForm and read via useFormCtx() so these don't have to be
-// prop-drilled through SchemaField into each per-field-type component.
 type FormCtx = {
   workspace?: WorkspaceCtx;
   accountPicker?: AccountPicker;
   references?: ReferenceCtx;
   extraReferenceItems?: { label: string; token: string }[];
   tokenLabels?: TokenLabels;
-  // missingKeys, when set, marks the named fields as unfilled-but-required
-  // (read by FieldWrap). Carried in context so it doesn't prop-drill through
-  // SchemaField into every per-type component.
   missingKeys?: Set<string>;
-  // wired is the set of param keys fed by a connected input port — read by
-  // fields (e.g. the geo-point map) that must react to a SIBLING being wired.
   wired?: Set<string>;
-  // geoRunCoordinate is the selected node's last-run coordinate ("lat,lon"),
-  // so the geo-point map can recenter on the result.
   geoRunCoordinate?: string;
 };
 
@@ -187,14 +126,7 @@ export function SchemaForm({
   const omit = new Set(omitKeys ?? []);
   const missing = new Set(missingKeys ?? []);
   const formCtx: FormCtx = { workspace, accountPicker, references, extraReferenceItems, tokenLabels, missingKeys: missing, wired, geoRunCoordinate };
-  // Defensive, and unreachable in the product as it stands: the only external
-  // caller (Inspector) gates on supportsSchemaForm, which asserts exactly this,
-  // and both recursive call sites below check `schema.properties` first. A drop
-  // whose schema is an object with NO properties never reaches here either —
-  // Inspector's `noSettings` renders nothing for it, which is why Branch, Merge
-  // and the event triggers show a clean empty panel rather than this. Kept so a
-  // future caller that skips the guard degrades to something a person can read
-  // instead of a blank div; worded for that person, not for us.
+  // Unreachable as the product stands; kept so a new caller cannot break it.
   if (schema.type !== "object" || !schema.properties) {
     return (
       <div className="sf-fallback-hint">
@@ -224,19 +156,10 @@ export function SchemaForm({
     />
   );
 
-  // Everyday params render directly. Advanced/developer-flavored fields
-  // (timeouts, raw overrides, the render_text expression/separators) are
-  // tucked into a collapsed "Advanced" disclosure rather than dropped — a
-  // non-techie never opens it, but a power user can still reach every knob.
-  // HIDDEN_FIELD_KEYS are pure plumbing and never render at all (the backend
-  // applies their defaults; a value set via template/API is still preserved).
   const basic: [string, JSONSchema][] = [];
   const advanced: [string, JSONSchema][] = [];
   for (const [key, propSchema] of Object.entries(props)) {
     if (HIDDEN_FIELD_KEYS.has(key) || omit.has(key)) continue;
-    // Conditional fields (x_visible_when) render only while the sibling they
-    // depend on has the right value — a Custom format box appears when Format
-    // says Custom, and takes its stored value with it when it goes.
     if (!isFieldVisible(propSchema, value, props)) continue;
     if (isAdvancedField(key, propSchema, props)) advanced.push([key, propSchema]);
     else basic.push([key, propSchema]);
@@ -261,12 +184,6 @@ export function SchemaForm({
   );
 }
 
-// ADVANCED_FIELD_NAMES is the built-in allowlist of param names the
-// Inspector hides until the user explicitly asks for advanced fields.
-// These are universally developer-flavored: timeouts in milliseconds,
-// pagination cursors, low-level wire-protocol knobs. Drops can opt
-// individual fields in (or out) by setting x_advanced on the
-// per-property schema.
 const ADVANCED_FIELD_NAMES = new Set([
   "timeout_ms",
   "page_token",
@@ -274,11 +191,6 @@ const ADVANCED_FIELD_NAMES = new Set([
   "cursor",
 ]);
 
-// HIDDEN_FIELD_KEYS never render in the form at all — pure developer knobs
-// a non-tech owner never needs. The backend still applies each one's default,
-// and a value set via template/API is preserved (just not shown). timeout_ms
-// is the request-timeout dial on most network drops; hiding it also removes
-// the lone-field "Advanced" section it used to drag in by itself.
 const HIDDEN_FIELD_KEYS = new Set([
   "timeout_ms", // request-timeout dial
   "base_url", // API-host override — a test seam pointing at a mock server
@@ -287,13 +199,6 @@ const HIDDEN_FIELD_KEYS = new Set([
   "reply_to", // org-admin sets a default centrally; not per-flow (see /admin/google)
 ]);
 
-// isAdvancedField decides whether a top-level property of a drop's
-// params_schema is "advanced" (hidden by default). Three signals
-// stack: an explicit x_advanced on the schema (manifest-level
-// opt-in), the built-in name allowlist, and a sibling-aware rule
-// for the OAuth raw-token bypass — `token` is an escape hatch when
-// the same drop also exposes an `account` param (the connection
-// picker is the non-advanced path; `token` overrides it).
 function isAdvancedField(
   name: string,
   schema: JSONSchema,
@@ -311,20 +216,10 @@ type FieldProps = {
   required: boolean;
   value: unknown;
   onChange: (v: unknown) => void;
-  // wired is true when this param is fed by a connected input port; the
-  // resource picker then renders disabled (the wire overrides the value).
   wired?: boolean;
-  // resolvedName is the picker resource's friendly name (traced from upstream
-  // when wired), shown in the disabled picker's note.
   resolvedName?: string;
-  // wiredSource is a friendly label for the step/port feeding a wired,
-  // non-picker field — shown so the greyed field still says what's flowing in.
   wiredSource?: string;
-  // siblings is the other params on the same node — lets a field react to a
-  // peer's value (e.g. the resource picker lists for the chosen `account`).
   siblings?: Record<string, unknown>;
-  // workspace, accountPicker, references, extraReferenceItems, tokenLabels now
-  // come from FormContext (useFormCtx) rather than per-field props.
 };
 
 function SchemaField({ name, schema, required, value, onChange, wired, resolvedName, wiredSource, siblings }: FieldProps) {
@@ -338,20 +233,12 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
     geoRunCoordinate,
   } = useFormCtx();
   const { t } = useTranslation();
-  // A wired param is decided by the incoming wire, so the editor is read-only.
-  // Resource pickers render their own richer disabled note (with the resolved
-  // resource name), so let those fall through; every other field type would
-  // otherwise show a plain, editable-looking box whose value is silently
-  // ignored — replace it with a clear "comes from <step>" note instead.
+  // Decided by the incoming wire, so the editor is read-only.
   const isResourcePicker =
     schema.type === "string" && !!schema.format && !!RESOURCE_PICKERS[schema.format] && !!references;
   if (wired && !isResourcePicker) {
     return <WiredField name={name} schema={schema} required={required} source={wiredSource ?? resolvedName} />;
   }
-  // The OAuth `account` field becomes a dropdown of connected accounts
-  // (plus a Connect affordance) when the editor supplies a picker. Plain
-  // string otherwise. Guarded to a bare string field so an enum/oneOf
-  // `account` (none today, but defensively) keeps its specialized UI.
   if (
     accountPicker &&
     name === "account" &&
@@ -371,10 +258,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       </FieldWrap>
     );
   }
-  // format:"git-account" renders the git_checkout `account` param as a
-  // dropdown of the org's saved Git credentials (configured on the Git
-  // credentials admin page) — the same "pick a named account" UX as the
-  // OAuth connectors, for SSH keys / access tokens.
   if (schema.format === "git-account" && schema.type === "string") {
     return (
       <FieldWrap name={name} schema={schema} required={required}>
@@ -385,9 +268,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       </FieldWrap>
     );
   }
-  // oneOf takes precedence over `type` — it expresses a typed union
-  // (e.g. branch.value: string | number | boolean). Render the
-  // segmented picker; the selected branch is itself a SchemaField.
   if (schema.oneOf && schema.oneOf.length > 0) {
     return (
       <FieldWrap name={name} schema={schema} required={required}>
@@ -395,11 +275,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       </FieldWrap>
     );
   }
-  // format:"suggest" is an OPEN combobox: a free-text box backed by a
-  // datalist of the enum/enumNames suggestions, plus the {} reference menu.
-  // Unlike the closed select below, it accepts ANY value — a currency code
-  // outside the common list, or a ${item.…} reference in a For-each body.
-  // Used by Send invoice's currency.
   if (schema.format === "suggest" && schema.enum && schema.enum.length > 0) {
     return (
       <SuggestField
@@ -414,13 +289,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       />
     );
   }
-  // format:"toggle" renders a small enum as a segmented control instead of a
-  // dropdown: both choices are on screen, and picking one is a single click
-  // rather than open-read-pick. For a two-value choice that the user flips
-  // back and forth while building a flow — a sort's direction — a dropdown
-  // hides half the answer behind an interaction. Opt-in per field, and meant
-  // for two or three options; more than that belongs in the select below,
-  // which doesn't run out of room.
   if (schema.format === "toggle" && schema.enum && schema.enum.length > 0) {
     const current = (value as string) ?? (schema.default as string) ?? "";
     return (
@@ -451,8 +319,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       </FieldWrap>
     );
   }
-  // Enums become a select regardless of underlying type — most useful
-  // for our string-enum case ("method": GET/POST/...).
   if (schema.enum && schema.enum.length > 0) {
     const current = (value as string) ?? schema.default ?? "";
     const unlistedValue =
@@ -487,9 +353,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
               the dropdown is the common ones). Labelled with the raw value,
               because that is the only name we have for it. */}
           {unlistedValue !== undefined && (
-            // An <option> can hold only text, so a reference here shows the
-            // {} menu's words rather than a chip — but never the raw ${…},
-            // which is the one thing a user should not have to read.
             <option value={unlistedValue}>
               {hasToken(unlistedValue) ? tokenChipLabel(unlistedValue, tokenLabels) : unlistedValue}
             </option>
@@ -505,15 +368,8 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
   }
   switch (schema.type) {
     case "string": {
-      // Account resource pickers: a string param whose format names a
-      // connected-account resource (google-spreadsheet, google-form) renders
-      // a dropdown of the account's items instead of an ID box. Needs the
-      // references ctx for the auth token; without it, falls through to the
-      // plain input (so tests/standalone still work).
       const picker = schema.format ? RESOURCE_PICKERS[schema.format] : undefined;
       if (picker && references) {
-        // Dependent pickers (e.g. tabs need a spreadsheet_id) read their
-        // deps from sibling params; a missing one means "choose that first".
         const extra: Record<string, string> = {};
         let missingDep: string | undefined;
         for (const dep of picker.dependsOn ?? []) {
@@ -551,10 +407,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           </FieldWrap>
         );
       }
-      // format:"workspace-dir" is a folder PICKER: a dropdown of the
-      // workspace's directories (e.g. the gitcache/<flow>/<node> repo
-      // checkouts) instead of a free-text path. Degrades to plain text
-      // without a workspace ctx (tests/standalone).
       if (schema.format === "workspace-dir" && workspace) {
         return (
           <FieldWrap name={name} schema={schema} required={required}>
@@ -566,13 +418,7 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           </FieldWrap>
         );
       }
-      // format:"row-condition" gets the no-code condition builder — a
-      // column/operator/value form that emits the CEL filter string a
-      // non-technical user would otherwise have to hand-write. Power
-      // users can flip to the raw CEL textarea at any time.
       if (schema.format === "row-condition") {
-        // x_columns_source:"collection" turns each condition's column field
-        // into a dropdown of the chosen collection's columns (sibling `table`).
         const collectionCols =
           schema.x_columns_source === "collection" && typeof siblings?.table === "string"
             ? (siblings.table as string)
@@ -595,8 +441,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           </FieldWrap>
         );
       }
-      // format:"collection-column" gets a dropdown of the chosen collection's
-      // columns (sibling `table`) — the Find rows "Sort by" field.
       if (schema.format === "collection-column") {
         const collection = typeof siblings?.table === "string" ? (siblings.table as string) : "";
         return (
@@ -611,9 +455,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           />
         );
       }
-      // format:"collection" gets a dropdown of the workspace's existing
-      // collections (the Save rows / Find rows store), with a free-text escape
-      // for a not-yet-created name or a ${…} reference.
       if (schema.format === "collection") {
         return (
           <CollectionField
@@ -626,9 +467,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           />
         );
       }
-      // format:"collection-name" is the writer's variant of the above: a
-      // combobox rather than a dropdown, because Save rows usually names a
-      // collection that doesn't exist yet.
       if (schema.format === "collection-name") {
         return (
           <CollectionNameField
@@ -641,23 +479,11 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           />
         );
       }
-      // Which language the box is written in, read off a SIBLING param named by
-      // the schema (x_lang_param). Two steps ask this in their own words — the
-      // runner's "Run it with" says how it will be executed, Text's "Written
-      // in" says what it is — so the field is told where to look rather than
-      // knowing either name.
-      //
-      // Defaulted to "shell" for the runner step, whose field predates the
-      // setting and whose own default IS a shell.
       const chosenLang = (() => {
         const key = schema.x_lang_param ?? (schema.format === "script" ? "shell" : undefined);
         const v = key ? siblings?.[key] : undefined;
         return typeof v === "string" ? v : undefined;
       })();
-      // format:"script" gets the code box: a real textarea, monospace, with
-      // syntax highlighting for the language the step says it will run the
-      // script with (the sibling `shell` param). A one-line input hid
-      // everything past the right edge of a thing that is many lines by nature.
       if (schema.format === "script") {
         const text = (value as string) ?? (schema.default as string | undefined) ?? "";
         return (
@@ -671,12 +497,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           </FieldWrap>
         );
       }
-      // format:"geo-point" gets the OpenStreetMap map picker — search/click to
-      // set a "lat,lon" point, the string the Weather/geo Coordinate inputs
-      // accept. (The Location value source uses this.)
-      // format:"timezone" gets the searchable IANA picker rather than a text
-      // box (a name typed from memory is only found to be wrong by a failed
-      // run) or a dropdown (400+ zones don't fit one).
       if (schema.format === "timezone") {
         return (
           <FieldWrap name={name} schema={schema} required={required}>
@@ -700,9 +520,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           </FieldWrap>
         );
       }
-      // format:"json" gets the syntax-highlighted editor (keys/strings/
-      // numbers/bool colours + a soft red border on unparseable input) —
-      // for params that carry a JSON literal, like the JSON value source.
       if (schema.format === "json") {
         const text = (value as string) ?? (schema.default as string | undefined) ?? "";
         return (
@@ -717,9 +534,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           </FieldWrap>
         );
       }
-      // format:"email-template" picks a reusable HTML layout shell (built-ins
-      // ∪ this org's templates) for the email drops to wrap the body in. The
-      // stored value is the template id; empty = send the body as-is.
       if (schema.format === "email-template" && schema.type === "string") {
         return (
           <FieldWrap name={name} schema={schema} required={required} value={value}>
@@ -734,10 +548,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           </FieldWrap>
         );
       }
-      // format:"datetime" gets a native date+time picker. The stored value
-      // stays an RFC3339/ISO instant (what the Calendar API wants); the picker
-      // shows and edits it in the browser's local time. Leaving it empty clears
-      // the param (e.g. an unbounded calendar-window edge).
       if (schema.format === "datetime") {
         return (
           <FieldWrap name={name} schema={schema} required={required} value={value}>
@@ -752,12 +562,7 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           </FieldWrap>
         );
       }
-      // format:"multiline" gets a textarea — for things like LLM
-      // user prompts and system prompts where a single-line input
-      // hides anything past the right edge.
       if (schema.format === "multiline") {
-        // CEL fields name their formula language inline (with a docs link)
-        // rather than hiding it in the description tooltip.
         const celFooter = schema.x_cel ? (
           <div className="sf-docs-hint">
             <Trans
@@ -774,11 +579,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
             />
           </div>
         ) : undefined;
-        // A language chosen on the sibling param turns this box into the code
-        // editor: monospace, highlighted, no wrapping. "plain" (and unset) stays
-        // a plain textarea, because most of what goes in one of these is prose —
-        // an LLM system prompt, an email body — and prose in monospace is worse,
-        // not better.
         if (chosenLang && chosenLang !== "plain") {
           return (
             <FieldWrap name={name} schema={schema} required={required} value={value} footer={celFooter}>
@@ -822,9 +622,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
     }
     case "integer":
     case "number":
-      // format:"duration-seconds" renders as value + unit (minutes/hours/…)
-      // instead of a raw seconds box — the canonical stored value stays an
-      // integer of seconds.
       if (schema.format === "duration-seconds") {
         return (
           <FieldWrap name={name} schema={schema} required={required}>
@@ -856,18 +653,11 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
               }
               let n =
                 schema.type === "integer" ? parseInt(raw, 10) : parseFloat(raw);
-              // Don't silently swallow unparseable input: clearing to
-              // undefined keeps the stored value in sync with what the field
-              // can actually represent (rather than leaving a stale committed
-              // number while the box shows garbage), so required-field
-              // validation flags it instead of the user thinking it saved.
+              // Clearing to undefined would silently discard what the user typed.
               if (Number.isNaN(n)) {
                 onChange(undefined);
                 return;
               }
-              // Clamp to the schema's bounds so an out-of-range value (e.g. a
-              // negative quantity) can't be stored — the field never holds
-              // what the backend would only reject at run time.
               if (typeof schema.minimum === "number") n = Math.max(schema.minimum, n);
               if (typeof schema.maximum === "number") n = Math.min(schema.maximum, n);
               onChange(n);
@@ -876,9 +666,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
         </FieldWrap>
       );
     case "boolean": {
-      // A plain Yes/No dropdown reads far clearer under a question-style
-      // title ("First row is headers → Yes") than a checkbox labelled with a
-      // generic "Enabled/Disabled", and matches the other dropdowns.
       const cur = (value as boolean | undefined) ?? (schema.default as boolean | undefined) ?? false;
       return (
         <FieldWrap name={name} schema={schema} required={required}>
@@ -894,7 +681,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
     }
     case "object":
       if (schema.properties) {
-        // Nested object with named properties — recurse.
         const sub = (value as Record<string, unknown>) ?? {};
         return (
           <FieldWrap name={name} schema={schema} required={required}>
@@ -911,7 +697,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           </FieldWrap>
         );
       }
-      // additionalProperties = schema → string-keyed dict.
       if (
         typeof schema.additionalProperties === "object" &&
         schema.additionalProperties !== null
@@ -929,17 +714,12 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           </FieldWrap>
         );
       }
-      // Untyped object → JSON
       return (
         <FieldWrap name={name} schema={schema} required={required}>
           <JSONField value={value} onChange={onChange} />
         </FieldWrap>
       );
     case "array":
-      // format:"sheet-mapping" gets the column-mapping editor — paired
-      // "sheet column ← from field" rows, both sides chosen from dropdowns
-      // (the target sheet's columns, and the upstream record's fields).
-      // Used by sheets_append_row's `mapping`.
       if (schema.format === "sheet-mapping") {
         return (
           <FieldWrap name={name} schema={schema} required={required}>
@@ -952,10 +732,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           </FieldWrap>
         );
       }
-      // format:"collection-columns" is a multiselect of the chosen collection's
-      // columns (sibling `table`) — the Save rows "Unique by" key. Free-text
-      // "add your own" covers a not-yet-created collection or a column not yet
-      // in it.
       if (schema.format === "collection-columns") {
         const collection = typeof siblings?.table === "string" ? (siblings.table as string) : "";
         return (
@@ -969,11 +745,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           </FieldWrap>
         );
       }
-      // format:"runner-tags" is the Run on your machine step's "where": a
-      // checklist of every tag the org's machines carry, plus a box for one they
-      // do not yet. Same control as string-multiselect below, with the options
-      // fetched rather than declared — the set changes as machines are
-      // registered and retagged, so a schema could not carry it.
       if (schema.format === "runner-tags") {
         return (
           <RunnerTagsField
@@ -986,11 +757,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           />
         );
       }
-      // format:"string-multiselect" turns an array-of-string into a
-      // checklist of curated options (items.enum / enumNames) plus a
-      // free-text "add your own" for the long tail — so a non-tech owner
-      // ticks "Payment succeeded" instead of typing payment_intent.succeeded,
-      // while power users can still add anything. Used by stripe_list_events.
       if (schema.format === "string-multiselect" && schema.items?.enum) {
         const opts = schema.items.enum.map((v, i) => ({
           value: String(v),
@@ -1031,12 +797,6 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
   }
 }
 
-// OneOfControl renders the segmented branch picker plus the active
-// branch's input. State note: the active index is derived from the
-// current value on every render (via pickBranch) but cached in local
-// state so a user-driven switch sticks even when the value momentarily
-// matches a different branch (e.g. empty string also "matches" the
-// boolean branch by Falsy default).
 function OneOfControl({
   branches,
   value,
@@ -1048,8 +808,6 @@ function OneOfControl({
 }) {
   const detected = useMemo(() => pickBranch(value, branches), [value, branches]);
   const [active, setActive] = useState<number>(detected);
-  // When the value changes externally (selected a different node, etc.)
-  // re-sync to whichever branch matches.
   useEffect(() => {
     setActive(detected);
   }, [detected]);
@@ -1063,8 +821,6 @@ function OneOfControl({
             className={i === active ? "active" : undefined}
             onClick={() => {
               setActive(i);
-              // Re-default to match the new shape so the user isn't
-              // staring at a stale value typed against a different type.
               if (!valueMatches(value, b)) onChange(defaultFor(b));
             }}
           >
@@ -1077,9 +833,6 @@ function OneOfControl({
   );
 }
 
-// OneOfBranchInput chooses how to render the active branch: scalar
-// types go through ScalarValue (compact, no label-wrap), object
-// branches with properties recurse via SchemaForm.
 function OneOfBranchInput({
   schema,
   value,
@@ -1115,10 +868,6 @@ function branchLabel(schema: JSONSchema, idx: number): string {
   return `Option ${idx + 1}`;
 }
 
-// pickBranch chooses the index of the branch best matching `value`.
-// JS-side heuristic: type compatibility wins; if nothing matches, pick
-// the first branch (so empty/undefined values land on the canonical
-// shape).
 function pickBranch(value: unknown, branches: JSONSchema[]): number {
   for (let i = 0; i < branches.length; i++) {
     if (valueMatches(value, branches[i])) return i;
@@ -1159,28 +908,15 @@ function FieldWrap({
 }: {
   name: string;
   schema: JSONSchema;
-  // required drives the always-visible "required" marker (so a field that
-  // needs a value is flagged while configuring, not only after a failed Run
-  // populates missingKeys).
   required: boolean;
   stack?: boolean;
-  // value is passed for fields that can hold a ${...} reference
-  // expression (string inputs) so we can render a plain-language
-  // explainer of what each reference pulls in. Omitted elsewhere.
   value?: unknown;
-  // footer is extra, field-specific content rendered inside the field
-  // container below the input (alongside the example / reference hints) —
-  // e.g. the URL tracking-param hint. Omitted for most fields.
   footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const { t } = useTranslation();
   const { missingKeys } = useFormCtx();
   const missing = missingKeys?.has(name) ?? false;
-  // A process-unique control id so <label htmlFor> associates with the
-  // rendered input/select/textarea even when the same field `name` repeats
-  // (nested objects, array items). We inject it onto the single child
-  // control below rather than threading an id prop through every field type.
   const controlId = useId();
   const labelledChildren =
     isValidElement(children) &&
@@ -1268,12 +1004,6 @@ function FieldWrap({
   );
 }
 
-// WiredField is the read-only stand-in for a param whose value arrives over a
-// connected input port. The wire decides the value, so an editable box would
-// be misleading (anything typed is ignored). Instead we say so plainly and,
-// when we can trace it, name the step/port that's feeding in — so the field
-// is reassuring ("comes from New responses → Email") rather than a greyed,
-// blank mystery. Mirrors the resource picker's disabled note for consistency.
 function WiredField({
   name,
   schema,
@@ -1299,12 +1029,6 @@ function WiredField({
   );
 }
 
-// FieldRef is a parsed ${...} reference inside a string field value.
-// Splitting kind from payload (instead of returning pre-formatted strings)
-// lets the renderer attach kind-specific affordances — e.g. tenant
-// credentials get an inline "Set up" link to /admin/secrets?focus=NAME so
-// a non-technical user has a one-click path from "this field uses a
-// credential" to "where do I store it."
 type FieldRef =
   | { kind: "secret"; payload: string }
   | { kind: "upstream"; payload: string }
@@ -1312,13 +1036,6 @@ type FieldRef =
   | { kind: "resource"; payload: string }
   | { kind: "generic"; payload: string };
 
-// parseFieldRefs extracts every ${...} placeholder from a raw string
-// field value, classifying each so the renderer can decide how to
-// present it. Mirrors the engine's resolver: tenant: (a stored
-// credential), upstream: (output of an earlier node), trigger/webhook
-// (the event that started the run), and anything else (generic).
-// Dedup happens by the (kind, payload) tuple so the same ref appearing
-// twice in one string only contributes one hint.
 function parseFieldRefs(raw: string): FieldRef[] {
   const out: FieldRef[] = [];
   const seen = new Set<string>();
@@ -1346,11 +1063,6 @@ function parseFieldRefs(raw: string): FieldRef[] {
   return out;
 }
 
-// RESOURCE_PICKERS maps a string field's `format` to the connected-account
-// resource it should pick from. The dropdown lists the account's items
-// (via GET /oauth/{provider}/resources?kind=) so the user selects instead
-// of pasting an ID. Adding a picker is one entry here + a manifest format +
-// a backend lister.
 const RESOURCE_PICKERS: Record<
   string,
   { provider: string; kind: string; noun: string; dependsOn?: string[] }
@@ -1360,48 +1072,22 @@ const RESOURCE_PICKERS: Record<
   "google-drive-file": { provider: "google", kind: "drive-files", noun: "file" },
   "google-drive-folder": { provider: "google", kind: "drive-folders", noun: "folder" },
   "google-calendar": { provider: "google", kind: "calendars", noun: "calendar" },
-  // Tabs are listed from the chosen spreadsheet — a dependent picker.
   "google-sheet-tab": { provider: "google", kind: "tabs", noun: "tab", dependsOn: ["spreadsheet_id"] },
-  // Listed via the tenant's STRIPE_API_KEY secret, not OAuth — the
-  // "provider" here is only the lister-registry key.
   "stripe-price": { provider: "stripe", kind: "prices", noun: "price" },
   "stripe-subscription": { provider: "stripe", kind: "subscriptions", noun: "subscription" },
   "stripe-payment-intent": { provider: "stripe", kind: "payment_intents", noun: "payment" },
   "stripe-customer": { provider: "stripe", kind: "customers", noun: "customer" },
-  // Listed via the connected Fortnox account's OAuth token (customer scope).
-  // The dropdown stores the CustomerNumber; the card shows "Name — number".
   "fortnox-customer": { provider: "fortnox", kind: "customers", noun: "customer" },
-  // Listed via the connected workspace's OAuth token (channels:read). The
-  // dropdown stores the channel ID (Cxxx); the card shows the #name.
   "slack-channel": { provider: "slack", kind: "channels", noun: "channel" },
-  // Listed via the tenant's Home Assistant connection (base_url + token), not
-  // OAuth — the "provider" here is only the lister-registry key. Entity stores
-  // the entity_id (light.living_room); service stores domain.service.
   "homeassistant-entity": { provider: "homeassistant", kind: "entities", noun: "entity" },
   "homeassistant-service": { provider: "homeassistant", kind: "services", noun: "service" },
 };
 
-// resourceNameCache remembers id→name for resources we've resolved this
-// session (keyed by provider:kind:id), so re-opening a node shows the
-// spreadsheet/form's friendly name immediately instead of a blank box while
-// the live list refetches. Stale names self-correct: once the fresh list
-// loads, its name wins. We never fall back to showing the raw id.
 const resourceNameCache = new Map<string, string>();
 const resourceCacheKey = (provider: string, kind: string, id: string) =>
   `${provider}:${kind}:${id}`;
 
-// AccountResourceField pairs the resource dropdown with an escape hatch: a
-// "use a value or reference" mode that swaps the dropdown for a plain text box
-// plus the {} reference menu. The dropdown alone can't express a DYNAMIC value
-// — most importantly ${item.…} inside a For-each body, where the row reaches
-// the step through templated params (not a wire), so the field must hold a
-// reference, not a picked id. Defaults to the text box when the stored value
-// is already a ${…} expression (a loop body, an imported graph) so it's
-// visible and editable; otherwise the dropdown, the everyday path.
-// EmailTemplatePicker is a dropdown of email templates (global built-ins ∪ the
-// org's own) for the email drops' optional `template` param. The stored value
-// is the template id; the blank option clears it (send the body as-is). It's a
-// live reference — the drop re-reads the chosen template's HTML on every run.
+// Falls back to a free-text id, so a resource the picker cannot list is reachable.
 function EmailTemplatePicker({
   value,
   onChange,
@@ -1413,19 +1099,14 @@ function EmailTemplatePicker({
   value: string;
   onChange: (v: string) => void;
   token?: string;
-  // body/subject are the email drop's sibling params — previewed as the real
-  // message content. format gates the preview (templates wrap HTML sends only).
   body?: string;
   subject?: string;
   format?: string;
 }) {
   const { t } = useTranslation();
-  // tokenLabels words a ${…} reference the way the {} menu does, so the
-  // preview can stand in for the references it can't resolve.
   const { tokenLabels } = useFormCtx();
   const [opts, setOpts] = useState<EmailTemplateSummary[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  // preview holds the rendered HTML shown in the modal; null = modal closed.
   const [preview, setPreview] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
 
@@ -1444,24 +1125,14 @@ function EmailTemplatePicker({
 
   const builtins = (opts ?? []).filter((o) => o.builtin);
   const custom = (opts ?? []).filter((o) => !o.builtin);
-  // A previously-chosen id that's no longer in the list (e.g. a deleted org
-  // template) still needs to render as the selected option so the user sees it
-  // — and isn't silently switched to "none".
   const known = (opts ?? []).some((o) => o.id === value);
-  // Templates only wrap HTML sends; a text send ignores them, so don't imply
-  // otherwise. Preview is still allowed for the no-template (id="") case — it
-  // shows the body on its own.
   const isText = format === "text";
 
   const openPreview = () => {
     if (!token) return;
     setErr(null);
     setPreviewing(true);
-    // Stand in for every ${…} reference before rendering: the preview shows
-    // the message as a recipient sees it, and nothing has run, so raw token
-    // syntax in the subject line (or the body) is the one thing a recipient
-    // will never see. The body's substitutions get a marker span; the subject
-    // stays plain text because html/template escapes .Subject.
+    // References are substituted before render, or the preview shows raw ${…}.
     api
       .previewEmailTemplate(token, {
         id: value || undefined,
@@ -1521,9 +1192,6 @@ function EmailTemplatePicker({
   );
 }
 
-// EmailPreviewModal shows the server-rendered email HTML in a sandboxed iframe,
-// so the markup renders exactly as a client would see it without its scripts
-// touching the app.
 function EmailPreviewModal({ html, onClose }: { html: string; onClose: () => void }) {
   const { t } = useTranslation();
   useEscapeToClose(onClose);
@@ -1596,8 +1264,6 @@ function AccountResourceField({
   const isExpr = typeof value === "string" && value.includes("${");
   const [manual, setManual] = useState(isExpr);
 
-  // A wired input port decides the value — show the picker's read-only note,
-  // no toggle (the wire wins regardless of mode).
   if (wired) {
     return (
       <FieldWrap name={name} schema={schema} required={required} value={value}>
@@ -1660,14 +1326,6 @@ function AccountResourceField({
   );
 }
 
-// ResourcePickerField renders a dropdown of a connected account's resources
-// (forms, spreadsheets) and stores the chosen ID. The picker is the ONLY way
-// to set the value — there's no free-text entry (it just complicated the
-// drops). If the account isn't connected (the list errors) it prompts to
-// connect + offers a retry. The raw id is never shown: until its name
-// resolves the box shows the cached name (if known) or the empty placeholder.
-// Account is the connection's default — the common case; a non-default
-// `account` param isn't threaded in this version.
 function ResourcePickerField({
   provider,
   kind,
@@ -1688,33 +1346,16 @@ function ResourcePickerField({
   value: unknown;
   onChange: (v: unknown) => void;
   references: ReferenceCtx;
-  // required gates the empty-option label: a required picker prompts "Choose a
-  // {noun}…", an optional one (e.g. On mention's channel filter, where empty =
-  // every channel) says "Any {noun}" — selecting it clears the value.
   required?: boolean;
-  // account is the sibling `account` param — list resources for the account
-  // the node actually uses. Undefined → the connection's default.
   account?: string;
-  // extra carries dependent params (e.g. spreadsheet_id for tabs).
   extra?: Record<string, string>;
-  // missingDep names an unmet dependency (e.g. no spreadsheet chosen yet) —
-  // the picker can't list until it's set, so it prompts for that first.
   missingDep?: string;
-  // disabled: the param is fed by a connected input port, so the wire decides
-  // the value — the picker is replaced by a read-only "set upstream" note.
   disabled?: boolean;
-  // wiredName: the resolved resource name the wire points at, named in the
-  // disabled note so the user still sees which sheet/form it is.
   wiredName?: string;
 }) {
   const { t } = useTranslation();
   const [opts, setOpts] = useState<{ id: string; name: string }[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  // The SERVER's own words, kept alongside the humanized message. A missing
-  // connection comes back as 502, which explainApiError flattens to "Dazyflow
-  // ran into a problem on our side" — so deciding "is this app simply not
-  // connected?" from the humanized string could never work, and the picker
-  // blamed the server for the user's unconnected account.
   const [errRaw, setErrRaw] = useState<string>("");
   const [reloadKey, setReloadKey] = useState(0);
   const cur = typeof value === "string" ? value : "";
@@ -1735,8 +1376,6 @@ function ResourcePickerField({
       .listAccountResources(references.token, provider, kind, account || undefined, extra)
       .then((r) => {
         if (!live) return;
-        // Remember every resolved name so a later mount can label the id
-        // instantly from cache while its own fetch is in flight.
         for (const o of r.resources) {
           resourceNameCache.set(resourceCacheKey(provider, kind, o.id), o.name);
         }
@@ -1754,8 +1393,6 @@ function ResourcePickerField({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, kind, references.token, account, extraKey, missingDep, disabled, reloadKey]);
 
-  // Overridden by a connected input port — the wire decides the value, so the
-  // picker is replaced by a read-only note rather than an editable dropdown.
   if (disabled) {
     return (
       <div className="resource-picker">
@@ -1768,9 +1405,6 @@ function ResourcePickerField({
     );
   }
 
-  // Dependency not chosen yet (e.g. no spreadsheet): can't list until it's
-  // set, so prompt for that first. No free-text fallback — the picker is the
-  // only way to set this value.
   if (missingDep) {
     const depNoun = missingDep.replace(/_id$/, "").replace(/_/g, " ");
     return (
@@ -1782,19 +1416,7 @@ function ResourcePickerField({
     );
   }
 
-  // The list failed. Distinguish "no account at all" (prompt to connect) from
-  // "connected but the provider rejected the call" — the common case being a
-  // missing scope (e.g. the Google sheet picker lists via the Drive API, so an
-  // account connected only for Gmail/Calendar 403s here). In that case the old
-  // generic "Connect the account" hint was misleading, so we say the account
-  // may need reconnecting for more access and surface the provider's own
-  // message instead of swallowing it.
   if (err) {
-    // Test the SERVER's message, not the humanized one: a missing connection
-    // arrives as 502, which explainApiError turns into the generic "problem on
-    // our side" — so matching against `err` here always fell through to
-    // "couldn't load your list", telling the user to retry and contact support
-    // for something only they could fix, on the step's very first open.
     const notConnected =
       /\bnot connected\b|\bno connection\b|connect (a|the)\b|no .*token|missing .*(token|credential|account)|unauthor/i.test(
         errRaw || err,
@@ -1807,11 +1429,6 @@ function ResourcePickerField({
             : t("schemaForm.resourcePicker.loadFailed", { noun })}
         </div>
         {!notConnected && (
-          // The raw provider error (e.g. "Request had insufficient
-          // authentication scopes.") — the detail that tells the user whether
-          // to reconnect, enable an API, or just retry. Prefer the server's own
-          // words; the humanized string is a fallback, and repeating it here
-          // under the hint above just said the same thing twice.
           <div className="resource-picker-detail" title={errRaw || err}>
             {errRaw || err}
           </div>
@@ -1829,8 +1446,6 @@ function ResourcePickerField({
 
   const options = opts ?? [];
   const curKnown = cur === "" || options.some((o) => o.id === cur);
-  // While the live list is loading, label a set id from the session cache so
-  // the user sees the spreadsheet/form name, not a blank box. Never the raw id.
   const cachedName =
     cur !== "" && !curKnown
       ? resourceNameCache.get(resourceCacheKey(provider, kind, cur))
@@ -1867,13 +1482,6 @@ function ResourcePickerField({
   );
 }
 
-// SuggestField backs format:"suggest" string fields: an obvious dropdown of
-// the schema's enum/enumNames (currency: "USD — US Dollar" → stores "usd")
-// with an escape-hatch toggle to a free-text box + {} reference menu — for a
-// value outside the list (any ISO code) or a ${…} reference (${item.currency}
-// per row in a For-each), neither of which a closed <select> allows. A
-// <datalist> was tried first but reads as a plain text box, so it's a real
-// <select> for the everyday path. Mirrors AccountResourceField's toggle.
 function SuggestField({
   name,
   schema,
@@ -1900,9 +1508,6 @@ function SuggestField({
   }));
   const cur = typeof value === "string" ? value : "";
   const inList = opts.some((o) => o.value === cur);
-  // Start in the text box when the value is a reference or a custom code that
-  // isn't one of the suggestions, so it stays visible and editable; otherwise
-  // the dropdown is the default, everyday path.
   const [manual, setManual] = useState(cur.includes("${") || (cur !== "" && !inList));
 
   return (
@@ -1946,15 +1551,6 @@ function SuggestField({
   );
 }
 
-// useRunnerTargets fetches the org's machines once per form and hands the same
-// answer to every field that asks.
-//
-// Cached at module level because the Run on your machine step has TWO fields
-// backed by this list (the machine and the label), and an inspector that opened
-// with two identical requests in flight — then two more on every re-render —
-// would be paying for the same list repeatedly to fill in one step. The cache is
-// keyed by token so switching account or organisation cannot show one org's
-// machines to another.
 const runnerTargetCache = new Map<string, Promise<RunnerTarget[]>>();
 
 function useRunnerTargets(token: string | undefined) {
@@ -1972,9 +1568,6 @@ function useRunnerTargets(token: string | undefined) {
     let pending = runnerTargetCache.get(token);
     if (!pending) {
       pending = api.listRunnerTargets(token).then((r) => r.runners ?? []);
-      // A failure is not cached: runners answer 501 on a deployment without
-      // Postgres, but they also fail on a dropped connection, and remembering
-      // that forever would leave the field a text box until a reload.
       pending.catch(() => runnerTargetCache.delete(token));
       runnerTargetCache.set(token, pending);
     }
@@ -1989,22 +1582,6 @@ function useRunnerTargets(token: string | undefined) {
   return state;
 }
 
-// RunnerTagsField is the "where does this run" picker on the Run on your machine
-// step: which tags a machine must carry for the step to land on it.
-//
-// It replaced two fields — a machine name and a label, mutually exclusive — with
-// one, which is possible because every machine now carries its own name as a
-// tag. So "run this on invoices-box" and "run this on any build machine" are the
-// same question with different answers, and the field asks it once.
-//
-// The options are every tag any of the org's machines carries. Ticking two means
-// BOTH must match, which is stated under the field rather than left to be
-// discovered: a set of tags that no single machine carries fails the step, and
-// "narrower than you meant" is the mistake this control invites.
-//
-// Free text stays available for a tag nothing carries yet — a machine about to
-// be registered, or a ${…} reference resolved per row in a For-each — because a
-// closed checklist would forbid both.
 function RunnerTagsField({
   name,
   schema,
@@ -2026,11 +1603,6 @@ function RunnerTagsField({
     ? value.filter((v): v is string => typeof v === "string")
     : [];
 
-  // Every tag in the fleet, each labelled with how many machines carry it and
-  // how many of those are switched on. The first number says whether a tag is a
-  // pool or one machine; the second is the one that decides whether a step
-  // written now will actually run, and it is the reason both are here rather
-  // than just the total.
   const options = useMemo(() => {
     const total = new Map<string, number>();
     const live = new Map<string, number>();
@@ -2042,9 +1614,6 @@ function RunnerTagsField({
     }
     return (
       [...total.entries()]
-        // Tags with a machine switched on first, so the ones that can take work
-        // now are what the eye lands on; alphabetical within each group, so the
-        // list does not reshuffle as machines come and go.
         .sort(([a, an], [b, bn]) => {
           const liveA = (live.get(a) ?? 0) > 0 ? 0 : 1;
           const liveB = (live.get(b) ?? 0) > 0 ? 0 : 1;
@@ -2057,9 +1626,6 @@ function RunnerTagsField({
     );
   }, [rows, t]);
 
-  // How many machines carry EVERY chosen tag — the number that decides whether
-  // this step can run at all. Shown always, because zero is the failure this
-  // control invites and it is invisible until a run.
   const matching = useMemo(() => {
     if (chosen.length === 0 || !rows) return null;
     return rows.filter((r) => chosen.every((tag) => (r.tags ?? []).includes(tag)));
@@ -2068,17 +1634,11 @@ function RunnerTagsField({
   const footer =
     matching === null ? (
       failed ? (
-        // No list to check against — no auth context, or a deployment with no
-        // runners (the endpoint answers 501). The field still works by hand.
         <div className="sf-docs-hint">{t("schemaForm.runner.noneKnown")}</div>
       ) : undefined
     ) : matching.length === 0 ? (
       <div className="sf-docs-hint">{t("schemaForm.runner.matchesNone")}</div>
     ) : matching.every((r) => !r.online) ? (
-      // Machines carry the tags, but not one of them is switched on. Work goes
-      // to whichever eligible machine polls first, so this step will wait and
-      // then fail — a different problem from a set that matches nothing, and
-      // one a count tucked into a sentence let people read straight past.
       <div className="sf-docs-hint sf-warn">
         {t("schemaForm.runner.matchesNoneOnline", {
           count: matching.length,
@@ -2101,12 +1661,6 @@ function RunnerTagsField({
   );
 }
 
-// CollectionField renders a dropdown of the workspace's existing collections
-// (the Save rows / Find rows store), fetched from /me/boards. Unlike the OAuth
-// resource pickers, collection names are user-defined, so it also allows typing
-// a name that isn't in the list yet — one a sibling Save rows step will create,
-// or a ${…} reference — via a "type a name" toggle. The list failing or being
-// empty falls back to that free-text input so the field always works.
 function CollectionField({
   name,
   schema,
@@ -2143,9 +1697,6 @@ function CollectionField({
     };
   }, [token]);
 
-  // Couldn't list collections (no auth context / fetch error) — fall back to a
-  // plain text input so the field stays usable. A not-yet-created or dynamic
-  // name is supplied by wiring the Collection input instead.
   if (failed) {
     return (
       <FieldWrap name={name} schema={schema} required={required} value={value}>
@@ -2160,9 +1711,6 @@ function CollectionField({
     );
   }
 
-  // Dropdown of existing collections. A current value that isn't in the fetched
-  // list (set via the wired input, or a collection dropped since) is kept as a
-  // selectable option so it isn't silently lost.
   const options = opts ?? [];
   const known = options.includes(cur);
   return (
@@ -2192,15 +1740,6 @@ function CollectionField({
   );
 }
 
-// CollectionNameField is the WRITER's collection picker — Save rows, where the
-// collection usually doesn't exist yet. That rules out CollectionField's plain
-// <select>: you have to be able to name something new.
-//
-// So it's a combobox: a text input you can type anything into, backed by a
-// datalist of the collections this workspace already has. The suggestions are
-// the point — the field used to be bare free text hinting "Example: leads", so
-// a second flow with "testimonial" instead of "testimonials" silently started
-// a SECOND collection, and the owner found out when rows went missing.
 function CollectionNameField({
   name,
   schema,
@@ -2228,18 +1767,12 @@ function CollectionNameField({
     api
       .listBoards(token)
       .then((r) => live && setOpts(r.boards.map((b) => b.name)))
-      // Suggestions are a convenience, never a gate: if the list can't be
-      // fetched the field is still an ordinary text box.
       .catch(() => {});
     return () => {
       live = false;
     };
   }, [token]);
 
-  // Typing a name that doesn't exist yet is the normal case for a writer, so
-  // it is not an error — but say which way it will go, because "adds to the
-  // one you already have" vs "starts a new one" is exactly the distinction a
-  // typo destroys.
   const trimmed = cur.trim();
   const isNew = trimmed !== "" && !trimmed.includes("${") && !opts.includes(trimmed);
 
@@ -2273,14 +1806,6 @@ function CollectionNameField({
   );
 }
 
-// PlainStringField is the default text input for string-typed schema
-// fields. Wrapped as its own component so it can own the "show chip
-// vs show input" toggle without breaking Rules of Hooks (useState
-// can't live inside a switch case directly).
-//
-// When the field's value is exactly one ${secret.NAME} reference, it
-// renders the credential chip; the user can click Replace to flip to
-// the input and type whatever they want instead.
 function PlainStringField({
   name,
   schema,
@@ -2301,15 +1826,8 @@ function PlainStringField({
   tokenLabels?: TokenLabels;
 }) {
   const { t } = useTranslation();
-  // URL fields (schema.format === "uri") get an edit-time hint when the typed
-  // value carries known tracking / analytics params (utm_source, fbclid, …),
-  // with one-click removal. Purely a nudge — a tracking param is still a valid
-  // URL, so it never blocks; the `url` drop still validates/fails on its own.
   const urlValue = schema.format === "uri" && typeof value === "string" ? value : "";
   const trackers = urlValue ? detectTrackingParams(urlValue) : [];
-  // Phone fields (schema.format === "tel") show a live flag — but only for an
-  // international number (+…/00…), read from its own calling code. A local
-  // number shows no flag (ambiguous country). A display nicety, never blocks.
   const telInfo = schema.format === "tel" ? telFieldFlag(value) : null;
   const footer =
     trackers.length > 0 ? (
@@ -2353,12 +1871,6 @@ function PlainStringField({
   );
 }
 
-// ReferenceMenu is the insert-a-reference affordance: a "{}" button that
-// opens a grouped list of the flow's referenceable data (secrets, upstream
-// node outputs, trigger fields, resources) fetched lazily from
-// GET /me/flows/{flow_id}/references. Clicking an item inserts its ${…}
-// token into the field. Purely additive — the user can still type tokens
-// by hand. Closes on outside click / Escape.
 function ReferenceMenu({
   ctx,
   onInsert,
@@ -2366,17 +1878,12 @@ function ReferenceMenu({
 }: {
   ctx: ReferenceCtx;
   onInsert: (token: string) => void;
-  // extraItems are caller-supplied tokens shown as a group above the fetched
-  // references — used by the for_each step editor to offer ${item.<field>}.
   extraItems?: { label: string; token: string }[];
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [groups, setGroups] = useState<ReferenceGroups | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Filter text: the reference list can be long (every upstream field, every
-  // secret), so a non-techie types "email" to find the field instead of
-  // scrolling. Reset each time the menu opens.
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -2418,21 +1925,15 @@ function ReferenceMenu({
     }
     if (kind === "secrets" || kind === "resources") return it.name || it.token;
     if (kind === "trigger") {
-      // Trigger/form fields arrive as raw keys ("email", "first_name").
-      // Humanize them ("Email", "First Name") so a non-techie recognises
-      // their form question instead of reading a developer-shaped key.
       return it.label || humanize(it.field || it.token);
     }
     return it.label || it.token;
   };
-  // Case-insensitive substring filter over the human label of each row.
   const q = query.trim().toLowerCase();
   const matches = (label: string) => q === "" || label.toLowerCase().includes(q);
   const filteredExtra = (extraItems ?? []).filter((it) => matches(it.label));
   const filteredSection = (kind: keyof ReferenceGroups) =>
     (groups?.[kind] ?? []).filter((it) => matches(describe(kind, it)));
-  // First visible row (extra group first, then sections in order) — Enter
-  // inserts it, so a non-techie can type "email" + Enter.
   const firstToken =
     filteredExtra[0]?.token ??
     sections.map((s) => filteredSection(s.kind)[0]?.token).find(Boolean) ??
@@ -2443,9 +1944,6 @@ function ReferenceMenu({
     hasExtra ||
     (groups && sections.some((s) => filteredSection(s.kind).length > 0));
 
-  // Each row shows only the human description — never the raw ${…} token,
-  // which is developer syntax a non-technical owner can't read. Clicking
-  // still inserts the token; we just don't surface it.
   const renderRow = (key: string, label: string, token: string) => (
     <Button
       key={key}
@@ -2460,11 +1958,6 @@ function ReferenceMenu({
     </Button>
   );
 
-  // The reference picker renders its own backdrop, so Escape has to dismiss it
-  // too. Guarded on `open` so the call is a no-op when the menu is closed. If
-  // this menu sits inside another dialog, Escape closes both — which is what
-  // happened before as well, since the outer dialog took the key and unmounted
-  // the menu with it.
   useEscapeToClose(() => open && setOpen(false));
 
   return (
@@ -2474,8 +1967,6 @@ function ReferenceMenu({
         className="ref-insert-btn"
         onClick={() => {
           setQuery("");
-          // Reset a previous transient error so reopening the menu refetches
-          // (the load effect's guard skips while `error` is set).
           setError(null);
           setOpen(true);
         }}
@@ -2488,8 +1979,6 @@ function ReferenceMenu({
       </Button>
       {open &&
         createPortal(
-          // Portal to <body> so the fixed backdrop escapes the inspector's
-          // transformed/clipped ancestors — same reasoning as ConfirmModal.
           <div className="modal-backdrop" onClick={() => setOpen(false)}>
             <div
               className="modal ref-dialog"
@@ -2575,25 +2064,7 @@ function ReferenceMenu({
   );
 }
 
-// ───────────────────────── inline token editor ─────────────────────────
-// TokenInput is the shared field for any string param that can embed ${…}
-// template tokens (secrets, upstream outputs, trigger fields, resources). It
-// renders each token as an inline chip *within* the editable text — so a value
-// like `Bearer ${secret.API_KEY}` shows literal "Bearer " then a chip, and the
-// user edits the text and the reference together. This replaces the old
-// input-or-chip split (whole-value → chip, anything else → raw ${…} text) that
-// made mixed values impossible to read or build in the UI.
-//
-// contentEditable is intentionally UNCONTROLLED: React owns none of the
-// editable div's children. We sync value→DOM only when the incoming value
-// differs from what the DOM already serialises to (an external change), so
-// typing and token inserts never trigger a re-render that resets the caret.
-// DOM→value flows through onInput/insert via serializeEditable.
 
-// serializeEditable walks the editable DOM back into the raw string: text
-// nodes contribute their text, token chips contribute their data-token, and a
-// browser-inserted wrapper is recursed into. Inverse of renderInto. Exported
-// for unit tests.
 export function serializeEditable(root: Node): string {
   let out = "";
   root.childNodes.forEach((node) => {
@@ -2610,9 +2081,6 @@ export function serializeEditable(root: Node): string {
   return out;
 }
 
-// tokenChipLabel is the human text inside a chip — the secret name for
-// ${secret.X}, otherwise the {} menu's friendly description, falling back to
-// the raw token when unparseable.
 function buildChip(
   token: string,
   labels: TokenLabels | undefined,
@@ -2670,14 +2138,10 @@ function TokenInput({
 }) {
   const { t } = useTranslation();
   const editRef = useRef<HTMLDivElement | null>(null);
-  // The caret position last seen inside the editor, remembered so the {} menu
-  // can insert at the cursor even after focus moves to the menu button.
   const savedRange = useRef<Range | null>(null);
   const raw = typeof value === "string" ? value : "";
   const removeLabel = t("schemaForm.tokenInput.remove");
 
-  // value → DOM, but only on an external change (DOM doesn't already match) so
-  // our own keystrokes/inserts don't reset the caret.
   useEffect(() => {
     const root = editRef.current;
     if (!root) return;
@@ -2716,7 +2180,6 @@ function TokenInput({
       sel.removeAllRanges();
       sel.addRange(range);
     } else {
-      // No remembered caret (menu opened without focusing the field) — append.
       root.appendChild(chip);
     }
     savedRange.current = null;
@@ -2724,8 +2187,6 @@ function TokenInput({
     root.focus();
   };
 
-  // Clicking a chip's × removes just that chip; everything else falls through
-  // to normal caret placement.
   const onClick = (e: React.MouseEvent) => {
     const x = (e.target as HTMLElement).closest(".token-chip-x");
     if (!x) return;
@@ -2750,7 +2211,6 @@ function TokenInput({
         onMouseUp={rememberSelection}
         onClick={onClick}
         onKeyDown={(e) => {
-          // Single-line: Enter never inserts a newline.
           if (e.key === "Enter") e.preventDefault();
         }}
       />
@@ -2765,9 +2225,6 @@ function TokenInput({
   );
 }
 
-// DurationSecondsField edits an interval as value + unit ("5 minutes")
-// while storing canonical seconds — non-techies never do the ×60 math.
-// The displayed unit is the largest one that divides the value evenly.
 function DurationSecondsField({
   value,
   onChange,
@@ -2820,16 +2277,6 @@ function DurationSecondsField({
   );
 }
 
-// humanize turns a raw param key ("first_row_headers") into the label the form
-// shows when a field's schema has no explicit `title`. Exported so the lint
-// banner can name fields the same way the Inspector does.
-//
-// SENTENCE case, not Title Case. Every param that DOES carry a title is written
-// in sentence case ("Unique by", "Time column"), and so is the generated step
-// reference, so title-casing the fallback made the ~200 untitled params across
-// the catalog the odd ones out — "Column Types" sitting under "Unique by" in
-// the same panel, "Timeout Ms", "Base Url", "Thread Id". The fallback should be
-// invisible; capitalising differently is what made it visible.
 export function humanize(key: string): string {
   const words = key.replace(/[_-]+/g, " ").trim();
   if (!words) return "";
@@ -2847,50 +2294,20 @@ function DictField({
   valueSchema: JSONSchema;
   value: Record<string, unknown>;
   onChange: (v: Record<string, unknown>) => void;
-  // Examples for the two boxes (x_key_placeholder / x_value_placeholder). A
-  // map's meaning is in the pairing, and "key"/"" doesn't carry it.
   keyPlaceholder?: string;
   valuePlaceholder?: string;
-  // Ask before removing a row (x_confirm_remove on the field).
-  //
-  // Opt-in rather than always, because a confirm on every row of every map
-  // would be one people click through without reading — and then it is not
-  // protecting the one that matters. It is set where the value costs something
-  // to reconstruct: an environment variable holding a ${secret.…} reference
-  // means a trip back to the secret picker, while a column-rename entry is
-  // retyped in two seconds.
   confirmRemove?: boolean;
 }) {
   const { t } = useTranslation();
-  // Index of the row being confirmed; null = none. Cleared on every commit,
-  // since the indices move when the list does.
   const [confirming, setConfirming] = useState<number | null>(null);
-  // The rows are LOCAL state, not derived from `value` on every render.
-  //
-  // Deriving them meant a row existed only while its key did: an object cannot
-  // hold "the entry currently being renamed", so clearing the key to retype it
-  // dropped the entry and the row vanished from under the cursor. Naming a
-  // variable was only possible by editing around the existing text and never
-  // emptying the box — which is not something anyone should have to work out.
-  //
-  // So the editor owns the list, and hands up only the rows that have a name.
   const [rows, setRows] = useState<[string, unknown][]>(() => Object.entries(value ?? {}));
 
-  // What the rows mean as an object: the nameless one is being typed, not
-  // deleted, so it is simply not part of the value yet.
   const named = (rs: [string, unknown][]) => rs.filter(([k]) => k !== "");
   const toObject = (rs: [string, unknown][]) => Object.fromEntries(named(rs));
 
-  // Re-sync when a DIFFERENT value arrives from outside — another node
-  // selected, an undo, a wired value. Keyed on the CONTENT rather than the
-  // object's identity: the call site passes `value ?? {}`, a fresh object on
-  // every render, which as an effect dependency would rebuild the rows
-  // continuously and undo every keystroke.
   const incoming = JSON.stringify(Object.entries(value ?? {}));
   useEffect(() => {
     setRows((prev) =>
-      // Already agreed — keep the rows, and with them the half-typed name that
-      // the object cannot represent.
       JSON.stringify(named(prev)) === incoming ? prev : Object.entries(value ?? {}),
     );
     // `value` is read inside but `incoming` is its content; depending on both
@@ -2907,16 +2324,9 @@ function DictField({
     commit(rows.map((row, i) => (i === idx ? [newKey, newVal] : row)));
   const removeAt = (idx: number) => commit(rows.filter((_, i) => i !== idx));
   const addEmpty = () => {
-    // A fresh row starts empty and unnamed, which is what an editor should give
-    // you — the old "key", "key2", "key3" placeholders had to be selected and
-    // deleted before a real name could be typed.
     commit([...rows, ["", defaultFor(valueSchema) ?? ""]]);
   };
 
-  // A name used twice: the second one wins when the object is built, so the
-  // first row's value is quietly not what runs. Flagged rather than prevented —
-  // it is a transient state while renaming, and blocking the keystroke would be
-  // worse than saying so.
   const duplicated = new Set(
     named(rows)
       .map(([k]) => k)
@@ -2951,8 +2361,6 @@ function DictField({
             <X size={ICON.sm} />
           </Button>
         </div>,
-        // The prompt sits UNDER its row rather than replacing it, so what is
-        // about to go is still on screen while the question is being answered.
         confirming === idx ? (
           <div key={`${idx}-confirm`} className="sf-dict-confirm inline-confirm">
             {k
@@ -3024,10 +2432,6 @@ function ArrayField({
   );
 }
 
-// MultiSelectField edits a string[] as a checklist of curated options
-// (label ⇄ stored value) plus a free-text box for values not in the list.
-// Ticking toggles membership; a custom entry becomes a removable chip.
-// Empties out to undefined so an untouched field doesn't bloat saved params.
 function MultiSelectField({
   value,
   onChange,
@@ -3044,8 +2448,6 @@ function MultiSelectField({
     : [];
   const chosen = new Set(selected);
   const known = new Set(options.map((o) => o.value));
-  // Customs are selected values outside the curated list — shown as chips so
-  // a power user's hand-added type stays visible and removable.
   const customs = selected.filter((v) => !known.has(v));
 
   const commit = (next: string[]) => onChange(next.length ? next : undefined);
@@ -3108,19 +2510,8 @@ function MultiSelectField({
   );
 }
 
-// MappingRow is one entry of a sheet-mapping array: which sheet column,
-// and which incoming field feeds it.
 type MappingRow = { column?: string; source?: string };
 
-// MappingField is the column-mapping editor for sheets_append_row's
-// `mapping` param. Each row pairs a destination sheet column with the
-// incoming field that fills it — and BOTH sides are dropdowns sourced from
-// real data, never free-text: the "Sheet column" lists the target sheet's
-// own header row (the google "sheet-columns" resource lister, keyed off the
-// sibling spreadsheet_id/range), and "From field" lists the upstream
-// record's fields (the row-source field hints, e.g. a Google Form's question
-// titles). Column order is the appended-row order, so rows can be reordered.
-// Empties out to undefined so an untouched mapping doesn't bloat saved params.
 function MappingField({
   value,
   onChange,
@@ -3135,8 +2526,6 @@ function MappingField({
   const { t } = useTranslation();
   const rows: MappingRow[] = Array.isArray(value) ? value : [];
 
-  // "From field" options: the fields of whatever row source feeds this
-  // node's `rows` input (a Google Form, a hosted webhook form, …).
   const [fieldHints, setFieldHints] = useState<string[]>([]);
   useEffect(() => {
     if (!references) return;
@@ -3161,10 +2550,6 @@ function MappingField({
     };
   }, [references]);
 
-  // "Sheet column" options: the target sheet's own header row, listed by the
-  // google "sheet-columns" resource lister. Keyed off the sibling
-  // spreadsheet_id (+ range/tab), so it refetches when the user repoints the
-  // append at a different sheet.
   const spreadsheetId =
     typeof siblings?.spreadsheet_id === "string" ? siblings.spreadsheet_id : "";
   const tab = typeof siblings?.range === "string" ? siblings.range : "";
@@ -3192,25 +2577,15 @@ function MappingField({
   const setRow = (i: number, patch: Partial<MappingRow>) =>
     commit(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   const remove = (i: number) => commit(rows.filter((_, idx) => idx !== i));
-  // Auto-map: for every source field that has a same-named sheet column not
-  // already mapped, add an identity row. One click to line a Form up with a
-  // sheet whose headers match the question titles.
   const cols = columnOpts ?? [];
   const mappedCols = new Set(rows.map((r) => r.column).filter(Boolean));
   const autoPairs = fieldHints
     .filter((f) => cols.includes(f) && !mappedCols.has(f))
     .map((f) => ({ column: f, source: f }));
 
-  // Which row (if any) is naming a NEW sheet column via a free-text input —
-  // the column dropdown only lists the sheet's existing headers, so without
-  // this there'd be no way to map onto a column the sheet doesn't have yet
-  // (the backend creates it on append).
   const [newColIdx, setNewColIdx] = useState<number | null>(null);
   const NEW_COL = "__new_column__";
 
-  // A <select> that keeps an out-of-list current value selectable (e.g. a
-  // column saved before its header changed) so editing one row never silently
-  // drops another's value. withNew adds the "+ New column…" choice.
   const pickerSelect = (
     cur: string,
     options: string[],
@@ -3328,9 +2703,6 @@ function MappingField({
   );
 }
 
-// ScalarValue is a render-only-the-input variant of SchemaField used
-// inside array / dict rows where the label is implicit (the index or
-// the key already names the slot).
 function ScalarValue({
   schema,
   value,
@@ -3340,9 +2712,6 @@ function ScalarValue({
   schema: JSONSchema;
   value: unknown;
   onChange: (v: unknown) => void;
-  // An example for the text case (a dict row's value box). The typed cases
-  // below carry their own affordances — a select shows its options, a number
-  // box its spinner — so nothing else here needs one.
   placeholder?: string;
 }) {
   const { t } = useTranslation();
@@ -3403,11 +2772,6 @@ function ScalarValue({
   }
 }
 
-// DictValueCell renders the value side of a dict row. String values use the
-// shared inline TokenInput (so a header value like `Bearer ${secret.NAME}`
-// shows the literal text and the reference chip together, with the {} picker);
-// non-string values fall through to the plain ScalarValue editor. References
-// and tokenLabels come from FormContext, so DictField doesn't thread them.
 function DictValueCell({
   schema,
   value,
@@ -3451,17 +2815,6 @@ function JSONField({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
-  // Snapshot the prop into local text state ONCE so the user's
-  // keystrokes survive mid-edit even when they're not yet valid
-  // JSON. The old version used `defaultValue` + commit-on-blur —
-  // clicking Save without first blurring silently dropped the
-  // edit. The "obvious" fix (a useEffect that re-syncs text from
-  // value) was worse: it ran after every keystroke that re-emitted
-  // the SAME value to flip dirty, wiping the user's in-progress
-  // text down to "". Instead we rely on the caller giving us a
-  // fresh component instance (via key) when the conceptual field
-  // identity changes — same trick the Inspector already uses for
-  // the raw-JSON outer textarea.
   const [text, setText] = useState(() => {
     if (value === undefined) return "";
     try {
@@ -3485,10 +2838,6 @@ function JSONField({
         try {
           onChange(JSON.parse(v));
         } catch {
-          // Mid-typing — invalid JSON. Re-emit the last valid value
-          // so onParamsChange runs and dirty=true flips; the user's
-          // text is preserved by local state, and the eventual valid
-          // parse lands normally.
           onChange(value);
         }
       }}
@@ -3516,21 +2865,9 @@ function defaultFor(schema: JSONSchema): unknown {
   }
 }
 
-// WorkspacePathField renders the workspace-path widget: a text input
-// holding the current sandbox-relative path, plus a drop-zone +
-// file-picker that uploads the dropped/selected file via the daemon
-// --- RowConditionField: no-code filter builder -----------------------
-//
-// Renders the `filter` param of the row drops (route_rows, compute_rows,
-// split_rows) as column / operator / value rows joined by AND, and emits
-// the CEL string the engine expects. A non-technical user never sees CEL;
-// a power user can flip to the raw textarea (and anything the builder
-// can't round-trip opens there automatically).
 
 export type RowCond = { column: string; op: string; value: string };
 
-// labelKey is resolved against i18n at render time so the operator dropdown
-// switches with the active locale.
 const ROW_COND_OPS: { id: string; labelKey: string; value: "text" | "number" | "none" }[] = [
   { id: "equals", labelKey: "schemaForm.rowCond.opEquals", value: "text" },
   { id: "not_equals", labelKey: "schemaForm.rowCond.opNotEquals", value: "text" },
@@ -3587,10 +2924,6 @@ export function buildRowCEL(conds: RowCond[]): string {
     .join(" && ");
 }
 
-// parseRowCEL is the inverse of buildRowCEL for the shapes the builder
-// emits. Returns null when any clause is something the builder didn't
-// produce, so the caller falls back to the raw CEL editor rather than
-// silently dropping the user's expression.
 export function parseRowCEL(cel: string): RowCond[] | null {
   const trimmed = cel.trim();
   if (trimmed === "") return [];
@@ -3629,16 +2962,12 @@ function RowConditionField({
 }: {
   value: string;
   onChange: (v: string) => void;
-  // columns, when supplied, turns each row's column field into a dropdown of
-  // these names (e.g. the chosen collection's columns). Absent → free text.
   columns?: string[];
 }) {
   const { t } = useTranslation();
   const parsedInit = parseRowCEL(value);
   const [advanced, setAdvanced] = useState(parsedInit === null);
   const [conds, setConds] = useState<RowCond[]>(parsedInit ?? []);
-  // tooAdvanced shows an inline note when the typed expression can't be
-  // represented in the simple builder (replaces a window.alert about CEL).
   const [tooAdvanced, setTooAdvanced] = useState(false);
 
   const emit = (next: RowCond[]) => {
@@ -3664,8 +2993,6 @@ function RowConditionField({
           onClick={() => {
             const p = parseRowCEL(value);
             if (p === null) {
-              // Keep the user's expression; just tell them it's not
-              // simple enough to edit visually.
               setTooAdvanced(true);
               return;
             }
@@ -3773,11 +3100,6 @@ function RowConditionField({
   );
 }
 
-// useCollectionColumns fetches the column names of a collection (from
-// /me/boards/<name>) so a field can offer them as a dropdown. Returns [] when
-// no collection is chosen yet, the name is a ${…} reference (resolved only at
-// run time), the collection is empty, or the fetch fails — callers fall back to
-// free text in that case.
 function useCollectionColumns(collection: string, token?: string): string[] {
   const [columns, setColumns] = useState<string[]>([]);
   useEffect(() => {
@@ -3798,8 +3120,6 @@ function useCollectionColumns(collection: string, token?: string): string[] {
   return columns;
 }
 
-// CollectionRowConditionField wraps the no-code condition builder with a column
-// dropdown sourced from the chosen collection's own columns.
 function CollectionRowConditionField({
   value,
   onChange,
@@ -3815,10 +3135,6 @@ function CollectionRowConditionField({
   return <RowConditionField value={value} onChange={onChange} columns={columns} />;
 }
 
-// CollectionColumnField is a single column picker sourced from the chosen
-// collection's columns (the Find rows "Sort by" field). Falls back to a plain
-// text input when the columns aren't known yet (no collection chosen, a ${…}
-// reference, an empty collection, or a failed fetch).
 function CollectionColumnField({
   name,
   schema,
@@ -3875,10 +3191,6 @@ function CollectionColumnField({
   );
 }
 
-// CollectionColumnsField is a MULTI-column picker sourced from the chosen
-// collection's columns (the Save rows "Unique by" key). When the collection
-// doesn't exist yet (no columns to list), MultiSelectField's free-text
-// "add your own" still lets the user name the key column(s).
 function CollectionColumnsField({
   value,
   onChange,
@@ -3895,17 +3207,6 @@ function CollectionColumnsField({
   return <MultiSelectField value={value} onChange={onChange} options={options} />;
 }
 
-// and stores the returned path. Drag-and-drop uses native HTML5
-// events (no library) so it works alongside React Flow's own
-// drag handling — we stopPropagation so a drop on the input doesn't
-// also create a node.
-// WorkspaceDirField is a folder PICKER: a dropdown of the workspace's
-// directories so a path param (e.g. git_log's repository folder) is chosen
-// from real folders rather than typed. It lists directories with a small
-// bounded recursive walk (depth 3, capped fetch count) so the
-// gitcache/<flow>/<node> repo checkouts surface without scanning a huge
-// tree. The current value stays selectable even if the listing is loading
-// or the folder is gone, so a wired/old value is never silently dropped.
 function WorkspaceDirField({
   value,
   onChange,
@@ -4032,7 +3333,6 @@ function WorkspacePathField({
         onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) void uploadFile(f);
-          // Reset so picking the same file twice in a row still fires.
           e.target.value = "";
         }}
       />
@@ -4052,21 +3352,6 @@ function WorkspacePathField({
   );
 }
 
-// AccountField renders the OAuth `account` param as a dropdown of the
-// tenant's connected accounts plus a "Connect…" link. The current value
-// is always selectable even if it isn't in `options` (e.g. a template
-// shipped account="default" before anything was connected) so the field
-// never silently drops a value the graph already references.
-//
-// Two non-tech-friendly behaviours layered on top:
-//   - When zero accounts are connected, the dropdown disappears and
-//     the field becomes a single "Connect Gmail" button. Showing a
-//     dropdown with only "(choose an account)" + a literal "default"
-//     value left over from the template would just confuse the user.
-//   - When exactly one account is connected and the field still holds
-//     the template's literal "default" placeholder, we auto-emit the
-//     real connected name. The user gets a forkable template that
-//     "just works" without manually mapping their email to the box.
 function AccountField({
   value,
   options,
@@ -4081,11 +3366,6 @@ function AccountField({
   onChange: (v: string) => void;
 }) {
   const { t } = useTranslation();
-  // Auto-default: if exactly one account is connected and the field
-  // still carries the template's literal "default" placeholder, swap
-  // to the real account on mount. Runs once per (options, value)
-  // transition — the value !== options[0] guard keeps it from
-  // looping after the parent picks up the change.
   useEffect(() => {
     if (options.length === 1 && value === "default" && options[0] !== "default") {
       onChange(options[0]);
@@ -4095,9 +3375,6 @@ function AccountField({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options.join("\0"), value]);
 
-  // No accounts connected: replace the dropdown entirely with a
-  // single Connect button. Avoids showing a placeholder-only select
-  // that has nothing useful to choose.
   if (options.length === 0) {
     return (
       <div>
@@ -4114,8 +3391,6 @@ function AccountField({
     );
   }
 
-  // Union of connected accounts + the current value, de-duplicated and
-  // order-stable (connected first, then the value if it's something else).
   const choices = Array.from(new Set([...options, ...(value ? [value] : [])]));
   return (
     <div>
@@ -4134,12 +3409,6 @@ function AccountField({
   );
 }
 
-// GitCredAccountField renders the git_checkout `account` param as a dropdown
-// of the org's saved Git credentials, with a link to manage them. Unlike the
-// OAuth AccountField there's no inline "connect" flow — keys/tokens are
-// pasted on the admin page — so an empty list points the user there. The
-// current value is always selectable even if not in the list, so a graph
-// never silently drops an account it references.
 function GitCredAccountField({
   value,
   onChange,
@@ -4168,8 +3437,6 @@ function GitCredAccountField({
   }, [token]);
 
   const current = value || "default";
-  // "default" is always offered (the drop's fallback); merge in configured
-  // accounts and the current value so nothing is lost.
   const opts = Array.from(
     new Set(["default", ...(accounts ?? []), current]),
   );
@@ -4192,13 +3459,6 @@ function GitCredAccountField({
   );
 }
 
-// supportsSchemaForm answers "should the Inspector use the form, or
-// fall back to JSON?". Today: a JSON Schema is form-renderable iff its
-// top level is an object with at least one property (or the parent
-// passes a non-object value through ScalarValue).
-// isoToLocalInput converts a stored RFC3339/ISO instant to the
-// "YYYY-MM-DDTHH:mm" value an <input type="datetime-local"> expects, in the
-// browser's local time. Blank or unparseable input yields "" (empty picker).
 function isoToLocalInput(iso: string): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -4207,9 +3467,6 @@ function isoToLocalInput(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// localInputToISO converts the picker's local "YYYY-MM-DDTHH:mm" back to a UTC
-// RFC3339 instant ("…Z") for storage — the form the Calendar API wants. Blank
-// or unparseable input yields "".
 function localInputToISO(local: string): string {
   if (!local) return "";
   const d = new Date(local); // a bare datetime-local string parses as local time

@@ -44,14 +44,9 @@ const (
 // deployments without a Postgres backend simply can't ban (and don't
 // crash). Postgres-only, like the membership/profile stores.
 type BlocklistStore interface {
-	// IsBlocked reports whether email is banned, by exact match or by its
-	// domain. email is normalized (lowercased, trimmed) internally.
 	IsBlocked(ctx context.Context, email string) (bool, Blocked, error)
-	// Block adds (or refreshes) a blocklist entry. Idempotent on value.
 	Block(ctx context.Context, b Blocked) error
-	// Unblock removes an entry by its (already-normalized) value.
 	Unblock(ctx context.Context, value string) error
-	// List returns every entry, newest first — the platform-admin view.
 	List(ctx context.Context) ([]Blocked, error)
 	// AnonymizeCreatedBy replaces an erased person's email where it appears as
 	// the ADMIN who created an entry, returning the rows changed.
@@ -65,14 +60,10 @@ type BlocklistStore interface {
 	AnonymizeCreatedBy(ctx context.Context, email string) (int, error)
 }
 
-// NormalizeBlockEmail lowercases and trims an email for blocklist
-// storage and comparison.
 func NormalizeBlockEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
-// emailDomain returns the lowercased domain part of an email, or "" if
-// the address has no usable domain.
 func emailDomain(email string) string {
 	email = NormalizeBlockEmail(email)
 	at := strings.LastIndex(email, "@")
@@ -92,7 +83,6 @@ CREATE TABLE IF NOT EXISTS blocked_identities (
 );
 `
 
-// EnsurePgBlocklistSchema creates the blocked_identities table.
 func EnsurePgBlocklistSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	if pool == nil {
 		return fmt.Errorf("nil pool")
@@ -101,7 +91,6 @@ func EnsurePgBlocklistSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return err
 }
 
-// PgBlocklistStore is the Postgres BlocklistStore.
 type PgBlocklistStore struct {
 	pool *pgxpool.Pool
 }
@@ -119,10 +108,6 @@ func (s *PgBlocklistStore) IsBlocked(ctx context.Context, email string) (bool, B
 		return false, Blocked{}, nil
 	}
 	domain := emailDomain(email)
-	// One round-trip: match the exact email OR a domain row equal to the
-	// candidate's domain. Exact-email wins when both exist (ORDER BY kind
-	// puts 'domain' before 'email' alphabetically, so prefer 'email' last
-	// — flip with DESC).
 	const q = `
 		SELECT value, kind, reason, created_by, created_at
 		FROM blocked_identities

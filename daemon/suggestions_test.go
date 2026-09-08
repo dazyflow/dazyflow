@@ -11,7 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/daemon"
 )
 
-// find returns the adjacency entry for the from→to module pair, or nil.
 func findAdj(items []daemon.DropAdjacency, from, to string) *daemon.DropAdjacency {
 	for i := range items {
 		if items[i].From == from && items[i].To == to {
@@ -21,11 +20,6 @@ func findAdj(items []daemon.DropAdjacency, from, to string) *daemon.DropAdjacenc
 	return nil
 }
 
-// edge is a tiny helper for building valid graph edges (non-empty ports,
-// which core.Validate requires).
-// edge wires two steps on the universal pass pin — the one connection every
-// drop accepts, so a suggestion fixture doesn't have to name each drop's
-// real ports to be a valid graph.
 func edge(from, to string) core.Edge {
 	return core.Edge{From: from, FromPort: core.PassPort, To: to, ToPort: core.PassPort}
 }
@@ -52,7 +46,6 @@ func TestDropSuggestions_CountsAndRanking(t *testing.T) {
 		t.Fatalf("save flow1: %v", err)
 	}
 
-	// flow2 (org-visible): http_fetch → parse_json again, in a separate flow.
 	if _, err := h.svc.SaveGraph(ctx, h.alice, core.Graph{
 		ID: "flow2", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -97,7 +90,6 @@ func TestDropSuggestions_CountsAndRanking(t *testing.T) {
 		t.Errorf("http_fetch→shell = %v, want Flows=1", sh)
 	}
 
-	// Privacy: bob's private pairing is invisible to alice.
 	if leak := findAdj(items, "cron_trigger", "ntfy"); leak != nil {
 		t.Errorf("alice's suggestions leaked bob's private flow: %+v", leak)
 	}
@@ -107,7 +99,6 @@ func TestDropSuggestions_CountsAndRanking(t *testing.T) {
 		t.Errorf("not sorted by Flows desc: %+v", items)
 	}
 
-	// The tenant admin DOES count the private flow (mirrors ListFlowSummaries).
 	adminItems, err := h.svc.DropSuggestions(ctx, h.mallory, "t", "ws")
 	if err != nil {
 		t.Fatalf("admin suggestions: %v", err)
@@ -117,8 +108,6 @@ func TestDropSuggestions_CountsAndRanking(t *testing.T) {
 	}
 }
 
-// findAdjPort is findAdj narrowed to a specific source port — for asserting
-// the port-level keying that distinguishes a router's matched/unmatched pins.
 func findAdjPort(items []daemon.DropAdjacency, from, fromPort, to string) *daemon.DropAdjacency {
 	for i := range items {
 		if items[i].From == from && items[i].FromPort == fromPort && items[i].To == to {
@@ -133,7 +122,6 @@ func TestDropSuggestions_KeysOnSourcePort(t *testing.T) {
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 
-	// A router whose two output pins lead to different drops.
 	if _, err := h.svc.SaveGraph(ctx, h.alice, core.Graph{
 		ID: "router-flow", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -178,10 +166,9 @@ func TestDropSuggestions_EmptyWorkspace(t *testing.T) {
 	}
 }
 
-// TestDropSuggestions_CacheInvalidatesOnSave pins the memo's invalidation
-// contract: the result is cached keyed on the workspace HEAD, so a save (which
-// moves HEAD) must transparently surface in the next call rather than serving
-// a stale cached answer.
+// Pins the memo's invalidation contract: the result is cached keyed on the
+// workspace HEAD, so a save (which moves HEAD) must transparently surface in
+// the next call rather than serving a stale cached answer.
 func TestDropSuggestions_CacheInvalidatesOnSave(t *testing.T) {
 	t.Parallel()
 	h := newVisibilityHarness(t)
@@ -194,7 +181,6 @@ func TestDropSuggestions_CacheInvalidatesOnSave(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save f1: %v", err)
 	}
-	// Prime the cache.
 	first, err := h.svc.DropSuggestions(ctx, h.alice, "t", "ws")
 	if err != nil {
 		t.Fatalf("first suggestions: %v", err)

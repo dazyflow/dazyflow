@@ -15,11 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Shared store-conformance tests for the missing functions. Both Memory
-// and Postgres run the same bodies via runConformance — every method on
-// core.JobStore that wasn't exercised by the original per-store tests is
-// pinned here once, and runs against both stores.
-
 func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 	t.Helper()
 	conformanceOutcomes(t, mk)
@@ -37,7 +32,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		mustEnqueue(t, s, ctx, core.JobRecord{ID: "ok1", Kind: core.JobKindNode, Status: core.JobStatusQueued, Tenant: "t"})
 		mustEnqueue(t, s, ctx, core.JobRecord{ID: "fail1", Kind: core.JobKindNode, Status: core.JobStatusQueued, Tenant: "t"})
 		mustEnqueue(t, s, ctx, core.JobRecord{ID: "graph-row", Kind: core.JobKindGraph, Status: core.JobStatusRunning, Tenant: "t"})
-		// Move ok1 and fail1 to terminal.
 		if err := s.Complete(ctx, "ok1", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); err != nil {
 			t.Fatalf("Complete ok1: %v", err)
 		}
@@ -146,7 +140,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			EnqueuedAt: now,
 		})
 
-		// Tenant filter narrows.
 		got, err := s.ListGraphRuns(ctx, core.ListGraphRunsOpts{Tenant: "acme"})
 		if err != nil {
 			t.Fatalf("ListGraphRuns: %v", err)
@@ -160,7 +153,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			}
 		}
 
-		// Workspace narrows further.
 		got, err = s.ListGraphRuns(ctx, core.ListGraphRunsOpts{Tenant: "acme", Workspace: "ws-prod"})
 		if err != nil {
 			t.Fatalf("ListGraphRuns ws filter: %v", err)
@@ -169,31 +161,26 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			t.Errorf("acme/ws-prod rows = %d, want 3", len(got))
 		}
 
-		// Status filter.
 		got, _ = s.ListGraphRuns(ctx, core.ListGraphRunsOpts{Tenant: "acme", Status: core.JobStatusSucceeded})
 		if len(got) != 2 {
 			t.Errorf("acme succeeded = %d, want 2", len(got))
 		}
 
-		// GraphID filter.
 		got, _ = s.ListGraphRuns(ctx, core.ListGraphRunsOpts{Tenant: "globex", GraphID: "graph-B"})
 		if len(got) != 1 || got[0].ID != "g5" {
 			t.Errorf("globex/graph-B rows = %v, want [g5]", ids(got))
 		}
 
-		// Sorted DESC by EnqueuedAt.
 		got, _ = s.ListGraphRuns(ctx, core.ListGraphRunsOpts{Tenant: "acme", Workspace: "ws-prod"})
 		if got[0].ID != "g3" || got[len(got)-1].ID != "g1" {
 			t.Errorf("order = %v, want g3..g1 (desc)", ids(got))
 		}
 
-		// Limit clamps to N.
 		got, _ = s.ListGraphRuns(ctx, core.ListGraphRunsOpts{Tenant: "acme", Limit: 2})
 		if len(got) != 2 {
 			t.Errorf("limit=2 → %d rows", len(got))
 		}
 
-		// Offset skips the newest.
 		gotAll, _ := s.ListGraphRuns(ctx, core.ListGraphRunsOpts{Tenant: "acme"})
 		gotOff, _ := s.ListGraphRuns(ctx, core.ListGraphRunsOpts{Tenant: "acme", Offset: 2})
 		if len(gotOff) != len(gotAll)-2 {
@@ -203,7 +190,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			t.Errorf("offset=2 starts with %q, want %q", gotOff[0].ID, gotAll[2].ID)
 		}
 
-		// Offset beyond end → empty, not error.
 		gotEmpty, err := s.ListGraphRuns(ctx, core.ListGraphRunsOpts{Tenant: "acme", Offset: 99})
 		if err != nil {
 			t.Errorf("offset-past-end err = %v", err)
@@ -212,9 +198,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			t.Errorf("offset-past-end len = %d, want 0", len(gotEmpty))
 		}
 
-		// Date range over EnqueuedAt. acme/ws-prod rows sit at now-3m (g1),
-		// now-2m (g2), now-1m (g3). Since is inclusive, Until exclusive.
-		// [now-2m30s, now-90s) selects exactly g2 (now-2m).
 		got, _ = s.ListGraphRuns(ctx, core.ListGraphRunsOpts{
 			Tenant: "acme", Workspace: "ws-prod",
 			Since: now.Add(-150 * time.Second),
@@ -223,7 +206,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if len(got) != 1 || got[0].ID != "g2" {
 			t.Errorf("date range = %v, want [g2]", ids(got))
 		}
-		// Since alone (inclusive) keeps g2 and g3, drops the older g1.
 		got, _ = s.ListGraphRuns(ctx, core.ListGraphRunsOpts{
 			Tenant: "acme", Workspace: "ws-prod",
 			Since: now.Add(-2 * time.Minute),
@@ -304,7 +286,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			GraphRunID: "run-1", EnqueuedAt: now,
 		})
 
-		// Tenant filter.
 		got, err := s.ListNodeRecords(ctx, core.ListNodeRecordsOpts{Tenant: "acme"})
 		if err != nil {
 			t.Fatalf("ListNodeRecords: %v", err)
@@ -323,26 +304,22 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			t.Errorf("acme/ws-prod queued = %d, want 2", len(got))
 		}
 
-		// GraphRunID narrows to one run.
 		got, _ = s.ListNodeRecords(ctx, core.ListNodeRecordsOpts{Tenant: "acme", GraphRunID: "run-1"})
 		if len(got) != 2 {
 			t.Errorf("acme run-1 rows = %d, want 2", len(got))
 		}
 
-		// Sort DESC by enqueued_at. Newest first: c (-1m), d (-90s), b (-2m), a (-3m).
 		got, _ = s.ListNodeRecords(ctx, core.ListNodeRecordsOpts{Tenant: "acme"})
 		want := []string{"c", "d", "b", "a"}
 		if !sameIDs(got, want) {
 			t.Errorf("order = %v, want %v", ids(got), want)
 		}
 
-		// Limit.
 		got, _ = s.ListNodeRecords(ctx, core.ListNodeRecordsOpts{Tenant: "acme", Limit: 1})
 		if len(got) != 1 {
 			t.Errorf("limit=1 → %d", len(got))
 		}
 
-		// Offset past end.
 		gotEmpty, err := s.ListNodeRecords(ctx, core.ListNodeRecordsOpts{Tenant: "acme", Offset: 99})
 		if err != nil {
 			t.Errorf("offset-past-end err = %v", err)
@@ -353,10 +330,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 	})
 
 	t.Run("ListNodeRecords_by_graph_across_runs", func(t *testing.T) {
-		// GraphID is the flow's whole history, where GraphRunID is one run.
-		// The editor's card data faces read it: newest-first across every run
-		// of one flow, so a step covered only by an older run still has a
-		// value while the newest run holds the rest.
 		s := mk(t)
 		ctx := t.Context()
 		now := time.Now()
@@ -384,13 +357,10 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 				t.Errorf("another flow's row leaked: %s (graph %s)", r.ID, r.GraphID)
 			}
 		}
-		// Newest first, so a fold that keeps the first hit per node takes
-		// run-new's src and run-old's sink.
 		if len(got) > 0 && got[0].ID != "g1-new-src" {
 			t.Errorf("first row = %s, want the newest (g1-new-src); order = %v", got[0].ID, ids(got))
 		}
 
-		// Combining both filters narrows to one run of one flow.
 		got, _ = s.ListNodeRecords(ctx, core.ListNodeRecordsOpts{
 			Tenant: "acme", GraphID: "flow-1", GraphRunID: "run-old",
 		})
@@ -402,14 +372,10 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 	t.Run("Renew_missing_or_unowned", func(t *testing.T) {
 		s := mk(t)
 		ctx := t.Context()
-		// Missing record.
 		err := s.Renew(ctx, "no-such-id", "w", time.Minute)
-		// pg conflates "missing" with "unowned" via RowsAffected==0 (returns
-		// ErrConflict); memory returns ErrNotFound. Either is acceptable.
 		if !errors.Is(err, core.ErrNotFound) && !errors.Is(err, core.ErrConflict) {
 			t.Errorf("Renew missing = %v, want ErrNotFound or ErrConflict", err)
 		}
-		// Unowned (different worker).
 		mustEnqueue(t, s, ctx, core.JobRecord{ID: "j", Kind: core.JobKindNode, Tenant: "t"})
 		if _, err := s.Claim(ctx, "owner", time.Minute); err != nil {
 			t.Fatalf("Claim: %v", err)
@@ -418,7 +384,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if !errors.Is(err, core.ErrConflict) {
 			t.Errorf("Renew unowned = %v, want ErrConflict", err)
 		}
-		// Owned renew succeeds and extends the lease.
 		if err := s.Renew(ctx, "j", "owner", 2*time.Minute); err != nil {
 			t.Errorf("Renew owned: %v", err)
 		}
@@ -450,7 +415,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		s := mk(t)
 		ctx := t.Context()
 		mustEnqueue(t, s, ctx, core.JobRecord{ID: "j", Kind: core.JobKindNode, Tenant: "t"})
-		// Awaiting parks the record without finishing it.
 		if err := s.Complete(ctx, "j", core.JobStatusAwaiting, &core.Result{Status: core.StatusAwaiting}); err != nil {
 			t.Fatalf("Complete awaiting: %v", err)
 		}
@@ -461,7 +425,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if rec.FinishedAt != nil {
 			t.Errorf("finished_at must stay nil while awaiting")
 		}
-		// Resume to a terminal status.
 		if err := s.Complete(ctx, "j", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); err != nil {
 			t.Fatalf("resume Complete: %v", err)
 		}
@@ -541,7 +504,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if adv.RunStatus != core.JobStatusRunning {
 			t.Errorf("RunStatus = %q, want running", adv.RunStatus)
 		}
-		// The pre-existing dependent is left alone and not counted.
 		if adv.Enqueued != 1 {
 			t.Errorf("Enqueued = %d, want 1", adv.Enqueued)
 		}
@@ -559,7 +521,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if old, _ := s.Get(ctx, "run/old"); old.Status != core.JobStatusQueued {
 			t.Errorf("old = %q, want left queued", old.Status)
 		}
-		// Re-completing is a conflict, and lands nothing new.
 		_, err = ce.CompleteAndEnqueue(ctx, "run/a", "w1", core.JobStatusFailed, nil,
 			[]core.JobRecord{{ID: "run/c", GraphRunID: "run", GraphID: "g", NodeID: "c", Tenant: "t"}})
 		if !errors.Is(err, core.ErrConflict) {
@@ -619,7 +580,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if adv.RunStatus != core.JobStatusCancelled || adv.Enqueued != 0 {
 			t.Errorf("adv = %+v, want cancelled run and nothing enqueued", adv)
 		}
-		// The node's own outcome still lands: it did run.
 		if a, _ := s.Get(ctx, "run/a"); a.Status != core.JobStatusSucceeded {
 			t.Errorf("a = %q, want succeeded", a.Status)
 		}
@@ -644,7 +604,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if a, _ := s.Get(ctx, "run/a"); a.Status != core.JobStatusAwaiting || a.FinishedAt != nil {
 			t.Errorf("a = %+v, want awaiting with no finish time", a)
 		}
-		// A re-park is the conflict Complete makes it.
 		if _, err := ce.CompleteAndEnqueue(ctx, "run/a", "", core.JobStatusAwaiting, nil, nil); !errors.Is(err, core.ErrConflict) {
 			t.Errorf("re-park = %v, want ErrConflict", err)
 		}
@@ -674,9 +633,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 				t.Fatalf("claim = %q, %v; want %q (order %v)", rec.ID, err, id, want)
 			}
 		}
-		// The org's later steps queue behind its remaining backlog, not at
-		// the front: while hog-1..3 are running nothing waits, so a new step
-		// takes the next free slot — plain FIFO again.
 		mustEnqueue(t, s, ctx, core.JobRecord{ID: "hog-4", Kind: core.JobKindNode, Tenant: "hog"})
 		mustEnqueue(t, s, ctx, core.JobRecord{ID: "new-1", Kind: core.JobKindNode, Tenant: "new"})
 		if rec, _ := s.Claim(ctx, "w", time.Minute); rec.ID != "hog-4" {
@@ -830,7 +786,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if !ok {
 			t.Skip("store does not implement DeleteByTenant")
 		}
-		// Two tenants; deletion of one leaves the other intact.
 		mustEnqueue(t, s, ctx, core.JobRecord{ID: "a1", Kind: core.JobKindNode, Tenant: "acme"})
 		mustEnqueue(t, s, ctx, core.JobRecord{ID: "a2", Kind: core.JobKindGraph, Tenant: "acme"})
 		mustEnqueue(t, s, ctx, core.JobRecord{ID: "g1", Kind: core.JobKindNode, Tenant: "globex"})
@@ -848,7 +803,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if _, err := s.Get(ctx, "g1"); err != nil {
 			t.Errorf("globex row should survive: %v", err)
 		}
-		// Deleting a tenant with no rows is a no-op, not an error.
 		if n, err := d.DeleteByTenant(ctx, "nobody"); err != nil || n != 0 {
 			t.Errorf("DeleteByTenant(empty) = %d, %v; want 0, nil", n, err)
 		}
@@ -863,7 +817,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		}
 		mustEnqueue(t, s, ctx, core.JobRecord{ID: "gr", Kind: core.JobKindGraph, Status: core.JobStatusRunning, Tenant: "t"})
 
-		// running → awaiting, once.
 		did, err := parker.SetGraphRunParked(ctx, "gr", true)
 		if err != nil || !did {
 			t.Fatalf("park = %v, %v; want true, nil", did, err)
@@ -877,7 +830,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			t.Errorf("second park = %v, %v; want false, nil", did, err)
 		}
 
-		// awaiting → running, once.
 		did, err = parker.SetGraphRunParked(ctx, "gr", false)
 		if err != nil || !did {
 			t.Fatalf("unpark = %v, %v; want true, nil", did, err)
@@ -910,7 +862,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			t.Errorf("park(node) = %v, %v; want false, nil", did, err)
 		}
 
-		// Missing rows: same tolerated divergence as MarkGraphRunning.
 		did, err = parker.SetGraphRunParked(ctx, "ghost", true)
 		if did {
 			t.Error("park(missing) reported a transition")
@@ -927,7 +878,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if !ok {
 			t.Skip("store does not implement GraphRunStarter")
 		}
-		// A queued graph row flips to running exactly once.
 		mustEnqueue(t, s, ctx, core.JobRecord{ID: "gr", Kind: core.JobKindGraph, Status: core.JobStatusQueued, Tenant: "t"})
 		did, err := starter.MarkGraphRunning(ctx, "gr")
 		if err != nil || !did {
@@ -940,7 +890,6 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		if got.StartedAt == nil {
 			t.Error("StartedAt should be set after MarkGraphRunning")
 		}
-		// A second call is a no-op (already running): returns false.
 		if did, err := starter.MarkGraphRunning(ctx, "gr"); err != nil || did {
 			t.Errorf("second MarkGraphRunning = %v, %v; want false, nil", did, err)
 		}
@@ -983,8 +932,6 @@ func conformanceOutcomes(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			t.Fatalf("Complete fail1: %v", err)
 		}
 
-		// One call answers for every id, including the one that is absent —
-		// which the batch reports by omission, not by failing the whole read.
 		got, err := reader.Outcomes(ctx, []string{"ok1", "fail1", "queued1", "nope"})
 		if err != nil {
 			t.Fatalf("Outcomes: %v", err)
@@ -1008,8 +955,6 @@ func conformanceOutcomes(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			t.Errorf("queued1 = %+v, want queued with no result", got["queued1"])
 		}
 
-		// Same shape as Get, so a caller can fall back to it — that fallback is
-		// live for any store that does not implement the extension.
 		rec, err := s.Get(ctx, "ok1")
 		if err != nil {
 			t.Fatalf("Get ok1: %v", err)
@@ -1058,12 +1003,10 @@ func conformanceRunSummaries(t *testing.T, mk func(t *testing.T) core.JobStore) 
 			}
 			mustEnqueue(t, s, ctx, rec)
 		}
-		// A second tenant's run, to catch a projection that drops a predicate.
 		mustEnqueue(t, s, ctx, core.JobRecord{
 			ID: "other", Kind: core.JobKindGraph, GraphID: "g1", Tenant: "other",
 			Workspace: "ws", Status: core.JobStatusFailed, EnqueuedAt: base,
 		})
-		// And a node record, which neither read may ever return.
 		mustEnqueue(t, s, ctx, core.JobRecord{
 			ID: "node-row", Kind: core.JobKindNode, GraphID: "g1", NodeID: "a",
 			Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded, EnqueuedAt: base,
@@ -1097,7 +1040,6 @@ func conformanceRunSummaries(t *testing.T, mk func(t *testing.T) core.JobStore) 
 					t.Errorf("%+v row %d:\n got %+v\nwant %+v", opts, i, got[i], want[i])
 				}
 			}
-			// The count answers the same question, capped at Limit.
 			n, err := reader.CountGraphRuns(ctx, opts)
 			if err != nil {
 				t.Fatalf("CountGraphRuns %+v: %v", opts, err)
@@ -1127,7 +1069,6 @@ func conformanceRunSummaries(t *testing.T, mk func(t *testing.T) core.JobStore) 
 			t.Errorf("GetGraphRunSummary(missing) = %v, want ErrNotFound", err)
 		}
 
-		// An unset Limit counts every match rather than stopping at a page.
 		n, err := reader.CountGraphRuns(ctx, core.ListGraphRunsOpts{Tenant: "t"})
 		if err != nil {
 			t.Fatalf("CountGraphRuns unlimited: %v", err)
@@ -1157,7 +1098,6 @@ func conformanceNodeRuns(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		started, finished := base.Add(time.Second), base.Add(2*time.Second)
 		horizon := base.Add(time.Minute)
 
-		// A finished step, carrying both what it received and what it produced.
 		mustEnqueue(t, s, ctx, core.JobRecord{
 			ID: "run1-a", Kind: core.JobKindNode, GraphRunID: "run1", GraphID: "g1",
 			NodeID: "a", Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded,
@@ -1165,14 +1105,12 @@ func conformanceNodeRuns(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			Result:     &core.Result{Status: core.StatusOK, Output: map[string]core.Ref{"out": {Inline: 42}}},
 			EnqueuedAt: base, StartedAt: &started, FinishedAt: &finished,
 		})
-		// A step between automatic attempts: queued, with a horizon.
 		mustEnqueue(t, s, ctx, core.JobRecord{
 			ID: "run1-b", Kind: core.JobKindNode, GraphRunID: "run1", GraphID: "g1",
 			NodeID: "b", Tenant: "t", Workspace: "ws", Status: core.JobStatusQueued,
 			Job: core.Job{GraphID: "g1", NodeID: "b"}, Attempt: 2,
 			EnqueuedAt: base.Add(time.Minute), AvailableAt: &horizon,
 		})
-		// A failed step whose result stores an explicit error.
 		mustEnqueue(t, s, ctx, core.JobRecord{
 			ID: "run1-c", Kind: core.JobKindNode, GraphRunID: "run1", GraphID: "g1",
 			NodeID: "c", Tenant: "t", Workspace: "ws", Status: core.JobStatusFailed,
@@ -1180,13 +1118,11 @@ func conformanceNodeRuns(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			Result:     &core.Result{Status: core.StatusError, Error: &core.JobError{Code: "boom", Message: "it broke"}},
 			EnqueuedAt: base.Add(2 * time.Minute),
 		})
-		// Another run's step, to catch a projection that drops the predicate.
 		mustEnqueue(t, s, ctx, core.JobRecord{
 			ID: "run2-a", Kind: core.JobKindNode, GraphRunID: "run2", GraphID: "g1",
 			NodeID: "a", Tenant: "t", Workspace: "ws", Status: core.JobStatusSucceeded,
 			Job: core.Job{GraphID: "g1", NodeID: "a"}, EnqueuedAt: base,
 		})
-		// And the run's own graph record, which neither read may ever return.
 		mustEnqueue(t, s, ctx, core.JobRecord{
 			ID: "run1", Kind: core.JobKindGraph, GraphID: "g1", Tenant: "t",
 			Workspace: "ws", Status: core.JobStatusRunning, EnqueuedAt: base,
@@ -1215,7 +1151,6 @@ func conformanceNodeRuns(t *testing.T, mk func(t *testing.T) core.JobStore) {
 				}
 			}
 		}
-		// A run with no steps is an empty list, not an error.
 		empty, err := reader.ListNodeRuns(ctx, "no-such-run", 100)
 		if err != nil {
 			t.Fatalf("ListNodeRuns(missing): %v", err)
@@ -1237,10 +1172,8 @@ func conformanceNodeRuns(t *testing.T, mk func(t *testing.T) core.JobStore) {
 			{Tenant: "t", Workspace: "ws"},
 			{Workspace: "no-such-ws"},
 			{GraphID: "g1"},
-			// The approval badge's own query: records carrying one output port.
 			{HasOutputPort: "out"},
 			{HasOutputPort: "no-such-port"},
-			// Limit is a ceiling on the count, as it is on the list.
 			{GraphRunID: "run1", Limit: 2},
 			{GraphRunID: "run1", Offset: 1},
 		} {
@@ -1278,14 +1211,9 @@ func sameNodeRun(a, b core.NodeRun) bool {
 	if (a.Result == nil) != (b.Result == nil) {
 		return false
 	}
-	// Refs carry arbitrary decoded JSON, so the values compare through their
-	// encoding rather than by ==.
 	return sameJSON(a.Inputs, b.Inputs) && sameJSON(a.Result, b.Result)
 }
 
-// sameJSON reports whether two values encode identically. Both sides came out
-// of the same stored bytes, so re-encoding them is a faithful comparison and
-// does not depend on how deeply either was decoded.
 func sameJSON(a, b any) bool {
 	ab, aerr := json.Marshal(a)
 	bb, berr := json.Marshal(b)
@@ -1340,8 +1268,6 @@ func sameIDs(got []core.JobRecord, want []string) bool {
 	return true
 }
 
-// TestMemory_Conformance runs the shared conformance suite against the
-// in-memory store. Always runs (no DB needed).
 func TestMemory_Conformance(t *testing.T) {
 	runConformance(t, func(t *testing.T) core.JobStore { return NewMemory() })
 }
@@ -1380,9 +1306,6 @@ func conformanceNodeBatchEnqueue(t *testing.T, mk func(t *testing.T) core.JobSto
 	}
 
 	t.Run("BatchMatchesSequentialOrder", func(t *testing.T) {
-		// mk resets the store rather than handing out an independent one — the
-		// Postgres factory TRUNCATEs and returns the same handle — so the two
-		// halves run one after the other, not side by side.
 		batched := mk(t)
 		b, ok := batched.(core.NodeBatchEnqueuer)
 		if !ok {

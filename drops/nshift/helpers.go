@@ -46,12 +46,8 @@ import (
 // streaming an unbounded body. Shipment bodies carry parcels + label metadata.
 const maxResponseBytes = 8 << 20 // 8 MiB
 
-// extAPIPrefix is the Unifaun ExtAPI v1 path root every resource hangs off.
 const extAPIPrefix = "/rs-extapi/v1"
 
-// envHosts maps a connection's environment option to its nShift API host.
-// Production and the integration sandbox are distinct hosts with distinct keys
-// — https://help.unifaun.com/phc-se/en/16401-16968-authorization-and-access.html.
 var envHosts = map[string]string{
 	"integration": "https://api.unifaun.se",
 	"production":  "https://api.unifaun.com",
@@ -81,10 +77,6 @@ func baseURL(job core.Job) string {
 	return envBase(params.StringDefault(job.Params, "environment", ""))
 }
 
-// nshiftConnectionFields is the per-tenant nShift connection: environment + API
-// key, entered once on the Apps page (stored as conn.nshift.*) and injected into
-// each action's job at run time. Shared by every action drop so the whole
-// integration configures from one place.
 func nshiftConnectionFields() []core.ConnectionField {
 	return []core.ConnectionField{
 		{Key: "environment", Label: "Environment", Required: true, Options: envOptions, Placeholder: "integration"},
@@ -103,7 +95,6 @@ func resolveKey(job core.Job) (string, error) {
 	return key, nil
 }
 
-// shipmentsPath builds the ExtAPI shipments collection path.
 func shipmentsPath(job core.Job) string { return baseURL(job) + extAPIPrefix + "/shipments" }
 
 // shipmentPath builds the ExtAPI path for one shipment id, URL-escaping the id
@@ -112,9 +103,6 @@ func shipmentPath(job core.Job, id string) string {
 	return shipmentsPath(job) + "/" + escapePathSeg(id)
 }
 
-// nshiftDo runs one authenticated nShift ExtAPI call (Bearer with the API key).
-// `body` nil means no request body (GET/DELETE). Returns status, raw body and
-// response headers; the caller maps non-2xx via nshiftFailure.
 func nshiftDo(ctx context.Context, job core.Job, method, url string, body []byte) (int, []byte, http.Header, error) {
 	key, err := resolveKey(job)
 	if err != nil {
@@ -133,10 +121,6 @@ func nshiftDo(ctx context.Context, job core.Job, method, url string, body []byte
 	return hfnet.Do(ctx, method, url, headers, body, params.TimeoutMS(job, 20000), maxResponseBytes)
 }
 
-// extractNshiftError pulls a human message out of an nShift ExtAPI error body.
-// The ExtAPI reports validation problems as an array of {message,key} objects
-// ([{"key":"…","message":"Invalid receiver country"}]) and other faults as a
-// flat {message}. Falls back to params.APIErrorMessage for anything else.
 func extractNshiftError(body []byte) string {
 	var arr []struct {
 		Key     string `json:"key"`
@@ -161,9 +145,6 @@ func extractNshiftError(body []byte) string {
 	return params.APIErrorMessage(body, 300)
 }
 
-// nshiftFailure maps a transport error or a non-2xx nShift response to an error
-// Result, or returns nil when the call succeeded — the shared epilogue of every
-// drop's nshiftDo call. Delegates to params.HTTPFailure with nShift's extractor.
 func nshiftFailure(job core.Job, status int, body []byte, err error) *core.Result {
 	return params.HTTPFailure(job, "nshift", "nShift", status, body, err, extractNshiftError)
 }

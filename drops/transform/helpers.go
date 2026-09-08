@@ -1,13 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package transform hosts data-shaping drops — nodes that don't talk
-// to anything external, they just rearrange the rows that flow between
-// other drops: map_rows, compute_rows, route_rows, split_rows,
-// sort_rows, dedupe_rows, group_aggregate, join_rows, render_text, and
-// the JSON/results parsers. They all share the {column: value}[] row
-// shape emitted by excel_read and the db query drops, normalized
-// through drops/internal/rows.
 package transform
 
 import (
@@ -43,7 +36,6 @@ func newRowCELEnv(extra ...cel.EnvOption) (*cel.Env, error) {
 	return rowcel.Env(extra...)
 }
 
-// celVars is the activation for one row evaluation (delegates to rowcel.Vars).
 func celVars(row map[string]any) map[string]any {
 	return rowcel.Vars(row)
 }
@@ -93,11 +85,6 @@ func loadRowsAndHeaders(job core.Job) (rowsOut []map[string]any, headers []strin
 	return rowsOut, headers, core.Result{}, true
 }
 
-// resultRows builds the common OK Result that emits a `rows` list plus a
-// `headers` list — the epilogue shared by sort_rows, dedupe_rows, and
-// the rest of the row-passthrough drops. Drops with extra output ports
-// (route_rows' per-slot buckets, dedupe_rows' dropped count) build their
-// Result inline instead.
 func resultRows(job core.Job, rowsOut []map[string]any, headers []string) core.Result {
 	return core.Result{
 		JobID:  job.ID,
@@ -141,8 +128,6 @@ func keyString(row map[string]any, cols []string) string {
 	return strings.Join(parts, "\x1f")
 }
 
-// normalizeStringSlice accepts []string or []any-of-string. Used for
-// `select` and `drop` params.
 func normalizeStringSlice(v any, name string) ([]string, error) {
 	switch s := v.(type) {
 	case []string:
@@ -161,8 +146,6 @@ func normalizeStringSlice(v any, name string) ([]string, error) {
 	return nil, fmt.Errorf("%s: expected array of strings, got %T", name, v)
 }
 
-// normalizeStringMap accepts map[string]string or map[string]any-of-string.
-// Used for `rename`.
 func normalizeStringMap(v any, name string) (map[string]string, error) {
 	switch m := v.(type) {
 	case map[string]string:
@@ -181,9 +164,6 @@ func normalizeStringMap(v any, name string) (map[string]string, error) {
 	return nil, fmt.Errorf("%s: expected object, got %T", name, v)
 }
 
-// normalizeAnyMap accepts map[string]any directly or coerces from
-// map[string]string. Used for `default`, `filter_eq`, `filter_neq`
-// where values can be any JSON type.
 func normalizeAnyMap(v any, name string) (map[string]any, error) {
 	switch m := v.(type) {
 	case map[string]any:
@@ -198,8 +178,6 @@ func normalizeAnyMap(v any, name string) (map[string]any, error) {
 	return nil, fmt.Errorf("%s: expected object, got %T", name, v)
 }
 
-// normalizeAnyArrayMap accepts map[string][]any. Used for filter_in
-// where each value is a list of allowed values.
 func normalizeAnyArrayMap(v any, name string) (map[string][]any, error) {
 	m, ok := v.(map[string]any)
 	if !ok {
@@ -209,7 +187,6 @@ func normalizeAnyArrayMap(v any, name string) (map[string][]any, error) {
 	for k, val := range m {
 		arr, ok := val.([]any)
 		if !ok {
-			// Be lenient: also accept []string from typed callers.
 			if ss, ok := val.([]string); ok {
 				asAny := make([]any, len(ss))
 				for i, s := range ss {

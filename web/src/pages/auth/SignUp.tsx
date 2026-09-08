@@ -48,12 +48,6 @@ export function SignUp() {
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [localErr, setLocalErr] = useState<string | null>(null);
-  // signupAllowed starts as null = "still probing"; once the public
-  // config endpoint resolves, false means the deployment is
-  // invite-only and we bounce back to /signin. The page also stays
-  // open when admin_bootstrap is set: signup is disabled deployment-
-  // wide, but a platform-admin email can still claim its first account
-  // here (the server enforces the allowlist — see httpsignup.go).
   const [signupAllowed, setSignupAllowed] = useState<boolean | null>(null);
 
   // Clear any error left over from the sign-in page so a stale "wrong
@@ -84,9 +78,6 @@ export function SignUp() {
     };
   }, [signupInvite]);
 
-  // Still probing whether signup is open. Show a quiet loading state in the
-  // same frame as the form — a bare empty <div> read as a broken/blank page
-  // on a slow connection.
   if (signupAllowed === null) {
     return (
       <AuthLayout>
@@ -124,10 +115,6 @@ export function SignUp() {
           setBusy(true);
           try {
             await signUpWithPassword(email.trim(), password, signupInvite);
-            // A platform signup-invite creates the user's own account, so
-            // there's no org to accept — straight to the welcome wizard.
-            // An org-invite link (`invite`) still routes to its accept
-            // page; everyone else gets the welcome wizard.
             navigate(
               inviteToken && !signupInvite
                 ? `/invite/${inviteToken}`
@@ -146,10 +133,6 @@ export function SignUp() {
           id="email"
           type="email"
           autoComplete="username"
-          // On an invite, the email is fixed to the address the owner
-          // invited — the server binds the new account to it, so let the
-          // recipient see but not change it, and put focus on the
-          // password they actually need to fill in.
           readOnly={lockEmail}
           autoFocus={!lockEmail}
           value={email}

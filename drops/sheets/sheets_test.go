@@ -196,8 +196,6 @@ func TestListSheetTabs(t *testing.T) {
 		t.Errorf("tabs = %+v", got)
 	}
 
-	// No spreadsheet_id → error (the dependent picker surfaces this as 502
-	// and prompts the user to pick a spreadsheet first).
 	if _, err := ListSheetTabs(context.Background(), core.Job{Params: map[string]any{}}); err == nil {
 		t.Error("missing spreadsheet_id should error")
 	}
@@ -280,16 +278,12 @@ func TestSheetsExportPDF_WritesToScratch(t *testing.T) {
 	if pdfRef.MIME != "application/pdf" || !strings.HasPrefix(pdfRef.Ref, "scratch://") {
 		t.Errorf("pdf ref = %+v", pdfRef)
 	}
-	// The file actually landed in the scratch tree.
 	written, err := os.ReadFile(scratch + "/sheet-S1.pdf")
 	if err != nil || !strings.HasPrefix(string(written), "%PDF") {
 		t.Errorf("scratch file: %v / %q", err, string(written))
 	}
 }
 
-// 'path' is a friendly file name: a bare "Svar" lands in scratch as
-// "Svar.pdf" (scheme + extension added); an explicit scratch:// path from an
-// older flow still passes through.
 func TestSheetsExportPDF_FriendlyFileName(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("%PDF-1.4 fake"))
@@ -316,43 +310,32 @@ func TestSheetsExportPDF_FriendlyFileName(t *testing.T) {
 	}
 }
 
-// --- pure helpers (no HTTP) ------------------------------------------------
-
 func TestNormalizeRows_AllForms(t *testing.T) {
-	// []map passes through.
 	if got, err := normalizeRows([]map[string]any{{"a": 1}}); err != nil || len(got) != 1 {
 		t.Errorf("[]map: %v %v", got, err)
 	}
-	// nil → nil.
 	if got, err := normalizeRows(nil); err != nil || got != nil {
 		t.Errorf("nil: %v %v", got, err)
 	}
-	// []any of objects.
 	got, err := normalizeRows([]any{map[string]any{"a": 1}, map[string]any{"b": 2}})
 	if err != nil || len(got) != 2 {
 		t.Errorf("[]any: %v %v", got, err)
 	}
-	// []any with a non-object element → error.
 	if _, err := normalizeRows([]any{"oops"}); err == nil {
 		t.Error("[]any non-object should error")
 	}
-	// single object → one-row slice.
 	if got, err := normalizeRows(map[string]any{"a": 1}); err != nil || len(got) != 1 {
 		t.Errorf("single obj: %v %v", got, err)
 	}
-	// JSON string.
 	if got, err := normalizeRows(`[{"a":1}]`); err != nil || len(got) != 1 {
 		t.Errorf("json string: %v %v", got, err)
 	}
-	// empty string → nil.
 	if got, err := normalizeRows(""); err != nil || got != nil {
 		t.Errorf("empty string: %v %v", got, err)
 	}
-	// invalid JSON string → error.
 	if _, err := normalizeRows("{not json"); err == nil {
 		t.Error("invalid json should error")
 	}
-	// unsupported type → error.
 	if _, err := normalizeRows(42); err == nil {
 		t.Error("int should be unsupported")
 	}
@@ -363,7 +346,6 @@ func TestDeriveHeaders_SortedUnion(t *testing.T) {
 		{"name": "Ada", "email": "a@x"},
 		{"email": "b@y", "age": 7},
 	})
-	// Union of keys, sorted: age, email, name.
 	if len(got) != 3 || got[0] != "age" || got[1] != "email" || got[2] != "name" {
 		t.Errorf("headers = %v", got)
 	}
@@ -385,7 +367,6 @@ func TestCell_Coercions(t *testing.T) {
 }
 
 func TestFlattenValues_NoHeaders(t *testing.T) {
-	// Ragged rows, headers=false → col_0.. and every row is data.
 	headers, rows := flattenValues([][]any{{"a", "b", "c"}, {"x"}}, false)
 	if len(headers) != 3 || headers[0] != "col_0" || headers[2] != "col_2" {
 		t.Errorf("headers = %v", headers)
@@ -393,7 +374,6 @@ func TestFlattenValues_NoHeaders(t *testing.T) {
 	if len(rows) != 2 || rows[0]["col_1"] != "b" || rows[1]["col_2"] != "" {
 		t.Errorf("rows = %v", rows)
 	}
-	// Empty matrix.
 	h, r := flattenValues(nil, true)
 	if len(h) != 0 || len(r) != 0 {
 		t.Errorf("empty = %v / %v", h, r)
@@ -401,31 +381,25 @@ func TestFlattenValues_NoHeaders(t *testing.T) {
 }
 
 func TestParseMapping_Forms(t *testing.T) {
-	// Missing / nil → nil.
 	if parseMapping(map[string]any{}) != nil {
 		t.Error("missing mapping should be nil")
 	}
 	if parseMapping(map[string]any{"mapping": nil}) != nil {
 		t.Error("nil mapping should be nil")
 	}
-	// Empty JSON string → nil.
 	if parseMapping(map[string]any{"mapping": ""}) != nil {
 		t.Error("empty string mapping should be nil")
 	}
-	// Invalid JSON string → nil (swallowed).
 	if parseMapping(map[string]any{"mapping": "{nope"}) != nil {
 		t.Error("invalid json mapping should be nil")
 	}
-	// JSON string form.
 	got := parseMapping(map[string]any{"mapping": `[{"column":"Email","source":"e"}]`})
 	if len(got) != 1 || got[0].Column != "Email" || got[0].Source != "e" {
 		t.Errorf("json string mapping = %v", got)
 	}
-	// Non-array, non-string → nil.
 	if parseMapping(map[string]any{"mapping": 5}) != nil {
 		t.Error("numeric mapping should be nil")
 	}
-	// Array with a non-object entry and a column-less entry both skipped.
 	got = parseMapping(map[string]any{"mapping": []any{
 		"junk",
 		map[string]any{"source": "x"}, // no column → skip
@@ -437,21 +411,18 @@ func TestParseMapping_Forms(t *testing.T) {
 }
 
 func TestResolveSpreadsheetID_InputAndParam(t *testing.T) {
-	// String input port wins, URL trimmed to id.
 	id := resolveSpreadsheetID(core.Job{
 		Input: map[string]core.Ref{"spreadsheet_id": {Inline: "https://docs.google.com/spreadsheets/d/WIRED/edit"}},
 	})
 	if id != "WIRED" {
 		t.Errorf("string input = %q", id)
 	}
-	// []byte input port.
 	id = resolveSpreadsheetID(core.Job{
 		Input: map[string]core.Ref{"spreadsheet_id": {Inline: []byte("BYTEID")}},
 	})
 	if id != "BYTEID" {
 		t.Errorf("byte input = %q", id)
 	}
-	// Blank input falls back to param.
 	id = resolveSpreadsheetID(core.Job{
 		Input:  map[string]core.Ref{"spreadsheet_id": {Inline: "   "}},
 		Params: map[string]any{"spreadsheet_id": "PARAMID"},
@@ -459,7 +430,6 @@ func TestResolveSpreadsheetID_InputAndParam(t *testing.T) {
 	if id != "PARAMID" {
 		t.Errorf("fallback = %q", id)
 	}
-	// No input at all → param.
 	id = resolveSpreadsheetID(core.Job{Params: map[string]any{"spreadsheet_id": "P2"}})
 	if id != "P2" {
 		t.Errorf("param only = %q", id)
@@ -472,8 +442,6 @@ func TestSheetsErr_Message(t *testing.T) {
 		t.Errorf("sheetsErr empty for %q", msg)
 	}
 }
-
-// --- HTTP-backed helpers ---------------------------------------------------
 
 func TestListSheetColumns(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -489,12 +457,10 @@ func TestListSheetColumns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSheetColumns: %v", err)
 	}
-	// Blank skipped, duplicate "Name" deduped → Name, Email, Notes.
 	if len(got) != 3 || got[0].ID != "Name" || got[1].ID != "Email" || got[2].ID != "Notes" {
 		t.Errorf("columns = %+v", got)
 	}
 
-	// Missing spreadsheet_id → error before HTTP.
 	if _, err := ListSheetColumns(context.Background(), core.Job{Params: map[string]any{}}); err == nil {
 		t.Error("missing spreadsheet_id should error")
 	}
@@ -556,8 +522,6 @@ func TestListSheetTabs_APIError(t *testing.T) {
 	}
 }
 
-// --- execute-path error/edge branches --------------------------------------
-
 func TestSheetsRead_MissingID(t *testing.T) {
 	withSheetsEnv(t, "http://unused")
 	res, _ := executeSheetsRead(context.Background(), core.Job{Params: map[string]any{}}, nil)
@@ -595,12 +559,10 @@ func TestSheetsRead_CellsRangeAndNoHeaders(t *testing.T) {
 	if err != nil || res.Status != core.StatusOK {
 		t.Fatalf("res = %+v", res)
 	}
-	// Quoted tab + cells made it into the path.
 	if gotPath == "" {
 		t.Error("no request path captured")
 	}
 	rows := res.Output["rows"].Inline.([]map[string]any)
-	// headers=false → both rows are data keyed col_0/col_1.
 	if len(rows) != 2 || rows[0]["col_0"] != "x" {
 		t.Errorf("rows = %+v", rows)
 	}
@@ -655,8 +617,6 @@ func TestSheetsAppend_APIError(t *testing.T) {
 	}
 }
 
-// A mapping that introduces a NEW column triggers the header-row PUT before
-// the append — exercising the writeHeaderCols branch (and readSheetHeaders).
 func TestSheetsAppend_MappingWritesNewHeader(t *testing.T) {
 	var putHeader bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -715,8 +675,6 @@ func TestSheetsAppend_MappingReadHeadersError(t *testing.T) {
 	}
 }
 
-// base_url param override is honored over the package base (used like `token`
-// by the integration tests). Pointing it at a server proves the override path.
 func TestBaseURLParamOverride(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"sheets": []map[string]any{
@@ -734,7 +692,6 @@ func TestBaseURLParamOverride(t *testing.T) {
 	}
 }
 
-// driveBaseURL override (export hits Drive).
 func TestDriveBaseURLParamOverride(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("%PDF-1.4 ok"))
@@ -750,7 +707,6 @@ func TestDriveBaseURLParamOverride(t *testing.T) {
 	}
 }
 
-// lookupField walks dotted paths and returns "" for absent/non-object steps.
 func TestLookupField_DottedPaths(t *testing.T) {
 	row := map[string]any{"user": map[string]any{"email": "a@x"}, "flat": "v"}
 	if lookupField(row, "user.email") != "a@x" {
@@ -770,7 +726,6 @@ func TestLookupField_DottedPaths(t *testing.T) {
 	}
 }
 
-// cellValue stringifies non-scalar values as JSON, scalars pass through.
 func TestCellValue_NestedAndScalar(t *testing.T) {
 	if cellValue(7) != 7 {
 		t.Error("int scalar passes through")

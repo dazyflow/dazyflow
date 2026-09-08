@@ -41,7 +41,6 @@ func TestUsageMe(t *testing.T) {
 	if len(usage) != 2 {
 		t.Fatalf("got %d buckets, want 2: %+v", len(usage), usage)
 	}
-	// Newest first; only the principal's tenant ("t") is visible.
 	if usage[0].Period != usagePeriod(now) || usage[0].GraphRuns != 1 || usage[0].NodeExecutions != 5 {
 		t.Errorf("current = %+v, want %s/1/5", usage[0], usagePeriod(now))
 	}

@@ -11,16 +11,10 @@ import (
 	"github.com/dazyflow/dazyflow/internal/caldavutil"
 )
 
-// Connection verification for the Calendar integration, registered so the
-// Apps page can test credentials before storing them. The label matches the
-// drops' Manifest.Integration.
 func init() {
 	engine.RegisterConnectionVerifier(integration, verifyCalDAV)
 }
 
-// verifyTimeout bounds the probe. CalDAV discovery is several round trips —
-// principal, then home set, then the collections — so it gets a little more
-// room than the single-request integrations.
 const verifyTimeout = 25 * time.Second
 
 // verifyCalDAV signs in, discovers the account's calendars, and confirms the

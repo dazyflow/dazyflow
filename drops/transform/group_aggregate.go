@@ -16,9 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// Aggregation operations. Mirrors the SQL set most users reach for —
-// count/sum/avg for numerics, min/max for orderable values,
-// first/last for "pick a representative", collect for fanout to lists.
 const (
 	aggCount   = "count"
 	aggSum     = "sum"
@@ -89,18 +86,12 @@ func init() {
 	})
 }
 
-// aggSpec is the parsed-from-params shape of one aggregation
-// instruction. Output names come from the params map's keys.
 type aggSpec struct {
 	output string // the column name in the result
 	op     string // count / sum / avg / ...
 	column string // source column ("" for count)
 }
 
-// executeGroupAggregate walks input rows once, accumulates per-group
-// state, then emits one row per group. Time: O(R * A) where A is the
-// number of aggregations. Memory: O(G * A) for the accumulators (G =
-// distinct groups) plus O(R) for the rows in `collect` ops.
 func executeGroupAggregate(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	by, aggs, err := parseGroupParams(job.Params)
 	if err != nil {
@@ -137,9 +128,6 @@ func executeGroupAggregate(_ context.Context, job core.Job, _ chan<- core.Progre
 		}
 	}
 
-	// groupAcc tracks one group's running aggregation state. count
-	// is incremented for every row regardless of aggregations so
-	// `avg = sum / count` works without a separate counter per agg.
 	type groupAcc struct {
 		keyValues map[string]any         // by columns of the first row in this group
 		ops       map[string]*aggOpState // keyed by output name
@@ -233,10 +221,6 @@ func parseGroupParams(params map[string]any) ([]string, []aggSpec, error) {
 	}
 	aggs := make([]aggSpec, 0, len(aggsMap))
 	for outName, raw := range aggsMap {
-		// Short form: {"revenue": "sum"} — the op alone, with the output name
-		// doubling as the source column ({"orders": "count"} needs no column).
-		// It's what people write by hand, and the long form's nested objects
-		// are a stumble the editor's form hides but hand-authored graphs don't.
 		if op, isShort := raw.(string); isShort {
 			raw = map[string]any{"op": op, "column": outName}
 			if op == aggCount {
@@ -274,34 +258,23 @@ func parseGroupParams(params map[string]any) ([]string, []aggSpec, error) {
 	return by, aggs, nil
 }
 
-// aggOpState holds the running computation for ONE aggregation in ONE
-// group. All accumulators are folded into a single struct so the
-// observe()/finalize() dispatch stays in one switch — fewer types,
-// fewer allocations.
 type aggOpState struct {
 	spec aggSpec
 
-	// Numeric accumulators (sum / avg / min / max numeric path).
 	numericValid bool // true once at least one numeric value landed
 	sumFloat     float64
 	count        int
 
-	// Generic min/max — kept alongside numeric so we can fall back
-	// to lexical comparison if non-numeric values appear.
 	minAny any
 	maxAny any
 	hasAny bool
 
-	// first / last / collect carry raw values.
 	first    any
 	hasFirst bool
 	last     any
 	collect  []any
 }
 
-// observe folds one row's contribution into the accumulator. Errors
-// surface for genuinely bad data (non-coercible strings on sum/avg);
-// "missing column" produces a nil treated as zero / skipped per op.
 func (s *aggOpState) observe(row map[string]any) error {
 	switch s.spec.op {
 	case aggCount:
@@ -328,7 +301,6 @@ func (s *aggOpState) observe(row map[string]any) error {
 			return nil
 		}
 		if n, err := coerceNumeric(raw); err == nil {
-			// Numeric path — fast and well-ordered.
 			if !s.numericValid {
 				s.sumFloat = n // reuse sumFloat as the running extremum
 				s.numericValid = true
@@ -336,7 +308,6 @@ func (s *aggOpState) observe(row map[string]any) error {
 				s.sumFloat = n
 			}
 		} else {
-			// Non-numeric — lexical comparison via fmt.Sprint.
 			str := fmt.Sprint(raw)
 			if !s.hasAny {
 				s.minAny, s.maxAny, s.hasAny = raw, raw, true
@@ -366,8 +337,6 @@ func (s *aggOpState) observe(row map[string]any) error {
 	return nil
 }
 
-// finalize converts the accumulator into the output value for this
-// group. Called once per group, after every row has been observed.
 func (s *aggOpState) finalize() any {
 	switch s.spec.op {
 	case aggCount:
@@ -376,8 +345,6 @@ func (s *aggOpState) finalize() any {
 		if !s.numericValid {
 			return 0
 		}
-		// Prefer int output when the sum is integral — avoids
-		// "30" turning into "30.0" downstream for tidy display.
 		if s.sumFloat == float64(int64(s.sumFloat)) {
 			return int64(s.sumFloat)
 		}
@@ -412,8 +379,6 @@ func (s *aggOpState) finalize() any {
 		}
 		return s.last
 	case aggCollect:
-		// Always return a non-nil slice so downstream consumers
-		// don't have to special-case "empty group" vs "no list".
 		if s.collect == nil {
 			return []any{}
 		}

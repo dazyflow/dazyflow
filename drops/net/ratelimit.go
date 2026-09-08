@@ -51,8 +51,6 @@ const (
 	// can't wedge a tenant's calls to that host for a year.
 	maxCooldown = time.Hour
 
-	// fallbackCooldown paces a 429/503 that arrives with NO usable header,
-	// so even a header-less rate-limit response slows the next call.
 	fallbackCooldown = 5 * time.Second
 
 	// concPollInterval is how often Acquire re-checks a full concurrency
@@ -86,9 +84,6 @@ type egressLimiter struct {
 	lastGC  time.Time
 }
 
-// egressLimit is the process-wide limiter every outbound connector call goes
-// through. It starts with the safe defaults; cmd/dzd may retune it from env
-// at startup, and tests may relax it via SetEgressRateLimit.
 var egressLimit = newEgressLimiter(defaultEgressRatePerMin, defaultEgressBurst, defaultEgressConcurrency)
 
 func newEgressLimiter(perMin, burst, conc int) *egressLimiter {
@@ -108,10 +103,6 @@ func newEgressLimiter(perMin, burst, conc int) *egressLimiter {
 	}
 }
 
-// SetEgressRateLimit retunes the process-wide outbound limiter. perMin <= 0
-// DISABLES pacing entirely (Acquire becomes a pass-through) — used by cmd/dzd
-// when an operator opts out, and by tests that fire many calls in a tight
-// loop. burst/conc fall back to the safe defaults when non-positive.
 func SetEgressRateLimit(perMin, burst, conc int) {
 	if burst <= 0 {
 		burst = defaultEgressBurst
@@ -267,8 +258,6 @@ func (l *egressLimiter) penalize(key string, d time.Duration, now time.Time) {
 	}
 }
 
-// bucketLocked returns (creating, evicting if needed) the bucket for key.
-// Caller holds l.mu.
 func (l *egressLimiter) bucketLocked(key string, now time.Time) *egressBucket {
 	b := l.buckets[key]
 	if b == nil {
@@ -281,9 +270,6 @@ func (l *egressLimiter) bucketLocked(key string, now time.Time) *egressBucket {
 	return b
 }
 
-// gcLocked drops buckets that are full, idle, not in cooldown, and have no
-// in-flight calls — indistinguishable from a fresh bucket, so forgetting
-// them is free. Runs at most once a minute.
 func (l *egressLimiter) gcLocked(now time.Time) {
 	if now.Sub(l.lastGC) < time.Minute {
 		return
@@ -336,8 +322,6 @@ func retryAfter(h http.Header, now time.Time) time.Duration {
 	return resetDelay(h, now)
 }
 
-// resetDelay reads a RateLimit-Reset / X-RateLimit-Reset header, handling
-// both the IETF delta-seconds form and the unix-epoch form (GitHub).
 func resetDelay(h http.Header, now time.Time) time.Duration {
 	v, ok := headerInt(h, "RateLimit-Reset", "X-RateLimit-Reset")
 	if !ok || v <= 0 {
@@ -359,7 +343,6 @@ func clampCooldown(d time.Duration) time.Duration {
 	return d
 }
 
-// headerInt returns the first of names present as a non-negative integer.
 func headerInt(h http.Header, names ...string) (int, bool) {
 	if h == nil {
 		return 0, false

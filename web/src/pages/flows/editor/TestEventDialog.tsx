@@ -7,11 +7,6 @@ import { Button } from "../../../components/ui/Button";
 import { ICON } from "../../../icons";
 import { useEscapeToClose } from "../../../components/ui/useEscapeToClose";
 
-// The "Send test event" dialog: an editable JSON sample the editor POSTs to
-// /test-trigger, so a webhook flow can be fired from the canvas without an
-// external caller. The sample itself is built by ./testEventSample, and what
-// the author leaves in the box is remembered per flow by ./testEventStore —
-// Reset puts the generated sample back.
 export function TestEventDialog({
   json,
   error,
@@ -22,13 +17,10 @@ export function TestEventDialog({
   onClose,
 }: {
   json: string;
-  // Parse failure from the last submit attempt; keeps the dialog open with the
-  // message inline rather than firing a malformed payload.
   error: string | null;
   canRun: boolean;
   onChange: (json: string) => void;
   onSubmit: () => void;
-  // Discards the remembered payload and regenerates the sample.
   onReset: () => void;
   onClose: () => void;
 }) {

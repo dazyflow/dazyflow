@@ -12,8 +12,6 @@ import (
 
 func TestMigrateLegacyOrgAdminPerm(t *testing.T) {
 	pool, ctx := testPool(t)
-	// The migration also touches the memberships table, which testPool's
-	// auth-only schema doesn't create — ensure it and start clean.
 	if err := EnsurePgOrgsSchema(ctx, pool); err != nil {
 		t.Fatalf("EnsurePgOrgsSchema: %v", err)
 	}
@@ -23,8 +21,6 @@ func TestMigrateLegacyOrgAdminPerm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPgUserStore: %v", err)
 	}
-	// A pre-rename account: its tenant_owner role carries the dead
-	// "tenant:admin" string instead of "organization:admin".
 	u := User{
 		Email:        "owner@example.com",
 		PasswordHash: []byte("x"),
@@ -57,7 +53,6 @@ func TestMigrateLegacyOrgAdminPerm(t *testing.T) {
 		t.Errorf("legacy tenant:admin still present: %+v", got.Roles)
 	}
 
-	// Idempotent: a second run rewrites nothing.
 	n2, err := MigrateLegacyOrgAdminPerm(ctx, pool)
 	if err != nil {
 		t.Fatalf("migrate#2: %v", err)

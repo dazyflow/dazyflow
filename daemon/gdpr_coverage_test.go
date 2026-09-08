@@ -25,18 +25,11 @@ import (
 // test until someone writes down what happens to it on erasure. The point is
 // not the map — it is that adding a table forces the question to be answered.
 
-// erasureDisposition is what becomes of a tenant-scoped table when its org is
-// erased.
 type erasureDisposition int
 
 const (
-	// erasedByCascade — deleteOrgData removes the tenant's rows.
 	erasedByCascade erasureDisposition = iota
-	// erasedByIdentity — eraseUserIdentity removes or pseudonymises the rows,
-	// keyed on the data subject rather than the tenant.
 	erasedByIdentity
-	// deliberatelyRetained — the rows outlive the org on purpose. Requires a
-	// reason, which is the lawful basis someone had to think about.
 	deliberatelyRetained
 )
 
@@ -47,7 +40,6 @@ var tenantTableDisposition = map[string]struct {
 	how    erasureDisposition
 	reason string
 }{
-	// --- org data, removed by deleteOrgData ---------------------------------
 	"jobs":                  {erasedByCascade, "run history + payloads"},
 	"run_logs":              {erasedByCascade, "run output, may contain personal data from flows"},
 	"bus_events":            {erasedByCascade, "spooled run events"},
@@ -79,7 +71,6 @@ var tenantTableDisposition = map[string]struct {
 	"invitations":           {erasedByCascade, "also erased per-subject on account deletion"},
 	"api_keys":              {erasedByCascade, "also erased per-subject on account deletion"},
 
-	// --- subject data, removed by eraseUserIdentity -------------------------
 	"users":    {erasedByIdentity, "the data subject's own row"},
 	"sessions": {erasedByIdentity, "revoked by subject, and expire on their own"},
 }
@@ -97,19 +88,10 @@ var indirectlyScoped = map[string]bool{
 	"bus_events": true,
 }
 
-// tenantTableRe finds a CREATE TABLE body so the column list can be inspected.
 var tenantTableRe = regexp.MustCompile(`(?s)CREATE TABLE IF NOT EXISTS\s+([a-z_]+)\s*\((.*?)\n\s*\);`)
 
-// tenantColumnRe matches a literal tenant column declaration.
 var tenantColumnRe = regexp.MustCompile(`(?m)^\s*tenant\s+`)
 
-// TestEveryTenantTableHasAnErasureDisposition walks the schema DDL in the
-// source tree and fails on any tenant-scoped table nobody has ruled on.
-//
-// If this test failed because you added a table: decide what erasure does with
-// it, wire that into deleteOrgData if it holds org data, and record the answer
-// in tenantTableDisposition. Do not add the entry alone to make the test pass —
-// the entry is the claim, deleteOrgData is what makes it true.
 func TestEveryTenantTableHasAnErasureDisposition(t *testing.T) {
 	t.Parallel()
 	// Scan the packages that own schema. Relative to daemon/, which is this
@@ -137,7 +119,6 @@ func TestEveryTenantTableHasAnErasureDisposition(t *testing.T) {
 			if !strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, ".sql") {
 				return nil
 			}
-			// Test files build throwaway tables with generated names.
 			if strings.HasSuffix(name, "_test.go") {
 				return nil
 			}
@@ -191,31 +172,12 @@ Deleting an org must not leave its rows behind. Decide which applies:
 	}
 }
 
-// ---- identity columns -------------------------------------------------
-//
-// The table-level guard above asks "does erasing an ORG take this table's
-// rows?". This one asks the question that outlives it: an email column can name
-// person A inside a row owned by org B. Erase A's account while B lives on —
-// which is every account deletion by a member of a shared org — and the row
-// stays, with A's address in it.
-//
-// That is how the support-ticket residue happened, and it is why coverage is
-// declared per column rather than per table.
-
-// columnDisposition is what erasing the PERSON named in a column does to it.
 type columnDisposition int
 
 const (
-	// erasedWithRow — the row itself only ever survives as long as the subject
-	// does, so nothing column-specific is needed.
 	erasedWithRow columnDisposition = iota
-	// pseudonymisedOnErase — the row outlives the subject and the identifier is
-	// replaced with core.ErasedIdentity.
 	pseudonymisedOnErase
-	// retainedLawfully — the identifier stays, under a stated lawful basis.
 	retainedLawfully
-	// knownResidual — the identifier CAN outlive the subject and is not yet
-	// scrubbed. A tracked gap, not a passing grade; every entry needs a note.
 	knownResidual
 )
 
@@ -223,7 +185,6 @@ var identityColumnDisposition = map[string]struct {
 	how  columnDisposition
 	note string
 }{
-	// The subject's own rows — deleted outright by eraseUserIdentity.
 	"users.email":            {erasedWithRow, "the subject's row"},
 	"users.subject":          {erasedWithRow, "the subject's row"},
 	"sessions.subject":       {erasedWithRow, "revoked by subject"},
@@ -233,7 +194,6 @@ var identityColumnDisposition = map[string]struct {
 	"platform_admins.email":  {erasedWithRow, "revoked by email"},
 	"support_agents.email":   {erasedWithRow, "revoked by email"},
 
-	// Rows that outlive the subject, with the identifier replaced.
 	"audit_events.actor":             {pseudonymisedOnErase, "AnonymizeActor"},
 	"support_tickets.created_by":     {pseudonymisedOnErase, "AnonymizeSubject"},
 	"support_tickets.subject":        {pseudonymisedOnErase, "AnonymizeSubject"},
@@ -243,14 +203,10 @@ var identityColumnDisposition = map[string]struct {
 	"support_agents.granted_by":      {pseudonymisedOnErase, "AnonymizeGrantedBy"},
 	"blocked_identities.created_by":  {pseudonymisedOnErase, "AnonymizeCreatedBy"},
 
-	// Kept on purpose.
 	"blocked_identities.value": {retainedLawfully,
 		"the ban itself: a block liftable by asking to be forgotten is not a block. " +
 			"Legitimate interest, Art. 17(1)(c) / 6(1)(f) — see docs/PRIVACY.md."},
 
-	// Rows owned by an ORG that name a person who may leave. Deleting the org
-	// takes them; these entries cover the other path, where a member of a
-	// SHARED org erases their account and the org carries on.
 	"git_mirrors.updated_by":        {pseudonymisedOnErase, "AnonymizeSubject"},
 	"tenant_mcp_servers.created_by": {pseudonymisedOnErase, "AnonymizeSubject"},
 	"tenant_web_apis.created_by":    {pseudonymisedOnErase, "AnonymizeSubject"},
@@ -264,17 +220,9 @@ var identityColumnDisposition = map[string]struct {
 	"invitations.invited_by":        {pseudonymisedOnErase, "AnonymizeSubject"},
 }
 
-// identityColumnRe matches a column whose value names a person.
 var identityColumnRe = regexp.MustCompile(
 	`(?m)^\s*(email|actor|author|created_by|granted_by|disabled_by|updated_by|invited_by|assigned_to|user_email|subject|value)\s+`)
 
-// TestEveryIdentityColumnHasADisposition fails on any person-naming column that
-// nobody has ruled on.
-//
-// If this failed because you added a column: decide whether erasing the person
-// it names removes the row (erasedWithRow), replaces the value
-// (pseudonymisedOnErase), keeps it under a stated basis (retainedLawfully), or
-// leaves a residue you are tracking (knownResidual, with a note).
 func TestEveryIdentityColumnHasADisposition(t *testing.T) {
 	t.Parallel()
 	found := map[string]string{} // "table.column" → file
@@ -340,8 +288,6 @@ Erasing that person must not leave their identifier behind. Decide:
 		}
 	}
 
-	// Not a failure — these are declared and tracked. Logged so they stay
-	// visible in a verbose run instead of decaying into permanent silence.
 	if len(residual) > 0 {
 		sort.Strings(residual)
 		t.Logf("%d identity columns still leak past account erasure (tracked): %s",

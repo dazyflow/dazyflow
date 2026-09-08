@@ -9,8 +9,6 @@ import (
 )
 
 func TestString(t *testing.T) {
-	// String composes the three vars into the banner format. Use the
-	// build-time defaults so the test doesn't depend on linker stamping.
 	got := String()
 	for _, want := range []string{"v" + Version, "commit " + Commit, "built " + Date} {
 		if !strings.Contains(got, want) {

@@ -35,10 +35,6 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
-			// The check is split out (Unreal-Blueprint style): Branch is a
-			// pure router. 'condition' is the boolean decision (from a Compare
-			// drop or any boolean-emitting node); 'in' is the payload that
-			// continues down the chosen port.
 			Inputs: []core.Port{
 				{Port: "condition", Required: true, Label: "Yes/No value", MIME: []string{core.MIMEBool}},
 				{Port: "in", Required: true, Label: "Value"},
@@ -94,10 +90,6 @@ func executeBranch(_ context.Context, job core.Job, _ chan<- core.Progress) (cor
 	}, nil
 }
 
-// asBool coerces a condition ref into a boolean. It accepts a native bool
-// (the usual case, from Compare), the strings "true"/"false"/"1"/"0"/"yes"/
-// "no" (and JSON-encoded booleans), and treats numbers as truthy when nonzero.
-// A nil/absent inline value is false, so an unfired upstream routes to else.
 func asBool(ref core.Ref) (bool, error) {
 	switch v := ref.Inline.(type) {
 	case bool:

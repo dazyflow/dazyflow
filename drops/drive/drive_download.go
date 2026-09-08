@@ -77,20 +77,14 @@ func executeDownload(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 	}
 	timeoutMS := params.IntDefault(job.Params, "timeout_ms", 60000)
 
-	// Fetch metadata first: we need the name (for the default save path) and
-	// the mimeType (to reject Google-native docs, which have no media bytes).
 	meta, err := fileMetadata(ctx, job, id, token, timeoutMS)
 	if err != nil {
 		return params.Err(job, "drive_error", err.Error()), nil
 	}
-	// Google-editor docs (Docs/Sheets/Slides) have no media bytes — there's
-	// nothing to fetch via alt=media. Instead of failing, export them to a
-	// concrete format ('format' param, default PDF) so the run can carry on.
 	if isGoogleNative(meta.MimeType) {
 		return exportNative(ctx, job, id, meta, token, timeoutMS)
 	}
 
-	// Download the media bytes.
 	endpoint := apiBaseURL(job) + "/files/" + url.PathEscape(id) + "?alt=media"
 	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, timeoutMS)
 	if err != nil {
@@ -129,7 +123,6 @@ func executeDownload(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			// Ref preserves the scheme so a downstream node resolves it the same.
 			"out": {MIME: mime, Ref: dest},
 			"meta": {MIME: "application/json", Inline: map[string]any{
 				"file_id": id,
@@ -142,13 +135,9 @@ func executeDownload(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 	}, nil
 }
 
-// exportNative exports a Google-editor doc (Docs/Sheets/Slides/Drawing) to a
-// concrete format via Drive's /files/{id}/export endpoint, picking the target
-// from the 'format' param (default: the type's first supported format, PDF).
 func exportNative(ctx context.Context, job core.Job, id string, meta driveFile, token string, timeoutMS int) (core.Result, error) {
 	allowed, ok := nativeExportable[meta.MimeType]
 	if !ok {
-		// Folders, Forms, Sites, shortcuts… nothing to download or export.
 		return params.Err(job, "not_downloadable", "file "+id+" is a "+friendlyNative(meta.MimeType)+" — it can't be downloaded or exported"), nil
 	}
 	format := strings.ToLower(strings.TrimSpace(params.StringDefault(job.Params, "format", "")))
@@ -210,7 +199,6 @@ func exportNative(ctx context.Context, job core.Job, id string, meta driveFile, 
 	}, nil
 }
 
-// fileMetadata fetches the name + mimeType + size for a file id.
 func fileMetadata(ctx context.Context, job core.Job, id, token string, timeoutMS int) (driveFile, error) {
 	q := url.Values{}
 	q.Set("fields", "id,name,mimeType,size")
@@ -233,7 +221,6 @@ type driveAPIError struct{ msg string }
 
 func (e *driveAPIError) Error() string { return e.msg }
 
-// resolveFileID prefers a wired 'file_id' input port over the param.
 func resolveFileID(job core.Job) string {
 	if in, ok := job.Input["file_id"]; ok && in.Inline != nil {
 		switch v := in.Inline.(type) {
@@ -250,9 +237,6 @@ func resolveFileID(job core.Job) string {
 	return strings.TrimSpace(params.StringDefault(job.Params, "file_id", ""))
 }
 
-// destPath picks where the download lands. An explicit 'path' wins (a bare name
-// goes to scratch space; an explicit scheme passes through). Otherwise the
-// file's own name is used, sanitized to a safe basename, in scratch space.
 func destPath(job core.Job, name, id string) string {
 	dest := strings.TrimSpace(params.StringDefault(job.Params, "path", ""))
 	if dest == "" {
@@ -267,9 +251,6 @@ func destPath(job core.Job, name, id string) string {
 	return dest
 }
 
-// exportDestPath is destPath for an exported Google-editor doc: same rules,
-// but the export extension (.pdf/.docx/…) is appended when the chosen name
-// lacks it, since a Google doc's own name carries no file extension.
 func exportDestPath(job core.Job, name, id, ext string) string {
 	dest := destPath(job, name, id)
 	if !strings.HasSuffix(strings.ToLower(dest), ext) {
@@ -294,8 +275,6 @@ func safeBase(name string) string {
 	return base
 }
 
-// filepathSlashes normalizes Windows-style backslashes to forward slashes so
-// path.Base sees the final element regardless of separator.
 func filepathSlashes(s string) string {
 	return strings.ReplaceAll(s, `\`, "/")
 }

@@ -15,10 +15,6 @@ import { ICON } from "../../icons";
 import { FEEDBACK } from "../../lib/timing";
 import { Loading } from "../../components/ui/Loading";
 
-// ssoUpcoming lists identity providers we show as placeholders so the
-// surface reads as "SSO providers" rather than "Google" — the monogram
-// tiles swap for real logos (and real config forms) as each lands.
-// Empty for now: Microsoft Entra, Okta and SAML are hidden until wired.
 const ssoUpcoming: string[] = [];
 
 // RedirectURIDisplay shows the read-only redirect URI alongside a copy
@@ -39,8 +35,6 @@ function RedirectURIDisplay({ uri }: { uri: string }) {
       /* clipboard may be blocked; user can select + copy manually */
     }
   };
-  // No absolute origin to build a pasteable URI from — show a hint
-  // instead of a misleading relative path in the copy box.
   if (!uri) {
     return <div className="desc">{t("admin.sso.redirectUriUnavailable")}</div>;
   }
@@ -113,8 +107,6 @@ export function AdminOrgSSO() {
     }
   }, []);
 
-  // Codes the daemon emits — keep in sync with classifyGoogleError +
-  // the redirectTestError sites in daemon/google_signin.go.
   const knownTestErrorCodes = new Set([
     "invalid_client",
     "redirect_uri_mismatch",
@@ -133,9 +125,6 @@ export function AdminOrgSSO() {
       ? `admin.sso.testError.${testErrorCode}`
       : "admin.sso.testError.exchange_failed";
 
-  // silent skips the full-page loading swap — used by the post-save
-  // refetch so the "Saved" chip stays visible instead of flashing away
-  // under the loading card.
   const refresh = useCallback(
     async (silent = false) => {
       if (!token) return;
@@ -164,9 +153,6 @@ export function AdminOrgSSO() {
     void refresh();
   }, [refresh]);
 
-  // The "Saved" confirmation is a transient acknowledgement, not durable
-  // state — the header status pill carries whether SSO is actually on.
-  // Fade it out after a few seconds so it doesn't linger as decoration.
   useEffect(() => {
     if (!savedAt) return;
     const id = window.setTimeout(() => setSavedAt(null), 4000);
@@ -223,8 +209,6 @@ export function AdminOrgSSO() {
     `/api/v1/auth/google/start?tenant=${encodeURIComponent(orgID)}` +
     `&test=1` +
     `&return_to=${encodeURIComponent("/admin/sso")}`;
-  // Public origin the daemon is reached at — prefer the operator-set
-  // public_base_url, fall back to the current window origin.
   const publicOrigin = me?.public_base_url
     ? me.public_base_url.replace(/\/+$/, "")
     : typeof window !== "undefined"

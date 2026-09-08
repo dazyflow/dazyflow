@@ -45,8 +45,6 @@ export function DeleteFlowModal({
     setErr(null);
     try {
       await onConfirm(password);
-      // Success: the parent navigates/refreshes and unmounts us — nothing
-      // more to do here.
     } catch (e) {
       const status = e instanceof APIError ? e.status : 0;
       setErr(

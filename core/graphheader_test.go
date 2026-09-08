@@ -9,10 +9,6 @@ import (
 	"testing"
 )
 
-// richGraph is a flow with every field of Graph and Node set to a distinctive
-// non-zero value, so the equality test below actually exercises them. It holds
-// one node of each trigger shape the list views read params off, plus ordinary
-// steps whose params are the ones a header drops.
 func richGraph() Graph {
 	node := func(id, module string, params map[string]any) Node {
 		return Node{
@@ -37,7 +33,6 @@ func richGraph() Graph {
 			node("hook", "webhook_input", map[string]any{"secret": "s3cret"}),
 			node("intake", "form_input", map[string]any{"form_fields": []any{"name", "email"}}),
 			node("event", "slack_on_mention", map[string]any{"channel": "#ops"}),
-			// The ordinary steps: their params are what a header elides.
 			node("n1", "http_request", map[string]any{
 				"url": "https://api.example.com/v1/resource",
 				"body": map[string]any{
@@ -81,7 +76,6 @@ func TestGraphHeaderMatchesFull(t *testing.T) {
 		t.Fatalf("header decode: %v", err)
 	}
 
-	// The projection's definition, applied to the full decode.
 	want := full
 	want.Nodes = make([]Node, len(full.Nodes))
 	copy(want.Nodes, full.Nodes)
@@ -102,8 +96,6 @@ func TestGraphHeaderMatchesFull(t *testing.T) {
 		t.Errorf("header decode differs from the full decode with ordinary params dropped\n got %+v\nwant %+v", header, want)
 	}
 
-	// And the half that matters most: a trigger's params survive, because
-	// FlowRunStatusOf and the schedules list read them.
 	for _, n := range header.Nodes {
 		if IsTriggerModule(n.Module) && n.Params == nil {
 			t.Errorf("trigger step %q (%s) lost its params", n.ID, n.Module)

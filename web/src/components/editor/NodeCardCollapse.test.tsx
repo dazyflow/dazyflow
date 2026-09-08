@@ -25,8 +25,6 @@ vi.mock("@xyflow/react", () => ({
 
 import { DazyNode } from "./NodeCard";
 
-// A router: several outputs, which is exactly the shape whose pins a fold
-// could plausibly lose.
 const routeManifest = {
   id: "route_rows",
   label: "Route rows",
@@ -37,9 +35,6 @@ const routeManifest = {
     { port: "rows_2", label: "Route 2" },
     { port: "default", label: "Everything else" },
   ],
-  // `default_slot` is REQUIRED on purpose: only required literals (params with
-  // no input pin) render as inline fields on the card, and those fields are
-  // what locking has to switch off.
   params_schema: {
     type: "object",
     properties: { default_slot: { type: "string", title: "Where the leftovers go" } },
@@ -66,7 +61,6 @@ describe("a folded card", () => {
   it("keeps every pin mounted under its own id, so no wire is dropped", () => {
     const open = renderCard({}).container;
     const openIDs = handleIDs(open);
-    // Sanity: the fixture really does have the pins we are about to look for.
     expect(openIDs).toContain("rows_1");
     expect(openIDs).toContain("default");
 

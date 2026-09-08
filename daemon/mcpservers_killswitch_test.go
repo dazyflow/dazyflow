@@ -69,8 +69,6 @@ func TestPlatformKillswitch_ListsATenantsMCPTool(t *testing.T) {
 	}
 }
 
-// TestPlatformKillswitch_DisablesATenantsMCPTool drives the whole path: the
-// admin disables the id, and the resolver refuses it for that org afterwards.
 func TestPlatformKillswitch_DisablesATenantsMCPTool(t *testing.T) {
 	t.Parallel()
 	h, _, _, _, _, ds := platformHarness(t)
@@ -95,7 +93,6 @@ func TestPlatformKillswitch_DisablesATenantsMCPTool(t *testing.T) {
 	const id = "mcp:vendor:create_issue"
 	ctx := core.WithTenant(context.Background(), "acme")
 
-	// Resolvable to begin with.
 	if _, err := resolver.Resolve(ctx, id); err != nil {
 		t.Fatalf("Resolve before disabling: %v", err)
 	}
@@ -115,7 +112,6 @@ func TestPlatformKillswitch_DisablesATenantsMCPTool(t *testing.T) {
 	if !strings.Contains(err.Error(), "disabled by platform policy") {
 		t.Fatalf("unexpected refusal: %v", err)
 	}
-	// Another org's flows are untouched by a per-tenant switch.
 	if _, err := resolver.Resolve(core.WithTenant(context.Background(), "globex"), "text"); err != nil {
 		t.Fatalf("an unrelated org's built-in step broke: %v", err)
 	}

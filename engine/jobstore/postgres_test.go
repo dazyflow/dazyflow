@@ -20,10 +20,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// testDB is the DSN for a database private to this package, derived from
-// DAZYFLOW_TEST_DB, or "" when that is unset so each caller's t.Skip still
-// gates. Needed because daemon's tests TRUNCATE the same `jobs` table in the
-// shared database, and go test runs the two packages concurrently.
 var testDBState struct {
 	once sync.Once
 	dsn  string
@@ -45,7 +41,6 @@ func testDB(t *testing.T) string {
 	return testDBState.dsn
 }
 
-// ownDatabase creates "<base database>_jobstore" if absent and returns its DSN.
 func ownDatabase(base string) (string, error) {
 	u, err := url.Parse(base)
 	if err != nil {
@@ -56,7 +51,6 @@ func ownDatabase(base string) (string, error) {
 		return "", fmt.Errorf("DAZYFLOW_TEST_DB names no database: %q", base)
 	}
 	own := name + "_jobstore"
-	// Interpolated into DDL below, so don't trust the DSN for it.
 	if strings.ContainsFunc(own, func(r rune) bool {
 		return !(r == '_' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z')
 	}) {
@@ -81,10 +75,6 @@ func ownDatabase(base string) (string, error) {
 	return u.String(), nil
 }
 
-// Integration test against a real Postgres. Skipped unless DAZYFLOW_TEST_DB
-// is set, e.g.
-//
-//	DAZYFLOW_TEST_DB=postgres://localhost/dazyflow_test go test ./...
 func TestPostgres_RoundTrip(t *testing.T) {
 	url := testDB(t)
 	if url == "" {
@@ -99,7 +89,6 @@ func TestPostgres_RoundTrip(t *testing.T) {
 	}
 	defer store.Close()
 
-	// Clean slate within the test's namespace.
 	_, _ = store.pool.Exec(ctx, "TRUNCATE jobs")
 
 	// Kind must be node — Claim only hands out node-kind work units
@@ -127,8 +116,6 @@ func TestPostgres_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestPostgres_MaxConcurrentPerTenant exercises the per-tenant soft cap
-// against a real Postgres. Skipped unless DAZYFLOW_TEST_DB is set.
 func TestPostgres_MaxConcurrentPerTenant(t *testing.T) {
 	url := testDB(t)
 	if url == "" {
@@ -150,7 +137,6 @@ func TestPostgres_MaxConcurrentPerTenant(t *testing.T) {
 			t.Fatalf("enqueue %s: %v", id, err)
 		}
 	}
-	// Two claims succeed, then acme is at its cap.
 	if _, err := store.Claim(ctx, "w", 30*time.Second); err != nil {
 		t.Fatalf("claim 1: %v", err)
 	}
@@ -161,7 +147,6 @@ func TestPostgres_MaxConcurrentPerTenant(t *testing.T) {
 		t.Fatalf("claim 3 err = %v, want ErrNoJobs (acme at cap)", err)
 	}
 
-	// A different tenant is unaffected.
 	if err := store.Enqueue(ctx, core.JobRecord{ID: "b1", Kind: core.JobKindNode, Tenant: "globex"}); err != nil {
 		t.Fatal(err)
 	}
@@ -170,9 +155,6 @@ func TestPostgres_MaxConcurrentPerTenant(t *testing.T) {
 	}
 }
 
-// TestPostgres_Conformance runs the shared store-conformance suite
-// against real Postgres. Each subtest truncates jobs first so they don't
-// interfere with each other.
 func TestPostgres_Conformance(t *testing.T) {
 	url := testDB(t)
 	if url == "" {
@@ -194,27 +176,20 @@ func TestPostgres_Conformance(t *testing.T) {
 	})
 }
 
-// TestPostgres_OpenPostgres_BadDSN covers the connect / schema failure
-// paths so the OpenPostgres + NewPostgresFromPool branches that return
-// errors get exercised.
 func TestPostgres_OpenPostgres_BadDSN(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	// pgxpool.New rejects an obviously malformed DSN synchronously.
 	if _, err := OpenPostgres(ctx, "not-a-valid-dsn"); err == nil {
 		t.Errorf("OpenPostgres on bad DSN: want error, got nil")
 	}
 }
 
-// TestPostgres_NewPostgresFromPool_NilPool exercises the nil-pool guard.
 func TestPostgres_NewPostgresFromPool_NilPool(t *testing.T) {
 	if _, err := NewPostgresFromPool(t.Context(), nil); err == nil {
 		t.Errorf("NewPostgresFromPool(nil) = nil, want error")
 	}
 }
 
-// TestPostgres_CompleteOwned_FencesNonOwner mirrors the memory test
-// against real Postgres. Skipped unless DAZYFLOW_TEST_DB is set.
 func TestPostgres_CompleteOwned_FencesNonOwner(t *testing.T) {
 	url := testDB(t)
 	if url == "" {
@@ -246,8 +221,6 @@ func TestPostgres_CompleteOwned_FencesNonOwner(t *testing.T) {
 	}
 }
 
-// openPG opens the Postgres store with a clean jobs table, skipping when
-// DAZYFLOW_TEST_DB is unset. Returns the store and a live context.
 func openPG(t *testing.T) (*Postgres, context.Context) {
 	t.Helper()
 	url := testDB(t)
@@ -267,17 +240,13 @@ func openPG(t *testing.T) (*Postgres, context.Context) {
 	return store, ctx
 }
 
-// TestPostgres_PruneTerminal exercises the retention sweep: only terminal,
-// old-enough rows are removed, in batches.
 func TestPostgres_PruneTerminal(t *testing.T) {
 	store, ctx := openPG(t)
 
-	// olderThan <= 0 is a guarded no-op.
 	if n, err := store.PruneTerminal(ctx, 0, 100); err != nil || n != 0 {
 		t.Errorf("PruneTerminal(0) = %d, %v; want 0, nil", n, err)
 	}
 
-	// Two terminal rows + one still-running row.
 	for _, id := range []string{"t1", "t2"} {
 		if err := store.Enqueue(ctx, core.JobRecord{ID: id, Kind: core.JobKindNode, Tenant: "t"}); err != nil {
 			t.Fatal(err)
@@ -290,8 +259,6 @@ func TestPostgres_PruneTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// batch=1 forces the multi-iteration loop; both terminal rows go,
-	// the running row stays.
 	n, err := store.PruneTerminal(ctx, time.Nanosecond, 1)
 	if err != nil {
 		t.Fatalf("PruneTerminal: %v", err)
@@ -307,13 +274,8 @@ func TestPostgres_PruneTerminal(t *testing.T) {
 	}
 }
 
-// seedRun writes a graph-record plus one succeeded node-record per name, then
-// backdates the run's finish to age days ago and the steps' to stepAge days
-// ago. A zero age leaves the graph-record non-terminal (still parked/running).
 func seedRun(t *testing.T, store *Postgres, ctx context.Context, runID string, status core.JobStatus, age, stepAge int, steps ...string) {
 	t.Helper()
-	// Enqueued live, then completed: Complete refuses a record that is
-	// already terminal, and the finished_at it stamps is what retention reads.
 	enqueued := status
 	if core.IsTerminalStatus(status) {
 		enqueued = core.JobStatusRunning
@@ -366,24 +328,14 @@ func kept(t *testing.T, store *Postgres, ctx context.Context, id, why string) {
 	}
 }
 
-// TestPostgres_PruneTerminal_RunScoped pins the retention unit: a RUN, whole.
-// The two cases in the middle are the ones row-scoped pruning got wrong — it
-// deleted the steps of runs that were still going, and the steps of runs whose
-// own finish was still inside the window.
 func TestPostgres_PruneTerminal_RunScoped(t *testing.T) {
 	store, ctx := openPG(t)
 	const window = 30 * 24 * time.Hour
 
-	// Finished 40 days ago: the whole thing goes.
 	seedRun(t, store, ctx, "old", core.JobStatusSucceeded, 40, 41, "a", "b")
-	// Parked on an approval since day 41 and STILL awaiting: nothing goes.
 	seedRun(t, store, ctx, "parked", core.JobStatusAwaiting, 0, 41, "a", "b")
-	// Ran for weeks and finished yesterday: its early steps are older than the
-	// window, but the run is not, so the run keeps all of itself.
 	seedRun(t, store, ctx, "long", core.JobStatusSucceeded, 1, 41, "a", "b")
-	// Finished 40 days ago but only just: inside the window, untouched.
 	seedRun(t, store, ctx, "recent", core.JobStatusSucceeded, 3, 4, "a")
-	// A node-record whose run is already gone, old enough to sweep.
 	if err := store.Enqueue(ctx, core.JobRecord{
 		ID: "orphan", Kind: core.JobKindNode, GraphRunID: "vanished", GraphID: "g", NodeID: "a", Tenant: "acme",
 	}); err != nil {
@@ -401,7 +353,6 @@ func TestPostgres_PruneTerminal_RunScoped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PruneTerminal: %v", err)
 	}
-	// old (1 graph + 2 nodes) + orphan.
 	if n != 4 {
 		t.Errorf("pruned %d row(s), want 4", n)
 	}
@@ -420,7 +371,6 @@ func TestPostgres_PruneTerminal_RunScoped(t *testing.T) {
 	kept(t, store, ctx, "recent", "run finished inside the window")
 	kept(t, store, ctx, "recent:a", "run finished inside the window")
 
-	// A parked run that later finishes becomes prunable as a unit.
 	if err := store.Complete(ctx, "parked", core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); err != nil {
 		t.Fatalf("complete parked: %v", err)
 	}
@@ -434,14 +384,11 @@ func TestPostgres_PruneTerminal_RunScoped(t *testing.T) {
 	gone(t, store, ctx, "parked:a", "its run has now aged out")
 }
 
-// TestPostgres_PruneTerminal_Batches checks the run-at-a-time loop drains a
-// backlog that exceeds one batch, and still deletes each run whole.
 func TestPostgres_PruneTerminal_Batches(t *testing.T) {
 	store, ctx := openPG(t)
 	for _, id := range []string{"r1", "r2", "r3"} {
 		seedRun(t, store, ctx, id, core.JobStatusSucceeded, 40, 40, "a", "b")
 	}
-	// batch=1 forces three iterations; 3 runs × 3 rows.
 	n, err := store.PruneTerminal(ctx, 30*24*time.Hour, 1)
 	if err != nil {
 		t.Fatalf("PruneTerminal: %v", err)
@@ -458,11 +405,9 @@ func TestPostgres_PruneTerminal_Batches(t *testing.T) {
 	}
 }
 
-// TestPostgres_OldestQueuedEnqueuedAt covers the queue-latency probe.
 func TestPostgres_OldestQueuedEnqueuedAt(t *testing.T) {
 	store, ctx := openPG(t)
 
-	// Empty queue reports no row.
 	if _, ok, err := store.OldestQueuedEnqueuedAt(ctx); err != nil || ok {
 		t.Errorf("empty queue = ok %v, err %v; want false, nil", ok, err)
 	}
@@ -479,7 +424,6 @@ func TestPostgres_OldestQueuedEnqueuedAt(t *testing.T) {
 		t.Errorf("future-available row counted as queued")
 	}
 
-	// An immediately-claimable row is reported.
 	if err := store.Enqueue(ctx, core.JobRecord{ID: "now", Kind: core.JobKindNode, Tenant: "t"}); err != nil {
 		t.Fatal(err)
 	}
@@ -492,10 +436,9 @@ func TestPostgres_OldestQueuedEnqueuedAt(t *testing.T) {
 	}
 }
 
-// TestPostgres_ClaimUnnotified covers the failure-notification claim: what is
-// eligible, that a claim is exclusive (so two replicas cannot both mail about
-// one run), that a release makes it eligible again, and that attempts are
-// bounded.
+// Covers the failure-notification claim: what is eligible, that a claim is
+// exclusive (so two replicas cannot both mail about one run), that a release
+// makes it eligible again, and that attempts are bounded.
 func TestPostgres_ClaimUnnotified(t *testing.T) {
 	store, ctx := openPG(t)
 	const window = time.Hour
@@ -533,15 +476,12 @@ func TestPostgres_ClaimUnnotified(t *testing.T) {
 	for _, r := range claimed {
 		got[r.ID] = true
 	}
-	// Both bad endings are handed over; deciding whether a cancel is worth an
-	// email is the caller's job (a person's cancel is not).
 	if !got["failed"] || !got["cancelled"] {
 		t.Errorf("claimed %v, want the failed and cancelled runs", got)
 	}
 	if got["succeeded"] || got["running"] {
 		t.Errorf("claimed a run that owes no notification: %v", got)
 	}
-	// The claim carries the payload the caller needs to build a notification.
 	for _, r := range claimed {
 		if r.Result == nil || r.Result.Error == nil {
 			t.Errorf("claimed %s without its error; the notification has nothing to say", r.ID)
@@ -551,7 +491,6 @@ func TestPostgres_ClaimUnnotified(t *testing.T) {
 		}
 	}
 
-	// Exclusive: a second sweep sees nothing.
 	again, err := store.ClaimUnnotified(ctx, window, 3, 50)
 	if err != nil {
 		t.Fatalf("second claim: %v", err)
@@ -560,7 +499,6 @@ func TestPostgres_ClaimUnnotified(t *testing.T) {
 		t.Fatalf("second sweep re-claimed %d run(s); two replicas would both mail", len(again))
 	}
 
-	// Released (a send that failed) → eligible again.
 	if err := store.ReleaseNotifyClaim(ctx, "failed"); err != nil {
 		t.Fatalf("release: %v", err)
 	}
@@ -572,7 +510,6 @@ func TestPostgres_ClaimUnnotified(t *testing.T) {
 		t.Fatalf("after release got %d run(s), want just the released one", len(retry))
 	}
 
-	// Bounded: attempts have now reached 2, so a ceiling of 2 stops it.
 	if err := store.ReleaseNotifyClaim(ctx, "failed"); err != nil {
 		t.Fatalf("release: %v", err)
 	}
@@ -585,8 +522,6 @@ func TestPostgres_ClaimUnnotified(t *testing.T) {
 	}
 }
 
-// A run older than the lookback is left alone, so the first sweep after a
-// weekend of downtime is not a mailstorm.
 func TestPostgres_ClaimUnnotified_Lookback(t *testing.T) {
 	store, ctx := openPG(t)
 	if err := store.Enqueue(ctx, core.JobRecord{

@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package shell hosts the `shell` drop — runs a command in a
-// workspace-relative directory and streams its output. Used as the
-// build/test step in CI-shaped pipelines and as a generic escape hatch
-// when no first-class integration covers the operation a user wants.
+// Package shell runs a command in a workspace-relative directory and streams its
+// output: the build/test step in CI-shaped pipelines, and the escape hatch when no
+// first-class integration covers what a user wants.
 package shell
 
 import (
@@ -33,14 +32,6 @@ import (
 )
 
 func init() {
-	// The shell drop runs arbitrary host commands as the daemon's user with
-	// host filesystem + network access — it bypasses the scripted-drop
-	// sandbox entirely. That's fine for a single-tenant CI box but is a full
-	// RCE primitive on a multi-tenant deployment, where any user with
-	// graph:run could read the host, the daemon env (master key!), and reach
-	// internal services. So it is OFF unless the operator explicitly opts in
-	// with DAZYFLOW_ENABLE_SHELL — and even then its env is scrubbed of
-	// DAZYFLOW_* secrets (see executeShell).
 	if !shellEnabled() {
 		return
 	}
@@ -79,12 +70,10 @@ func init() {
 				{Port: "path", Label: "Working directory"},
 			},
 			Outputs: []core.Port{
-				// Only the friendly scalars are declared as ports; the full
-				// structured result (command, args, path, success, duration_ms,
-				// error) is still EMITTED under "meta" (see executeShell) so run
-				// records keep it for debugging, but it's not a pin — undeclared
-				// outputs can't be wired and don't clutter the card. Branch on
-				// exit_code ("0" = success) for fail/notify paths.
+				// Only the friendly scalars are declared as ports. The full structured result
+				// is still EMITTED under "meta", so run records keep it for debugging, but an
+				// undeclared output cannot be wired and does not clutter the card. Branch on
+				// exit_code for fail/notify paths.
 				{Port: "stdout", Label: "Standard output", MIME: []string{"text/plain"}},
 				{Port: "stderr", Label: "Standard error", MIME: []string{"text/plain"}},
 				{Port: "exit_code", Label: "Exit code", MIME: []string{"text/plain"}},
@@ -114,16 +103,11 @@ const (
 	defaultMaxOutputBytes = 1024 * 1024
 )
 
-// shellEnabled reports whether the operator opted into the shell drop.
-// FAIL-CLOSED: only an explicit affirmative ("1"/"true"/"yes"/"on")
-// turns it on; every other value — empty, "0"/"false"/"no"/"off", AND
-// anything unrecognized like "disabled", "none", or a typo — leaves this
-// host-RCE primitive OFF. This matches cmd/dzd's envBool convention. The
-// earlier "anything non-negative enables" logic failed OPEN: an operator
-// who wrote DAZYFLOW_ENABLE_SHELL=disabled (reasonably expecting it off)
-// would have silently armed remote code execution. A security-critical
-// toggle must never enable on a value the operator didn't clearly mean
-// as "yes".
+// shellEnabled is FAIL-CLOSED: only an explicit affirmative turns it on, so
+// every other value — including anything unrecognized like "disabled" or a typo —
+// leaves this host-RCE primitive OFF. The earlier "anything non-negative enables"
+// logic failed OPEN, silently arming remote code execution for an operator who
+// wrote DAZYFLOW_ENABLE_SHELL=disabled.
 func shellEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("DAZYFLOW_ENABLE_SHELL"))) {
 	case "1", "true", "yes", "on":
@@ -133,21 +117,14 @@ func shellEnabled() bool {
 	}
 }
 
-// scrubbedEnv builds the environment handed to the command.
+// scrubbedEnv always removes every DAZYFLOW_* variable, so a command cannot read
+// the daemon's own secrets out of its environment. CI ergonomics survive: PATH,
+// HOME, toolchain vars all pass through — only the app's own namespace goes.
 //
-// Floor (always): every DAZYFLOW_* variable is removed, so a command can't
-// read the daemon's own secrets (master key, Postgres DSN, webhook signing
-// secrets, trusted signing keys, …) out of its environment. CI ergonomics
-// are preserved by default: PATH, HOME, GOPATH, language toolchain vars,
-// etc. all pass through — only the app's own secret namespace is removed.
-//
-// Least-privilege (opt-in): when DAZYFLOW_SHELL_ENV_ALLOW is set (a
-// comma-separated list of variable names), the command instead sees ONLY
-// those variables plus a minimal safe base (PATH, HOME) — nothing else.
-// This is for boxes whose daemon environment also holds THIRD-PARTY secrets
-// (AWS_*, GOOGLE_APPLICATION_CREDENTIALS, generic API keys) that the
-// prefix scrub above wouldn't catch: the operator names exactly what a
-// command may see, and everything unlisted is withheld.
+// DAZYFLOW_SHELL_ENV_ALLOW opts into least privilege instead: the command sees
+// ONLY the named variables plus a minimal safe base. That is for boxes whose
+// daemon environment also holds THIRD-PARTY secrets (AWS_*,
+// GOOGLE_APPLICATION_CREDENTIALS) that the prefix scrub would not catch.
 func scrubbedEnv() []string {
 	allow := parseShellEnvAllow(os.Getenv("DAZYFLOW_SHELL_ENV_ALLOW"))
 	src := os.Environ()
@@ -155,7 +132,6 @@ func scrubbedEnv() []string {
 	for _, kv := range src {
 		k, _, ok := strings.Cut(kv, "=")
 		if ok && strings.HasPrefix(k, "DAZYFLOW_") {
-			// The app's own secrets are withheld in every mode.
 			continue
 		}
 		if allow != nil {
@@ -168,10 +144,6 @@ func scrubbedEnv() []string {
 	return out
 }
 
-// parseShellEnvAllow turns the DAZYFLOW_SHELL_ENV_ALLOW list into a set, or
-// returns nil when unset (signalling "no allowlist — pass the full scrubbed
-// env"). PATH and HOME are always included so commands still resolve and
-// run; the operator need only name the extras a command genuinely needs.
 func parseShellEnvAllow(s string) map[string]struct{} {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -206,16 +178,12 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 			relPath = input.Ref
 		}
 	}
-	// Resolve the working directory THROUGH an os.Root handle rather than
-	// string-cleaning it. Cleaning alone never touches the filesystem, so a
-	// symlink planted inside the workspace and pointing outside it was
-	// accepted and then followed by cmd.Dir — the command would run outside
-	// the sandbox. The io drops already resolve through a root; this brings
-	// the shell drop up to the same standard.
+	// Resolve the working directory THROUGH an os.Root handle rather than by
+	// string-cleaning: cleaning never touches the filesystem, so a symlink planted
+	// inside the workspace and pointing out of it was accepted and then followed by
+	// cmd.Dir, running the command outside the sandbox.
 	workdir, cleanRel, err := sandbox.ResolveDir(job.WorkspaceRoot, relPath)
 	if err != nil {
-		// Separate "you pointed outside the sandbox" from "that folder isn't
-		// there" — same rejection, very different thing for a user to fix.
 		if errors.Is(err, os.ErrNotExist) {
 			return params.Err(job, "bad_param",
 				fmt.Sprintf("working folder %q doesn't exist in the workspace", relPath)), nil
@@ -232,18 +200,13 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 
 	cmd := exec.CommandContext(runCtx, cmdName, args...)
 	cmd.Dir = workdir
-	// Never expose the daemon's DAZYFLOW_* secrets (master key, DSN, webhook
-	// secrets) to the command — see scrubbedEnv.
 	cmd.Env = scrubbedEnv()
-	// On timeout/cancel, tear down the WHOLE process group, not just the
-	// direct child. pty.Start (below) makes the command a session leader, so
-	// its PID doubles as its process-group ID; killing the group reaps
-	// grandchildren the command backgrounded (`thing &`, a fork bomb) that a
-	// bare Process.Kill would orphan to keep running on the host after the
-	// node "finished". The pgid==pid guard is a hard safety interlock: we
-	// signal a group ONLY when the child genuinely leads its own group, so a
-	// negative-PID kill can never escape to the daemon's own process group.
-	// WaitDelay backstops a child that ignores the signal or holds the pty.
+	// On timeout, tear down the WHOLE process group: pty.Start makes the command a
+	// session leader, so killing the group reaps grandchildren it backgrounded that a
+	// bare Process.Kill would orphan to keep running on the host after the node
+	// "finished". The pgid==pid guard is a hard interlock — signal a group ONLY when
+	// the child genuinely leads its own — so a negative-PID kill can never escape to
+	// the daemon's own group. WaitDelay backstops a child that ignores the signal.
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return nil
@@ -262,11 +225,6 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 	params.EmitProgress(progress, job, 0.1, "exec "+cmdName)
 	started := time.Now()
 
-	// Spawn the command attached to a PTY so build tools that switch to
-	// block buffering when stdout is a pipe (make, gcc, cargo, …) flush
-	// line-by-line as if a user were watching. Tradeoff: stdout and
-	// stderr arrive merged, so we route everything to stdout and leave
-	// stderr empty.
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return params.Err(job, "start", err.Error()), nil
@@ -275,10 +233,9 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 
 	doneRead := make(chan struct{})
 	go func() {
-		// close(doneRead) is deferred so a panic in the pump can't leave the
-		// Execute goroutine blocked forever on <-doneRead, and the recover
-		// keeps a pump panic from killing the daemon (the engine's recover
-		// only covers the calling goroutine).
+		// Deferred so a panic in the pump cannot leave Execute blocked forever on
+		// <-doneRead, and the recover keeps a pump panic from killing the daemon — the
+		// engine's recover only covers the calling goroutine.
 		defer close(doneRead)
 		defer func() {
 			if r := recover(); r != nil {
@@ -334,91 +291,59 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}, nil
 }
 
-// maxLogLineBytes bounds how much of a single output line is buffered
-// before it is flushed as one progress event. A line longer than this is
-// split into consecutive chunks rather than dropped, so memory stays
-// bounded without losing output.
+// maxLogLineBytes: a longer line is split into consecutive chunks rather than
+// dropped, so memory stays bounded without losing output.
 const maxLogLineBytes = 64 * 1024
 
-// pumpStream forwards src to dst (the captured stdout) and to the progress
-// channel, one line at a time.
-//
-// It uses bufio.Reader.ReadSlice rather than bufio.Scanner: a Scanner stops
-// permanently on a token over its max size, silently dropping the rest of the
-// output while the exit code reports success. ReadSlice reports that as a
-// non-terminal ErrBufferFull, so an over-long line is emitted in
-// maxLogLineBytes chunks and reading continues. The command runs on a pty, so
-// complete lines arrive CRLF-terminated; those become "\n" in the captured
-// output and are stripped from the progress message. A chunk flushed mid-line
-// is written through verbatim.
+// pumpStream uses bufio.Reader.ReadSlice rather than bufio.Scanner: a Scanner
+// stops permanently on a token over its max size, silently dropping the rest of
+// the output while the exit code reports success. ReadSlice reports that as a
+// non-terminal ErrBufferFull, so an over-long line is emitted in chunks and
+// reading continues. Lines arrive CRLF-terminated off the pty.
 func pumpStream(src io.Reader, dst *boundedBuffer, progress chan<- core.Progress, job core.Job, stream string) {
 	r := bufio.NewReaderSize(src, maxLogLineBytes)
 	for {
 		chunk, err := r.ReadSlice('\n')
 		if errors.Is(err, bufio.ErrBufferFull) {
-			// Mid-line flush: the line is longer than the buffer. Emit what
-			// we have and keep reading — this is the case the old Scanner
-			// treated as fatal.
 			if len(chunk) > 0 {
 				dst.Write(chunk)
 				emitLogProgress(progress, job, stream, string(chunk))
 			}
 			continue
 		}
-		// Either a complete line (err == nil) or the trailing unterminated
-		// remainder at EOF. Both are emitted as one newline-terminated line,
-		// which is what the Scanner produced for them.
 		if line := trimEOL(chunk); len(line) > 0 || err == nil {
 			dst.Write(line)
 			dst.Write([]byte{'\n'})
 			emitLogProgress(progress, job, stream, string(line))
 		}
 		if err != nil {
-			// io.EOF, or the read error a closed pty surfaces once the
-			// command exits. Everything read so far has been emitted.
 			return
 		}
 	}
 }
 
-// trimEOL strips one trailing line terminator — "\r\n", "\n", or a bare
-// "\r" — from a complete line. Mirrors bufio.ScanLines, which dropped the
-// pty's CR along with the LF.
 func trimEOL(b []byte) []byte {
 	b = bytes.TrimSuffix(b, []byte{'\n'})
 	return bytes.TrimSuffix(b, []byte{'\r'})
 }
 
-// maxTimeoutMs is the largest millisecond count that fits in an int64-ns
-// time.Duration without overflow (~292 years). Mirrors the daemon's
-// maxDurationSeconds, in the unit this drop's param uses.
 const maxTimeoutMs = int(math.MaxInt64 / int64(time.Millisecond))
 
-// resolveTimeoutMs turns the untrusted timeout_ms param into a usable
-// deadline. Like resolveMaxOutputBytes, this is the real enforcement — the
-// ParamsSchema's "minimum" is advisory, since nothing validates a job's
-// params against it before Execute.
+// resolveTimeoutMs is the real enforcement: the ParamsSchema's "minimum" is
+// advisory, since nothing validates a job's params against it before Execute.
 //
-// Two hostile shapes to absorb:
+// Non-positive falls back to the default — context.WithTimeout with a zero
+// duration is already expired, killing the command the instant it starts, and
+// unlike the daemon's secondsToDuration "no timeout" is not an option here, a
+// shell step without a deadline pinning a worker indefinitely.
 //
-//   - Non-positive. context.WithTimeout with a zero or negative duration is
-//     already expired, so the command is killed the instant it starts (or
-//     never starts at all, surfacing as a confusing "start" error rather
-//     than a timeout). Fall back to the default, matching
-//     resolveMaxOutputBytes: unlike the daemon's secondsToDuration, "no
-//     timeout" is not an option here — a shell step without a deadline pins
-//     a worker indefinitely.
+// Over-large clamps: time.Duration is int64 NANOSECONDS, so a big millisecond
+// count wraps NEGATIVE, turning a request for an enormous timeout into an
+// immediate kill. Reachable by typing a long run of digits.
 //
-//   - Over-large. time.Duration is int64 NANOSECONDS, so a big
-//     millisecond count overflows and wraps NEGATIVE — turning a request for
-//     an enormous timeout into an immediate kill, the exact inversion of
-//     what was asked for. This is reachable by typing a long run of digits.
-//     Clamp to the max representable instead.
-//
-// No practical ceiling is imposed beyond the overflow bound: the per-run
-// policy limit is the graph timeout (effectiveGraphTimeout, which clamps to
-// the tenant's MaxTimeoutSeconds), and duplicating a lower cap here would
-// silently break legitimately long builds.
+// No ceiling beyond the overflow bound: the per-run policy limit is the graph
+// timeout, and duplicating a lower cap here would break legitimately long
+// builds.
 func resolveTimeoutMs(n int) int {
 	if n <= 0 {
 		return defaultTimeoutMs
@@ -429,21 +354,14 @@ func resolveTimeoutMs(n int) int {
 	return n
 }
 
-// resolveMaxOutputBytes turns the untrusted max_output_bytes param into a
-// usable positive cap.
+// resolveMaxOutputBytes has to be enforced HERE, not by the ParamsSchema's
+// "minimum": the schema drives the UI form, the docs and flowgen, but nothing
+// validates a job's params against it before Execute — there is no JSON-schema
+// validator in the daemon at all.
 //
-// The cap has to be enforced HERE, not by the ParamsSchema's "minimum": the
-// schema drives the UI form, the docs and flowgen, but nothing validates a
-// job's params against it before Execute — there is no JSON-schema validator
-// in the daemon at all. So a schema constraint is documentation, and this is
-// the check.
-//
-// It matters because a non-positive value reaches boundedBuffer as "no
-// limit" and hands a runaway command an unbounded in-memory buffer — exactly
-// the OOM the cap exists to prevent. Falling back to the default is the
-// fail-safe reading: someone writing 0 far more likely means "leave it
-// alone" than "buffer without bound", and unbounded is not a setting this
-// drop offers. To capture more output, raise the number.
+// It matters because a non-positive value reaches boundedBuffer as "no limit" and
+// hands a runaway command an unbounded in-memory buffer, exactly the OOM the cap
+// prevents. Someone writing 0 far more likely means "leave it alone".
 func resolveMaxOutputBytes(n int) int {
 	if n <= 0 {
 		return defaultMaxOutputBytes
@@ -451,11 +369,9 @@ func resolveMaxOutputBytes(n int) int {
 	return n
 }
 
-// boundedBuffer captures output up to limit bytes, silently discarding
-// the remainder so a runaway command can't OOM the daemon. A zero or
-// negative limit disables the cap — a primitive convenience for tests that
-// want everything; executeShell never passes one, because a caller-supplied
-// limit goes through resolveMaxOutputBytes first.
+// boundedBuffer discards the remainder so a runaway command cannot OOM the
+// daemon. A non-positive limit disables the cap, a convenience for tests;
+// executeShell never passes one.
 type boundedBuffer struct {
 	bytes.Buffer
 	limit int

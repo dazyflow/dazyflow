@@ -3,10 +3,6 @@
 
 package daemon
 
-// Read-only listing routes: the drop catalog and the run history, plus the
-// query parsing they share (filters, time bounds, and the XML alternative
-// to JSON some clients ask for).
-
 import (
 	"encoding/xml"
 	"fmt"
@@ -18,8 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// isTruthyQuery reports whether a query-param value means "on" — accepting
-// "1"/"true"/"yes"/"on" and treating empty, absent, or garbage as false.
 func isTruthyQuery(v string) bool {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "1", "true", "yes", "on":
@@ -28,10 +22,6 @@ func isTruthyQuery(v string) bool {
 	return false
 }
 
-// wantsXML reports whether the caller asked for an XML response instead of
-// the default JSON — either explicitly via ?format=xml or by an Accept
-// header that prefers application/xml (or text/xml). JSON stays the default:
-// anything else (including */* and a missing header) is treated as JSON.
 func wantsXML(r *http.Request) bool {
 	switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format"))) {
 	case "xml":
@@ -43,11 +33,6 @@ func wantsXML(r *http.Request) bool {
 	return strings.Contains(accept, "application/xml") || strings.Contains(accept, "text/xml")
 }
 
-// dropsXML wraps the catalog for an XML response. It mirrors the JSON shape
-// (the same drops, the same field names via the manifests' xml tags) under a
-// <drops><drop>…</drop></drops> root. The JSON body also emits a legacy
-// "modules" alias; XML is a new surface with no legacy clients, so it carries
-// the canonical "drops" name only.
 type dropsXML struct {
 	XMLName xml.Name        `xml:"drops"`
 	Drops   []core.Manifest `xml:"drop"`
@@ -75,8 +60,6 @@ func (h *flowAPI) listModules(rw http.ResponseWriter, r *http.Request, p core.Pr
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// XML is opt-in (?format=xml or an XML Accept header); it serves the
-	// same catalog as the JSON path, just in the XML representation.
 	if wantsXML(r) {
 		writeXML(rw, http.StatusOK, dropsXML{Drops: mans})
 		return
@@ -106,7 +89,6 @@ func (h *flowAPI) listRuns(rw http.ResponseWriter, r *http.Request, p core.Princ
 	tenant := r.PathValue("tenant")
 	workspace := r.PathValue("workspace")
 	id := r.PathValue("id")
-	// Tenant-scope check: confirm the graph exists for this principal.
 	if _, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, ""); err != nil {
 		writeJSONError(rw, http.StatusNotFound, err.Error())
 		return
@@ -121,9 +103,6 @@ func (h *flowAPI) listRuns(rw http.ResponseWriter, r *http.Request, p core.Princ
 	h.writeRunList(rw, r, p, opts)
 }
 
-// listAllRuns is the workspace-wide variant. tenant/workspace come from
-// the principal (Service.ListGraphRuns overrides any client-supplied
-// values), so this endpoint takes no path params — just query filters.
 func (h *flowAPI) listAllRuns(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	opts, err := parseRunListOpts(r)
 	if err != nil {
@@ -152,10 +131,6 @@ func parseRunListOpts(r *http.Request) (core.ListGraphRunsOpts, error) {
 		}
 	}
 	if s := r.URL.Query().Get("status"); s != "" {
-		// Reject an unknown status instead of casting it through. The cast
-		// itself is harmless, but the result — an empty list that looks
-		// exactly like "no runs match" — makes a typo'd filter
-		// (?status=succeded) indistinguishable from a genuine empty result.
 		st := core.JobStatus(s)
 		if !st.Valid() {
 			return opts, fmt.Errorf("unknown status %q", s)
@@ -225,9 +200,6 @@ func (h *flowAPI) writeRunList(rw http.ResponseWriter, r *http.Request, p core.P
 	writeJSON(rw, http.StatusOK, map[string]any{"runs": out})
 }
 
-// runSummary is the slim payload listRuns emits — JobRecord has more
-// fields than the UI needs and serializing Result for every run wastes
-// bandwidth on a list view.
 type runSummary struct {
 	ID         string         `json:"id"`
 	GraphID    string         `json:"graph_id"`

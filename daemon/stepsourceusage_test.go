@@ -11,7 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// usageService builds a service over two real workspace stores for one org.
 func usageService(t *testing.T) (*Service, *workspace.Store, *workspace.Store) {
 	t.Helper()
 	ws1, err := workspace.OpenFS(t.TempDir())
@@ -35,9 +34,6 @@ func saveGraph(t *testing.T, store *workspace.Store, g core.Graph) {
 	}
 }
 
-// TestFlowsUsingMCPServer_FindsReferencesAcrossWorkspaces is the fact the
-// delete warning rests on: every flow in the org that names the server's
-// steps, and nothing else.
 func TestFlowsUsingMCPServer_FindsReferencesAcrossWorkspaces(t *testing.T) {
 	t.Parallel()
 	svc, ws1, ws2 := usageService(t)
@@ -98,8 +94,6 @@ func TestFlowsUsingMCPServer_FindsReferencesAcrossWorkspaces(t *testing.T) {
 	}
 }
 
-// TestFlowsUsingMCPServer_NothingUsesIt is the case the old warning could not
-// express, and the reason this lookup exists.
 func TestFlowsUsingMCPServer_NothingUsesIt(t *testing.T) {
 	t.Parallel()
 	svc, ws1, _ := usageService(t)
@@ -149,8 +143,6 @@ func TestFlowsUsingMCPServer_CountsWhatItMayNotName(t *testing.T) {
 	}
 }
 
-// TestFlowsUsingMCPServer_RefusesAnotherOrg: the scan is tenant-scoped, and
-// the tenant comes from the principal's own authorization.
 func TestFlowsUsingMCPServer_RefusesAnotherOrg(t *testing.T) {
 	t.Parallel()
 	svc, _, _ := usageService(t)
@@ -159,9 +151,6 @@ func TestFlowsUsingMCPServer_RefusesAnotherOrg(t *testing.T) {
 	}
 }
 
-// TestFlowsUsingWebAPI covers the other step source through the same scan: a
-// web API catalog's steps carry api:<name>:<operation>, and deleting one has
-// the same consequence a disabled MCP server does.
 func TestFlowsUsingWebAPI(t *testing.T) {
 	t.Parallel()
 	svc, ws1, _ := usageService(t)
@@ -195,7 +184,6 @@ func TestFlowsUsingWebAPI(t *testing.T) {
 		t.Errorf("steps = %v, want both operations", usage.Flows[0].Steps)
 	}
 
-	// And the two schemes do not see each other's flows.
 	mcpUsage, err := svc.FlowsUsingMCPServer(context.Background(), adminPrincipal("acme"), "acme", "order-service")
 	if err != nil {
 		t.Fatalf("FlowsUsingMCPServer: %v", err)

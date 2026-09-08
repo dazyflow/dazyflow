@@ -3,10 +3,6 @@
 
 package daemon
 
-// Browser session handling: the session cookie's lifetime and renewal, the
-// requireAuth wrapper every authenticated route goes through, and pulling a
-// credential off a request (bearer header or cookie).
-
 import (
 	"errors"
 	"fmt"
@@ -117,8 +113,6 @@ func (h *HTTPGateway) maybeRenewSession(rw http.ResponseWriter, r *http.Request,
 	if h.Sessions == nil || !strings.HasPrefix(token, auth.SessionTokenPrefix) {
 		return
 	}
-	// Only refresh the cookie for cookie-authenticated requests; a bearer
-	// session token has no cookie to update.
 	if c, err := r.Cookie(sessionCookieName); err != nil || c.Value != token {
 		return
 	}
@@ -139,9 +133,6 @@ func (h *HTTPGateway) maybeRenewSession(rw http.ResponseWriter, r *http.Request,
 	h.setSessionCookie(rw, r, token, next)
 }
 
-// credentialFromRequest extracts a bearer credential from either the
-// Authorization header (preferred, used by dzctl and API-key clients)
-// or the session cookie set by /auth/signin (used by the browser).
 func credentialFromRequest(r *http.Request) string {
 	if h := r.Header.Get("Authorization"); h != "" {
 		token := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
@@ -155,19 +146,12 @@ func credentialFromRequest(r *http.Request) string {
 	return ""
 }
 
-// sessionCookies issues and clears the browser session cookie, and answers how
-// long a session lasts. The Secure flag is decided by urlBuilder, so the
-// proxy-header gate stays in one place.
 type sessionCookies struct {
 	urlBuilder
 	ttl    time.Duration
 	maxAge time.Duration
 }
 
-// sessionTTL is the sliding idle window, defaulting to 7d when SessionTTL
-// is unset (or non-positive). Centralizes the `ttl := c.ttl; if ttl
-// <= 0 { ttl = … }` default repeated at every session-issue site and in
-// maybeRenewSession.
 func (c sessionCookies) sessionTTL() time.Duration {
 	if c.ttl <= 0 {
 		return 7 * 24 * time.Hour
@@ -187,10 +171,6 @@ func (c sessionCookies) maxSessionAge() time.Duration {
 	return c.maxAge
 }
 
-// setSessionCookie installs the host-only session cookie for token, expiring
-// at expires. The Secure flag tracks whether the request reached us over TLS
-// (requestIsHTTPS, which also honors a trusted X-Forwarded-Proto). Single
-// source for every cookie-issuing sign-in path (password, SSO, handoff).
 func (c sessionCookies) setSessionCookie(rw http.ResponseWriter, r *http.Request, token string, expires time.Time) {
 	http.SetCookie(rw, &http.Cookie{
 		Name:     sessionCookieName,
@@ -203,8 +183,6 @@ func (c sessionCookies) setSessionCookie(rw http.ResponseWriter, r *http.Request
 	})
 }
 
-// clearSessionCookie expires the session cookie (sign-out). Mirrors
-// setSessionCookie's attributes so the browser matches and drops it.
 func (c sessionCookies) clearSessionCookie(rw http.ResponseWriter, r *http.Request) {
 	http.SetCookie(rw, &http.Cookie{
 		Name:     sessionCookieName,
@@ -217,7 +195,6 @@ func (c sessionCookies) clearSessionCookie(rw http.ResponseWriter, r *http.Reque
 	})
 }
 
-// cookies exposes session-cookie handling to a domain handler.
 func (h *HTTPGateway) cookies() sessionCookies {
 	return sessionCookies{urlBuilder: h.urls(), ttl: h.SessionTTL, maxAge: h.MaxSessionAge}
 }

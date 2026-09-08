@@ -51,13 +51,8 @@ import type { OAuthProviderStatus, Graph, GraphTrigger, Manifest } from "../../t
 type Props = {
   selected: Node<DazyNodeData> | null;
   onChange: (id: string, patch: Partial<DazyNodeData>) => void;
-  // params are stashed alongside the node-data in the Flow node — passed
-  // in here separately so the textarea stays controllable without a
-  // round-trip through React Flow's internal state.
   paramsByID: Record<string, Record<string, unknown>>;
   onParamsChange: (id: string, params: Record<string, unknown>) => void;
-  // manifests is the full drop catalog — the for_each editor uses it to
-  // populate its "Run step" picker and render the chosen step's form.
   manifests?: Manifest[];
   // wiredPorts lists the node's input ports that currently have a wire. A
   // param whose key is wired is overridden by that wire, so its editor (e.g.
@@ -67,90 +62,30 @@ type Props = {
   // (traced from upstream when wired), so the disabled picker can name the
   // sheet the wire actually points at rather than just "set by a step".
   resourceLabels?: Record<string, string>;
-  // wiredSources maps a wired param key → a friendly label for the step/port
-  // feeding it, so a wired non-picker field can name what's flowing in.
   wiredSources?: Record<string, string>;
-  // loopOwnerNodeId is set when the selected node runs inside a for_each
-  // loop body — it's the id of the owning for_each. The form then offers
-  // ${item.<column>} reference tokens (the columns of that loop's list) and
-  // shows a "runs once per row" banner.
   loopOwnerNodeId?: string;
-  // nodeDisabled + onToggleDisabled drive the step's on/off switch. Off =
-  // skipped at run time, along with everything downstream.
   nodeDisabled?: boolean;
   onToggleDisabled?: (id: string) => void;
-  // nodeLocked + onToggleLocked guard the step against edits: the form above
-  // goes inert and FlowEditor stops the card dragging. Editor-side only — the
-  // API happily writes a locked node, so this is a guard against the slip
-  // (nudging a card mid-review, typing into the wrong field), not a permission.
   nodeLocked?: boolean;
   onToggleLocked?: (id: string) => void;
   // tokenLabels: "nodeId.port" → friendly step·port names so fields holding
   // one ${upstream.…} token render as a readable chip.
   tokenLabels?: Record<string, string>;
-  // currentRunID is the most-recent run for this graph (set when the user
-  // clicks Run). Used by the render_text / render_table editors to read real
-  // values off that run. Note it is graph-scoped, not run-scoped: it names
-  // whichever run is latest, which is why no decision control (approvals)
-  // hangs off it — see ApprovalPanel.
   currentRunID: string | null;
-  // rowsSource: the node+port feeding this step's `rows` input, so an editor
-  // can read its columns off the producer's own output. The resolved input on
-  // this node's run record is always empty (see inspectorRowsSource in
-  // FlowEditor), which is why the producer is the one to ask.
   rowsSource?: { nodeId: string; port: string };
-  // upstreamRows: for a render_text step, the rows its `rows` producer emitted
-  // on the last run — the parent resolves it from the run outputs so the
-  // Make-text editor can discover real columns and seed its preview.
   upstreamRows?: Record<string, unknown>[];
-  // liveLogs streams stdout/stderr lines from the currently-selected
-  // node's in-flight run. When non-empty the inspector renders a
-  // scrolling console.
   liveLogs?: string[];
-  // workspace gives form fields with format:"workspace-path" the
-  // context they need to upload files into the active sandbox.
   workspace?: WorkspaceCtx;
-  // onSample fires a partial run that ends at the selected node —
-  // the parent submits a graph-subset run via /sample and pipes the
-  // result back through the same SSE channel the regular Run button
-  // uses, so the inspector's existing Output section lights up.
-  // Returns the run ID on success, or undefined when the pre-sample save
-  // didn't land (the parent already surfaced that error); or throws. When
-  // omitted the button is hidden.
   onSample?: (nodeID: string) => Promise<string | undefined>;
-  // onClose dismisses the inspector. Used by the mobile bottom-sheet
-  // layout to let the user reclaim the canvas; clears the selection
-  // so the same selection-driven open logic doesn't reopen instantly.
-  // The close affordance is only rendered when this prop is set so
-  // desktop layouts (where the inspector is always visible) stay clean.
   onClose?: () => void;
-  // onDelete removes the selected node (and its edges). This is the
-  // only delete affordance on touch devices, where there's no
-  // Delete/Backspace key to trigger React Flow's built-in removal.
   onDelete?: (id: string) => void;
-  // onResetState clears the node's persisted per-run state (dedupe cursor /
-  // watermark). Offered only for drops whose manifest declares node_state.
-  // The parent owns the confirm modal (shared with the context-menu action).
   onResetState?: (id: string) => void;
-  // providers + onConnect drive the account dropdown for OAuth drops:
-  // the `account` param becomes a picker of connected accounts instead
-  // of a free-text box. Omitted/null = plain text (OAuth disabled).
   providers?: OAuthProviderStatus[] | null;
   onConnect?: () => void;
-  // setupNeeded is set when the selected node's app isn't connected yet —
-  // drives a "Connect <app>" CTA at the top of the panel, matching the node
-  // card's footer and the run banner. Carries the integration name + /apps slug.
   setupNeeded?: SetupNeed;
-  // running + onStopRun let the "Run this step" button reflect the live run:
-  // while a run (incl. this step's sample) is active it becomes a Stop button.
-  // cancelling shows the in-flight "Stopping…" state.
   running?: boolean;
   cancelling?: boolean;
   onStopRun?: () => void;
-  // graphMeta gives the trigger config UI (FormTab/WebhookTab/RequestTab) the
-  // tenant/workspace/id/name it needs to build the /trigger + /form URLs and
-  // the curl/embed recipes. The Triggers menu is gone — this config lives on
-  // the node now.
   graphMeta?: { id: string; tenant: string; workspace: string; name?: string };
   // triggerLive says whether THIS flow's triggers are actually accepting
   // deliveries right now: published, with no unpublished edits sitting on top.
@@ -159,12 +94,7 @@ type Props = {
   // claim it "works exactly as shown" while the key it showed returned 401
   // until the flow was published again.
   triggerLive?: { published: boolean; dirty: boolean };
-  // missingKeys lists the selected node's param/port keys still needing a
-  // value (from the config check). The form marks those fields red so a jump
-  // from the "N to configure" modal points straight at what to fill in.
   missingKeys?: string[];
-  // The coordinate the selected node emitted on its last run ("lat,lon"), so a
-  // geo-point map field can recenter on the result after running.
   runCoordinate?: string;
 };
 
@@ -209,9 +139,6 @@ export function Inspector({
   const navigate = useNavigate();
   const [sampling, setSampling] = useState(false);
   const [sampleError, setSampleError] = useState<string | null>(null);
-  // Node deletion goes through the themed ConfirmModal (Escape/backdrop
-  // cancel, safe default) rather than a raw window.confirm — consistent with
-  // every other destructive action and translatable.
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [mode, setMode] = useState<Mode>("form");
   const [jsonText, setJsonText] = useState("");
@@ -223,11 +150,6 @@ export function Inspector({
   // them as ${item.<column>} inserts in every string field's "{}" menu —
   // mirroring ForEachEditor for the legacy step path.
   const [loopItemFields, setLoopItemFields] = useState<string[]>([]);
-  // Deps are primitives only: the `workspace` object is recreated by the
-  // parent on every render, so depending on it re-runs this effect each
-  // render — and the no-owner branch setting a fresh [] each time spins an
-  // infinite render loop. The functional set (keep the same ref when already
-  // empty) guards the same way.
   const wsToken = workspace?.token;
   useEffect(() => {
     if (!loopOwnerNodeId || !wsToken || !graphMeta?.id) {
@@ -255,9 +177,6 @@ export function Inspector({
     token: "${item." + f + "}",
   }));
 
-  // Sync JSON text whenever selection or params change. We track
-  // dependencies on the selected ID and the current params snapshot so
-  // an external save (e.g. switching tabs) shows up immediately.
   const currentParams = selected ? (paramsByID[selected.id] ?? {}) : {};
   useEffect(() => {
     if (!selected) {
@@ -307,25 +226,10 @@ export function Inspector({
     !!schema &&
     schema.type === "object" &&
     Object.keys(schema.properties ?? {}).length === 0;
-  // Drop identity for the header — literally the same component the canvas
-  // node, the step palette and the Apps cards draw, so "this drop" looks like
-  // itself wherever you meet it. This used to be a hand-copied variant that
-  // resolved the icon the same way but painted it differently.
   const brandLogo = d.manifest?.brand_logo;
-  // The bare glyph, for the "connect this app" button below — that one wants
-  // an icon inside a button, not the tiled DropIcon treatment.
   const Glyph = iconFor(d.manifest?.icon, d.manifest?.category);
-  // The cron_trigger node owns its schedule (Phase 2). In form mode we
-  // render the friendly preset picker (presets + time + "next fires"
-  // preview) instead of a raw cron text box — the same control the
-  // Triggers modal uses. The picker always emits a concrete 5-field cron,
-  // so just opening it on a fresh node writes a real default rather than
-  // leaving params blank. JSON mode still exposes the raw params.
   const isCronTrigger = d.moduleID === "cron_trigger";
-  // for_each gets a bespoke editor (step picker + the chosen step's form)
-  // instead of the raw step_module/step_params fields.
   const isForEach = d.moduleID === "for_each";
-  // Shared reference context for the form's "{}" insert-a-reference menu.
   const refCtx =
     workspace && graphMeta?.id
       ? {
@@ -336,9 +240,6 @@ export function Inspector({
           nodeId: selected.id,
         }
       : undefined;
-  // The inbound-HTTP triggers carry their own config on the node. Their
-  // panels read a minimal Graph for building the /trigger, /form and /call
-  // URLs; params are the same bag the old GraphTrigger was.
   const isWebhookInput = d.moduleID === "webhook_input";
   const isRequestInput = d.moduleID === "request_input";
   const isFormInput = d.moduleID === "form_input";
@@ -348,14 +249,7 @@ export function Inspector({
     workspace: graphMeta?.workspace ?? "",
     name: graphMeta?.name ?? "",
   } as Graph);
-  // For OAuth-backed drops, turn the `account` param into a dropdown of
-  // connected accounts. Skipped when OAuth is off (providers null) or
-  // the drop isn't OAuth-backed (provider null).
   const accountProvider = oauthProviderForIntegration(d.manifest?.integration);
-  // Google accounts are shared org credentials managed centrally on
-  // /admin/google (org-admin only), so the picker's connect CTA routes
-  // there instead of starting an inline OAuth flow from a node. Every
-  // other provider connects inline via the passed-in onConnect.
   const connectAction =
     accountProvider === "google" ? () => navigate("/admin/google") : onConnect;
   const accountPicker: AccountPicker | undefined =
@@ -364,10 +258,6 @@ export function Inspector({
           options:
             providers.find((p) => p.name === accountProvider)?.accounts ?? [],
           onConnect: connectAction,
-          // providerLabel is the integration's user-facing name
-          // ("Gmail", "Slack") — drives the inline "Connect Gmail"
-          // button when no accounts are connected. Falls back to a
-          // generic label inside AccountField when absent.
           providerLabel: integrationName(d.manifest?.integration ?? "", i18n.language),
         }
       : undefined;
@@ -548,8 +438,6 @@ export function Inspector({
             lock that stopped you running the flow or connecting an app. */}
         <div className="inspector-edits" inert={nodeLocked || undefined}>
         {mode === "form" && canForm && schema && isCronTrigger && (
-          // key forces a fresh picker per node so its internal preset
-          // state re-derives from the new node's cron on selection.
           <TriggerScheduleField
             key={selected.id}
             value={typeof currentParams.cron === "string" ? currentParams.cron : ""}
@@ -565,8 +453,6 @@ export function Inspector({
         )}
 
         {mode === "form" && isWebhookInput && graphMeta && (
-          // The Webhook step is one door now — the key that guards
-          // /trigger — so it renders flat. The hosted form is its own step.
           <>
             <WebhookStatusLine
               webhook={currentParams as GraphTrigger}
@@ -584,8 +470,6 @@ export function Inspector({
         )}
 
         {mode === "form" && isFormInput && graphMeta && (
-          // The Form step: the link people open, what it asks them, and
-          // how to put it on your own site.
           <>
             <FormStatusLine triggerLive={triggerLive} />
             <FormTab
@@ -599,9 +483,6 @@ export function Inspector({
         )}
 
         {mode === "form" && isRequestInput && graphMeta && (
-          // The Request step's config is one door — the keys guarding /call —
-          // so it renders flat rather than behind the webhook's form/developer
-          // split.
           <RequestTab
             graph={webhookGraph}
             request={currentParams as GraphTrigger}
@@ -704,17 +585,6 @@ export function Inspector({
               workspace={workspace}
               accountPicker={accountPicker}
               wiredKeys={wiredPorts}
-              // A drop with a dedicated editor above hides its raw field here so
-              // it isn't edited in two places: render_table's `columns` (its
-              // whole Advanced section) and the Expression drop's `expr`.
-              //
-              // `column_labels` is omitted for the same reason: the column
-              // editor above now carries the custom name in the row you add the
-              // column in, and a second field for the same decision, sitting
-              // apart from the list it applies to, is what made this confusing.
-              // The param still works — it is the shape an LLM writes, and it
-              // renames without restricting the column set — it just isn't a
-              // second place to do it by hand.
               omitKeys={
                 d.moduleID === "render_table"
                   ? ["columns", "column_labels"]

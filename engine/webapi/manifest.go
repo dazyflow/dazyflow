@@ -13,22 +13,10 @@ import (
 	"github.com/dazyflow/dazyflow/internal/schemaports"
 )
 
-// overlayPort is the catch-all input: a whole JSON object merged over the
-// params. Same name and same job as engine/mcp's, because it is the same
-// affordance and an author moving between an MCP step and a web-API step should
-// not have to learn a second word for it. It stays even though arguments get
-// their own ports, because it is the only way to supply an argument the port
-// synthesis declines to expose — a nested object, an array, a name that cannot
-// be a port.
 const overlayPort = "input"
 
-// rawBodyPort carries a verbatim request body for BodyRaw operations. Named as
-// http_request names it, for the same reason overlayPort is named as MCP names
-// it.
 const rawBodyPort = "request_body"
 
-// synthesizeManifest turns one described operation into the manifest the engine
-// validates against and the palette (and the flow generator) reads.
 func synthesizeManifest(desc Descriptor, op Operation) core.Manifest {
 	method := strings.ToUpper(op.Method)
 	integration := desc.Integration
@@ -37,50 +25,42 @@ func synthesizeManifest(desc Descriptor, op Operation) core.Manifest {
 	}
 
 	inputs := schemaports.Build(portCandidates(op), schemaports.Options{
-		// Belt and braces: descriptor validation already refuses an argument
-		// named any of these (reservedParams), so this can only fire for a
-		// descriptor built in a test. Cheap enough to keep, and the alternative
-		// is a port that silently shadows an output.
+		// Belt and braces: descriptor validation already refuses these names, so this
+		// can only fire for a descriptor built in a test. The alternative is a port that
+		// silently shadows an output.
 		Reserved: []string{overlayPort, rawBodyPort, "status", "response_body", "headers", "out"},
 	})
 	if op.BodyMode == BodyRaw {
 		inputs = append(inputs, core.Port{
 			Port:  rawBodyPort,
 			Label: "Body",
-			// Every input here is inline-only: the service is on another
-			// machine (or at least another process's network namespace), while
-			// a Ref's path is on the DAEMON's disk. A job carrying one is
-			// refused before the step runs, with that as the reason, rather
-			// than a path being posted to a third party as a string.
+			// Every input is inline-only: the service is on another machine while a Ref's
+			// path is on the DAEMON's disk, and a job carrying one is refused before the step
+			// runs rather than a path being posted to a third party as a string.
 			InlineOnly: true,
 		})
 	}
 	inputs = append(inputs, core.Port{
-		Port: overlayPort,
-		// Kept in step with engine/mcp's overlay port, which carries the note
-		// on why this is a short name and not the sentence it used to be.
+		Port:       overlayPort,
 		Label:      "Extra params",
 		InlineOnly: true,
 	})
 
 	return core.Manifest{
-		ID:       StepID(desc.Name, op.ID),
-		Version:  "1.0",
-		Label:    desc.DisplayName() + " — " + op.DisplayName(),
-		Subtitle: subtitle(op, method),
-		Color:    "#5599ee",
-		Icon:     "globe",
-		// The service's own favicon, when icon.go found one. The globe above is
-		// what a catalog with no resolvable mark keeps wearing.
+		ID:          StepID(desc.Name, op.ID),
+		Version:     "1.0",
+		Label:       desc.DisplayName() + " — " + op.DisplayName(),
+		Subtitle:    subtitle(op, method),
+		Color:       "#5599ee",
+		Icon:        "globe",
 		BrandLogo:   desc.Logo,
 		Category:    "external",
 		Provider:    "api:" + desc.Name,
 		Integration: integration,
-		// The catalog's own blurb, which reaches the Apps page through the
-		// integration group rather than through this step. Deliberately NOT
-		// folded into the step's Description below: the same paragraph repeated
-		// on sixty manifests is what the flow generator would read instead of
-		// grounding, and the reader of a step wants the call, not the service.
+		// The catalog's blurb reaches the Apps page through the integration group, and
+		// is deliberately NOT folded into the step's Description: the same paragraph on
+		// sixty manifests is what the flow generator would read instead of grounding, and
+		// the reader of a step wants the call, not the service.
 		IntegrationDescription: desc.Description,
 		Tags:                   []string{"api", "http", desc.Name},
 		Description:            description(desc, op, method),
@@ -90,33 +70,26 @@ func synthesizeManifest(desc Descriptor, op Operation) core.Manifest {
 		ProcessModel:           core.ProcessLongLived,
 		Inputs:                 inputs,
 		Outputs: []core.Port{
-			// The same three http_request emits, in the same order and for the
-			// same reason: flows branch on the status code, so it is a port and
-			// not buried in a meta blob. A typed step that hid it would be a
-			// downgrade from the generic step it replaces.
+			// The same three http_request emits, in the same order: flows branch on the
+			// status code, so it is a port rather than buried in a meta blob.
 			{Port: "status", Label: "Status", MIME: []string{"application/json"}},
 			{Port: "response_body", Label: "Response"},
 			{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 		},
 		ParamsSchema:     paramsSchema(desc, op),
 		ConnectionFields: connectionFields(desc),
-		// Declared from the HTTP method, which is the one thing a described API
-		// tells us that an MCP tool does not: GET/HEAD/PUT/DELETE are idempotent
-		// per RFC 9110, so a retry edge that targets them validates, and one
-		// that targets a POST fails validation instead of silently double-firing.
+		// Declared from the HTTP method, the one thing a described API tells us that an
+		// MCP tool does not: a retry edge targeting GET/HEAD/PUT/DELETE validates, and one
+		// targeting a POST fails validation instead of silently double-firing.
 		Idempotent:  idempotentMethods[method],
 		RetryPolicy: retryPolicy(method),
 	}
 }
 
-// portCandidates decides which of an operation's arguments are even considered
-// for a port.
-//
-// Header arguments are excluded on purpose. In a real spec they are
-// content negotiation and versioning (`Accept-Language`, `X-Api-Version`) —
-// set once for the whole catalog, not per run — and a pin for each would spend
-// the port budget on the arguments least likely to be wired. They remain
-// settable as params.
+// portCandidates excludes header arguments on purpose: in a real spec they are
+// content negotiation and versioning, set once for the whole catalog rather than
+// per run, so a pin for each would spend the port budget on the arguments least
+// likely to be wired. They remain settable as params.
 func portCandidates(op Operation) []schemaports.Candidate {
 	out := make([]schemaports.Candidate, 0, len(op.Args))
 	for _, a := range op.Args {
@@ -143,9 +116,6 @@ func subtitle(op Operation, method string) string {
 func description(desc Descriptor, op Operation, method string) string {
 	var b strings.Builder
 	if op.Deprecated {
-		// core.Manifest has no deprecation field yet, and inventing one is a
-		// bigger change than this feature should carry. Saying it first in the
-		// description is where an author will actually read it.
 		b.WriteString("Deprecated by the service. ")
 	}
 	if op.Description != "" {
@@ -166,9 +136,8 @@ func summary(desc Descriptor, op Operation, method string) string {
 	return fmt.Sprintf("Call %s %s on %s.", method, op.Path, desc.DisplayName())
 }
 
-// example gives the flow generator a params shape to copy. Required arguments
-// only: an example that filled in every optional field would teach the
-// generator to send them.
+// example carries required arguments only: filling in every optional field would
+// teach the generator to send them.
 func example(desc Descriptor, op Operation, method string) core.ParamsExample {
 	params := map[string]any{}
 	for _, a := range op.Args {
@@ -227,21 +196,19 @@ func retryPolicy(method string) core.RetryPolicy {
 	return ""
 }
 
-// connectionFields declares the catalog's credential as a connection field, so
-// a tenant's own service appears on the Apps page beside Gmail and Stripe:
-// connected once, encrypted, injected at run time (engine/secrets.go) into
-// whichever of these params the author left unset, never visible in a flow.
+// connectionFields puts a tenant's own service on the Apps page beside Gmail and
+// Stripe: connected once, encrypted, injected at run time into whichever params
+// the author left unset, never visible in a flow.
 //
 // The credential and NOTHING ELSE. The service address is deliberately not a
-// connection field: connections are writable with secret:write (the editor
-// role), the catalog address is set behind organization:admin, and an injected
-// connection value beats the descriptor's own (Transport.buildRequest). Making
-// the address a connection field would let the less privileged source redirect
-// the token to a host of its choosing. The per-step base_url PARAM remains,
-// which is flow-shaping power graph:edit already has.
+// connection field: connections are writable with secret:write, the catalog
+// address is set behind organization:admin, and an injected connection value beats
+// the descriptor's own — so making the address one would let the less privileged
+// source redirect the token to a host of its choosing. The per-step base_url PARAM
+// remains, which is flow-shaping power graph:edit already has.
 //
-// The credential is not marked Required: it is injected rather than typed, so
-// flagging it would mark every node incomplete until the connection exists.
+// Not marked Required: it is injected rather than typed, so flagging it would
+// mark every node incomplete until the connection exists.
 func connectionFields(desc Descriptor) []core.ConnectionField {
 	var fields []core.ConnectionField
 	switch desc.Auth.Kind {
@@ -263,10 +230,6 @@ func connectionFields(desc Descriptor) []core.ConnectionField {
 	return fields
 }
 
-// paramsSchema renders the params form: every argument, plus the two knobs the
-// call itself takes. An argument's own Schema is used verbatim when it has one,
-// so an enum stays a dropdown and a nested body object keeps its shape after
-// Type reduced it to a word.
 func paramsSchema(desc Descriptor, op Operation) json.RawMessage {
 	props := map[string]json.RawMessage{}
 	var required []string
@@ -308,8 +271,7 @@ func paramsSchema(desc Descriptor, op Operation) json.RawMessage {
 
 	schema := map[string]any{"type": "object", "properties": props}
 	if len(required) > 0 {
-		// Sorted so the rendered schema is stable across restarts — the same
-		// reason port order is.
+		// Sorted so the rendered schema is stable across restarts, as port order is.
 		sort.Strings(required)
 		schema["required"] = required
 	}
@@ -331,9 +293,6 @@ func argSchema(a Arg) json.RawMessage {
 		m["description"] = a.Description
 	}
 	if a.In != InBody {
-		// Worth stating in the form: it explains why two arguments of the same
-		// shape land in different places, and it is the only place the request
-		// structure is visible to an author at all.
 		m["x_location"] = string(a.In)
 	}
 	return mustJSON(m)

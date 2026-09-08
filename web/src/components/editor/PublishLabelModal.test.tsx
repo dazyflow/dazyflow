@@ -41,9 +41,6 @@ describe("PublishLabelModal", () => {
     expect(onPublish).toHaveBeenLastCalledWith("");
   });
 
-  // The default (healthy flow) shape: no warning, and publishing is the
-  // emphasised action. Guards against the gate below leaking into every
-  // publish.
   it("shows no warning and keeps publish primary when nothing is missing", () => {
     renderModal();
     expect(screen.queryByRole("note")).not.toBeInTheDocument();

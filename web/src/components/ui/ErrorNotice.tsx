@@ -23,14 +23,9 @@ export function ErrorNotice({
   children: ReactNode;
   style?: CSSProperties;
   className?: string;
-  // action is a trailing control (Dismiss, Retry, Sign out) pinned to the end
-  // of the row. It sits OUTSIDE the message body so a long message wraps
-  // against it rather than pushing it out of the card.
   action?: ReactNode;
 }) {
   return (
-    // role="alert" so a screen reader announces the failure when it appears —
-    // these are almost always rendered in response to a user action.
     <div className={className ? `card error ${className}` : "card error"} style={style} role="alert">
       <AlertCircle size={ICON.sm} aria-hidden="true" />
       {/* A div, not a span: some messages carry block content (a paragraph

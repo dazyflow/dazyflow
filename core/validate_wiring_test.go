@@ -38,15 +38,12 @@ func TestValidate_RefusesDuplicateEdges(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "duplicates edge 0") {
 		t.Fatalf("duplicate wire: err = %v, want a duplicate-edge error", err)
 	}
-	// Waypoints are editor metadata, so they don't make two wires distinct.
 	g.Edges[1].Waypoints = []Position{{X: 1, Y: 1}}
 	if err := Validate(g); err == nil {
 		t.Error("a duplicate wire with different waypoints was accepted")
 	}
 }
 
-// The report can't grow with the graph: a graph made entirely of duplicates
-// collapses to a count rather than one error per wire.
 func TestValidate_DuplicateReportIsBounded(t *testing.T) {
 	const n = 500
 	g := Graph{Nodes: []Node{{ID: "a", Module: "src"}, {ID: "b", Module: "variadic"}}}
@@ -85,7 +82,6 @@ func TestValidateRuntime_VariadicFanInDefaultMax(t *testing.T) {
 		t.Errorf("fan-in past the ceiling: err = %v, want a max-connections error", err)
 	}
 
-	// A port that declares its own Max keeps it.
 	m := wiringManifests()
 	two := 2
 	m["variadic"] = Manifest{ID: "variadic", Inputs: []Port{{Port: "items", Variadic: true, Max: &two}}}
@@ -94,11 +90,6 @@ func TestValidateRuntime_VariadicFanInDefaultMax(t *testing.T) {
 	}
 }
 
-// A declared Max is the drop's own business only up to MaxVariadicFanIn. Not
-// every manifest is ours: a remote runner's arrives over gRPC and its max is
-// taken verbatim, so an unclamped one let the drop declaring the port choose
-// its own ceiling — putting fan-in back where it was before the default
-// existed, for exactly the steps outside the default palette.
 func TestValidateRuntime_ManifestMaxIsClamped(t *testing.T) {
 	build := func(n int) Graph {
 		g := Graph{Nodes: []Node{{ID: "sink", Module: "variadic"}}}
@@ -113,11 +104,9 @@ func TestValidateRuntime_ManifestMaxIsClamped(t *testing.T) {
 	huge := 1_000_000
 	m["variadic"] = Manifest{ID: "variadic", Inputs: []Port{{Port: "items", Variadic: true, Max: &huge}}}
 
-	// The declared max still raises the ceiling above the default...
 	if err := ValidateRuntime(build(DefaultMaxVariadicFanIn+1), m); err != nil {
 		t.Errorf("a declared max above the default was refused: %v", err)
 	}
-	// ...but not past the absolute one.
 	if err := ValidateRuntime(build(MaxVariadicFanIn), m); err != nil {
 		t.Errorf("fan-in at the absolute ceiling was refused: %v", err)
 	}
@@ -127,8 +116,6 @@ func TestValidateRuntime_ManifestMaxIsClamped(t *testing.T) {
 	}
 }
 
-// A dynamic-port step is exempt from port existence and MIME — its real ports
-// come from its own settings — but not from fan-in, which needs no port list.
 func TestValidateRuntime_DynamicPortsFanIn(t *testing.T) {
 	g := Graph{
 		Nodes: []Node{
@@ -146,7 +133,6 @@ func TestValidateRuntime_DynamicPortsFanIn(t *testing.T) {
 		t.Fatalf("two wires into one dynamic port: err = %v, want a fan-in error", err)
 	}
 
-	// One wire per port stays legal, on a port name no manifest declares.
 	g.Edges[1].ToPort = "other"
 	if err := ValidateRuntime(g, wiringManifests()); err != nil {
 		t.Errorf("one wire per dynamic port was refused: %v", err)
@@ -183,9 +169,6 @@ func TestValidate_EditorMetadataCaps(t *testing.T) {
 	}
 }
 
-// A step whose module this instance has no manifest for still obeys fan-in:
-// the rule needs no port list, and the engine assembles one value per port
-// wherever the step actually runs (a runner, an MCP host).
 func TestValidateRuntime_UnknownModuleFanIn(t *testing.T) {
 	g := Graph{
 		Nodes: []Node{
@@ -203,14 +186,11 @@ func TestValidateRuntime_UnknownModuleFanIn(t *testing.T) {
 		t.Fatalf("two wires into one input of a catalog-less step: err = %v, want a fan-in error", err)
 	}
 
-	// One wire per port is still legal — the module may be anywhere, and its
-	// port names are its own business.
 	g.Edges[1].ToPort = "other"
 	if err := ValidateRuntime(g, wiringManifests()); err != nil {
 		t.Errorf("one wire per port on a catalog-less step was refused: %v", err)
 	}
 
-	// A switched-off step runs nowhere, so it is exempt like every other.
 	g.Edges[1].ToPort = "in"
 	g.Nodes[0].Disabled = true
 	if err := ValidateRuntime(g, wiringManifests()); err != nil {
@@ -218,10 +198,6 @@ func TestValidateRuntime_UnknownModuleFanIn(t *testing.T) {
 	}
 }
 
-// Ceilings that bound the graph itself rather than its wiring: how many
-// triggers it declares, how many waypoints it carries in total, and how many
-// bytes of free-form settings and labels — each of which rides in every run
-// record.
 func TestValidate_GraphScaleCaps(t *testing.T) {
 	base := func() Graph {
 		return Graph{
@@ -242,7 +218,6 @@ func TestValidate_GraphScaleCaps(t *testing.T) {
 		t.Errorf("triggers past the cap: err = %v", err)
 	}
 
-	// Waypoints: inside the per-edge cap on every wire, past the total.
 	g = base()
 	perEdge := make([]Position, MaxEdgeWaypoints)
 	for total := 0; total <= MaxGraphWaypoints; total += MaxEdgeWaypoints {
@@ -271,8 +246,6 @@ func TestValidate_GraphScaleCaps(t *testing.T) {
 		t.Errorf("a graph past the byte ceiling: err = %v", err)
 	}
 
-	// The walk stops at the budget rather than measuring the whole graph, and
-	// nesting deeper than ApproxValueSize walks counts as over budget.
 	deep := any("x")
 	for range 200 {
 		deep = []any{deep}
@@ -311,7 +284,6 @@ func TestValidateRuntime_TriggerStepsShareTheTriggerCap(t *testing.T) {
 		t.Errorf("trigger steps past the cap: err = %v", err)
 	}
 
-	// Half the budget in steps, half in the array, one over between them.
 	split := steps(MaxGraphTriggers / 2)
 	for range MaxGraphTriggers/2 + 1 {
 		split.Triggers = append(split.Triggers, GraphTrigger{Type: "cron", Cron: "* * * * *"})
@@ -320,7 +292,6 @@ func TestValidateRuntime_TriggerStepsShareTheTriggerCap(t *testing.T) {
 		t.Errorf("a flood split across steps and the array: err = %v", err)
 	}
 
-	// An ordinary step is not a trigger, however many of them there are.
 	plain := Graph{}
 	for i := range MaxGraphTriggers * 4 {
 		plain.Nodes = append(plain.Nodes, Node{ID: "n" + strconv.Itoa(i), Module: "src"})
@@ -330,14 +301,6 @@ func TestValidateRuntime_TriggerStepsShareTheTriggerCap(t *testing.T) {
 	}
 }
 
-// Every approval step in a flow parks in the SAME run and mails its whole
-// list, through the operator's transactional mailer rather than an account the
-// author connected. So the per-step cap bounded the wrong unit: the flood came
-// back split across STEPS — 40 gates carrying a full list each sent 2000
-// messages from one run, with 50,000 in reach at the node ceiling.
-//
-// Same shape as MaxGraphTriggers counting trigger steps and the Triggers array
-// against one budget: splitting the list has to buy nothing.
 func TestValidate_ApprovalRecipientsShareOneBudget(t *testing.T) {
 	gate := func(id string, n int) Node {
 		var list []string
@@ -355,7 +318,6 @@ func TestValidate_ApprovalRecipientsShareOneBudget(t *testing.T) {
 		return g
 	}
 
-	// A real approval flow: a few gates, a few people on each.
 	if err := Validate(build(3, 5)); err != nil {
 		t.Errorf("an ordinary approval flow was refused: %v", err)
 	}
@@ -364,7 +326,6 @@ func TestValidate_ApprovalRecipientsShareOneBudget(t *testing.T) {
 	if err := Validate(build(1, MaxApprovalRecipients*100)); err != nil {
 		t.Errorf("one over-long list should be capped at read, not refused here: %v", err)
 	}
-	// Split across gates, the budget still binds.
 	err := Validate(build(40, MaxApprovalRecipients))
 	if err == nil || !strings.Contains(err.Error(), "approvers in one run") {
 		t.Errorf("40 gates x %d approvers: err = %v, want the run budget to bind",

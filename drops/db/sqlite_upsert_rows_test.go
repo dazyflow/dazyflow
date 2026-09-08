@@ -12,7 +12,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// seedUpsertSqliteDB creates a table with id as the conflict key.
 func seedUpsertSqliteDB(t *testing.T, root, path string) {
 	t.Helper()
 	db, err := sql.Open("sqlite", filepath.Join(root, path))
@@ -50,7 +49,6 @@ func TestSQLiteUpsert_InsertAndUpdate(t *testing.T) {
 	root := t.TempDir()
 	seedUpsertSqliteDB(t, root, "data.db")
 
-	// First pass: pure inserts.
 	res, _ := executeSQLiteUpsertRows(t.Context(), core.Job{
 		WorkspaceRoot: root,
 		Params: map[string]any{
@@ -70,7 +68,6 @@ func TestSQLiteUpsert_InsertAndUpdate(t *testing.T) {
 		t.Fatalf("first: status=%q err=%+v", res.Status, res.Error)
 	}
 
-	// Second pass: re-insert with new values + one new id.
 	res, _ = executeSQLiteUpsertRows(t.Context(), core.Job{
 		WorkspaceRoot: root,
 		Params: map[string]any{
@@ -156,7 +153,6 @@ func TestSQLiteUpsert_PartialUpdate(t *testing.T) {
 		},
 	}, nil)
 
-	// Only update name; score should stay at 5.0.
 	res, _ := executeSQLiteUpsertRows(t.Context(), core.Job{
 		WorkspaceRoot: root,
 		Params: map[string]any{
@@ -183,9 +179,6 @@ func TestSQLiteUpsert_PartialUpdate(t *testing.T) {
 }
 
 func TestSQLiteUpsert_CreateTableAddsUnique(t *testing.T) {
-	// Without an explicit table, create_table=true should add the
-	// UNIQUE constraint; second row with same id should UPDATE not
-	// error.
 	root := t.TempDir()
 	res, _ := executeSQLiteUpsertRows(t.Context(), core.Job{
 		WorkspaceRoot: root,

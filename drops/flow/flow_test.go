@@ -11,8 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
-// --- compare.go: toStr -------------------------------------------------------
-
 func TestToStr_Cov(t *testing.T) {
 	for _, c := range []struct {
 		name   string
@@ -45,8 +43,6 @@ func TestToStr_Cov(t *testing.T) {
 	}
 }
 
-// --- compare.go: toFloat -----------------------------------------------------
-
 func TestToFloat_Cov(t *testing.T) {
 	for _, c := range []struct {
 		name   string
@@ -76,8 +72,6 @@ func TestToFloat_Cov(t *testing.T) {
 		})
 	}
 }
-
-// --- compare.go: coerceLiteral ----------------------------------------------
 
 func TestCoerceLiteral_Cov(t *testing.T) {
 	t.Run("non-string passes through", func(t *testing.T) {
@@ -111,8 +105,6 @@ func TestCoerceLiteral_Cov(t *testing.T) {
 		}
 	})
 }
-
-// --- compare.go: extractPath ------------------------------------------------
 
 func TestExtractPath_Cov(t *testing.T) {
 	t.Run("empty field returns root", func(t *testing.T) {
@@ -162,8 +154,6 @@ func TestExtractPath_Cov(t *testing.T) {
 	})
 }
 
-// --- compare.go: inRange edge cases -----------------------------------------
-
 func TestInRange_Cov(t *testing.T) {
 	t.Run("non-list B errors", func(t *testing.T) {
 		if _, err := inRange(5.0, "nope", true, true); err == nil {
@@ -204,8 +194,6 @@ func TestInRange_Cov(t *testing.T) {
 	})
 }
 
-// --- compare.go: numericCompare / LE / GE error paths -----------------------
-
 func TestNumericCompare_Cov(t *testing.T) {
 	if _, err := numericCompare("x", 1.0, 1); err == nil {
 		t.Error("non-numeric A should error")
@@ -213,7 +201,6 @@ func TestNumericCompare_Cov(t *testing.T) {
 	if _, err := numericCompare(1.0, "y", 1); err == nil {
 		t.Error("non-numeric B should error")
 	}
-	// equal case returns false for both < and >.
 	if v, _ := numericCompare(2.0, 2.0, 1); v {
 		t.Error("2 > 2 should be false")
 	}
@@ -242,8 +229,6 @@ func TestNumericCompareLEGE_Cov(t *testing.T) {
 		t.Error("3 >= 3 should be true")
 	}
 }
-
-// --- branch.go: asBool ------------------------------------------------------
 
 func TestAsBool_Cov(t *testing.T) {
 	for _, c := range []struct {
@@ -286,14 +271,11 @@ func TestAsBool_Cov(t *testing.T) {
 }
 
 func TestAsBool_JSONEncodedBool_Cov(t *testing.T) {
-	// A JSON-encoded bool string not in the fast-path set still parses.
 	got, err := asBool(core.Ref{Inline: "true"})
 	if err != nil || !got {
 		t.Errorf("got %v %v", got, err)
 	}
 }
-
-// --- for_each.go: normalizeItems --------------------------------------------
 
 func TestNormalizeItems_Cov(t *testing.T) {
 	t.Run("[]core.Ref", func(t *testing.T) {
@@ -331,8 +313,6 @@ func TestNormalizeItems_Cov(t *testing.T) {
 	})
 }
 
-// --- for_each.go: errorPayload ----------------------------------------------
-
 func TestErrorPayload_Cov(t *testing.T) {
 	t.Run("nil returns nil", func(t *testing.T) {
 		if errorPayload(nil) != nil {
@@ -346,8 +326,6 @@ func TestErrorPayload_Cov(t *testing.T) {
 		}
 	})
 }
-
-// --- helpers.go: coerceInt / paramInt ---------------------------------------
 
 func TestCoerceInt_Cov(t *testing.T) {
 	for _, c := range []struct {
@@ -396,8 +374,6 @@ func TestParamInt_Cov(t *testing.T) {
 	})
 }
 
-// --- helpers.go: emitProgress -----------------------------------------------
-
 func TestEmitProgress_Cov(t *testing.T) {
 	job := core.Job{ID: "j1", NodeID: "n1"}
 
@@ -423,8 +399,6 @@ func TestEmitProgress_Cov(t *testing.T) {
 		params.EmitProgress(ch, job, 75, "drop")
 	})
 }
-
-// --- subgraph.go: parseInputMap / parseOutputMap ----------------------------
 
 func TestParseInputMap_Cov(t *testing.T) {
 	t.Run("nil -> empty", func(t *testing.T) {
@@ -484,8 +458,6 @@ func TestParseOutputMap_Cov(t *testing.T) {
 	})
 }
 
-// --- switch.go: parseSwitchCases --------------------------------------------
-
 func TestParseSwitchCases_Cov(t *testing.T) {
 	t.Run("missing cases errors", func(t *testing.T) {
 		if _, err := parseSwitchCases(map[string]any{}); err == nil {
@@ -539,8 +511,6 @@ func TestParseSwitchCases_Cov(t *testing.T) {
 		}
 	})
 }
-
-// --- combinators.go: combine / executeNot -----------------------------------
 
 func TestCombine_Cov(t *testing.T) {
 	t.Run("no inputs errors", func(t *testing.T) {

@@ -79,7 +79,6 @@ func init() {
 	})
 }
 
-// attachmentPart is one candidate file found while walking a message payload.
 type attachmentPart struct {
 	Filename     string
 	MIME         string
@@ -186,8 +185,6 @@ func executeGmailGetAttachments(ctx context.Context, job core.Job, _ chan<- core
 	return core.Result{JobID: job.ID, Status: core.StatusOK, Output: out}, nil
 }
 
-// fetchAttachment pulls one attachment's bytes. Gmail hands them back
-// base64url-encoded inside a JSON envelope rather than as a raw body.
 func fetchAttachment(ctx context.Context, job core.Job, token, msgID, attID string, timeoutMS int) ([]byte, error) {
 	endpoint := baseURL(job) + "/users/me/messages/" + url.PathEscape(msgID) +
 		"/attachments/" + url.PathEscape(attID)
@@ -211,9 +208,6 @@ func fetchAttachment(ctx context.Context, job core.Job, token, msgID, attID stri
 	return dec, nil
 }
 
-// collectAttachments walks the MIME tree for parts that are real attachments:
-// a filename and an attachmentId. Inline parts (a signature logo, an embedded
-// image) carry a Content-ID and no filename, so they fall out naturally.
 func collectAttachments(payload map[string]any, wanted map[string]bool) []attachmentPart {
 	var out []attachmentPart
 	var walk func(m map[string]any)

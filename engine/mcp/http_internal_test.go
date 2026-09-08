@@ -16,9 +16,6 @@ import (
 	"time"
 )
 
-// A zero (or negative) Timeout means "use the default", and the default
-// has to reach the transport — that is where the per-phase ceilings that
-// stop a hung endpoint from pinning a worker actually live.
 func TestNewHTTPClient_NonPositiveTimeoutUsesDefault(t *testing.T) {
 	for _, timeout := range []time.Duration{0, -time.Second} {
 		c := NewHTTPClient(HTTPDescriptor{URL: "https://example.com/mcp", Timeout: timeout})
@@ -56,8 +53,6 @@ func TestBuildHTTPClient_TransportIsBounded(t *testing.T) {
 	}
 }
 
-// 2xx is the success band and nothing outside it is: a 300 is a redirect
-// this client refuses to follow, not an answer.
 func TestCheckHTTPStatus_SuccessBandIsTwoHundredsOnly(t *testing.T) {
 	for _, tc := range []struct {
 		code int
@@ -79,9 +74,6 @@ func TestCheckHTTPStatus_SuccessBandIsTwoHundredsOnly(t *testing.T) {
 	}
 }
 
-// The server's own words are appended after a ": " separator so they read
-// as part of the sentence — a 401 whose body explains why is the failure
-// operators actually hit. An empty body appends nothing at all.
 func TestCheckHTTPStatus_AppendsBodyDetail(t *testing.T) {
 	err := checkHTTPStatus(&http.Response{
 		StatusCode: http.StatusUnauthorized,
@@ -106,8 +98,6 @@ func TestCheckHTTPStatus_AppendsBodyDetail(t *testing.T) {
 	}
 }
 
-// sessionSpy records the Mcp-Session-Id on every inbound request and hands
-// one out on every response.
 type sessionSpy struct {
 	mu     sync.Mutex
 	seen   []string
@@ -174,9 +164,6 @@ func TestHTTPClient_EchoesAssignedSessionID(t *testing.T) {
 	}
 }
 
-// A notification expects no response body, but its STATUS still matters:
-// a server that refuses one has to surface as an error rather than pass
-// for success.
 func TestHTTPClient_NotifyReportsRefusedStatus(t *testing.T) {
 	spy := &sessionSpy{status: http.StatusInternalServerError}
 	srv := httptest.NewServer(spy.handler())

@@ -29,7 +29,6 @@ export interface UseRevisionsArgs {
   tenant: string;
   workspace: string;
   t: (key: string, opts?: Record<string, unknown>) => string;
-  // Puts a loaded graph onto the canvas.
   hydrateGraph: (g: Graph) => void;
   onError: (message: string | null) => void;
   // A restore can lose to an active run holding the edit lock; re-pull it so the
@@ -50,22 +49,12 @@ export function useRevisions({
   const [showHistory, setShowHistory] = useState(false);
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  // The commit currently on the canvas as a read-only preview; null = HEAD.
   const [previewRef, setPreviewRef] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
-  // Which revision is live, for the "current release" badge in the list. Fed
-  // both from here and from the publish status probe, which returns it too.
   const [publishedCommit, setPublishedCommit] = useState<string | null>(null);
-  // The revision whose label is being edited in the rename dialog.
   const [labelEditing, setLabelEditing] = useState<Revision | null>(null);
-  // The unlabeled revision a "Make live" (rollback) is asking to name first.
   const [makeLivePrompt, setMakeLivePrompt] = useState<Revision | null>(null);
 
-  // refreshHistory re-reads the commit list and which revision is live.
-  //
-  // There were four copies of this: openHistory, and then again after
-  // publishing, after going live, and after naming a revision — each rebuilding
-  // the same two setState calls from the same response.
   const refreshHistory = useCallback(async () => {
     if (!token || !graphID) return;
     const res = await api.flowHistory(token, tenant, workspace, graphID);
@@ -113,7 +102,6 @@ export function useRevisions({
     [token, graphID, tenant, workspace, hydrateGraph, onError, t],
   );
 
-  // Drops the preview and reloads live HEAD.
   const exitPreview = useCallback(async () => {
     if (!token || !graphID) {
       setPreviewRef(null);
@@ -131,8 +119,6 @@ export function useRevisions({
     }
   }, [token, graphID, tenant, workspace, hydrateGraph, onError, t]);
 
-  // Makes a revision the new HEAD — a fresh commit on top, so history is
-  // preserved — then reloads HEAD and re-reads the list.
   const restoreRevision = useCallback(
     async (commit: string) => {
       if (!token || !graphID) return;
@@ -161,9 +147,6 @@ export function useRevisions({
     [token, graphID, tenant, workspace, hydrateGraph, refreshHistory, onError, onConflict, t],
   );
 
-  // Names a revision, or clears its name when label is empty, without
-  // publishing it. The label is keyed to the commit server-side, so it survives
-  // later publishes and rollbacks. Admin-gated by the daemon.
   const saveLabel = useCallback(
     async (commit: string, label: string) => {
       if (!token || !graphID) return;
@@ -186,7 +169,6 @@ export function useRevisions({
     previewRef,
     restoring,
     publishedCommit,
-    // Written by the publish status probe too, which returns the live commit.
     setPublishedCommit,
     labelEditing,
     setLabelEditing,

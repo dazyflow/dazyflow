@@ -17,10 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// fallbackHarness reuses the skip-test pattern (boom + source + built-ins).
-// We just share the existing newSkipHarness builder — fallback runs against
-// the same module set.
-
 func TestFallback_ActivatesOnFailure(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)
@@ -130,9 +126,6 @@ func TestFallback_CascadesSkipToDownstream(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)
 
-	// boom fails; "handler" is its fallback. "downstream" depends on
-	// "lost" (which was blocked) via a default edge — it should cascade
-	// to Skipped without ever running.
 	g := core.Graph{
 		ID: "fb-cascade", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -168,10 +161,6 @@ func TestFallback_MixedInputs(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)
 
-	// "merge" has two preds:
-	//   - "alive" succeeds via default edge → contributes input
-	//   - "primary" fails; fallback to merge → activates, no input
-	// merge runs with alive's contribution only. Graph succeeds.
 	g := core.Graph{
 		ID: "fb-mixed", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -206,9 +195,6 @@ func TestFallback_NoFallbackPathStillAborts(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)
 
-	// Same as the abort case from skip-tests, but using a default edge.
-	// This exists to confirm the new logic didn't accidentally turn all
-	// failures into non-propagating ones.
 	g := core.Graph{
 		ID: "fb-baseline-abort", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -238,8 +224,6 @@ func TestFallback_NoFallbackPathStillAborts(t *testing.T) {
 // (only one ref collected), but a focused engine-level test is cheap.
 func TestEngine_FallbackEdgeDoesNotProvideInput(t *testing.T) {
 	t.Parallel()
-	// Compose a graph and a tiny harness directly so we can assert on
-	// the captured Job.Input.
 	captured := make(map[string]map[string]core.Ref)
 	reg := engine.NewRegistry()
 	_ = reg.Register(engine.NativeDrop{
@@ -302,7 +286,6 @@ func TestEngine_FallbackEdgeDoesNotProvideInput(t *testing.T) {
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Fatalf("status = %q", terminal.Status)
 	}
-	// sink should have been skipped (dormant fallback edge from succeeded src).
 	sinkRec, _ := jobs.Get(t.Context(), daemon.NodeJobID(graphRunID, "sink"))
 	if sinkRec.Status != core.JobStatusSkipped {
 		t.Errorf("sink status = %q, want skipped", sinkRec.Status)

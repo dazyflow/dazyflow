@@ -96,8 +96,6 @@ func executeHash(_ context.Context, job core.Job, _ chan<- core.Progress) (core.
 	}
 }
 
-// hashFuncs maps the algo param to its constructor. hmac.New takes exactly
-// this func() hash.Hash shape, so plain and keyed hashing share one table.
 var hashFuncs = map[string]func() hash.Hash{
 	"sha256": sha256.New,
 	"sha512": sha512.New,

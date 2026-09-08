@@ -1,10 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package db hosts database-connector drops. Today: SQLite. Postgres
-// and friends slot in alongside as separate drops sharing the same
-// row-input shape (a list of {column: value} records, as emitted by
-// excel_read and friends).
 package db
 
 import (
@@ -35,9 +31,6 @@ func init() {
 			Provider:    "internal",
 			Integration: "SQLite",
 			Tags:        []string{"sqlite", "sql", "database", "insert", "save", "store", "etl"},
-			// Win the "save"/"database" verb over the no-setup KV store
-			// (Collections), which matches the same generic terms — SQLite
-			// is the canonical zero-config save-to-a-database default.
 			SearchBoost: 25,
 			Description: "Save rows into a database file kept in your workspace — no server, connection string, or setup needed (this is the easy database; use Postgres/MySQL only if you already have one). The table is auto-created from the row shape by default; flip create_table off if you've already set up a schema you don't want overwritten.",
 			Summary:     "Save rows into a workspace database file — no setup; the table is auto-created from the row shape.",
@@ -137,9 +130,6 @@ func executeSQLiteInsertRows(ctx context.Context, job core.Job, _ chan<- core.Pr
 			return params.Err(job, "io", fmt.Sprintf("mkdir: %v", err)), nil
 		}
 	}
-	// Touch the file through the sandbox root so os.Root validates
-	// the path before sqlite (which takes an unconstrained filename
-	// string) ever sees it.
 	probe, probeErr := root.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o644)
 	root.Close()
 	if probeErr != nil {

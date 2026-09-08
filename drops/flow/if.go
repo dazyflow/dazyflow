@@ -55,8 +55,6 @@ func init() {
 				{Port: "then", Label: "Yes"},
 				{Port: "else", Label: "No"},
 			},
-			// Same test config as Compare, minus the result port: only the output
-			// shape differs (route the payload vs. emit a boolean value).
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
@@ -83,10 +81,6 @@ func init() {
 		Execute: executeIf,
 	})
 
-	// Contains — a fixed-operator preset of If, the way operators.go bakes a
-	// single op onto Compare. The op is the node's identity (not a dropdown),
-	// the pins read as Text/Substring, and the outputs say what they mean. It's
-	// the same router underneath: routeByCompare(job, "contains").
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:          "contains",
@@ -115,8 +109,6 @@ func init() {
 				{Port: "then", Label: "Yes"},
 				{Port: "else", Label: "No"},
 			},
-			// Just the substring to look for — no op enum (the node IS contains),
-			// no field/range knobs. Keeping the preset trivial is the point.
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
@@ -130,8 +122,6 @@ func init() {
 	})
 }
 
-// executeContains is the Contains preset's executor: If's router with the
-// operator locked to "contains".
 func executeContains(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	return routeByCompare(job, "contains")
 }
@@ -142,8 +132,6 @@ func executeContains(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 // means If can never drift from Compare's semantics; it only swaps the boolean
 // result for a routed payload. Downstream nodes on the unused port stay dormant.
 func executeIf(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	// op defaults to "equals" (the schema default) so a freshly-dropped If is
-	// immediately valid — no required-param friction.
 	op, _ := job.Params["op"].(string)
 	if op == "" {
 		op = "equals"
@@ -169,9 +157,6 @@ func routeByCompare(job core.Job, op string) (core.Result, error) {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
 
-	// Route the original A ref so MIME/blob pointers survive; when A is a
-	// literal-only (unwired) operand there's no ref to forward, so synthesize
-	// an inline one from the resolved value.
 	payload, ok := job.Input["A"]
 	if !ok {
 		payload = core.Ref{Inline: a}

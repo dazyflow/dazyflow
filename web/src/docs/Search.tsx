@@ -29,8 +29,6 @@ type Hit = {
 
 const MAX_HITS = 12;
 
-// stripMarkdown removes the syntax a reader shouldn't see in a result snippet:
-// heading hashes, emphasis, link/image wrappers, inline-code ticks, table pipes.
 function stripMarkdown(line: string): string {
   return line
     .replace(/^#{1,6}\s+/, "")
@@ -63,8 +61,6 @@ function search(query: string): Hit[] {
       else if (title.includes(term)) score += 40;
     }
 
-    // Find the best line to show: prefer a heading that matches, else the first
-    // body line carrying a term. This is the snippet AND part of the score.
     let context = "";
     let bestLine = -1;
     const lines = page.body.split("\n");
@@ -80,8 +76,6 @@ function search(query: string): Hit[] {
       }
     }
     score += Math.max(bestLine, 0);
-    // A guide page is a better landing place than a generated reference page
-    // for the same words — someone searching prose wants the explanation.
     if (page.path.startsWith("/guide/")) score += 6;
 
     hits.push({ path: page.path, title: page.title, context, score });

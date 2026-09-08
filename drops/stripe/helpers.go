@@ -41,7 +41,6 @@ const maxResponseBytes = 16 << 20 // 16 MiB
 
 var httpBase = apibase.New("https://api.stripe.com/v1")
 
-// SetHTTPBase swaps the Stripe API root (tests point it at httptest).
 func SetHTTPBase(base string) { httpBase.Set(base) }
 
 func baseURL(job core.Job) string { return httpBase.For(job) }
@@ -108,9 +107,6 @@ func stripeDoIdem(ctx context.Context, job core.Job, method, url, form, idemKey 
 	return status, raw, err
 }
 
-// extractStripeError pulls error.message (plus code when set) out of a
-// Stripe error body, so "No such payment_intent: pi_123" reaches the
-// user instead of a bare HTTP status.
 func extractStripeError(body []byte) string {
 	var e struct {
 		Error struct {
@@ -167,13 +163,6 @@ func numberInputOr(job core.Job, port string, fallback int) (int, bool) {
 	return 0, false
 }
 
-// paymentTriggerOutputs is the output-port set shared by the
-// payment_intent.* triggers (stripe_on_payment / stripe_on_payment_failed):
-// the scalar fields pulled out of the event, plus the raw payment intent and
-// the whole webhook event as wireable JSON pins (so compositions can template
-// across fields the scalar pins don't surface). The failed trigger prepends
-// its own 'Failure reason' pin. Returns a fresh slice per call so a caller
-// can safely append to it.
 func paymentTriggerOutputs() []core.Port {
 	// The examples mirror daemon.paymentPorts, which is what actually fills
 	// these pins when a webhook lands — including its two surprises: `amount`
@@ -195,10 +184,6 @@ func paymentTriggerOutputs() []core.Port {
 	}
 }
 
-// noPaymentTriggerData is the standalone-run result shared by the
-// payment_intent.* triggers. They're pre-completed by the daemon's Stripe
-// events handler when a real webhook arrives, so a manual run has no event to
-// emit — `message`/`details` explain the specific trigger and how to test it.
 func noPaymentTriggerData(job core.Job, message, details string) (core.Result, error) {
 	return core.Result{
 		JobID:  job.ID,
@@ -211,11 +196,6 @@ func noPaymentTriggerData(job core.Job, message, details string) (core.Result, e
 	}, nil
 }
 
-// stripeFailure maps a transport error or a non-2xx Stripe response to
-// an error Result. Returns nil when the call succeeded — the shared
-// epilogue of every drop's stripeDo call. Delegates to params.HTTPFailure
-// (the shared transport-error/non-2xx epilogue), keeping Stripe's exact
-// error codes ("stripe_http_error"/"stripe_error") and message format.
 func stripeFailure(job core.Job, status int, body []byte, err error) *core.Result {
 	return params.HTTPFailure(job, "stripe", "Stripe", status, body, err, extractStripeError)
 }

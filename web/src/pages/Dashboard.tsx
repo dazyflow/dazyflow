@@ -23,13 +23,6 @@ import type { FlowSummary, RunSummary } from "../types";
 import { ICON } from "../icons";
 import { StatCard } from "../components/ui/StatCard";
 
-// Dashboard is the workspace overview — the "is everything healthy?" landing
-// pro automation tools open to. It answers four questions at a glance (runs
-// today, success rate, failures needing attention, approvals waiting), then
-// lists the failed runs to act on and the most recent activity. All derived
-// client-side from three cheap list calls; no new backend. Private and
-// unpublished (needs_publish) flows — and their runs — are excluded so
-// owner-scoped test-mode activity doesn't skew the workspace health numbers.
 const RUN_WINDOW = 200; // recent runs to summarize
 const ATTENTION_MAX = 5;
 const RECENT_MAX = 8;
@@ -58,8 +51,6 @@ export function Dashboard() {
     Promise.allSettled([
       api.listAllRuns(token, { limit: RUN_WINDOW, workspace, tenant }),
       api.listGraphs(token, activeTenant, activeWorkspace),
-      // The tile renders a number, so it asks for one — the inbox rows carry
-      // each parked step's stashed context, which nothing here reads.
       api.countPendingApprovals(token, { workspace, tenant }),
     ]).then(([r, g, a]) => {
       if (cancelled) return;
@@ -137,10 +128,6 @@ export function Dashboard() {
   const flowName = (id: string) =>
     flows.find((f) => f.id === id)?.name || id;
 
-  // Each stat tile deep-links to the runs page with the filter it counted by,
-  // so the number on the card and the list you land on agree. The runs page
-  // reads ?since=/?until= as local calendar days, so "today" is the same day
-  // startOfToday() used above.
   const today = formatDate(new Date());
 
   const greeting = me?.subject ? me.subject.split("@")[0] : "";

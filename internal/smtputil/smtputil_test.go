@@ -17,27 +17,18 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// allowLoopbackEgress lets a test's Send/Verify reach the loopback scripted
-// servers below. The tenant-facing SMTP path now carries the SSRF dial guard,
-// which blocks loopback/private targets unless the operator has opted into
-// private egress — exactly the toggle these protocol-level tests need. Reset
-// on cleanup so the guard tests still see the default (guarded) policy.
 func allowLoopbackEgress(t *testing.T) {
 	t.Helper()
 	hfnet.SetAllowPrivateEgress(true)
 	t.Cleanup(func() { hfnet.SetAllowPrivateEgress(false) })
 }
 
-// smtpScript configures the scripted server's behavior.
 type smtpScript struct {
 	withAuth  bool   // advertise AUTH PLAIN in EHLO
 	authFail  bool   // reject AUTH with 535
 	rejectCmd string // command prefix to reject with 550 (e.g. "MAIL", "RCPT")
 }
 
-// scriptedSMTP starts a minimal plaintext SMTP server that walks one
-// client through the MAIL/RCPT/DATA/QUIT dance. The returned addr is the
-// listener's host:port; it serves exactly one connection then stops.
 func scriptedSMTP(t *testing.T, sc smtpScript) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -232,7 +223,6 @@ func TestVerify_HappyPath(t *testing.T) {
 
 func TestVerify_NoDeadlineFallback(t *testing.T) {
 	allowLoopbackEgress(t)
-	// A context without a deadline exercises dial's 30s fallback branch.
 	addr := scriptedSMTP(t, smtpScript{})
 	if err := Verify(context.Background(), addr, "127.0.0.1", "none", nil, "from@x.test"); err != nil {
 		t.Fatalf("Verify: %v", err)
@@ -240,7 +230,6 @@ func TestVerify_NoDeadlineFallback(t *testing.T) {
 }
 
 func TestSend_DialError(t *testing.T) {
-	// Reserve a port and immediately close it so the dial is refused.
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
 	ln.Close()
@@ -255,8 +244,6 @@ func TestSend_DialError(t *testing.T) {
 }
 
 func TestSend_ImplicitTLSDialError(t *testing.T) {
-	// The implicit-TLS branch dials with a TLS handshake; a plain closed
-	// port still fails at dial, exercising the mode=="implicit" path.
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
 	ln.Close()
@@ -267,8 +254,8 @@ func TestSend_ImplicitTLSDialError(t *testing.T) {
 	}
 }
 
-// TestSplitSender covers the sender forms an operator can type on the Email
-// integration page (or in DAZYFLOW_SMTP_FROM). The envelope must always come out as the bare
+// Covers the sender forms an operator can type on the Email integration page
+// (or in DAZYFLOW_SMTP_FROM). The envelope must always come out as the bare
 // address — a display name in MAIL FROM is not a valid reverse-path and gets
 // the send rejected outright.
 func TestSplitSender(t *testing.T) {
@@ -279,13 +266,9 @@ func TestSplitSender(t *testing.T) {
 	}{
 		{"bare address", "reports@x.test", "reports@x.test", "reports@x.test"},
 		{"display name", "Reports <reports@x.test>", `"Reports" <reports@x.test>`, "reports@x.test"},
-		// Already quoted because the name contains a comma; the address still
-		// splits out clean.
 		{"quoted display name", `"Klahr, Joachim" <j@x.test>`, `"Klahr, Joachim" <j@x.test>`, "j@x.test"},
 		// Angle brackets with no name: valid in a header, never in the envelope.
 		{"angle addr only", "<reports@x.test>", "<reports@x.test>", "reports@x.test"},
-		// Unparseable (a hostless relay username): kept verbatim on both sides,
-		// so the mail server decides — the same leniency as before the split.
 		{"unparseable", "relay", "relay", "relay"},
 		{"empty", "", "", ""},
 	}
@@ -317,8 +300,6 @@ func TestSplitSender_MIMEEncodesNonASCIIName(t *testing.T) {
 	}
 }
 
-// TestNewMessageID_DomainFromSender pins the shape every relay validates:
-// <token@domain>, with the domain taken from the sender's address.
 func TestNewMessageID_DomainFromSender(t *testing.T) {
 	for _, from := range []string{"reports@example.com", "Reports <reports@example.com>"} {
 		id := NewMessageID(from)
@@ -333,15 +314,14 @@ func TestNewMessageID_DomainFromSender(t *testing.T) {
 	if a, b := NewMessageID("a@x.test"), NewMessageID("a@x.test"); a == b {
 		t.Errorf("two Message-IDs are identical: %q", a)
 	}
-	// A sender with no domain still yields a well-formed header.
 	if id := NewMessageID("relay-user"); !strings.HasSuffix(id, "@localhost>") {
 		t.Errorf("NewMessageID(hostless) = %q, want the localhost fallback", id)
 	}
 }
 
-// TestNewMessageID_StripsHeaderInjection guards the one way a sender reaches a
-// header unescaped: the Message-ID's domain. CR/LF/space are stripped, so a
-// hostile From can't smuggle a second header in behind it.
+// Guards the one way a sender reaches a header unescaped: the Message-ID's
+// domain. CR/LF/space are stripped, so a hostile From can't smuggle a second
+// header in behind it.
 func TestNewMessageID_StripsHeaderInjection(t *testing.T) {
 	id := NewMessageID("me@x.test\r\nBcc: evil@x.test")
 	if strings.ContainsAny(id, "\r\n ") {
@@ -349,8 +329,6 @@ func TestNewMessageID_StripsHeaderInjection(t *testing.T) {
 	}
 }
 
-// TestDateHeader_RFC5322 confirms the Date: value parses back as the form
-// every MTA expects.
 func TestDateHeader_RFC5322(t *testing.T) {
 	got := DateHeader(time.Date(2026, 9, 1, 12, 34, 56, 0, time.UTC))
 	if got != "Tue, 01 Sep 2026 12:34:56 +0000" {
@@ -361,8 +339,6 @@ func TestDateHeader_RFC5322(t *testing.T) {
 	}
 }
 
-// TestAuth_Complete: both fields set yields a usable authenticator, and neither
-// set yields the legitimate "this relay takes mail without a login" nil.
 func TestAuth_Complete(t *testing.T) {
 	a, err := Auth("127.0.0.1", " user ", "pw")
 	if err != nil || a == nil {
@@ -372,17 +348,15 @@ func TestAuth_Complete(t *testing.T) {
 	if err != nil || a != nil {
 		t.Fatalf("Auth(empty) = %v, %v; want nil, nil", a, err)
 	}
-	// A password that is only spaces is still a password — not trimmed away
-	// into "no login configured".
 	if _, err := Auth("127.0.0.1", "", "  "); err == nil {
 		t.Error("Auth(no user, blank-ish password) = nil error; want the incomplete-login error")
 	}
 }
 
-// TestAuth_PartialCredentialsRejected is the regression guard for the silent
-// pass this package used to allow: a stored password with no username became a
-// nil Auth, so the session went out unauthenticated and both Send and Verify
-// reported success on credentials that were never presented.
+// The regression guard for the silent pass this package used to allow: a
+// stored password with no username became a nil Auth, so the session went out
+// unauthenticated and both Send and Verify reported success on credentials
+// that were never presented.
 func TestAuth_PartialCredentialsRejected(t *testing.T) {
 	if _, err := Auth("mail.x.test", "", "secret"); err == nil ||
 		!strings.Contains(err.Error(), "no username") {
@@ -434,8 +408,6 @@ func TestVerify_ProbesEnvelopeFormOfSender(t *testing.T) {
 	}
 }
 
-// TestVerify_NoSenderSkipsProbe keeps the handshake-only behavior available for
-// a caller with no sender to offer.
 func TestVerify_NoSenderSkipsProbe(t *testing.T) {
 	allowLoopbackEgress(t)
 	addr, cmds := scriptedSMTPRecordingCmds(t)
@@ -457,8 +429,6 @@ func TestDial_StartTLSRequiredForLogin(t *testing.T) {
 	addr := scriptedSMTP(t, smtpScript{})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	// A non-loopback host NAME (the dial still goes to the loopback listener):
-	// loopback is exempt, mirroring net/smtp's own localhost exemption.
 	auth, _ := Auth("mail.x.test", "me@x.test", "pw")
 	err := Send(ctx, addr, "mail.x.test", "starttls", auth, "f@x.test", []string{"t@x.test"}, []byte("body"))
 	if err == nil || !strings.Contains(err.Error(), "doesn't offer STARTTLS") {

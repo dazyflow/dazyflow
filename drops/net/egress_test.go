@@ -11,14 +11,12 @@ import (
 )
 
 func TestEgressAllowlist_Disabled(t *testing.T) {
-	// No allowlist → everything public is allowed.
 	if err := SetEgressAllowlist(nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := EgressAllowed("https://anything.example.org/x"); err != nil {
 		t.Errorf("disabled allowlist should permit all: %v", err)
 	}
-	// Whitespace-only entries also clear it.
 	if err := SetEgressAllowlist([]string{"  ", ""}); err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +72,6 @@ func TestEgressAllowlist_CIDRAndIP(t *testing.T) {
 	if err := EgressAllowed("http://203.0.114.1/x"); err == nil {
 		t.Error("IP outside CIDR should be blocked")
 	}
-	// A hostname (not an IP literal) isn't covered by IP-only rules.
 	if err := EgressAllowed("https://example.com/x"); err == nil {
 		t.Error("hostname should be blocked when only IP rules exist")
 	}
@@ -87,11 +84,9 @@ func TestEgressAllowlist_RejectsBadEntries(t *testing.T) {
 	if err := SetEgressAllowlist([]string{"*.com"}); err == nil {
 		t.Error("overly-broad wildcard *.com should error")
 	}
-	// Leave the package in the disabled state for other tests.
 	_ = SetEgressAllowlist(nil)
 }
 
-// fakeTenantPolicy is a per-tenant allowlist resolver for tests.
 type fakeTenantPolicy map[string][]string
 
 func (f fakeTenantPolicy) AllowlistFor(tenant string) ([]string, bool) {
@@ -99,17 +94,12 @@ func (f fakeTenantPolicy) AllowlistFor(tenant string) ([]string, bool) {
 	return entries, ok
 }
 
-// TestEgressAllowedFor_PerTenant covers the per-tenant policy: a tenant with
-// its own allowlist is bound by it (independent of the global list), and a
-// tenant with no per-tenant policy falls back to the global allowlist.
 func TestEgressAllowedFor_PerTenant(t *testing.T) {
 	t.Cleanup(func() { SetEgressPolicy(nil); _ = SetEgressAllowlist(nil) })
 
-	// Global allowlist permits global.example only.
 	if err := SetEgressAllowlist([]string{"global.example"}); err != nil {
 		t.Fatal(err)
 	}
-	// acme has its own allowlist (acme-api.example); globex has none.
 	SetEgressPolicy(fakeTenantPolicy{
 		"acme": {"acme-api.example"},
 	})
@@ -126,7 +116,6 @@ func TestEgressAllowedFor_PerTenant(t *testing.T) {
 		t.Error("acme must NOT inherit the global host — per-tenant policy replaces it")
 	}
 
-	// globex: no per-tenant policy → falls back to the global allowlist.
 	if err := EgressAllowedFor(ctxFor("globex"), "https://global.example/x"); err != nil {
 		t.Errorf("globex should fall back to the global allowlist: %v", err)
 	}
@@ -134,7 +123,6 @@ func TestEgressAllowedFor_PerTenant(t *testing.T) {
 		t.Error("globex must not reach acme's host")
 	}
 
-	// With no resolver installed at all, EgressAllowedFor == global check.
 	SetEgressPolicy(nil)
 	if err := EgressAllowedFor(ctxFor("acme"), "https://global.example/x"); err != nil {
 		t.Errorf("with no resolver, should use the global list: %v", err)

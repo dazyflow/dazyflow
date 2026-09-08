@@ -78,7 +78,6 @@ func TestRender_MaxBytesCeiling(t *testing.T) {
 }
 
 func TestRender_NullCellViaGuard(t *testing.T) {
-	// The generated table CEL guards nulls; confirm the guard pattern renders "".
 	spec := Spec{Template: `(row["v"] == null ? "" : string(row["v"]))`}
 	got, err := Render(context.Background(), spec, rows(map[string]any{"v": nil}), 0)
 	if err != nil || got != "" {
@@ -86,14 +85,13 @@ func TestRender_NullCellViaGuard(t *testing.T) {
 	}
 }
 
-// TestSpecFromParams covers the shared defaults. The function exists so the
+// Covers the shared defaults. The function exists so the
 // drop and the editor's live preview cannot drift, and its one subtle rule is
 // the separator: absent means newline, but an explicit "" must stay empty —
 // that is what the HTML-table preset relies on to join cells with no gap.
 // daemon/httprender_text_preview.go re-implements the same rule against a typed
 // JSON body (it has no params map to pass here), so this pins the drop half.
 func TestSpecFromParams(t *testing.T) {
-	// An empty params map yields the documented defaults.
 	got := SpecFromParams(map[string]any{})
 	if got.Separator != "\n" {
 		t.Errorf("default Separator = %q, want a newline", got.Separator)
@@ -107,7 +105,6 @@ func TestSpecFromParams(t *testing.T) {
 		t.Errorf("explicit empty Separator = %q, want empty (HTML-table preset)", s.Separator)
 	}
 
-	// Every field is read through from the params map.
 	full := SpecFromParams(map[string]any{
 		"template":  `row.name`,
 		"column":    "name",
@@ -124,8 +121,6 @@ func TestSpecFromParams(t *testing.T) {
 		t.Errorf("SpecFromParams = %+v, want %+v", full, want)
 	}
 
-	// A non-string param falls back to the default rather than panicking or
-	// stringifying — params arrive from JSON, so a number here is user error.
 	nonStr := SpecFromParams(map[string]any{"separator": 42, "prefix": nil})
 	if nonStr.Separator != "\n" {
 		t.Errorf("non-string Separator = %q, want the newline default", nonStr.Separator)
@@ -135,9 +130,6 @@ func TestSpecFromParams(t *testing.T) {
 	}
 }
 
-// TestParseAndEvalErrorUnwrap pins the error wrappers the callers switch on:
-// the preview endpoint uses errors.As(&ParseError) to show a template mistake
-// inline, and the drop maps ParseError to bad_param and EvalError to eval.
 func TestParseAndEvalErrorUnwrap(t *testing.T) {
 	inner := errors.New("boom")
 	pe := &ParseError{Err: inner}

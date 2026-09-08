@@ -1,16 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// A param's LABEL on the card is the same string the Inspector shows for it.
-//
-// The sibling of NodeCardEnum's bargain, one level up: that test covers the
-// enum's value, this one covers the field's name. The card printed the raw
-// manifest title while the Inspector ran it through the reader's vocabulary,
-// so a Swedish reader had "Collection" on the node and "Samling" in the panel
-// beside it — one setting, two languages, side by side on screen.
-//
-// It also pins the untitled-param fallback, which used to differ a third way
-// again: the card showed the bare key ("column_types").
 
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -37,8 +27,6 @@ vi.mock("@xyflow/react", () => ({
 
 import { DazyNode } from "./NodeCard";
 
-// Shaped like the Collections "Save rows" step: a titled param the Swedish
-// vocabulary knows, and one that ships no title at all.
 const storeManifest: Manifest = {
   id: "builtin_store_append",
   label: "Save rows",

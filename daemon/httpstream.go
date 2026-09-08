@@ -3,10 +3,6 @@
 
 package daemon
 
-// Server-sent event streams and single-node sampling — the routes the editor
-// holds open to watch a run progress, as opposed to the request/response
-// routes everywhere else in the gateway.
-
 import (
 	"context"
 	"encoding/json"
@@ -47,8 +43,6 @@ func (h *flowAPI) sampleNode(rw http.ResponseWriter, r *http.Request, p core.Pri
 			}
 		}
 	}
-	// The inspector's "what does this step emit?" preview. Nobody wants an
-	// email because a preview of one step failed while they were looking at it.
 	runID, err := h.svc.SubmitGraphOpts(r.Context(), p, sub, SubmitOpts{Manual: true})
 	if err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
@@ -60,13 +54,6 @@ func (h *flowAPI) sampleNode(rw http.ResponseWriter, r *http.Request, p core.Pri
 	})
 }
 
-// jobEvents streams bus events for jobID as Server-Sent Events. Each
-// frame is `event: <kind>\ndata: <json>\n\n` where kind is "progress",
-// "terminal", or "snapshot" (the initial frame containing the current
-// JobRecord).
-//
-// The stream closes when the job reaches a terminal state. The handler
-// also flushes on every event so browsers see updates promptly.
 func (h *flowAPI) jobEvents(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	jobID := r.PathValue("jobID")
 	rec, err := h.svc.GetJob(r.Context(), p, jobID)
@@ -98,19 +85,10 @@ func (h *flowAPI) jobEvents(rw http.ResponseWriter, r *http.Request, p core.Prin
 	rw.Header().Set("X-Accel-Buffering", "no") // for nginx
 	rw.WriteHeader(http.StatusOK)
 
-	// Snapshot first so the UI has the current state without racing
-	// against subscriber delivery. Emit the same clean runView the REST
-	// /me/runs/{id} endpoint returns — not the raw JobRecord.
 	writeSSE(rw, "snapshot", newRunView(core.SummarizeRun(rec)))
-	// Followed by per-node status snapshots — late subscribers (the UI
-	// that connects after Submit returns) catch up on transitions that
-	// already happened.
 	h.emitNodeSnapshots(rw, r.Context(), rec)
 	flusher.Flush()
 
-	// Re-read the status now that we're subscribed. If the run reached a
-	// terminal state at or before subscribe time, emit terminal and stop; a
-	// terminal that lands after this point instead arrives on `events`.
 	if cur, err := h.svc.GetJob(r.Context(), p, jobID); err == nil {
 		rec = cur
 	}
@@ -124,8 +102,6 @@ func (h *flowAPI) jobEvents(rw http.ResponseWriter, r *http.Request, p core.Prin
 		return
 	}
 
-	// Keep-alive ping every 25s — proxies time out idle SSE streams
-	// faster than that without a heartbeat.
 	ping := time.NewTicker(25 * time.Second)
 	defer ping.Stop()
 
@@ -134,8 +110,6 @@ func (h *flowAPI) jobEvents(rw http.ResponseWriter, r *http.Request, p core.Prin
 		case <-r.Context().Done():
 			return
 		case <-ping.C:
-			// SSE comment lines (starting with ":") are dropped by the
-			// EventSource API but keep the TCP connection alive.
 			_, _ = fmt.Fprintf(rw, ": ping\n\n")
 			flusher.Flush()
 		case ev, ok := <-events:
@@ -163,17 +137,6 @@ func (h *flowAPI) jobEvents(rw http.ResponseWriter, r *http.Request, p core.Prin
 	}
 }
 
-// watchFlowMe streams `flow_updated` Server-Sent Events for a flow: one
-// frame each time the flow's graph is saved, by anyone (the web editor, the
-// MCP server, a direct API call). An open editor subscribes so it can
-// live-reflect external edits — e.g. an AI assistant restructuring the flow
-// through MCP — animating the new graph onto its canvas.
-//
-// The frame carries only {flow_id, commit, author, autosave} — no graph
-// content. The client re-fetches the graph through the normal authorized
-// load path on receipt, and uses `commit` to ignore the echo of its own
-// save. Mirrors jobEvents' SSE plumbing (headers, flush, 25s keep-alive,
-// disconnect on context cancel).
 func (h *flowAPI) watchFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	// Validate scope + readability up front (and resolve the id parts) the
 	// same way a load would — a 403/404 here is clearer than a silent stream
@@ -201,8 +164,6 @@ func (h *flowAPI) watchFlowMe(rw http.ResponseWriter, r *http.Request, p core.Pr
 	rw.Header().Set("Cache-Control", "no-cache")
 	rw.Header().Set("X-Accel-Buffering", "no") // for nginx
 	rw.WriteHeader(http.StatusOK)
-	// An initial comment opens the stream so the client's fetch resolves its
-	// response promptly even before the first edit lands.
 	_, _ = fmt.Fprintf(rw, ": watching\n\n")
 	flusher.Flush()
 

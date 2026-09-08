@@ -15,16 +15,10 @@ import (
 	"github.com/dazyflow/dazyflow/internal/imaputil"
 )
 
-// Connection verification for the Mailbox integration, registered so the Apps
-// page can test credentials before storing them. The label matches the drops'
-// Manifest.Integration.
 func init() {
 	engine.RegisterConnectionVerifier(integration, verifyMailbox)
 }
 
-// verifyTimeout bounds the probe. Shorter than a run's default: someone is
-// watching a spinner, and a mail server that needs longer than this to say
-// hello is a finding in itself.
 const verifyTimeout = 15 * time.Second
 
 // verifyMailbox connects to the configured IMAP server, logs in, and opens the
@@ -52,11 +46,6 @@ func verifyMailbox(ctx context.Context, conn map[string]string) error {
 		return errors.New("a username is set but no password — enter the mailbox password, or an app password if your provider issues them")
 	}
 
-	// CheckDialHost fails for two very different reasons: the host doesn't
-	// resolve at all (a typo'd server name) vs. it resolves to a private/LAN
-	// address (the egress guard). Don't tell someone with a typo to enable
-	// private-network access — say the address looks wrong. Checked here as
-	// well as inside Dial so the message can be about this form.
 	if err := hfnet.CheckDialHost(cfg.Addr()); err != nil {
 		if strings.Contains(err.Error(), "cannot resolve") {
 			return fmt.Errorf("couldn't find a mail server at %q — check the address", cfg.Host)

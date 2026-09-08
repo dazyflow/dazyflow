@@ -45,7 +45,6 @@ describe("the editor's issue buttons", () => {
   it("shows the count and nothing else until it is asked", async () => {
     render(<Harness />);
     expect(screen.getByRole("button", { name: "2 warnings" })).toBeInTheDocument();
-    // The whole point of the change: the words are not over the canvas.
     expect(
       screen.queryByText("Items can't plug into a Text input"),
     ).not.toBeInTheDocument();

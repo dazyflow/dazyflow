@@ -73,8 +73,6 @@ func TestValidateGoogleClaims(t *testing.T) {
 			if (msg == "") != (c.wantReason == "") {
 				t.Errorf("msg = %q for reason %q", msg, c.wantReason)
 			}
-			// The domain-mismatch message names the required domain so the
-			// user knows which account to use.
 			if c.wantReason == "domain_mismatch" && !strings.Contains(msg, c.cfg.GoogleWorkspaceDomain) {
 				t.Errorf("domain_mismatch msg %q should name %q", msg, c.cfg.GoogleWorkspaceDomain)
 			}
@@ -82,9 +80,6 @@ func TestValidateGoogleClaims(t *testing.T) {
 	}
 }
 
-// stubGoogleVerifier is an injectable IDTokenVerifier: it returns canned
-// claims (or an error) for a given raw id_token, so verifyGoogleIDToken can be
-// exercised without OIDC discovery / a live JWKS fetch.
 type stubGoogleVerifier struct {
 	claims auth.Claims
 	err    error
@@ -94,8 +89,6 @@ func (s stubGoogleVerifier) Verify(_ context.Context, _ string) (auth.Claims, er
 	return s.claims, s.err
 }
 
-// installGoogleVerifier seeds the package-level verifier cache for clientID so
-// verifyGoogleIDToken hits the cache instead of building a real OIDC verifier.
 func installGoogleVerifier(t *testing.T, clientID string, v auth.IDTokenVerifier) {
 	t.Helper()
 	googleVerifierCache.mu.Lock()
@@ -114,24 +107,20 @@ func TestVerifyGoogleIDToken_Cov(t *testing.T) {
 	cfg := auth.OrgAuthConfig{Tenant: "acme", GoogleClientID: clientID, GoogleClientSecret: "sec"}
 	ctx := context.Background()
 
-	// Missing id_token -> no_id_token (no verifier needed).
 	if _, reason, status, _ := h.gw.authAPI().verifyGoogleIDToken(ctx, cfg, "", googleUserInfo{}); reason != "no_id_token" || status != http.StatusBadGateway {
 		t.Fatalf("empty token reason=%q status=%d", reason, status)
 	}
 
-	// Verifier rejects the token.
 	installGoogleVerifier(t, clientID, stubGoogleVerifier{err: errors.New("bad sig")})
 	if _, reason, status, _ := h.gw.authAPI().verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{}); reason != "id_token_invalid" || status != http.StatusForbidden {
 		t.Fatalf("invalid token reason=%q status=%d", reason, status)
 	}
 
-	// Verified, but the signed token has no email claim.
 	installGoogleVerifier(t, clientID, stubGoogleVerifier{claims: auth.Claims{Subject: "s"}})
 	if _, reason, status, _ := h.gw.authAPI().verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{}); reason != "no_email" || status != http.StatusBadGateway {
 		t.Fatalf("no-email reason=%q status=%d", reason, status)
 	}
 
-	// Verified email disagrees with the userinfo email -> mismatch.
 	installGoogleVerifier(t, clientID, stubGoogleVerifier{claims: auth.Claims{Extras: map[string]any{"email": "Signed@Acme.test"}}})
 	if _, reason, status, _ := h.gw.authAPI().verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{Email: "other@acme.test"}); reason != "email_mismatch" || status != http.StatusForbidden {
 		t.Fatalf("mismatch reason=%q status=%d", reason, status)
@@ -151,7 +140,6 @@ func TestVerifyGoogleIDToken_Cov(t *testing.T) {
 		t.Fatalf("signed claims not extracted: %+v", vc)
 	}
 
-	// Userinfo email omitted is allowed (signed token is authoritative).
 	vc, reason, _, _ = h.gw.authAPI().verifyGoogleIDToken(ctx, cfg, "tok", googleUserInfo{})
 	if reason != "" || vc.Email != "user@acme.test" {
 		t.Fatalf("empty-userinfo email=%q reason=%q", vc.Email, reason)
@@ -167,7 +155,6 @@ func TestResolveSignInUser_Cov(t *testing.T) {
 	r := httptest.NewRequest("GET", "/cb", nil)
 	st := googleSignInState{Tenant: "acme"}
 
-	// First sign-in: a user is created in st.Tenant with a seeded org profile.
 	rw := httptest.NewRecorder()
 	user, isNew, ok := h.gw.authAPI().resolveSignInUser(rw, r, "new@acme.test", st)
 	if !ok || !isNew || user.Tenant != "acme" || user.Email != "new@acme.test" {
@@ -177,7 +164,6 @@ func TestResolveSignInUser_Cov(t *testing.T) {
 		t.Errorf("org profile not seeded: %+v err=%v", prof, err)
 	}
 
-	// Second sign-in for the same email: existing user, not new.
 	rw = httptest.NewRecorder()
 	user, isNew, ok = h.gw.authAPI().resolveSignInUser(rw, r, "new@acme.test", st)
 	if !ok || isNew {
@@ -202,15 +188,12 @@ func TestCompleteSignIn_Cov(t *testing.T) {
 		t.Error("expected a session cookie to be set inline")
 	}
 
-	// An unsafe return path falls back to "/".
 	rw = httptest.NewRecorder()
 	h.gw.authAPI().completeSignIn(rw, r, googleSignInState{ReturnTo: "https://evil.test/x"}, sess, "tok")
 	if loc := rw.Header().Get("Location"); loc != "/" {
 		t.Fatalf("unsafe return path redirect = %q, want /", loc)
 	}
 
-	// Different host (per-org subdomain): bounces through /auth/handoff with a
-	// one-time token instead of setting an apex cookie.
 	rw = httptest.NewRecorder()
 	h.gw.authAPI().completeSignIn(rw, r, googleSignInState{Host: "acme.dazyflow.test", ReturnTo: "/x"}, sess, "tok")
 	loc := rw.Header().Get("Location")
@@ -225,11 +208,7 @@ func TestCompleteSignIn_Cov(t *testing.T) {
 	}
 }
 
-// TestGoogleSignInStart_Cov covers googleSignInStart: the not-configured and
-// missing-tenant guards, an org without Google enabled, and the happy-path
-// 302 to Google's auth endpoint carrying client_id, state, and the hd hint.
 func TestGoogleSignInStart_Cov(t *testing.T) {
-	// No OrgAuth store -> 501.
 	h := newGatewayHarness(t)
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, httptest.NewRequest("GET", "/api/v1/auth/google/start?tenant=acme", nil))
@@ -240,21 +219,18 @@ func TestGoogleSignInStart_Cov(t *testing.T) {
 	h.gw.OrgAuth = newMemOrgAuth()
 	h.svc.PublicBaseURL = "https://app.dazyflow.test"
 
-	// Missing tenant -> 400.
 	rw = httptest.NewRecorder()
 	ServeForTest(h.gw, rw, httptest.NewRequest("GET", "/api/v1/auth/google/start", nil))
 	if rw.Code != http.StatusBadRequest {
 		t.Fatalf("missing tenant = %d, want 400", rw.Code)
 	}
 
-	// Tenant with no Google config -> 404.
 	rw = httptest.NewRecorder()
 	ServeForTest(h.gw, rw, httptest.NewRequest("GET", "/api/v1/auth/google/start?tenant=acme", nil))
 	if rw.Code != http.StatusNotFound {
 		t.Fatalf("unconfigured tenant = %d, want 404", rw.Code)
 	}
 
-	// Configure Google for acme, with a workspace domain (hd hint path).
 	_ = h.gw.OrgAuth.PutOrgAuth(context.Background(), auth.OrgAuthConfig{
 		Tenant: "acme", GoogleClientID: "cid.apps.googleusercontent.com",
 		GoogleClientSecret: "sec", GoogleWorkspaceDomain: "acme.test",
@@ -293,11 +269,7 @@ func TestClassifyGoogleError_Cov(t *testing.T) {
 	}
 }
 
-// TestGoogleSignInCallback_EarlyErrors covers the callback's guard branches via
-// the real mux: not-configured stores, an OAuth ?error=, an invalid state, and
-// a missing code. None of these reach the live token exchange.
 func TestGoogleSignInCallback_EarlyErrors(t *testing.T) {
-	// Stores not configured -> 501.
 	h := newGatewayHarness(t)
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, httptest.NewRequest("GET", "/api/v1/auth/google/callback?code=x&state=y", nil))
@@ -305,27 +277,23 @@ func TestGoogleSignInCallback_EarlyErrors(t *testing.T) {
 		t.Fatalf("unconfigured callback = %d, want 501; body=%s", rw.Code, rw.Body.String())
 	}
 
-	// Wire the stores; now the state/code guards apply.
 	h.gw.OrgAuth = newMemOrgAuth()
 	users, _ := auth.OpenJSONUserStore("")
 	h.gw.Users = users
 	h.gw.Sessions = auth.NewMemSessionStore()
 
-	// ?error= with no (consumable) state -> JSON 400 "denied".
 	rw = httptest.NewRecorder()
 	ServeForTest(h.gw, rw, httptest.NewRequest("GET", "/api/v1/auth/google/callback?error=access_denied", nil))
 	if rw.Code != http.StatusBadRequest {
 		t.Fatalf("error param = %d, want 400; body=%s", rw.Code, rw.Body.String())
 	}
 
-	// Missing/expired state -> 400.
 	rw = httptest.NewRecorder()
 	ServeForTest(h.gw, rw, httptest.NewRequest("GET", "/api/v1/auth/google/callback?code=abc", nil))
 	if rw.Code != http.StatusBadRequest {
 		t.Fatalf("missing state = %d, want 400", rw.Code)
 	}
 
-	// Valid state but missing code -> 400.
 	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/", "", false)
 	rw = httptest.NewRecorder()
 	rNoCode := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+state, nil)
@@ -335,8 +303,6 @@ func TestGoogleSignInCallback_EarlyErrors(t *testing.T) {
 		t.Fatalf("missing code = %d, want 400", rw.Code)
 	}
 
-	// Valid state + code, but the org's Google config is gone (not enabled) ->
-	// signInError -> JSON 400 not_configured.
 	state2, bind2 := boundGoogleState(t, h.gw, "acme", "/", "", false)
 	rw = httptest.NewRecorder()
 	rNotEnabled := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+state2+"&code=abc", nil)
@@ -346,8 +312,6 @@ func TestGoogleSignInCallback_EarlyErrors(t *testing.T) {
 		t.Fatalf("not-enabled config = %d, want 400; body=%s", rw.Code, rw.Body.String())
 	}
 
-	// Admin "Test" sign-in: a state minted with test=true routes failures to
-	// the friendly ?test_error= page (redirectTestError) instead of JSON.
 	testState, bind3 := boundGoogleState(t, h.gw, "acme", "/admin/sso", "", true)
 	rw = httptest.NewRecorder()
 	rTest := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+testState+"&code=abc", nil)
@@ -360,8 +324,6 @@ func TestGoogleSignInCallback_EarlyErrors(t *testing.T) {
 		t.Fatalf("test redirect = %q, want test_error=not_configured", loc)
 	}
 
-	// Admin "Test" sign-in where the user declined consent (?error=) also
-	// routes to the test-error page (denied) — state is consumed up front.
 	deniedState, _ := boundGoogleState(t, h.gw, "acme", "/admin/sso", "", true)
 	rw = httptest.NewRecorder()
 	ServeForTest(h.gw, rw, httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+deniedState+"&error=access_denied", nil))
@@ -373,10 +335,6 @@ func TestGoogleSignInCallback_EarlyErrors(t *testing.T) {
 	}
 }
 
-// googleCallbackEnv wires the full happy-path environment for the Google
-// sign-in callback: an OrgAuth config, user/session/profile stores, httptest
-// servers for the token + userinfo endpoints, and a stubbed ID-token verifier
-// whose signed email matches userinfo. Returns the harness ready to serve.
 func googleCallbackEnv(t *testing.T, signedEmail, hd string, emailVerified bool) *gatewayHarness {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -433,8 +391,6 @@ func boolJSON(b bool) string {
 	return "false"
 }
 
-// TestGoogleSignInCallback_NewUserSuccess drives the full callback to a new
-// user creation, session issuance, and same-host cookie redirect.
 func TestGoogleSignInCallback_NewUserSuccess(t *testing.T) {
 	h := googleCallbackEnv(t, "fresh@acme.test", "", true)
 	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/dashboard", "", false)
@@ -454,15 +410,12 @@ func TestGoogleSignInCallback_NewUserSuccess(t *testing.T) {
 	if len(rw.Result().Cookies()) == 0 {
 		t.Error("expected a session cookie to be set")
 	}
-	// The user was created in the SSO org.
 	u, err := h.gw.Users.GetByEmail(context.Background(), "fresh@acme.test")
 	if err != nil || u.Tenant != "acme" {
 		t.Fatalf("new user = %+v err=%v", u, err)
 	}
 }
 
-// TestGoogleSignInCallback_ExistingUserSuccess covers the existing-user leg
-// (resolveSignInUser returns isNew=false; resolveActiveOrg home-tenant path).
 func TestGoogleSignInCallback_ExistingUserSuccess(t *testing.T) {
 	h := googleCallbackEnv(t, "returning@acme.test", "", true)
 	_ = h.gw.Users.PutUser(context.Background(), auth.User{
@@ -481,8 +434,6 @@ func TestGoogleSignInCallback_ExistingUserSuccess(t *testing.T) {
 	}
 }
 
-// TestGoogleSignInCallback_TestModeSuccess: an admin "Test" sign-in verifies
-// the Google side then stops, redirecting with ?test=ok and minting no user.
 func TestGoogleSignInCallback_TestModeSuccess(t *testing.T) {
 	h := googleCallbackEnv(t, "tester@acme.test", "acme.test", true)
 	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/admin/sso", "", true)
@@ -503,8 +454,6 @@ func TestGoogleSignInCallback_TestModeSuccess(t *testing.T) {
 	}
 }
 
-// TestGoogleSignInCallback_EmailNotVerified drives validateGoogleClaims's
-// not-verified rejection through the live callback.
 func TestGoogleSignInCallback_EmailNotVerified(t *testing.T) {
 	h := googleCallbackEnv(t, "unverified@acme.test", "", false)
 	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/", "", false)
@@ -518,10 +467,7 @@ func TestGoogleSignInCallback_EmailNotVerified(t *testing.T) {
 	}
 }
 
-// TestGoogleSignInCallback_DomainMismatch: org restricts to a Workspace
-// domain the signed-in user is not part of.
 func TestGoogleSignInCallback_DomainMismatch(t *testing.T) {
-	// Org requires hd=acme.test but userinfo carries no hd.
 	h := newGatewayHarness(t)
 	const clientID = "cid-dm.apps.googleusercontent.com"
 	h.gw.OrgAuth = newMemOrgAuth()
@@ -556,8 +502,6 @@ func TestGoogleSignInCallback_DomainMismatch(t *testing.T) {
 	}
 }
 
-// TestGoogleSignInCallback_ExchangeFailure: the token endpoint 4xxs, so the
-// callback routes through classifyGoogleError -> signInError (502).
 func TestGoogleSignInCallback_ExchangeFailure(t *testing.T) {
 	h := newGatewayHarness(t)
 	h.gw.OrgAuth = newMemOrgAuth()
@@ -585,13 +529,8 @@ func TestGoogleSignInCallback_ExchangeFailure(t *testing.T) {
 	}
 }
 
-// TestGoogleSignInCallback_DomainAutoEnroll covers resolveActiveOrg's
-// domain-authorized auto-join leg through the live callback: an existing user
-// whose home tenant differs from the SSO org, with a matching Workspace
-// domain, is enrolled and gets a session.
 func TestGoogleSignInCallback_DomainAutoEnroll(t *testing.T) {
 	h := googleCallbackEnv(t, "joiner@acme.test", "acme.test", true)
-	// Existing user whose home tenant is "elsewhere".
 	_ = h.gw.Users.PutUser(context.Background(), auth.User{
 		Email: "joiner@acme.test", Subject: "joiner@acme.test",
 		Tenant: "elsewhere", Workspace: "main", Roles: []core.Role{core.TeamRoleEditor()},
@@ -615,7 +554,6 @@ func TestPendingInvitation_Cov(t *testing.T) {
 	h := newGatewayHarness(t)
 	ctx := context.Background()
 
-	// Nil store -> no invite.
 	if _, ok := h.gw.authAPI().pendingInvitation(ctx, "a@x.com", "t"); ok {
 		t.Fatal("nil invitations store returned an invite")
 	}
@@ -625,7 +563,6 @@ func TestPendingInvitation_Cov(t *testing.T) {
 	_ = invites.PutInvitation(ctx, auth.Invitation{
 		Token: "i1", Email: "a@x.com", Tenant: "acme", ExpiresAt: time.Now().Add(time.Hour),
 	})
-	// Expired invite is ignored.
 	_ = invites.PutInvitation(ctx, auth.Invitation{
 		Token: "i2", Email: "old@x.com", Tenant: "acme", ExpiresAt: time.Now().Add(-time.Hour),
 	})
@@ -650,20 +587,17 @@ func TestResolveActiveOrg_Cov(t *testing.T) {
 	r := httptest.NewRequest("GET", "/cb", nil)
 	cfg := auth.OrgAuthConfig{Tenant: "acme"}
 
-	// New user: lands in their own (home) tenant.
 	newUser := auth.User{Email: "n@x.com", Tenant: "home", Workspace: "main", Roles: []core.Role{core.TeamRoleViewer()}}
 	tn, ws, _, reason, _, _ := h.gw.authAPI().resolveActiveOrg(r, cfg, newUser, true, "n@x.com", googleSignInState{Tenant: "acme"})
 	if reason != "" || tn != "home" || ws != "main" {
 		t.Fatalf("new user resolve = %q/%q reason=%q", tn, ws, reason)
 	}
 
-	// Existing user, signing into home tenant (st.Tenant == user.Tenant).
 	home := auth.User{Email: "h@x.com", Tenant: "acme", Workspace: "main"}
 	if _, _, _, reason, _, _ := h.gw.authAPI().resolveActiveOrg(r, cfg, home, false, "h@x.com", googleSignInState{Tenant: "acme"}); reason != "" {
 		t.Fatalf("home tenant resolve reason = %q", reason)
 	}
 
-	// Existing user with a membership in the target org.
 	_ = mem.PutMembership(context.Background(), auth.Membership{
 		UserEmail: "m@x.com", Tenant: "acme", Workspace: "ws2", Roles: []core.Role{core.TeamRoleEditor()},
 	})
@@ -672,14 +606,12 @@ func TestResolveActiveOrg_Cov(t *testing.T) {
 		t.Fatalf("membership resolve = %q/%q reason=%q", tn, ws, reason)
 	}
 
-	// Existing user, no membership, no domain match, no invite -> not_invited.
 	stranger := auth.User{Email: "s@x.com", Tenant: "home"}
 	_, _, _, reason, status, _ := h.gw.authAPI().resolveActiveOrg(r, cfg, stranger, false, "s@x.com", googleSignInState{Tenant: "acme"})
 	if reason != "not_invited" || status != http.StatusForbidden {
 		t.Fatalf("stranger resolve reason=%q status=%d, want not_invited/403", reason, status)
 	}
 
-	// Domain-authorized auto-join.
 	domainCfg := auth.OrgAuthConfig{Tenant: "acme", GoogleWorkspaceDomain: "acme.com"}
 	dom := auth.User{Email: "d@acme.com", Tenant: "home"}
 	tn, ws, roles, reason, _, _ := h.gw.authAPI().resolveActiveOrg(r, domainCfg, dom, false, "d@acme.com", googleSignInState{Tenant: "acme"})
@@ -690,7 +622,6 @@ func TestResolveActiveOrg_Cov(t *testing.T) {
 		t.Fatalf("domain join did not create membership: %v", err)
 	}
 
-	// Invitation-authorized auto-join honors invite roles/workspace.
 	_ = invites.PutInvitation(context.Background(), auth.Invitation{
 		Token: "inv", Email: "i@x.com", Tenant: "acme", Workspace: "wsInv",
 		Roles: []core.Role{core.TeamRoleAdmin()}, ExpiresAt: time.Now().Add(time.Hour),
@@ -705,7 +636,6 @@ func TestResolveActiveOrg_Cov(t *testing.T) {
 func TestSignInError_Cov(t *testing.T) {
 	h := newGatewayHarness(t)
 
-	// Non-test: writes a JSON error with the given status.
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/cb", nil)
 	h.gw.authAPI().signInError(rw, r, googleSignInState{}, "exchange_failed", http.StatusBadGateway, "boom")
@@ -713,7 +643,6 @@ func TestSignInError_Cov(t *testing.T) {
 		t.Fatalf("non-test signInError = %d, want 502", rw.Code)
 	}
 
-	// Test mode: redirects to the SSO settings page with a test_error code.
 	rw = httptest.NewRecorder()
 	h.gw.authAPI().signInError(rw, r, googleSignInState{Test: true, ReturnTo: "/admin/sso"}, "invalid_grant", http.StatusForbidden, "x")
 	if rw.Code != http.StatusFound {
@@ -735,7 +664,6 @@ func boundGoogleState(t *testing.T, gw *HTTPGateway, tenant, returnTo, host stri
 	if err != nil {
 		t.Fatalf("newOAuthBinding: %v", err)
 	}
-	// Mint into the gateway's own store, since that is what the callback reads.
 	if gw.Ephemeral == nil {
 		gw.Ephemeral = auth.NewMemEphemeralStore()
 	}
@@ -746,8 +674,6 @@ func boundGoogleState(t *testing.T, gw *HTTPGateway, tenant, returnTo, host stri
 	return state, &http.Cookie{Name: googleSignInCookie, Value: binding}
 }
 
-// TestGoogleSignInStart_SetsBindingCookie asserts the start leg actually mints
-// the binding — the callback gate is worthless if nothing sets the cookie.
 func TestGoogleSignInStart_SetsBindingCookie(t *testing.T) {
 	h := newGatewayHarness(t)
 	h.gw.OrgAuth = newMemOrgAuth()
@@ -780,11 +706,10 @@ func TestGoogleSignInStart_SetsBindingCookie(t *testing.T) {
 	}
 }
 
-// TestGoogleSignInCallback_RejectsUnboundBrowser is the login-CSRF regression.
-// The attacker holds a valid state token (they started the flow) and a valid
-// authorization code for THEIR Google account, and gets the victim to load the
-// callback. Without a matching binding cookie the victim's browser must not
-// come away holding a session.
+// The login-CSRF regression. The attacker holds a valid state token (they
+// started the flow) and a valid authorization code for THEIR Google account,
+// and gets the victim to load the callback. Without a matching binding cookie
+// the victim's browser must not come away holding a session.
 func TestGoogleSignInCallback_RejectsUnboundBrowser(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -817,7 +742,6 @@ func TestGoogleSignInCallback_RejectsUnboundBrowser(t *testing.T) {
 					t.Fatalf("unbound callback issued cookie %q — session leaked to the victim's browser", c.Name)
 				}
 			}
-			// And no account was provisioned off the back of it.
 			if _, err := h.gw.Users.GetByEmail(context.Background(), "attacker@acme.test"); err == nil {
 				t.Error("unbound callback created a user")
 			}
@@ -825,9 +749,6 @@ func TestGoogleSignInCallback_RejectsUnboundBrowser(t *testing.T) {
 	}
 }
 
-// TestGoogleSignInCallback_StateIsSingleUse pins that a binding cookie can't be
-// replayed: the state is consumed even by the rejected attempt, so a second
-// request carrying the correct cookie still fails.
 func TestGoogleSignInCallback_StateIsSingleUse(t *testing.T) {
 	h := googleCallbackEnv(t, "replay@acme.test", "", true)
 	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/", "", false)

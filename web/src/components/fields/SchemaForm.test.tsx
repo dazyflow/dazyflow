@@ -5,9 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-// t() returns the key, with {{interpolations}} filled in — enough for a test to
-// assert on the part of a label that comes from the data ("old-laptop —
-// offline") without pulling the real catalogues in.
 const fakeT = (k: string, vars?: Record<string, unknown>) =>
   vars ? k + " " + Object.values(vars).join(" ") : k;
 vi.mock("react-i18next", () => ({
@@ -39,14 +36,10 @@ describe("SchemaForm (FormContext)", () => {
     const input = screen.getByRole("textbox");
     await userEvent.type(input, "hi");
     expect(onChange).toHaveBeenCalled();
-    // The last call reflects the typed value merged into the params object.
     const last = onChange.mock.calls.at(-1)?.[0];
     expect(last).toMatchObject({ note: expect.any(String) });
   });
 
-  // x_visible_when: a field that only applies once a sibling says so. The Date
-  // & time step's Custom format is the case — beside a Format dropdown, a
-  // permanent second format box reads as two ways of saying the same thing.
   const conditional: JSONSchema = {
     type: "object",
     properties: {
@@ -66,7 +59,6 @@ describe("SchemaForm (FormContext)", () => {
   } as JSONSchema;
 
   it("hides a conditional field until its sibling selects it", () => {
-    // Fresh node: format is unset, so its default "iso" is in force.
     const { rerender } = render(
       <SchemaForm schema={conditional} value={{}} onChange={() => {}} />,
     );
@@ -89,7 +81,6 @@ describe("SchemaForm (FormContext)", () => {
       />,
     );
     expect(screen.queryByText("Custom format")).not.toBeInTheDocument();
-    // Hiding is a render decision only: nothing was written back.
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -177,8 +168,6 @@ describe("SchemaForm (FormContext)", () => {
       <SchemaForm schema={schema} value={{}} onChange={() => {}} />,
     );
     expect(screen.queryByRole("option", { name: "schemaForm.unsetOption" })).not.toBeInTheDocument();
-    // Exactly one option carries "", and it is the drop's own — so selecting
-    // it holds instead of snapping to a synthetic twin.
     const empties = [...container.querySelectorAll("option")].filter((o) => o.value === "");
     expect(empties).toHaveLength(1);
     expect(empties[0].textContent).toBe("Follow the flow's language");
@@ -197,7 +186,6 @@ describe("SchemaForm (FormContext)", () => {
   });
 });
 
-// ---- the Run on your machine step's fields ----------------------------
 
 // A token per test: the machine list is cached per token (one inspector fills
 // two fields from it), so sharing one would serve the previous test's answer.
@@ -253,11 +241,8 @@ describe("SchemaForm — a name/value map", () => {
     const key = keyBoxes()[0];
     await userEvent.clear(key);
 
-    // The row is still there with its value, which is the whole bug: an empty
-    // name means "being typed", not "deleted".
     expect(keyBoxes()).toHaveLength(1);
     expect(screen.getByDisplayValue("v")).toBeInTheDocument();
-    // And the params no longer carry a half-named entry.
     expect(onChange.mock.calls.at(-1)?.[0]).toMatchObject({ env: {} });
 
     await userEvent.type(key, "NEW");
@@ -308,11 +293,8 @@ describe("SchemaForm — a name/value map", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "schemaForm.remove" }));
 
-    // Nothing gone yet, and the row is still on screen — what is about to go
-    // has to be visible while the question is being answered.
     expect(onChange).not.toHaveBeenCalled();
     expect(keyBoxes()).toHaveLength(1);
-    // Named, so it is clear WHICH one.
     expect(screen.getByText(/schemaForm.dictRemoveConfirm.*API_TOKEN/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "common.remove" }));
@@ -346,8 +328,6 @@ describe("SchemaForm — a name/value map", () => {
   });
 
   it("says so when one name is used twice", async () => {
-    // The second wins when the object is built, so the first row's value
-    // quietly is not what runs.
     render(
       <SchemaForm schema={dictSchema} value={{ env: { A: "1" } }} onChange={() => {}} />,
     );
@@ -357,10 +337,6 @@ describe("SchemaForm — a name/value map", () => {
   });
 });
 
-// A multiline field becomes a code box when a sibling param says which language
-// it is written in — the Text step's "Written in", the runner step's "Run it
-// with". The field is told WHICH sibling to read, so the two steps can each ask
-// the question in their own words.
 describe("SchemaForm — a language-aware text box", () => {
   const textSchema: JSONSchema = {
     type: "object",
@@ -371,8 +347,6 @@ describe("SchemaForm — a language-aware text box", () => {
   } as JSONSchema;
 
   it("stays a plain textarea for prose", () => {
-    // Most of what goes in one of these is a system prompt or an email body,
-    // and prose in a monospace box reads worse, not better.
     const { container } = render(
       <SchemaForm schema={textSchema} value={{ text: "Dear team," }} onChange={() => {}} />,
     );
@@ -411,8 +385,6 @@ describe("SchemaForm — a language-aware text box", () => {
 });
 
 describe("SchemaForm — the runner step's fields", () => {
-  // One field replaced two (a machine name and a label, mutually exclusive),
-  // which is possible because every machine now carries its own name as a tag.
   it("offers every tag the org's machines carry, names included", async () => {
     const token = "list";
     vi.spyOn(api, "listRunnerTargets").mockResolvedValue({
@@ -425,14 +397,10 @@ describe("SchemaForm — the runner step's fields", () => {
       <SchemaForm schema={runnerSchema} value={{}} onChange={() => {}} references={refs(token)} />,
     );
 
-    // The count is what says whether a tag is a pool or one machine.
     expect(await screen.findByText(/schemaForm.runner.tagOption.*linux.*2/)).toBeInTheDocument();
     expect(await screen.findByText(/schemaForm.runner.tagOption.*invoices-box.*1/)).toBeInTheDocument();
   });
 
-  // Work goes to whichever tagged machine is polling when the step fires, so
-  // the tags backed by a machine that is actually on are the ones worth
-  // reaching for — they lead.
   it("puts tags with a machine switched on first", async () => {
     const token = "order";
     vi.spyOn(api, "listRunnerTargets").mockResolvedValue({
@@ -456,9 +424,6 @@ describe("SchemaForm — the runner step's fields", () => {
     expect(at("alpha-pool")).toBeLessThan(at("off-box"));
   });
 
-  // Machines carry the tags but not one is on: the step will wait and then
-  // fail. A different problem from a set that matches nothing, and one the
-  // "— 0 online" count let people read straight past.
   it("warns when the matching machines are all switched off", async () => {
     const token = "asleep";
     vi.spyOn(api, "listRunnerTargets").mockResolvedValue({
@@ -475,7 +440,6 @@ describe("SchemaForm — the runner step's fields", () => {
         references={refs(token)}
       />,
     );
-    // Names them, because which machine to go and switch on is the answer.
     const warn = await screen.findByText(/schemaForm.runner.matchesNoneOnline.*render-01, render-02/);
     expect(warn).toBeInTheDocument();
     expect(container.querySelector(".sf-warn")).not.toBeNull();
@@ -513,7 +477,6 @@ describe("SchemaForm — the runner step's fields", () => {
         references={refs(token)}
       />,
     );
-    // Two carry linux, one of them online.
     expect(await screen.findByText(/schemaForm.runner.matches.*2.*1/)).toBeInTheDocument();
   });
 
@@ -534,8 +497,6 @@ describe("SchemaForm — the runner step's fields", () => {
   });
 
   it("stays usable when the machine list cannot be fetched", async () => {
-    // A deployment without runners answers 501, and an org may have registered
-    // none yet. The tags still have to be typeable by hand.
     const token = "failed";
     vi.spyOn(api, "listRunnerTargets").mockRejectedValue(new Error("501"));
     render(
@@ -556,18 +517,14 @@ describe("SchemaForm — the runner step's fields", () => {
         references={refs(token)}
       />,
     );
-    // Not an <input>: a script is many lines by nature and everything past the
-    // right edge of a one-line box was invisible.
     const box = container.querySelector(".dz-code-editor textarea");
     expect(box).toHaveValue("import sys  # go");
-    // Coloured as Python, which only the sibling `shell` param can say.
     expect(container.querySelector(".dz-s-keyword")).toHaveTextContent("import");
     expect(container.querySelector(".dz-s-comment")).toHaveTextContent("# go");
   });
 });
 
 describe("SchemaForm — a two-way choice", () => {
-  // Sort rows' direction, the field this rendering was added for.
   const toggleSchema: JSONSchema = {
     type: "object",
     properties: {
@@ -629,10 +586,6 @@ describe("SchemaForm — a two-way choice", () => {
 });
 
 describe("SchemaForm — a name/value map with example boxes", () => {
-  // render_table's column headings: the field a user reaches for to rename one
-  // heading. Two unlabelled boxes and a "key" placeholder is what made the
-  // same capability look absent when it was reachable only through the
-  // canvas-side column editor.
   const mapSchema: JSONSchema = {
     type: "object",
     properties: {

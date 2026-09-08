@@ -67,9 +67,7 @@ func init() {
 			// so a retried POST posts the message twice. This drop is a
 			// terminal leaf the engine auto-retries on backoff, so retries
 			// must be off here.
-			RetryPolicy: core.RetryNever,
-			// …and the engine dedupes a same-job re-execution (expired-lease
-			// reclaim / crash recovery) so a recovered run doesn't re-post.
+			RetryPolicy:  core.RetryNever,
 			DedupeWrites: true,
 		},
 		Execute: executeSendMessage,
@@ -138,9 +136,6 @@ func executeSendMessage(ctx context.Context, job core.Job, _ chan<- core.Progres
 	}, nil
 }
 
-// buildEndpoint adds wait=true (so Discord returns the created message rather
-// than a bare 204) and an optional thread_id, preserving any query the webhook
-// URL already carries.
 func buildEndpoint(webhookURL, threadID string) (string, error) {
 	u, err := url.Parse(webhookURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {

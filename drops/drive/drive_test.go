@@ -92,7 +92,6 @@ func TestDownload_WritesToScratchAndReportsMeta(t *testing.T) {
 			_, _ = w.Write([]byte(fileBytes))
 			return
 		}
-		// metadata request
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id": "f1", "name": "Quarterly report.pdf", "mimeType": "application/pdf", "size": "7",
 		})
@@ -123,8 +122,6 @@ func TestDownload_WritesToScratchAndReportsMeta(t *testing.T) {
 	}
 }
 
-// nativeDocServer answers metadata for a Google-editor doc of the given mime
-// and serves any /export request with the body, recording the mimeType asked.
 func nativeDocServer(t *testing.T, name, mime, exportBody string, gotExportMIME *string) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -240,7 +237,6 @@ func TestUpload_SendsMultipartRelated(t *testing.T) {
 			t.Errorf("content-type = %q (err %v)", r.Header.Get("Content-Type"), err)
 		}
 		mr := multipart.NewReader(r.Body, p["boundary"])
-		// Part 1: JSON metadata.
 		part, err := mr.NextPart()
 		if err != nil {
 			t.Fatalf("metadata part: %v", err)
@@ -254,7 +250,6 @@ func TestUpload_SendsMultipartRelated(t *testing.T) {
 		if len(meta.Parents) > 0 {
 			gotParents = meta.Parents[0]
 		}
-		// Part 2: media.
 		part2, err := mr.NextPart()
 		if err != nil {
 			t.Fatalf("media part: %v", err)
@@ -309,8 +304,7 @@ func TestUpload_FromWiredFileRef(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(ws, "data.bin"), []byte("x"), 0o644)
 	res, err := executeUpload(context.Background(), core.Job{
 		WorkspaceRoot: ws,
-		// 'in' Ref wins over a (here absent) path param.
-		Input: map[string]core.Ref{"in": {Ref: "data.bin"}},
+		Input:         map[string]core.Ref{"in": {Ref: "data.bin"}},
 	}, nil)
 	if err != nil || res.Status != core.StatusOK {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
@@ -375,8 +369,6 @@ func TestUpload_RequiresPath(t *testing.T) {
 	}
 }
 
-// errServer returns a server that always answers with the given status and body
-// (a Google {error:{message}} envelope), so non-2xx paths can be exercised.
 func errServer_Cov(t *testing.T, status int, msg string) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -483,7 +475,6 @@ func TestBaseURL_ParamOverride_Cov(t *testing.T) {
 	if got := uploadBaseURL(job); got != "http://up.example" {
 		t.Errorf("uploadBaseURL = %q", got)
 	}
-	// Fallback to the seam when no override.
 	if got := apiBaseURL(core.Job{}); got != "http://seam.invalid" {
 		t.Errorf("apiBaseURL fallback = %q", got)
 	}
@@ -582,8 +573,6 @@ func TestDownload_ExportErrorStatus_Cov(t *testing.T) {
 	}
 }
 
-// Default-extension append: a Sheet exported as xlsx whose name lacks the ext
-// gets ".xlsx" appended (exercises exportDestPath append branch).
 func TestDownload_ExportAppendsExtension_Cov(t *testing.T) {
 	srv := nativeDocServer(t, "Budget", "application/vnd.google-apps.spreadsheet", "XLSXBYTES", nil)
 	withDriveEnv(t, srv)
@@ -600,7 +589,6 @@ func TestDownload_ExportAppendsExtension_Cov(t *testing.T) {
 	}
 }
 
-// An explicit 'path' that already carries the extension is not doubled.
 func TestDownload_ExportPathKeepsExtension_Cov(t *testing.T) {
 	srv := nativeDocServer(t, "Doc", "application/vnd.google-apps.document", "PDF", nil)
 	withDriveEnv(t, srv)
@@ -616,7 +604,6 @@ func TestDownload_ExportPathKeepsExtension_Cov(t *testing.T) {
 	}
 }
 
-// A file with no name falls back to "drive-<id>" as the dest base.
 func TestDownload_NamelessUsesIDFallback_Cov(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("alt") == "media" {
@@ -680,8 +667,6 @@ func TestUpload_OpenMissingFile_Cov(t *testing.T) {
 	}
 }
 
-// Upload with an explicit name + mime override, verifying buildRelatedBody puts
-// the chosen mime on the media part.
 func TestUpload_NameAndMimeOverride_Cov(t *testing.T) {
 	var gotName string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -729,7 +714,6 @@ func TestBuildRelatedBody_Cov(t *testing.T) {
 	if !strings.Contains(s, "application/json") || !strings.Contains(s, "text/plain") || !strings.Contains(s, "data") {
 		t.Errorf("body = %q", s)
 	}
-	// Empty mime: media part header carries no Content-Type.
 	body2, _, err := buildRelatedBody(map[string]any{"name": "y"}, "", []byte("d2"))
 	if err != nil {
 		t.Fatalf("buildRelatedBody empty mime: %v", err)

@@ -5,8 +5,6 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-// Same stable-identity mocks as RunListLinks.test.tsx: RunList's load effect
-// depends on `t` and `me`, so a fresh object per render re-fires it forever.
 vi.mock("react-i18next", () => {
   const t = (k: string) => k;
   const value = { t };
@@ -59,7 +57,6 @@ describe("RunList empty states", () => {
     );
     expect(await screen.findByText("runList.emptyFirstTitle")).toBeTruthy();
     expect(screen.getByText("runList.emptyFirstBody")).toBeTruthy();
-    // And a way out — the page that can actually produce a run.
     const cta = screen.getByRole("button", { name: "runList.emptyFirstCta" });
     expect(cta).toBeTruthy();
     // The filter wording must NOT appear: nothing was filtered.

@@ -19,14 +19,10 @@ import sv from "../../i18n/sv.json";
 const GO = join(__dirname, "../../../../core/ticket.go");
 const src = readFileSync(GO, "utf8");
 
-// The SystemNote constants: `NoteCustomerClosed SystemNote = "customer_closed"`
 const codes = [...src.matchAll(/SystemNote\s*=\s*"([a-z_]+)"/g)].map((m) => m[1]);
-// MarkedNote(s) builds "marked_<status>" for every TicketStatus, so the codes
-// it can produce are exactly the statuses the ticket model defines.
 const statuses = [...src.matchAll(/TicketStatus\s*=\s*"([a-z_]+)"/g)].map((m) => m[1]);
 const all = [...codes, ...statuses.map((s) => `marked_${s}`)];
 
-// The renderer's map, read the same way — from the source, not restated.
 const TSX_SRC = readFileSync(join(__dirname, "SupportTickets.tsx"), "utf8");
 const mapped = new Set(
   [...TSX_SRC.matchAll(/^\s{2}([a-z_]+): "(support\.note\.[A-Za-z]+)",$/gm)].map((m) => m[1]),
@@ -62,8 +58,6 @@ describe("support system notes", () => {
   });
 
   it("maps no code the daemon cannot produce", () => {
-    // A note removed on the Go side leaves a mapping behind, where it reads as
-    // coverage of something that no longer happens.
     const live = new Set(all);
     expect([...mapped].filter((c) => !live.has(c))).toEqual([]);
   });

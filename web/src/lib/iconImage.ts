@@ -8,19 +8,10 @@
 // SVGs are tiny already. Images are always rendered via <img> (never
 // inlined as markup), so an uploaded SVG can't execute scripts.
 
-// Max accepted source file sizes. SVGs are kept small as-is; PNGs are
-// downscaled before storage, but we still cap the source to avoid
-// decoding a huge upload.
 const SVG_MAX_BYTES = 64 * 1024;
 const PNG_MAX_BYTES = 2 * 1024 * 1024;
-// Longest edge (px) a PNG is downscaled to — icons render at ~16–40px,
-// so 128 keeps them crisp on hi-dpi while bounding the data-URL size.
 const PNG_MAX_EDGE = 128;
 
-// isImageIcon reports whether an icon value is an image reference (a
-// data: URL, an http(s) URL, an absolute asset path, or a filename with
-// an image extension) rather than a logical lucide-icon name like
-// "sparkles". Callers render images via <img> and names via iconFor.
 export function isImageIcon(icon?: string): boolean {
   if (!icon) return false;
   return (
@@ -29,11 +20,6 @@ export function isImageIcon(icon?: string): boolean {
   );
 }
 
-// fileToIconDataURL validates an uploaded SVG/PNG and returns a data:
-// URL suitable for storing in an icon field. SVGs are read verbatim
-// (after a size check); PNGs are downscaled to PNG_MAX_EDGE first.
-// Throws an Error with a user-facing message on the wrong type / too
-// large.
 export async function fileToIconDataURL(file: File): Promise<string> {
   const name = file.name.toLowerCase();
   const isSvg = file.type === "image/svg+xml" || name.endsWith(".svg");

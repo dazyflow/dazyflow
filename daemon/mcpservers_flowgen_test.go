@@ -24,9 +24,6 @@ import (
 // nothing in flowgen mentions MCP, so the connection is invisible in the code
 // and would be silently lost by a future change to any of those three.
 
-// mcpFlowgenService builds a Service whose resolver carries one org's MCP
-// server, the way a running daemon's does. The tool carries a real argument
-// schema, because the arguments are the half the generator has to get right.
 func mcpFlowgenService(t *testing.T, tenant string) *Service {
 	t.Helper()
 	srv := (&fakeMCPEndpoint{
@@ -88,10 +85,9 @@ func TestSearchDrops_IncludesTheOrgsOwnMCPTools(t *testing.T) {
 	}
 }
 
-// TestGenerateFlow_ComposesAgainstAnOrgsMCPTool drives the real generate loop
-// with a scripted model answer that uses the org's MCP step, and asserts the
-// production gate accepts it — an unknown-module error here would mean the AI
-// can see a step it is not allowed to use.
+// Drives the real generate loop with a scripted model answer that uses the
+// org's MCP step, and asserts the production gate accepts it — an unknown-
+// module error here would mean the AI can see a step it is not allowed to use.
 func TestGenerateFlow_ComposesAgainstAnOrgsMCPTool(t *testing.T) {
 	t.Parallel()
 	svc := mcpFlowgenService(t, "acme")
@@ -102,8 +98,6 @@ func TestGenerateFlow_ComposesAgainstAnOrgsMCPTool(t *testing.T) {
 
 	sp := &scriptedProvider{graphs: []map[string]any{{
 		"name": "file a bug",
-		// Both required arguments set as params — the alternative the system
-		// prompt offers is wiring them, and either satisfies the gate.
 		"nodes": []any{node("a", "mcp:vendor:create_issue", map[string]any{
 			"repo":  "acme/widgets",
 			"title": "Something broke",
@@ -179,7 +173,6 @@ func TestMCPTool_RequiredArgumentIsEnforced(t *testing.T) {
 	for _, m := range mans {
 		byID[m.ID] = m
 	}
-	// "repo" is required and neither wired nor set as a param.
 	g := core.Graph{
 		Name:   "incomplete",
 		Tenant: "acme",
@@ -215,12 +208,10 @@ func TestSearchDrops_HidesAnUnreachableServersTools(t *testing.T) {
 	ctx := context.Background()
 	p := adminPrincipal("acme")
 
-	// While connected it is offered like any other step.
 	if !hasDrop(t, svc, ctx, p, "mcp:vendor:create_issue") {
 		t.Fatal("a connected server's tool is missing from search")
 	}
 
-	// Now describe it from cache, as a failed handshake does.
 	tools := []mcp.Tool{{Name: "create_issue"}}
 	if err := cat.RegisterOffline(mcp.OfflineDescriptor{
 		Tenant: "acme", Name: "vendor", Tools: tools, Reason: "HTTP 401",
@@ -230,8 +221,6 @@ func TestSearchDrops_HidesAnUnreachableServersTools(t *testing.T) {
 	if hasDrop(t, svc, ctx, p, "mcp:vendor:create_issue") {
 		t.Error("an unreachable server's tool is still offered for new work")
 	}
-	// The editor's listing keeps it, stamped, so an existing flow renders. This
-	// is the request FlowEditor actually makes (include_disabled=1).
 	mans, err := svc.SearchDrops(ctx, p, DropSearch{IncludeDisabled: true})
 	if err != nil {
 		t.Fatalf("SearchDrops: %v", err)
@@ -248,13 +237,11 @@ func TestSearchDrops_HidesAnUnreachableServersTools(t *testing.T) {
 	if !man.Unavailable {
 		t.Error("the step is not stamped unavailable")
 	}
-	// Still fully described, which is the reason to keep it at all.
 	if len(man.Inputs) == 0 || len(man.Outputs) == 0 {
 		t.Errorf("the step arrived without ports: %+v", man)
 	}
 }
 
-// hasDrop reports whether SearchDrops offers an id.
 func hasDrop(t *testing.T, svc *Service, ctx context.Context, p core.Principal, id string) bool {
 	t.Helper()
 	mans, err := svc.SearchDrops(ctx, p, DropSearch{})

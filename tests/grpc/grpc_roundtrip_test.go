@@ -1,16 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package grpc_test stands up the daemon's gRPC server in-process and drives
-// every control-plane RPC through the generated controlpb client, plus a
-// purpose-built NodeService server driven through the generated nodepb client.
-//
-// Its sole reason for existing is coverage of the generated *_grpc.pb.go
-// dispatch/handler/client code in api/gen/control (controlpb) and
-// api/gen/node (nodepb): nothing else in the suite drives a live gRPC
-// round-trip across BOTH packages, so the generated stubs sit at 0% under
-// -coverpkg. We run the real server over a bufconn listener and a real
-// grpc.ClientConn so the generated marshaling and stream plumbing executes.
 package grpc_test
 
 import (
@@ -38,10 +28,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// covHarness bundles a live control-plane gRPC server (the daemon handlers)
-// and a live NodeService gRPC server, each behind its own bufconn-backed
-// ClientConn, so this file can exercise the generated stubs in both
-// controlpb and nodepb from a single test.
 type covHarness struct {
 	controlConn *grpc.ClientConn
 	nodeConn    *grpc.ClientConn
@@ -52,7 +38,6 @@ type covHarness struct {
 func newCovHarness(t *testing.T) *covHarness {
 	t.Helper()
 
-	// --- control plane: daemon Service with in-memory stores ---
 	ks := auth.NewMemKeyStore()
 	editor := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
@@ -104,7 +89,6 @@ func newCovHarness(t *testing.T) *covHarness {
 		t.Fatalf("dial control: %v", err)
 	}
 
-	// --- node plane: a self-contained NodeService implementation ---
 	nodeSrv := grpc.NewServer()
 	nodepb.RegisterNodeServiceServer(nodeSrv, &echoNode{})
 	nodeLis := bufconn.Listen(1 << 20)
@@ -142,9 +126,6 @@ func (h *covHarness) authCtx(t *testing.T) (context.Context, context.CancelFunc)
 	return ctx, cancel
 }
 
-// echoNode is a minimal NodeService that drives the generated nodepb server
-// dispatch and the Execute server-streaming path (one Progress event then a
-// terminal Result).
 type echoNode struct {
 	nodepb.UnimplementedNodeServiceServer
 }
@@ -178,10 +159,6 @@ func (echoNode) Execute(job *nodepb.Job, stream nodepb.NodeService_ExecuteServer
 	}}})
 }
 
-// TestGRPCCov_AllControlRPCs drives every controlpb RPC over the wire:
-// SaveGraph, ListGraphs, LoadGraph, RunGraph (stream), GetJob,
-// ListJobsForGraph, StreamJobLogs (stream), PromoteGraph, CancelJob,
-// and the DropService ListDrops.
 func TestGRPCCov_AllControlRPCs(t *testing.T) {
 	h := newCovHarness(t)
 	defer h.stop()
@@ -193,7 +170,6 @@ func TestGRPCCov_AllControlRPCs(t *testing.T) {
 	ctx, cancel := h.authCtx(t)
 	defer cancel()
 
-	// SaveGraph
 	saveResp, err := gs.SaveGraph(ctx, &controlpb.SaveGraphRequest{Graph: &controlpb.Graph{
 		Id: "cov", Tenant: "acme", Workspace: "ws1",
 		Nodes: []*controlpb.Node{{Id: "a", Module: "delay", Params: []byte(`{"ms":5}`)}},
@@ -205,7 +181,6 @@ func TestGRPCCov_AllControlRPCs(t *testing.T) {
 		t.Error("SaveGraph: empty commit")
 	}
 
-	// ListGraphs
 	listResp, err := gs.ListGraphs(ctx, &controlpb.ListGraphsRequest{Tenant: "acme", Workspace: "ws1"})
 	if err != nil {
 		t.Fatalf("ListGraphs: %v", err)
@@ -214,7 +189,6 @@ func TestGRPCCov_AllControlRPCs(t *testing.T) {
 		t.Errorf("ListGraphs = %v", listResp.GraphIds)
 	}
 
-	// LoadGraph
 	loadResp, err := gs.LoadGraph(ctx, &controlpb.LoadGraphRequest{
 		Tenant: "acme", Workspace: "ws1", GraphId: "cov",
 	})
@@ -225,7 +199,6 @@ func TestGRPCCov_AllControlRPCs(t *testing.T) {
 		t.Errorf("LoadGraph id = %q", loadResp.Graph.Id)
 	}
 
-	// PromoteGraph (promote the just-saved commit to an env)
 	if _, err := gs.PromoteGraph(ctx, &controlpb.PromoteGraphRequest{
 		Tenant: "acme", Workspace: "ws1", GraphId: "cov",
 		Env: "staging", Commit: saveResp.Commit,
@@ -233,7 +206,6 @@ func TestGRPCCov_AllControlRPCs(t *testing.T) {
 		t.Fatalf("PromoteGraph: %v", err)
 	}
 
-	// RunGraph (server-streaming) — receive until EOF.
 	runStream, err := gs.RunGraph(ctx, &controlpb.RunGraphRequest{Graph: loadResp.Graph})
 	if err != nil {
 		t.Fatalf("RunGraph: %v", err)
@@ -249,7 +221,6 @@ func TestGRPCCov_AllControlRPCs(t *testing.T) {
 		}
 		switch p := ev.Payload.(type) {
 		case *controlpb.RunGraphEvent_Progress:
-			// drive the progress oneof branch
 			_ = p.Progress.GetJobId()
 		case *controlpb.RunGraphEvent_Completed:
 			jobID = p.Completed.JobId
@@ -263,7 +234,6 @@ func TestGRPCCov_AllControlRPCs(t *testing.T) {
 		t.Errorf("RunGraph status = %q", finalStatus)
 	}
 
-	// GetJob
 	rec, err := js.GetJob(ctx, &controlpb.GetJobRequest{JobId: jobID})
 	if err != nil {
 		t.Fatalf("GetJob: %v", err)
@@ -272,7 +242,6 @@ func TestGRPCCov_AllControlRPCs(t *testing.T) {
 		t.Errorf("GetJob id = %q want %q", rec.Id, jobID)
 	}
 
-	// ListJobsForGraph
 	jobsResp, err := js.ListJobsForGraph(ctx, &controlpb.ListJobsForGraphRequest{GraphId: "cov"})
 	if err != nil {
 		t.Fatalf("ListJobsForGraph: %v", err)
@@ -281,8 +250,6 @@ func TestGRPCCov_AllControlRPCs(t *testing.T) {
 		t.Error("ListJobsForGraph: expected at least one job")
 	}
 
-	// StreamJobLogs (server-streaming) — follow=false replays the persisted
-	// log to EOF. The job is already terminal, so this returns promptly.
 	logStream, err := js.StreamJobLogs(ctx, &controlpb.StreamJobLogsRequest{JobId: jobID, Follow: false})
 	if err != nil {
 		t.Fatalf("StreamJobLogs: %v", err)
@@ -293,8 +260,6 @@ func TestGRPCCov_AllControlRPCs(t *testing.T) {
 			break
 		}
 		if err != nil {
-			// RunLogs may be unconfigured (Unimplemented) on this in-memory
-			// Service; that still exercised the generated stream dispatch.
 			if st, _ := status.FromError(err); st.Code() == codes.Unimplemented {
 				break
 			}
@@ -302,14 +267,10 @@ func TestGRPCCov_AllControlRPCs(t *testing.T) {
 		}
 	}
 
-	// CancelJob on an already-terminal job: the generated unary path executes;
-	// the handler maps it to FailedPrecondition (terminal) — either way the
-	// stub round-trips. We accept any error here since the run finished.
 	if _, err := js.CancelJob(ctx, &controlpb.CancelJobRequest{JobId: jobID, Reason: "cov"}); err == nil {
 		t.Log("CancelJob on terminal job returned nil (idempotent)")
 	}
 
-	// DropService.ListDrops
 	dropsResp, err := ds.ListDrops(ctx, &controlpb.ListDropsRequest{})
 	if err != nil {
 		t.Fatalf("ListDrops: %v", err)
@@ -319,8 +280,6 @@ func TestGRPCCov_AllControlRPCs(t *testing.T) {
 	}
 }
 
-// TestGRPCCov_NodeService drives the generated nodepb client and server:
-// GetManifest (unary) and Execute (server-streaming, received to EOF).
 func TestGRPCCov_NodeService(t *testing.T) {
 	h := newCovHarness(t)
 	defer h.stop()

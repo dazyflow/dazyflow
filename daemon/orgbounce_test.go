@@ -1,18 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Forwarding an apex deep link to the org's own subdomain.
-//
-// Mail carries apex links on purpose — the apex is the one host that stays
-// valid when an org renames or drops its subdomain label, and an emailed link
-// outlives that. But session cookies are host-only, so a member of an org that
-// HAS a subdomain arrived at the apex signed out and had to authenticate a
-// second time, on a second host.
-//
-// The link already names the org, so the apex forwards the whole request to
-// where that member's session lives. These are the guards on a redirect that is
-// driven by a URL parameter.
-
 package daemon
 
 import (
@@ -29,7 +17,6 @@ func bounceAPI(t *testing.T, wildcard string) (*staticAPI, *recordingOrgProfiles
 	if err := profiles.PutOrgProfile(t.Context(), auth.OrgProfile{Tenant: "acme", Subdomain: "acme"}); err != nil {
 		t.Fatal(err)
 	}
-	// An org that has claimed no label.
 	if err := profiles.PutOrgProfile(t.Context(), auth.OrgProfile{Tenant: "plain"}); err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +34,6 @@ func bounceFor(t *testing.T, api *staticAPI, method, host, target string) string
 	return api.orgBounceTarget(r)
 }
 
-// The case this exists for: a "View run details" link out of a failure email.
 func TestOrgBounce_ApexDeepLinkGoesToTheOrgSubdomain(t *testing.T) {
 	t.Parallel()
 	api, _ := bounceAPI(t, "dazyflow.app")
@@ -58,10 +44,6 @@ func TestOrgBounce_ApexDeepLinkGoesToTheOrgSubdomain(t *testing.T) {
 	}
 }
 
-// The port has to come across. Behind a proxy on 443 the browser sends none and
-// none is added — which is why every other test here reads correctly without
-// one, and why dropping the port went unnoticed until the redirect was followed
-// by a real browser against a deployment on :8642 and refused at :80.
 func TestOrgBounce_CarriesThePortAcross(t *testing.T) {
 	t.Parallel()
 	api, _ := bounceAPI(t, "dazyflow.test")
@@ -71,18 +53,14 @@ func TestOrgBounce_CarriesThePortAcross(t *testing.T) {
 	if got != "http://acme.dazyflow.test:8642/runs/abc?org=acme" {
 		t.Fatalf("bounce = %q, want the port carried across", got)
 	}
-	// And the proxy shape, where the browser sends no port at all.
 	if got := bounceFor(t, api, "GET", "dazyflow.test", "/runs/abc?org=acme"); got != "http://acme.dazyflow.test/runs/abc?org=acme" {
 		t.Fatalf("bounce = %q, want no port invented", got)
 	}
 }
 
-// Path and query have to survive, or the link stops being a deep link.
 func TestOrgBounce_PreservesPathAndQuery(t *testing.T) {
 	t.Parallel()
 	api, _ := bounceAPI(t, "dazyflow.app")
-	// The query rides across verbatim rather than being re-encoded, so a link
-	// is forwarded exactly as it was mailed.
 	got := bounceFor(t, api, "GET", "dazyflow.app", "/approvals?org=acme&filter=mine&page=2")
 	if got != "https://acme.dazyflow.app/approvals?org=acme&filter=mine&page=2" {
 		t.Fatalf("bounce = %q, lost part of the link", got)
@@ -110,7 +88,6 @@ func TestOrgBounce_LeavesAnApexSessionAlone(t *testing.T) {
 	}
 }
 
-// Already on the subdomain — bouncing again is an infinite redirect.
 func TestOrgBounce_DoesNotLoopOnTheSubdomain(t *testing.T) {
 	t.Parallel()
 	api, _ := bounceAPI(t, "dazyflow.app")
@@ -186,8 +163,6 @@ func TestOrgBounce_SingleHostDeploymentNeverBounces(t *testing.T) {
 	}
 }
 
-// Only document navigations. A POST is not something to redirect across hosts,
-// and an unregistered /api/ path is a 404, not a redirect.
 func TestOrgBounce_OnlyGetAndNeverTheAPI(t *testing.T) {
 	t.Parallel()
 	api, _ := bounceAPI(t, "dazyflow.app")
@@ -199,7 +174,6 @@ func TestOrgBounce_OnlyGetAndNeverTheAPI(t *testing.T) {
 	}
 }
 
-// And the wrapper actually redirects, rather than just computing a target.
 func TestOrgBounce_WrapperRedirects(t *testing.T) {
 	t.Parallel()
 	api, _ := bounceAPI(t, "dazyflow.app")
@@ -220,7 +194,6 @@ func TestOrgBounce_WrapperRedirects(t *testing.T) {
 		t.Fatal("the wrapped handler ran as well as the redirect")
 	}
 
-	// And it passes everything else straight through.
 	rw = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", "/runs/abc", nil)
 	r.Host = "dazyflow.app"

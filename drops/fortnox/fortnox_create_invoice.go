@@ -84,7 +84,6 @@ func executeCreateInvoice(ctx context.Context, job core.Job, _ chan<- core.Progr
 		return params.Err(job, "bad_param", "at least one invoice row is required — set 'rows' or connect the 'Rows' input"), nil
 	}
 
-	// Fortnox wraps the request body in a singular "Invoice" envelope.
 	body, err := json.Marshal(map[string]any{"Invoice": map[string]any{
 		"CustomerNumber": customer,
 		"InvoiceRows":    rows,
@@ -121,9 +120,6 @@ func executeCreateInvoice(ctx context.Context, job core.Job, _ chan<- core.Progr
 	}, nil
 }
 
-// resolveRows reads the invoice rows from the 'Rows' input (a wired JSON
-// array wins) or the 'rows' param. Each row passes through to Fortnox verbatim
-// as an InvoiceRow object, so the caller uses Fortnox's PascalCase field names.
 func resolveRows(job core.Job) ([]any, error) {
 	if in, present := job.Input["rows"]; present && in.Inline != nil {
 		switch v := in.Inline.(type) {
@@ -153,7 +149,6 @@ func unmarshalRows(b []byte) ([]any, error) {
 	return rows, nil
 }
 
-// errInvalid is a tiny error type so the sentinel above reads cleanly.
 type errInvalid string
 
 func (e errInvalid) Error() string { return string(e) }

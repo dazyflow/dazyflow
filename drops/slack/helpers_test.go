@@ -9,10 +9,10 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestResolveBlocks covers the shapes a user can paste/build into the Blocks
-// input: the canonical array, the Block Kit Builder's wrapped {"blocks":[…]}
-// payload, a lone block object, and JSON text of each — plus the genuine
-// mistakes (malformed JSON, a scalar) that must still error.
+// Covers the shapes a user can paste/build into the Blocks input: the
+// canonical array, the Block Kit Builder's wrapped {"blocks":[…]} payload, a
+// lone block object, and JSON text of each — plus the genuine mistakes
+// (malformed JSON, a scalar) that must still error.
 func TestResolveBlocks(t *testing.T) {
 	block := map[string]any{"type": "divider"}
 	arr := []any{block}
@@ -58,8 +58,6 @@ func TestResolveBlocks(t *testing.T) {
 	}
 }
 
-// TestResolveBlocks_Absent: no blocks input and no param → (nil, nil) so the
-// caller falls through to text-only.
 func TestResolveBlocks_Absent(t *testing.T) {
 	got, jerr := resolveBlocks(core.Job{})
 	if got != nil || jerr != nil {

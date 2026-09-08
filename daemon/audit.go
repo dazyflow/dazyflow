@@ -19,23 +19,16 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/internal/pgstore"
 )
 
-// auditAPI serves the audit-trail read endpoints. Its fields are the whole of what
-// those handlers touch.
 type auditAPI struct {
 	Audit core.AuditLog
 }
 
-// auditAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) auditAPI() *auditAPI {
 	return &auditAPI{Audit: h.Audit}
 }
 
 const defaultAuditLimit = 100
 
-// ---- in-memory backend ----------------------------------------------
-
-// MemAuditLog is an in-process audit trail for single-binary / dev runs.
-// Concurrency-safe; lost on restart (use PgAuditLog for durability).
 type MemAuditLog struct {
 	mu     sync.Mutex
 	events []core.AuditEvent
@@ -59,7 +52,6 @@ func (m *MemAuditLog) List(_ context.Context, q core.AuditQuery) ([]core.AuditEv
 			out = append(out, e)
 		}
 	}
-	// Newest first.
 	sort.Slice(out, func(i, j int) bool { return out[i].Time.After(out[j].Time) })
 	return paginate(out, q.Limit, q.Offset), nil
 }
@@ -81,8 +73,6 @@ func paginate(events []core.AuditEvent, limit, offset int) []core.AuditEvent {
 	return events[offset:end]
 }
 
-// ---- Postgres backend -----------------------------------------------
-
 const pgAuditSchema = `
 CREATE TABLE IF NOT EXISTS audit_events (
     id      BIGSERIAL PRIMARY KEY,
@@ -100,7 +90,6 @@ CREATE INDEX IF NOT EXISTS audit_events_prune_idx
     ON audit_events (ts) WHERE action <> 'approval';
 `
 
-// PgAuditLog persists the audit trail to Postgres (durable, multi-node).
 type PgAuditLog struct {
 	pool *pgxpool.Pool
 }
@@ -161,13 +150,6 @@ func (p *PgAuditLog) Prune(ctx context.Context, olderThan time.Duration, batch i
 	}
 }
 
-// AnonymizeActor pseudonymises a data subject in the audit trail: it
-// replaces their actor identifier with a fixed marker and blanks the
-// free-text detail (which can carry the client IP on auth events). The
-// action/target/tenant/timestamp survive, so the security trail stays
-// intact without retaining personal data — the GDPR-preferred treatment
-// for logs kept under a legal-obligation/legitimate-interest basis
-// (Art. 17(3), Recital 26). Returns the number of rows affected.
 func (p *PgAuditLog) AnonymizeActor(ctx context.Context, actor string) (int, error) {
 	tag, err := p.pool.Exec(ctx,
 		`UPDATE audit_events SET actor = $2, detail = '' WHERE actor = $1`, actor, core.ErasedIdentity)
@@ -177,8 +159,6 @@ func (p *PgAuditLog) AnonymizeActor(ctx context.Context, actor string) (int, err
 	return int(tag.RowsAffected()), nil
 }
 
-// DeleteByTenant hard-deletes a tenant's whole audit trail — used when an
-// entire org is deleted (no security trail to preserve for a gone tenant).
 func (p *PgAuditLog) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	tag, err := p.pool.Exec(ctx, `DELETE FROM audit_events WHERE tenant = $1`, tenant)
 	if err != nil {
@@ -203,8 +183,6 @@ func (p *PgAuditLog) List(ctx context.Context, q core.AuditQuery) ([]core.AuditE
 	if offset < 0 {
 		offset = 0
 	}
-	// $4 = "" means "any actor", so one statement serves both the admin trail
-	// and the per-subject export.
 	rows, err := p.pool.Query(ctx,
 		`SELECT ts, tenant, actor, action, target, detail FROM audit_events
 		  WHERE tenant=$1 AND ($4 = '' OR actor = $4)
@@ -223,8 +201,6 @@ func (p *PgAuditLog) List(ctx context.Context, q core.AuditQuery) ([]core.AuditE
 	}
 	return out, rows.Err()
 }
-
-// ---- gateway integration --------------------------------------------
 
 // audit records an administrative action. Best-effort: a write failure is
 // logged but never fails the user action being audited, and a nil Audit
@@ -253,7 +229,6 @@ func sanitizeAuditField(v string) string {
 		case r == '\n' || r == '\r' || r == '\t':
 			b.WriteByte(' ')
 		case r < 0x20 || r == 0x7f:
-			// Other C0 controls and DEL: drop entirely.
 		default:
 			b.WriteRune(r)
 		}
@@ -327,9 +302,6 @@ func (a auditor) auditAuth(ctx context.Context, r *http.Request, tenant, actor, 
 	}
 }
 
-// listAudit serves GET /api/v1/admin/audit — the admin audit trail,
-// organization:admin only, scoped to the caller's tenant (platform admins may
-// pass ?tenant=). Paginated via ?limit / ?offset.
 func (h *auditAPI) listAudit(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Audit == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "audit log not configured")
@@ -363,5 +335,4 @@ func queryInt(r *http.Request, key string, def int) int {
 	return def
 }
 
-// auditor exposes the gateway's audit sink to a domain handler.
 func (h *HTTPGateway) auditor() auditor { return auditor{h.Audit} }

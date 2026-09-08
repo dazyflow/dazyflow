@@ -9,14 +9,6 @@ import (
 	"fmt"
 )
 
-// conn_sql.go adapts a database/sql handle (used by the SQLite and
-// MySQL backends — modernc.org/sqlite and go-sql-driver/mysql both ride
-// on database/sql) to the conn interface in dialect.go. The single
-// behavioral knob is bytesToString: the MySQL driver hands back []byte
-// for text/varchar columns by default, which we convert so JSON
-// consumers downstream see strings rather than base64 blobs. SQLite
-// returns native Go types and leaves it off.
-
 type sqlConn struct {
 	db            *sql.DB
 	bytesToString bool
@@ -41,9 +33,6 @@ func (c sqlConn) query(ctx context.Context, query string, args []any, limit int)
 
 	out := make([]map[string]any, 0, 16)
 	for rows.Next() {
-		// database/sql scans by reference, so we need a slice of
-		// pointers-into-vals to receive the row, then read vals back
-		// into a map.
 		vals := make([]any, len(columns))
 		ptrs := make([]any, len(columns))
 		for i := range vals {

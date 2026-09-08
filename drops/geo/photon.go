@@ -16,9 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
-// photonURL is Komoot's Photon geocoder. A var so tests can point it at a local
-// httptest server; DAZYFLOW_PHOTON_URL overrides it for operators who self-host
-// (the public instance is fair-use only).
 var photonURL = func() string {
 	if u := strings.TrimRight(strings.TrimSpace(os.Getenv("DAZYFLOW_PHOTON_URL")), "/"); u != "" {
 		return u
@@ -28,14 +25,6 @@ var photonURL = func() string {
 
 const photonRateHint = "Photon's public instance is fair-use only; for heavier load self-host Photon and set DAZYFLOW_PHOTON_URL."
 
-// photonGeocoder talks to a Photon instance. Photon is OpenStreetMap data
-// behind an Elasticsearch index — keyless, autocomplete-friendly — but speaks
-// GeoJSON (a FeatureCollection of Point features with flat address properties)
-// rather than Nominatim's JSON, so it needs its own mapping onto geoPlace.
-//
-// Photon has no Nominatim-style "display_name" or "countrycodes"; we compose a
-// label from the address properties and ignore the country-bias param (Photon
-// biases by bbox/location instead, which these drops don't expose).
 type photonGeocoder struct{}
 
 func (photonGeocoder) label() string { return "Photon" }
@@ -72,8 +61,6 @@ func (g photonGeocoder) reverse(ctx context.Context, job core.Job, lat, lon floa
 	return g.firstFeature(job, body, "No place found at "+geoloc.Fmt(lat, lon))
 }
 
-// firstFeature decodes a Photon FeatureCollection and maps its first feature
-// onto geoPlace. noMatch is the message when the collection is empty.
 func (g photonGeocoder) firstFeature(job core.Job, body []byte, noMatch string) (geoPlace, *core.Result) {
 	var doc photonResponse
 	if uerr := json.Unmarshal(body, &doc); uerr != nil {
@@ -85,7 +72,6 @@ func (g photonGeocoder) firstFeature(job core.Job, body []byte, noMatch string) 
 		return geoPlace{}, &r
 	}
 	f := doc.Features[0]
-	// GeoJSON orders coordinates [lon, lat] — the opposite of "lat,lon".
 	if len(f.Geometry.Coordinates) < 2 {
 		r := params.ErrDetails(job, "geocoder_error", "Photon returned a feature with no coordinate.", "geometry.coordinates")
 		return geoPlace{}, &r
@@ -107,7 +93,6 @@ func (g photonGeocoder) firstFeature(job core.Job, body []byte, noMatch string) 
 	}, nil
 }
 
-// photonResponse is the GeoJSON FeatureCollection Photon returns.
 type photonResponse struct {
 	Features []photonFeature `json:"features"`
 }
@@ -119,15 +104,8 @@ type photonFeature struct {
 	Properties map[string]any `json:"properties"`
 }
 
-// photonLang passes the optional language through as Photon's `lang` query
-// param. Photon only understands a handful (en, de, fr, it, default) and falls
-// back to default for anything else, so an unsupported code is harmless.
 func photonLang(job core.Job) string { return acceptLanguage(job) }
 
-// photonDisplayName composes a human label from Photon's flat address
-// properties (it has no Nominatim-style display_name). It walks the most
-// salient fields outermost-last and skips empties and consecutive repeats, so
-// "Stockholm / Stockholm / Sweden" collapses to "Stockholm, Sweden".
 func photonDisplayName(props map[string]any) string {
 	street := pstr(props, "street")
 	if hn := pstr(props, "housenumber"); hn != "" && street != "" {
@@ -152,7 +130,6 @@ func photonDisplayName(props map[string]any) string {
 	return strings.Join(out, ", ")
 }
 
-// pstr reads a string property, tolerating absent/non-string values.
 func pstr(props map[string]any, key string) string {
 	if v, ok := props[key].(string); ok {
 		return strings.TrimSpace(v)

@@ -28,8 +28,6 @@ export function Settings() {
     { code: "en", label: t("appSettings.langEnglish") },
     { code: "sv", label: t("appSettings.langSwedish") },
   ];
-  // i18n.resolvedLanguage collapses regional codes (sv-SE → sv) to the
-  // bundle that's actually active, so the <select> reflects reality.
   const currentLang = i18n.resolvedLanguage ?? i18n.language ?? "en";
 
   // Theme is applied imperatively (data-theme on <html>); keep a local
@@ -39,21 +37,11 @@ export function Settings() {
   // Dark/Light the OS happens to be on.
   const [theme, setTheme] = useState<ThemeMode>(getThemeMode());
   const pickTheme = (mode: ThemeMode) => {
-    // Apply locally first (instant, and refreshes the localStorage boot
-    // cache), then persist to the account so the choice roams to other
-    // devices. The server write is best-effort: a failure leaves the
-    // local change in place — the next change or login reconciles it.
     applyTheme(mode);
     setTheme(mode);
     if (token) void api.updatePreferences(token, { theme: mode }).catch(() => {});
   };
   const pickLanguage = (code: string) => {
-    // setLanguage fetches the language's catalogue and drop vocabulary, then
-    // swaps to it — atomically, so no screen paints raw message keys in
-    // between. The switch also persists the choice locally via the
-    // languagedetector's localStorage cache, so it survives reloads. Mirror it
-    // to the account so the locale roams; best-effort, same contract as the
-    // theme write.
     void setLanguage(code);
     if (token) void api.updatePreferences(token, { language: code }).catch(() => {});
   };
@@ -159,8 +147,6 @@ function DataExportCard() {
     setBusy(true);
     try {
       const data = await api.exportMyData(token);
-      // Dated, because a data export is a snapshot and a folder of files all
-      // called dazyflow-my-data.json tells you nothing about which is current.
       const day = new Date().toISOString().slice(0, 10);
       downloadJson(data, `dazyflow-my-data-${day}.json`);
       setDone(true);
@@ -239,9 +225,6 @@ function NotificationsCard() {
   const setEmailOnFailure = async (next: boolean) => {
     if (emailOnFailure === null || busy) return;
     const prev = emailOnFailure;
-    // Optimistic flip so the toggle feels instant; revert on failure.
-    // Partial PUT — only this field is sent, so the theme/language prefs
-    // the user may also have set are left untouched.
     setEmailOnFailureState(next);
     setErr(null);
     setBusy(true);
@@ -327,15 +310,11 @@ function TwoFactorCard() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Enrolment sub-state.
   const [setup, setSetup] = useState<TOTPSetup | null>(null);
   const [confirmCode, setConfirmCode] = useState("");
-  // One-time recovery codes display (after confirm or regenerate).
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
-  // Disable sub-state.
   const [disabling, setDisabling] = useState(false);
   const [disablePassword, setDisablePassword] = useState("");
-  // Transient "Copied" affordance for the copy buttons.
   const [copied, setCopied] = useState<"secret" | "codes" | null>(null);
 
   const copy = (text: string, which: "secret" | "codes") => {

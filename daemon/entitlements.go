@@ -15,19 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Platform-admin entitlements: named tiers (reusable bundles of limits +
-// a plan level) and per-org assignments with optional per-limit
-// overrides and a manual plan/trial/comp grant. The effective value for
-// any limit is resolved override → tier → global default, and the
-// effective plan layers comp/trial/force on top of the Stripe plan.
-//
-// Limits use 0 = "unlimited / inherit": a tier or override of 0 falls
-// through to the next level, so an explicit "no limit" is expressed by a
-// tier that sets the value to 0 AND the global default also being 0.
-// (The product's existing global gates already treat 0 as "off", so this
-// stays consistent.)
-
-// Tier is a reusable bundle of limits a platform admin assigns to orgs.
 type Tier struct {
 	ID                string `json:"id"`
 	Name              string `json:"name"`
@@ -37,13 +24,9 @@ type Tier struct {
 	MaxGraphNodes     int    `json:"max_graph_nodes"`
 	MaxFlows          int    `json:"max_flows"`
 	MaxTimeoutSeconds int    `json:"max_timeout_seconds"`
-	// RetentionDays caps how long run history (run logs/results) is kept for orgs
-	// on this tier. MaxConcurrency caps simultaneously-running graph runs.
-	// MaxMembers caps org membership (seats). All three use the 0 = inherit /
-	// unlimited convention of the numeric limits above.
-	RetentionDays  int `json:"retention_days"`
-	MaxConcurrency int `json:"max_concurrency"`
-	MaxMembers     int `json:"max_members"`
+	RetentionDays     int    `json:"retention_days"`
+	MaxConcurrency    int    `json:"max_concurrency"`
+	MaxMembers        int    `json:"max_members"`
 	// PollingAllowed gates scheduled / poll triggers for orgs on this tier.
 	// nil = inherit the deployment-global default (Service.FreePollingDisabled,
 	// i.e. the DAZYFLOW_FREE_POLLING_TRIGGERS knob) — matching the 0 = inherit
@@ -56,10 +39,6 @@ type Tier struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
-// TenantEntitlement is one org's assignment: a tier plus optional
-// per-limit overrides (nil = inherit from the tier) and a manual plan
-// grant. PlanOverride pins the plan ("free"/"pro"); Comped grants pro
-// with no Stripe subscription; TrialEndsAt grants pro until it lapses.
 type TenantEntitlement struct {
 	Tenant       string     `json:"tenant"`
 	TierID       string     `json:"tier_id"`
@@ -67,7 +46,6 @@ type TenantEntitlement struct {
 	Comped       bool       `json:"comped,omitempty"`
 	TrialEndsAt  *time.Time `json:"trial_ends_at,omitempty"`
 
-	// Per-limit overrides. nil = inherit the assigned tier's value.
 	RunsPerMonth      *int   `json:"runs_per_month,omitempty"`
 	DiskQuotaBytes    *int64 `json:"disk_quota_bytes,omitempty"`
 	MaxGraphNodes     *int   `json:"max_graph_nodes,omitempty"`
@@ -82,8 +60,6 @@ type TenantEntitlement struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// LimitDefaults are the deployment-global fallbacks (the existing
-// Service.* knobs) used when neither an override nor a tier sets a limit.
 type LimitDefaults struct {
 	RunsPerMonth      int
 	DiskQuotaBytes    int64
@@ -96,8 +72,6 @@ type LimitDefaults struct {
 	PollingAllowed    bool
 }
 
-// EffectiveLimits is the fully-resolved set of limits + plan for a tenant,
-// the single value every enforcement point reads.
 type EffectiveLimits struct {
 	Plan              string     `json:"plan"`
 	RunsPerMonth      int        `json:"runs_per_month"`
@@ -114,11 +88,6 @@ type EffectiveLimits struct {
 	Comped            bool       `json:"comped,omitempty"`
 }
 
-// ResolveEffective combines an org's entitlement, its tier, the global
-// defaults, and the Stripe plan into the effective limits. Pure (time
-// passed in) so it's unit-testable without a store. A nil entitlement or
-// tier simply contributes nothing — the result is the global defaults
-// plus the Stripe plan.
 func ResolveEffective(ent *TenantEntitlement, tier *Tier, def LimitDefaults, stripePlan string, now time.Time) EffectiveLimits {
 	eff := EffectiveLimits{
 		RunsPerMonth:      def.RunsPerMonth,
@@ -131,7 +100,6 @@ func ResolveEffective(ent *TenantEntitlement, tier *Tier, def LimitDefaults, str
 		MaxMembers:        def.MaxMembers,
 		PollingAllowed:    def.PollingAllowed,
 	}
-	// Tier layer: a non-zero tier value replaces the global default.
 	if tier != nil {
 		eff.TierID = tier.ID
 		if tier.RunsPerMonth != 0 {
@@ -166,7 +134,6 @@ func ResolveEffective(ent *TenantEntitlement, tier *Tier, def LimitDefaults, str
 			eff.PollingAllowed = *tier.PollingAllowed
 		}
 	}
-	// Override layer: a set (non-nil) override wins over the tier.
 	if ent != nil {
 		if ent.RunsPerMonth != nil {
 			eff.RunsPerMonth = *ent.RunsPerMonth
@@ -200,7 +167,6 @@ func ResolveEffective(ent *TenantEntitlement, tier *Tier, def LimitDefaults, str
 	}
 	eff.Plan = resolvePlan(ent, tier, stripePlan, now)
 	if eff.Plan == PlanPro {
-		// Pro implies polling is allowed regardless of the gate.
 		eff.PollingAllowed = true
 		// The free-only gates (runs, concurrency, members, retention) take
 		// their global DEFAULT from the FREE tier's env values, which a Pro
@@ -233,10 +199,6 @@ func ResolveEffective(ent *TenantEntitlement, tier *Tier, def LimitDefaults, str
 	return eff
 }
 
-// resolvePlan layers the manual grant over the Stripe plan. A PlanOverride
-// is a hard pin (covers "force free" / "force pro"). Otherwise the plan is
-// pro if ANY signal grants it — comp, an active trial, a pro tier, or the
-// Stripe plan — and free only when none do.
 func resolvePlan(ent *TenantEntitlement, tier *Tier, stripePlan string, now time.Time) string {
 	if ent != nil && ent.PlanOverride != "" {
 		return ent.PlanOverride
@@ -258,7 +220,6 @@ func resolvePlan(ent *TenantEntitlement, tier *Tier, stripePlan string, now time
 	return PlanFree
 }
 
-// EntitlementStore is the tier + per-org-assignment boundary.
 type EntitlementStore interface {
 	ListTiers(ctx context.Context) ([]Tier, error)
 	GetTier(ctx context.Context, id string) (Tier, bool)
@@ -318,7 +279,6 @@ UPDATE tiers SET polling_allowed = NULL
      OR (id = 'pro'  AND built_in = TRUE AND polling_allowed = TRUE);
 `
 
-// EnsurePgEntitlementSchema creates the tiers + tenant_entitlements tables.
 func EnsurePgEntitlementSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return pgstore.ApplySchema(ctx, pool, pgEntitlementSchema)
 }
@@ -350,11 +310,6 @@ func NewPgEntitlementStore(ctx context.Context, pool *pgxpool.Pool) (*PgEntitlem
 	return s, nil
 }
 
-// seedBuiltins inserts the Free and Pro tiers once. They carry only a plan
-// level and leave every limit unset — numeric limits at 0 and polling_allowed
-// NULL — so they inherit the deployment-global defaults and behave identically
-// until an operator edits them. (Seeding polling_allowed explicitly was the bug
-// that disabled scheduling for every free org; see the schema migration.)
 func (s *PgEntitlementStore) seedBuiltins(ctx context.Context) error {
 	const q = `INSERT INTO tiers (id, name, plan, built_in)
 		VALUES ($1,$2,$3,TRUE) ON CONFLICT (id) DO NOTHING`
@@ -439,7 +394,6 @@ func (s *PgEntitlementStore) PutTier(ctx context.Context, t Tier) error {
 }
 
 func (s *PgEntitlementStore) DeleteTier(ctx context.Context, id string) error {
-	// Built-in tiers are load-bearing (the plan mapping) — refuse to delete.
 	if t, ok := s.GetTier(ctx, id); ok && t.BuiltIn {
 		return fmt.Errorf("cannot delete built-in tier %q", id)
 	}
@@ -471,8 +425,6 @@ func (s *PgEntitlementStore) listTiersDB(ctx context.Context) ([]Tier, error) {
 	return out, rows.Err()
 }
 
-// entGrant is the JSONB-persisted half of a TenantEntitlement (everything
-// except the relational tenant/tier_id/notes columns).
 type entGrant struct {
 	PlanOverride      string     `json:"plan_override,omitempty"`
 	Comped            bool       `json:"comped,omitempty"`
@@ -522,12 +474,6 @@ func (s *PgEntitlementStore) PutEntitlement(ctx context.Context, e TenantEntitle
 	return s.reload(ctx)
 }
 
-// DeleteByTenant removes a tenant's entitlement override, returning the number
-// deleted (0 or 1). The erasure cascade's hook (GDPR Art. 17).
-//
-// The notes column is why this matters beyond tidiness: it is free text a
-// platform admin wrote about the org, and it routinely names the person they
-// agreed the deal with.
 func (s *PgEntitlementStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	if tenant == "" {
 		return 0, fmt.Errorf("tenant required")

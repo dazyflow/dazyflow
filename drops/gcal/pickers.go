@@ -13,11 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
-// ListCalendars lists the connected account's calendars as {id, name} options —
-// the backend for the calendar_id picker on gcal_list_events / gcal_create_event.
-// A synthetic "primary" option is prepended (matching the param default) so the
-// common case is one click; the account's own primary entry is then skipped to
-// avoid a duplicate. Reads account/timeout_ms from job.Params.
 func ListCalendars(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
 	token, err := resolveToken(ctx, job)
 	if err != nil {
@@ -46,7 +41,6 @@ func ListCalendars(ctx context.Context, job core.Job) ([]core.AccountResource, e
 		return nil, fmt.Errorf("calendarList decode: %w", err)
 	}
 	out := make([]core.AccountResource, 0, len(parsed.Items)+1)
-	// "primary" is the alias the param defaults to — list it first.
 	out = append(out, core.AccountResource{ID: "primary", Name: "Primary calendar"})
 	for _, it := range parsed.Items {
 		if it.Primary {

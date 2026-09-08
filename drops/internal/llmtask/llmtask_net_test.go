@@ -17,8 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// Tests hit httptest servers on loopback; the SSRF guard blocks loopback
-// unless the operator opt-in is set, so enable it for the suite.
 func TestMain(m *testing.M) {
 	hfnet.SetAllowPrivateEgress(true)
 	os.Exit(m.Run())
@@ -49,7 +47,6 @@ func TestPostJSON_HappyPath(t *testing.T) {
 }
 
 func TestPostJSON_BadEndpoint(t *testing.T) {
-	// A control char in the URL makes http.NewRequestWithContext fail.
 	_, _, jerr := PostJSON(context.Background(), "http://\x00bad", nil, []byte(`{}`), 1000)
 	if jerr == nil || jerr.Code != "bad_param" {
 		t.Fatalf("PostJSON bad endpoint = %+v, want bad_param", jerr)
@@ -65,7 +62,6 @@ func TestPostJSON_Timeout(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// timeoutMS small → the request deadline fires → llm_timeout.
 	_, _, jerr := PostJSON(context.Background(), srv.URL, nil, []byte(`{}`), 100)
 	if jerr == nil || jerr.Code != "llm_timeout" {
 		t.Fatalf("PostJSON timeout = %+v, want llm_timeout", jerr)
@@ -118,11 +114,9 @@ func TestRegisterAll_RegistersDropsAndVerifier(t *testing.T) {
 	if !ok || v == nil {
 		t.Fatal("RegisterAll did not register a connection verifier for CovTest")
 	}
-	// Empty key is rejected with guidance.
 	if err := v(context.Background(), map[string]string{}); err == nil || !strings.Contains(err.Error(), "API key") {
 		t.Errorf("verifier with no key = %v, want API-key guidance", err)
 	}
-	// A present key flows through to the provider's VerifyKey.
 	if err := v(context.Background(), map[string]string{"api_key": "sk-123"}); err != nil {
 		t.Errorf("verifier with key: %v", err)
 	}

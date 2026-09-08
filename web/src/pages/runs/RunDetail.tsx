@@ -31,32 +31,7 @@ import { POLL, TICK, FEEDBACK } from "../../lib/timing";
 import { NBSP, formatDuration } from "../../lib/format";
 import { Notice } from "../../components/ui/Notice";
 
-// RunDetail is the post-failure "what happened" page — and the
-// post-success "yes, here are the values" page. T2 of the PMF
-// roadmap: when a trial workflow breaks, this is the surface that
-// decides whether the user stays or churns.
-//
-// Layout:
-//
-//   ┌──────────────────────────────────────────────────────────┐
-//   │ ← back   Run summary card (status, graph, timing, error  │
-//   │          banner if failed)                                │
-//   ├──────────────────────────────────────────────────────────┤
-//   │ Node timeline                                             │
-//   │   ● node-1  status   duration   ▶ (click to expand)       │
-//   │     └─ inputs/outputs/error preview                       │
-//   │   ● node-2  …                                             │
-//   └──────────────────────────────────────────────────────────┘
-//
-// One API call (listRunNodes) draws the whole timeline. Each node
-// row expands inline to show its result JSON; no extra round trips.
-// "Replay" re-fires the graph from scratch and navigates to the
-// new run's detail page.
-// actionErrorMessage turns a failed replay/retry/cancel request into a
-// plain-language string. A raw "503: Service Unavailable" or "0: network
-// error" means nothing to a non-technical user, so map transport/server
-// failures to friendly guidance and otherwise surface the server's own
-// human message (without the leaked numeric status prefix).
+// The post-failure "what happened" page.
 function actionErrorMessage(e: unknown, t: (key: string) => string): string {
   return explainApiError(e, t);
 }
@@ -69,41 +44,26 @@ export function RunDetail() {
   const [run, setRun] = useState<JobRecord | null>(null);
   const [nodes, setNodes] = useState<JobRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
-  // Kept apart from `error`: that one means "this page couldn't load" and
-  // renders the not-found card INSTEAD of the run. A replay/retry/cancel that
-  // is refused — a replay with no delivery to re-send is now an ordinary
-  // answer — must not blank out the run the reader is looking at.
+  // Distinct from `error`, which means the page itself could not load.
   const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [replaying, setReplaying] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  // Confirm gates: Replay re-fires every step (incl. side effects like
-  // sending emails), and Cancel stops an in-flight run — both warrant a
-  // deliberate yes/no.
+  // Replay re-fires every step, side effects included, so it is confirmed.
   const [confirmReplay, setConfirmReplay] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
-  // Transient "Copied" tick on the run-id row.
   const [copiedID, setCopiedID] = useState(false);
-  // The subtitle's "started 5m ago" is only true at render time, and a
-  // FINISHED run stops the live poll — so without a clock of its own the page
-  // would sit there claiming "just now" an hour later. Coarse label, so a
-  // 30s tick is plenty. (Same trick as the TV overview's ticking clock.)
+  // Only true at render time, so it must be recomputed rather than memoized.
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), TICK.relative);
     return () => window.clearInterval(id);
   }, []);
-  // Friendly naming: the flow's display name for the heading, and module
-  // labels for timeline rows ("ntfy" instead of "ntfy_1"). Best-effort —
-  // a deleted flow or fetch error falls back to the raw IDs.
   const [graph, setGraph] = useState<Graph | null>(null);
   const [manifests, setManifests] = useState<Map<string, Manifest>>(new Map());
 
-  // Reset the friendly-naming state whenever the run changes, so navigating
-  // run A → run B never renders A's flow name and node labels against B's
-  // run while B's graph is still loading (or fails to load).
   useEffect(() => {
     setGraph(null);
     setManifests(new Map());
@@ -130,18 +90,9 @@ export function RunDetail() {
     return () => {
       cancelled = true;
     };
-    // Depend on the two FIELDS this effect reads, not on `me` itself: an auth
-    // context that hands back a fresh object each render would otherwise
-    // re-fire the effect on its own setGraph, forever.
+    // The two FIELDS, not `me` itself: a new object identity would re-run this.
   }, [token, run?.GraphID, activeTenant, activeWorkspace, me?.tenant, me?.workspace]);
 
-  // nodeLabel resolves a timeline row's display name: the node's module
-  // manifest label when known ("Send notification"), else the raw id.
-  // failedApp is which app the failing step was talking to, and as which
-  // account. The error text doesn't say — "Gmail returned 401" names no
-  // account and no page — but the graph and the catalog between them do, so
-  // the fix-it button can land on that app with that account rather than on
-  // the Apps index.
   const failedApp = (nodeID: string | undefined): AppContext | undefined => {
     if (!nodeID) return undefined;
     const node = graph?.nodes?.find((n) => n.id === nodeID);
@@ -150,17 +101,10 @@ export function RunDetail() {
     const acct = node?.params?.account;
     return {
       slug: integrationSlug(integration),
-      // Unset means the connector uses the account literally named
-      // "default", which is the one to offer reconnecting.
       account: typeof acct === "string" && acct.trim() !== "" ? acct.trim() : "default",
     };
   };
 
-  // What to call a step in the timeline. The author's own name for it when they
-  // gave it one — a run is where you go to read what happened, and reading it
-  // under different names to the ones on the canvas is the whole problem — else
-  // the drop's name. The subtitle stays either way: with a custom name it is
-  // what says which KIND of step this is.
   const nodeLabel = (nodeID: string): string => {
     const node = graph?.nodes?.find((n) => n.id === nodeID);
     if (!node) return nodeID;
@@ -170,14 +114,7 @@ export function RunDetail() {
     return sub ? `${label} · ${sub}` : label;
   };
 
-  // What to call a port in the Inputs / Output sections. The canvas names its
-  // pins with the drop's own port labels, translated ("Rader", "HTML-tabell"),
-  // and this section was naming the same pins by their wire ids ("rows",
-  // "html") — so the two halves of one run read as different vocabularies.
-  //
-  // A variadic port arrives as "port[0]", "port[1]" (core.VariadicInputKey),
-  // which no manifest declares: the index is split off, resolved against the
-  // base port, and put back as a number a reader counts from 1.
+  // Must match what the canvas calls the same port, or the two pages disagree.
   const portLabelFor = (nodeID: string, port: string, dir: "in" | "out"): string => {
     const node = graph?.nodes?.find((n) => n.id === nodeID);
     const m = node ? manifests.get(node.module) : undefined;
@@ -216,16 +153,12 @@ export function RunDetail() {
     !!run &&
     (isLiveStatus(run.Status) || nodes.some((n) => isLiveStatus(n.Status)));
 
-  // Poll while anything's still live so the timeline updates without
-  // a manual reload. Mirrors RunList's polling pattern.
   useEffect(() => {
     if (!token || !runID || !live) return;
     let cancelled = false;
     const t = window.setInterval(() => {
       Promise.all([api.getJob(token, runID), api.listRunNodes(token, runID)])
         .then(([r, ns]) => {
-          // Guard against a late tick resolving after unmount or after the
-          // run/effect changed — same pattern as the initial load.
           if (cancelled) return;
           setRun(r);
           setNodes(ns.nodes ?? []);
@@ -241,12 +174,6 @@ export function RunDetail() {
   const toggle = (nid: string) =>
     setExpanded((prev) => ({ ...prev, [nid]: !prev[nid] }));
 
-  // replay re-runs every step of this run from scratch. It goes through the
-  // run's own replay endpoint rather than plainly submitting the flow, because
-  // a flow started by a webhook or a form begins at a step whose data came in
-  // with that request: submitting the flow again left that step with nothing
-  // and the whole re-run died on it ("nothing was sent to this flow"). The
-  // daemon re-sends the delivery this run originally received.
   const replay = async () => {
     if (!token || !run) return;
     setActionError(null);
@@ -263,9 +190,6 @@ export function RunDetail() {
     }
   };
 
-  // retry resumes this run from where it failed: the daemon reuses the
-  // outputs of nodes that already succeeded and re-runs only the failed
-  // node and its downstream — cheaper and faster than a full replay.
   const retry = async () => {
     if (!token || !run) return;
     setActionError(null);
@@ -282,16 +206,12 @@ export function RunDetail() {
     }
   };
 
-  // cancel stops a run that's still in flight (queued / running / awaiting an
-  // approval). The daemon marks it cancelled; the live poll picks up the new
-  // status. Surfaced via a confirm since it abandons in-progress work.
   const cancel = async () => {
     if (!token || !run) return;
     setActionError(null);
     setCancelling(true);
     try {
       await api.cancelRun(token, run.ID);
-      // Optimistically reflect the stop; the poll reconciles with the daemon.
       const fresh = await api.getJob(token, run.ID).catch(() => null);
       if (fresh) setRun(fresh);
     } catch (e) {
@@ -322,31 +242,19 @@ export function RunDetail() {
     );
   }
 
-  // Sort nodes by enqueued_at ASC so the timeline reads top→down
-  // in execution order rather than newest-first.
   const orderedNodes = [...nodes].sort((a, b) => {
     const ta = Date.parse(timestamp(a, "EnqueuedAt", "enqueued_at"));
     const tb = Date.parse(timestamp(b, "EnqueuedAt", "enqueued_at"));
     return ta - tb;
   });
 
-  // Find the first failed node (if any) so the banner can name it.
   const failedNode = orderedNodes.find((n) => n.Status === "failed");
 
-  // resultNode: what the run actually produced. A failed run leads with the
-  // error banner, so this is only for the clean ones — where the page used to
-  // report duration and step counts but never the answer, leaving it folded
-  // inside a step, then inside a port. See pickResultNode for the rules,
-  // including why a flow that ends in a file gets no Result panel.
+  // A failed run leads with the failure, a successful one with the last output.
   const resultNode = pickResultNode(orderedNodes, graph?.edges, run.Status);
 
-  // Files the run's steps named on their outputs. Independent of run status:
-  // a failed run's earlier steps may still have written the file the reader
-  // is looking for, and a cancelled one certainly did.
   const artifacts = collectArtifacts(orderedNodes);
 
-  // Empty when the run carries no usable timestamp at all — the subtitle is
-  // then dropped rather than rendered as "Started " with a hole in it.
   const startedAgo = formatRelative(run.StartedAt ?? run.EnqueuedAt, t, now);
 
   return (
@@ -613,9 +521,6 @@ export function RunDetail() {
               {isOpen && (
                 <div className="node-body">
                   {n.Result?.error && (
-                    // The expanded step knows exactly which app it was
-                    // talking to, so its fix-it button is more precise than
-                    // the banner's: this node's app, this node's account.
                     <NodeError error={n.Result.error} app={failedApp(n.NodeID)} />
                   )}
                   {n.Job?.Input && Object.keys(n.Job.Input).length > 0 && (
@@ -706,12 +611,6 @@ function isLiveStatus(s: JobStatus): boolean {
   return s === "queued" || s === "running" || s === "awaiting";
 }
 
-// RunLogs renders the run's persisted log (progress lines, node
-// transitions, terminal outcome) below the timeline — the web twin of
-// `dzctl job logs`. History loads once via seq-cursor paging; while the
-// run is live it append-polls from the cursor, so each tick fetches
-// only new lines. A daemon without a log store answers 501 and the
-// section hides entirely (old daemons, or logging disabled).
 function RunLogs({
   token,
   runID,
@@ -727,13 +626,9 @@ function RunLogs({
   const [loaded, setLoaded] = useState(false);
   const cursor = useRef(0);
   const scroller = useRef<HTMLDivElement | null>(null);
-  // Stick to the bottom while tailing, unless the user scrolled up.
   const stick = useRef(true);
 
-  // Page from the cursor until a short page, appending. The append
-  // drops anything at-or-below the last rendered seq, so overlapping
-  // calls (poll racing the initial load, StrictMode's double-invoked
-  // effects) can't duplicate lines.
+  // A short page means the end; anything else keeps paging.
   const fetchMore = async () => {
     for (;;) {
       const before = cursor.current;
@@ -751,9 +646,7 @@ function RunLogs({
         });
       }
       if (logs.length < 1000) return;
-      // Safety valve: a full page that didn't advance the cursor (a buggy
-      // backend re-returning the same page, or seqs at-or-below `after`)
-      // would otherwise spin this loop forever. Stop if no forward progress.
+      // A full page that did not advance the cursor would loop for ever.
       if (cursor.current <= before) return;
     }
   };
@@ -779,8 +672,6 @@ function RunLogs({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, runID]);
 
-  // Tail while live; on the live→done edge do one last catch-up so the
-  // terminal line (written as the status flips) isn't missed.
   const wasLive = useRef(false);
   useEffect(() => {
     if (!available) return;
@@ -803,8 +694,6 @@ function RunLogs({
   }, [entries]);
 
   if (!available || (loaded && entries.length === 0 && !live)) {
-    // No store, or an old/quiet run with nothing recorded: no empty
-    // chrome — the timeline above already tells the story.
     return null;
   }
   return (
@@ -838,9 +727,6 @@ function RunLogs({
   );
 }
 
-// logLineClass colors a line by what it says, not just its kind:
-// node/run failures read red, the success terminal reads green,
-// stderr output reads amber, plain progress stays plain.
 function logLineClass(e: RunLogEntry): string {
   if (e.kind === "truncated") return "truncated";
   if (e.kind === "status" || e.kind === "terminal") {
@@ -869,15 +755,6 @@ function SummaryRow({ label, value }: { label: string; value: React.ReactNode })
   );
 }
 
-// RunFailureBanner is the "what went wrong" surface above the
-// node timeline. Three layers, top to bottom:
-//   1. The plain-English headline (when explainRunError can match
-//      the daemon message against a known shape) + a next-action
-//      button. This is the layer non-technical users read first.
-//   2. The failing-node identifier ("Failed at node `notify`").
-//   3. The raw daemon error text, kept verbatim so a developer can
-//      still see exactly what blew up. Unmatched errors render only
-//      this layer — no fake headline.
 function RunFailureBanner({
   run,
   flowName,
@@ -901,12 +778,7 @@ function RunFailureBanner({
   );
   const action = explanation?.action;
   const isExternal = action?.href.startsWith("http") || false;
-  // "Get help with this run": when the operator configured a support
-  // contact, offer a real escalation path for the case the fix-it button
-  // above didn't resolve — or when there was no friendly headline at all.
-  // For an email contact we prefill a report with the safe identifiers
-  // support needs to find the run (flow, run ID, failed step, error code,
-  // the plain-English headline) — never raw run data, inputs, or secrets.
+  // Only when the operator configured a support contact.
   const errCode = run.Result?.error?.code;
   const headlineText = explanation
     ? t(explanation.headlineKey, explanation.headlineValues ?? {})
@@ -928,10 +800,7 @@ function RunFailureBanner({
     body: helpBody,
   });
   const helpExternal = helpHref ? !helpHref.startsWith("mailto:") : false;
-  // A failed run is terminal — the engine already exhausted any automatic
-  // retries (a node that COULD still retry leaves the run "running", not
-  // "failed"). Say so, and name how many attempts it took, so the user knows
-  // this one is on them now rather than wondering if it'll fix itself.
+  // Terminal: the engine already exhausted any automatic retry.
   const attempts = failedNodeAttempts ?? 0;
   const title =
     failedNodeLabel && attempts > 1
@@ -1039,16 +908,7 @@ function RunFailureBanner({
   );
 }
 
-// NodeError renders the error of an INDIVIDUAL failed/awaiting node the user
-// expands in the timeline: the same plain-English headline + next-action that
-// RunFailureBanner shows, plus the raw daemon code/message.
-//
-// When explainRunError matches, the raw string (e.g. `secret "postgres_dsn"
-// not found`, a Go error, `dial tcp …`) is tucked behind a "Technical
-// details" disclosure so the friendly headline is what a non-technical user
-// reads first — the scary string used to sit inline as primary content and
-// made people think the product was broken. When nothing matches, the raw
-// code/message stays inline (it's all we have to show).
+// One node's error, as against the run-level banner above.
 function NodeError({
   error,
   app,
@@ -1125,19 +985,11 @@ function StatusChip({ status }: { status: JobStatus }) {
   );
 }
 
-// statusLabel maps the engine's machine status values to the human
-// label rendered on chips and timeline rows. Only "awaiting" is
-// genuinely jargon — it means "the run is parked at an await_approval
-// node, waiting for a human decision". Every other status is already
-// readable, so we let them pass through verbatim and don't pay an
-// i18n round-trip for "running" / "failed" / "queued".
 function statusLabel(
   status: JobStatus,
   t: (key: string) => string,
 ): string {
   if (status === "awaiting") return t("runDetail.statusAwaiting");
-  // "cancelled" reads as a machine value and looks like a failure; a run in
-  // this state was deliberately stopped, so say "stopped".
   if (status === "cancelled") return t("runDetail.statusCancelled");
   return status;
 }
@@ -1147,23 +999,16 @@ function formatAbs(iso: string | null): string {
   return formatDateTime(iso);
 }
 
-// retryCountdown renders the wait until a node's next scheduled auto-retry as
-// a short "12s" / "3m" string. Empty when the horizon is unknown or already
-// passed (the next poll will pick up the new attempt) — callers fall back to
-// a "shortly" label. Computed at render; the live run poll refreshes it.
 function retryCountdown(iso: string | null | undefined): string {
   if (!iso) return "";
   const secs = Math.round((Date.parse(iso) - Date.now()) / 1000);
   if (!Number.isFinite(secs) || secs <= 0) return "";
   if (secs < 60) return `${secs}${NBSP}s`;
-  // "min", not "m" — m is metre. See NBSP/formatDuration in lib/format.
   return `${Math.round(secs / 60)}${NBSP}min`;
 }
 
 
-// timestamp tries the Go-shaped capitalized field then the
-// JSON-shaped lowercased one — defends against backend serialization
-// drift since JobRecord uses Go field names today.
+// The wire carries either shape depending on the route's age.
 function timestamp(rec: JobRecord, ...keys: string[]): string {
   for (const k of keys) {
     const v = (rec as unknown as Record<string, string | null | undefined>)[k];
@@ -1172,9 +1017,6 @@ function timestamp(rec: JobRecord, ...keys: string[]): string {
   return "";
 }
 
-// previewValue renders a Ref's value (or path) for the expandable
-// preview block. Pretty-prints JSON; strings stay verbatim. The Ref
-// type's `data` field corresponds to the Go side's `Inline`.
 function previewValue(ref: Ref): string {
   if (ref.ref) return `→ ${ref.ref}`;
   const v = ref.data;

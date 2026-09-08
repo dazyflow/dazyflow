@@ -61,9 +61,6 @@ export function Welcome() {
   useEffect(() => {
     if (!token) return;
     let live = true;
-    // Wrapped, not just .catch()'d: this is a cosmetic annotation on one card,
-    // and nothing about it is worth taking the whole first-run page down for.
-    // A failed or unavailable probe leaves the card exactly as it was.
     try {
       Promise.resolve(api.listLLMProviders(token))
         .then((r) => live && setAiReady((r?.providers ?? []).length > 0))
@@ -80,10 +77,6 @@ export function Welcome() {
   // tenant surfaced the previous org's flow after a switch. Recomputed when
   // `me` / activeTenant resolve.
   const recent = loadRecentFlow(userScope(activeTenant || me?.tenant, me?.subject));
-  // The cached recent flow only carries whatever icon/name was stored when it
-  // was last opened. Resolve the current icon + name from the live flow list so
-  // a renamed flow / freshly-set icon shows correctly here without depending on
-  // the cache being fresh.
   const recentId = recent?.id;
   const [live, setLive] = useState<{ icon?: string; name?: string } | null>(null);
   useEffect(() => {
@@ -104,8 +97,6 @@ export function Welcome() {
     };
   }, [recentId, token, activeTenant, activeWorkspace]);
 
-  // Returning users get a quieter heading. The hint comes from the same
-  // localStorage flag RootRedirect uses, so the two surfaces agree.
   let isReturning = false;
   try {
     // Per-account key: a brand-new account on a browser where someone else had
@@ -150,10 +141,6 @@ export function Welcome() {
       )}
 
       {showDemo && (
-        // One click to a flow that runs with no account, no connection and no
-        // trigger. It is featured for a first-timer because the alternative
-        // first move — an empty canvas — is the hardest of the three ways in
-        // and the one most likely to end with the tab being closed.
         <Link
           to="/flows/new?tab=template&start=try-it-now"
           className="welcome-demo"

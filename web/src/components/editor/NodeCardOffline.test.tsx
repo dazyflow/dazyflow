@@ -6,8 +6,6 @@ import { render, screen } from "@testing-library/react";
 import type { NodeProps } from "@xyflow/react";
 import type { Manifest } from "../../types";
 
-// Canvas plumbing only: a Handle is a connector React Flow positions, and the
-// store is the viewport transform. Neither is what these tests are about.
 vi.mock("@xyflow/react", () => ({
   Handle: ({ id, children }: { id?: string; children?: React.ReactNode }) => (
     <div data-handle={id}>{children}</div>
@@ -18,9 +16,6 @@ vi.mock("@xyflow/react", () => ({
 
 import { DazyNode } from "./NodeCard";
 
-// An MCP tool's manifest as it arrives while its server is unreachable: fully
-// described, and flagged. The ports are the point — they are what a flow's
-// edges are attached to.
 const offlineManifest: Manifest = {
   id: "mcp:vendor:create_issue",
   label: "Vendor Tools — Create an issue",
@@ -46,8 +41,6 @@ function renderCard(manifest: Manifest) {
 describe("NodeCard with an unreachable provider", () => {
   it("keeps the ports the flow's edges are attached to", () => {
     renderCard(offlineManifest);
-    // This is the reported bug: without the manifest the card falls back to a
-    // bare in/out pair and edges into `repo`/`title` have no handle to hold.
     expect(document.querySelector('[data-handle="repo"]')).not.toBeNull();
     expect(document.querySelector('[data-handle="title"]')).not.toBeNull();
     expect(document.querySelector('[data-handle="out"]')).not.toBeNull();

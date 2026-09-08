@@ -32,22 +32,15 @@ import (
 // the SDK is a dependency tree two orders of magnitude bigger than the ~100
 // lines of signing below. Same trade /metrics and the Stripe client made.
 type AwsSecretsProvider struct {
-	client *awsAPIClient
-	// loadConfig returns the calling tenant's connection config. ok=false
-	// means the tenant hasn't configured AWS (a clear "not configured"
-	// error, not a failure). Backed by the encrypted store in production.
+	client     *awsAPIClient
 	loadConfig func(ctx context.Context, tenant string) (cfg AwsSecretsConfig, ok bool, err error)
 	cache      *tenantSecretCache
 }
 
-// NewAwsSecretsProvider builds the provider. ttl <= 0 uses defaultVaultCacheTTL
-// (the BYO providers share one staleness policy).
 func NewAwsSecretsProvider(client *awsAPIClient, loadConfig func(context.Context, string) (AwsSecretsConfig, bool, error), ttl time.Duration) *AwsSecretsProvider {
 	return &AwsSecretsProvider{client: client, loadConfig: loadConfig, cache: newTenantSecretCache(ttl)}
 }
 
-// NewAwsSecretsProviderForStore builds the production provider with each
-// tenant's config loaded from the encrypted store.
 func NewAwsSecretsProviderForStore(es *EncryptedSecrets, httpTimeout time.Duration) *AwsSecretsProvider {
 	return NewAwsSecretsProvider(
 		newAwsAPIClient(httpTimeout),
@@ -58,9 +51,6 @@ func NewAwsSecretsProviderForStore(es *EncryptedSecrets, httpTimeout time.Durati
 	)
 }
 
-// VerifyAwsConfig validates a config and checks the credentials authenticate,
-// using a one-off client. Used by the save endpoint to catch a bad region/key
-// before persisting it.
 func VerifyAwsConfig(ctx context.Context, cfg AwsSecretsConfig, timeout time.Duration) error {
 	if err := cfg.validate(); err != nil {
 		return err
@@ -86,9 +76,7 @@ type AwsSecretsConfig struct {
 	Region          string `json:"region"`            // e.g. eu-north-1
 	AccessKeyID     string `json:"access_key_id"`     // AKIA…
 	SecretAccessKey string `json:"secret_access_key"` //
-	// Endpoint overrides the API host — LocalStack / tests. Empty uses
-	// https://secretsmanager.{region}.amazonaws.com.
-	Endpoint string `json:"endpoint,omitempty"`
+	Endpoint        string `json:"endpoint,omitempty"`
 }
 
 func (c AwsSecretsConfig) validate() error {
@@ -111,8 +99,6 @@ func (c AwsSecretsConfig) endpointURL() string {
 	return "https://secretsmanager." + c.Region + ".amazonaws.com"
 }
 
-// awsConfigSecretName is the reserved encrypted-store key for a tenant's AWS
-// connection (the "cfg:" prefix hides it from user-facing listings).
 const awsConfigSecretName = "cfg:secret-manager-aws"
 
 // awsAPIClient speaks Secrets Manager's JSON-RPC ("x-amz-json-1.1") protocol
@@ -134,7 +120,6 @@ func newAwsAPIClient(timeout time.Duration) *awsAPIClient {
 	return &awsAPIClient{httpc: hfnet.SafeHTTPClient(timeout, hfnet.PrivateEgressAllowed())}
 }
 
-// awsAPIError is Secrets Manager's error envelope.
 type awsAPIError struct {
 	Type    string `json:"__type"`
 	Message string `json:"message"`
@@ -167,7 +152,6 @@ func (c *awsAPIClient) call(ctx context.Context, cfg AwsSecretsConfig, target st
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var ae awsAPIError
 		if json.Unmarshal(raw, &ae) == nil && ae.Type != "" {
-			// "com.amazonaws...#ResourceNotFoundException" → short name.
 			if i := strings.LastIndexByte(ae.Type, '#'); i >= 0 {
 				ae.Type = ae.Type[i+1:]
 			}
@@ -202,10 +186,6 @@ func (c *awsAPIClient) getSecretValue(ctx context.Context, cfg AwsSecretsConfig,
 	return "", fmt.Errorf("secret has neither SecretString nor SecretBinary")
 }
 
-// verify proves the credentials are accepted by calling GetSecretValue on a
-// probe name that should not exist. ResourceNotFound (or AccessDenied — the
-// key works but is scoped tighter than the probe) means the signature was
-// accepted; signature/identity errors mean the credentials are wrong.
 func (c *awsAPIClient) verify(ctx context.Context, cfg AwsSecretsConfig) error {
 	_, apiErr, err := c.call(ctx, cfg, "secretsmanager.GetSecretValue",
 		map[string]string{"SecretId": "dazyflow-connection-test"})
@@ -229,10 +209,6 @@ func truncateForError(b []byte) string {
 	return string(b)
 }
 
-// signSigV4 signs req in place per AWS Signature Version 4
-// (https://docs.aws.amazon.com/IAM/latest/UserGuide/create-signed-request.html)
-// for the secretsmanager service. Only what this client emits is canonicalized
-// (POST /, no query string, fixed header set) — not a general-purpose signer.
 func signSigV4(req *http.Request, payload []byte, cfg AwsSecretsConfig, now time.Time) error {
 	const service = "secretsmanager"
 	amzDate := now.Format("20060102T150405Z")

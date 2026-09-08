@@ -9,11 +9,6 @@ import { Button } from "../ui/Button";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { useEscapeToClose } from "../ui/useEscapeToClose";
 
-// DuplicateFlowModal prompts for the new flow's name before copying. The
-// field is pre-filled with "Copy of <source>" so the common case is a single
-// Enter. The parent owns the actual duplicate + follow-up (open the copy in
-// the editor) via onConfirm(name); that promise rejecting keeps the dialog
-// open and surfaces the reason. On success the parent's onClose unmounts us.
 export function DuplicateFlowModal({
   sourceName,
   defaultName,
@@ -41,7 +36,6 @@ export function DuplicateFlowModal({
     setErr(null);
     try {
       await onConfirm(trimmed);
-      // Success: the parent navigates to the copy and unmounts us.
     } catch (e) {
       setErr(explainApiError(e, t));
       setBusy(false);

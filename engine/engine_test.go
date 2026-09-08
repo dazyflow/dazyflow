@@ -16,8 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// noopManifest describes a module with one optional input and one output,
-// used by most tests to assemble arbitrary graph shapes.
 var noopManifest = core.Manifest{
 	ID:       "noop",
 	Summary:  "Test fixture no-op.",
@@ -244,7 +242,6 @@ func TestEngine_ContextCancel(t *testing.T) {
 	g := core.Graph{Nodes: []core.Node{{ID: "a", Module: "noop"}}}
 	_, err := e.Run(ctx, g, nil)
 	if !errors.Is(err, context.Canceled) {
-		// engine wraps node error; check via string fallback
 		if err == nil || !strings.Contains(err.Error(), "context canceled") {
 			t.Fatalf("expected context.Canceled, got %v", err)
 		}
@@ -332,14 +329,10 @@ func TestNewJobID_IsHexAndUnique(t *testing.T) {
 	}
 }
 
-// Modules are not required to echo the job id back. The engine stamps it
-// on any result that arrives without one, because the job store and the
-// run-detail UI key on it.
 func TestEngine_StampsJobIDOnResultWithoutOne(t *testing.T) {
 	e := newEngineWith(t, NativeDrop{
 		Manifest: noopManifest,
 		Execute: func(_ context.Context, _ core.Job, _ chan<- core.Progress) (core.Result, error) {
-			// Deliberately leaves JobID unset.
 			return core.Result{
 				Status: core.StatusOK,
 				Output: map[string]core.Ref{"out": {Ref: "x"}},

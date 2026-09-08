@@ -53,8 +53,6 @@ func init() {
 				{Port: "id", Label: "Email", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
-				// Untyped on purpose: the file's MIME is whatever was attached,
-				// so the pin carries it per-run rather than declaring one.
 				{Port: "first", Label: "First file"},
 				{Port: "files", Label: "Files", MIME: []string{"application/json"}, Example: json.RawMessage(`[{"name":"Faktura-4471.pdf","mime":"application/pdf","size":48213,"path":"attachments/Faktura-4471.pdf"}]`)},
 				{Port: "count", Label: "How many", MIME: []string{"text/plain"}, Example: json.RawMessage(`"1"`)},
@@ -91,11 +89,6 @@ func executeIMAPGetAttachments(ctx context.Context, job core.Job, _ chan<- core.
 	}
 	defer client.Close()
 
-	// BODYSTRUCTURE first, bytes second: the tree tells us which parts are
-	// files and how big each one is, so an oversized mail is refused before a
-	// single byte of it is downloaded. Gmail's version has to add the sizes up
-	// as it goes and bail part-way through, having already paid for what it
-	// fetched.
 	buf, fetchFail := fetchOneUID(client, job, uid, &imap.FetchOptions{
 		UID:           true,
 		BodyStructure: &imap.FetchItemBodyStructure{Extended: true},
@@ -115,8 +108,6 @@ func executeIMAPGetAttachments(ctx context.Context, job core.Job, _ chan<- core.
 		return emitFiles(job, nil, core.Ref{}), nil
 	}
 
-	// One FETCH for every part: they all belong to the same message, so the
-	// sections ride on a single command rather than a round trip each.
 	sections := make([]*imap.FetchItemBodySection, 0, len(files))
 	for _, f := range files {
 		sections = append(sections, sectionFor(f))
@@ -133,9 +124,6 @@ func executeIMAPGetAttachments(ctx context.Context, job core.Job, _ chan<- core.
 
 	for i, f := range files {
 		data := decodePart(bytesForSection(partBuf.BodySection, f.path), f.leaf)
-		// The declared sizes were a promise, not a measurement — a server can
-		// be wrong, and the decode changes the length anyway — so the real
-		// total is checked too.
 		written += int64(len(data))
 		if written > mailfiles.MaxBytes {
 			return params.Err(job, "too_large", fmt.Sprintf("the attachments on this email exceed the %d MiB limit", mailfiles.MaxBytes>>20)), nil
@@ -186,9 +174,6 @@ func executeIMAPGetAttachments(ctx context.Context, job core.Job, _ chan<- core.
 	return emitFiles(job, rows, first), nil
 }
 
-// emitFiles builds the result. The "first" pin is omitted when nothing was
-// saved, so a downstream step wired to it goes dormant instead of being handed
-// an empty file — matching Gmail's Download attachments.
 func emitFiles(job core.Job, rows []map[string]any, first core.Ref) core.Result {
 	if rows == nil {
 		rows = []map[string]any{}
@@ -219,8 +204,6 @@ func overCap(files []part) (declared int64, over bool) {
 	return declared, declared > mailfiles.MaxBytes
 }
 
-// attachmentsToTake narrows a message's parts to the real attachments passing
-// the extension filter.
 func attachmentsToTake(parts []part, wanted map[string]bool) []part {
 	out := make([]part, 0, len(parts))
 	for i, p := range parts {
@@ -235,9 +218,6 @@ func attachmentsToTake(parts []part, wanted map[string]bool) []part {
 	return out
 }
 
-// attachmentName is what to call the file. A part with no filename still needs
-// one — some senders attach a PDF with nothing but a Content-Type — so the
-// media type supplies the extension and the index keeps the names distinct.
 func attachmentName(p part, idx int) string {
 	if name := strings.TrimSpace(p.leaf.Filename()); name != "" {
 		return name

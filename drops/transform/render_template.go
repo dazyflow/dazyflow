@@ -50,12 +50,7 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// template: typed on the step, or wired from a file (file_read
-				// of a .html), in which case the input overrides the param.
 				{Port: "template", Label: "Template", Required: false, MIME: []string{"text/html", "text/plain"}},
-				// data: the merge context the template sees as the root (.).
-				// A JSON object is the common shape (a sheet row, a webhook
-				// body); an array works too for a top-level {{range .}}.
 				{Port: "data", Label: "Data", Required: false, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
@@ -90,10 +85,6 @@ func init() {
 	})
 }
 
-// The HTML render engine (parse + safe FuncMap + output cap) lives in
-// internal/htmltmpl so the editor's live-preview endpoint renders through
-// the exact same code — preview == what the flow sends.
-
 // executeRenderTemplate renders an HTML template with merge data into a
 // single HTML string on the `html` output. The template comes from the
 // `template` input (a wired .html file) or the `template` param; the
@@ -121,13 +112,10 @@ func executeRenderTemplate(_ context.Context, job core.Job, _ chan<- core.Progre
 		var pe *htmltmpl.ParseError
 		switch {
 		case errors.As(err, &pe):
-			// A parse error is the author's mistake (mismatched {{ }}, bad
-			// action) — surface it as a param error.
 			return params.Err(job, "bad_param", fmt.Sprintf("template: %v", pe.Err)), nil
 		case errors.Is(err, htmltmpl.ErrTooLarge):
 			return params.Err(job, "too_large", err.Error()), nil
 		default:
-			// An execution error (missing method, bad range operand, …).
 			return params.Err(job, "eval", fmt.Sprintf("render: %v", err)), nil
 		}
 	}
@@ -141,10 +129,6 @@ func executeRenderTemplate(_ context.Context, job core.Job, _ chan<- core.Progre
 	}, nil
 }
 
-// templateTextInputOr returns the text wired into the `template` input
-// (string or raw bytes), or fallback when that port is unwired/empty. ok
-// is false only when the port carries a NON-text value — a wiring mistake
-// the caller rejects. Mirrors emailTextInputOr in the notify drop.
 func templateTextInputOr(job core.Job, fallback string) (string, bool) {
 	in, present := job.Input["template"]
 	if !present || in.Inline == nil {
@@ -165,10 +149,6 @@ func templateTextInputOr(job core.Job, fallback string) (string, bool) {
 	return "", false
 }
 
-// resolveTemplateData builds the root context the template renders
-// against: the `data` input when wired, else the `data` param, else an
-// empty object. A JSON string is parsed; an object or array passes
-// through. Anything else is an error rather than a silent surprise.
 func resolveTemplateData(job core.Job) (any, error) {
 	if in, present := job.Input["data"]; present && in.Inline != nil {
 		return normalizeTemplateData(in.Inline)
@@ -176,8 +156,6 @@ func resolveTemplateData(job core.Job) (any, error) {
 	if raw, ok := job.Params["data"]; ok && raw != nil {
 		return normalizeTemplateData(raw)
 	}
-	// No data: render against an empty object so {{.x}} yields "" rather
-	// than failing — a template with no merge fields still works.
 	return map[string]any{}, nil
 }
 

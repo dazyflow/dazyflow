@@ -15,8 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// metricsAPI serves the Prometheus metrics endpoints. Its fields are the whole of what
-// those handlers touch.
 type metricsAPI struct {
 	svc      *Service
 	Sessions auth.SessionStore
@@ -24,14 +22,10 @@ type metricsAPI struct {
 	DBPool   *pgxpool.Pool
 }
 
-// metricsAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) metricsAPI() *metricsAPI {
 	return &metricsAPI{svc: h.svc, Sessions: h.Sessions, Metrics: h.Metrics, DBPool: h.DBPool}
 }
 
-// queueAger is the optional JobStore capability for reporting queue
-// latency. The Postgres store implements it; the in-memory dev store
-// doesn't, so the gauge is simply omitted there.
 type queueAger interface {
 	OldestQueuedEnqueuedAt(ctx context.Context) (time.Time, bool, error)
 }
@@ -55,11 +49,6 @@ var jobStatusOrder = []core.JobStatus{
 	core.JobStatusSkipped,
 }
 
-// metrics serves a minimal Prometheus text exposition. It's hand-rolled
-// (no client_golang dependency) because the surface is small: a liveness
-// gauge plus per-tenant disk usage. Unauthenticated by design — it's a
-// scrape endpoint, gated behind EnableMetrics and meant to be reachable
-// only from the operator's monitoring network.
 func (h *metricsAPI) metrics(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 
@@ -67,8 +56,6 @@ func (h *metricsAPI) metrics(rw http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(rw, "# TYPE dazyflow_up gauge\n")
 	fmt.Fprint(rw, "dazyflow_up 1\n")
 
-	// Node-job counts by status — queue depth (queued) + in-flight
-	// (running) are the load-bearing signals.
 	if counter, ok := h.svc.Jobs.(core.JobCounter); ok {
 		if counts, err := counter.CountsByStatus(r.Context()); err == nil {
 			fmt.Fprint(rw, "# HELP dazyflow_jobs Node-job records currently in the store, by status.\n")
@@ -94,9 +81,6 @@ func (h *metricsAPI) metrics(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Postgres pool saturation — the earliest warning that the pool is
-	// undersized. empty_acquires climbing means callers are waiting for a
-	// free connection (raise DAZYFLOW_PG_MAX_CONNS or scale out).
 	if h.DBPool != nil {
 		st := h.DBPool.Stat()
 		fmt.Fprint(rw, "# HELP dazyflow_pg_pool_connections Postgres pool connections by state.\n")
@@ -112,8 +96,6 @@ func (h *metricsAPI) metrics(rw http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(rw, "dazyflow_pg_pool_empty_acquires_total %d\n", st.EmptyAcquireCount())
 	}
 
-	// Session-lookup cache hit/miss — confirms the cache is absorbing the
-	// per-request auth lookups, and the miss rate tracks raw auth load.
 	if statter, ok := h.Sessions.(sessionCacheStatter); ok {
 		hits, misses := statter.Stats()
 		fmt.Fprint(rw, "# HELP dazyflow_session_cache_hits_total Session lookups served from the in-process cache (cumulative).\n")
@@ -124,7 +106,6 @@ func (h *metricsAPI) metrics(rw http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(rw, "dazyflow_session_cache_misses_total %d\n", misses)
 	}
 
-	// HTTP RED + per-node latency histograms (cumulative, in-process).
 	h.Metrics.render(rw)
 
 	reporter, ok := h.quotaReporter()
@@ -147,8 +128,6 @@ func (h *metricsAPI) metrics(rw http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// quotaReporter returns the wired quota provider when it can enumerate
-// per-tenant usage (FSQuota does; a bare provider may not).
 func (h *metricsAPI) quotaReporter() (core.QuotaReporter, bool) {
 	if h.svc == nil || h.svc.Engine == nil || h.svc.Engine.Quota == nil {
 		return nil, false

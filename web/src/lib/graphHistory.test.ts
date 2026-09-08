@@ -119,7 +119,6 @@ describe("record", () => {
   it("ignores a no-op change and returns the same state object", () => {
     const s1 = record(emptyHistory(), doc(), 1000);
     const s2 = record(s1, doc(), 1100);
-    // Reference equality matters: the caller uses it to skip a re-render.
     expect(s2).toBe(s1);
   });
 
@@ -132,7 +131,6 @@ describe("record", () => {
 
   it("coalesces a drag into one step", () => {
     let s = record(emptyHistory(), doc(), 1000);
-    // A drag arrives as many position updates a few ms apart.
     for (let i = 1; i <= 25; i++) {
       s = record(s, moveNode(doc(), "a", i * 4, 0), 1000 + i * 16);
     }
@@ -182,7 +180,6 @@ describe("record", () => {
   it("bounds the stack, dropping the oldest", () => {
     let s = record(emptyHistory(), doc(), 0);
     for (let i = 1; i <= HISTORY_LIMIT + 40; i++) {
-      // Structural each time, spaced past the window, so nothing coalesces.
       s = record(s, doc({ name: `n${i}`, edges: i % 2 ? [] : doc().edges }), i * 5000);
     }
     expect(s.past.length).toBe(HISTORY_LIMIT);

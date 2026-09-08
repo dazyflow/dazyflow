@@ -14,10 +14,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
-// shortObject is a plumbing.EncodedObject whose declared Size overstates
-// what its Reader actually yields — the shape a truncated or corrupt
-// object store presents. readBlob sizes its buffer from Size, so this is
-// what drives io.ReadFull to fail.
 type shortObject struct {
 	content []byte
 	size    int64

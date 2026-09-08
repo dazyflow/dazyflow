@@ -78,10 +78,6 @@ func executeSheetsExportPDF(ctx context.Context, job core.Job, _ chan<- core.Pro
 	if err != nil {
 		return params.Err(job, "auth", err.Error()), nil
 	}
-	// 'path' is a plain file name ("Svar.pdf") — non-techies shouldn't see
-	// the scratch:// scheme. A bare name lands in the run's scratch space;
-	// ".pdf" is appended when missing; an explicit scheme (scratch://… from
-	// older flows or templates) passes through untouched.
 	dest := strings.TrimSpace(params.StringDefault(job.Params, "path", ""))
 	switch {
 	case dest == "":

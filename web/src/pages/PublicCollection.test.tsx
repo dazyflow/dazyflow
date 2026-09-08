@@ -19,9 +19,6 @@ vi.mock("react-i18next", () => {
 });
 
 const getPublicCollection = vi.fn();
-// The factory is hoisted above the module body, so it may not close over
-// anything declared here — hence the shape check rather than an instanceof
-// against a class defined in this file.
 vi.mock("../api", () => ({
   APIError: class extends Error {},
   isErrorCode: (e: unknown, code: string) =>
@@ -31,8 +28,6 @@ vi.mock("../api", () => ({
   },
 }));
 
-// apiError builds what the real APIError looks like to isErrorCode: an Error
-// carrying the server's error code.
 function apiError(code: string): Error & { code: string } {
   return Object.assign(new Error(code), { code });
 }
@@ -106,8 +101,6 @@ describe("PublicCollection", () => {
     expect(cells).not.toContain("2026-08-31T07:21:54Z");
   });
 
-  // A dead link is the whole screen, so it has to say so — an empty page reads
-  // as broken rather than as a link somebody turned off.
   it("explains a revoked link instead of rendering nothing", async () => {
     getPublicCollection.mockRejectedValue(apiError("share_not_found"));
     renderPage();
@@ -133,7 +126,6 @@ describe("PublicCollection", () => {
     await waitFor(() =>
       expect(screen.getByText("publicCollection.stale")).toBeInTheDocument(),
     );
-    // Still readable.
     expect(screen.getByRole("cell", { name: "a@example.com" })).toBeInTheDocument();
   });
 
@@ -203,8 +195,6 @@ describe("PublicCollection", () => {
     );
   });
 
-  // Nothing on this page may change anything: the reader is not signed in and
-  // the link is read-only by design.
   it("offers no destructive action", async () => {
     getPublicCollection.mockResolvedValue(leads);
     renderPage();

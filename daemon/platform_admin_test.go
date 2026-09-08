@@ -78,9 +78,6 @@ func TestElevatePlatformAdmin(t *testing.T) {
 	})
 }
 
-// TestElevatePlatformAdmin_AuditsOnFirstApply verifies the escalation emits a
-// single platform_admin.granted audit event on first apply (per email, per
-// process), not one per session issue, and not for unlisted users.
 func TestElevatePlatformAdmin_AuditsOnFirstApply(t *testing.T) {
 	t.Parallel()
 	audit := NewMemAuditLog()
@@ -106,9 +103,6 @@ func TestElevatePlatformAdmin_AuditsOnFirstApply(t *testing.T) {
 	}
 }
 
-// TestSignup_ElevatesPlatformAdmin proves the allowlist is actually wired
-// into the sign-in path end to end: a listed user's session reaches the
-// platform-admin-gated admin endpoint, an unlisted one is forbidden.
 func TestSignup_ElevatesPlatformAdmin(t *testing.T) {
 	t.Parallel()
 	h := newSignupHarness(t)
@@ -128,9 +122,6 @@ func TestSignup_ElevatesPlatformAdmin(t *testing.T) {
 		return resp.Token
 	}
 
-	// The OAuth registry is nil in this harness, so a principal that
-	// clears requirePlatformAdmin reaches the 501 ("not configured")
-	// branch; one that doesn't is rejected with 403 first.
 	adminStatus := func(token string) int {
 		req := httptest.NewRequest("GET", "/api/v1/admin/oauth-providers", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -147,12 +138,12 @@ func TestSignup_ElevatesPlatformAdmin(t *testing.T) {
 	}
 }
 
-// TestSignup_AllowlistBypassesDisabledSignup proves the bootstrap hatch:
-// with self-serve signup OFF, an email in DAZYFLOW_PLATFORM_ADMINS can
-// still create its account (so a fresh instance can mint its first
-// super-admin without toggling EnableSignup), while everyone else still
-// gets the 501. And the bypass is self-limiting — a second attempt for
-// the same listed email is rejected as a duplicate, not silently reused.
+// Proves the bootstrap hatch: with self-serve signup OFF, an email in
+// DAZYFLOW_PLATFORM_ADMINS can still create its account (so a fresh instance
+// can mint its first super-admin without toggling EnableSignup), while
+// everyone else still gets the 501. And the bypass is self-limiting — a second
+// attempt for the same listed email is rejected as a duplicate, not silently
+// reused.
 func TestSignup_AllowlistBypassesDisabledSignup(t *testing.T) {
 	t.Parallel()
 	h := newSignupHarness(t)
@@ -181,12 +172,6 @@ func TestSignup_AllowlistBypassesDisabledSignup(t *testing.T) {
 	})
 }
 
-// TestPublicAuthConfig_AdminBootstrap proves the sign-up page can find
-// the bootstrap door: GET /api/v1/auth/config reports admin_bootstrap
-// true while a listed platform-admin email is unclaimed (even though
-// signup_enabled is false), and flips to false once that email has an
-// account. The SignUp page keys off this flag to render instead of
-// bouncing to /signin, so the allowlist bypass in signUp is reachable.
 func TestPublicAuthConfig_AdminBootstrap(t *testing.T) {
 	t.Parallel()
 	h := newSignupHarness(t)

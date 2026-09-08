@@ -49,9 +49,6 @@ func init() {
 				{Port: "id", Label: "Email", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
-				// Friendly scalar pins instead of a JSON blob — same move as
-				// sheets append. The full flattened message is still EMITTED
-				// under "message" for run records/debugging, just not a pin.
 				{Port: "date", Label: "Date", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Thu, 12 Feb 2026 09:12:04 +0100"`)},
 				{Port: "from", Label: "From", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Fortnox <faktura@fortnox.se>"`)},
 				{Port: "subject", Label: "Subject", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Faktura 4471"`)},
@@ -76,7 +73,6 @@ func init() {
 }
 
 func executeGmailGetMessage(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	// The Message ID input pin overrides the param when wired.
 	id, ok := resolveMessageID(job)
 	if !ok {
 		return params.Err(job, "bad_input", "input port 'id' must be a message ID or a list of matches"), nil
@@ -106,9 +102,6 @@ func executeGmailGetMessage(ctx context.Context, job core.Job, _ chan<- core.Pro
 	}
 	msg := flatten(raw)
 
-	// Friendly scalars for the declared pins. Headers are name-keyed as
-	// Gmail sent them; look up case-insensitively to be safe. Body prefers
-	// the plain-text part, falls back to HTML, then the snippet.
 	headers, _ := msg["headers"].(map[string]any)
 	header := func(name string) string {
 		for k, v := range headers {
@@ -134,7 +127,6 @@ func executeGmailGetMessage(ctx context.Context, job core.Job, _ chan<- core.Pro
 			"subject": {MIME: "text/plain", Inline: header("Subject")},
 			"date":    {MIME: "text/plain", Inline: header("Date")},
 			"body":    {MIME: "text/plain", Inline: bodyText},
-			// Full flattened message — emitted for run records, not a pin.
 			"message": {MIME: "application/json", Inline: msg},
 		},
 	}, nil
@@ -182,8 +174,6 @@ func resolveMessageID(job core.Job) (id string, ok bool) {
 		return "", false
 	case []any:
 		if len(v) == 0 {
-			// An empty match list isn't a wiring mistake — fall back to the
-			// param (and to the clear "'id' is required" error when unset).
 			return fallback, true
 		}
 		if s := stubID(v[0]); s != "" {

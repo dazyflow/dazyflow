@@ -76,15 +76,12 @@ func TestMemTicketStore_DeleteByTenant(t *testing.T) {
 	if _, err := s.Get(ctx, "t1"); err == nil {
 		t.Error("acme ticket survived erasure")
 	}
-	// The other org is untouched — erasure is tenant-scoped, not a truncate.
 	if _, err := s.Get(ctx, "t3"); err != nil {
 		t.Errorf("other tenant's ticket was deleted: %v", err)
 	}
 	if msgs, _ := s.ListMessages(ctx, "t3"); len(msgs) != 1 {
 		t.Errorf("other tenant's thread = %d msgs, want 1", len(msgs))
 	}
-	// The erased tickets' message IDs are released, so a later ticket can reuse
-	// them without tripping the cross-thread dedupe.
 	if err := s.AppendMessage(ctx, core.TicketMessage{
 		ID: "m-t1", TicketID: "t3", AuthorKind: core.AuthorUser, Body: "reused", CreatedAt: now,
 	}); err != nil {
@@ -194,8 +191,6 @@ func TestPgSupportAnonymizeSubject(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create grant: %v", err)
 	}
-	// Create only ever writes a 'requested' row; the approver lands in
-	// decided_by through Decide, which is where the erased user's address is.
 	if err := gs.Decide(ctx, "g1", core.GrantApproved, gone, now, now.Add(time.Hour)); err != nil {
 		t.Fatalf("decide grant: %v", err)
 	}
@@ -302,7 +297,6 @@ func TestPgSupportEraseAndPrune(t *testing.T) {
 	mkTicket("sweep-me", "acme", core.TicketResolved, old)         // old + closed
 	mkTicket("recent", "acme", core.TicketResolved, now)           // closed but recent
 
-	// --- Prune: only the old CLOSED ticket goes, and its thread with it -------
 	n, err := ts.Prune(ctx, 365*24*time.Hour, 100)
 	if err != nil {
 		t.Fatalf("prune: %v", err)
@@ -328,7 +322,7 @@ func TestPgSupportEraseAndPrune(t *testing.T) {
 		t.Errorf("pruning left %d orphaned message(s)", orphans)
 	}
 
-	// --- Prune bundles: one referenced by an OPEN ticket must survive --------
+	// Prune bundles: one referenced by an OPEN ticket must survive
 	mkBundle := func(id, tenant string, at time.Time) {
 		g := core.Graph{ID: "f", Tenant: tenant, Workspace: "main"}
 		rec, err := core.NewSupportBundleRecord(id, "agent", at,
@@ -348,11 +342,6 @@ func TestPgSupportEraseAndPrune(t *testing.T) {
 	if err := ts.Update(ctx, openT); err != nil {
 		t.Fatalf("attach bundle: %v", err)
 	}
-	// The regression case: a ticket that is RESOLVED but still inside its own
-	// retention window (recent updated_at) attached to an OLD bundle. The two
-	// prunes key on different timestamps, so keying the bundle on "no OPEN
-	// ticket references it" swept this bundle while its ticket lived on — and
-	// the ticket's "View diagnostic" 404'd.
 	resolvedT, _ := ts.Get(ctx, "recent")
 	resolvedT.BundleID = "b-resolved"
 	if err := ts.Update(ctx, resolvedT); err != nil {
@@ -375,7 +364,6 @@ func TestPgSupportEraseAndPrune(t *testing.T) {
 		t.Error("an unreferenced, past-retention bundle survived the sweep")
 	}
 
-	// --- Erase: the whole org leaves together --------------------------------
 	if err := gs.Create(ctx, core.AccessGrant{
 		ID: "g1", Tenant: "acme", FlowID: "f", AgentSubject: "a",
 		Status: core.GrantRequested, RequestedAt: now, RequestedBy: "a",
@@ -400,12 +388,6 @@ func TestPgSupportEraseAndPrune(t *testing.T) {
 		t.Errorf("%d message(s) outlived their org", left)
 	}
 }
-
-// --- Notification routing ---------------------------------------------------
-//
-// The transport (SMTP) has no seam worth faking, so these cover the decisions:
-// who hears about what, and that a deployment with no mailer stays silent
-// instead of panicking.
 
 func TestSupportQueueRecipient(t *testing.T) {
 	assigned := core.Ticket{AssignedTo: "agent@vendor.test"}
@@ -439,13 +421,10 @@ func TestTicketURLFor_AudienceRoutes(t *testing.T) {
 	if got := h.supportAPI().ticketURLFor(tk, true); got != "https://app.example.com/support/queue/abc123" {
 		t.Errorf("agent URL = %q", got)
 	}
-	// A single-tenant deployment carries no tenant on the ticket; the bare link
-	// is unambiguous there.
 	solo := core.Ticket{ID: "abc123"}
 	if got := h.supportAPI().ticketURLFor(solo, false); got != "https://app.example.com/support/abc123" {
 		t.Errorf("tenantless user URL = %q", got)
 	}
-	// No public base URL configured: no link rather than a broken relative one.
 	bare := &HTTPGateway{svc: &Service{}}
 	if got := bare.supportAPI().ticketURLFor(tk, false); got != "" {
 		t.Errorf("URL without a public base = %q, want empty", got)
@@ -461,8 +440,6 @@ func TestSupportNotify_NoMailerIsSilent(t *testing.T) {
 	h.supportAPI().notifyUserReplied(tk)
 	h.supportAPI().notifyTicketFiled(tk)
 }
-
-// --- Rate limiting ----------------------------------------------------------
 
 func TestSupportWriteRateLimit(t *testing.T) {
 	h := &HTTPGateway{SupportRateLimit: newIPRateLimiter(60, 3)}
@@ -503,8 +480,6 @@ func TestSupportWriteRateLimit_Unset(t *testing.T) {
 	}
 }
 
-// --- Notification opt-out ---------------------------------------------------
-
 func TestEmailOnSupportReplyEnabled_DefaultsOn(t *testing.T) {
 	var unset auth.NotifyPrefs
 	if !unset.EmailOnSupportReplyEnabled() {
@@ -525,12 +500,6 @@ func TestEmailOnSupportReplyEnabled_DefaultsOn(t *testing.T) {
 	}
 }
 
-// --- Queue summary cache ----------------------------------------------------
-//
-// The summary is a full-table GROUP BY (the tiles count every ticket, not a
-// page). Measured at 200k rows it ran ~30ms alone but p50 111ms / p95 182ms
-// under 20 concurrent agents, and the dashboard calls it on every filter click.
-// It's cached for a few seconds, single-flighted, and invalidated on write.
 func TestPgQueueSummary_CacheAndInvalidation(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
@@ -572,8 +541,6 @@ func TestPgQueueSummary_CacheAndInvalidation(t *testing.T) {
 		t.Errorf("cache not serving: total = %d, want the stale 1", cached.Total)
 	}
 
-	// But the store's OWN write invalidates, so an agent always sees the effect
-	// of their own action immediately rather than waiting out the TTL.
 	if err := ts.Create(ctx, mk("c2", core.TicketResolved)); err != nil {
 		t.Fatalf("create c2: %v", err)
 	}
@@ -585,7 +552,6 @@ func TestPgQueueSummary_CacheAndInvalidation(t *testing.T) {
 		t.Errorf("total after invalidating write = %d, want 3", after.Total)
 	}
 
-	// Update invalidates too (claim / resolve are Updates).
 	tk, _ := ts.Get(ctx, "c1")
 	tk.Status = core.TicketClosed
 	if err := ts.Update(ctx, tk); err != nil {
@@ -621,8 +587,6 @@ func TestPgQueueSummary_ConcurrentAccess(t *testing.T) {
 		}
 	}
 
-	// Readers hammering the cache while writers keep invalidating it — the mix
-	// that made the stampede visible in the load test.
 	var wg sync.WaitGroup
 	errs := make(chan error, 64)
 	for i := 0; i < 24; i++ {

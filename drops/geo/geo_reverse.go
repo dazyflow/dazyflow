@@ -42,12 +42,10 @@ func init() {
 					Notes:  "The 'Coordinate' input (\"lat,lon\") overrides the map pin — connect a Location step into it.",
 				},
 			},
-			// Per-tenant geocoding backend (shared with Location); all optional.
 			ConnectionFields: geoConnectionFields,
 			ExecutionModel:   core.ExecutionBatch,
 			ProcessModel:     core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Coordinate (a "lat,lon") overrides the map pin when wired.
 				{Port: "coordinate", Label: "Coordinate", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
@@ -72,9 +70,6 @@ func init() {
 	})
 }
 
-// executeReverse resolves the point (the Coordinate input overrides the map
-// pin), reverse-geocodes it, and emits the place name + structured address,
-// plus the normalized coordinate for chaining.
 func executeReverse(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	lat, lon, err := resolveCoord(job)
 	if err != nil {
@@ -95,8 +90,6 @@ func executeReverse(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			// Echo the queried coordinate (not the backend's snapped one) so
-			// chaining stays faithful to what the user pointed at.
 			"place":      {MIME: "text/plain", Inline: place.DisplayName},
 			"coordinate": {MIME: "text/plain", Inline: geoloc.Fmt(lat, lon)},
 			"address":    {MIME: "application/json", Inline: addr},

@@ -22,9 +22,6 @@ import (
 // already written would answer Unimplemented and be refused. These tests pin
 // the fallback that keeps them registering.
 
-// legacyServer implements only the pre-ListManifests GetManifest, by hand.
-// Registered through a raw ServiceDesc because the method no longer exists in
-// the .proto — which is the point: nothing new should implement it.
 type legacyServer struct{ manifest *nodepb.Manifest }
 
 var legacyServiceDesc = grpc.ServiceDesc{
@@ -69,9 +66,6 @@ func TestRegister_FallsBackToGetManifestForAnOlderRunner(t *testing.T) {
 	}
 }
 
-// A server implementing NEITHER method reports the honest failure — the
-// ListManifests error — rather than sending the reader after a method the
-// daemon no longer publishes.
 func TestRegister_ReportsTheRealFailureWhenNeitherMethodExists(t *testing.T) {
 	c := NewRemoteCatalog()
 	defer c.Close()

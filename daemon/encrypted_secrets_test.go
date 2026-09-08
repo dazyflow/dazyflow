@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// randomKey returns 32 random bytes suitable for an AES-256 KEK.
 func randomKey(t *testing.T) []byte {
 	t.Helper()
 	k := make([]byte, 32)
@@ -26,8 +25,6 @@ func randomKey(t *testing.T) []byte {
 	return k
 }
 
-// newMemES builds an EncryptedSecrets backed by an in-memory store.
-// Used by every test that doesn't specifically need Postgres.
 func newMemES(t *testing.T) *EncryptedSecrets {
 	t.Helper()
 	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
@@ -36,8 +33,6 @@ func newMemES(t *testing.T) *EncryptedSecrets {
 	}
 	return es
 }
-
-// ---- Crypto basics --------------------------------------------------
 
 func TestEncryptedSecrets_RoundTrip(t *testing.T) {
 	es := newMemES(t)
@@ -165,8 +160,6 @@ func TestEncryptedSecrets_TamperedCiphertextRejected(t *testing.T) {
 	ctx := core.WithTenant(t.Context(), "acme")
 	_ = es.Put(ctx, "acme", "k", "valuable")
 
-	// Reach into the store and corrupt the first byte of the
-	// ciphertext.
 	store.secrets["acme"]["k"].ciphertext[0] ^= 0xFF
 
 	_, err := es.Get(ctx, "k")
@@ -174,8 +167,6 @@ func TestEncryptedSecrets_TamperedCiphertextRejected(t *testing.T) {
 		t.Fatal("expected decryption error after tampering")
 	}
 }
-
-// ---- DEK lifecycle --------------------------------------------------
 
 func TestEncryptedSecrets_DEKCachedAcrossReads(t *testing.T) {
 	// The unwrap path is the slow part — once cached, subsequent
@@ -198,10 +189,6 @@ func TestEncryptedSecrets_DEKCachedAcrossReads(t *testing.T) {
 }
 
 func TestEncryptedSecrets_RaceProvisioningDEK(t *testing.T) {
-	// Two goroutines writing the first secret for the same tenant
-	// in parallel should both succeed and end up with the same DEK
-	// in the store (whoever wrote first wins; the other's DEK is
-	// discarded by setWrappedDEK's no-overwrite rule).
 	store := NewMemSecretsStore()
 	es, _ := NewEncryptedSecrets(randomKey(t), store)
 	ctx := core.WithTenant(t.Context(), "acme")
@@ -228,14 +215,11 @@ func TestEncryptedSecrets_RaceProvisioningDEK(t *testing.T) {
 	if len(store.deks) != 1 {
 		t.Errorf("expected 1 DEK after race, got %d", len(store.deks))
 	}
-	// And the secret round-trips.
 	got, _ := es.Get(ctx, "k")
 	if got != "v" {
 		t.Errorf("post-race read = %q, want v", got)
 	}
 }
-
-// ---- CRUD surface ---------------------------------------------------
 
 func TestEncryptedSecrets_Delete(t *testing.T) {
 	es := newMemES(t)
@@ -285,8 +269,6 @@ func TestEncryptedSecrets_ListDoesNotLeakAcrossTenants(t *testing.T) {
 	}
 }
 
-// ---- Construction errors --------------------------------------------
-
 func TestNewEncryptedSecrets_BadKeyLength(t *testing.T) {
 	_, err := NewEncryptedSecrets([]byte{1, 2, 3}, NewMemSecretsStore())
 	if err == nil {
@@ -300,8 +282,6 @@ func TestNewEncryptedSecrets_NilStore(t *testing.T) {
 		t.Error("nil store should error")
 	}
 }
-
-// ---- Postgres integration (gated) -----------------------------------
 
 func TestPgSecretsStore_RoundTrip(t *testing.T) {
 	dsn := os.Getenv("DAZYFLOW_TEST_DB")
@@ -319,8 +299,6 @@ func TestPgSecretsStore_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPgSecretsStore: %v", err)
 	}
-	// Clean slate — TRUNCATE both tables so concurrent test runs
-	// don't pollute each other.
 	_, _ = pool.Exec(ctx, "TRUNCATE encrypted_secrets, encrypted_secret_deks")
 
 	es, err := NewEncryptedSecrets(randomKey(t), store)
@@ -350,9 +328,6 @@ func TestPgSecretsStore_RoundTrip(t *testing.T) {
 }
 
 func TestPgSecretsStore_TenantIsolationOnDisk(t *testing.T) {
-	// Same test as the in-memory variant but against the real DB —
-	// confirms the WHERE tenant=$1 clauses are correctly scoped on
-	// both reads and lists.
 	dsn := os.Getenv("DAZYFLOW_TEST_DB")
 	if dsn == "" {
 		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
@@ -374,10 +349,6 @@ func TestPgSecretsStore_TenantIsolationOnDisk(t *testing.T) {
 	}
 }
 
-// ---- helpers --------------------------------------------------------
-
-// countingStore wraps another secretsStore and tallies getWrappedDEK
-// hits, used to verify the in-memory DEK cache works.
 type countingStore struct {
 	inner              secretsStore
 	getWrappedDEKCalls int
@@ -423,7 +394,6 @@ func TestEncryptedSecrets_RewrapDEKs_RotatesKEK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEncryptedSecrets(old): %v", err)
 	}
-	// Seed secrets across two tenants (two DEKs).
 	seed := map[string]map[string]string{
 		"acme":   {"slack_token": "xoxb-acme", "db_pw": "hunter2hunter2"},
 		"globex": {"api_key": "sk_live_globex_key"},
@@ -445,8 +415,6 @@ func TestEncryptedSecrets_RewrapDEKs_RotatesKEK(t *testing.T) {
 		t.Fatalf("rotated=%d skipped=%d, want 2/0", rotated, skipped)
 	}
 
-	// A fresh store view under the NEW key decrypts every secret — the
-	// DEK plaintexts (and ciphertexts) are unchanged, only re-wrapped.
 	es2, err := NewEncryptedSecrets(newKey, store)
 	if err != nil {
 		t.Fatalf("NewEncryptedSecrets(new): %v", err)
@@ -464,16 +432,14 @@ func TestEncryptedSecrets_RewrapDEKs_RotatesKEK(t *testing.T) {
 		}
 	}
 
-	// The OLD key can no longer unwrap the re-wrapped DEKs.
 	es3, _ := NewEncryptedSecrets(oldKey, store)
 	if _, err := es3.Get(core.WithTenant(context.Background(), "acme"), "slack_token"); err == nil {
 		t.Fatal("old key still decrypts after rotation; want failure")
 	}
 }
 
-// TestEncryptedSecrets_ReadAudit covers the opt-in secret.read audit: off by
-// default (no events), and when enabled it records the secret NAME + tenant
-// but never the value.
+// Covers the opt-in secret.read audit: off by default (no events), and when
+// enabled it records the secret NAME + tenant but never the value.
 func TestEncryptedSecrets_ReadAudit(t *testing.T) {
 	store := NewMemSecretsStore()
 	es, err := NewEncryptedSecrets(randomKey(t), store)
@@ -486,7 +452,6 @@ func TestEncryptedSecrets_ReadAudit(t *testing.T) {
 		t.Fatalf("put: %v", err)
 	}
 
-	// Default: no auditing.
 	audit := NewMemAuditLog()
 	if _, err := es.Get(ctx, "slack_token"); err != nil {
 		t.Fatalf("get: %v", err)
@@ -521,10 +486,6 @@ func (failingRandReader) Read([]byte) (int, error) {
 	return 0, errors.New("entropy source unavailable")
 }
 
-// TestEncryptedSecrets_RewrapDEKs_HaltsOnRandFailure verifies rotation aborts
-// (rather than re-wrapping a DEK with a zero/partial nonce — catastrophic
-// AES-GCM nonce reuse) when the entropy source fails, and leaves the existing
-// DEK intact and readable under the original key.
 func TestEncryptedSecrets_RewrapDEKs_HaltsOnRandFailure(t *testing.T) {
 	store := NewMemSecretsStore()
 	oldKey, newKey := randomKey(t), randomKey(t)
@@ -592,7 +553,6 @@ func TestEncryptedSecrets_RewrapDEKs_WrongCurrentKeyErrors(t *testing.T) {
 	if _, _, err := esWrong.RewrapDEKs(context.Background(), newKey); err == nil {
 		t.Fatal("rotation with wrong current key succeeded; want error")
 	}
-	// The original DEK is untouched — the real key still decrypts.
 	got, err := es.Get(core.WithTenant(context.Background(), "acme"), "k")
 	if err != nil || got != "valuevalue" {
 		t.Fatalf("after failed rotation: got %q err %v, want secret intact", got, err)
@@ -606,8 +566,6 @@ func TestEncryptedSecrets_RewrapDEKs_RejectsShortKey(t *testing.T) {
 	}
 }
 
-// TestPgSecretsStore_DEKRotationMethods covers the key-rotation helpers
-// listDEKTenants and replaceWrappedDEK (including the not-found leg).
 func TestPgSecretsStore_DEKRotationMethods(t *testing.T) {
 	pool, ctx := covPGPool(t)
 	store, err := NewPgSecretsStore(ctx, pool)
@@ -618,30 +576,25 @@ func TestPgSecretsStore_DEKRotationMethods(t *testing.T) {
 		t.Fatalf("truncate: %v", err)
 	}
 
-	// No DEKs yet.
 	if tenants, err := store.listDEKTenants(ctx); err != nil || len(tenants) != 0 {
 		t.Fatalf("listDEKTenants(empty) = %v / %v", tenants, err)
 	}
 
-	// Seed two tenants' wrapped DEKs.
 	if wrote, err := store.setWrappedDEK(ctx, "acme", []byte("wrap-a"), []byte("nonce-a")); err != nil || !wrote {
 		t.Fatalf("setWrappedDEK acme = %v / %v", wrote, err)
 	}
 	if wrote, err := store.setWrappedDEK(ctx, "beta", []byte("wrap-b"), []byte("nonce-b")); err != nil || !wrote {
 		t.Fatalf("setWrappedDEK beta = %v / %v", wrote, err)
 	}
-	// A second write for the same tenant is a no-op (ON CONFLICT DO NOTHING).
 	if wrote, err := store.setWrappedDEK(ctx, "acme", []byte("ignored"), []byte("ignored")); err != nil || wrote {
 		t.Fatalf("setWrappedDEK acme (dup) = %v / %v, want false", wrote, err)
 	}
 
-	// listDEKTenants returns both, ordered.
 	tenants, err := store.listDEKTenants(ctx)
 	if err != nil || len(tenants) != 2 || tenants[0] != "acme" || tenants[1] != "beta" {
 		t.Fatalf("listDEKTenants = %v / %v, want [acme beta]", tenants, err)
 	}
 
-	// replaceWrappedDEK rewraps an existing tenant's DEK.
 	if err := store.replaceWrappedDEK(ctx, "acme", []byte("wrap-a2"), []byte("nonce-a2")); err != nil {
 		t.Fatalf("replaceWrappedDEK: %v", err)
 	}
@@ -650,16 +603,11 @@ func TestPgSecretsStore_DEKRotationMethods(t *testing.T) {
 		t.Fatalf("getWrappedDEK after replace = %q/%q / %v", w, n, err)
 	}
 
-	// replaceWrappedDEK on an unknown tenant -> ErrSecretNotFound.
 	if err := store.replaceWrappedDEK(ctx, "ghost", []byte("x"), []byte("y")); err != ErrSecretNotFound {
 		t.Fatalf("replaceWrappedDEK(ghost) = %v, want ErrSecretNotFound", err)
 	}
 }
 
-// TestPgSecretsStore_DeleteTenant exercises the erasure sweep against the real
-// DB: both tables cleared for the target tenant in one transaction, and the
-// neighbouring tenant untouched. The in-memory store can't cover this — the
-// two-statement transaction and the WHERE clauses only exist in the Pg path.
 func TestPgSecretsStore_DeleteTenant(t *testing.T) {
 	dsn := os.Getenv("DAZYFLOW_TEST_DB")
 	if dsn == "" {
@@ -700,8 +648,6 @@ func TestPgSecretsStore_DeleteTenant(t *testing.T) {
 		t.Errorf("n = %d, want 2", n)
 	}
 
-	// Count rows directly: List goes through the cache-bearing wrapper, and
-	// what matters here is what is left on disk.
 	var secrets, deks int
 	if err := pool.QueryRow(ctx,
 		`SELECT count(*) FROM encrypted_secrets WHERE tenant=$1`, "doomed").Scan(&secrets); err != nil {

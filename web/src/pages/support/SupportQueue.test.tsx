@@ -35,7 +35,6 @@ vi.mock("../../api", () => ({
 
 import { SupportQueue } from "./SupportTickets";
 
-// Two tickets: one nobody has claimed, one this agent already owns.
 const UNCLAIMED = {
   id: "tk-1",
   tenant: "acme",
@@ -64,12 +63,10 @@ const SUMMARY = {
   mine: 1,
 };
 
-// tileFor finds a dashboard stat tile by its label.
 function tileFor(label: string): HTMLElement {
   return screen.getByRole("button", { name: new RegExp(label.replace(/\./g, "\\.")) });
 }
 
-// rowFor finds the queue row carrying a given subject.
 function rowFor(subject: string): HTMLElement {
   const el = screen.getByText(subject).closest(".user-card");
   if (!el) throw new Error(`no queue row for ${subject}`);
@@ -93,23 +90,15 @@ describe("SupportQueue dashboard", () => {
 
   it("shows the server-side counts and both tickets, with Claim only on the unclaimed one", async () => {
     renderQueue();
-    // The tiles read the summary, not the loaded page: 1 unassigned / 1 mine /
-    // 2 awaiting support / 2 open.
     await waitFor(() => expect(screen.getByText("Invoice flow keeps failing")).toBeInTheDocument());
     expect(screen.getByText("Webhook never fires")).toBeInTheDocument();
-    // Ownership is shown per row (the meta line mixes several fragments, so
-    // assert on the row's text rather than a lone node).
     expect(rowFor("Invoice flow keeps failing").textContent).toContain("support.unassigned");
     expect(rowFor("Webhook never fires").textContent).toContain("support.assignedToYou");
-    // The tiles report the server's counts over the whole queue (1 unassigned,
-    // 1 mine, 2 awaiting support, 2 open of 9 filed) — not the page's 2 rows.
     expect(tileFor("support.stats.unassigned").textContent).toContain("1");
     expect(tileFor("support.stats.mine").textContent).toContain("1");
     expect(tileFor("support.stats.waiting").textContent).toContain("2");
     expect(tileFor("support.stats.open").textContent).toContain("2");
-    // One Claim button — the ticket this agent already owns doesn't offer one.
     expect(screen.getAllByRole("button", { name: /support\.claim/ })).toHaveLength(1);
-    // The first load asks for everything (no ownership/status narrowing).
     expect(listTicketQueue).toHaveBeenCalledWith("tok-123", {
       status: undefined,
       assignee: undefined,
@@ -139,7 +128,6 @@ describe("SupportQueue dashboard", () => {
       }),
     );
 
-    // The status tile narrows on status instead of ownership.
     await userEvent.click(screen.getByRole("button", { name: /support\.stats\.waiting/ }));
     await waitFor(() =>
       expect(listTicketQueue).toHaveBeenLastCalledWith("tok-123", {
@@ -157,7 +145,6 @@ describe("SupportQueue dashboard", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /support\.claim/ }));
     expect(assignSupportTicket).toHaveBeenCalledWith("tok-123", "tk-1", "me");
-    // Claiming re-reads the queue so the row moves out of the unassigned view.
     await waitFor(() => expect(listTicketQueue.mock.calls.length).toBeGreaterThan(before));
   });
 
@@ -168,7 +155,6 @@ describe("SupportQueue dashboard", () => {
     await userEvent.type(screen.getByRole("searchbox"), "webhook");
     expect(screen.queryByText("Invoice flow keeps failing")).not.toBeInTheDocument();
     expect(screen.getByText("Webhook never fires")).toBeInTheDocument();
-    // Searching is client-side over what's already loaded — no extra request.
     expect(listTicketQueue).toHaveBeenCalledTimes(1);
   });
 });

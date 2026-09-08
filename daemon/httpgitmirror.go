@@ -15,8 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// gitMirrorAPI serves the git-mirror endpoints. Its fields are the whole of what
-// those handlers touch.
 type gitMirrorAPI struct {
 	auditor
 	EncryptedSecrets *EncryptedSecrets
@@ -24,7 +22,6 @@ type gitMirrorAPI struct {
 	MirrorPusher     *MirrorPusher
 }
 
-// gitMirrorAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) gitMirrorAPI() *gitMirrorAPI {
 	return &gitMirrorAPI{auditor: h.auditor(), EncryptedSecrets: h.EncryptedSecrets, GitMirrors: h.GitMirrors, MirrorPusher: h.MirrorPusher}
 }
@@ -247,9 +244,6 @@ func (h *gitMirrorAPI) pushGitMirrorMe(rw http.ResponseWriter, r *http.Request, 
 			"git mirroring is not configured on this deployment")
 		return
 	}
-	// overwrite_unrelated is the user's answer to the shared-history refusal
-	// below: the UI re-posts with it set only after showing what the remote
-	// holds and asking. Body is optional, so a plain POST means "no".
 	var body struct {
 		OverwriteUnrelated bool `json:"overwrite_unrelated"`
 	}
@@ -266,15 +260,10 @@ func (h *gitMirrorAPI) pushGitMirrorMe(rw http.ResponseWriter, r *http.Request, 
 			"this workspace has no git mirror configured yet")
 		return
 	}
-	// A distinct code, because this is the one failure with a safe answer the
-	// UI can offer ("overwrite it") rather than a fault to report. 409: the
-	// request was well-formed, the remote's state is what conflicts.
 	if errors.Is(err, workspace.ErrUnrelatedRemote) {
 		writeAPIError(rw, http.StatusConflict, "mirror_unrelated_remote", err.Error())
 		return
 	}
-	// The status row has already recorded the attempt, so the UI can refresh
-	// and see the same failure it's about to be told about.
 	if err != nil {
 		writeAPIError(rw, http.StatusBadGateway, "mirror_push_failed", err.Error())
 		return

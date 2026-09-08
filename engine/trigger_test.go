@@ -10,15 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// ${trigger.…} was offered by the {} reference menu, suggested by a lint
-// message, rendered as a chip on the canvas, and described as working by two
-// handler comments — and resolved by nothing. A flow following the menu's own
-// suggestion mailed a literal "${trigger.body.version}".
-//
-// It survived because the tests that mentioned the scheme covered the menu
-// OFFERING the token (daemon/httpreferences_test.go) and the seed's SHAPE
-// (daemon/webhook_test.go). Neither ran a value through it. These do.
-
 func webhookGraph() core.Graph {
 	return core.Graph{
 		Nodes: []core.Node{
@@ -28,8 +19,6 @@ func webhookGraph() core.Graph {
 	}
 }
 
-// firedWebhook is the seed a real POST leaves behind: the parsed body on the
-// node's own `body` port, exactly as buildWebhookSeed writes it.
 func firedWebhook() map[string]core.Result {
 	return map[string]core.Result{
 		"webhook_input_1": {Output: map[string]core.Ref{
@@ -69,9 +58,6 @@ func TestTrigger_AgreesWithTheUpstreamFormOfTheSameValue(t *testing.T) {
 }
 
 func TestTrigger_PicksTheTriggerThatActuallyFired(t *testing.T) {
-	// A webhook AND a schedule on one flow is an ordinary shape. Only one of
-	// them starts any given run, so "which trigger" is a question the RUN has
-	// already answered — no lint rule needed.
 	g := core.Graph{Nodes: []core.Node{
 		{ID: "cron_trigger_1", Module: "cron_trigger"},
 		{ID: "webhook_input_1", Module: "webhook_input"},
@@ -86,23 +72,11 @@ func TestTrigger_PicksTheTriggerThatActuallyFired(t *testing.T) {
 }
 
 func TestTrigger_FailsLoudlyWhenNoTriggerFired(t *testing.T) {
-	// This test used to assert the OPPOSITE — that the placeholder was left as
-	// written, because "an unknown scheme is not an error". That conflated two
-	// different things. SubstituteString leaves an unknown SCHEME alone so that
-	// arbitrary ${…} text in JSON and shell survives; `trigger` is a known
-	// scheme with an owner, so failing to resolve it is a broken reference.
-	//
-	// The shrug was paid for in production: a step one hop further down the
-	// chain mailed a customer a literal "${trigger.body.version}" and nothing
-	// failed, logged or warned. Stopping the run is strictly better than
-	// sending the template to a person.
 	job := &core.Job{Params: map[string]any{"v": "${trigger.body.version}"}}
 	err := resolveTemplates(t.Context(), nil, webhookGraph(), map[string]core.Result{}, job)
 	if err == nil {
 		t.Fatalf("want an error, got v = %q", job.Params["v"])
 	}
-	// The message has to say what to do about it — this is what a person sees
-	// when they press Run on a webhook flow.
 	if !strings.Contains(err.Error(), "no trigger fired") {
 		t.Errorf("error should name the cause: %v", err)
 	}
@@ -121,7 +95,6 @@ func TestTrigger_ResolvesFromAnywhereInTheRun(t *testing.T) {
 		{ID: "if_1", Module: "if"},
 		{ID: "email_send_1", Module: "email_send"},
 	}}
-	// The email step's own predecessor is the `if`; the trigger is two hops up.
 	prior := map[string]core.Result{
 		"if_1":            {Output: map[string]core.Ref{"then": {Inline: "yes"}}},
 		"webhook_input_1": {Output: map[string]core.Ref{"body": {Inline: map[string]any{"version": "0.27.5"}}}},
@@ -136,8 +109,6 @@ func TestTrigger_ResolvesFromAnywhereInTheRun(t *testing.T) {
 }
 
 func TestTrigger_ResolvesTheWholeBodyPort(t *testing.T) {
-	// No trailing path: the port itself. Structured values stringify through
-	// the same rules the upstream scheme uses.
 	job := &core.Job{Params: map[string]any{"v": "${trigger.body}"}}
 	if err := resolveTemplates(t.Context(), nil, webhookGraph(), firedWebhook(), job); err != nil {
 		t.Fatalf("resolveTemplates: %v", err)

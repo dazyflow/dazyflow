@@ -18,51 +18,26 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// oauthAPI serves the OAuth connect-account endpoints. Its fields are the whole of what
-// those handlers touch.
 type oauthAPI struct {
 	auditor
 	svc              *Service
 	OAuth            *OAuthRegistry
 	EncryptedSecrets *EncryptedSecrets
-	// WildcardDomain is the apex under which org subdomains are served
-	// ("dazyflow.app"). Empty disables per-org subdomains, and with it
-	// everything below about returning the browser to the host it came from.
-	WildcardDomain string
+	WildcardDomain   string
 }
 
-// oauthAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) oauthAPI() *oauthAPI {
 	return &oauthAPI{auditor: h.auditor(), svc: h.svc, OAuth: h.OAuth,
 		EncryptedSecrets: h.EncryptedSecrets, WildcardDomain: h.WildcardDomain}
 }
 
-// HTTP surface for the OAuth flow. Two endpoints:
-//
-//	GET /api/v1/oauth/{provider}/authorize?account=NAME&return_to=/...
-//	    Auth-required. Mints state, 302s to provider.
-//
-//	GET /api/v1/oauth/{provider}/callback?code=...&state=...
-//	    UN-authenticated. State token is the only thing that ties
-//	    the callback back to the authorizing principal.
-//
-// The callback is unauthenticated because the OAuth provider
-// redirects the user's browser without a Bearer token. Security
-// rests on the state token being unguessable (256 bits of entropy)
-// and single-use (consumed on callback, expires in 10 min).
-//
-// On successful callback the handler 302s the user back to
-// `return_to` with `?oauth=success&provider=...&account=...`. On
-// failure: `?oauth=error&provider=...&error=...`. Lets the UI
-// show a toast without an extra round-trip.
+// Two endpoints: one mints the authorize URL, one receives the provider's
+// redirect. Both are reachable by a browser, so both assume a hostile caller.
 
-// oauthAuthorize starts the flow. Requires bearer auth so we know
-// which tenant the resulting token belongs to.
 func (h *oauthAPI) oauthAuthorize(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	provider := r.PathValue("provider")
-	// Bind this browser-redirect flow to the caller's browser: mint a nonce,
-	// stash it on the pending state, and drop it as an httpOnly cookie the
-	// callback re-checks (RFC 6749 §10.12 anti-CSRF).
+	// Bind the flow to THIS browser: the state token alone only proves some browser
+	// started one.
 	binding, err := newOAuthBinding()
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, "mint state binding: "+err.Error())
@@ -72,9 +47,6 @@ func (h *oauthAPI) oauthAuthorize(rw http.ResponseWriter, r *http.Request, p cor
 		provider,
 		r.URL.Query().Get("account"),
 		r.URL.Query().Get("return_to"),
-		// ?integration=<label> requests only that service's scopes
-		// (incremental authorization); empty/unknown → the provider's full
-		// scope set, unchanged.
 		scopeSubsetForIntegration(provider, r.URL.Query().Get("integration")),
 		binding,
 		h.originHost(r),
@@ -87,12 +59,7 @@ func (h *oauthAPI) oauthAuthorize(rw http.ResponseWriter, r *http.Request, p cor
 	http.Redirect(rw, r, target, http.StatusFound)
 }
 
-// originHost reports the host the browser is on, when it is this deployment's
-// apex or one of its org subdomains. "" otherwise — including every
-// single-host deployment, where the callback lands back where it started and
-// none of the subdomain handling applies.
-//
-// Mirrors signInStartHost: same rule, same reason.
+// Only when it is this deployment's own host; anything else is not trusted.
 func (h *oauthAPI) originHost(r *http.Request) string {
 	if h.WildcardDomain == "" {
 		return ""
@@ -104,12 +71,8 @@ func (h *oauthAPI) originHost(r *http.Request) string {
 	return ""
 }
 
-// oauthStateCookie is the name of the browser-binding cookie for the OAuth
-// redirect flow. Scoped to the OAuth path so it isn't sent on every request.
 const oauthStateCookie = "dz_oauth_state"
 
-// newOAuthBinding returns 32 bytes of entropy hex-encoded — the value shared
-// between the pending state and the browser cookie.
 func newOAuthBinding() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -118,25 +81,13 @@ func newOAuthBinding() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// setOAuthStateCookie writes the browser-binding cookie. SameSite=Lax so it
-// rides the top-level redirect back from the provider; httpOnly so script
-// can't read it; Secure when the public origin is https.
+// SameSite=Lax so it survives the provider's cross-site redirect back.
 func (h *oauthAPI) setOAuthStateCookie(rw http.ResponseWriter, r *http.Request, binding string) {
 	http.SetCookie(rw, &http.Cookie{
 		Name:  oauthStateCookie,
 		Value: binding,
 		Path:  "/api/v1/oauth",
-		// Scoped to the whole apex when org subdomains are in play. The
-		// provider only ever redirects to the APEX callback — that is the
-		// single registered redirect_uri — so a host-only cookie set on
-		// "acme.dazyflow.app" is simply not sent there, and the callback
-		// rejected every flow started from a subdomain with "OAuth state did
-		// not match this browser session".
-		//
-		// Widening it does not weaken what the nonce is for. It proves "same
-		// browser"; it is httpOnly, path-scoped to /api/v1/oauth, single-use
-		// and ten minutes old at most. Every host it now reaches is this same
-		// application — there is no untrusted subdomain to leak it to.
+		// Scoped to the apex, or a subdomain callback cannot read it.
 		Domain:   h.cookieDomain(r),
 		MaxAge:   int(h.OAuth.state.ttl / time.Second),
 		HttpOnly: true,
@@ -145,9 +96,6 @@ func (h *oauthAPI) setOAuthStateCookie(rw http.ResponseWriter, r *http.Request, 
 	})
 }
 
-// cookieDomain returns the apex to scope the binding cookie to, or "" for a
-// host-only cookie. Only widened for a request that is genuinely on this
-// deployment's apex or one of its subdomains.
 func (h *oauthAPI) cookieDomain(r *http.Request) string {
 	if r == nil || h.originHost(r) == "" {
 		return ""
@@ -155,15 +103,11 @@ func (h *oauthAPI) cookieDomain(r *http.Request) string {
 	return h.WildcardDomain
 }
 
-// clearOAuthStateCookie expires the binding cookie after the callback
-// consumes (or rejects) it, so a stale value can't linger.
 func (h *oauthAPI) clearOAuthStateCookie(rw http.ResponseWriter, r *http.Request) {
 	http.SetCookie(rw, &http.Cookie{
-		Name:  oauthStateCookie,
-		Value: "",
-		Path:  "/api/v1/oauth",
-		// Must match the domain it was set with, or the browser expires a
-		// different cookie and leaves the real one in place.
+		Name:     oauthStateCookie,
+		Value:    "",
+		Path:     "/api/v1/oauth",
 		Domain:   h.cookieDomain(r),
 		MaxAge:   -1,
 		HttpOnly: true,
@@ -172,21 +116,7 @@ func (h *oauthAPI) clearOAuthStateCookie(rw http.ResponseWriter, r *http.Request
 	})
 }
 
-// buildAuthorizeURL is the shared path between the legacy redirect
-// endpoint and the new /me/connections/{provider}/authorize JSON
-// endpoint. Returns the provider's full authorize URL on success;
-// (HTTP status, error message) when the request is malformed or
-// OAuth is unconfigured.
-//
-// Pulled out so the JSON variant doesn't have to fake an http.Redirect
-// just to capture the target — and so the URL-building logic stays
-// single-source as more providers / extras are added.
-// scopes, when non-empty, overrides the provider's full scope list — used
-// for incremental authorization (request only one integration's scopes).
-// nil/empty falls back to the provider's complete Scopes.
-// binding, when non-empty, ties the flow to the caller's browser via the
-// dz_oauth_state cookie (the browser-redirect path sets it). Pass "" for the
-// JSON/manual path, where the authorize link is opened by a different agent.
+// Shared by both entry points, so the state and binding cannot diverge.
 func (h *oauthAPI) buildAuthorizeURL(p core.Principal, providerName, account, returnTo string, scopes []string, binding, host string) (string, int, string) {
 	if h.OAuth == nil {
 		return "", http.StatusNotImplemented, "OAuth not configured"
@@ -194,11 +124,7 @@ func (h *oauthAPI) buildAuthorizeURL(p core.Principal, providerName, account, re
 	if p.Tenant == "" {
 		return "", http.StatusForbidden, "principal has no tenant"
 	}
-	// Connecting WRITES a token to the secret store, so the base bar is
-	// secret:write — except Google, whose connections are org-shared
-	// credentials managed centrally by org admins on the /admin/google page.
-	// Connecting (or topping up) a Google account is an organization:admin
-	// action; secret:write alone isn't enough.
+	// Connecting WRITES a token, so it is gated on secret:write.
 	if providerName == "google" {
 		if !core.CanAdminOrg(p) {
 			return "", http.StatusForbidden, "connecting a Google account requires organization:admin"
@@ -223,10 +149,7 @@ func (h *oauthAPI) buildAuthorizeURL(p core.Principal, providerName, account, re
 	if returnTo == "" {
 		returnTo = "/apps"
 	}
-	// safeReturnPath rejects not just non-rooted paths but also the
-	// off-origin shapes plain HasPrefix(returnTo, "/") lets through —
-	// "//evil.com" (protocol-relative) and "/\evil.com" (which some
-	// browsers normalize to a host) — closing the open-redirect hole.
+	// Rejects protocol-relative paths too: "//evil.com" is not same-origin.
 	if !safeReturnPath(returnTo) {
 		return "", http.StatusBadRequest, "return_to must be a relative path starting with /"
 	}
@@ -264,9 +187,6 @@ func (h *oauthAPI) buildAuthorizeURL(p core.Principal, providerName, account, re
 	return target + sep + q.Encode(), http.StatusOK, ""
 }
 
-// oauthCallback receives the provider's redirect, exchanges the
-// code for tokens, stores them, and 302s the user back to
-// `return_to`. No auth — state token is the only credential.
 func (h *oauthAPI) oauthCallback(rw http.ResponseWriter, r *http.Request) {
 	if h.OAuth == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "OAuth not configured")
@@ -286,26 +206,15 @@ func (h *oauthAPI) oauthCallback(rw http.ResponseWriter, r *http.Request) {
 
 	pending, ok := h.OAuth.state.consume(state)
 	if !ok {
-		// No matching pending state — either replay, expiry, or a
-		// stray request. We don't know where to send the user, so
-		// return a plain 400 page. The UI catches users on the same
-		// origin so a redirect-to-error isn't worth the extra hop.
+		// Replay, expiry, or forgery: all answered the same way.
 		writeJSONError(rw, http.StatusBadRequest, "invalid or expired OAuth state")
 		return
 	}
 	if pending.provider != providerName {
-		// Defensive: state token bound to a different provider — should
-		// be impossible if mint/consume are matched, but if it ever
-		// happens (proxy weirdness?) we'd rather fail loudly.
 		writeJSONError(rw, http.StatusBadRequest, "state/provider mismatch")
 		return
 	}
-	// Browser-binding check: a flow started via the redirect path carries a
-	// binding nonce that must match the dz_oauth_state cookie in THIS browser.
-	// This stops an attacker from completing a flow they started and injecting
-	// their provider account into the victim's org. Flows started via the
-	// JSON/manual path have no binding (the link is opened elsewhere) and skip
-	// the check, relying on the unguessable single-use state.
+	// A flow started via the redirect path must finish in the same browser.
 	if pending.binding != "" {
 		c, cerr := r.Cookie(oauthStateCookie)
 		if cerr != nil || subtle.ConstantTimeCompare([]byte(c.Value), []byte(pending.binding)) != 1 {
@@ -317,9 +226,6 @@ func (h *oauthAPI) oauthCallback(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	if providerErr != "" {
-		// User declined consent, scope refused, etc. Bounce back to
-		// the UI with the error in the query so the UI can show a
-		// toast.
 		h.redirectBack(rw, r, pending, providerName, "error", "provider returned error: "+providerErr)
 		return
 	}
@@ -340,17 +246,7 @@ func (h *oauthAPI) oauthCallback(rw http.ResponseWriter, r *http.Request) {
 	h.redirectBack(rw, r, pending, providerName, "success", "")
 }
 
-// redirectBack sends the browser to return_to, on the host the flow STARTED on.
-//
-// The provider redirects to the apex callback, so by the time we are here the
-// browser is on "dazyflow.app" whatever it was on before. Returning a
-// path-only redirect would leave a user who began on "acme.dazyflow.app"
-// sitting on the apex — where their host-only session cookie does not exist, so
-// the connection they just authorized appears to have signed them out.
-//
-// The host is re-validated rather than trusted: it was checked when the state
-// was minted, and it is checked again here, so a state row that somehow carried
-// a foreign host cannot turn the callback into an open redirect.
+// On the host the flow STARTED on, so a subdomain user lands back there.
 func (h *oauthAPI) redirectBack(rw http.ResponseWriter, r *http.Request, pending pendingOAuth, providerName, status, errMsg string) {
 	target := pending.host
 	if target != "" {
@@ -369,14 +265,8 @@ func (h *oauthAPI) redirectBack(rw http.ResponseWriter, r *http.Request, pending
 	redirectWithStatus(rw, r, pending.returnTo, providerName, pending.account, status, errMsg, scheme, target)
 }
 
-// redirectWithStatus 302s the user back to return_to with
-// `?oauth=success|error&provider=…&account=…[&error=…]` so the UI
-// can render a toast without polling.
 func redirectWithStatus(rw http.ResponseWriter, r *http.Request, returnTo, provider, account, status, errMsg, scheme, host string) {
-	// Defense in depth: returnTo was already validated when the state was
-	// minted, but re-check here before url.Parse/http.Redirect so a value
-	// that ever slips through (or a future caller) can't turn the callback
-	// into an open redirect. safeReturnPath rejects "//host" and "/\host".
+	// Already validated at mint time; re-checked because this is the redirect.
 	if !safeReturnPath(returnTo) {
 		returnTo = "/apps"
 	}
@@ -390,15 +280,12 @@ func redirectWithStatus(rw http.ResponseWriter, r *http.Request, returnTo, provi
 	q.Set("provider", provider)
 	q.Set("account", account)
 	if errMsg != "" {
-		// Truncate so a long error message doesn't blow up the URL.
 		if len(errMsg) > 256 {
 			errMsg = errMsg[:256] + "…"
 		}
 		q.Set("error", errMsg)
 	}
 	u.RawQuery = q.Encode()
-	// host is empty for every single-host deployment and whenever the browser
-	// is already where it started, which keeps the redirect path-relative.
 	if host != "" {
 		u.Scheme = scheme
 		u.Host = host
@@ -406,9 +293,6 @@ func redirectWithStatus(rw http.ResponseWriter, r *http.Request, returnTo, provi
 	http.Redirect(rw, r, u.String(), http.StatusFound)
 }
 
-// oauthListProviders is the UI's hook for "what can I connect to?".
-// Returns the registered provider names plus, for each, whether
-// the tenant currently has a stored token under any account.
 func (h *oauthAPI) oauthListProviders(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.OAuth == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "OAuth not configured")
@@ -420,9 +304,6 @@ func (h *oauthAPI) oauthListProviders(rw http.ResponseWriter, r *http.Request, p
 	}
 	names := h.OAuth.Providers()
 
-	// For each provider, find any stored accounts. Reuses the same
-	// oauth.<provider>.<account> prefix scan as connectedAccounts (one
-	// List() call) so the two surfaces can't drift.
 	connected := h.connectedAccountsByProvider(r.Context(), p.Tenant)
 	out := make([]map[string]any, 0, len(names))
 	for _, n := range names {
@@ -430,33 +311,15 @@ func (h *oauthAPI) oauthListProviders(rw http.ResponseWriter, r *http.Request, p
 			"name":     n,
 			"accounts": connected[n], // empty slice = not connected
 		}
-		// stale_accounts: accounts whose stored token's granted scope
-		// no longer covers what the current provider config requires
-		// (typical cause: we added a new scope after the user
-		// connected, so the access token can't call the new endpoint).
-		// The frontend renders a "Reconnect required" pill on these.
-		// Skip the all-scopes staleness check for providers that authorize
-		// incrementally (Google): an account connected for one service
-		// legitimately lacks the others' scopes, so comparing against the
-		// full set would flag every account as needing reconnection. Those
-		// scopes are topped up per-integration at connect time instead.
+		// A stored token whose granted scope no longer covers what the provider needs.
 		if provider, ok := h.OAuth.Provider(n); ok && len(provider.Scopes) > 0 && !providerUsesIncrementalScopes(n) {
 			stale := h.staleAccounts(r.Context(), p.Tenant, n, connected[n], provider.Scopes)
 			if len(stale) > 0 {
 				row["stale_accounts"] = stale
 			}
 		}
-		// Check before reporting, rather than waiting for the next run to
-		// discover it. Only accounts whose token has already expired cost a
-		// round-trip, and that refresh is work the next run would do anyway.
+		// Checked here so the user is told before a run fails.
 		h.OAuth.RefreshStaleAccounts(r.Context(), p.Tenant, n, connected[n])
-		// needs_reconnect: accounts whose grant is DEAD — the refresh
-		// exchange was definitively rejected (access revoked, password
-		// changed, grant expired). Distinct from stale_accounts, which is
-		// about scopes we have since added. This is the one that matters for
-		// a provider authorized incrementally (Google): it is skipped by the
-		// scope check above, so without this a dead Google account reads as
-		// perfectly connected while every run 401s.
 		if dead := h.OAuth.ReconnectNeeded(r.Context(), p.Tenant, n, connected[n]); len(dead) > 0 {
 			row["needs_reconnect"] = dead
 		}
@@ -465,9 +328,6 @@ func (h *oauthAPI) oauthListProviders(rw http.ResponseWriter, r *http.Request, p
 	writeJSON(rw, http.StatusOK, map[string]any{"providers": out})
 }
 
-// connectedAccounts returns the account names this tenant has a stored
-// oauth.<provider>.<account> token for. One List() call + prefix match,
-// shared by oauthListProviders and oauthListAccounts.
 func (h *oauthAPI) connectedAccounts(ctx context.Context, tenant, provider string) []string {
 	out := h.connectedAccountsByProvider(ctx, tenant)[provider]
 	if out == nil {
@@ -477,10 +337,6 @@ func (h *oauthAPI) connectedAccounts(ctx context.Context, tenant, provider strin
 	return out
 }
 
-// connectedAccountsByProvider lists every stored OAuth account, grouped by
-// provider, from the tenant's oauth.<provider>.<account> secret names. One
-// List() call serves both the all-providers listing (oauthListProviders) and
-// the per-provider lookup (connectedAccounts), so the prefix-scan lives once.
 func (h *oauthAPI) connectedAccountsByProvider(ctx context.Context, tenant string) map[string][]string {
 	out := map[string][]string{}
 	if h.EncryptedSecrets == nil {
@@ -506,22 +362,6 @@ func (h *oauthAPI) connectedAccountsByProvider(ctx context.Context, tenant strin
 	return out
 }
 
-// oauthListAccounts is GET /api/v1/oauth/{provider}/accounts — the data
-// behind the org-admin /admin/google page. For each connected account it
-// reports the services its current grant covers, so an admin can see at a
-// glance whether (say) Forms is authorized or a top-up/new connection is
-// needed. Org-admin only: Google connections are org-shared credentials.
-//
-// Response:
-//
-//	{
-//	  "provider": "google",
-//	  "services": ["Gmail","Google Forms","Google Sheets"],
-//	  "accounts": [
-//	    {"account":"default","coverage":{"Gmail":true,"Google Forms":false,...},
-//	     "scopes":["..."]}
-//	  ]
-//	}
 func (h *oauthAPI) oauthListAccounts(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.OAuth == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "oauth_not_configured", "OAuth not configured")
@@ -563,9 +403,7 @@ func (h *oauthAPI) oauthListAccounts(rw http.ResponseWriter, r *http.Request, p 
 		}
 		coverage := make(map[string]bool, len(services))
 		for _, svc := range services {
-			// An empty/unknown grant covers nothing; grantedCovers over an
-			// empty required set would be vacuously true, so guard on the
-			// granted set existing first.
+			// An empty grant covers nothing, so it must not read as "covers everything".
 			coverage[svc] = grantedSet != nil && grantedCovers(grantedSet, groups[svc])
 		}
 		accounts = append(accounts, map[string]any{
@@ -581,12 +419,6 @@ func (h *oauthAPI) oauthListAccounts(rw http.ResponseWriter, r *http.Request, p 
 	})
 }
 
-// staleAccounts compares each connected account's stored token scope
-// against the current required scope set and returns the names whose
-// grant is missing at least one required scope. A token whose scope
-// field is empty (some providers don't echo it on success) is treated
-// as fresh — we have no signal to declare it stale and false positives
-// would push users into a needless reauthorize loop.
 func (h *oauthAPI) staleAccounts(ctx context.Context, tenant, provider string, accounts, required []string) []string {
 	if h.OAuth == nil || tenant == "" {
 		return nil
@@ -605,12 +437,7 @@ func (h *oauthAPI) staleAccounts(ctx context.Context, tenant, provider string, a
 	return stale
 }
 
-// splitScopes accepts the wire formats different providers use —
-// Google uses spaces, GitHub and Slack use commas, and a few clients
-// mix both. Splitting on either gives a tolerant set; lowercase
-// because scope strings are case-insensitive in practice (Google
-// returns the canonical URL form, which is mixed-case but identity-
-// compared in real callers).
+// Providers disagree on the separator, so accept both.
 func splitScopes(s string) map[string]struct{} {
 	set := map[string]struct{}{}
 	for _, raw := range strings.FieldsFunc(s, func(r rune) bool {
@@ -624,9 +451,6 @@ func splitScopes(s string) map[string]struct{} {
 	return set
 }
 
-// grantedCovers reports whether every required scope is present in
-// granted. A missing scope (in granted) is the signal — extras in
-// granted are fine.
 func grantedCovers(granted map[string]struct{}, required []string) bool {
 	for _, req := range required {
 		if _, ok := granted[strings.ToLower(req)]; !ok {

@@ -38,11 +38,7 @@ type params struct {
 	replicas, workers, conns int
 	rate, seconds            int
 	nodes, stepMS, tenants   int
-	// hogRuns is a burst one extra org dumps on the queue at the start — the
-	// fairness question: how long does everyone else wait behind it? Each of
-	// its runs is hogWidth INDEPENDENT steps, all queued at once; a chain
-	// meters itself and hogs nothing.
-	hogRuns, hogWidth int
+	hogRuns, hogWidth        int
 }
 
 func load() params {
@@ -108,8 +104,6 @@ func registerStressStep() {
 	})
 }
 
-// replica is one simulated dzd: its own pool, stores and worker pool, so the
-// contention and the pool statistics are per-process exactly as in a fleet.
 type replica struct {
 	id   int
 	pool *pgxpool.Pool
@@ -137,8 +131,6 @@ func newReplica(t *testing.T, ctx context.Context, dsn string, id int, p params,
 	if err != nil {
 		t.Fatal(err)
 	}
-	// STRESS_BURST_SPACING overrides the queue's burst spacing ("0" for plain
-	// FIFO), to see what fairness costs and what it buys.
 	if v := os.Getenv("STRESS_BURST_SPACING"); v != "" {
 		d, perr := time.ParseDuration(v)
 		if perr != nil {
@@ -146,9 +138,6 @@ func newReplica(t *testing.T, ctx context.Context, dsn string, id int, p params,
 		}
 		jobs.SetBurstSpacing(d)
 	}
-	// STRESS_BUS=memory takes the event bus off the database entirely, to see
-	// what it is costing. Not a supported deployment — a memory bus reaches no
-	// other replica — purely an attribution knob.
 	var bus daemon.Bus
 	if os.Getenv("STRESS_BUS") == "memory" {
 		bus = daemon.NewMemoryBus()
@@ -183,8 +172,6 @@ func newReplica(t *testing.T, ctx context.Context, dsn string, id int, p params,
 	return r
 }
 
-// hogGraph is one org fanning out: hogWidth steps with no wires between them,
-// so a single submit puts all of them on the queue at once.
 func hogGraph(p params, tenant string) core.Graph {
 	g := core.Graph{ID: "hog", Tenant: tenant, Workspace: "main"}
 	for i := range p.hogWidth {
@@ -237,9 +224,6 @@ func TestStressQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// STRESS_TRACE=1 counts the statements the run issues, so the round trips a
-	// step costs can be attributed rather than estimated. It adds a little
-	// overhead, so it is off unless asked for.
 	var trace *stmtCounter
 	if os.Getenv("STRESS_TRACE") != "" {
 		trace = newStmtCounter()
@@ -270,9 +254,6 @@ func TestStressQueue(t *testing.T) {
 		_ = admin.QueryRow(ctx, `SELECT pg_total_relation_size('jobs')`).Scan(&n)
 		return n
 	}
-	// Commits per second is what says whether the fleet or the DATABASE is the
-	// ceiling: when adding workers stops adding throughput, this is the number
-	// that has stopped moving.
 	commits := func() int64 {
 		var n int64
 		_ = admin.QueryRow(ctx,
@@ -329,9 +310,6 @@ func TestStressQueue(t *testing.T) {
 		}()
 	}
 
-	// The hog: one org submits its whole burst at once, alongside everyone
-	// else's steady trickle. Its steps are older than theirs from then on, so a
-	// FIFO queue serves the burst first and the trickle waits behind it.
 	const hogTenant = "hog"
 	if p.hogRuns > 0 {
 		hogRuns := make(chan int, p.hogRuns)
@@ -353,13 +331,11 @@ func TestStressQueue(t *testing.T) {
 		}
 	}
 
-	// Sample while the load runs.
 	type sample struct {
-		at        time.Time
-		done      int
-		queued    int
-		oldestSec float64
-		// The oldest queued step per org, split hog / everyone else.
+		at                  time.Time
+		done                int
+		queued              int
+		oldestSec           float64
 		hogWait, othersWait float64
 	}
 	var samples []sample
@@ -404,7 +380,6 @@ func TestStressQueue(t *testing.T) {
 	close(stop)
 	wg.Wait()
 
-	// Report.
 	if len(samples) < 2 {
 		t.Fatal("not enough samples; raise STRESS_SECONDS")
 	}
@@ -412,7 +387,6 @@ func TestStressQueue(t *testing.T) {
 	span := last.at.Sub(first.at).Seconds()
 	stepsPerSec := float64(last.done-first.done) / span
 	targetSteps := float64(p.rate * p.nodes)
-	// What was really put on the queue, as opposed to what was asked for.
 	offeredSteps := float64(submitted.Load()*int64(p.nodes)) / float64(p.seconds)
 
 	var maxOldest, sumOldest float64

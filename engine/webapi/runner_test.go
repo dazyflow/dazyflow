@@ -18,7 +18,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/webapi"
 )
 
-// seenDispatch is what the fake dispatcher recorded.
 type seenDispatch struct {
 	tenant string
 	tags   []string
@@ -28,9 +27,6 @@ type seenDispatch struct {
 	called bool
 }
 
-// fakeDispatcher installs a dispatcher that records the task and answers with
-// what the machine "printed". Cleared on cleanup — SetDispatcher is
-// process-wide, so no test here may run in parallel with another.
 func fakeDispatcher(t *testing.T, reply webapi.RunnerResult, err error) *seenDispatch {
 	t.Helper()
 	var seen seenDispatch
@@ -51,9 +47,6 @@ func (f dispatchFunc) Dispatch(ctx context.Context, req webapi.RunnerRequest, on
 	return f(ctx, req, onProgress)
 }
 
-// runnerDescriptor is ordersDescriptor pointed at a private address and set to
-// be reached through a runner — the case the whole feature exists for, since the
-// daemon refuses to dial that host at all.
 func runnerDescriptor() webapi.Descriptor {
 	d := ordersDescriptor()
 	d.BaseURL = "https://orders.internal.acme.example"
@@ -61,7 +54,6 @@ func runnerDescriptor() webapi.Descriptor {
 	return d
 }
 
-// replyJSON builds what the script prints on a successful call.
 func replyJSON(t *testing.T, status int, contentType, body string) webapi.RunnerResult {
 	t.Helper()
 	payload := map[string]any{
@@ -105,8 +97,6 @@ func TestRunner_QueuesTheRequestAndReadsTheAnswerBack(t *testing.T) {
 		t.Errorf("tags = %v", seen.tags)
 	}
 	if seen.shell != "python" {
-		// The runner agent IS python3, so this is the one interpreter
-		// guaranteed to exist on a machine running one.
 		t.Errorf("shell = %q, want python", seen.shell)
 	}
 
@@ -135,10 +125,6 @@ func TestRunner_ScriptCarriesNoCredentialAndTheEnvelopeDoes(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	// runner_tasks stores `script` and `stdin` in separate columns and both are
-	// read while debugging a queue. Keeping the script constant means the token
-	// has exactly ONE place to be, which is the point of putting the whole
-	// envelope on stdin rather than templating the request into the program.
 	if strings.Contains(seen.script, "tok-secret") {
 		t.Error("the credential reached the script text")
 	}
@@ -167,8 +153,6 @@ func TestRunner_ScriptCarriesNoCredentialAndTheEnvelopeDoes(t *testing.T) {
 	if env.Headers["Authorization"] != "Bearer tok-secret" {
 		t.Errorf("Authorization = %q", env.Headers["Authorization"])
 	}
-	// The response cap does not survive on its own: the guarded Doer is not in
-	// this path, so the script has to re-impose it.
 	if env.MaxBytes != webapi.DefaultMaxBodyBytes {
 		t.Errorf("max_bytes = %d, want the descriptor's cap", env.MaxBytes)
 	}
@@ -224,13 +208,10 @@ func TestRunner_FailuresAreReadable(t *testing.T) {
 		err   error
 		want  string
 	}{{
-		// The dispatcher's own message already names the machine.
 		name: "nothing matched the tags",
 		err:  errors.New("no runner carries all of: linux, dmz"),
 		want: "no runner carries",
 	}, {
-		// Overwhelmingly a runner started with --allow that forbids python;
-		// stderr is the only thing that explains it, so it is quoted.
 		name:  "the interpreter never ran",
 		reply: webapi.RunnerResult{ExitCode: 1, Stderr: `this runner is not allowed to run scripts with "python"`},
 		want:  "not allowed to run scripts",
@@ -272,8 +253,6 @@ func TestRunner_ServiceSaidNoIsAnAnswerNotATransportFailure(t *testing.T) {
 	cat := mustRegister(t, runnerDescriptor())
 	tr := transport(t, cat, "acme", "api:orders:get_order")
 
-	// expect_status widens what counts as success, exactly as it does for a
-	// direct call — so a 404 reached through a runner can be an answer too.
 	res, err := tr.Execute(context.Background(), core.Job{
 		ID:     "j1",
 		Params: map[string]any{"order_id": "o-1", "token": "t", "expect_status": []any{200, 404}},
@@ -311,7 +290,7 @@ func TestRunnerTags_NormalizedAndBounded(t *testing.T) {
 	}
 }
 
-// TestRunnerScript_ActuallyPerformsTheCall runs the REAL generated script under
+// Runs the REAL generated script under
 // the real interpreter against a real server.
 //
 // Every other test here fakes the dispatcher, which proves the Go half and
@@ -340,8 +319,6 @@ func TestRunnerScript_ActuallyPerformsTheCall(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Drive the script the way the agent does: the constant on disk, the
-	// envelope on stdin.
 	cat := mustRegister(t, func() webapi.Descriptor {
 		d := runnerDescriptor()
 		d.BaseURL = srv.URL

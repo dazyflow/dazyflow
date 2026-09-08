@@ -18,8 +18,6 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// fakeWebhook captures everything a failure-notify POST sends so
-// the tests can assert on the payload shape and headers.
 type fakeWebhook struct {
 	server   *httptest.Server
 	mu       sync.Mutex
@@ -67,23 +65,18 @@ func (fw *fakeWebhook) wait(t *testing.T, n int, timeout time.Duration) {
 	t.Fatalf("waited %s for %d POSTs, got %d", timeout, n, got)
 }
 
-// newFailureNotifyHarness wires a minimal Service capable of
-// running the notifier — just Jobs + Bus, no engine/workers.
-// Tests publish synthetic bus events to drive the notifier.
 func newFailureNotifyHarness(t *testing.T) *Service {
 	t.Helper()
 	h := newGatewayHarness(t)
-	// Plug in our own HTTP client + base URL so the notifier POSTs
-	// to the fakeWebhook server rather than the wild internet.
 	h.svc.PublicBaseURL = "https://app.example.com"
 	return h.svc
 }
 
-// TestFailureNotify_BlocksPrivateWebhook pins the SSRF guard: with private
-// egress off (the production default), a webhook pointed at a loopback/private
-// address must NOT be dialed — so a tenant can't use a failure webhook to probe
-// the host's internal network. The fake server is on loopback, so an unblocked
-// notifier would POST to it; the guard must stop that.
+// Pins the SSRF guard: with private egress off (the production default), a
+// webhook pointed at a loopback/private address must NOT be dialed — so a
+// tenant can't use a failure webhook to probe the host's internal network. The
+// fake server is on loopback, so an unblocked notifier would POST to it; the
+// guard must stop that.
 func TestFailureNotify_BlocksPrivateWebhook(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(false)      // production default
 	defer hfnet.SetAllowPrivateEgress(true) // restore the package default
@@ -136,8 +129,6 @@ func TestFailureNotify_FiresOnFailedTerminal(t *testing.T) {
 	if payload.ErrorCode != "timeout" || payload.ErrorMessage != "node 'enrich' exceeded 30s" {
 		t.Errorf("missing error fields: %+v", payload)
 	}
-	// The link carries the org, or a recipient whose browser last used a
-	// different org opens it and is told the run doesn't exist.
 	if payload.RunURL != "https://app.example.com/runs/run-1?org=t" {
 		t.Errorf("run_url = %q", payload.RunURL)
 	}
@@ -161,13 +152,10 @@ func TestFailureNotify_DoesNotFireOnSuccess(t *testing.T) {
 }
 
 func TestFailureNotify_NoConfigSendsNothing(t *testing.T) {
-	// No FailureNotify and no mailer/owner: the sweep claims the run, finds
-	// nothing to send, and moves on.
 	fw := newFakeWebhook(t)
 	svc := newFailureNotifyHarness(t)
 	graph := core.Graph{
 		ID: "g", Tenant: "t", Workspace: "ws",
-		// FailureNotify: intentionally nil
 	}
 	terminateAndSweep(t, svc, graph, "any-run", core.JobStatusFailed,
 		&core.JobError{Code: "boom"})
@@ -195,9 +183,6 @@ func TestFailureNotify_EmptyWebhookSendsNothing(t *testing.T) {
 }
 
 func TestFailureNotify_FailedNodePopulatedFromStore(t *testing.T) {
-	// TerminalEvent carries the graph-level error but no failed
-	// node ID. The notifier should query ListNodeRecords for the
-	// failed node so the payload includes failed_node.
 	fw := newFakeWebhook(t)
 	svc := newFailureNotifyHarness(t)
 	graph := core.Graph{
@@ -205,7 +190,6 @@ func TestFailureNotify_FailedNodePopulatedFromStore(t *testing.T) {
 		FailureNotify: &core.FailureNotify{Webhook: fw.server.URL},
 	}
 	runID := "run-with-failed-node"
-	// Pre-seed a failed node record so the sweep's lookup finds it.
 	_ = svc.Jobs.Enqueue(t.Context(), core.JobRecord{
 		ID: NodeJobID(runID, "enrich"), Kind: core.JobKindNode,
 		GraphRunID: runID, GraphID: "g", NodeID: "enrich",
@@ -266,9 +250,6 @@ func TestFailureNotify_NonSuccessWebhookDoesNotPanic(t *testing.T) {
 	fw.wait(t, 1, 2*time.Second) // verifies the POST happened despite 500
 }
 
-// terminalToPayload unit test — exercises the helper directly so a
-// regression in field mapping shows up here rather than only
-// through the full notifier round trip.
 func TestFailureNotify_TerminalToPayloadShape(t *testing.T) {
 	graph := core.Graph{ID: "g", Tenant: "acme", Workspace: "main"}
 	got := terminalToPayload(graph, "r1", &TerminalEvent{
@@ -304,8 +285,6 @@ func TestBuildRunURL(t *testing.T) {
 		// extra params onto the link.
 		{"tenant escaped", "https://app.example.com", "a&b=c d", "r1",
 			"https://app.example.com/runs/r1?org=a%26b%3Dc+d"},
-		// Single-tenant deployments carry no tenant on the graph; the bare link
-		// is still correct there.
 		{"no tenant", "https://app.example.com", "", "r1",
 			"https://app.example.com/runs/r1"},
 		{"no base", "", "acme", "r1", ""},
@@ -332,9 +311,6 @@ func TestFailureNotify_NoPublicBaseURLOmitsRunURL(t *testing.T) {
 	}
 }
 
-// Smoke check that the package's HTTP client default works
-// against a real net.Dial — guards against an accidental nil
-// client breaking production while keeping unit tests fast.
 func TestFailureNotify_DefaultClientPostsRealJSON(t *testing.T) {
 	var got bytes.Buffer
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

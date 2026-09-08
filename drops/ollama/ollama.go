@@ -44,28 +44,12 @@ import (
 )
 
 const (
-	// defaultBase is where `ollama serve` listens out of the box. It is a
-	// default rather than a requirement — the connection's Server URL field
-	// points at a remote instance just as well.
-	defaultBase = "http://localhost:11434"
-	// defaultModel is a guess, not a catalog. llama3.1 is picked because it is
-	// widely pulled AND supports tool calls, which the Extract fields and
-	// Classify steps need; a text-only model runs the other three steps fine.
+	defaultBase  = "http://localhost:11434"
 	defaultModel = "llama3.1"
 )
 
 type provider struct{}
 
-// Call sends one Chat Completions request to Ollama's OpenAI-compatible
-// endpoint and normalizes the response.
-//
-// Tool handling is where this diverges from drops/openai. Ollama accepts
-// `tools` and returns `tool_calls` for models that implement them, but honors
-// a forced `tool_choice` inconsistently across models — so a model may answer
-// a forced tool call with ordinary prose containing the JSON instead. We ask
-// for the tool the same way, then fall back to reading JSON out of the message
-// content, which turns "the model ignored tool_choice" from a failed step into
-// a working one. A model with no tool support at all still fails, and says so.
 func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (llmtask.Result, *core.JobError) {
 	model := req.Model
 	if model == "" {
@@ -111,9 +95,6 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 	raw, _ := json.Marshal(body)
 
 	headers := map[string]string{"content-type": "application/json"}
-	// Ollama itself ignores the header; a reverse proxy in front of a shared
-	// instance may not. Sent only when the operator actually set a key, so the
-	// common keyless case does not present an empty bearer.
 	if apiKey != "" {
 		headers["authorization"] = "Bearer " + apiKey
 	}
@@ -132,7 +113,6 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 	if req.Tool != nil {
 		res.Tool = chatcompletion.ToolArgs(parsed)
 		if res.Tool == nil {
-			// The forced call was ignored — try the prose.
 			res.Tool = jsonFromText(res.Text)
 		}
 		if res.Tool == nil {
@@ -157,29 +137,18 @@ func init() {
 		Name:         "ollama",
 		Integration:  "Ollama",
 		DefaultModel: defaultModel,
-		// No Models: there is no catalog to compile in, because it is whatever
-		// this operator pulled. ListModels asks the server instead, so a
-		// reachable Ollama gets a real picker of exactly what it can run, and
-		// an unreachable one falls back to free text rather than to a guess.
-		ListModels: listModels,
-		Provider:   provider{},
+		ListModels:   listModels,
+		Provider:     provider{},
 	})
 	llmtask.RegisterAll(llmtask.Config{
-		Provider:    provider{},
-		FileSupport: llmtask.FilesImagesOnly,
-		Integration: "Ollama",
-		// Ollama's own llama mark, traced from the logo they serve at
-		// ollama.com/public/ollama.png — see web/src/components/brand/OllamaIcon.tsx.
-		// Color is the slate the static docs copy of the mark is baked in; the
-		// in-app component inherits the text colour instead, so it stays legible
-		// on both themes.
-		Icon:         "ollama",
-		Color:        "#4b5563",
-		DefaultModel: defaultModel,
-		AskID:        "ollama",
-		TaskIDPrefix: "ollama",
-		// Keyless by default, and the host lives on the connection: both are
-		// the point of a local runtime. See the llmtask.Config docs.
+		Provider:           provider{},
+		FileSupport:        llmtask.FilesImagesOnly,
+		Integration:        "Ollama",
+		Icon:               "ollama",
+		Color:              "#4b5563",
+		DefaultModel:       defaultModel,
+		AskID:              "ollama",
+		TaskIDPrefix:       "ollama",
 		KeyOptional:        true,
 		KeyPlaceholder:     "only if your instance is behind a proxy",
 		BaseURLLabel:       "Server URL",
@@ -189,10 +158,6 @@ func init() {
 	})
 }
 
-// verifyReachable is the connection test. For a cloud vendor this asks "is
-// this key valid"; for Ollama there is usually no key, so it asks the question
-// that actually fails in practice — can the daemon reach this server at all,
-// and does it have any models pulled. GET /api/tags is free and read-only.
 func verifyReachable(ctx context.Context, apiKey, base string) error {
 	headers := map[string]string{}
 	if apiKey != "" {
@@ -214,8 +179,6 @@ func verifyReachable(ctx context.Context, apiKey, base string) error {
 	return nil
 }
 
-// modelCount reads the length of /api/tags' models array. -1 when the body is
-// not the shape we expect, which the caller treats as "don't complain".
 func modelCount(body []byte) int {
 	var tags struct {
 		Models []json.RawMessage `json:"models"`
@@ -249,7 +212,6 @@ func jsonFromText(text string) map[string]any {
 		case c == '"':
 			inStr = !inStr
 		case inStr:
-			// nothing: braces inside a string are not structure
 		case c == '{':
 			depth++
 		case c == '}':
@@ -266,10 +228,6 @@ func jsonFromText(text string) map[string]any {
 	return nil
 }
 
-// ollamaError pulls the message out of Ollama's error body ({"error":"..."}),
-// falling back to the raw body. Note the shape differs from OpenAI's nested
-// {"error":{"message":...}} even on the compatibility endpoint, so both are
-// tried before giving up.
 func ollamaError(body []byte) string {
 	var flat struct {
 		Error string `json:"error"`
@@ -325,8 +283,6 @@ func listModels(ctx context.Context, apiKey, base string) ([]llm.ModelOption, er
 		if id == "" {
 			continue
 		}
-		// The tag IS the name here — "qwen3-coder:30b" is what the operator
-		// typed to pull it and what they will recognise. Nothing to prettify.
 		out = append(out, llm.ModelOption{ID: id, Label: id})
 	}
 	if len(out) == 0 {

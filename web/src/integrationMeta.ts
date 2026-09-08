@@ -20,32 +20,16 @@
 
 export type IntegrationMeta = {
   name: string;
-  // Friendly product description. What the user can build, in
-  // their language. Avoid protocol names ("OAuth", "HMAC"),
-  // implementation details ("pgxpool", "secret_set"), and env-var
-  // references — those belong in technical_notes.
   description: string;
-  // Optional developer-flavored detail (auth scheme, env vars,
-  // API version pinning, pool config). Rendered under a
-  // "Technical details" disclosure on the detail page.
   technical_notes?: string;
-  // External docs URL. Surfaces as a link in the hero.
   docs_url?: string;
-  // brand_logo overrides the per-drop brand_logo fallback for the
-  // hero header. Useful when the integration ships multiple drops
-  // but you want one canonical asset at a larger size.
   brand_logo?: string;
 };
 
-// integrationSlug normalises an Integration field value into a URL
-// slug. Same rule used in nav links and route params so the two
-// sides agree without import gymnastics.
 export function integrationSlug(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
-// Display name fallback when the slug isn't curated — turns
-// "google-sheets" back into "Google Sheets" for the page title.
 export function integrationNameFromSlug(slug: string): string {
   return slug
     .split("-")
@@ -53,11 +37,6 @@ export function integrationNameFromSlug(slug: string): string {
     .join(" ");
 }
 
-// displayNameForIntegrationSlug prefers the curated name from
-// integrationMeta when one exists ("GitHub" vs the simplistic
-// title-casing of "Github"). Falls through to the slug-derived
-// title-case for any slug that hasn't been curated yet. Use this
-// anywhere user-facing copy names an integration by slug.
 export function displayNameForIntegrationSlug(slug: string): string {
   const meta = integrationMeta[slug];
   if (meta?.name) return meta.name;
@@ -119,17 +98,11 @@ const integrationToProvider: Record<string, string> = {
   spotify: "spotify",
 };
 
-// oauthProviderForIntegration returns the OAuth provider name for a
-// Manifest.integration value, or null when that integration needs no
-// connected account.
 export function oauthProviderForIntegration(integration?: string): string | null {
   if (!integration) return null;
   return integrationToProvider[integrationSlug(integration)] ?? null;
 }
 
-// oauthProviderDisplay resolves a provider name to its display meta,
-// falling back to a title-cased name for any provider the daemon
-// reports that isn't curated here yet.
 export function oauthProviderDisplay(name: string): OAuthProviderMeta {
   return (
     oauthProviderMeta[name] ?? {
@@ -138,7 +111,6 @@ export function oauthProviderDisplay(name: string): OAuthProviderMeta {
   );
 }
 
-// Curated metadata. Add new integrations here when they ship.
 export const integrationMeta: Record<string, IntegrationMeta> = {
   slack: {
     name: "Slack",

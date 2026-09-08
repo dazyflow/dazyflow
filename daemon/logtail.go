@@ -21,9 +21,7 @@ import (
 // is installed onward. The ring buffer gives a new viewer recent history;
 // subscribers get every line live.
 type LogTail struct {
-	mu sync.Mutex
-	// buf is a circular buffer of the most recent `cap(buf)` lines. start
-	// is the index of the oldest retained line; count is how many are live.
+	mu      sync.Mutex
 	buf     []string
 	start   int
 	count   int
@@ -37,8 +35,6 @@ type LogTail struct {
 // line and reset.
 const maxPartial = 64 * 1024
 
-// NewLogTail returns a LogTail that retains the last `size` log lines for
-// backfill (default 2000 when size <= 0).
 func NewLogTail(size int) *LogTail {
 	if size <= 0 {
 		size = 2000
@@ -61,16 +57,12 @@ func (lt *LogTail) Write(p []byte) (int, error) {
 			break
 		}
 		lt.emitLocked(string(lt.partial[:i]))
-		// Reslice past the newline; periodically compact so the backing
-		// array doesn't grow unbounded across many partial writes.
 		lt.partial = lt.partial[i+1:]
 	}
 	if len(lt.partial) > maxPartial {
 		lt.emitLocked(string(lt.partial))
 		lt.partial = lt.partial[:0]
 	}
-	// Compact the leftover tail into a fresh small slice so we don't pin a
-	// large backing array between writes.
 	if len(lt.partial) == 0 && cap(lt.partial) > maxPartial {
 		lt.partial = nil
 	}
@@ -78,14 +70,12 @@ func (lt *LogTail) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// emitLocked stores a line in the ring and fans it out. Caller holds mu.
 func (lt *LogTail) emitLocked(line string) {
 	idx := (lt.start + lt.count) % len(lt.buf)
 	if lt.count < len(lt.buf) {
 		lt.buf[idx] = line
 		lt.count++
 	} else {
-		// Full: overwrite the oldest and advance start.
 		lt.buf[lt.start] = line
 		lt.start = (lt.start + 1) % len(lt.buf)
 	}
@@ -93,15 +83,10 @@ func (lt *LogTail) emitLocked(line string) {
 		select {
 		case ch <- line:
 		default:
-			// Subscriber is behind its buffer — drop this line for it
-			// rather than block every other writer/subscriber. A live
-			// tail tolerates an occasional gap.
 		}
 	}
 }
 
-// Snapshot returns the retained lines oldest-first. When max > 0 only the
-// most recent max lines are returned.
 func (lt *LogTail) Snapshot(max int) []string {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()

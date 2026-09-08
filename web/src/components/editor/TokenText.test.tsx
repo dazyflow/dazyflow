@@ -28,7 +28,6 @@ describe("TokenText", () => {
     expect(container.textContent).not.toContain("${");
   });
 
-  // The regression this exists for.
   it("chips a reference embedded in text, keeping the text", () => {
     const { container } = render(
       <TokenText value="Deadline: ${upstream.date_1.out}" labels={labels} />,
@@ -103,8 +102,6 @@ describe("after hasToken has run", () => {
   });
 
   it("survives hasToken being asked about several values first", () => {
-    // A card asks per field, so by the time the third one tokenizes the shared
-    // state had been advanced repeatedly.
     for (const v of ["${a.b}", "${c.d}", "prose ${e.f} more"]) hasToken(v);
     expect(tokenizeValue("${trigger.body.id}").filter((s) => s.kind === "token")).toHaveLength(1);
   });

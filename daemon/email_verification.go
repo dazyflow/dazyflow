@@ -35,14 +35,10 @@ import (
 
 const verifyTokenTTL = 48 * time.Hour
 
-// verificationActive reports whether this deployment can run the flow.
 func (h *authAPI) verificationActive() bool {
 	return h.svc.Mailer != nil && h.svc.PublicBaseURL != "" && h.Users != nil
 }
 
-// sendVerificationEmail mints a fresh token onto the user record and
-// emails the link. Best-effort: a failure logs and reports false; the
-// account works regardless.
 func (h *authAPI) sendVerificationEmail(r *http.Request, user auth.User) bool {
 	if !h.verificationActive() {
 		return false
@@ -89,11 +85,6 @@ func (h *authAPI) sendVerificationEmail(r *http.Request, user auth.User) bool {
 	return true
 }
 
-// verifyEmail is POST /api/v1/auth/verify-email {email, token} — the
-// landing page's call when the user clicks the link. Unauthenticated by
-// nature (the click can come from any browser); the token is the proof.
-// Idempotent: re-clicking a consumed link on a verified account is a
-// success, not an error.
 func (h *authAPI) verifyEmail(rw http.ResponseWriter, r *http.Request) {
 	if h.Users == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "users not configured")
@@ -113,7 +104,6 @@ func (h *authAPI) verifyEmail(rw http.ResponseWriter, r *http.Request) {
 	}
 	user, err := h.Users.GetByEmail(r.Context(), email)
 	if err != nil {
-		// Same shape as a bad token — don't confirm which addresses exist.
 		writeJSONError(rw, http.StatusBadRequest, "invalid or expired verification link")
 		return
 	}
@@ -140,9 +130,6 @@ func (h *authAPI) verifyEmail(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, http.StatusOK, map[string]any{"verified": true})
 }
 
-// resendVerification is POST /api/v1/me/verification/resend — the
-// banner's "resend" button. Mints a fresh token (invalidating the old
-// one) and sends again.
 func (h *authAPI) resendVerification(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.verificationActive() {
 		writeJSONError(rw, http.StatusNotImplemented, "email verification is not enabled on this deployment")
@@ -165,10 +152,6 @@ func (h *authAPI) resendVerification(rw http.ResponseWriter, r *http.Request, p 
 	writeJSON(rw, http.StatusOK, map[string]any{"sent": true})
 }
 
-// verificationStatus resolves the whoami fields for p: whether the
-// account's email is verified and whether the UI should nag. API-key
-// principals (no user record) count as verified — there's no inbox to
-// confirm and no banner to show.
 func (h *authAPI) verificationStatus(r *http.Request, p core.Principal) (verified, pending bool) {
 	if h.Users == nil || p.Subject == "" || !strings.Contains(p.Subject, "@") {
 		return true, false

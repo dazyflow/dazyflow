@@ -43,8 +43,6 @@ func (h *flowAPI) renderTextPreview(rw http.ResponseWriter, r *http.Request, _ c
 		return
 	}
 
-	// Separator defaults to a newline only when omitted; an explicit "" (the
-	// HTML-table preset) stays empty. Same rule as rendertext.SpecFromParams.
 	sep := "\n"
 	if body.Separator != nil {
 		sep = *body.Separator

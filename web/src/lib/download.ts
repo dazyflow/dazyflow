@@ -35,15 +35,10 @@ export function downloadBlob(blob: Blob, filename: string) {
   }
 }
 
-// downloadText saves `text` as a file. `mime` sets the type so the OS opens it
-// with something sensible.
 export function downloadText(text: string, mime: string, filename: string) {
   downloadBlob(new Blob([text], { type: mime }), filename);
 }
 
-// downloadJson saves an object as a pretty-printed .json file. Indented
-// deliberately: an export a person may open, read, or hand to somebody else is
-// worth the extra bytes.
 export function downloadJson(data: unknown, filename: string) {
   downloadText(JSON.stringify(data, null, 2), "application/json", filename);
 }

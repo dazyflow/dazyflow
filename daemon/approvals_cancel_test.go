@@ -11,14 +11,10 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestApproveAuthed_Cov covers approveAuthed's error legs through the real mux:
-// 404 for an unknown run, 400 for an invalid decision, and 409 when the node
-// isn't awaiting approval.
 func TestApproveAuthed_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 
-	// Unknown run -> 404.
 	if rw := h.do(t, "POST", "/api/v1/approvals/ghost/n?decision=approve", nil); rw.Code != http.StatusNotFound {
 		t.Fatalf("approve(ghost) = %d, want 404; body=%s", rw.Code, rw.Body.String())
 	}
@@ -34,25 +30,20 @@ func TestApproveAuthed_Cov(t *testing.T) {
 		t.Fatalf("seed run: %v", err)
 	}
 
-	// Invalid decision -> 400.
 	if rw := h.do(t, "POST", "/api/v1/approvals/run-appr/n?decision=maybe", nil); rw.Code != http.StatusBadRequest {
 		t.Fatalf("approve(bad decision) = %d, want 400; body=%s", rw.Code, rw.Body.String())
 	}
 
-	// Node has no awaiting record -> 409 not awaiting (or 404 if no record).
 	rw := h.do(t, "POST", "/api/v1/approvals/run-appr/n?decision=approve", nil)
 	if rw.Code != http.StatusConflict && rw.Code != http.StatusNotFound {
 		t.Fatalf("approve(not awaiting) = %d, want 409/404; body=%s", rw.Code, rw.Body.String())
 	}
 }
 
-// TestCancelRunMe_Cov covers cancelRun's error and success legs via
-// /me/runs/{id}/cancel: 404 unknown, then a successful cancel of a running run.
 func TestCancelRunMe_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 
-	// Unknown run -> 404.
 	if rw := h.do(t, "POST", "/api/v1/me/runs/ghost/cancel", nil); rw.Code != http.StatusNotFound {
 		t.Fatalf("cancel(ghost) = %d, want 404; body=%s", rw.Code, rw.Body.String())
 	}
@@ -72,7 +63,6 @@ func TestCancelRunMe_Cov(t *testing.T) {
 		t.Fatalf("cancel(running) = %d, want 200; body=%s", rw.Code, rw.Body.String())
 	}
 
-	// Cancelling an already-terminal run -> 409 conflict.
 	rw = h.do(t, "POST", "/api/v1/me/runs/run-cancel/cancel", nil)
 	if rw.Code != http.StatusConflict {
 		t.Fatalf("cancel(already cancelled) = %d, want 409; body=%s", rw.Code, rw.Body.String())

@@ -78,10 +78,10 @@ func TestHostKeyCallback_AcceptsBundledRejectsUnknown(t *testing.T) {
 	}
 }
 
-// TestHostKeyAlgorithms_ConstrainedForBundledHosts guards the "key mismatch"
-// regression: the clone must advertise only the host-key algorithms we have
-// an entry for (ssh-ed25519 for the bundled forges), so the server doesn't
-// negotiate an RSA/ECDSA key that then fails our ed25519-only known_hosts.
+// Guards the "key mismatch" regression: the clone must advertise only the
+// host-key algorithms we have an entry for (ssh-ed25519 for the bundled
+// forges), so the server doesn't negotiate an RSA/ECDSA key that then fails
+// our ed25519-only known_hosts.
 func TestHostKeyAlgorithms_ConstrainedForBundledHosts(t *testing.T) {
 	db, err := hostKeyDB("")
 	if err != nil {
@@ -103,14 +103,12 @@ func TestHostKeyAlgorithms_ConstrainedForBundledHosts(t *testing.T) {
 			t.Errorf("%s: algorithms %v missing ssh-ed25519", host, algos)
 		}
 	}
-	// Unknown host: empty (callback still rejects it).
 	if a := db.HostKeyAlgorithms("nope.example.com:22"); len(a) != 0 {
 		t.Errorf("unknown host should have no algorithms, got %v", a)
 	}
 }
 
 func TestHostKeyCallback_HonorsUserKnownHosts(t *testing.T) {
-	// A user-supplied known_hosts entry for a self-hosted forge.
 	pub, _, _ := ed25519.GenerateKey(rand.Reader)
 	key, _ := gossh.NewPublicKey(pub)
 	line := "git.internal " + key.Type() + " " + base64Key(key)
@@ -133,7 +131,6 @@ func TestAuthForURL_SSHAndHTTPSAndPublic(t *testing.T) {
 	SetGitCredLookup(nil) // tests use inline params, not the org store
 	keyPEM := genKeyPEM(t)
 
-	// Public https URL, no token → no auth (public clone path unchanged).
 	auth, err := authForURL(t.Context(), core.Job{Params: map[string]any{}}, "https://github.com/x/y.git")
 	if err != nil {
 		t.Fatalf("public https: %v", err)
@@ -142,7 +139,6 @@ func TestAuthForURL_SSHAndHTTPSAndPublic(t *testing.T) {
 		t.Errorf("public https URL must yield nil auth")
 	}
 
-	// https URL + inline PAT → HTTP basic auth.
 	job := core.Job{Params: map[string]any{"token": "ghp_abc", "username": "octocat"}}
 	auth, err = authForURL(t.Context(), job, "https://github.com/x/y.git")
 	if err != nil {
@@ -156,13 +152,11 @@ func TestAuthForURL_SSHAndHTTPSAndPublic(t *testing.T) {
 		t.Errorf("basic auth = %q/%q, want octocat/ghp_abc", ba.Username, ba.Password)
 	}
 
-	// https URL + token, no username → defaults username to "git".
 	auth, _ = authForURL(t.Context(), core.Job{Params: map[string]any{"token": "ghp_def"}}, "https://gitlab.com/x/y.git")
 	if ba, ok := auth.(*githttp.BasicAuth); !ok || ba.Username != "git" {
 		t.Errorf("default username not applied: %#v", auth)
 	}
 
-	// ssh URL with an inline private key → public-key auth.
 	auth, err = authForURL(t.Context(), core.Job{Params: map[string]any{"ssh_private_key": keyPEM}}, "git@github.com:x/y.git")
 	if err != nil {
 		t.Fatalf("inline ssh: %v", err)
@@ -171,20 +165,17 @@ func TestAuthForURL_SSHAndHTTPSAndPublic(t *testing.T) {
 		t.Errorf("ssh URL with inline key must yield a non-nil auth method")
 	}
 
-	// ssh URL, no key available → clear error.
 	if _, err := authForURL(t.Context(), core.Job{Params: map[string]any{}}, "git@github.com:x/y.git"); err == nil {
 		t.Errorf("ssh URL without an SSH key must error")
 	}
 }
 
-// TestSSHAuth covers the exported builder the workspace git mirror uses.
-// authForURL delegates its SSH branch here, so this is the shared path: key
-// parsing, the pinned host-key database, and the host-key-algorithm
-// constraint that keeps a mirror push from silently accepting a new host key.
+// Covers the exported builder the workspace git mirror uses. authForURL
+// delegates its SSH branch here, so this is the shared path: key parsing, the
+// pinned host-key database, and the host-key-algorithm constraint that keeps a
+// mirror push from silently accepting a new host key.
 func TestSSHAuth(t *testing.T) {
 	keyPEM := genKeyPEM(t)
-	// A real known_hosts line for the self-hosted case — the parser rejects a
-	// placeholder, so build one from a generated public key.
 	pub, _, _ := ed25519.GenerateKey(rand.Reader)
 	hostKey, _ := gossh.NewPublicKey(pub)
 	knownHosts := "git.internal " + hostKey.Type() + " " + base64Key(hostKey)
@@ -210,7 +201,6 @@ func TestSSHAuth(t *testing.T) {
 	if _, err := SSHAuth("https://github.com/acme/flows.git", keyPEM, "", ""); err == nil {
 		t.Error("SSHAuth on an https URL should error")
 	}
-	// Garbage key material fails at parse time, where the message can say so.
 	if _, err := SSHAuth("git@github.com:acme/flows.git", "not a key", "", ""); err == nil {
 		t.Error("SSHAuth with an unparseable key should error")
 	}
@@ -251,8 +241,6 @@ func genKeyPEM(t *testing.T) string {
 	return string(pem.EncodeToMemory(block))
 }
 
-// hostKeyCallback returns just the verifier — used by tests; the clone path
-// uses hostKeyDB directly so it can also constrain HostKeyAlgorithms.
 func hostKeyCallback(userKnownHosts string) (gossh.HostKeyCallback, error) {
 	db, err := hostKeyDB(userKnownHosts)
 	if err != nil {

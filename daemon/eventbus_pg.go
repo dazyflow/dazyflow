@@ -16,34 +16,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// PgBus is the multi-node Bus. The in-process MemoryBus only fans out to
-// subscribers on the same dzd; PgBus lets ANY dzd serve the streaming
-// RPC/SSE for a run regardless of which node's worker produced the
-// events.
-//
-// Design — a tiny durable spool + LISTEN/NOTIFY wake:
-//
-//	Publish:  INSERT the JSON event into bus_events, then pg_notify a
-//	          wake on the "dazy_bus" channel.
-//	Listener: one dedicated connection LISTENs on "dazy_bus"; on each
-//	          wake it drains every row newer than the last it saw and
-//	          fans each out to local subscribers for that job. Draining
-//	          "id > lastSeen" (not the notify payload) means a missed or
-//	          coalesced NOTIFY can't drop an event — the next wake catches
-//	          up. All delivery — including same-node — flows through the
-//	          listener, so there's no local/remote double-delivery.
-//
-// NOTIFY's 8 KB payload limit is why the event rides in a table, not the
-// notification: a terminal event carries the full GraphResult. Inline
-// values round-trip as JSON-generic types across the bus; the JobStore
-// stays the type-faithful source of truth (WaitGraph re-fetches from it
-// on a closed subscription), so this is a non-issue for correctness.
-//
-// Spool rows are ephemeral — a background sweep deletes anything older
-// than retention. New subscribers don't replay history (lastSeen starts
-// at the current max), matching MemoryBus semantics; the gateway already
-// reconciles the "already finished before I subscribed" race by
-// re-reading the JobRecord.
+// The multi-node Bus: MemoryBus only fans out within one process, so a browser
+// streaming a run from one replica would see nothing of a run executing on
+// another. Events are spooled to a table and replayed via LISTEN/NOTIFY.
 type PgBus struct {
 	pool      *pgxpool.Pool
 	logger    *log.Logger
@@ -51,49 +26,25 @@ type PgBus struct {
 
 	local localSubscribers
 
-	// pending buffers publishes until the writer flushes them as one statement.
-	// See Publish.
 	pendingMu sync.Mutex
 	pending   []pendingBusEvent
 	wake      chan struct{}
-	// drained closes once the writer has made its final flush, so whoever owns
-	// the pool can wait for it before closing — see Close.
-	drained chan struct{}
+	drained   chan struct{}
 
-	// lastSeen and seen are touched ONLY by the single listener goroutine
-	// (drainNew); no lock needed. lastSeen is the high-water id fanned out.
-	// seen dedupes the trailing re-scan window so an event whose row committed
-	// out of BIGSERIAL order (a lower id committing after we advanced past it)
-	// is still delivered, without re-delivering rows we already fanned. Bounded
-	// to ~pgBusReScanWindow ids.
+	// Touched ONLY by the single listener goroutine, so they need no lock.
 	lastSeen int64
 	seen     map[int64]struct{}
 }
 
-// pgBusReScanWindow is how far below the high-water mark drainNew re-scans each
-// pass. A BIGSERIAL id is assigned at INSERT but only visible at COMMIT, so a
-// row can commit with a lower id than one already drained; re-scanning a
-// trailing window (deduped via `seen`) catches it. Publishes are single-
-// statement (microsecond) transactions, so the number of ids that can commit
-// between one publish's INSERT and COMMIT is tiny — 256 is generous headroom.
-// Beyond the window the JobStore re-read self-heal is the backstop (terminal/
-// node state is durable), so this strictly improves on never re-scanning.
+// Sequence numbers are assigned before commit, so a row with a lower id can
+// become visible after a higher one — the re-scan is what stops that being a
+// dropped event.
 const pgBusReScanWindow = 256
 
-// Publishing is batched, because each event was its own transaction and a
-// transaction is a commit — the one thing on this path that waits for disk. A
-// step publishes two or three events, and measured against the queue's own
-// writes the bus was costing about a third of execution throughput.
-//
-// The window is short enough to be invisible in a live stream and long enough
-// that a busy fleet collapses many events into one commit.
 const (
 	pgBusFlushEvery = 20 * time.Millisecond
-	// pgBusMaxBatch bounds one statement; beyond it the writer flushes early.
-	pgBusMaxBatch = 256
-	// pgBusMaxPending bounds the buffer if the database stalls. Publishing is
-	// already best-effort — the JobStore is the source of truth and a
-	// subscriber re-reads it — so shedding the oldest beats unbounded growth.
+	pgBusMaxBatch   = 256
+	// Publishing must never block a run, so a stalled database drops events instead.
 	pgBusMaxPending = 20_000
 )
 
@@ -121,9 +72,6 @@ CREATE INDEX IF NOT EXISTS bus_events_job_idx ON bus_events (job_id, id);
 
 const pgBusChannel = "dazy_bus"
 
-// NewPgBus provisions the spool table, captures the current high-water
-// mark (so brand-new subscribers don't get a backlog), and starts the
-// listener + sweep goroutines. They stop when ctx is cancelled.
 func NewPgBus(ctx context.Context, pool *pgxpool.Pool) (*PgBus, error) {
 	if err := pgstore.ApplySchema(ctx, pool, pgBusSchema); err != nil {
 		return nil, err
@@ -142,10 +90,7 @@ func NewPgBus(ctx context.Context, pool *pgxpool.Pool) (*PgBus, error) {
 	}
 	if maxID != nil {
 		b.lastSeen = *maxID
-		// drainNew re-scans a trailing window below lastSeen; seed `seen` with
-		// the pre-existing ids in that window so the first drain treats them as
-		// already-delivered (new subscribers don't replay history) rather than
-		// fanning out stale events. Bounded to pgBusReScanWindow rows.
+		// The seen set is what makes the re-scan idempotent.
 		rows, err := pool.Query(ctx,
 			`SELECT id FROM bus_events WHERE id > $1`, b.lastSeen-pgBusReScanWindow)
 		if err != nil {
@@ -169,9 +114,6 @@ func NewPgBus(ctx context.Context, pool *pgxpool.Pool) (*PgBus, error) {
 	return b, nil
 }
 
-// Publish writes the event to the spool and wakes listeners (this node's
-// and every peer's). Errors are logged, not returned — the Bus contract
-// is fire-and-forget, same as MemoryBus's non-blocking sends.
 func (b *PgBus) Publish(jobID string, ev BusEvent) {
 	payload, err := json.Marshal(ev)
 	if err != nil {
@@ -180,9 +122,6 @@ func (b *PgBus) Publish(jobID string, ev BusEvent) {
 	}
 	b.pendingMu.Lock()
 	if len(b.pending) >= pgBusMaxPending {
-		// The database is not keeping up. Shed the oldest rather than grow
-		// without bound; a subscriber's authority is the JobStore, which it
-		// re-reads, and this path has always been best-effort.
 		b.pending = b.pending[1:]
 	}
 	b.pending = append(b.pending, pendingBusEvent{jobID: jobID, payload: payload})
@@ -196,11 +135,8 @@ func (b *PgBus) Publish(jobID string, ev BusEvent) {
 	}
 }
 
-// Flush writes anything buffered, for a caller that must see its own publishes
-// on the far side — the erasure cascade, and tests.
 func (b *PgBus) Flush(ctx context.Context) { b.flush(ctx) }
 
-// writer drains the publish buffer into one statement per flush.
 func (b *PgBus) writer(ctx context.Context) {
 	defer close(b.drained)
 	t := time.NewTicker(pgBusFlushEvery)
@@ -217,10 +153,6 @@ func (b *PgBus) writer(ctx context.Context) {
 	}
 }
 
-// Close waits for the final flush that cancelling the bus's context starts,
-// so events published in the last flush window reach the table before the
-// pool is closed under them. Bounded, so a caller that closes without having
-// cancelled cannot hang.
 func (b *PgBus) Close() {
 	select {
 	case <-b.drained:
@@ -228,9 +160,6 @@ func (b *PgBus) Close() {
 	}
 }
 
-// flush writes the buffered events as a single insert, and notifies for each
-// inside the same transaction — so a batch is one commit and every row still
-// carries its own wake.
 func (b *PgBus) flush(ctx context.Context) {
 	b.pendingMu.Lock()
 	batch := b.pending
@@ -261,9 +190,6 @@ func (b *PgBus) flush(ctx context.Context) {
 	}
 }
 
-// busNotice is what a notification carries: the spool id and the run it belongs
-// to. Malformed (or empty, from an older publisher) reports ok=false, and the
-// listener falls back to draining, which is always correct.
 func parseBusNotice(payload string) (id int64, jobID string, ok bool) {
 	sep := strings.IndexByte(payload, ':')
 	if sep <= 0 {
@@ -276,16 +202,10 @@ func parseBusNotice(payload string) (id int64, jobID string, ok bool) {
 	return n, payload[sep+1:], true
 }
 
-// Subscribe registers a local channel for a job's events. Identical
-// fan-out semantics to MemoryBus (buffered, non-blocking, drop-on-slow).
 func (b *PgBus) Subscribe(jobID string) (<-chan BusEvent, func()) {
 	return b.local.subscribe(jobID)
 }
 
-// listen holds a dedicated connection on the LISTEN channel and drains
-// the spool on every wake. Reconnects with backoff on failure; lastSeen
-// persists across reconnects so the catch-up drain replays anything
-// published during the blip.
 func (b *PgBus) listen(ctx context.Context) {
 	backoff := time.Second
 	for ctx.Err() == nil {
@@ -314,22 +234,12 @@ func (b *PgBus) listenOnce(ctx context.Context) error {
 	if _, err := conn.Exec(ctx, "LISTEN "+pgBusChannel); err != nil {
 		return err
 	}
-	// Catch up on anything published before/while (re)connecting.
 	b.drainNew(ctx)
 	for {
 		n, err := conn.Conn().WaitForNotification(ctx)
 		if err != nil {
 			return err
 		}
-		// The cheap path, and the common one: an event for a run nobody here is
-		// watching. There is nothing to deliver, so the spool is not read at
-		// all — the cursor simply moves past it.
-		//
-		// Safe precisely BECAUSE there is no subscriber: skipping an event we
-		// owe nobody costs nothing, and a subscriber that appears later is only
-		// owed what comes after it. A notification that does not parse (or an
-		// older publisher's) falls through to the drain, which is always
-		// correct.
 		if id, jobID, ok := parseBusNotice(n.Payload); ok && !b.local.has(jobID) {
 			b.skipTo(id)
 			continue
@@ -338,14 +248,7 @@ func (b *PgBus) listenOnce(ctx context.Context) error {
 	}
 }
 
-// skipTo advances the cursor past an event this replica has no subscriber for.
-// Touched only by the listener goroutine, like lastSeen and seen.
 func (b *PgBus) skipTo(id int64) {
-	// Marked seen as well as skipped. drainNew re-scans a window BELOW the
-	// cursor to catch rows that commit out of order, and `seen` is what stops
-	// that window re-delivering. An id skipped without being recorded falls
-	// straight back into it — so a later subscriber to the same run was handed
-	// the backlog it should never have had.
 	b.seen[id] = struct{}{}
 	if id <= b.lastSeen {
 		return
@@ -359,14 +262,7 @@ func (b *PgBus) skipTo(id int64) {
 	}
 }
 
-// drainNew reads spool rows and fans each out exactly once. It re-scans a
-// trailing window below lastSeen (not just `id > lastSeen`) so an event whose
-// row committed out of BIGSERIAL order is still caught; `seen` dedupes rows
-// already fanned out in a prior pass so the re-scan never re-delivers.
 func (b *PgBus) drainNew(ctx context.Context) {
-	// Only the runs with a live local subscriber. Every replica used to read
-	// every event in the fleet and hand almost all of them to nobody: most runs
-	// are watched by no one, and a watched one by a single replica.
 	watching := b.local.jobIDs()
 	if len(watching) == 0 {
 		return
@@ -389,11 +285,6 @@ func (b *PgBus) drainNew(ctx context.Context) {
 		ev        BusEvent
 		malformed bool // count toward `seen` (don't re-scan) but don't fan out
 	}
-	// Collect the whole pass into a local batch and commit shared state
-	// (seen/lastSeen/fan-out) only AFTER the row loop fully succeeds. A
-	// mid-loop scan/query error then discards the pass cleanly — nothing is
-	// marked seen and lastSeen doesn't advance, so the next wake re-scans and
-	// re-delivers (dedupe keeps that safe).
 	batch := make([]pending, 0)
 	maxID := b.lastSeen
 	for rows.Next() {
@@ -424,10 +315,6 @@ func (b *PgBus) drainNew(ctx context.Context) {
 		b.logger.Printf("drain rows: %v", err)
 		return
 	}
-	// Commit: mark every scanned id seen, advance the cursor, then prune `seen`
-	// of ids now below the re-scan window (never queried again) so it stays
-	// bounded. Advance before fanning out so a slow subscriber can't stall the
-	// loop.
 	for _, p := range batch {
 		b.seen[p.id] = struct{}{}
 	}
@@ -445,14 +332,7 @@ func (b *PgBus) drainNew(ctx context.Context) {
 	}
 }
 
-// DeleteByTenant removes every spooled event belonging to a tenant's runs.
-// bus_events has no tenant column, so it scopes via the jobs table (same
-// database). Part of the org/account erasure cascade (Art. 17).
 func (b *PgBus) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
-	// Publishing is buffered, so anything still in hand would be written AFTER
-	// this delete and leave the erased org's events on disk. Flush first, then
-	// erase what is there. (The cascade cancels the org's active runs before
-	// reaching here, so nothing should be producing events by now anyway.)
 	b.flush(ctx)
 	tag, err := b.pool.Exec(ctx,
 		`DELETE FROM bus_events WHERE job_id IN (SELECT id FROM jobs WHERE tenant = $1)`, tenant)
@@ -462,9 +342,6 @@ func (b *PgBus) DeleteByTenant(ctx context.Context, tenant string) (int, error) 
 	return int(tag.RowsAffected()), nil
 }
 
-// sweep deletes spooled events past the retention window so the table
-// stays small (events are only useful while a run is live + briefly
-// after).
 func (b *PgBus) sweep(ctx context.Context) {
 	t := time.NewTicker(5 * time.Minute)
 	defer t.Stop()

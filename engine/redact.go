@@ -14,48 +14,30 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// redactionMarker replaces a secret plaintext wherever it surfaces in a
-// persisted node Result. Distinct, greppable, and obviously not a real
-// value so an operator seeing it knows redaction fired.
 const redactionMarker = "[redacted:secret]"
 
-// minRedactableSecretLen guards against catastrophic over-redaction. A
-// secret value of "1" or "true" would otherwise mangle every output that
-// happens to contain that substring. Real credentials (tokens, keys,
-// passwords) comfortably exceed this; trivially short secret values fall
-// back to the save-time lint (the secret_to_persistence rule) and the
-// fact that resolved secrets only ever land in params, never auto-copied
-// into a Result unless a module deliberately echoes them.
+// minRedactableSecretLen guards against catastrophic over-redaction: a secret
+// value of "1" would mangle every output containing that substring. Real
+// credentials comfortably exceed it, and trivially short ones fall back to the
+// save-time lint.
 const minRedactableSecretLen = 6
 
-// secretSet collects the plaintext values of the secrets resolved for a
-// single job. Most entries are added synchronously during
-// resolveTemplatesCollecting (one goroutine, before Execute), but
-// connector OAuth tokens are registered from inside Execute via the
-// ctx sink (see RegisterRuntimeSecret) — possibly from a drop's own
-// goroutine — so add/read are guarded by mu. Reads (redactString) run
-// after Execute returns, but the mutex keeps the race detector honest
-// for any drop that resolves tokens concurrently.
+// secretSet collects the plaintexts resolved for one job. Most are added
+// synchronously before Execute, but connector OAuth tokens are registered from
+// inside it — possibly from a drop's own goroutine — so add and read are guarded.
 type secretSet struct {
 	mu     sync.Mutex
 	values map[string]struct{}
-	// ordered is values sorted by descending length, rebuilt lazily after
-	// an add. Redaction has to replace the LONGEST secret first: when one
-	// secret contains another (an API key, and that same key with a suffix
-	// or prefix — common when a connector stores both a token and a
-	// "Bearer <token>" header value), replacing the shorter one first cuts
-	// it out of the middle of the longer one, so the longer secret's tail
-	// no longer matches and survives into the persisted run record in
-	// cleartext. Map iteration order is random, so without this the leak
-	// was intermittent rather than absent.
+	// ordered is longest-first, rebuilt lazily. Redaction must replace the LONGEST
+	// secret first: when one contains another — an API key and the same key inside a
+	// "Bearer <token>" header value — replacing the shorter first cuts it out of the
+	// middle of the longer, whose tail then survives into the run record in
+	// cleartext. Map iteration order is random, so the leak was intermittent.
 	ordered []string
 }
 
 func newSecretSet() *secretSet { return &secretSet{values: map[string]struct{}{}} }
 
-// add records a resolved secret plaintext. No-ops on the nil set, empty
-// values, and values too short to redact without unacceptable
-// false-positive risk (see minRedactableSecretLen).
 func (s *secretSet) add(v string) {
 	if s == nil || len(v) < minRedactableSecretLen {
 		return
@@ -66,16 +48,13 @@ func (s *secretSet) add(v string) {
 	s.mu.Unlock()
 }
 
-// sortedLocked returns the secrets longest-first, building the cache on
-// demand. Caller must hold s.mu.
 func (s *secretSet) sortedLocked() []string {
 	if s.ordered == nil && len(s.values) > 0 {
 		s.ordered = make([]string, 0, len(s.values))
 		for v := range s.values {
 			s.ordered = append(s.ordered, v)
 		}
-		// Descending length; ties broken bytewise so the order is
-		// deterministic for a given set (keeps tests reproducible).
+		// Ties broken bytewise, so the order is deterministic for a given set.
 		sort.Slice(s.ordered, func(i, j int) bool {
 			if len(s.ordered[i]) != len(s.ordered[j]) {
 				return len(s.ordered[i]) > len(s.ordered[j])
@@ -95,34 +74,23 @@ func (s *secretSet) empty() bool {
 	return len(s.values) == 0
 }
 
-// secretSinkCtxKey carries the per-job *secretSet through ctx into
-// Execute so credentials resolved at run time can be registered for
-// redaction. Unexported key type avoids collisions.
 type secretSinkCtxKey struct{}
 
-// withSecretSink exposes set on ctx so credentials resolved *during*
-// Execute — notably connector OAuth tokens fetched via a SetTokenLookup
-// hook, which never pass through the secret-provider path that populated
-// set — can still be scrubbed from the node's persisted Result.
+// withSecretSink covers credentials resolved DURING Execute — connector OAuth
+// tokens, which never pass through the provider path that populated set.
 func withSecretSink(ctx context.Context, set *secretSet) context.Context {
 	return context.WithValue(ctx, secretSinkCtxKey{}, set)
 }
 
-// RegisterRuntimeSecret records a credential resolved inside a drop's
-// Execute (e.g. an OAuth access token returned by a SetTokenLookup hook)
-// so redactResult scrubs it from the node's persisted Result, exactly
-// like a ${secret.}-resolved value. No-op when called outside a node
-// execution (no sink on ctx) or for values too short to redact safely.
+// RegisterRuntimeSecret scrubs a credential resolved inside a drop's Execute
+// exactly like a ${secret.}-resolved value. A no-op outside a node execution, or
+// for values too short to redact safely.
 func RegisterRuntimeSecret(ctx context.Context, value string) {
 	if set, ok := ctx.Value(secretSinkCtxKey{}).(*secretSet); ok {
 		set.add(value)
 	}
 }
 
-// recordingSecretSubstituter wraps secretSubstituter so every plaintext
-// it resolves is recorded in set. Upstream-ref substitution is handled
-// by a separate substituter in the chain and is intentionally not
-// recorded — only secret-provider values are scrubbed.
 func recordingSecretSubstituter(providers map[string]core.SecretProvider, set *secretSet) Substituter {
 	base := secretSubstituter(providers)
 	return func(ctx context.Context, scheme, path string) (string, bool, error) {
@@ -134,13 +102,10 @@ func recordingSecretSubstituter(providers map[string]core.SecretProvider, set *s
 	}
 }
 
-// redactResult scrubs every resolved secret value from a node's Result
-// before it is persisted/returned. This is defense-in-depth behind the
-// save-time lint: a module that echoes a resolved param into its output
-// (e.g. an HTTP node reflecting its Authorization header) would otherwise
-// write the secret into durable storage and the run-detail UI. It walks
-// the output refs and the error strings, replacing any occurrence of a
-// secret plaintext with redactionMarker.
+// redactResult is defence-in-depth behind the save-time lint: a module echoing a
+// resolved param into its output — an HTTP node reflecting its Authorization
+// header — would otherwise write the secret into durable storage and the
+// run-detail UI.
 func redactResult(result *core.Result, set *secretSet) {
 	if result == nil || set.empty() {
 		return
@@ -158,11 +123,9 @@ func redactResult(result *core.Result, set *secretSet) {
 	}
 }
 
-// redactProgressEvent scrubs every resolved secret from a single progress
-// event's Message and Data. redactResult only scrubs the final persisted
-// Result; without this a drop that echoes a resolved secret into a live
-// progress event (e.g. "GET https://api/?token=…") would stream it to the
-// UI and any persisted progress, bypassing redaction entirely.
+// redactProgressEvent covers what redactResult cannot: without it a drop echoing
+// a resolved secret into a live progress event would stream it to the UI,
+// bypassing redaction entirely.
 func redactProgressEvent(p core.Progress, set *secretSet) core.Progress {
 	if set.empty() {
 		return p
@@ -176,13 +139,10 @@ func redactProgressEvent(p core.Progress, set *secretSet) core.Progress {
 	return p
 }
 
-// redactProgress returns a progress channel to hand to transport.Execute
-// whose events are scrubbed of every resolved secret before being forwarded
-// to dst, plus a done channel that closes once every buffered event has been
-// forwarded. The caller must close the returned channel after Execute
-// returns and then receive on done. When dst is nil there is nothing to
-// redact: the returned channel is nil (drops guard nil progress sends) and
-// done is already closed.
+// redactProgress returns a scrubbing channel plus a done channel that closes
+// once every buffered event has been forwarded. The caller must close the
+// returned channel after Execute returns, then receive on done. A nil dst needs
+// no redaction: the channel is nil and done is already closed.
 func redactProgress(ctx context.Context, dst chan<- core.Progress, set *secretSet) (chan<- core.Progress, <-chan struct{}) {
 	done := make(chan struct{})
 	if dst == nil {
@@ -196,8 +156,8 @@ func redactProgress(ctx context.Context, dst chan<- core.Progress, set *secretSe
 			select {
 			case dst <- redactProgressEvent(p, set):
 			case <-ctx.Done():
-				// Consumer gone; keep draining so Execute is never blocked on
-				// a full channel, but stop forwarding.
+				// Consumer gone: keep draining so Execute is never blocked on a full channel,
+				// but stop forwarding.
 				for range in {
 				}
 				return
@@ -207,14 +167,12 @@ func redactProgress(ctx context.Context, dst chan<- core.Progress, set *secretSe
 	return in, done
 }
 
-// redactHeaders scrubs a row-list value's column order (Ref.Headers). A secret
-// echoed as a COLUMN NAME — e.g. a row-shaping drop that pivots a resolved param
-// into a header — is a string the Ref/Inline walk never visits, so without this
-// it survives into durable storage and the run-detail UI.
+// redactHeaders covers a secret echoed as a COLUMN NAME, which the Ref/Inline
+// walk never visits.
 //
-// Returns a fresh slice instead of editing in place: a Ref's Headers can share
-// its backing array with a value another reader still holds (a write-dedupe
-// entry, the caller's graph), and redaction must not reach back into those.
+// Returns a fresh slice rather than editing in place: a Ref's Headers can share
+// its backing array with a value another reader still holds, and redaction must
+// not reach back into those.
 func redactHeaders(in []string, set *secretSet) []string {
 	if len(in) == 0 {
 		return in
@@ -226,7 +184,6 @@ func redactHeaders(in []string, set *secretSet) []string {
 	return out
 }
 
-// redactString replaces every secret plaintext substring in s.
 func redactString(s string, set *secretSet) string {
 	if s == "" {
 		return s
@@ -241,8 +198,6 @@ func redactString(s string, set *secretSet) string {
 	return s
 }
 
-// redactValue walks an arbitrary decoded JSON value (the shape Ref.Inline
-// holds) redacting every string it contains, in place where possible.
 func redactValue(v any, set *secretSet) any {
 	switch tv := v.(type) {
 	case nil:
@@ -252,10 +207,9 @@ func redactValue(v any, set *secretSet) any {
 	case []byte:
 		return []byte(redactString(string(tv), set))
 	case map[string]any:
-		// Redact keys as well as values: a module that echoes a secret as a
-		// map key (e.g. {<token>: "..."}) would otherwise leak it, since the
-		// key isn't a value we'd otherwise visit. Rebuild into a fresh map so
-		// a redacted key can't collide-then-clobber mid-iteration.
+		// Keys as well as values: a module echoing a secret as a map key would
+		// otherwise leak it. Rebuild into a fresh map so a redacted key cannot
+		// collide-then-clobber mid-iteration.
 		out := make(map[string]any, len(tv))
 		for k, val := range tv {
 			out[redactString(k, set)] = redactValue(val, set)
@@ -292,20 +246,15 @@ func redactValue(v any, set *secretSet) any {
 		}
 		return tv
 	default:
-		// Drops emit many other container shapes ([]struct decoded from JSON,
-		// map[string]int, nested generics). Walk them reflectively so a secret
-		// echoed into any slice/map still gets scrubbed; everything else
-		// (scalars, structs) is returned unchanged.
+		// Walk the long tail of container shapes reflectively, so a secret echoed into
+		// any slice or map is still scrubbed.
 		return redactReflect(v, set)
 	}
 }
 
-// redactReflect handles container shapes the fast-path type switch in
-// redactValue doesn't enumerate. Slices/arrays and maps are rebuilt as
-// []any / map[string]any with every reachable string redacted. The fast
-// path already covers the common concrete types so this only runs for the
-// long tail; converting to the generic shape is safe because a redacted
-// Result is serialized before any downstream consumer sees it.
+// redactReflect rebuilds slices and maps as []any / map[string]any. Converting
+// to the generic shape is safe because a redacted Result is serialized before any
+// downstream consumer sees it.
 func redactReflect(v any, set *secretSet) any {
 	rv := reflect.ValueOf(v)
 	switch rv.Kind() {

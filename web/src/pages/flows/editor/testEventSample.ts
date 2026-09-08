@@ -1,9 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Builds the JSON body the editor's "Send test event" button POSTs to
-// /test-trigger, so a webhook flow can be exercised from the canvas without an
-// external caller. Pure: no editor state, no network.
 
 // buildTestEventSample produces the JSON object the "Send test event"
 // button POSTs to /test-trigger. For a Form step, formFields names the exact
@@ -33,12 +30,6 @@ export function buildTestEventSample(formFields?: string[]): Record<string, stri
   return sample;
 }
 
-// sampleValueFor picks a plausible-looking value for a form field
-// based on its name. Matching is on the lowercased name so "Email"
-// and "email" both resolve to the same default. The catch-all
-// produces a label like "Sample phone" rather than an empty string
-// so the value is visibly distinguishable in a downstream Slack post
-// or store row during testing.
 function sampleValueFor(field: string): string {
   const f = field.toLowerCase();
   if (f === "email" || f.endsWith("_email")) return "jane@example.com";

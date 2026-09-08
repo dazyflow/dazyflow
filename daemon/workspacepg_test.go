@@ -55,8 +55,6 @@ func seedMirroredFlow(t *testing.T, p *PgWorkspaces, tenant, cache string) {
 	if _, err := s.Save(g, "u"); err != nil {
 		t.Fatal(err)
 	}
-	// Pushing to a bogus remote still synthesizes the repository first, which
-	// is what puts the org's flows on disk.
 	_, _ = s.Push(context.Background(), "file:///nonexistent-remote", nil)
 	if _, err := os.Stat(filepath.Join(cache, tenant, "main", ".git")); err != nil {
 		t.Fatalf("expected a synthesized mirror on disk: %v", err)
@@ -84,18 +82,15 @@ func TestPgWorkspaces_EraseRemovesTheSynthesizedMirror(t *testing.T) {
 	}
 }
 
-// The other replicas' copies: each clears its own on the next sweep.
 func TestPgWorkspaces_PruneMirrorCacheClearsErasedTenants(t *testing.T) {
 	p, cache, tenant := pgWorkspacesFixture(t)
 	seedMirroredFlow(t, p, tenant, cache)
 
-	// A second replica with its own cache, which also mirrored this org.
 	other := NewPgWorkspaces(p.pool)
 	otherCache := t.TempDir()
 	other.SetMirrorCache(otherCache)
 	seedMirroredFlow(t, other, tenant, otherCache)
 
-	// Erasure runs on the first replica only.
 	if err := p.RemoveTenant(tenant); err != nil {
 		t.Fatal(err)
 	}

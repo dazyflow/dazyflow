@@ -5,8 +5,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-// Stable `t` / useTranslation result: Approvals' refresh callback lists `t` in
-// its deps, so a fresh function per render re-fires it forever.
 vi.mock("react-i18next", () => {
   const t = (k: string) => k;
   const value = { t };
@@ -56,8 +54,6 @@ const FLOW_ID = "refunds";
 describe("Approvals card links", () => {
   beforeEach(() => {
     listGraphs.mockResolvedValue({ graphs: [{ id: FLOW_ID, name: "Refunds" }] });
-    // No history here: these cases count the links on the page, and a decided
-    // row carries one of its own.
     listDecidedApprovals.mockResolvedValue({ approvals: [] });
     listPendingApprovals.mockResolvedValue({
       approvals: [

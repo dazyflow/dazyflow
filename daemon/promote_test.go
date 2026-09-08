@@ -13,7 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/jobstore"
 )
 
-// countGraphRuns returns how many of a tenant's graph runs are in the status.
 func countGraphRuns(t *testing.T, s *Service, tenant string, status core.JobStatus) int {
 	t.Helper()
 	recs, err := s.Jobs.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
@@ -25,9 +24,6 @@ func countGraphRuns(t *testing.T, s *Service, tenant string, status core.JobStat
 	return len(recs)
 }
 
-// TestConcurrencyAdmissionAndPromotion verifies the true per-tenant concurrency
-// cap: a free tenant over max_concurrency starts runs PENDING (queued), and the
-// promotion sweep starts the next one only after a running slot frees.
 func TestConcurrencyAdmissionAndPromotion(t *testing.T) {
 	t.Parallel()
 	jobs := jobstore.NewMemory()
@@ -59,7 +55,6 @@ func TestConcurrencyAdmissionAndPromotion(t *testing.T) {
 		ids = append(ids, id)
 	}
 
-	// Cap is 2: first two admitted (running), last two held pending (queued).
 	if got := countGraphRuns(t, svc, "t", core.JobStatusRunning); got != 2 {
 		t.Fatalf("running after 4 submits = %d, want 2 (the cap)", got)
 	}
@@ -67,8 +62,6 @@ func TestConcurrencyAdmissionAndPromotion(t *testing.T) {
 		t.Fatalf("pending after 4 submits = %d, want 2", got)
 	}
 
-	// Free a slot: complete the first run. Then a sweep should promote exactly
-	// one pending run (running back to 2, pending down to 1).
 	if err := jobs.Complete(t.Context(), ids[0], core.JobStatusSucceeded, &core.Result{Status: core.StatusOK}); err != nil {
 		t.Fatalf("complete run 0: %v", err)
 	}
@@ -95,7 +88,7 @@ func TestConcurrencyAdmissionAndPromotion(t *testing.T) {
 	}
 }
 
-// TestConcurrencyUncappedAdmitsAll verifies pro/unlimited tenants never queue.
+// Verifies pro/unlimited tenants never queue.
 func TestConcurrencyUncappedAdmitsAll(t *testing.T) {
 	t.Parallel()
 	jobs := jobstore.NewMemory()
@@ -134,8 +127,6 @@ func promoteSvc() *Service {
 	}
 }
 
-// TestStartPendingRun_NoPayload covers the no-usable-payload leg: the run is
-// finalized failed.
 func TestStartPendingRun_NoPayload(t *testing.T) {
 	t.Parallel()
 	s := promoteSvc()
@@ -152,8 +143,6 @@ func TestStartPendingRun_NoPayload(t *testing.T) {
 	}
 }
 
-// TestStartPendingRun_EmptyGraph covers the zero-node short-circuit: succeeds
-// immediately.
 func TestStartPendingRun_EmptyGraph(t *testing.T) {
 	t.Parallel()
 	s := promoteSvc()
@@ -168,8 +157,6 @@ func TestStartPendingRun_EmptyGraph(t *testing.T) {
 	}
 }
 
-// TestStartPendingRun_DispatchesRoots covers the normal leg: a runnable root is
-// enqueued and the watchdog/notifier are armed (run stays running).
 func TestStartPendingRun_DispatchesRoots(t *testing.T) {
 	t.Parallel()
 	s := promoteSvc()
@@ -185,7 +172,6 @@ func TestStartPendingRun_DispatchesRoots(t *testing.T) {
 	_ = s.Jobs.Enqueue(context.Background(), run)
 	s.startPendingRun(context.Background(), run)
 
-	// The root node-record was enqueued (queued, awaiting a worker).
 	nodeRec, err := s.Jobs.Get(context.Background(), NodeJobID("r3", "n"))
 	if err != nil {
 		t.Fatalf("root node not enqueued: %v", err)
@@ -193,7 +179,6 @@ func TestStartPendingRun_DispatchesRoots(t *testing.T) {
 	if nodeRec.NodeID != "n" {
 		t.Fatalf("node = %q, want n", nodeRec.NodeID)
 	}
-	// The run itself stays running (no worker in this test to advance it).
 	got, _ := s.Jobs.Get(context.Background(), "r3")
 	if got.Status != core.JobStatusRunning {
 		t.Fatalf("run status = %q, want running", got.Status)

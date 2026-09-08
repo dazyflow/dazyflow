@@ -12,20 +12,14 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// flushRecorder is an httptest.ResponseRecorder that also satisfies
-// http.Flusher, which systemLogTail requires.
 type flushRecorder struct{ *httptest.ResponseRecorder }
 
 func (flushRecorder) Flush() {}
 
-// TestSystemLogTail_Cov covers systemLogTail: the platform-admin guard, the
-// not-enabled guard, and the backfill happy path (drained with an already-
-// cancelled context so the live loop exits immediately after backfill).
 func TestSystemLogTail_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 
-	// Non-platform-admin -> 403.
 	rw := httptest.NewRecorder()
 	h.gw.orgAPI().systemLogTail(rw, httptest.NewRequest("GET", "/api/v1/admin/system/log", nil),
 		core.Principal{Subject: "u", Tenant: "t"})
@@ -37,15 +31,12 @@ func TestSystemLogTail_Cov(t *testing.T) {
 		Name: "platform", Permissions: []core.Permission{core.PermPlatformAdmin},
 	}}}
 
-	// LogTail not configured -> 501.
 	rw = httptest.NewRecorder()
 	h.gw.orgAPI().systemLogTail(rw, httptest.NewRequest("GET", "/api/v1/admin/system/log", nil), admin)
 	if rw.Code != 501 {
 		t.Fatalf("no-logtail = %d, want 501; body=%s", rw.Code, rw.Body.String())
 	}
 
-	// Backfill path: write a couple of lines, then connect with an
-	// already-cancelled context so the handler backfills and returns.
 	lt := NewLogTail(100)
 	_, _ = lt.Write([]byte("first line\n"))
 	_, _ = lt.Write([]byte("second line\n"))
@@ -65,7 +56,6 @@ func TestSystemLogTail_Cov(t *testing.T) {
 		t.Fatalf("backfill body missing lines: %q", body)
 	}
 
-	// tail<=0 means no backfill (live-only); still 200, no seeded lines.
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	cancel2()
 	req2 := httptest.NewRequest("GET", "/api/v1/admin/system/log?tail=0", nil).WithContext(ctx2)

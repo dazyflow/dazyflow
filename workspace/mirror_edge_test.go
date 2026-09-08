@@ -19,17 +19,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// A mirror push force-updates every ref and deletes the ones that no longer
-// exist locally. Both halves are destructive and neither is recoverable from
-// the daemon's side, so the cases below are about the two ways that can go
-// wrong: overwriting the WRONG repository, and computing the wrong ref set for
-// the right one. The happy paths live in mirror_test.go (refspec mechanics)
-// and mirror_ssh_test.go (a real key against a real server).
-
-// --- helpers ----------------------------------------------------------
-
-// mirrorOf pushes s to a fresh bare remote and returns the remote's path,
-// so a test can then do something adversarial to either side.
 func mirrorOf(t *testing.T, s *Store) string {
 	t.Helper()
 	remote := bareRemote(t)
@@ -39,8 +28,6 @@ func mirrorOf(t *testing.T, s *Store) string {
 	return remote
 }
 
-// storeWithFlows builds a workspace holding the named flows, publishing the
-// first, and returns it with the final commit.
 func storeWithFlows(t *testing.T, ids ...string) (*Store, string) {
 	t.Helper()
 	s, err := OpenFS(t.TempDir())
@@ -65,8 +52,6 @@ func storeWithFlows(t *testing.T, ids ...string) (*Store, string) {
 	return s, commit
 }
 
-// remoteFlows lists the flow ids readable from the remote's branch tip — the
-// question that actually matters after a destructive push: is the data there?
 func remoteFlows(t *testing.T, dir string) []string {
 	t.Helper()
 	repo, err := git.PlainOpen(dir)
@@ -107,15 +92,11 @@ func remoteFlows(t *testing.T, dir string) []string {
 	return out
 }
 
-// --- overwriting the wrong repository ---------------------------------
-
-// TestMirror_RefusesUnrelatedRemote is the data-loss case that mattered most:
-// a deployment whose data volume was lost comes back with an empty workspace
-// and mirrors it over the very repository it should have been restored from.
-// Before the shared-history check this silently deleted every flow and the
-// published tag.
+// The data-loss case that mattered most: a deployment whose data volume was
+// lost comes back with an empty workspace and mirrors it over the very
+// repository it should have been restored from. Before the shared-history
+// check this silently deleted every flow and the published tag.
 func TestMirror_RefusesUnrelatedRemote(t *testing.T) {
-	// A populated mirror, from a workspace that then disappears.
 	original, _ := storeWithFlows(t, "invoices", "alerts", "backup")
 	remote := mirrorOf(t, original)
 	before := remoteRefs(t, remote)
@@ -123,7 +104,6 @@ func TestMirror_RefusesUnrelatedRemote(t *testing.T) {
 		t.Fatalf("setup: expected a branch and a tag on the mirror, got %v", before)
 	}
 
-	// A brand-new workspace — same URL, no shared history.
 	fresh, err := OpenFS(t.TempDir())
 	if err != nil {
 		t.Fatalf("OpenFS: %v", err)
@@ -133,7 +113,6 @@ func TestMirror_RefusesUnrelatedRemote(t *testing.T) {
 		t.Fatalf("push from an unrelated workspace = %v, want ErrUnrelatedRemote", err)
 	}
 
-	// Nothing moved. This is the assertion the whole guard exists for.
 	if after := remoteRefs(t, remote); len(after) != len(before) {
 		t.Errorf("refused push still changed the remote: %v -> %v", before, after)
 	}
@@ -143,9 +122,8 @@ func TestMirror_RefusesUnrelatedRemote(t *testing.T) {
 	}
 }
 
-// TestMirror_OverwriteUnrelatedIsOptIn — the same push, explicitly confirmed,
-// must go through. Refusing forever would make a legitimately repointed
-// mirror impossible to fix from the UI.
+// The same push, explicitly confirmed, must go through. Refusing forever would
+// make a legitimately repointed mirror impossible to fix from the UI.
 func TestMirror_OverwriteUnrelatedIsOptIn(t *testing.T) {
 	original, _ := storeWithFlows(t, "invoices")
 	remote := mirrorOf(t, original)
@@ -166,9 +144,6 @@ func TestMirror_OverwriteUnrelatedIsOptIn(t *testing.T) {
 	}
 }
 
-// TestMirror_EmptyRemoteIsNotUnrelated — a fresh empty repository is the
-// expected target of a first push. If the guard fired here, nobody could ever
-// set a mirror up.
 func TestMirror_EmptyRemoteIsNotUnrelated(t *testing.T) {
 	s, commit := storeWithFlows(t, "flow1")
 	remote := bareRemote(t)
@@ -181,11 +156,11 @@ func TestMirror_EmptyRemoteIsNotUnrelated(t *testing.T) {
 	}
 }
 
-// TestMirror_AmendedHistoryIsStillRelated is the false-positive the guard had
-// to avoid. SaveCoalescing amends, so the remote's tip stops being an
-// ancestor of local HEAD during ordinary editing — but it is still an object
-// we hold, which is what the check tests. If this regressed, mirroring would
-// break for every user who types two params half a minute apart.
+// The false-positive the guard had to avoid. SaveCoalescing amends, so the
+// remote's tip stops being an ancestor of local HEAD during ordinary editing —
+// but it is still an object we hold, which is what the check tests. If this
+// regressed, mirroring would break for every user who types two params half a
+// minute apart.
 func TestMirror_AmendedHistoryIsStillRelated(t *testing.T) {
 	s, err := OpenFS(t.TempDir())
 	if err != nil {
@@ -207,16 +182,15 @@ func TestMirror_AmendedHistoryIsStillRelated(t *testing.T) {
 	if second == first {
 		t.Fatal("setup: expected the coalescing save to amend")
 	}
-	// The remote still points at the amended-away commit.
 	if _, err := s.Push(context.Background(), remote, nil); err != nil {
 		t.Fatalf("push after amend must be allowed, got: %v", err)
 	}
 }
 
-// TestMirror_DivergedRemoteIsStillRelated — someone commits directly on the
-// mirror. Its tip is unknown to us, but its other refs are ours, so this is
-// clearly still the same repository and the replica contract applies: we
-// overwrite. The guard must not turn a diverged replica into a stuck mirror.
+// Someone commits directly on the mirror. Its tip is unknown to us, but its
+// other refs are ours, so this is clearly still the same repository and the
+// replica contract applies: we overwrite. The guard must not turn a diverged
+// replica into a stuck mirror.
 func TestMirror_DivergedRemoteIsStillRelated(t *testing.T) {
 	s, _ := storeWithFlows(t, "flow1")
 	remote := mirrorOf(t, s)
@@ -238,8 +212,6 @@ func TestMirror_DivergedRemoteIsStillRelated(t *testing.T) {
 	if err := repo.Storer.SetReference(plumbing.NewHashReference(head.Name(), stranger)); err != nil {
 		t.Fatalf("move remote branch: %v", err)
 	}
-	// Sanity: the branch tip is now something we do not hold, while the tag
-	// still is — which is exactly the "diverged but related" shape.
 	if s.git().repo.Storer.HasEncodedObject(stranger) == nil {
 		t.Fatal("setup: the fabricated commit should be unknown locally")
 	}
@@ -250,7 +222,6 @@ func TestMirror_DivergedRemoteIsStillRelated(t *testing.T) {
 	if _, err := s.Push(context.Background(), remote, nil); err != nil {
 		t.Fatalf("push to a diverged-but-related remote: %v", err)
 	}
-	// Our branch won, which is the documented replica behaviour.
 	for name, hash := range remoteRefs(t, remote) {
 		if strings.HasPrefix(name, "refs/heads/") && hash == stranger.String() {
 			t.Error("the stranger commit survived; the mirror did not take over the branch")
@@ -258,9 +229,6 @@ func TestMirror_DivergedRemoteIsStillRelated(t *testing.T) {
 	}
 }
 
-// commitOnRemote writes a real commit object into the remote's own store,
-// parented on `parent` and reusing its tree — the cheapest way to simulate
-// "somebody pushed to the mirror directly" without a second worktree.
 func commitOnRemote(t *testing.T, repo *git.Repository, parent plumbing.Hash) plumbing.Hash {
 	t.Helper()
 	parentCommit, err := repo.CommitObject(parent)
@@ -286,12 +254,9 @@ func commitOnRemote(t *testing.T, repo *git.Repository, parent plumbing.Hash) pl
 	return h
 }
 
-// --- computing the ref set for the right repository -------------------
-
-// TestMirror_PrunesExtraRemoteBranchesButNotOurs — the delete half of the
-// push. Extra refs on the remote go; the ref being updated must not be caught
-// in the same sweep (which is exactly what go-git's Prune did, and why this
-// code enumerates refs itself).
+// The delete half of the push. Extra refs on the remote go; the ref being
+// updated must not be caught in the same sweep (which is exactly what go-git's
+// Prune did, and why this code enumerates refs itself).
 func TestMirror_PrunesExtraRemoteBranchesButNotOurs(t *testing.T) {
 	s, _ := storeWithFlows(t, "flow1")
 	remote := mirrorOf(t, s)
@@ -329,7 +294,6 @@ func TestMirror_PrunesExtraRemoteBranchesButNotOurs(t *testing.T) {
 			t.Errorf("%s should have been pruned (refs: %v)", gone, after)
 		}
 	}
-	// And the branch we were updating is still there, at the new commit.
 	var branch string
 	for name, hash := range after {
 		if strings.HasPrefix(name, "refs/heads/") {
@@ -344,9 +308,9 @@ func TestMirror_PrunesExtraRemoteBranchesButNotOurs(t *testing.T) {
 	}
 }
 
-// TestMirror_DeletedFlowPropagates — a deleted flow must disappear from the
-// mirror's tip while remaining in its history. This is the restore path: the
-// mirror is where a flow deleted by mistake is recovered from.
+// A deleted flow must disappear from the mirror's tip while remaining in its
+// history. This is the restore path: the mirror is where a flow deleted by
+// mistake is recovered from.
 func TestMirror_DeletedFlowPropagates(t *testing.T) {
 	s, _ := storeWithFlows(t, "keep", "remove")
 	remote := mirrorOf(t, s)
@@ -364,8 +328,6 @@ func TestMirror_DeletedFlowPropagates(t *testing.T) {
 	if len(flows) != 1 || flows[0] != "keep" {
 		t.Errorf("remote flows = %v, want only \"keep\"", flows)
 	}
-	// Still recoverable: the deletion is a commit, so the flow lives on in
-	// the mirrored history rather than being erased from it.
 	repo, err := git.PlainOpen(remote)
 	if err != nil {
 		t.Fatalf("open remote: %v", err)
@@ -388,8 +350,8 @@ func TestMirror_DeletedFlowPropagates(t *testing.T) {
 	}
 }
 
-// TestMirror_ManyFlowsAllMirrored guards the ref/refspec enumeration at a
-// size where an off-by-one or a truncation would show up.
+// Guards the ref/refspec enumeration at a size where an off-by-one or a
+// truncation would show up.
 func TestMirror_ManyFlowsAllMirrored(t *testing.T) {
 	s, err := OpenFS(t.TempDir())
 	if err != nil {
@@ -403,7 +365,6 @@ func TestMirror_ManyFlowsAllMirrored(t *testing.T) {
 		if err != nil {
 			t.Fatalf("save %s: %v", id, err)
 		}
-		// Publish every third flow, so there are many tags to carry too.
 		if i%3 == 0 {
 			if err := s.PromoteToEnvironment(id, PublishedEnv, last); err != nil {
 				t.Fatalf("publish %s: %v", id, err)
@@ -428,10 +389,10 @@ func TestMirror_ManyFlowsAllMirrored(t *testing.T) {
 	}
 }
 
-// TestMirror_AwkwardFlowIDs — ids reach the mirror as both a path
-// (graphs/<id>.json) and a tag (refs/tags/graphs/<id>/<env>). Characters that
-// are legal in one and awkward in the other are where a mirror silently drops
-// a flow or produces an unpushable ref.
+// Ids reach the mirror as both a path (graphs/<id>.json) and a tag
+// (refs/tags/graphs/<id>/<env>). Characters that are legal in one and awkward
+// in the other are where a mirror silently drops a flow or produces an
+// unpushable ref.
 func TestMirror_AwkwardFlowIDs(t *testing.T) {
 	ids := []string{
 		"with-dashes",
@@ -473,8 +434,6 @@ func TestMirror_AwkwardFlowIDs(t *testing.T) {
 	}
 }
 
-// --- failure and concurrency ------------------------------------------
-
 // TestMirror_FailedPushLeavesBothSidesIntact. The local half matters as much
 // as the remote: go-git's own prune implementation REMOVES LOCAL REFS, so a
 // wrong turn here would have the mirror corrupting the workspace it is
@@ -513,8 +472,6 @@ func TestMirror_FailedPushLeavesBothSidesIntact(t *testing.T) {
 	}
 }
 
-// TestMirror_CancelledPushIsSafe — the pusher bounds every push with a
-// timeout, so cancellation is a routine event, not an exception.
 func TestMirror_CancelledPushIsSafe(t *testing.T) {
 	s, commit := storeWithFlows(t, "flow1")
 	remote := bareRemote(t)
@@ -532,16 +489,15 @@ func TestMirror_CancelledPushIsSafe(t *testing.T) {
 	if _, err := s.Load("flow1"); err != nil {
 		t.Errorf("flow unreadable after a cancelled push: %v", err)
 	}
-	// A later push still works.
 	if _, err := s.Push(context.Background(), remote, nil); err != nil {
 		t.Errorf("push after a cancelled one: %v", err)
 	}
 }
 
-// TestMirror_ConcurrentPushesSerialize — the pusher coalesces, but a manual
-// "Push now" can land while an automatic push is in flight. go-git's
-// repository is not concurrency-safe, so the store lock is what stands
-// between that and a corrupted object store. Run with -race.
+// The pusher coalesces, but a manual "Push now" can land while an automatic
+// push is in flight. go-git's repository is not concurrency-safe, so the store
+// lock is what stands between that and a corrupted object store. Run with
+// -race.
 func TestMirror_ConcurrentPushesSerialize(t *testing.T) {
 	s, _ := storeWithFlows(t, "flow1")
 	remote := mirrorOf(t, s)
@@ -569,9 +525,9 @@ func TestMirror_ConcurrentPushesSerialize(t *testing.T) {
 	}
 }
 
-// TestMirror_PushWhileSaving — the other concurrency shape: a save (which
-// writes refs) racing a push (which reads them). Both must complete and the
-// store must stay readable. Run with -race.
+// The other concurrency shape: a save (which writes refs) racing a push (which
+// reads them). Both must complete and the store must stay readable. Run with
+// -race.
 func TestMirror_PushWhileSaving(t *testing.T) {
 	s, _ := storeWithFlows(t, "flow1")
 	remote := mirrorOf(t, s)
@@ -610,16 +566,13 @@ func TestMirror_PushWhileSaving(t *testing.T) {
 	if _, err := s.Load("flow1"); err != nil {
 		t.Errorf("store damaged: %v", err)
 	}
-	// The mirror ends up holding some valid state — not necessarily the very
-	// last save (a push races the writes by design), but a readable one.
 	if flows := remoteFlows(t, remote); len(flows) != 1 {
 		t.Errorf("remote flows = %v, want exactly flow1", flows)
 	}
 }
 
-// TestMirror_RepeatedPushesAreStable — mirroring runs unattended for months.
-// Repeated pushes with no local change must stay no-ops rather than
-// accumulating anything or flapping.
+// Mirroring runs unattended for months. Repeated pushes with no local change
+// must stay no-ops rather than accumulating anything or flapping.
 func TestMirror_RepeatedPushesAreStable(t *testing.T) {
 	s, _ := storeWithFlows(t, "flow1")
 	remote := mirrorOf(t, s)
@@ -639,9 +592,9 @@ func TestMirror_RepeatedPushesAreStable(t *testing.T) {
 	}
 }
 
-// TestMirror_UnpublishThenRepublish — the tag lifecycle, which is what tells
-// the mirror which revision is live. Going offline and back must leave the tag
-// pointing at the new revision, not the old one.
+// The tag lifecycle, which is what tells the mirror which revision is live.
+// Going offline and back must leave the tag pointing at the new revision, not
+// the old one.
 func TestMirror_UnpublishThenRepublish(t *testing.T) {
 	s, first := storeWithFlows(t, "flow1")
 	remote := mirrorOf(t, s)
@@ -677,8 +630,6 @@ func TestMirror_UnpublishThenRepublish(t *testing.T) {
 	if !ok {
 		t.Fatal("the published tag did not come back")
 	}
-	// The tag is annotated, so its ref points at a tag object rather than the
-	// commit — resolve it to check which revision is actually live.
 	repo, err := git.PlainOpen(remote)
 	if err != nil {
 		t.Fatalf("open remote: %v", err)
@@ -689,8 +640,6 @@ func TestMirror_UnpublishThenRepublish(t *testing.T) {
 	}
 }
 
-// resolveTagTarget follows an annotated tag to the commit it names, falling
-// back to the hash itself for a lightweight tag.
 func resolveTagTarget(t *testing.T, repo *git.Repository, h plumbing.Hash) string {
 	t.Helper()
 	if tag, err := repo.TagObject(h); err == nil {

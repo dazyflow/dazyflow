@@ -11,11 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Self-service rectification — Right to rectification (GDPR Art. 16):
-// change your own password and change your own email. Display-name/profile
-// rectification for an org already exists (PUT /api/v1/admin/org/profile);
-// there is no per-user display-name field to edit.
-
 const minPasswordLen = 8
 
 // changePasswordHandler lets a signed-in user change their own password.
@@ -97,7 +92,6 @@ func (h *authAPI) changeEmailHandler(rw http.ResponseWriter, r *http.Request, p 
 		writeAPIError(rw, http.StatusBadRequest, "no_change", "new_email matches the current email")
 		return
 	}
-	// Re-auth with the current password before re-keying identity.
 	if _, err := auth.VerifyPassword(r.Context(), h.Users, oldEmail, body.Password); err != nil {
 		writeAPIError(rw, http.StatusUnauthorized, "bad_credentials", "password is incorrect")
 		return
@@ -135,10 +129,7 @@ func (h *authAPI) changeEmailHandler(rw http.ResponseWriter, r *http.Request, p 
 		writeAPIError(rw, http.StatusInternalServerError, "rekey_failed", "create new identity: "+err.Error())
 		return
 	}
-	// Send a confirmation to the new address (best-effort; mints its own
-	// token and persists it). No-op when verification isn't configured.
 	verificationSent := h.sendVerificationEmail(r, newUser)
-	// 2) Re-point memberships (keyed by email).
 	if h.Memberships != nil {
 		if ms, err := h.Memberships.ListByEmail(r.Context(), oldEmail); err == nil {
 			for _, m := range ms {
@@ -151,7 +142,6 @@ func (h *authAPI) changeEmailHandler(rw http.ResponseWriter, r *http.Request, p 
 			}
 		}
 	}
-	// 3) Re-point API keys (subject == old email). PutKey upserts by ID.
 	if lister, ok := h.svc.AdminKeys.(subjectLister); ok && h.svc.AdminKeys != nil {
 		if keys, err := lister.ListBySubject(r.Context(), oldEmail); err == nil {
 			for _, k := range keys {
@@ -167,7 +157,6 @@ func (h *authAPI) changeEmailHandler(rw http.ResponseWriter, r *http.Request, p 
 	if rev, ok := h.Sessions.(auth.SessionRevoker); ok {
 		_, _ = rev.RevokeSubjectSessions(r.Context(), oldEmail)
 	}
-	// 5) Remove the old identity row.
 	if err := del.DeleteUser(r.Context(), oldEmail); err != nil {
 		warnings = append(warnings, "delete old row: "+err.Error())
 	}

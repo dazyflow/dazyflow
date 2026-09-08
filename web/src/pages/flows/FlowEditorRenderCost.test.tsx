@@ -36,10 +36,6 @@ installLayoutStubs();
 // close over an ordinary module-level binding.
 const counter = vi.hoisted(() => ({ nodes: 0 }));
 
-// Wrap the real card in a counting memo. The outer memo compares the same props
-// React Flow hands the inner one, so the counter ticks exactly when a card's
-// props changed — which is the thing under test — and the real component still
-// renders underneath.
 vi.mock("../../components/editor/NodeCard", async (importOriginal) => {
   const { memo, createElement } = await import("react");
   const actual = await importOriginal<typeof import("../../components/editor/NodeCard")>();
@@ -72,8 +68,6 @@ vi.mock("../../auth", () => ({
 
 const STEPS = 6;
 
-// A wide flow, so "one card" and "every card" are far apart. Every step hangs
-// off the trigger, which is also the shape whose cost this guards.
 function wideGraph(id = "wide") {
   return {
     id,
@@ -185,8 +179,6 @@ describe("canvas render cost", () => {
     await userEvent.click(screen.getByText("editor.run"));
     await waitFor(() => expect(stream.latest()?.runID).toBe("run-1"));
 
-    // Settle: mounting, loading and starting the run all legitimately render.
-    // What is being measured is a single status frame arriving afterwards.
     await act(async () => {});
     counter.nodes = 0;
 

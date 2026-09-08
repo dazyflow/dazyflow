@@ -17,10 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/mcp/mcptest"
 )
 
-// covPair wires a FakeServer into a Catalog over io.Pipe and returns the
-// catalog plus the named tool's transport. It mirrors registerInProcess
-// in transport_test.go but is self-contained so this file doesn't depend
-// on that helper's signature.
 func covRegister(t *testing.T, server string, srv *mcptest.FakeServer) *mcp.Catalog {
 	t.Helper()
 	clientR, serverW := io.Pipe()
@@ -59,8 +55,6 @@ func echoArgsServer(seen *map[string]any) *mcptest.FakeServer {
 	}
 }
 
-// TestTransport_Manifest covers Transport.Manifest(), the trivial getter
-// returning the synthesized manifest.
 func TestTransport_Manifest(t *testing.T) {
 	cat := covRegister(t, "srv", &mcptest.FakeServer{Tools: []mcp.Tool{{Name: "t1", Description: "d"}}})
 	tr, ok := cat.Get("", "mcp:srv:t1")
@@ -76,8 +70,6 @@ func TestTransport_Manifest(t *testing.T) {
 	}
 }
 
-// TestTransport_InputPort_Variants drives inlineToObject through its
-// branches (nil, map, []byte JSON, and a struct via the marshal default).
 func TestTransport_InputPort_Variants(t *testing.T) {
 	type payload struct {
 		A string `json:"a"`
@@ -141,9 +133,6 @@ func TestTransport_InputPort_Variants(t *testing.T) {
 	}
 }
 
-// TestTransport_BadInputBecomesBadInputError covers buildArguments'
-// error path: a string input port that isn't a JSON object and a value
-// that can't be coerced both surface a bad_input node error (no err).
 func TestTransport_BadInputBecomesBadInputError(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -176,8 +165,6 @@ func TestTransport_BadInputBecomesBadInputError(t *testing.T) {
 	}
 }
 
-// TestTransport_EmptyContentEmptyText covers contentToOutput's zero-item
-// branch: an empty content array becomes an empty text/plain output.
 func TestTransport_EmptyContentEmptyText(t *testing.T) {
 	srv := &mcptest.FakeServer{
 		Tools: []mcp.Tool{{Name: "empty"}},
@@ -203,9 +190,6 @@ func TestTransport_EmptyContentEmptyText(t *testing.T) {
 	}
 }
 
-// TestTransport_SingleNonTextContentIsJSON covers contentToOutput's
-// single non-text branch: one image item becomes an application/json
-// ContentItem rather than a plain string.
 func TestTransport_SingleNonTextContentIsJSON(t *testing.T) {
 	srv := &mcptest.FakeServer{
 		Tools: []mcp.Tool{{Name: "img"}},
@@ -231,9 +215,8 @@ func TestTransport_SingleNonTextContentIsJSON(t *testing.T) {
 	}
 }
 
-// TestTransport_ToolErrorNonTextSummary covers contentSummary's fallback
-// branch: an error result whose first content item is NOT text yields the
-// generic "tool reported error" message.
+// Covers contentSummary's fallback branch: an error result whose first content
+// item is NOT text yields the generic "tool reported error" message.
 func TestTransport_ToolErrorNonTextSummary(t *testing.T) {
 	srv := &mcptest.FakeServer{
 		Tools: []mcp.Tool{{Name: "errimg"}},
@@ -258,8 +241,6 @@ func TestTransport_ToolErrorNonTextSummary(t *testing.T) {
 	}
 }
 
-// TestTransport_ToolErrorEmptyContentSummary covers contentSummary with a
-// zero-length content slice (the len>0 guard is false).
 func TestTransport_ToolErrorEmptyContentSummary(t *testing.T) {
 	srv := &mcptest.FakeServer{
 		Tools: []mcp.Tool{{Name: "erre"}},
@@ -275,16 +256,11 @@ func TestTransport_ToolErrorEmptyContentSummary(t *testing.T) {
 	}
 }
 
-// TestTransport_CallFailsWhenConnectionClosed covers Execute's
-// mcp_call branch: when the underlying client connection is gone, the
-// CallTool returns an error and Execute reports an mcp_call node error
-// (and returns the error too).
 func TestTransport_CallFailsWhenConnectionClosed(t *testing.T) {
 	var seen map[string]any
 	cat := covRegister(t, "demo", echoArgsServer(&seen))
 	tr, _ := cat.Get("", "mcp:demo:noop")
 
-	// Tear the connection down before calling.
 	_ = cat.Close()
 
 	res, err := tr.Execute(t.Context(), core.Job{ID: "j1"}, nil)
@@ -299,8 +275,6 @@ func TestTransport_CallFailsWhenConnectionClosed(t *testing.T) {
 	}
 }
 
-// TestClient_NotifyWriteError covers Notify's write-error return: a
-// writer that always fails should propagate the error.
 func TestClient_NotifyWriteError(t *testing.T) {
 	r, _ := io.Pipe()
 	client := mcp.NewClient(failWriter{}, r)
@@ -309,9 +283,6 @@ func TestClient_NotifyWriteError(t *testing.T) {
 	}
 }
 
-// TestClient_CallWriteError covers Call's write-error path: the request
-// marshals fine but the write fails, so Call returns a write error and
-// discards the pending entry.
 func TestClient_CallWriteError(t *testing.T) {
 	r, _ := io.Pipe()
 	client := mcp.NewClient(failWriter{}, r)
@@ -325,11 +296,6 @@ type failWriter struct{}
 
 func (failWriter) Write(p []byte) (int, error) { return 0, io.ErrClosedPipe }
 
-// --- RegisterStdio (real subprocess) -------------------------------------
-
-// TestRegisterStdio_ValidationErrors covers the two guard branches of
-// RegisterStdio that reject an empty Name or empty Command without ever
-// spawning a process.
 func TestRegisterStdio_ValidationErrors(t *testing.T) {
 	cat := mcp.NewCatalog()
 	defer cat.Close()
@@ -342,8 +308,6 @@ func TestRegisterStdio_ValidationErrors(t *testing.T) {
 	}
 }
 
-// TestRegisterStdio_StartFailure covers the start-failure branch: a
-// command that does not exist on PATH fails at cmd.Start().
 func TestRegisterStdio_StartFailure(t *testing.T) {
 	cat := mcp.NewCatalog()
 	defer cat.Close()
@@ -356,10 +320,9 @@ func TestRegisterStdio_StartFailure(t *testing.T) {
 	}
 }
 
-// TestRegisterStdio_HandshakeTimeout covers the initialize-failure branch
-// of RegisterStdio (and killSubprocess): `cat` is a real process that
-// never speaks MCP, so the handshake times out and the subprocess is
-// killed.
+// Covers the initialize-failure branch of RegisterStdio (and killSubprocess):
+// `cat` is a real process that never speaks MCP, so the handshake times out
+// and the subprocess is killed.
 func TestRegisterStdio_HandshakeTimeout(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh not available")
@@ -385,10 +348,6 @@ func TestRegisterStdio_HandshakeTimeout(t *testing.T) {
 	}
 }
 
-// TestRegisterStdio_RealServerRoundTrip builds the example MCP server,
-// registers it as a real subprocess, calls a tool, then closes — covering
-// RegisterStdio's success path, the subprocess closer, and the graceful
-// stdin-close shutdown.
 func TestRegisterStdio_RealServerRoundTrip(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a subprocess; skipped in -short")
@@ -424,19 +383,14 @@ func TestRegisterStdio_RealServerRoundTrip(t *testing.T) {
 		t.Errorf("categorize = %q, want urgent", got)
 	}
 
-	// Close triggers the graceful subprocess shutdown closer.
 	if err := cat.Close(); err != nil {
 		t.Errorf("Close: %v", err)
 	}
-	// Idempotent: a second Close is a no-op.
 	if err := cat.Close(); err != nil {
 		t.Errorf("second Close should be a no-op, got %v", err)
 	}
 }
 
-// TestRegisterStdio_DuplicateServerName covers the duplicate-name guard
-// inside RegisterStdio (after a successful spawn) which kills the second
-// subprocess.
 func TestRegisterStdio_DuplicateServerName(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a subprocess; skipped in -short")
@@ -469,7 +423,6 @@ func buildExampleServer(t *testing.T) string {
 	return bin
 }
 
-// repoRoot walks up from the cwd looking for go.mod.
 func repoRoot() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {

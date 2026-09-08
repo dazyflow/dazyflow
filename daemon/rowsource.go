@@ -10,26 +10,8 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// A "row source" is a node that emits an array of record objects — the
-// kind of thing wired into sheets_append_row's `rows` input. Each source
-// knows the field names its records carry, so the mapping editor can offer
-// them as suggestions instead of making the user guess. The registry below
-// is the extensible seam: a new source is one RegisterRowSource call.
-//
-// This is deliberately decoupled from the drops that define the nodes — the
-// extractors read only node params, so daemon needn't import the connector
-// packages (same looseness as the OAuth token hooks).
-
-// RowFieldFunc returns the record field names a source node emits. It takes
-// a context (and may error) so a source can fetch its fields live — e.g. the
-// Google Form source calls the Forms API for the question titles. Failures
-// are treated as "no hints" by the caller, so the mapping box degrades to
-// free-text rather than erroring.
 type RowFieldFunc func(ctx context.Context, node core.Node) ([]string, error)
 
-// rowSource pairs the field extractor with the OUTPUT port that carries the
-// record list — so the reference picker can offer "first row" field tokens
-// (${upstream.<id>.<port>[0].<field>}) for exactly that port.
 type rowSource struct {
 	listPort string
 	fields   RowFieldFunc
@@ -37,9 +19,6 @@ type rowSource struct {
 
 var rowSources = map[string]rowSource{}
 
-// RegisterRowSource registers a field extractor for a node module, naming
-// the output port that emits the record list. Adding a source is exactly
-// this one call plus the extractor — that's the whole extension surface.
 func RegisterRowSource(module, listPort string, fn RowFieldFunc) {
 	rowSources[module] = rowSource{listPort: listPort, fields: fn}
 }
@@ -52,22 +31,14 @@ func RegisterRowSource(module, listPort string, fn RowFieldFunc) {
 // to the structural keys.
 var googleFormFieldFetcher func(ctx context.Context, node core.Node) ([]string, error)
 
-// SetGoogleFormFieldFetcher installs the live Google Form field resolver.
 func SetGoogleFormFieldFetcher(fn func(ctx context.Context, node core.Node) ([]string, error)) {
 	googleFormFieldFetcher = fn
 }
 
-// googleFormStructuralKeys are the fields every Forms response carries,
-// independent of the form's questions — the fallback when a live fetch
-// isn't wired or fails.
 var googleFormStructuralKeys = []string{"responseId", "submittedTime"}
 
-// sheetsFieldFetcher, when set by cmd/dzd, fetches a Google Sheet's live
-// header row so sheets_read_range can act as a row source. Injected for the
-// same reason as the Forms fetcher: daemon stays free of connector imports.
 var sheetsFieldFetcher func(ctx context.Context, node core.Node) ([]string, error)
 
-// SetSheetsFieldFetcher installs the live Sheets header resolver.
 func SetSheetsFieldFetcher(fn func(ctx context.Context, node core.Node) ([]string, error)) {
 	sheetsFieldFetcher = fn
 }
@@ -97,8 +68,6 @@ func init() {
 		return googleFormStructuralKeys, nil
 	})
 	RegisterRowSource("gmail_search_messages", "messages", func(_ context.Context, _ core.Node) ([]string, error) {
-		// Search expands every match into a real email record — these
-		// fields are structurally fixed, no live fetch needed.
 		return []string{"date", "from", "subject", "body", "id"}, nil
 	})
 	RegisterRowSource("sheets_read_range", "rows", func(ctx context.Context, n core.Node) ([]string, error) {
@@ -115,12 +84,6 @@ type rowSourceInfo struct {
 	Label  string `json:"label,omitempty"`
 }
 
-// listInputFields answers
-// GET /api/v1/me/flows/{flow_id}/input-fields?node=ID&port=rows:
-// the candidate record fields of whatever node feeds `node`'s `port` input
-// (default "rows"), so the mapping editor can suggest them. Returns an empty
-// field list (not an error) when nothing is wired in or the producer isn't a
-// known row source — the box just stays free-text.
 func (h *flowAPI) listInputFields(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {
@@ -148,8 +111,6 @@ func (h *flowAPI) listInputFields(rw http.ResponseWriter, r *http.Request, p cor
 	writeJSON(rw, http.StatusOK, map[string]any{"source": src, "fields": fields})
 }
 
-// inputFieldsFor finds the node wired into target.<port> and, if its module
-// is a registered row source, returns that source's field names.
 func (h *flowAPI) inputFieldsFor(ctx context.Context, p core.Principal, g core.Graph, target, port string) (*rowSourceInfo, []string) {
 	var fromID string
 	for _, e := range g.Edges {
@@ -178,7 +139,6 @@ func (h *flowAPI) inputFieldsFor(ctx context.Context, p core.Principal, g core.G
 	}
 	fields, err := src.fields(ctx, n)
 	if err != nil {
-		// Hints are best-effort — a failed live fetch leaves the box free-text.
 		return info, nil
 	}
 	return info, fields

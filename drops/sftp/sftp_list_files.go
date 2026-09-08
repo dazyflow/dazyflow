@@ -49,8 +49,6 @@ func init() {
 			ProcessModel:     core.ProcessLongLived,
 			ConnectionFields: connectionFields(),
 			Inputs: []core.Port{
-				// Named after its param so the card shows an inline editable
-				// box; a wired value overrides the typed one.
 				{Port: "directory", Label: "Folder", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
@@ -78,7 +76,6 @@ func executeSFTPList(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 	if err != nil {
 		return params.Err(job, "not_connected", err.Error()), nil
 	}
-	// The Folder input pin overrides the param when wired.
 	dir, ok := params.TextInputOr(job, "directory", cfg.Directory)
 	if !ok {
 		return params.Err(job, "bad_input", "input port 'directory' must be text"), nil
@@ -106,9 +103,6 @@ func executeSFTPList(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 
 	rows := make([]map[string]any, 0, len(entries))
 	for _, info := range entries {
-		// Folders are skipped: the question this step answers is "what files
-		// have landed", and a folder wired into Download file is an error
-		// waiting to happen. Point the step at a subfolder to descend.
 		if info.IsDir() {
 			continue
 		}
@@ -277,11 +271,6 @@ func emitOnlyNew(ctx context.Context, job core.Job, dir string, rows []map[strin
 		}
 	}
 	if !next.IsZero() && (next.After(mark.newest) || len(names) != len(mark.names)) {
-		// Safe to ignore once files have been emitted (the next run re-emits
-		// them at worst), but not on the baseline run: nothing was emitted and
-		// nothing recorded, so the next run baselines too. A write that keeps
-		// failing leaves the directory permanently unwatched while every run
-		// looks like a clean empty poll. See cursor.FailBaseline.
 		werr := cursor.Write(ctx, job.Tenant, cursorName(job, dir), formatWatermark(next, names))
 		if werr != nil && mark.baseline {
 			return cursor.FailBaseline(job, werr)
@@ -295,9 +284,6 @@ func emitOnlyNew(ctx context.Context, job core.Job, dir string, rows []map[strin
 	return listResult(job, fresh)
 }
 
-// formatWatermark renders the stored position as "<unix>|name,name". Names
-// are sorted so the same position always serializes the same way, which
-// keeps a re-read from looking like a change.
 func formatWatermark(newest time.Time, names map[string]bool) string {
 	list := make([]string, 0, len(names))
 	for n := range names {

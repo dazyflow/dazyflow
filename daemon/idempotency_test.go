@@ -14,8 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// idempotency middleware test harness: a gateway with just the store, and
-// a helper that drives one request through the wrapped handler.
 func newIdemGateway() *HTTPGateway {
 	return &HTTPGateway{idempotency: newIdempotencyStore()}
 }
@@ -31,9 +29,6 @@ func doIdem(h *HTTPGateway, method, route, key string, handler func(http.Respons
 	return rw
 }
 
-// ok2xx is a handler that counts its invocations and returns 200 with a
-// per-call body, so a replay (same body) is distinguishable from a
-// re-execution (new body).
 func countingHandler(calls *int32) func(http.ResponseWriter, *http.Request, core.Principal) {
 	return func(rw http.ResponseWriter, _ *http.Request, _ core.Principal) {
 		n := atomic.AddInt32(calls, 1)
@@ -128,11 +123,10 @@ func TestIdempotency_KeyTooLong(t *testing.T) {
 	}
 }
 
-// TestIdempotency_ConcurrentSameKey_FiresOnce is the regression test for
-// the get-then-put TOCTOU: many requests with the same key arriving while
-// the first is still in flight must NOT all run the handler. Exactly one
-// executes; the rest get 409 (in-flight). After it completes, a later
-// retry replays the cached result.
+// The regression test for the get-then-put TOCTOU: many requests with the same
+// key arriving while the first is still in flight must NOT all run the
+// handler. Exactly one executes; the rest get 409 (in-flight). After it
+// completes, a later retry replays the cached result.
 func TestIdempotency_ConcurrentSameKey_FiresOnce(t *testing.T) {
 	t.Parallel()
 	h := newIdemGateway()
@@ -140,8 +134,6 @@ func TestIdempotency_ConcurrentSameKey_FiresOnce(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 
-	// The winning request blocks inside the handler until released, so the
-	// racers below are guaranteed to hit a held, in-flight reservation.
 	blocking := func(rw http.ResponseWriter, _ *http.Request, _ core.Principal) {
 		atomic.AddInt32(&calls, 1)
 		close(started)
@@ -189,7 +181,6 @@ func TestIdempotency_ConcurrentSameKey_FiresOnce(t *testing.T) {
 		t.Fatalf("handler ran %d times under concurrency, want exactly 1", got)
 	}
 
-	// Once settled, a later retry of the same key replays the cached 200.
 	replay := doIdem(h, http.MethodPost, "/run", "race", blocking)
 	if replay.Code != http.StatusOK || replay.Header().Get("Idempotency-Replay") != "true" {
 		t.Errorf("post-settle retry: code=%d replay=%q, want 200 + replay", replay.Code, replay.Header().Get("Idempotency-Replay"))

@@ -41,8 +41,6 @@ const (
 	CancelCodeTimeout  = "timeout"
 )
 
-// CancelGraphRun stops a run at a person's request. See cancelGraphRun for the
-// variant that records a different cause.
 func (s *Service) CancelGraphRun(ctx context.Context, p core.Principal, graphRunID, reason string) error {
 	return s.cancelGraphRun(ctx, p, graphRunID, CancelCodeByPerson, reason)
 }
@@ -68,9 +66,6 @@ func (s *Service) cancelGraphRun(ctx context.Context, p core.Principal, graphRun
 			return fmt.Errorf("unmarshal graph: %w", err)
 		}
 	}
-	// Authorize against the stored graph payload: visibility may have
-	// changed since the run started, but the user who can re-run it
-	// should also be able to cancel it.
 	if err := core.AuthorizeGraphRun(p, g); err != nil {
 		return err
 	}
@@ -131,10 +126,6 @@ func (s *Service) cancelGraphRun(ctx context.Context, p core.Principal, graphRun
 	if err := s.Jobs.Complete(ctx, graphRunID, core.JobStatusCancelled, graphResult); err != nil {
 		return fmt.Errorf("cancel graph record: %w", err)
 	}
-	// Reclaim the run's ephemeral scratch now that it's terminal.
-	// Best-effort, same as the dispatcher's success/failure paths —
-	// route through the dispatcher's reclaimScratch so the
-	// ScratchProvider assertion lives in exactly one place.
 	NewDispatcher(s.Jobs, s.bus(), s.Engine, s.Logger).reclaimScratch(g, graphRunID)
 	s.bus().Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
 		JobID:  graphRunID,

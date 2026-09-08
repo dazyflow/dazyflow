@@ -12,9 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// A template may name a large value several times, and each reference
-// multiplies it. Uncapped, that is how a flow compounds a kilobyte into an
-// out-of-memory throw, so expansion stops at the ceiling.
 func TestSubstituteString_CapsExpansion(t *testing.T) {
 	defer core.SetMaxValueBytes(1024)()
 

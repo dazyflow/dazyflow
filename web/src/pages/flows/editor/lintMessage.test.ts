@@ -5,11 +5,6 @@ import { describe, expect, it } from "vitest";
 import { lintMessage } from "./lintMessage";
 import type { LintIssue } from "../../../types";
 
-// The editor builds its own sentence for the codes it knows and falls back to
-// the daemon's English `message` for the rest. The two script-language findings
-// were the first to need DATA rather than a field name, so what these pin is
-// that the data path works — and that the fallback still catches a finding
-// arriving without it, from an older daemon or a hand-made API call.
 const t = (k: string, o?: Record<string, unknown>) =>
   o ? `${k}:${JSON.stringify(o)}` : k;
 
@@ -43,7 +38,6 @@ describe("lintMessage", () => {
   });
 
   it("falls back to the daemon's message when the data is missing", () => {
-    // Same contract the field-based codes have: no data, no invented sentence.
     expect(lintMessage(issue({}), undefined, t)).toBe("the English fallback");
     expect(lintMessage(issue({ values: { language: "python" } }), undefined, t)).toBe(
       "the English fallback",

@@ -36,9 +36,6 @@ type APIKey struct {
 	RevokedAt *time.Time
 }
 
-// APIKeyStore is the lookup boundary the Authenticator uses — read-only
-// from its perspective. Kept minimal so test mocks for Authenticate
-// don't have to implement admin write methods.
 type APIKeyStore interface {
 	GetKey(ctx context.Context, id string) (APIKey, error)
 }
@@ -52,10 +49,6 @@ type AdminKeyStore interface {
 	PutKey(ctx context.Context, k APIKey) error
 	Revoke(ctx context.Context, id string, at time.Time) error
 	ListByTenant(ctx context.Context, tenant string) ([]APIKey, error)
-	// ListAll returns every key in the store regardless of tenant.
-	// Used by platform-admin paths that need to enumerate tenants
-	// (the only durable "set of tenants" today is the union of
-	// tenants represented in active keys).
 	ListAll(ctx context.Context) ([]APIKey, error)
 }
 
@@ -187,7 +180,6 @@ func sha256Salted(salt, secret []byte) []byte {
 	return h.Sum(nil)
 }
 
-// MemKeyStore is an in-memory APIKeyStore for tests.
 type MemKeyStore struct {
 	mu   sync.RWMutex
 	keys map[string]APIKey
@@ -256,31 +248,22 @@ func (m *MemKeyStore) deleteKeys(pred func(APIKey) bool) int {
 	return n
 }
 
-// ListAll returns every key in the store. Used by platform admins to
-// derive the tenant catalog (no separate tenants table exists today).
 func (m *MemKeyStore) ListAll(_ context.Context) ([]APIKey, error) {
 	return m.filterKeys(func(APIKey) bool { return true }), nil
 }
 
-// ListByTenant returns every key whose Tenant matches. Keys are
-// returned with their hash + salt intact — callers that don't need
-// those (the admin UI) should redact them on the way out. Sorted by ID
-// for deterministic test output.
 func (m *MemKeyStore) ListByTenant(_ context.Context, tenant string) ([]APIKey, error) {
 	return m.filterKeys(func(k APIKey) bool { return k.Tenant == tenant }), nil
 }
 
-// ListBySubject returns every key issued to a subject (GDPR export).
 func (m *MemKeyStore) ListBySubject(_ context.Context, subject string) ([]APIKey, error) {
 	return m.filterKeys(func(k APIKey) bool { return k.Subject == subject }), nil
 }
 
-// DeleteBySubject hard-deletes every key for a subject (erasure).
 func (m *MemKeyStore) DeleteBySubject(_ context.Context, subject string) (int, error) {
 	return m.deleteKeys(func(k APIKey) bool { return k.Subject == subject }), nil
 }
 
-// DeleteByTenant hard-deletes every key in a tenant (org deletion).
 func (m *MemKeyStore) DeleteByTenant(_ context.Context, tenant string) (int, error) {
 	return m.deleteKeys(func(k APIKey) bool { return k.Tenant == tenant }), nil
 }

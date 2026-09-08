@@ -49,16 +49,10 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{{
-				// A wired file (e.g. from file_write / http_download) overrides
-				// the 'path' param.
 				Port:  "in",
 				Label: "File",
 			}},
 			Outputs: []core.Port{
-				// Only the response is a pin; the structured result (status,
-				// bytes sent) is still EMITTED under "meta" (see the Execute
-				// result) so run records keep it for debugging — it's just not
-				// a pin (same as gmail send / sheets append).
 				{Port: "response_body", Label: "Response"},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"status":201,"bytes_sent":48213}`)},
 			},
@@ -113,7 +107,6 @@ func executeHTTPUpload(ctx context.Context, job core.Job, _ chan<- core.Progress
 	// operator opted in (DAZYFLOW_ALLOW_PRIVATE_EGRESS), else ignored.
 	allowPrivate := params.BoolDefault(job.Params, "allow_private_networks", false) && hfnet.PrivateEgressAllowed()
 
-	// Open the source file from the sandbox (workspace or scratch://).
 	root, rel, err := openSandboxRoot(job, srcPath)
 	if err != nil {
 		return params.Err(job, "no_sandbox", err.Error()), nil
@@ -226,8 +219,6 @@ func executeHTTPUpload(ctx context.Context, job core.Job, _ chan<- core.Progress
 	}, nil
 }
 
-// uploadSrcPath takes the file path from the 'in' input ref (so an
-// upstream file_write/http_download can feed it) or params.path.
 func uploadSrcPath(job core.Job) string {
 	if in, ok := job.Input["in"]; ok && in.Ref != "" {
 		return in.Ref

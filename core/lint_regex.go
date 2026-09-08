@@ -8,14 +8,9 @@ import (
 	"strings"
 )
 
-// The Regex step's pattern is required for three of its four modes, and in the
-// fourth a Replacements table can stand in for it — a rule the params schema
-// cannot express, since `required` knows nothing about `mode`.
-//
-// So the schema doesn't claim it, and this does. The point is WHEN the author
-// hears about it: a step with nothing to search for fails the moment it runs,
-// and the whole value of saying so here is that it's said while the flow is
-// still being written.
+// The pattern is required for three of four modes, and in the fourth a
+// Replacements table can stand in — a rule the params schema cannot express,
+// `required` knowing nothing about `mode`.
 const (
 	regexModule       = "regex"
 	regexPatternParam = "pattern"
@@ -31,8 +26,6 @@ func lintRegexPattern(g Graph) []LintIssue {
 		if strings.TrimSpace(stringParam(n.Params, regexPatternParam)) != "" {
 			continue
 		}
-		// In replace mode the table supplies the words to look for, so a step
-		// with one is fully configured without a pattern.
 		mode := stringParam(n.Params, "mode")
 		if mode == "replace" && hasEntries(n.Params[regexTableParam]) {
 			continue
@@ -52,8 +45,6 @@ func lintRegexPattern(g Graph) []LintIssue {
 	return issues
 }
 
-// hasEntries reports whether a params value is a map holding at least one
-// non-blank key — an editor row half-typed is not a configured table.
 func hasEntries(v any) bool {
 	m, ok := v.(map[string]any)
 	if !ok {

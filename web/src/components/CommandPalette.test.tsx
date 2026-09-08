@@ -73,7 +73,6 @@ describe("CommandPalette", () => {
   it("hides admin destinations without the permission", () => {
     open();
     expect(rowNames()).not.toContain("admin.cardGitTitle");
-    // Account settings are personal, so they stay available to everyone.
     expect(rowNames()).toContain("commandPalette.account");
   });
 

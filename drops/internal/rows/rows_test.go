@@ -19,20 +19,17 @@ func TestNormalize_NilAndEmpty(t *testing.T) {
 }
 
 func TestNormalize_NativeShapes(t *testing.T) {
-	// []map[string]any passes through.
 	in := []map[string]any{{"a": 1}}
 	got, err := Normalize(in, Options{})
 	if err != nil || !reflect.DeepEqual(got, in) {
 		t.Errorf("[]map[string]any = %v, %v", got, err)
 	}
 
-	// []map[string]string widens to any.
 	got, err = Normalize([]map[string]string{{"a": "x"}}, Options{})
 	if err != nil || len(got) != 1 || got[0]["a"] != "x" {
 		t.Errorf("[]map[string]string = %v, %v", got, err)
 	}
 
-	// []any of maps coerces each element.
 	got, err = Normalize([]any{map[string]any{"a": 1}, map[string]string{"b": "y"}}, Options{})
 	if err != nil || len(got) != 2 || got[1]["b"] != "y" {
 		t.Errorf("[]any = %v, %v", got, err)
@@ -47,14 +44,12 @@ func TestNormalize_AnyBadElement(t *testing.T) {
 }
 
 func TestNormalize_SingleObject(t *testing.T) {
-	// Rejected without AllowSingleObject.
 	if _, err := Normalize(map[string]any{"a": 1}, Options{}); err == nil {
 		t.Error("bare object should be rejected by default")
 	}
 	if _, err := Normalize(map[string]string{"a": "1"}, Options{}); err == nil {
 		t.Error("bare string-object should be rejected by default")
 	}
-	// Accepted as a one-row list with AllowSingleObject.
 	got, err := Normalize(map[string]any{"a": 1}, Options{AllowSingleObject: true})
 	if err != nil || len(got) != 1 || got[0]["a"] != 1 {
 		t.Errorf("single object = %v, %v", got, err)
@@ -66,27 +61,22 @@ func TestNormalize_SingleObject(t *testing.T) {
 }
 
 func TestNormalize_StringJSON(t *testing.T) {
-	// Strict mode: array of objects.
 	got, err := Normalize(`[{"a":1}]`, Options{})
 	if err != nil || len(got) != 1 {
 		t.Errorf("json array = %v, %v", got, err)
 	}
-	// Strict mode rejects malformed JSON.
 	if _, err := Normalize(`not json`, Options{}); err == nil {
 		t.Error("malformed JSON should error")
 	}
 
-	// Lenient mode parses then re-normalizes: single object.
 	got, err = Normalize(`{"a":1}`, Options{AllowSingleObject: true})
 	if err != nil || len(got) != 1 || got[0]["a"] != float64(1) {
 		t.Errorf("lenient single = %v, %v", got, err)
 	}
-	// Lenient mode also handles arrays.
 	got, err = Normalize(`[{"a":1},{"b":2}]`, Options{AllowSingleObject: true})
 	if err != nil || len(got) != 2 {
 		t.Errorf("lenient array = %v, %v", got, err)
 	}
-	// Lenient mode surfaces malformed JSON.
 	if _, err := Normalize(`{bad`, Options{AllowSingleObject: true}); err == nil {
 		t.Error("lenient malformed JSON should error")
 	}
@@ -106,7 +96,6 @@ func TestNormalize_CapEnforced(t *testing.T) {
 		}
 		return nil
 	}}
-	// Each list shape consults the cap.
 	for _, in := range []any{
 		[]map[string]any{{"a": 1}, {"b": 2}},
 		[]map[string]string{{"a": "1"}, {"b": "2"}},
@@ -116,7 +105,6 @@ func TestNormalize_CapEnforced(t *testing.T) {
 			t.Errorf("cap not enforced for %T: %v", in, err)
 		}
 	}
-	// Under the cap passes.
 	if _, err := Normalize([]map[string]any{{"a": 1}}, cap1); err != nil {
 		t.Errorf("under cap errored: %v", err)
 	}

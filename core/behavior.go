@@ -5,40 +5,21 @@ package core
 
 import "reflect"
 
-// BehaviorEqual reports whether two revisions of a flow would behave the
-// same: whether promoting one over the other changes anything a run, a
-// schedule, or an inbound trigger does. It drives the editor's "your draft has
-// changes that aren't live yet" prompt, which must not nag about cosmetics the
-// diff view already ignores.
+// Whether promoting one revision over the other changes anything a run, a
+// schedule or an inbound trigger does.
 //
-// Ignored as editor-only (mirror of the cosmetic set in
-// web/src/lib/diffGraphs.ts; keep the two in lockstep):
+// Ignored as editor-only, mirroring web/src/lib/diffGraphs.ts — keep the two in
+// lockstep: Node.Position, Label, Collapsed, Locked, Edge.Waypoints, Graph.Frames.
+// Graph.Name is NOT cosmetic — it reaches people through failure mail.
+// Graph.Disabled is ignored because the endpoints read it off HEAD, so pausing is
+// live the moment it is saved and is not publishable drift.
 //
-//	Node.Position, Node.Label, Node.Collapsed, Node.Locked,
-//	Edge.Waypoints, Graph.Frames
-//
-// Collapsed and Locked are editor-only for the same reason Position is: they
-// change how the flow is DRAWN and how the editor guards it, not what a run
-// does. Publishing a folded or locked card must not read as pending drift.
-//
-// Graph.Name is NOT cosmetic: it reaches people through the flow list and
-// failure mail. Graph.Disabled is ignored for a different reason: the
-// scheduler, webhook and form endpoints read it off HEAD, so pausing is live
-// the moment it is saved and is not publishable drift.
-//
-// Everything else counts. The comparison is a DeepEqual with the fields above
-// cleared, not an allowlist, so a new field defaults to "publishing it
-// matters", which is the safe direction.
+// A DeepEqual with those cleared rather than an allowlist, so a new field defaults
+// to "publishing it matters".
 func BehaviorEqual(a, b Graph) bool {
 	return reflect.DeepEqual(stripCosmetic(a), stripCosmetic(b))
 }
 
-// stripCosmetic returns g with the editor-only and applied-from-HEAD fields
-// zeroed. It copies the node and edge slices rather than editing them in
-// place — the caller's graph is usually one it just loaded and still uses.
-//
-// Empty slices normalize to nil so a graph saved with `"nodes": []` compares
-// equal to one that omits the key; DeepEqual otherwise calls those different.
 func stripCosmetic(g Graph) Graph {
 	out := g
 	out.Frames = nil

@@ -39,12 +39,9 @@ function parsePoint(v: string): { lat: number; lon: number } | null {
   return { lat, lon };
 }
 
-// trim trailing zeros: 59.32930 → 59.3293, but keep enough precision (~1 m).
 const fmt = (n: number) => String(Math.round(n * 1e6) / 1e6);
 const fmtPoint = (lat: number, lon: number) => `${fmt(lat)},${fmt(lon)}`;
 
-// A dependency-free marker: Leaflet's default PNG marker needs bundler asset
-// wiring, so we use a CSS/emoji divIcon instead.
 const markerIcon = L.divIcon({
   className: "geo-pin",
   html: "📍",
@@ -52,8 +49,6 @@ const markerIcon = L.divIcon({
   iconAnchor: [12, 23],
 });
 
-// geocodeQuery resolves a place name to its best match (or null). Used both by
-// the manual search box and by the Place-follow effect.
 async function geocodeQuery(q: string): Promise<{ lat: number; lon: number; name: string } | null> {
   const { geocoderUrl } = await mapConfig();
   const r = await fetch(`${geocoderUrl}/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`, {
@@ -76,15 +71,8 @@ export function GeoPointField({
 }: {
   value: string;
   onChange: (v: string) => void;
-  // The sibling Place (city/address). When set, the pin follows it.
   place?: string;
-  // True when the Place INPUT PORT is wired from another step. Then the
-  // location is decided at run time, so we stop following the typed Place and
-  // say so — neither the typed Place nor the map pin is used.
   placeWired?: boolean;
-  // The coordinate this node emitted on its last run ("lat,lon"). When set, the
-  // pin recenters on it — so after running, the map shows where it landed
-  // (especially useful when the location came from a wired input).
   runCoordinate?: string;
 }) {
   const { t } = useTranslation();
@@ -100,10 +88,6 @@ export function GeoPointField({
   const [placeName, setPlaceName] = useState<string | null>(null);
   const [placeErr, setPlaceErr] = useState<string | null>(null);
 
-  // `place` is the EFFECTIVE place to show: the typed Place param, or — when
-  // the Place input is wired from a resolvable literal (a Text drop) — that
-  // upstream value (the caller resolves it). So we geocode and follow it
-  // whenever it's non-empty, wired or not.
   const placeQuery = (place ?? "").trim();
   const following = placeQuery !== "";
   // The pin can't be picked manually while a Place (typed or wired) owns it.
@@ -114,7 +98,6 @@ export function GeoPointField({
 
   const parsed = parsePoint(value);
 
-  // setMarker places or moves the (single) marker, optionally recentering.
   function setMarker(lat: number, lon: number, recenter = false) {
     const map = mapRef.current;
     if (!map) return;
@@ -131,20 +114,13 @@ export function GeoPointField({
     if (recenter) map.setView([lat, lon], Math.max(map.getZoom(), 12));
   }
 
-  // init the map once.
   useEffect(() => {
     if (!mapEl.current || mapRef.current) return;
     const start = parsed ?? { lat: 20, lon: 0 };
-    // keyboard:false so the map doesn't swallow Delete/arrow keys when focused
-    // on the canvas — those belong to the flow editor (delete/move the node).
     const map = L.map(mapEl.current, { keyboard: false }).setView(
       [start.lat, start.lon],
       parsed ? 11 : 2,
     );
-    // The tile URL is config, so it arrives a tick late. The map is created
-    // and interactive immediately; the layer drops in when the config lands.
-    // `disposed` guards the case where the node is removed first — adding a
-    // layer to a removed map throws.
     let disposed = false;
     void mapConfig().then(({ tileUrl }) => {
       if (disposed) return;
@@ -210,8 +186,6 @@ export function GeoPointField({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placeQuery, following]);
 
-  // After a run, recenter the pin on the coordinate the node actually emitted
-  // — the resolved location (a wired Place/Coordinate is only known now).
   useEffect(() => {
     if (!runCoordinate) return;
     const p = parsePoint(runCoordinate);
@@ -241,7 +215,6 @@ export function GeoPointField({
   return (
     <div className="geo-point-field">
       {following ? (
-        // A Place (typed, or resolved from a wired Text) drives the pin.
         <div className="geo-following">
           {placeErr
             ? placeErr

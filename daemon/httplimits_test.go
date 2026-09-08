@@ -11,10 +11,6 @@ import (
 	"testing"
 )
 
-// TestLimitRequestBody_RejectsOversizedContentLength verifies the global body
-// guard rejects a POST whose declared Content-Length exceeds the ceiling
-// before the (tiny) body is ever read — the early-allocation guard. It fires
-// pre-routing/pre-auth, so any POST path exercises it.
 func TestLimitRequestBody_RejectsOversizedContentLength(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -29,7 +25,6 @@ func TestLimitRequestBody_RejectsOversizedContentLength(t *testing.T) {
 	}
 }
 
-// A normal-sized POST is unaffected by the guard (reaches routing/auth).
 func TestLimitRequestBody_AllowsNormalBody(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)

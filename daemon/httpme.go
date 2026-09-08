@@ -1,20 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// /me/flows and /me/runs are the spec-aligned wire shapes for the
-// flows + runs surface. They sit on top of the existing graph + job
-// service methods — translation only, no new business logic. The
-// `flow_id` path parameter is a percent-encoded composite of
-// `${tenant}/${workspace}/${id}` (slashes become %2F so the value
-// stays in a single mux segment); the daemon decodes via PathValue
-// then splits to recover the three parts. The `run_id` parameter is
-// the jobID verbatim — runs are already globally unique by ID, no
-// composite needed.
-//
-// Errors on this surface use the structured envelope from errors.go.
-// Legacy /api/v1/graphs and /api/v1/jobs routes stay alongside these
-// for the transition; they will be removed once the web client and
-// dz-mcp have both migrated.
+// The spec-aligned wire shapes; the legacy routes remain for older clients.
 
 package daemon
 
@@ -35,8 +22,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// flowAPI serves the flow authoring, run, board and preview endpoints. Its fields are the whole of what
-// those handlers touch.
 type flowAPI struct {
 	auditor
 	flowLoader
@@ -47,25 +32,14 @@ type flowAPI struct {
 	runCtl           *runCtlAPI
 	secrets          *secretsAPI
 	oauth            *oauthAPI
-	// noCompression mirrors the gateway's opt-out. Handlers that encode
-	// their own cached body have to honour it themselves: when it is set
-	// the streaming middleware is not installed at all.
-	noCompression bool
+	noCompression    bool
 }
 
-// flowAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) flowAPI() *flowAPI {
 	return &flowAPI{auditor: h.auditor(), flowLoader: h.flows(), urlBuilder: h.urls(), svc: h.svc, Users: h.Users, EncryptedSecrets: h.EncryptedSecrets, runCtl: h.runCtlAPI(), secrets: h.secretsAPI(), oauth: h.oauthAPI(), noCompression: h.DisableCompression}
 }
 
-// splitFlowID parses the {flow_id} path parameter back into
-// (tenant, workspace, graphID). Returns an error suitable for direct
-// emission via writeAPIError when the composite is malformed.
-//
-// Validates against the principal's scope when the principal is
-// scoped: a workspace-bound key calling /me/flows/other-tenant/...
-// gets a 403 (forbidden_scope) rather than a confused 404 from the
-// underlying graph store.
+// Inner slashes arrive %2F-encoded, so the composite stays one mux segment.
 func splitFlowID(flowID string, p core.Principal) (tenant, workspace, id string, err error) {
 	parts := strings.SplitN(flowID, "/", 3)
 	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
@@ -76,18 +50,11 @@ func splitFlowID(flowID string, p core.Principal) (tenant, workspace, id string,
 		return "", "", "", fmt.Errorf("cannot act on tenant %q (principal is bound to %q)", tenant, p.Tenant)
 	}
 	if p.Workspace != "" && workspace != p.Workspace && !isPlatformAdmin(p) {
-		// p.Workspace is set on workspace-scoped keys but empty on
-		// tenant-admin keys; the latter can act on any workspace in
-		// their tenant.
 		return "", "", "", fmt.Errorf("cannot act on workspace %q (principal is bound to %q)", workspace, p.Workspace)
 	}
 	return tenant, workspace, id, nil
 }
 
-// readFlowID centralizes the parse-or-401-style "extract scope and
-// translate to (tenant, workspace, id)" dance every /me/flows handler
-// shares. Returns false when the handler should stop (it already wrote
-// the error envelope).
 func readFlowID(rw http.ResponseWriter, r *http.Request, p core.Principal) (string, string, string, bool) {
 	tenant, workspace, id, err := splitFlowID(r.PathValue("flow_id"), p)
 	if err != nil {
@@ -101,13 +68,7 @@ func readFlowID(rw http.ResponseWriter, r *http.Request, p core.Principal) (stri
 	return tenant, workspace, id, true
 }
 
-// resolveScope resolves the (tenant, workspace) a request targets: ?tenant=
-// and ?workspace= override the principal's binding, and both must resolve to
-// non-empty (400 "missing_scope" otherwise). A scoped principal cannot widen
-// past its binding — naming another tenant or workspace is a 403
-// "forbidden_scope", where action names the attempt ("act on", "read boards
-// in"). Platform admins carry no binding and are exempt. Writes the error
-// envelope and returns ok=false when the handler should stop.
+// A non-platform-admin is pinned to their own tenant whatever they ask for.
 func resolveScope(rw http.ResponseWriter, r *http.Request, p core.Principal, action string) (tenant, workspace string, ok bool) {
 	tenant = r.URL.Query().Get("tenant")
 	workspace = r.URL.Query().Get("workspace")
@@ -130,8 +91,6 @@ func resolveScope(rw http.ResponseWriter, r *http.Request, p core.Principal, act
 			fmt.Sprintf("cannot %s tenant %q (principal is bound to %q)", action, tenant, p.Tenant))
 		return "", "", false
 	}
-	// p.Workspace is set on workspace-scoped keys but empty on tenant-admin
-	// keys; the latter can act on any workspace in their tenant.
 	if p.Workspace != "" && workspace != p.Workspace {
 		writeAPIError(rw, http.StatusForbidden, "forbidden_scope",
 			fmt.Sprintf("cannot %s workspace %q (principal is bound to %q)", action, workspace, p.Workspace))
@@ -140,22 +99,11 @@ func resolveScope(rw http.ResponseWriter, r *http.Request, p core.Principal, act
 	return tenant, workspace, true
 }
 
-// resolveTenantWorkspaceScope is resolveScope for the workspace-scoped /me
-// listings (listFlowsMe, suggestionsMe) and the /me/share handlers. Those
-// service methods re-check with core.RequireWorkspace, so the guard here is
-// defense in depth — but rejecting at the boundary keeps the rule in one
-// place, so a future handler that reaches a store directly (as the board
-// service does) can't silently inherit a cross-tenant read.
 func resolveTenantWorkspaceScope(rw http.ResponseWriter, r *http.Request, p core.Principal) (string, string, bool) {
 	return resolveScope(rw, r, p, "act on")
 }
 
-// runStoreError maps a run-store error onto the right status: no run-log
-// store wired is a 501 "not_configured" (the operator hasn't enabled
-// persistent run logs); anything else is a 404 "run_not_found" (the run id is
-// unknown or cross-tenant). Classifies on the sentinel, not on message text —
-// the substring form it replaced would have turned any unrelated error that
-// happened to contain "not configured" into a 501.
+// A deployment with no run-log store is 501, not 404.
 func runStoreError(rw http.ResponseWriter, err error) {
 	if errors.Is(err, ErrRunLogsDisabled) {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", err.Error())
@@ -164,16 +112,6 @@ func runStoreError(rw http.ResponseWriter, err error) {
 	writeAPIError(rw, http.StatusNotFound, "run_not_found", err.Error())
 }
 
-// --- /me/flows --------------------------------------------------------
-
-// listRunLogsMe is GET /api/v1/me/runs/{run_id}/logs — a page of the
-// run's persisted log. ?after= resumes from a seq cursor, ?limit= caps
-// the page. The web run-detail page replays history with this; live
-// tailing stays on the SSE events stream.
-// deleteRunLogsMe erases one run's persisted logs (GDPR P2.1). Run logs
-// can carry arbitrary personal data from a flow's payloads, so a user can
-// delete them per-run without waiting for the retention sweep. Authorized
-// like reading them: only the owning tenant's caller can.
 func (h *flowAPI) deleteRunLogsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("run_id")
 	n, err := h.svc.DeleteRunLog(r.Context(), p, runID)
@@ -201,9 +139,6 @@ func (h *flowAPI) listRunLogsMe(rw http.ResponseWriter, r *http.Request, p core.
 }
 
 func (h *flowAPI) listFlowsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	// /me/flows accepts ?tenant= and ?workspace=, falling back to the
-	// principal's binding. Web clients send them explicitly today; LLM
-	// clients with a workspace-scoped key can omit them.
 	tenant, workspace, ok := resolveTenantWorkspaceScope(rw, r, p)
 	if !ok {
 		return
@@ -216,10 +151,6 @@ func (h *flowAPI) listFlowsMe(rw http.ResponseWriter, r *http.Request, p core.Pr
 	writeJSON(rw, http.StatusOK, map[string]any{"flows": summaries})
 }
 
-// suggestionsMe is GET /api/v1/me/flows/suggestions — the directed
-// module co-occurrence mined from this workspace's own flows, used by the
-// editor's drag-off-pin palette to surface "drops you usually wire next".
-// Same ?tenant=/?workspace= fallback as listFlowsMe.
 func (h *flowAPI) suggestionsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, ok := resolveTenantWorkspaceScope(rw, r, p)
 	if !ok {
@@ -244,10 +175,7 @@ func (h *flowAPI) loadFlowMe(rw http.ResponseWriter, r *http.Request, p core.Pri
 	writeJSON(rw, http.StatusOK, g)
 }
 
-// flowNotFoundMessage is the user-facing 404 message for a missing flow.
-// It deliberately omits the git-backed store's internals (the commit hash,
-// the word "graph", "file not found") that the raw LoadGraph error
-// exposes — those are storage details a public API caller shouldn't see.
+// Must not disclose whether a flow exists but is invisible to this caller.
 func flowNotFoundMessage(tenant, workspace, id string) string {
 	return fmt.Sprintf("no flow %q in workspace %s/%s", id, tenant, workspace)
 }
@@ -261,12 +189,7 @@ func (h *flowAPI) saveFlowMe(rw http.ResponseWriter, r *http.Request, p core.Pri
 	if !ok {
 		return
 	}
-	// Path is source-of-truth; ignore tenant/workspace/id in the body
-	// even when the client supplied them.
 	g.Tenant, g.Workspace, g.ID = tenant, workspace, id
-	// ?autosave=1 marks an editor autosave: consecutive autosaves of this
-	// flow coalesce into a single commit so the history stays readable.
-	// Explicit saves (no param) always commit their own checkpoint.
 	var commit string
 	var err error
 	if r.URL.Query().Get("autosave") == "1" {
@@ -282,19 +205,10 @@ func (h *flowAPI) saveFlowMe(rw http.ResponseWriter, r *http.Request, p core.Pri
 		writeAPIError(rw, http.StatusBadRequest, "save_failed", err.Error())
 		return
 	}
-	// Audit action stays "graph.save" — it's an internal audit-trail
-	// contract that downstream alerting may key on. The public rename
-	// (graphs → flows) is wire-only; audit codes are stable.
 	h.audit(r.Context(), p, "graph.save", g.ID, "commit="+commit)
 	writeJSON(rw, http.StatusOK, h.flowMutationResponse(r, commit, g))
 }
 
-// flowMutationResponse is the shared response shape for save + patch.
-// Includes a canvas URL the LLM can hand to the user ("open this to
-// see what I built"), the trigger endpoints, and a flag indicating
-// whether the operator has set --public-base-url. When the flag is
-// false, the trigger URLs in `endpoints` are relative — the LLM
-// should warn the user instead of telling them to paste the URL.
 func (h *flowAPI) flowMutationResponse(r *http.Request, commit string, g core.Graph) map[string]any {
 	scope := g.Tenant + "/" + g.Workspace + "/" + g.ID
 	base := h.effectiveBaseURL(r)
@@ -305,13 +219,10 @@ func (h *flowAPI) flowMutationResponse(r *http.Request, commit string, g core.Gr
 		"endpoints":              h.triggerEndpoints(base, g),
 		"public_base_configured": h.svc.PublicBaseURL != "",
 	}
-	// canvas_url is the deep link to the in-app editor for this flow.
 	resp["canvas_url"] = base + "/flows/" + g.ID
 	return resp
 }
 
-// historyFlowMe is GET /me/flows/{flow_id}/history — the commit log of a
-// flow, newest first, for the editor's version-history panel.
 func (h *flowAPI) historyFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {
@@ -328,10 +239,6 @@ func (h *flowAPI) historyFlowMe(rw http.ResponseWriter, r *http.Request, p core.
 		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
 		return
 	}
-	// Surface which revision is currently published so the history panel
-	// can flag it (and offer "rollback to here" on the others). Best
-	// effort: a lookup error just omits the marker rather than failing
-	// the whole listing.
 	resp := map[string]any{"revisions": revs}
 	if info, perr := h.svc.PublishedInfo(r.Context(), p, tenant, workspace, id); perr == nil && info.Published {
 		resp["published_commit"] = info.PublishedCommit
@@ -339,9 +246,6 @@ func (h *flowAPI) historyFlowMe(rw http.ResponseWriter, r *http.Request, p core.
 	writeJSON(rw, http.StatusOK, resp)
 }
 
-// restoreFlowMe is POST /me/flows/{flow_id}/restore {ref} — make a past
-// revision the new HEAD by saving its content as a fresh commit. History is
-// preserved (no rewrite); a 409 means the flow is locked by an active run.
 func (h *flowAPI) restoreFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {
@@ -371,10 +275,6 @@ func (h *flowAPI) restoreFlowMe(rw http.ResponseWriter, r *http.Request, p core.
 	writeJSON(rw, http.StatusOK, h.flowMutationResponse(r, commit, g))
 }
 
-// duplicateFlowMe is POST /me/flows/{flow_id}/duplicate {name?} — create an
-// independent copy of a flow. The copy gets a fresh ID (so fresh trigger URLs
-// and an empty run history) and starts as a DISABLED draft owned by the
-// caller; they review and enable it when ready. See Service.DuplicateGraph.
 func (h *flowAPI) duplicateFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {
@@ -404,11 +304,6 @@ func (h *flowAPI) duplicateFlowMe(rw http.ResponseWriter, r *http.Request, p cor
 	writeJSON(rw, http.StatusCreated, h.flowMutationResponse(r, commit, g))
 }
 
-// labelRevisionMe is POST /me/flows/{flow_id}/label {ref?, label} — name a
-// revision without publishing it. ref defaults to HEAD ("name my draft"); an
-// older commit hash names that revision. An empty label clears the existing
-// label. The label is keyed to the commit, so it persists across publishes
-// and rollbacks. Gated on graph:admin inside the service.
 func (h *flowAPI) labelRevisionMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {
@@ -439,11 +334,6 @@ func (h *flowAPI) labelRevisionMe(rw http.ResponseWriter, r *http.Request, p cor
 	})
 }
 
-// publishFlowMe is POST /me/flows/{flow_id}/publish {ref?} — promote a
-// revision to "live". Automatic triggers run the published revision;
-// manual + test runs keep using the draft (HEAD). ref defaults to HEAD
-// ("publish my draft"); an older commit hash rolls back. Gated on
-// graph:admin inside the service.
 func (h *flowAPI) publishFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {
@@ -453,11 +343,6 @@ func (h *flowAPI) publishFlowMe(rw http.ResponseWriter, r *http.Request, p core.
 		Ref   string `json:"ref"`
 		Label string `json:"label"`
 	}
-	// Body is optional — an empty POST publishes HEAD with no label, and an
-	// empty body decodes to io.EOF which we ignore. A *malformed* body is a
-	// 400: swallowing it published HEAD instead of the ref the client asked
-	// for, so a client with a serialization bug got a successful publish of
-	// the wrong commit and only a server-side log line to say so.
 	if r.Body != nil {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 			writeAPIError(rw, http.StatusBadRequest, "bad_request",
@@ -490,10 +375,6 @@ func (h *flowAPI) publishFlowMe(rw http.ResponseWriter, r *http.Request, p core.
 	writeJSON(rw, http.StatusOK, resp)
 }
 
-// unpublishFlowMe is POST /me/flows/{flow_id}/unpublish — clear the published
-// pointer (the inverse of publish). Takes the flow fully offline: schedules,
-// webhooks, hosted forms and provider events all refuse an unpublished flow.
-// The draft is untouched. Gated on graph:admin inside the service; idempotent.
 func (h *flowAPI) unpublishFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {
@@ -514,9 +395,6 @@ func (h *flowAPI) unpublishFlowMe(rw http.ResponseWriter, r *http.Request, p cor
 	})
 }
 
-// publishedFlowMe is GET /me/flows/{flow_id}/published — the draft-vs-live
-// state the editor's publish control renders (is there a published
-// version, does the draft differ from it).
 func (h *flowAPI) publishedFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {
@@ -530,26 +408,11 @@ func (h *flowAPI) publishedFlowMe(rw http.ResponseWriter, r *http.Request, p cor
 	writeJSON(rw, http.StatusOK, info)
 }
 
-// triggerEndpoints returns the public URLs the user must paste into
-// the upstream system (Stripe webhook UI, contact-form embed, etc.)
-// to deliver events to a webhook-triggered or hosted-form flow.
-// Returns an empty slice when the flow has no webhook/form triggers.
-//
-// Webhook trigger → `/trigger/<tenant>/<workspace>/<id>` (POST).
-// Hosted form → `/form/<tenant>/<workspace>/<id>` (GET renders, POST submits).
-// Same flow can have both on a single trigger when PublicForm is true.
-//
-// Surfaces the secret (Authorization: Bearer header) for webhook
-// triggers when one is set on the trigger — the LLM can include it
-// in the "how to wire this up" instructions to the user. PublicForm
-// pages take no auth.
+// Built from the public base URL, which is what a third party can actually reach.
 func (h *flowAPI) triggerEndpoints(base string, g core.Graph) []map[string]any {
 	base = strings.TrimRight(base, "/")
 	out := []map[string]any{}
 	scope := g.Tenant + "/" + g.Workspace + "/" + g.ID
-	// Trigger config lives on nodes: the Webhook and Request steps carry their
-	// keys, the Form step is its own door, and the Schedule/Poll nodes carry
-	// their schedule.
 	for _, n := range g.Nodes {
 		switch n.Module {
 		case webhookInputModuleID:
@@ -559,10 +422,6 @@ func (h *flowAPI) triggerEndpoints(base string, g core.Graph) []map[string]any {
 				"url":    base + "/trigger/" + scope,
 			}
 			if keys := core.WebhookSecrets(n.Params); len(keys) > 0 {
-				// Any active key authenticates; show the first. Both forms are
-				// offered because the sender decides which is possible: a
-				// service whose webhook settings are one URL box can only use
-				// url_with_key, and it is the paste-ready string.
 				ep["auth"] = "Authorization: Bearer " + keys[0]
 				ep["url_with_key"] = base + "/trigger/" + scope + "?key=" + url.QueryEscape(keys[0])
 			} else if core.WebhookPublic(n.Params) {
@@ -608,7 +467,6 @@ func (h *flowAPI) triggerEndpoints(base string, g core.Graph) []map[string]any {
 			}
 		}
 	}
-	// Legacy graph-level cron triggers still fire, so surface them too.
 	for _, t := range g.Triggers {
 		if t.Type == "cron" && t.Cron != "" {
 			out = append(out, map[string]any{
@@ -621,10 +479,6 @@ func (h *flowAPI) triggerEndpoints(base string, g core.Graph) []map[string]any {
 	return out
 }
 
-// enableFlowMe / disableFlowMe are POST /me/flows/{flow_id}/enable
-// and /disable. Idempotent — pressing "enable" twice succeeds. The
-// Disabled bool lives on the saved graph; toggling it produces a new
-// git commit, so the action shows up in the workspace history.
 func (h *flowAPI) enableFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	h.setFlowEnabled(rw, r, p, true)
 }
@@ -653,28 +507,7 @@ func (h *flowAPI) setFlowEnabled(rw http.ResponseWriter, r *http.Request, p core
 	})
 }
 
-// deleteFlowMe is the DELETE /me/flows/{flow_id} handler. Idempotent:
-// missing flow → 204. Active run → 409 with code `flow_locked`.
-//
-// Deleting a flow is irreversible (it drops the flow's whole Git history), so
-// it carries a second gate beyond the graph:edit DeleteGraph enforces — but
-// WHICH gate depends on the credential kind, because the two credentials fail
-// in different ways:
-//
-//   - A session is ambient: it rides on a cookie, so a hijacked session could
-//     wipe work with no further proof of identity. Those callers re-supply
-//     their account password, bcrypt-verified here so the gate can't be
-//     bypassed by calling the API directly (mirrors changePasswordHandler).
-//   - An API key is not ambient: it is minted deliberately, carries its own
-//     capped role set, is revocable, is audited, and is unreachable by CSRF.
-//     Its holder — dzctl, a script, the MCP server — has NO password to
-//     re-supply, so demanding one didn't make deletion safer, it made it
-//     impossible: every key-authenticated DELETE answered 401, which is why
-//     the MCP `delete_flow` tool could never succeed. Keys are held to
-//     graph:admin instead, which the deliberately narrow `claude-mcp` default
-//     role (graph:run + graph:edit — see defaultSelfIssueRole) does NOT carry.
-//     So an agent's key still cannot destroy a flow's history; a human deletes
-//     from the web UI, or mints a key that says out loud it may delete.
+// Idempotent: deleting an already-gone flow succeeds.
 func (h *flowAPI) deleteFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {
@@ -697,9 +530,6 @@ func (h *flowAPI) deleteFlowMe(rw http.ResponseWriter, r *http.Request, p core.P
 		var body struct {
 			Password string `json:"password"`
 		}
-		// An empty/invalid body falls through to the password check below,
-		// which rejects a blank password — no separate decode-error path
-		// needed.
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		email := strings.ToLower(strings.TrimSpace(p.Subject))
 		if _, err := auth.VerifyPassword(r.Context(), h.Users, email, body.Password); err != nil {
@@ -719,14 +549,7 @@ func (h *flowAPI) deleteFlowMe(rw http.ResponseWriter, r *http.Request, p core.P
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// patchFlowMe is the RFC 7396 JSON Merge Patch entry point. The
-// request body is a partial Graph document; we load HEAD, apply the
-// merge, save the result. Convenience for an LLM building a flow
-// incrementally without re-uploading the whole graph each turn.
-//
-// Conflict semantics match SaveGraph: 409 when a run is in flight on
-// this flow. Validation runs on the merged graph (not the patch) so
-// the user sees errors against the actual saved shape.
+// RFC 7396 merge semantics, so a null value DELETES a key.
 func (h *flowAPI) patchFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {
@@ -748,10 +571,7 @@ func (h *flowAPI) patchFlowMe(rw http.ResponseWriter, r *http.Request, p core.Pr
 		writeAPIError(rw, http.StatusNotFound, "flow_not_found", err.Error())
 		return
 	}
-	// Round-trip current → map for the merge, then back to Graph after.
-	// Doing the merge on map[string]any lets us reuse a generic merge
-	// function rather than hand-writing per-field merge logic for every
-	// Graph field.
+	// Round-trip through a map, so merge semantics apply to unknown keys too.
 	currentJSON, err := json.Marshal(current)
 	if err != nil {
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", "marshal current: "+err.Error())
@@ -788,14 +608,7 @@ func (h *flowAPI) patchFlowMe(rw http.ResponseWriter, r *http.Request, p core.Pr
 	writeJSON(rw, http.StatusOK, h.flowMutationResponse(r, commit, next))
 }
 
-// jsonMergePatch applies RFC 7396 merge semantics: for each key in
-// the patch, replace the target's value with the patch's value;
-// null values delete the target's key; objects merge recursively;
-// arrays + primitives replace wholesale.
-//
-// 30 lines of plain Go beats pulling in a dependency for this — we
-// only need merge semantics on whole-document shapes, not the more
-// complex JSON Patch (RFC 6902) operations.
+// RFC 7396: a null value deletes, an object merges recursively.
 func jsonMergePatch(target, patch map[string]any) map[string]any {
 	if target == nil {
 		target = map[string]any{}
@@ -810,7 +623,6 @@ func jsonMergePatch(target, patch map[string]any) map[string]any {
 				target[k] = jsonMergePatch(subTarget, subPatch)
 				continue
 			}
-			// Patch is object, target was not — replace.
 			target[k] = jsonMergePatch(map[string]any{}, subPatch)
 			continue
 		}
@@ -824,9 +636,6 @@ func (h *flowAPI) runFlowMe(rw http.ResponseWriter, r *http.Request, p core.Prin
 	if !ok {
 		return
 	}
-	// Reuse the existing runGraph plumbing by spoofing the path values
-	// the legacy handler reads. Cheaper than a parallel runGraph variant
-	// and keeps the lifecycle/audit/notification wiring single-source.
 	q := r.URL.Query()
 	q.Set("tenant", tenant)
 	q.Set("workspace", workspace)
@@ -836,10 +645,7 @@ func (h *flowAPI) runFlowMe(rw http.ResponseWriter, r *http.Request, p core.Prin
 	r2.SetPathValue("tenant", tenant)
 	r2.SetPathValue("workspace", workspace)
 	r2.SetPathValue("id", id)
-	// Pre-check existence with a clean 404 before delegating: the legacy
-	// runGraph surfaces the raw store error ("graph \"x\" at <commit>: file
-	// not found"), which leaks the git-backed storage internals. A clean
-	// flow_not_found here short-circuits that.
+	// A clean 404 before delegating, so the legacy path's error is not surfaced.
 	if _, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, ""); err != nil {
 		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
 		return
@@ -847,14 +653,6 @@ func (h *flowAPI) runFlowMe(rw http.ResponseWriter, r *http.Request, p core.Prin
 	h.runCtl.runGraph(rw, r2, p)
 }
 
-// resetNodeStateMe clears the persisted per-node state of one node — the
-// dedupe cursor / poll watermark / cache that the editor surfaces via
-// Manifest.NodeState. It's the first-class replacement for the old
-// "delete the drop and re-add it so the key changes" workaround: same node
-// id, memory wiped, so the next run baselines afresh. The reserved key(s) to
-// delete come from the drop's own registration (engine.StateResetKeys), so the
-// daemon never hard-codes a key format. Gated on graph:edit (a state mutation,
-// not just a run).
 func (h *flowAPI) resetNodeStateMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if err := core.Require(p, core.PermGraphEdit); err != nil {
 		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
@@ -887,8 +685,6 @@ func (h *flowAPI) resetNodeStateMe(rw http.ResponseWriter, r *http.Request, p co
 			fmt.Sprintf("node %q (%s) keeps no resettable state", nodeID, module))
 		return
 	}
-	// Delete each reserved key. A missing key is not an error — resetting an
-	// already-clear node (never run, or reset twice) is a no-op success.
 	cleared := 0
 	for _, k := range keys {
 		if err := h.EncryptedSecrets.Delete(r.Context(), tenant, k); err != nil {
@@ -925,7 +721,6 @@ func (h *flowAPI) sampleFlowNodeMe(rw http.ResponseWriter, r *http.Request, p co
 	r2.SetPathValue("tenant", tenant)
 	r2.SetPathValue("workspace", workspace)
 	r2.SetPathValue("id", id)
-	// nodeID rides through unchanged (mux already extracted it).
 	r2.SetPathValue("nodeID", r.PathValue("node_id"))
 	h.sampleNode(rw, r2, p)
 }
@@ -942,32 +737,18 @@ func (h *flowAPI) listFlowRunsMe(rw http.ResponseWriter, r *http.Request, p core
 	h.listRuns(rw, r2, p)
 }
 
-// validateGraphLiteral is POST /api/v1/validate/graph. Body is a
-// Graph document; we lint it without touching the store. Lets an LLM
-// compose a graph in chat, dry-run it, and only call create_flow
-// when the lint is clean. Distinct from validateFlowMe which lints
-// the HEAD of an already-saved flow.
 func (h *flowAPI) validateGraphLiteral(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	g, ok := decodeRequestJSON[core.Graph](rw, r)
 	if !ok {
 		return
 	}
-	// Workspace scoping isn't required since we're not touching the
-	// store, but stamp the principal's scope onto the graph so lint
-	// rules that reference (tenant, workspace) behave as the saved
-	// flow would. Caller can override these in the body if they need
-	// to lint as a different scope.
+	// Not touching the workspace, so tenant scoping is enough.
 	if g.Tenant == "" {
 		g.Tenant = p.Tenant
 	}
 	if g.Workspace == "" {
 		g.Workspace = p.Workspace
 	}
-	// Run the SAME two gates the AI generator applies (core.ValidateGraphFull:
-	// the security/placeholder linter PLUS the manifest-level structural
-	// validator) so a graph an MCP host hand-authors here validates identically
-	// to one the server LLM drafts. Loading the catalog is best-effort — if it's
-	// unavailable, ValidateGraphFull degrades to LintGraph-only.
 	manifests, _ := h.svc.ListDrops(r.Context(), p)
 	issues := core.ValidateGraphFull(g, manifests)
 	writeJSON(rw, http.StatusOK, map[string]any{
@@ -976,10 +757,6 @@ func (h *flowAPI) validateGraphLiteral(rw http.ResponseWriter, r *http.Request, 
 	})
 }
 
-// validateFlowMe is the spec's /me/flows/{flow_id}/validate — lint
-// without saving. The current daemon doesn't have a save-less linter
-// over a remote graph (only LintGraph on a local Graph object), so
-// the flow must already exist; we load HEAD and lint.
 func (h *flowAPI) validateFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {
@@ -997,10 +774,6 @@ func (h *flowAPI) validateFlowMe(rw http.ResponseWriter, r *http.Request, p core
 	})
 }
 
-// hasLintError reports whether any issue in xs is a hard error (vs an
-// advisory warning). The validate endpoints flip `ok` to false on the
-// first error so callers can gate "run" / "publish" on a clean slate
-// while still tolerating warn-level findings.
 func hasLintError(xs []core.LintIssue) bool {
 	for _, x := range xs {
 		if x.Severity == core.LintError {
@@ -1010,67 +783,31 @@ func hasLintError(xs []core.LintIssue) bool {
 	return false
 }
 
-// --- /me/connections --------------------------------------------------
-
-// listConnectionsMe is GET /api/v1/me/connections — the LLM-friendly
-// shape of "which OAuth providers does the daemon offer + which has
-// this caller connected." Delegates to the legacy oauthListProviders
-// handler since the underlying logic is identical.
 func (h *flowAPI) listConnectionsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	h.oauth.oauthListProviders(rw, r, p)
 }
 
-// startConnectionMe is POST /api/v1/me/connections/{provider}/authorize.
-// Unlike the legacy /api/v1/oauth/{provider}/authorize (which 302s the
-// browser straight to the provider), this returns JSON
-// `{"authorize_url":"..."}` so an LLM client can hand the URL to the
-// user and have them open it manually. The provider's callback still
-// lands at /api/v1/oauth/{provider}/callback (one endpoint, one shape)
-// and finalizes the connection.
-//
-// Accepts ?account= (defaults "default") and ?return_to= (defaults
-// /integrations) — same semantics as the legacy redirect path.
 func (h *flowAPI) startConnectionMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	provider := r.PathValue("provider")
-	// No browser binding here: the JSON authorize URL is handed to another
-	// agent/browser to open, so a cookie set on this response wouldn't be
-	// present at the callback. The unguessable single-use state still applies.
 	target, status, msg := h.oauth.buildAuthorizeURL(p,
 		provider,
 		r.URL.Query().Get("account"),
 		r.URL.Query().Get("return_to"),
 		scopeSubsetForIntegration(provider, r.URL.Query().Get("integration")),
 		"",
-		// Still worth recording: if the agent opens the link in this same
-		// browser, the callback should return it to the subdomain it came from.
 		h.oauth.originHost(r),
 	)
 	if status != http.StatusOK {
-		// Code mapping: 501 = OAuth subsystem not configured;
-		// 503 = a known provider exists but its client_id/secret are
-		// not wired (operator config gap); 403 = principal can't act;
-		// 404 = no such provider; 400 = bad input.
+		// 501 means the OAuth subsystem is not configured, not that the call was wrong.
 		writeAPIError(rw, status, oauthErrorCode(status), msg)
 		return
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"authorize_url": target})
 }
 
-// disconnectConnectionMe is the inverse of the connect/authorize flow:
-// it deletes the stored oauth.<provider>.<account> token for the
-// caller's tenant, so flows stop using it and the Connections page shows
-// the account disconnected. Account defaults to "default"; idempotent.
-//
-// This forgets the token locally; it does not revoke the grant at the
-// provider (the user can also remove access in the provider's own
-// account settings). Gated on secret:write, the same permission the
-// connect flow requires.
 func (h *flowAPI) disconnectConnectionMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	provider := r.PathValue("provider")
-	// Disconnecting forgets the stored token. Base bar is secret:write —
-	// except Google, an org-shared credential managed by org admins on the
-	// /admin/google page; disconnecting affects everyone's flows, so it takes
-	// the same org-admin bar as connecting (see buildAuthorizeURL).
+	// Forgets the stored token; gated on secret:write.
 	if provider == "google" {
 		if !core.CanAdminOrg(p) {
 			writeAPIError(rw, http.StatusForbidden, "forbidden", "disconnecting a Google account requires organization:admin")
@@ -1118,15 +855,6 @@ func oauthErrorCode(status int) string {
 	}
 }
 
-// --- /me/runs ---------------------------------------------------------
-
-// runView is the public, stable shape of a graph run for the /me/runs
-// endpoints — the implementation of the OpenAPI `Run` schema. The legacy
-// /api/v1/graphs + /api/v1/jobs inspector routes still serialize the raw
-// core.JobRecord (the web UI inspector depends on that shape, GraphPayload
-// and all); runView is the clean, snake_case, storage-detail-free view the
-// public API documents and promises. `enqueued_at` + `graph_id` are kept
-// for parity with the list shape (runSummary).
 type runView struct {
 	ID         string         `json:"id"`
 	FlowID     string         `json:"flow_id"` // tenant/workspace/graph_id composite
@@ -1139,10 +867,6 @@ type runView struct {
 	Error      *core.JobError `json:"error,omitempty"`
 }
 
-// nodeRunView is the public shape of a single node-record within a run —
-// the OpenAPI `NodeRun` schema: status, timing, attempts, the inputs it
-// received, the outputs it emitted, and its structured error if any. No
-// internal/storage fields.
 type nodeRunView struct {
 	NodeID     string              `json:"node_id"`
 	Status     core.JobStatus      `json:"status"`
@@ -1153,20 +877,11 @@ type nodeRunView struct {
 	Inputs     map[string]core.Ref `json:"inputs,omitempty"`
 	Outputs    map[string]core.Ref `json:"outputs,omitempty"`
 	Error      *core.JobError      `json:"error,omitempty"`
-	// WillRetry + RetryAt expose the engine's auto-retry state so the run
-	// viewer can say "retrying — next attempt in Ns" instead of leaving a
-	// node that's between attempts looking stuck. Set only while a node is
-	// requeued for a future retry (an earlier attempt failed transiently);
-	// a terminally failed node leaves them unset, which the UI reads as
-	// "needs you". See newNodeRunView.
+	// So the run view can say "retrying" rather than showing a bare failure.
 	WillRetry bool       `json:"will_retry,omitempty"`
 	RetryAt   *time.Time `json:"retry_at,omitempty"`
 }
 
-// sseTerminalView is the clean payload of the `terminal` SSE frame on the
-// /me/runs/{id}/events stream — run_id + final status + structured error.
-// Replaces the raw TerminalEvent (PascalCase JobID/GraphRes) that used to
-// be serialized straight onto the wire.
 type sseTerminalView struct {
 	RunID  string         `json:"run_id"`
 	Status core.JobStatus `json:"status"`
@@ -1177,8 +892,6 @@ func newSSETerminalView(ev *TerminalEvent) sseTerminalView {
 	return sseTerminalView{RunID: ev.JobID, Status: ev.Status, Error: ev.Error}
 }
 
-// durationMS returns the run/node wall-clock in milliseconds when both
-// ends are known, else 0 (omitted by the DTO's omitempty).
 func durationMS(start, end *time.Time) int64 {
 	if start == nil || end == nil {
 		return 0
@@ -1186,9 +899,6 @@ func durationMS(start, end *time.Time) int64 {
 	return end.Sub(*start).Milliseconds()
 }
 
-// resultError returns the structured error from a result, or nil. The
-// {code, message, details} shape is what machine clients branch on and
-// what the run-detail UI renders.
 func resultError(res *core.Result) *core.JobError {
 	if res == nil {
 		return nil
@@ -1197,8 +907,6 @@ func resultError(res *core.Result) *core.JobError {
 }
 
 func newRunView(rec core.RunSummary) runView {
-	// Graph-records don't carry a distinct started_at (only node-records
-	// do), so the run's end-to-end duration is enqueue → finish.
 	runStart := rec.StartedAt
 	if runStart == nil {
 		runStart = &rec.EnqueuedAt
@@ -1230,11 +938,7 @@ func newNodeRunView(rec core.NodeRun) nodeRunView {
 	if rec.Result != nil {
 		v.Outputs = rec.Result.Output
 	}
-	// A node between attempts is requeued: queued, with a future availability
-	// horizon and a non-zero attempt count (the worker's maybeScheduleRetry
-	// set AvailableAt = now + backoff). Surface that as an explicit auto-retry
-	// signal so the UI distinguishes "the engine will try again at T" from a
-	// terminal failure the user must act on.
+	// Queued with a future availability is what "between attempts" looks like.
 	if rec.Status == core.JobStatusQueued && rec.Attempt > 0 && rec.AvailableAt != nil {
 		v.WillRetry = true
 		v.RetryAt = rec.AvailableAt
@@ -1242,10 +946,7 @@ func newNodeRunView(rec core.NodeRun) nodeRunView {
 	return v
 }
 
-// loadRunScoped fetches a run-record by id and enforces the caller's
-// tenant scope. A missing run and a cross-tenant run both report 404, so
-// run existence never leaks across tenants. On failure it writes the
-// structured error and returns ok=false.
+// Enforces the caller's tenant, so a run id alone is not an authorization.
 func (h *flowAPI) loadRunScoped(rw http.ResponseWriter, r *http.Request, p core.Principal, runID string) (core.JobRecord, bool) {
 	rec, err := h.svc.GetJob(r.Context(), p, runID)
 	if err != nil {
@@ -1259,9 +960,6 @@ func (h *flowAPI) loadRunScoped(rw http.ResponseWriter, r *http.Request, p core.
 	return rec, true
 }
 
-// loadRunSummaryScoped is loadRunScoped for the handlers that need the run's
-// identity and status but not the flow it ran. Same 404-for-both rule, so run
-// existence still never leaks across tenants.
 func (h *flowAPI) loadRunSummaryScoped(rw http.ResponseWriter, r *http.Request, p core.Principal, runID string) (core.RunSummary, bool) {
 	sum, err := h.svc.GetRunSummary(r.Context(), p, runID)
 	if err != nil {
@@ -1289,16 +987,10 @@ func (h *flowAPI) getRunMe(rw http.ResponseWriter, r *http.Request, p core.Princ
 
 func (h *flowAPI) listRunNodesMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("run_id")
-	// Scoped on the summary: the run's own record is only opened when the
-	// inputs below actually need the flow it ran, and this handler is polled
-	// every couple of seconds while the run is live.
 	if _, ok := h.loadRunSummaryScoped(rw, r, p, runID); !ok {
 		return
 	}
-	// The narrow read: the timeline renders eight fields per step, and this
-	// list is re-polled every couple of seconds per open tab. The run is
-	// already scoped above, so the tenant and workspace predicates the wide
-	// read took would only re-state what the run id decides.
+	// The timeline renders eight fields per step; the full record is far larger.
 	nodes, err := core.ListNodeRuns(r.Context(), h.svc.Jobs, runID, 1000) // typical graphs have <100 nodes; cap defensively
 	if err != nil {
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
@@ -1308,36 +1000,13 @@ func (h *flowAPI) listRunNodesMe(rw http.ResponseWriter, r *http.Request, p core
 	for _, n := range nodes {
 		out = append(out, newNodeRunView(n))
 	}
-	// Every node's record is already in hand, so the inputs cost nothing beyond
-	// the graph the run stored.
 	h.fillRunNodeInputs(r.Context(), p, runID, nodes, out)
 	writeJSON(rw, http.StatusOK, map[string]any{"nodes": out})
 }
 
-// fillRunNodeInputs reconstructs what each node RECEIVED and writes it onto the
-// views that don't already carry it.
-//
-// A node record stores what the node produced, never what it consumed: the
-// dispatcher enqueues a record holding only the graph and node id, and the
-// engine assembles the inputs in memory when it executes. So `inputs` was
-// always absent, and the run viewer's Inputs section — which reads it — never
-// appeared for any run since it was written.
-//
-// The inputs are recoverable, exactly, without storing them: they are a
-// function of the run's own graph (kept on the run record as GraphPayload) and
-// the outputs of the upstream nodes (kept on their records). engine.AssembleInput
-// is that function, and calling the engine's own rather than re-deriving
-// "the upstream output per edge" is what keeps this honest — variadic fan-in,
-// fallback edges carrying no data, and the one→many auto-lift all live there.
-//
-// It exposes nothing new: an input value IS an upstream node's output value,
-// already shown on that node in the same view, behind the same authorization.
-//
-// Best-effort throughout. A run whose graph payload is gone, a predecessor
-// pruned by retention, or a drop no longer registered leaves the section as it
-// was — absent — rather than failing the request. Nodes inside a for-each body
-// are the known incomplete case: the fan-out feeds them, not an edge (see
-// engine/autofan.go), so their inputs stay empty.
+// A node record stores what a node PRODUCED, never what it received, so the
+// inputs are rebuilt here through engine.AssembleInput — using the engine's own
+// assembly keeps variadic fan-in and the one→many lift honest.
 func (h *flowAPI) fillRunNodeInputs(
 	ctx context.Context,
 	p core.Principal,
@@ -1355,23 +1024,10 @@ func (h *flowAPI) fillRunNodeInputs(
 	if !need || h.svc == nil || h.svc.Jobs == nil {
 		return
 	}
-	// Through the run cache: this handler is polled every couple of seconds
-	// while a run is live, and a run's flow payload is pinned at submit, so
-	// every poll after the first is served without a round trip or a decode.
 	graph, err := h.svc.RunCache().graphForRun(ctx, h.svc.Jobs, runID)
 	if err != nil {
 		return
 	}
-	// Just the modules this run used, not the whole catalog. AssembleInput
-	// reads one thing off a manifest — whether the target port is variadic —
-	// so the tenant-filtered, switch-filtered, verifier-stamped map that
-	// ListDrops builds is 182 entries of copying to answer a handful of point
-	// lookups, on a request polled every couple of seconds per open tab.
-	//
-	// It is also the more correct source here. ListDrops DELETES a drop a
-	// platform admin has since switched off, so a run that used one rendered
-	// its timeline with no port metadata at all — for a step that had already
-	// executed, whose ports are a matter of record rather than of policy.
 	manifests := h.svc.manifestsForGraph(p.Tenant, graph)
 	prior := make(map[string]core.Result, len(recs))
 	for _, rec := range recs {
@@ -1390,8 +1046,6 @@ func (h *flowAPI) fillRunNodeInputs(
 	}
 }
 
-// nodeModule is the module a node in this graph runs, or "" when the graph no
-// longer has that node (a record from a since-edited flow).
 func nodeModule(g core.Graph, nodeID string) string {
 	n, ok := g.Node(nodeID)
 	if !ok {
@@ -1402,7 +1056,6 @@ func nodeModule(g core.Graph, nodeID string) string {
 
 func (h *flowAPI) getRunNodeMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("run_id")
-	// The run-record scope check gates access to its node records.
 	if _, ok := h.loadRunScoped(rw, r, p, runID); !ok {
 		return
 	}
@@ -1416,8 +1069,6 @@ func (h *flowAPI) getRunNodeMe(rw http.ResponseWriter, r *http.Request, p core.P
 		return
 	}
 	view := newNodeRunView(core.SummarizeNodeRun(nodeRec))
-	// One node asked for on its own: its predecessors' records have to be read
-	// to say what it received. Cheap — a node has a handful of inbound edges.
 	if len(view.Inputs) == 0 {
 		if graph, err := h.svc.RunCache().graphForRun(r.Context(), h.svc.Jobs, runID); err == nil {
 			recs := []core.NodeRun{core.SummarizeNodeRun(nodeRec)}
@@ -1456,10 +1107,6 @@ func (h *flowAPI) resumeRunMe(rw http.ResponseWriter, r *http.Request, p core.Pr
 	h.runCtl.resumeRun(rw, r2, p)
 }
 
-// replayRunMe is POST /api/v1/me/runs/{run_id}/replay — re-run a finished run
-// from the start, re-sending the trigger data it originally received. Returns
-// the new run's id (same shape as a fresh submission). 409 when the run has no
-// replayable delivery, 404 when it doesn't exist or isn't a graph run.
 func (h *flowAPI) replayRunMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("run_id")
 	newRunID, err := h.svc.ReplayRun(r.Context(), p, runID)
@@ -1488,10 +1135,6 @@ func (h *flowAPI) replayRunMe(rw http.ResponseWriter, r *http.Request, p core.Pr
 	writeJSON(rw, http.StatusAccepted, map[string]string{"job_id": newRunID})
 }
 
-// retryRunMe is POST /api/v1/me/runs/{run_id}/retry — resume a failed run
-// from where it failed, reusing the work that already succeeded. Returns
-// the new run's id (same shape as a fresh submission). 409 when the run is
-// still in progress, 404 when it doesn't exist or isn't a graph run.
 func (h *flowAPI) retryRunMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("run_id")
 	newRunID, err := h.svc.ResumeFailedRun(r.Context(), p, runID)
@@ -1512,15 +1155,8 @@ func (h *flowAPI) retryRunMe(rw http.ResponseWriter, r *http.Request, p core.Pri
 	writeJSON(rw, http.StatusAccepted, map[string]string{"job_id": newRunID})
 }
 
-// flowLoader resolves the flow a request names and loads its graph, which is
-// all several handlers outside the flow routes need in order to act on one.
 type flowLoader struct{ svc *Service }
 
-// loadFlowForRequest resolves the {flow_id} path parameter, loads the flow's
-// graph at ref, and returns the (tenant, workspace, id) plus the graph. On a
-// bad flow_id it writes the readFlowID envelope; on a missing flow it writes
-// a 404 "flow_not_found" with the storage-detail-free message. Returns
-// ok=false when the handler should stop.
 func (l flowLoader) loadFlowForRequest(rw http.ResponseWriter, r *http.Request, p core.Principal, ref string) (tenant, workspace, id string, g core.Graph, ok bool) {
 	tenant, workspace, id, ok = readFlowID(rw, r, p)
 	if !ok {
@@ -1534,5 +1170,4 @@ func (l flowLoader) loadFlowForRequest(rw http.ResponseWriter, r *http.Request, 
 	return tenant, workspace, id, g, true
 }
 
-// flows exposes the flow loader to a domain handler.
 func (h *HTTPGateway) flows() flowLoader { return flowLoader{svc: h.svc} }

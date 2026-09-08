@@ -19,14 +19,10 @@ import (
 // install hasn't configured a TOTP key, so a client can detect the
 // feature is off rather than half-failing midway through enrolment.
 
-// totpConfigured reports whether 2FA is usable on this install: a valid
-// 32-byte key AND a challenge store to bridge the login legs.
 func (h *authAPI) totpConfigured() bool {
 	return len(h.TOTPKey) == 32 && h.TOTPChallenges != nil
 }
 
-// requireTOTP writes a 503 and returns false when 2FA isn't configured.
-// Centralised so every endpoint reports the same posture.
 func (h *authAPI) requireTOTP(rw http.ResponseWriter) bool {
 	if h.totpConfigured() {
 		return true
@@ -41,8 +37,6 @@ func (h *authAPI) requireTOTP(rw http.ResponseWriter) bool {
 // else (e.g. an API-key principal) has no user record and can't enrol.
 func totpEmail(p core.Principal) string { return p.Subject }
 
-// totpStatus is GET /api/v1/me/totp — the Settings UI reads this to pick
-// which card to render.
 func (h *authAPI) totpStatus(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Users == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")
@@ -50,8 +44,6 @@ func (h *authAPI) totpStatus(rw http.ResponseWriter, r *http.Request, p core.Pri
 	}
 	st, err := auth.LoadTOTPStatus(r.Context(), h.Users, totpEmail(p))
 	if errors.Is(err, auth.ErrUnknownUser) {
-		// API-key / SSO principals have no password-user record; report
-		// 2FA as simply off rather than an error.
 		writeJSON(rw, http.StatusOK, map[string]any{"enabled": false})
 		return
 	}
@@ -170,8 +162,6 @@ func (h *authAPI) totpDisable(rw http.ResponseWriter, r *http.Request, p core.Pr
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// totpRegenerate is POST /api/v1/me/totp/recovery-codes — drops every
-// existing recovery code and mints a fresh set, returned once.
 func (h *authAPI) totpRegenerate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requireTOTP(rw) {
 		return
@@ -233,10 +223,6 @@ func (h *authAPI) totpVerify(rw http.ResponseWriter, r *http.Request) {
 		writeAPIError(rw, http.StatusBadRequest, "challenge_expired", "challenge has expired — sign in again")
 		return
 	case errors.Is(err, auth.ErrTOTPInvalid):
-		// The challenge is consumed inside ConsumeTOTPChallenge, so the
-		// email isn't returned on the failure path — the actor is left
-		// blank and the source IP (added by auditAuth) carries the
-		// brute-force signal.
 		h.auditAuth(r.Context(), r, "", "", "auth.signin_failed", "stage=mfa method=totp")
 		writeAPIError(rw, http.StatusUnauthorized, "totp_invalid", "invalid code")
 		return

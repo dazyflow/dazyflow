@@ -49,16 +49,9 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Named after its param so the card shows an inline editable
-				// box; a wired value (e.g. git checkout's path output)
-				// overrides the typed one.
 				{Port: "path", Label: "Repository folder"},
 			},
 			Outputs: []core.Port{
-				// Only the diff text is a pin; the change summary
-				// (files_changed, insertions, …) is still EMITTED under
-				// "meta" so run records keep it for debugging — it's just
-				// not a pin.
 				{Port: "diff", Label: "Diff", MIME: []string{"text/plain"}, Example: json.RawMessage(`"diff --git a/README.md b/README.md\n@@ -1,3 +1,4 @@\n+A new line\n"`)},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
@@ -79,11 +72,6 @@ func init() {
 	})
 }
 
-// maxDiffBytes caps the patch text we buffer into the run record, matching
-// the response-size caps the network drops enforce (stripe/gmail/slack). A
-// diff across a large or generated-file change can be huge; we keep the
-// accurate file/line counts (from patch.Stats(), which parses the whole
-// patch regardless) and only truncate the text.
 const maxDiffBytes = 16 << 20 // 16 MiB
 
 func executeGitDiff(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
@@ -158,8 +146,6 @@ func executeGitDiff(ctx context.Context, job core.Job, progress chan<- core.Prog
 		return params.Err(job, "diff_failed", err.Error()), nil
 	}
 
-	// Stats reflect the full diff even when the text is truncated, so the
-	// counts stay accurate.
 	stats := patch.Stats()
 	filesChanged := len(stats)
 	added, deleted := 0, 0
@@ -195,9 +181,6 @@ func executeGitDiff(ctx context.Context, job core.Job, progress chan<- core.Prog
 	}, nil
 }
 
-// capDiff trims patch text to max bytes at the last whole line so the
-// output stays valid (no mid-line/mid-rune cut) and ends with a marker
-// pointing at the still-accurate stats in meta.
 func capDiff(s string, max int) string {
 	cut := s[:max]
 	if i := strings.LastIndexByte(cut, '\n'); i > 0 {

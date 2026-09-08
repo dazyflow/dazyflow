@@ -30,12 +30,8 @@ import (
 // route_rows: variadic-by-name output handles need editor support that isn't
 // here yet. The upgrade to semantic names is purely additive.
 
-// switchSlotCount is how many named case outputs the manifest declares —
-// matched to route_rows' slot count for consistency. Cases beyond this either
-// fold into `default` or compose two Switches.
 const switchSlotCount = 8
 
-// switchDefaultSlot is the catch-all port for a key that matches no case.
 const switchDefaultSlot = "default"
 
 func init() {
@@ -109,8 +105,6 @@ func init() {
 	})
 }
 
-// switchCase is one parsed case rule: the output slot and the already-coerced
-// value the key is matched against.
 type switchCase struct {
 	slot   string
 	equals any
@@ -153,9 +147,6 @@ func executeSwitch(_ context.Context, job core.Job, _ chan<- core.Progress) (cor
 	}, nil
 }
 
-// matchCase reports whether the key matches a case value. A list value matches
-// if the key loosely equals any element (one_of); a scalar matches by loose
-// equality. Both delegate to compare.go so the semantics are Compare's.
 func matchCase(key, equals any) bool {
 	if arr, ok := equals.([]any); ok {
 		matched, _ := inSet(key, arr)
@@ -203,7 +194,6 @@ func parseSwitchCases(p map[string]any) ([]switchCase, error) {
 	return cases, nil
 }
 
-// validCaseSlots returns the set of legal case_N output port names.
 func validCaseSlots() map[string]struct{} {
 	out := make(map[string]struct{}, switchSlotCount)
 	for i := 1; i <= switchSlotCount; i++ {

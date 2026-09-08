@@ -12,8 +12,7 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestIsUploadSandboxEscape_Cov covers every leg of the sandbox-escape
-// classifier.
+// Covers every leg of the sandbox-escape classifier.
 func TestIsUploadSandboxEscape_Cov(t *testing.T) {
 	t.Parallel()
 	if core.IsSandboxEscape(nil) {
@@ -32,19 +31,15 @@ func TestIsUploadSandboxEscape_Cov(t *testing.T) {
 	}
 }
 
-// TestStatusRecorder_Cov covers statusRecorder.Write (implicit 200), Flush,
-// Unwrap, and statusCode defaulting.
 func TestStatusRecorder_Cov(t *testing.T) {
 	t.Parallel()
 	inner := httptest.NewRecorder()
 	s := &statusRecorder{ResponseWriter: inner}
 
-	// statusCode defaults to 200 before any write.
 	if s.statusCode() != 200 {
 		t.Fatalf("default statusCode = %d, want 200", s.statusCode())
 	}
 
-	// Write without an explicit WriteHeader stamps 200.
 	if _, err := s.Write([]byte("hi")); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -52,15 +47,12 @@ func TestStatusRecorder_Cov(t *testing.T) {
 		t.Fatalf("after Write code=%d wrote=%v", s.code, s.wrote)
 	}
 
-	// Flush is a no-op passthrough on a recorder that is a Flusher.
 	s.Flush()
 
-	// Unwrap returns the wrapped writer.
 	if s.Unwrap() != inner {
 		t.Fatal("Unwrap did not return the inner ResponseWriter")
 	}
 
-	// An explicit WriteHeader is honored and not overwritten by a later Write.
 	s2 := &statusRecorder{ResponseWriter: httptest.NewRecorder()}
 	s2.WriteHeader(404)
 	_, _ = s2.Write([]byte("x"))

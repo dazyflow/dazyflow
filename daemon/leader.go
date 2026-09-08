@@ -100,7 +100,6 @@ func (l *PgLeader) acquireAndHold(ctx context.Context, pingInterval time.Duratio
 		return err
 	}
 	if !got {
-		// Someone else leads. Stay a follower; the caller retries.
 		return nil
 	}
 	l.set(true)

@@ -71,34 +71,17 @@ func init() {
 				},
 				"required":["entity_id"]
 			}`),
-			// A fire is a discrete poll observation; rerunning re-reads against
-			// the stored watermark rather than re-deriving a past change.
 			Idempotent: false,
 		},
 		Execute: executeStateChanged,
 	})
 }
 
-// cursorState is what we persist between fires: the last_changed timestamp we
-// last acted on plus the state value at that point. Storing the state too
-// lets us emit `previous_state` without a second API call.
 type cursorState struct {
 	LastChanged string `json:"lc"`
 	State       string `json:"state"`
 }
 
-// executeStateChanged polls one entity and fires only when its state has
-// changed since the last observation. The watermark is the entity's
-// last_changed timestamp (which HA advances only on a real state change),
-// kept per (flow, node) in the cursor store.
-//
-// First observation (no stored cursor) records the current state and emits
-// NOTHING — so publishing the flow doesn't spuriously fire on whatever the
-// state happens to be. Thereafter, an advanced last_changed fires once,
-// emitting the new state, the previous state, and the attributes. An
-// unchanged poll emits no outputs, leaving downstream edges dormant (the
-// dispatcher skips the rest of the flow) — same non-event pattern as the
-// Google Forms trigger.
 func executeStateChanged(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	entityID := strings.TrimSpace(params.StringDefault(job.Params, "entity_id", ""))
 	if entityID == "" {
@@ -118,8 +101,6 @@ func executeStateChanged(ctx context.Context, job core.Job, _ chan<- core.Progre
 		return params.ErrDetails(job, "ha_error", "Home Assistant returned an unexpected response for this entity.", uerr.Error()), nil
 	}
 
-	// cursor.homeassistant.<graph>.<node>: per-(flow,node) watermark. The
-	// store hides the "cursor." prefix from the Credentials UI.
 	cursorName := fmt.Sprintf("cursor.homeassistant.%s.%s", job.GraphID, job.NodeID)
 	prev, rerr := readStoredCursor(ctx, job.Tenant, cursorName)
 	if rerr != nil {
@@ -131,7 +112,6 @@ func executeStateChanged(ctx context.Context, job core.Job, _ chan<- core.Progre
 
 	now := cursorState{LastChanged: cur.LastChanged, State: cur.State}
 
-	// First observation: remember the current state, fire nothing.
 	if prev == nil {
 		// Nothing was emitted, so a failed write is not "re-emit next time" —
 		// it is a first observation that never landed, and the next run makes
@@ -144,14 +124,11 @@ func executeStateChanged(ctx context.Context, job core.Job, _ chan<- core.Progre
 		return noChange(job), nil
 	}
 
-	// No change: same last_changed (and, defensively, same state value).
 	if prev.LastChanged == cur.LastChanged && prev.State == cur.State {
 		pollstate.Report(ctx, job, false) // empty poll — let the scheduler back off
 		return noChange(job), nil
 	}
 
-	// Changed — advance the watermark, then fire. A failed write is at-least-
-	// once: at worst the next poll re-fires this same change.
 	_ = writeStoredCursor(ctx, job.Tenant, cursorName, now)
 	pollstate.Report(ctx, job, true) // active — keep polling at the base cadence
 
@@ -172,9 +149,6 @@ func executeStateChanged(ctx context.Context, job core.Job, _ chan<- core.Progre
 	}, nil
 }
 
-// noChange is the empty result for an unchanged (or first) observation: no
-// output ports, so every downstream edge is dormant and the rest of the flow
-// is skipped.
 func noChange(job core.Job) core.Result {
 	return core.Result{JobID: job.ID, Status: core.StatusOK, Output: map[string]core.Ref{}}
 }

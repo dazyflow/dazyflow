@@ -25,10 +25,6 @@ import (
 	"sync"
 )
 
-// crcTable is Castagnoli, the polynomial with SSE4.2 hardware support:
-// 12.8 GB/s measured here against 207 MB/s for SHA-256. Fingerprinting the
-// catalog costs 0.08ms where compressing it costs 10.7ms, which is the only
-// reason this trade works.
 var crcTable = crc32.MakeTable(crc32.Castagnoli)
 
 // etagOfParts fingerprints a body given as its write parts, without
@@ -105,14 +101,7 @@ func (c *gzipBodyCache) put(tag string, body []byte) {
 	c.order = append(c.order, tag)
 }
 
-// gzipJoin compresses the body parts into one buffer to be cached and
-// written whole. Unlike the streaming middleware this knows the finished
-// length, so the response carries a Content-Length instead of being
-// chunked. Returns nil if compression fails, which leaves the caller on
-// the uncompressed path.
 func gzipJoin(parts [][]byte, total int) []byte {
-	// Size the buffer at the ratio the catalog actually achieves (~4:1) so
-	// it does not climb the doubling ladder to reach 267 KB.
 	buf := bytes.NewBuffer(make([]byte, 0, total/4+1024))
 	zw := gzipWriterPool.Get().(*gzip.Writer)
 	defer gzipWriterPool.Put(zw)
@@ -128,9 +117,6 @@ func gzipJoin(parts [][]byte, total int) []byte {
 	return buf.Bytes()
 }
 
-// addVaryAcceptEncoding records that the body depends on the encoding the
-// client asked for, without repeating a value already there — the response
-// cache below and the streaming middleware can both reach the same header.
 func addVaryAcceptEncoding(h http.Header) {
 	for _, v := range h.Values("Vary") {
 		for field := range strings.SplitSeq(v, ",") {
@@ -152,14 +138,6 @@ func writeCachedParts(rw http.ResponseWriter, r *http.Request, parts [][]byte, a
 	etag, total := etagOfParts(parts)
 	h := rw.Header()
 	h.Set("ETag", etag)
-	// Stored, but revalidated every time. The catalog moves when a runner
-	// registers, an admin flips a drop switch, or a credential's model list
-	// changes, so no freshness lifetime is defensible — but the tag is the
-	// body's own fingerprint, so a revalidation that matches is proof the
-	// held copy is current. "private" keeps it out of shared caches; it
-	// needs no Vary on Cookie for the same content-addressed reason, since
-	// a different user's catalog has a different tag and revalidates into a
-	// 200 carrying their own bytes.
 	h.Set("Cache-Control", "private, no-cache")
 	addVaryAcceptEncoding(h)
 	if etagMatches(r.Header.Get("If-None-Match"), etag) {
@@ -174,8 +152,6 @@ func writeCachedParts(rw http.ResponseWriter, r *http.Request, parts [][]byte, a
 			}
 		}
 		if gz != nil {
-			// Setting the encoding here is also what tells the streaming
-			// middleware to pass this response through untouched.
 			h.Set("Content-Encoding", "gzip")
 			h.Set("Content-Length", strconv.Itoa(len(gz)))
 			rw.WriteHeader(http.StatusOK)

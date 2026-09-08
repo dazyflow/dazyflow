@@ -20,8 +20,6 @@ import (
 // the payload by a third and the JSON body carries the prompt besides.
 const maxFileBytes = 20 << 20
 
-// filePort is the input every file-taking task declares. Named "file" rather
-// than "document" because a screenshot is as likely as a PDF.
 const filePort = "file"
 
 // fileInput is the port declaration, shared so the four task families can't
@@ -101,7 +99,6 @@ func variadicRefs(job core.Job, port string) []core.Ref {
 	return out
 }
 
-// fileName is what the model (and any error) calls the file.
 func fileName(ref core.Ref, idx int) string {
 	if ref.Ref != "" {
 		if base := path.Base(ref.Ref); base != "." && base != "/" {
@@ -168,10 +165,6 @@ func checkFileSupport(cfg Config, files []llm.File) *core.JobError {
 	}
 }
 
-// describeFiles is the line added to the user text so the model knows what it
-// was handed and by what name. Providers place the file blocks themselves;
-// this is the human-readable inventory, which matters when several files
-// arrive and the prompt asks about "the invoice".
 func describeFiles(files []llm.File) string {
 	if len(files) == 0 {
 		return ""
@@ -186,7 +179,6 @@ func describeFiles(files []llm.File) string {
 	return "The attached files are, in order: " + strings.Join(names, ", ") + "."
 }
 
-// withFiles folds the resolved files and their inventory into a request.
 func withFiles(req llm.Request, files []llm.File) llm.Request {
 	if len(files) == 0 {
 		return req
@@ -198,15 +190,10 @@ func withFiles(req llm.Request, files []llm.File) llm.Request {
 	return req
 }
 
-// textOrFiles reports whether a task has anything to work on at all. Both
-// families that take a file also take text, and either alone is enough — a
-// PDF with no prompt text is the whole point.
 func textOrFiles(text string, files []llm.File) bool {
 	return strings.TrimSpace(text) != "" || len(files) > 0
 }
 
-// fileHint is appended to a task's Description so the editor says what the
-// Files input takes, per provider.
 func fileHint(cfg Config) string {
 	switch cfg.FileSupport {
 	case FilesDocuments:

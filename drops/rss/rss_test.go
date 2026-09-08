@@ -67,7 +67,6 @@ func TestParseFeed_RSS(t *testing.T) {
 	if it.Author != "Ada" { // dc:creator fallback
 		t.Errorf("author = %q, want Ada", it.Author)
 	}
-	// pubDate normalized to RFC3339 UTC (15:04:05 -0700 → 22:04:05Z).
 	if it.Published != "2006-01-02T22:04:05Z" {
 		t.Errorf("published = %q, want 2006-01-02T22:04:05Z", it.Published)
 	}
@@ -115,7 +114,6 @@ func TestParseFeed_NotAFeed(t *testing.T) {
 	}
 }
 
-// memStore installs an in-memory cursor store for the duration of a test.
 func memStore(t *testing.T) map[string]string {
 	t.Helper()
 	store := map[string]string{}
@@ -150,9 +148,7 @@ func TestDedupe_FirstRunBaselinesSilently(t *testing.T) {
 func TestDedupe_EmitsOnlyNewOnSecondRun(t *testing.T) {
 	memStore(t)
 	job := core.Job{ID: "j", GraphID: "g", NodeID: "n", Tenant: "t"}
-	// First run baselines on A, B.
 	dedupeAndEmit(context.Background(), job, []feedItem{item("A"), item("B")}, nil)
-	// Second run: C is new (feed newest-first), A/B already seen.
 	res := dedupeAndEmit(context.Background(), job, []feedItem{item("C"), item("A"), item("B")}, nil)
 	got := freshIDs(res)
 	if len(got) != 1 || got[0] != "C" {
@@ -186,8 +182,6 @@ func TestDedupe_IndependentPerNode(t *testing.T) {
 	}
 }
 
-// drainProgress runs fn with a buffered progress channel and returns every
-// message emitted — the run-log lines that explain an empty Items output.
 func drainProgress(job core.Job, items []feedItem) []string {
 	ch := make(chan core.Progress, 8)
 	dedupeAndEmit(context.Background(), job, items, ch)
@@ -203,17 +197,14 @@ func TestDedupe_LogsExplainEmptyOutput(t *testing.T) {
 	memStore(t)
 	job := core.Job{ID: "j", GraphID: "g", NodeID: "n", Tenant: "t"}
 
-	// First run: baseline line names the count and says it's watching.
 	if msgs := drainProgress(job, []feedItem{item("A"), item("B")}); len(msgs) != 1 ||
 		!strings.Contains(msgs[0], "baseline") || !strings.Contains(msgs[0], "2") {
 		t.Errorf("baseline log = %v, want a 'baseline'/count line", msgs)
 	}
-	// Nothing new: an explicit "no new items" line (not silence).
 	if msgs := drainProgress(job, []feedItem{item("A"), item("B")}); len(msgs) != 1 ||
 		!strings.Contains(msgs[0], "no new items") {
 		t.Errorf("no-new log = %v, want a 'no new items' line", msgs)
 	}
-	// New item: a "1 new item(s)" line accompanies the emitted row.
 	if msgs := drainProgress(job, []feedItem{item("C"), item("A"), item("B")}); len(msgs) != 1 ||
 		!strings.Contains(msgs[0], "1 new item") {
 		t.Errorf("new-item log = %v, want a '1 new item' line", msgs)
@@ -259,17 +250,11 @@ func TestStateResetKeys_MatchesCursorName(t *testing.T) {
 	if got[0] != "cursor.rss.flowA.rss_1" {
 		t.Errorf("cursor key = %q, want cursor.rss.flowA.rss_1", got[0])
 	}
-	// A drop that declares no state resolves to nil — the daemon treats that
-	// as "nothing to reset" (400 no_resettable_state).
 	if got := engine.StateResetKeys("text", "flowA", "text_1"); got != nil {
 		t.Errorf("unregistered module should have no reset keys, got %v", got)
 	}
 }
 
-// TestResolveURL pins the precedence rule: a wired 'url' input beats the node's
-// param, so the feed address can be computed upstream (a Text drop, a lookup)
-// instead of being hardcoded on the node. An empty or non-string input falls
-// through to the param rather than resolving to "" and failing as bad_param.
 func TestResolveURL(t *testing.T) {
 	const paramURL = "https://example.com/param.xml"
 	const inputURL = "https://example.com/input.xml"
@@ -279,7 +264,6 @@ func TestResolveURL(t *testing.T) {
 		t.Errorf("param only = %q, want %q", got, paramURL)
 	}
 
-	// A wired input wins.
 	wired := core.Job{
 		Params: map[string]any{"url": paramURL},
 		Input:  map[string]core.Ref{"url": {Inline: inputURL}},
@@ -298,7 +282,6 @@ func TestResolveURL(t *testing.T) {
 		t.Errorf("empty input = %q, want the param %q", got, paramURL)
 	}
 
-	// A non-string input (a number, a row list) falls through to the param.
 	wrongType := core.Job{
 		Params: map[string]any{"url": paramURL},
 		Input:  map[string]core.Ref{"url": {Inline: 42}},
@@ -307,14 +290,13 @@ func TestResolveURL(t *testing.T) {
 		t.Errorf("non-string input = %q, want the param %q", got, paramURL)
 	}
 
-	// Neither set: empty, which executeRSS reports as bad_param.
 	if got := resolveURL(core.Job{}); got != "" {
 		t.Errorf("nothing set = %q, want empty", got)
 	}
 }
 
-// TestAllRows covers the dedupe-off projection: every feed item becomes one row
-// with the full itemHeaders column set, in feed order.
+// Covers the dedupe-off projection: every feed item becomes one row with the
+// full itemHeaders column set, in feed order.
 func TestAllRows(t *testing.T) {
 	if rows := allRows(nil); rows == nil || len(rows) != 0 {
 		t.Errorf("allRows(nil) = %v, want empty non-nil", rows)
@@ -328,7 +310,6 @@ func TestAllRows(t *testing.T) {
 	if rows[0]["id"] != "A" || rows[1]["id"] != "B" {
 		t.Errorf("order = %v, %v; want A then B", rows[0]["id"], rows[1]["id"])
 	}
-	// Every declared column is present, so a downstream table has no ragged rows.
 	for _, col := range itemHeaders {
 		if _, ok := rows[0][col]; !ok {
 			t.Errorf("row is missing the %q column", col)
@@ -374,13 +355,10 @@ func TestDedupe_ReadFailureStopsAndKeepsTheWindow(t *testing.T) {
 	if len(res.Output) != 0 {
 		t.Errorf("failed poll emitted %d port(s); downstream must not run", len(res.Output))
 	}
-	// The stored window is untouched, so the next poll resumes from it and the
-	// two new items are still new.
 	if got := store["t/"+name]; got != encodeIDs([]string{"old-1"}) {
 		t.Fatalf("dedupe window was overwritten: %q", got)
 	}
 
-	// Recovery: once the store answers again, nothing has been lost.
 	failRead = false
 	res = dedupeAndEmit(context.Background(), job, []feedItem{item("new-1"), item("new-2")}, nil)
 	if res.Status != core.StatusOK {
@@ -392,9 +370,6 @@ func TestDedupe_ReadFailureStopsAndKeepsTheWindow(t *testing.T) {
 	}
 }
 
-// With no store at all (no DAZYFLOW_MASTER_KEY) a dedupe poller can only ever
-// conclude "first run", every run. Emitting nothing for ever while reporting
-// success is the worst of the options, so it fails and names the cause.
 func TestDedupe_NoStoreFailsLoudly(t *testing.T) {
 	cursor.SetStore(nil, nil)
 	job := core.Job{ID: "j", GraphID: "g", NodeID: "n", Tenant: "t"}
@@ -407,10 +382,6 @@ func TestDedupe_NoStoreFailsLoudly(t *testing.T) {
 	}
 }
 
-// The baseline run is the one case where ignoring a failed cursor write is
-// wrong. Nothing was emitted and nothing was recorded, so the next run
-// baselines too: a write that keeps failing parks the feed watcher on its
-// first run for ever, emitting nothing while every run reports success.
 func TestDedupe_BaselineWriteFailureFails(t *testing.T) {
 	cursor.SetStore(
 		func(_ context.Context, _, _ string) (string, error) { return "", nil },

@@ -14,10 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// countingUsers / countingOrgs wrap the fakes with a read counter, which
-// is what these tests actually assert on: the point of the cache is the
-// round trips it removes, so "how many reads" is the behaviour, not an
-// implementation detail.
 type countingUsers struct {
 	mu      sync.Mutex
 	users   map[string]User
@@ -144,7 +140,6 @@ func TestModerationCache_InvalidateEnforcesImmediately(t *testing.T) {
 	u.Status = StatusSuspended
 	_ = users.PutUser(ctx, u)
 
-	// Without invalidation the memo still says active.
 	if _, err := g.Authenticate(ctx, "tok"); err != nil {
 		t.Fatalf("within the window the memo should still pass: %v", err)
 	}
@@ -259,9 +254,6 @@ func TestModerationCache_ConcurrentUse(t *testing.T) {
 	wg.Wait()
 }
 
-// suspensionKeys reports which keys currently sit in the cache. Eviction
-// is not observable through the get/put API alone, so the bound and the
-// sweep are asserted on the map directly.
 func suspensionKeys(c *suspensionCache) map[string]bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -313,8 +305,6 @@ func TestSuspensionCache_BoundedAtMaxEntries(t *testing.T) {
 	c.put("b", false) // cache now at max
 	c.put("c", false) // must trigger the bound
 
-	// Every entry is fresh, so the expiry sweep frees nothing and the map
-	// is dropped wholesale, leaving only the entry just written.
 	if keys := suspensionKeys(c); len(keys) != 1 || !keys["c"] {
 		t.Errorf("cached keys = %v, want only {c} once max is reached", keys)
 	}
@@ -330,9 +320,6 @@ func TestSuspensionCache_SweepDropsEntriesExactlyAtTTL(t *testing.T) {
 	c.put("b", false)               // cached at t0+30, fills to max
 	c.put("c", false)               // triggers the sweep
 
-	// The sweep reclaims "a" (exactly at the TTL counts as expired) and
-	// keeps the still-fresh "b"; freeing a slot means the map is not
-	// dropped wholesale.
 	if keys := suspensionKeys(c); len(keys) != 2 || !keys["b"] || !keys["c"] {
 		t.Errorf("cached keys = %v, want {b,c} after the sweep", keys)
 	}
@@ -367,7 +354,6 @@ func TestModerationCache_InvalidateOrgOnlyEnforcesImmediately(t *testing.T) {
 	p.Status = StatusSuspended
 	_ = orgs.PutOrgProfile(ctx, p)
 
-	// Within the window the memo still says active.
 	if _, err := g.Authenticate(ctx, "tok"); err != nil {
 		t.Fatalf("within the window the memo should still pass: %v", err)
 	}
@@ -377,7 +363,6 @@ func TestModerationCache_InvalidateOrgOnlyEnforcesImmediately(t *testing.T) {
 	if _, err := g.Authenticate(ctx, "tok"); !errors.Is(err, ErrAccountSuspended) {
 		t.Fatalf("after Invalidate of the tenant want ErrAccountSuspended, got %v", err)
 	}
-	// Only the org answer was dropped; the user memo stays warm.
 	if got := users.count(); got != readsBefore {
 		t.Errorf("user reads = %d, want %d (subject memo must survive)", got, readsBefore)
 	}

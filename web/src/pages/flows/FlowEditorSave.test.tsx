@@ -138,9 +138,6 @@ async function letAutosaveFire() {
   });
 }
 
-// vi.waitFor, not testing-library's, because that one polls on real time while
-// these tests run fake timers — the 3s debounce outlives its 1s default under
-// parallel workers. vi.waitFor drives the fake clock as it polls.
 async function awaitAutosave() {
   await vi.waitFor(() => expect(saveGraph).toHaveBeenCalled());
 }
@@ -163,9 +160,6 @@ afterEach(() => {
 // and until now saving from the editor silently dropped whatever an API-built
 // flow had set. Which is a data-loss bug that looks like nothing in a diff.
 describe("editor failure-policy round trip", () => {
-  // Built on the unzoned-schedule graph because that is what makes the editor
-  // dirty and so makes autosave fire at all: a plain load writes nothing, which
-  // is the point of every guard in the suite below.
   const graphWithPolicy = (onError?: string, continueOnError?: boolean) => {
     const g = graphWithUnzonedSchedule();
     return {
@@ -309,8 +303,6 @@ describe("editor autosave guards", () => {
     );
     mount();
     await screen.findByText("editor.run");
-    // Nothing is dirty on a fresh empty graph, so no write — but critically the
-    // editor is usable rather than locked out.
     expect(saveGraph).not.toHaveBeenCalled();
   });
 });
@@ -349,7 +341,6 @@ describe("editor edit lock", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });
-    // Only runs while locked, so there's no idle polling cost.
     expect(listRuns.mock.calls.length).toBe(atMount);
   });
 });
@@ -367,9 +358,6 @@ describe("editor step name round trip", () => {
         | undefined
     )?.nodes;
 
-  // The unzoned schedule is what makes the editor dirty on load, so autosave
-  // fires without needing a canvas gesture — the same trick the policy tests
-  // above use.
   const graphNamed = (label?: string) => {
     const g = graphWithUnzonedSchedule();
     return {
@@ -392,7 +380,6 @@ describe("editor step name round trip", () => {
     loadGraph.mockResolvedValue(graphNamed("Tell the barista"));
     mount();
     expect(await screen.findByText("Tell the barista")).toBeInTheDocument();
-    // The drop's own label is what it replaced.
     expect(screen.queryByText("Send notification")).toBeNull();
   });
 

@@ -23,9 +23,6 @@ import (
 // Companion to output_contract_test.go (the ports themselves are well-formed)
 // and examples_contract_test.go (the params side).
 
-// TestAllDrops_OutputExamplesMatchTheirPort asserts every declared output
-// example is valid JSON and carries what its port's declared MIME and List
-// flag promise.
 func TestAllDrops_OutputExamplesMatchTheirPort(t *testing.T) {
 	for _, d := range allDrops(t) {
 		t.Run(d.id, func(t *testing.T) {
@@ -81,8 +78,6 @@ func checkExampleElement(t *testing.T, p core.Port, el any, idx int) {
 	}
 	switch p.Kind() {
 	case core.KindItem:
-		// An Items port carries records. A bare scalar in an Items example is
-		// what makes the card render a column-less table.
 		if _, ok := el.(map[string]any); !ok {
 			t.Errorf("port %q: Items port, so Example must be a {field: value} object; got %T", where, el)
 		}
@@ -100,8 +95,6 @@ func checkExampleElement(t *testing.T, p core.Port, el any, idx int) {
 			t.Errorf("port %q: Yes/no port, so Example must be a boolean; got %T", where, el)
 		}
 	case core.KindFile:
-		// A file's bytes are not an example anybody wants on a card; its name
-		// is. Kept a string so the face shows "Faktura.pdf".
 		if _, ok := el.(string); !ok {
 			t.Errorf("port %q: File port, so Example must be a file name string; got %T", where, el)
 		}

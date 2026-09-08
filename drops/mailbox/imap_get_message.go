@@ -48,9 +48,6 @@ func init() {
 				{Port: "id", Label: "Email", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
-				// Friendly scalar pins rather than a JSON blob — the same four
-				// Gmail's Read email offers, so a flow can swap one for the
-				// other without rewiring.
 				{Port: "date", Label: "Date", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Thu, 12 Feb 2026 09:12:04 +0100"`)},
 				{Port: "from", Label: "From", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Fortnox <faktura@fortnox.se>"`)},
 				{Port: "subject", Label: "Subject", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Faktura 4471"`)},
@@ -114,9 +111,6 @@ func executeIMAPGetMessage(ctx context.Context, job core.Job, _ chan<- core.Prog
 			body = string(decodePart(textBuf.BodySection[0].Bytes, text.leaf))
 		}
 	}
-	// A message with no text part at all — a notification whose whole payload
-	// is an attachment — reads as an empty body. That is a real email, so it
-	// is not an error; Download attachments is the step that wants it.
 
 	date, from, subject := headerValues(buf)
 	return core.Result{

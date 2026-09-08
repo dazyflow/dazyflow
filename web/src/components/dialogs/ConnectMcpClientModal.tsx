@@ -14,17 +14,6 @@ import { ICON } from "../../icons";
 import { FEEDBACK } from "../../lib/timing";
 import { useEscapeToClose } from "../ui/useEscapeToClose";
 
-// ConnectMcpClientModal mints an API key scoped to the current
-// principal, then hands the user the right config snippet for their
-// MCP client. The modal hides the admin framing of /admin/api-keys —
-// it picks role + workspace defaults that make sense for an LLM
-// agent and surfaces only the bits the user actually needs to paste.
-//
-// New clients are added by extending CLIENTS below. Each entry owns
-// its label, icon, and snippet builders so the renderer stays a flat
-// switch over the active client. Both clients we ship today share the
-// Anthropic Claude brand; the card icons differentiate Desktop (raw
-// mark) from Code (mark inside a terminal frame).
 
 type Stage = "confirm" | "reveal";
 
@@ -54,16 +43,8 @@ type ClientDef = {
   vendorKey: string;
   Icon: () => ReactNode;
   instructionsKey: string;
-  // Spelled out per OS rather than built as `${prefix}.${os}`. The
-  // interpolated form meant no literal reference to
-  // connectMcp.clients.*.configPath.{macos,windows,linux} existed anywhere,
-  // so every static "unused i18n key" audit flagged all six as dead — and
-  // they were nearly deleted in the i18n sweep on exactly that evidence.
-  // Greppable keys are worth six lines.
   configPathKeys: Record<OS, string>;
   buildJSON: (env: SnippetEnv) => string;
-  // Optional CLI install command — Claude Code has one; Claude
-  // Desktop doesn't and the section is hidden when buildCLI is unset.
   buildCLI?: (env: SnippetEnv) => string;
 };
 
@@ -116,9 +97,6 @@ export function ConnectMcpClientModal({ onClose }: { onClose: () => void }) {
 
   const subject = me?.subject ?? "";
   const workspace = activeWorkspace || me?.workspace || "";
-  // The minted key is capped to the caller's own permissions (server
-  // intersects the claude-mcp default with what you hold). Mirror that
-  // here so the copy doesn't promise edit access a viewer won't get.
   const canEdit = me?.permissions?.includes("graph:edit") ?? false;
 
   const create = async () => {
@@ -130,11 +108,6 @@ export function ConnectMcpClientModal({ onClose }: { onClose: () => void }) {
     setSubmitting(true);
     setError(null);
     try {
-      // Self-issue path. Server takes subject/tenant/workspace from the
-      // session and, with no roles specified, mints the claude-mcp default
-      // CAPPED to the caller's own permissions — so the Connect button
-      // works for any signed-in member (a viewer gets a run-only key, an
-      // editor gets run+edit), not just tenant admins.
       const k = await api.issueMyAPIKey(token, {});
       setIssued(k);
       setStage("reveal");
@@ -393,8 +366,6 @@ function mcpServersJSON({ url, secret }: SnippetEnv): string {
   return JSON.stringify(config, null, 2);
 }
 
-// ClaudeLogo is the Anthropic Claude mark — a stylized asterisk /
-// sunburst. currentColor lets the card's active/hover states tint it.
 function ClaudeLogo() {
   return (
     <svg
@@ -413,8 +384,6 @@ function ClaudeLogo() {
   );
 }
 
-// ClaudeCodeLogo wraps the Claude mark cue (chevron + line) inside a
-// terminal frame so the two Claude products read as distinct cards.
 function ClaudeCodeLogo() {
   return (
     <svg

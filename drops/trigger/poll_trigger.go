@@ -45,10 +45,6 @@ func init() {
 				{Port: core.PassPort, Label: "Pass-through"},
 				{Port: "fired_at", Label: "Time", MIME: []string{"text/plain"}, Example: json.RawMessage(`"2026-02-12T08:00:00Z"`)},
 			},
-			// interval_seconds lives on the node (like cron_trigger's schedule),
-			// read by the scheduler. Max mirrors core.MaxPollIntervalSeconds
-			// (366 days) — past it the duration math overflows; the scheduler
-			// and lint reject it. Blank = manual-only, matching cron_trigger.
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
@@ -63,9 +59,6 @@ func init() {
 					}
 				}
 			}`),
-			// Retry-safe but operationally meaningless — a poll fire is
-			// a discrete event; rerunning doesn't re-derive a "fired at"
-			// from the original tick.
 			Idempotent: false,
 		},
 		Execute: executePollTrigger,

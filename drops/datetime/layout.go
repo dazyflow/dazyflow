@@ -32,18 +32,12 @@ import (
 // that is what spreadsheets, most date pickers and most other automation tools
 // use, so it is the one a user has already met.
 
-// formatToken is one vocabulary entry: the token a user writes and the Go
-// reference layout that renders that piece. A token whose output is a NAME
-// (month, weekday) carries no layout — Go's names are English-only, so those
-// four come from the localized table instead (see names.go).
 type formatToken struct {
 	tok    string
 	layout string
 	name   nameKind
 }
 
-// nameKind marks the tokens rendered from the name table rather than by
-// time.Format.
 type nameKind uint8
 
 const (
@@ -99,11 +93,6 @@ var tokenHints = map[string]string{
 	"YYYYY": "YYYY",
 }
 
-// renderCustom renders t through a user-written format: tokens from
-// formatTokens are substituted, [bracketed text] is copied out literally, and
-// anything else that is not a letter (punctuation, spaces, digits) passes
-// through. A letter run that is not a token is an error — that is the whole
-// point, since the alternative is emitting it verbatim into someone's email.
 func renderCustom(t time.Time, format string, names datenames.Names) (string, error) {
 	var sb strings.Builder
 	for i := 0; i < len(format); {
@@ -143,9 +132,6 @@ func renderCustom(t time.Time, format string, names datenames.Names) (string, er
 	return sb.String(), nil
 }
 
-// unknownTokenErr explains a letter run the vocabulary doesn't accept, naming
-// the near-miss when there is one rather than reciting the whole table at
-// someone who was one keystroke away.
 func unknownTokenErr(run string) error {
 	if want, ok := tokenHints[run]; ok {
 		return fmt.Errorf("%q isn't a format token — did you mean %q? (tokens are case-sensitive: MM is the month, mm the minute)", run, want)
@@ -170,7 +156,6 @@ func (tok formatToken) render(t time.Time, names datenames.Names) string {
 	return t.Format(tok.layout)
 }
 
-// matchToken returns the longest vocabulary token at the start of s.
 func matchToken(s string) (formatToken, bool) {
 	for _, t := range formatTokens {
 		if strings.HasPrefix(s, t.tok) {
@@ -180,15 +165,10 @@ func matchToken(s string) (formatToken, bool) {
 	return formatToken{}, false
 }
 
-// isFormatLetter reports whether c could be part of a token. ASCII only: the
-// vocabulary is ASCII, so a letter outside it (å, é) is literal text and needs
-// no brackets.
 func isFormatLetter(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
-// letterRun returns the leading run of ASCII letters, so an error names the
-// whole word the user wrote ("yyyy") rather than its first letter.
 func letterRun(s string) string {
 	n := 0
 	for n < len(s) && isFormatLetter(s[n]) {
@@ -197,9 +177,6 @@ func letterRun(s string) string {
 	return s[:n]
 }
 
-// parseClock reads a time of day: "9:00", "09:00", "17:30:15". Seconds are
-// optional; anything out of range is an error rather than a rollover, since
-// "25:00" is a typo and not a request for tomorrow at one.
 func parseClock(s string) (hour, min, sec int, err error) {
 	fields := strings.Split(strings.TrimSpace(s), ":")
 	if len(fields) < 2 || len(fields) > 3 {

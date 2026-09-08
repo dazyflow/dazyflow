@@ -37,8 +37,6 @@ vi.mock("../../api", () => ({
 
 import { AdminRunners } from "./AdminRunners";
 
-// The machine name is a link to that machine's settings page, so the page needs
-// a router. Wrapped in one helper rather than at every render site.
 const mount = () =>
   render(
     <MemoryRouter>
@@ -46,9 +44,6 @@ const mount = () =>
     </MemoryRouter>,
   );
 
-// Setting up a runner is: press a button, copy one line, paste it elsewhere.
-// The page's whole job is to make that line available exactly once and then be
-// honest about which machines have actually turned up.
 
 const online = {
   name: "invoices-box",
@@ -100,7 +95,6 @@ describe("AdminRunners", () => {
 
     const cmd = await screen.findByText(/runner\.sh/);
     expect(cmd.textContent).toContain("dzrt_abc123");
-    // Served by this very daemon, so the address is already known.
     expect(cmd.textContent).toContain(window.location.origin);
     // --service is part of the command, not an option to discover. A runner
     // that dies with the terminal fails silently — the machine just stops
@@ -116,7 +110,6 @@ describe("AdminRunners", () => {
     await waitFor(async () => {
       expect(await navigator.clipboard.readText()).toContain("dzrt_abc123");
     });
-    // And the button says so, which is the only feedback there is.
     expect(await screen.findByText("common.copied")).toBeInTheDocument();
   });
 
@@ -141,8 +134,6 @@ describe("AdminRunners", () => {
     expect(screen.queryByText(/runner\.sh/)).not.toBeInTheDocument();
   });
 
-  // Tags are assigned on the machine's own settings page, so the list's job is
-  // to get you there — clicking the machine is how anyone expects to.
   it("opens a machine's settings from its name", async () => {
     listRunners.mockResolvedValue({ runners: [online] });
     mount();
@@ -156,14 +147,9 @@ describe("AdminRunners", () => {
     expect(await screen.findByText("invoices-box")).toBeInTheDocument();
     expect(screen.getByText("runners.online")).toBeInTheDocument();
     expect(screen.getByText(/linux · x64/)).toBeInTheDocument();
-    // The agent version, because an old agent is a plausible cause of odd
-    // behaviour.
     expect(screen.getByText("0.1.0")).toBeInTheDocument();
   });
 
-  // "Offline since Tuesday" is the whole story of what went wrong, so an
-  // offline machine shows when it was last seen and an online one does not
-  // need to.
   it("says how long a machine has been gone", async () => {
     listRunners.mockResolvedValue({ runners: [offline] });
     mount();

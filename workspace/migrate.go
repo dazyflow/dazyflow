@@ -19,14 +19,10 @@ import (
 // migration OOMs an install too big to migrate twice.
 const maxMigratedRevisions = 10_000
 
-// MigrateResult reports what a migration moved.
 type MigrateResult struct {
 	Flows     int
 	Revisions int
 	Published int
-	// Truncated names flows whose history was longer than
-	// maxMigratedRevisions; their newest revisions came over and the oldest
-	// were left behind, so the operator can decide whether that matters.
 	Truncated []string
 }
 
@@ -79,8 +75,6 @@ func Migrate(ctx context.Context, dst, src *Store) (MigrateResult, error) {
 					return res, fmt.Errorf("marshal %s@%s: %w", id, r.Commit, err)
 				}
 			case errors.Is(lerr, ErrGraphNotFound):
-				// A revision that removed the flow. It is part of the history
-				// and is carried as the tombstone it is.
 				content = nil
 			default:
 				return res, fmt.Errorf("read %s@%s: %w", id, r.Commit, lerr)
@@ -140,21 +134,17 @@ func (p *pgBackend) setHead(ctx context.Context, graphID, revision string) error
 	return err
 }
 
-// VerifyIssue is one difference between the source workspace and the migrated
-// copy.
 type VerifyIssue struct {
 	GraphID string
 	Detail  string
 }
 
-// VerifyResult reports a comparison of a migrated workspace against its source.
 type VerifyResult struct {
 	Flows     int
 	Revisions int
 	Issues    []VerifyIssue
 }
 
-// OK reports whether the two workspaces agree.
 func (r VerifyResult) OK() bool { return len(r.Issues) == 0 }
 
 func (r *VerifyResult) flag(graphID, format string, args ...any) {
@@ -198,7 +188,6 @@ func VerifyMigration(ctx context.Context, dst, src *Store) (VerifyResult, error)
 		}
 		delete(inDst, id)
 
-		// Current content.
 		want, err := src.Load(id)
 		if err != nil {
 			return res, fmt.Errorf("read source %s: %w", id, err)
@@ -212,7 +201,6 @@ func VerifyMigration(ctx context.Context, dst, src *Store) (VerifyResult, error)
 			res.flag(id, "current content differs")
 		}
 
-		// Published pointer.
 		wantPub, err := src.PublishedCommit(id)
 		if err != nil {
 			return res, fmt.Errorf("source published %s: %w", id, err)
@@ -224,7 +212,6 @@ func VerifyMigration(ctx context.Context, dst, src *Store) (VerifyResult, error)
 			res.flag(id, "published pointer is %q, source has %q", gotPub, wantPub)
 		}
 
-		// Every revision: id, content and label.
 		wantRevs, err := src.History(id, maxMigratedRevisions)
 		if err != nil {
 			return res, fmt.Errorf("source history %s: %w", id, err)
@@ -256,7 +243,6 @@ func VerifyMigration(ctx context.Context, dst, src *Store) (VerifyResult, error)
 			gotAt, gerr := dst.LoadAt(w.Commit, id)
 			switch {
 			case errors.Is(werr, ErrGraphNotFound) && errors.Is(gerr, ErrGraphNotFound):
-				// Both sides agree this revision deleted the flow.
 			case werr != nil || gerr != nil:
 				res.flag(id, "revision %s unreadable on one side (source %v, migrated %v)", w.Commit, werr, gerr)
 			case !sameGraph(wantAt, gotAt):
@@ -270,8 +256,6 @@ func VerifyMigration(ctx context.Context, dst, src *Store) (VerifyResult, error)
 	return res, nil
 }
 
-// sameGraph compares two flows by their canonical encoding, so a difference in
-// how each side marshalled it is not reported as a difference in content.
 func sameGraph(a, b core.Graph) bool {
 	ab, err1 := json.Marshal(a)
 	bb, err2 := json.Marshal(b)

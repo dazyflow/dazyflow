@@ -71,10 +71,6 @@ func init() {
 	})
 }
 
-// executeGetState GETs /api/states/<entity_id> and emits the current state as
-// a text pin plus the attributes and the full entity object as JSON pins. A
-// 404 means the entity_id doesn't exist on this instance — surfaced with a
-// pointed message rather than a bare HTTP status.
 func executeGetState(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	entityID, ok := params.TextInputOr(job, "entity_id", params.StringDefault(job.Params, "entity_id", ""))
 	if !ok {

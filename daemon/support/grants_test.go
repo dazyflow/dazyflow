@@ -34,11 +34,9 @@ func TestMemGrantStore_RequestApproveActive(t *testing.T) {
 	if err := s.Create(ctx, reqGrant("g1", "agent-a", now)); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	// Not active while merely requested.
 	if _, ok, _ := s.ActiveGrant(ctx, "agent-a", "acme", "daily-invoice", now); ok {
 		t.Fatal("a requested grant must not be active")
 	}
-	// Approve it (4h box).
 	if err := s.Decide(ctx, "g1", core.GrantApproved, "admin-1", now, now.Add(time.Hour)); err != nil {
 		t.Fatalf("decide: %v", err)
 	}
@@ -64,11 +62,9 @@ func TestMemGrantStore_ExpiryAndRevoke(t *testing.T) {
 	_ = s.Create(ctx, reqGrant("g1", "agent-a", now))
 	_ = s.Decide(ctx, "g1", core.GrantApproved, "admin-1", now, now.Add(time.Hour))
 
-	// After expiry, no longer active (lazy expiry — status stays approved).
 	if _, ok, _ := s.ActiveGrant(ctx, "agent-a", "acme", "daily-invoice", now.Add(2*time.Hour)); ok {
 		t.Error("expired grant must not be active")
 	}
-	// Revoke ends it immediately.
 	if err := s.Revoke(ctx, "g1", "admin-1", now.Add(time.Minute)); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
@@ -87,15 +83,12 @@ func TestMemGrantStore_TransitionGuards(t *testing.T) {
 	s := NewMemGrantStore()
 	_ = s.Create(ctx, reqGrant("g1", "agent-a", now))
 
-	// Duplicate create.
 	if err := s.Create(ctx, reqGrant("g1", "agent-a", now)); !errors.Is(err, errGrantExists) {
 		t.Errorf("duplicate create should fail, got %v", err)
 	}
-	// Can't revoke a merely-requested grant.
 	if err := s.Revoke(ctx, "g1", "admin-1", now); !errors.Is(err, errGrantNotRevocable) {
 		t.Errorf("revoking a requested grant should fail, got %v", err)
 	}
-	// Decide must be approved|denied.
 	if err := s.Decide(ctx, "g1", core.GrantRevoked, "admin-1", now, now); !errors.Is(err, errBadDecision) {
 		t.Errorf("deciding with a non-decision status should fail, got %v", err)
 	}
@@ -104,7 +97,6 @@ func TestMemGrantStore_TransitionGuards(t *testing.T) {
 	if err := s.Decide(ctx, "g1", core.GrantDenied, "admin-2", now, now); !errors.Is(err, errGrantNotDecidable) {
 		t.Errorf("double-decide should fail, got %v", err)
 	}
-	// Missing grant.
 	if _, err := s.Get(ctx, "nope"); !errors.Is(err, core.ErrNotFound) {
 		t.Errorf("get missing should be ErrNotFound, got %v", err)
 	}
@@ -125,7 +117,6 @@ func TestMemGrantStore_ListForTenant(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("want 2 acme grants, got %d", len(got))
 	}
-	// Newest request first.
 	if got[0].ID != "g2" {
 		t.Errorf("want g2 first (newest), got %s", got[0].ID)
 	}

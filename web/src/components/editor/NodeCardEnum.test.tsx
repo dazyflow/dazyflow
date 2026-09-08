@@ -1,16 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// A read-only enum literal on the card reads as its LABEL, not its value.
-//
-// The card printed the raw param value while the Inspector's form rendered
-// through enumNames, so the same field said two different things depending on
-// where you looked — and the card was the one showing API vocabulary. On the
-// If step that meant a node reading "not_equals" on the canvas and "does not
-// equal" in the panel beside it.
-//
-// enum_labels_test.go already insists every enum carries display names; this
-// is the other half of that bargain, on the surface most people read first.
 
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -27,8 +17,6 @@ vi.mock("@xyflow/react", () => ({
 
 import { DazyNode } from "./NodeCard";
 
-// Shaped like the If step: a required `op` enum with no input port of its own,
-// which is what puts it in the card's read-only literal section.
 const ifManifest: Manifest = {
   id: "if",
   label: "If",
@@ -87,8 +75,6 @@ describe("an enum literal on the node card", () => {
   });
 
   it("leaves a value that is not an enum member alone", () => {
-    // Defensive: a graph carrying a value the schema no longer lists should
-    // still show something rather than blanking the field.
     renderCard({ op: "retired_operator" });
     expect(screen.getByText("retired_operator")).toBeTruthy();
   });

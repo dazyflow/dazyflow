@@ -12,16 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// ResumeGraphRun continues a run paused at a breakpoint (#12).
-//
-//   - step=false (Continue): run proceeds until the next breakpoint or
-//     completion.
-//   - step=true (Step): advance one layer, then pause again after the next
-//     node(s) regardless of breakpoints (step mode stays on until Continue).
-//
-// Mirrors CancelGraphRun's auth/setup and re-enters the dispatcher exactly
-// as Service.Approve does after a human resume: it dispatches the dependents
-// the breakpoint held back. Returns ErrConflict if the run isn't paused.
 func (s *Service) ResumeGraphRun(ctx context.Context, p core.Principal, graphRunID string, step bool) error {
 	rec, err := s.Jobs.Get(ctx, graphRunID)
 	if err != nil {
@@ -89,7 +79,6 @@ func (s *Service) ResumeFailedRun(ctx context.Context, p core.Principal, runID s
 	}
 	switch rec.Status {
 	case core.JobStatusFailed, core.JobStatusCancelled:
-		// retryable — terminal but incomplete
 	default:
 		return "", fmt.Errorf("%w: run is %s; only failed or cancelled runs can be retried",
 			core.ErrConflict, rec.Status)

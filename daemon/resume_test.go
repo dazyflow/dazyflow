@@ -17,12 +17,11 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// TestResumeFailedRun_ReusesUpstreamAndRerunsFrontier is the core guarantee
-// of resume-from-failure: a succeeded upstream node is reused (NOT
-// re-executed) via the seed path, while the failed node re-runs. Here the
-// upstream "counter" records how many times it actually executes, and the
-// downstream "failonce" fails the first time and succeeds the second — so a
-// successful resume that doesn't re-run the upstream proves both halves.
+// The core guarantee of resume-from-failure: a succeeded upstream node is
+// reused (NOT re-executed) via the seed path, while the failed node re-runs.
+// Here the upstream "counter" records how many times it actually executes, and
+// the downstream "failonce" fails the first time and succeeds the second — so
+// a successful resume that doesn't re-run the upstream proves both halves.
 func TestResumeFailedRun_ReusesUpstreamAndRerunsFrontier(t *testing.T) {
 	t.Parallel()
 	var upstreamRuns atomic.Int32
@@ -50,7 +49,6 @@ func TestResumeFailedRun_ReusesUpstreamAndRerunsFrontier(t *testing.T) {
 			}, nil
 		},
 	})
-	// failonce: fails on its first-ever execution, succeeds thereafter.
 	_ = reg.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
 			ID:             "failonce",
@@ -116,7 +114,6 @@ func TestResumeFailedRun_ReusesUpstreamAndRerunsFrontier(t *testing.T) {
 		},
 	}
 
-	// First run: up succeeds, down fails → graph fails.
 	run1, err := svc.SubmitGraph(t.Context(), p, g)
 	if err != nil {
 		t.Fatalf("submit run1: %v", err)
@@ -151,7 +148,6 @@ func TestResumeFailedRun_ReusesUpstreamAndRerunsFrontier(t *testing.T) {
 	if got := downstreamRuns.Load(); got != 2 {
 		t.Errorf("downstream ran %d times total, want 2 (failed node must re-run)", got)
 	}
-	// The seeded upstream record exists in run2, succeeded, with its output.
 	upRec, err := jobs.Get(t.Context(), daemon.NodeJobID(run2, "up"))
 	if err != nil {
 		t.Fatalf("get seeded upstream in run2: %v", err)
@@ -161,8 +157,6 @@ func TestResumeFailedRun_ReusesUpstreamAndRerunsFrontier(t *testing.T) {
 	}
 }
 
-// TestResumeFailedRun_RejectsRunningRun confirms only terminal-but-incomplete
-// runs (failed/cancelled) can be retried — a still-running run is a conflict.
 func TestResumeFailedRun_RejectsRunningRun(t *testing.T) {
 	t.Parallel()
 	ks := auth.NewMemKeyStore()
@@ -178,7 +172,6 @@ func TestResumeFailedRun_RejectsRunningRun(t *testing.T) {
 	p := core.Principal{Subject: "u", Tenant: "t", Workspace: "ws",
 		Roles: []core.Role{{Name: "editor", Permissions: []core.Permission{core.PermGraphRun}}}}
 
-	// A running graph record.
 	_ = jobs.Enqueue(t.Context(), core.JobRecord{
 		ID: "live-run", Kind: core.JobKindGraph, GraphID: "g", NodeID: "*",
 		Tenant: "t", Workspace: "ws", Status: core.JobStatusRunning,

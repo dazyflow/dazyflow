@@ -30,22 +30,18 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// useCase loads a corpus graph and points every connector at the fake.
 func useCase(t *testing.T, file string) core.Graph {
 	t.Helper()
 	_, g := readGraph(t, "../usecases/"+file)
 	return g
 }
 
-// pointAt rewrites a node's connection settings to the fake service.
 func pointAt(g *core.Graph, f *fakeSaaS, nodeIDs ...string) {
 	for _, id := range nodeIDs {
 		patchParams(g, id, map[string]any{"token": "mock-token", "base_url": f.URL()})
 	}
 }
 
-// saveRunWait is the whole user-visible cycle: save the draft, let the app
-// check it, publish, run, and wait for the verdict.
 func (n *newcomer) saveRunWait(t *testing.T, id string, g core.Graph) string {
 	t.Helper()
 	raw := fillBlanks(mustJSON(t, g))
@@ -63,7 +59,6 @@ func (n *newcomer) saveRunWait(t *testing.T, id string, g core.Graph) string {
 	return runID
 }
 
-// runAgain fires an already-saved flow a second time.
 func (n *newcomer) runAgain(t *testing.T, id string) string {
 	t.Helper()
 	runID := n.runFlow(id)
@@ -73,12 +68,8 @@ func (n *newcomer) runAgain(t *testing.T, id string) string {
 	return runID
 }
 
-// --- 12: read → act → write back, and don't do it twice -------------------
+// 12: read → act → write back, and don't do it twice
 
-// The round trip that lets a flow mark its work done: read the tab with row
-// numbers, act on what's outstanding, write a stamp back into those very rows.
-// Proving it needs a spreadsheet that remembers what was written, which is why
-// the fake keeps a real grid.
 func TestUseCase12_JobDoneInvoicesAndMarksTheRow(t *testing.T) {
 	f := newFakeSaaS(t)
 	f.putSheet("Jobs", [][]any{
@@ -96,12 +87,10 @@ func TestUseCase12_JobDoneInvoicesAndMarksTheRow(t *testing.T) {
 
 	me.saveRunWait(t, "job-done-invoice", g)
 
-	// Two jobs were Done, so two invoices — and the one in progress is untouched.
 	inv := f.invoicesRaised()
 	if len(inv) != 2 {
 		t.Fatalf("raised %d invoice(s), want one per finished job: %+v", len(inv), inv)
 	}
-	// Both finished rows are stamped; the unfinished one is not.
 	if got := f.cell("Jobs", "invoiced_on", 2); got == "" {
 		t.Errorf("row 2 (J-1) was invoiced but never marked")
 	}
@@ -120,12 +109,6 @@ func TestUseCase12_JobDoneInvoicesAndMarksTheRow(t *testing.T) {
 	}
 }
 
-// --- 29: a loop handing a step structured data ---------------------------
-
-// One statement per customer, each containing only their own lines. The loop
-// body's template is handed the whole grouped row as ${item.} — a real object
-// with a real list inside it — which is the handover that used to arrive as
-// text. If it regresses, the statement renders as JSON or the range fails.
 func TestUseCase29_EachCustomerGetsTheirOwnLines(t *testing.T) {
 	f := newFakeSaaS(t)
 	f.putSheet("Charges", [][]any{
@@ -141,7 +124,6 @@ func TestUseCase29_EachCustomerGetsTheirOwnLines(t *testing.T) {
 
 	g := useCase(t, "29-personal-statements.json")
 	pointAt(&g, f, "read")
-	// The Email step talks SMTP, not HTTP — point it at the fake's server.
 	patchParams(&g, "send", map[string]any{"host": host, "port": port, "from": "salong@example.com", "tls": "none"})
 
 	me.saveRunWait(t, "personal-statements", g)
@@ -158,14 +140,11 @@ func TestUseCase29_EachCustomerGetsTheirOwnLines(t *testing.T) {
 	if !ok {
 		t.Fatalf("Acme got no statement; sent: %+v", sent)
 	}
-	// Their own lines, both of them, and the total — proof the structured
-	// handover survived into the template.
 	for _, want := range []string{"Klippning", "Färg", "1350"} {
 		if !strings.Contains(acme.Body, want) {
 			t.Errorf("Acme's statement is missing %q:\n%s", want, acme.Body)
 		}
 	}
-	// And nobody else's.
 	if strings.Contains(acme.Body, "Konsultation") {
 		t.Errorf("Acme's statement contains another customer's line:\n%s", acme.Body)
 	}
@@ -174,11 +153,6 @@ func TestUseCase29_EachCustomerGetsTheirOwnLines(t *testing.T) {
 	}
 }
 
-// --- 33: fire on the change, not on the state ----------------------------
-
-// An outage should page you once, not once every five minutes. The check is
-// driven four times over a site that breaks and recovers, and what matters is
-// how MANY messages came out, not that any did.
 func TestUseCase33_SiteDownPagesOnceAndSaysWhenItIsBack(t *testing.T) {
 	f := newFakeSaaS(t)
 	s := newStack(t)
@@ -223,7 +197,7 @@ func TestUseCase33_SiteDownPagesOnceAndSaysWhenItIsBack(t *testing.T) {
 	}
 }
 
-// --- 34: one channel failing must not sink the others --------------------
+// 34: one channel failing must not sink the others
 
 // The fan-out shape. Discord is down; the run must still finish, and the
 // Slack post, the email and the push must all have gone out.
@@ -266,7 +240,6 @@ func TestUseCase34_OneDeadChannelDoesNotBlockTheRest(t *testing.T) {
 		t.Errorf("Discord was down but recorded %v", got)
 	}
 
-	// With Discord back, the same flow reaches all four.
 	f.fail("discord", false)
 	runID = me.fireForm(id, map[string]any{"headline": "Igen", "message": "Andra gången."})
 	if status := me.waitForRun(runID); status != "succeeded" {
@@ -277,11 +250,6 @@ func TestUseCase34_OneDeadChannelDoesNotBlockTheRest(t *testing.T) {
 	}
 }
 
-// --- 30: collecting what a loop produced ---------------------------------
-
-// Ask a question per item, gather the answers, then filter them. The loop
-// body's output only reaches the digest via for_each.results → Collect loop
-// results, which is the piece that has no meaning outside a real run.
 func TestUseCase30_OnlyTheUnansweredThreadsAreListed(t *testing.T) {
 	f := newFakeSaaS(t)
 	host, port := f.smtpHostPort()
@@ -312,7 +280,7 @@ func TestUseCase30_OnlyTheUnansweredThreadsAreListed(t *testing.T) {
 	}
 }
 
-// --- 02: "and nothing is posted twice" -----------------------------------
+// 02: "and nothing is posted twice"
 
 // The dedupe every polling flow leans on. The mailbox doesn't change between
 // runs, so the second run must post nothing at all.
@@ -328,9 +296,6 @@ func TestUseCase02_NewEmailPostsOnceNotEveryPoll(t *testing.T) {
 
 	const id = "important-email-to-slack"
 	me.saveRunWait(t, id, g)
-	// "Only new since last run" baselines on the first run by design: it
-	// records where it has read up to and emits nothing, so publishing a
-	// polling flow doesn't blast the whole mailbox.
 	if got := f.slackPosts(); len(got) != 0 {
 		t.Fatalf("the first run should baseline silently, but posted: %v", got)
 	}
@@ -348,14 +313,11 @@ func TestUseCase02_NewEmailPostsOnceNotEveryPoll(t *testing.T) {
 		t.Errorf("the post re-announced mail from before the watermark: %q", posts[0])
 	}
 
-	// Nothing new since: silence.
 	me.runAgain(t, id)
 	if got := f.slackPosts(); len(got) != 1 {
 		t.Fatalf("an unchanged mailbox posted again (%d total): %v", len(got), got)
 	}
 }
-
-// --- 22: the run waits for a person -------------------------------------
 
 // Nothing should happen until someone decides. The run must park, the
 // notification must carry a working link, and only after it is tapped should
@@ -391,15 +353,12 @@ func TestUseCase22_TimeOffWaitsForTheManager(t *testing.T) {
 		t.Fatalf("the time off was booked before anyone approved it: %v", got)
 	}
 
-	// The manager's notification carries the link. It is sent as the run
-	// parks, so give it the moment it needs to arrive.
 	eventually(t, "the approval notification", func() bool { return len(f.pushes()) == 1 })
 	links := f.pushLinks()
 	if len(links) != 1 || !strings.Contains(links[0], "/approve/") {
 		t.Fatalf("the approval notification carried no usable link: %v (messages: %v)", links, f.pushes())
 	}
 
-	// They tap approve, and only now does anything happen.
 	me.tapApprovalLink(links[0], "approve", "chef@example.com")
 	if status := me.waitForRun(runID); status != "succeeded" {
 		t.Fatalf("run after approval: status=%q\n%s", status, me.failedNodeReport(runID))
@@ -416,7 +375,6 @@ func TestUseCase22_TimeOffWaitsForTheManager(t *testing.T) {
 	}
 }
 
-// The other decision: rejecting books nothing and tells the person.
 func TestUseCase22_RejectingBooksNothing(t *testing.T) {
 	f := newFakeSaaS(t)
 	s := newStack(t)
@@ -456,8 +414,6 @@ func TestUseCase22_RejectingBooksNothing(t *testing.T) {
 	}
 }
 
-// --- 17: a judgement routing the original submission ---------------------
-
 // Classify decides, Compare turns the answer into yes/no, Branch routes — and
 // what reaches the sheet must be the person's actual message, not the
 // classifier's verdict. The stand-in model reads the enquiry and judges it,
@@ -479,7 +435,6 @@ func TestUseCase17_SpamNeverReachesTheSheet(t *testing.T) {
 	}
 	me.publishFlow(id)
 
-	// A real enquiry gets through.
 	runID := me.fireForm(id, map[string]any{
 		"name": "Ida", "email": "ida@example.com",
 		"message": "Hej! Kan ni offerera ett nytt tak till vår lada?",
@@ -491,7 +446,6 @@ func TestUseCase17_SpamNeverReachesTheSheet(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("the genuine enquiry did not reach the sheet: %v", rows)
 	}
-	// What landed is the message, not the verdict.
 	joined := fmt.Sprint(rows[1])
 	if !strings.Contains(joined, "nytt tak") {
 		t.Errorf("the sheet has the wrong thing in it: %v", rows[1])
@@ -518,8 +472,6 @@ func TestUseCase17_SpamNeverReachesTheSheet(t *testing.T) {
 		t.Errorf("spam pinged the team: %v", posts)
 	}
 }
-
-// --- what happens when the thing you're calling is down ------------------
 
 // The dangerous half of a read-act-write-back flow: if the ACT fails, the
 // write-back must not mark the work done anyway. Otherwise an outage at the
@@ -559,8 +511,6 @@ func TestUseCase12_AnOutageMustNotMarkTheJobsDone(t *testing.T) {
 		t.Errorf("the run reported success while every invoice failed")
 	}
 
-	// And once the API is back, the same jobs still invoice — the failure
-	// left them workable rather than half-done.
 	f.fail("fortnox", false)
 	runID = me.runFlow(id)
 	if status := me.waitForRun(runID); status != "succeeded" {
@@ -574,11 +524,6 @@ func TestUseCase12_AnOutageMustNotMarkTheJobsDone(t *testing.T) {
 	}
 }
 
-// --- 15: remind once, and only once --------------------------------------
-
-// The same read-act-write-back shape as 12, on a different service. The
-// window is a formula against the clock, so the fixture dates are built
-// relative to now rather than written down.
 func TestUseCase15_RenewalRemindsTheOwnerOnce(t *testing.T) {
 	f := newFakeSaaS(t)
 	soon := time.Now().UTC().AddDate(0, 0, 10).Format("2006-01-02")
@@ -608,7 +553,6 @@ func TestUseCase15_RenewalRemindsTheOwnerOnce(t *testing.T) {
 	if mails[0].To != "sara@example.com" || !strings.Contains(mails[0].Body, "Acme") {
 		t.Errorf("the reminder went to the wrong person or named the wrong contract: %+v", mails[0])
 	}
-	// Only that row is stamped.
 	if f.cell("Contracts", "reminded_on", 2) == "" {
 		t.Errorf("Acme was reminded but the row was not marked")
 	}
@@ -626,11 +570,6 @@ func TestUseCase15_RenewalRemindsTheOwnerOnce(t *testing.T) {
 	}
 }
 
-// --- 20: book it, text the tracking, mark it -----------------------------
-
-// Three services in one loop body, each step depending on the last: book the
-// consignment, build the message from the tracking number it returned, clean
-// the phone number, send, then mark the row.
 func TestUseCase20_ShippedOrderIsBookedAndTexted(t *testing.T) {
 	f := newFakeSaaS(t)
 	f.putSheet("Orders", [][]any{
@@ -656,8 +595,6 @@ func TestUseCase20_ShippedOrderIsBookedAndTexted(t *testing.T) {
 	if len(booked) != 1 {
 		t.Fatalf("booked %d shipment(s), want only the shipped order: %+v", len(booked), booked)
 	}
-	// The address object was built per item from the row — the structured
-	// handover into a loop body, on a nested value this time.
 	receiver, _ := booked[0]["receiver"].(map[string]any)
 	if receiver == nil || receiver["name"] != "Ida" || receiver["city"] != "Malmö" {
 		t.Fatalf("the consignment carries the wrong receiver: %+v", booked[0])
@@ -667,8 +604,6 @@ func TestUseCase20_ShippedOrderIsBookedAndTexted(t *testing.T) {
 	if len(texts) != 1 {
 		t.Fatalf("sent %d text(s), want one: %v", len(texts), texts)
 	}
-	// Normalised to E.164 by the Phone step, and carrying the tracking number
-	// the booking returned.
 	if !strings.HasPrefix(texts[0], "+46701234567") {
 		t.Errorf("the text did not go to the cleaned-up number: %q", texts[0])
 	}

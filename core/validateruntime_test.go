@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// runtimeManifests is the small catalog the run-path rules are checked
-// against: a source, a single-value sink, and a variadic one with a max.
 func runtimeManifests() map[string]Manifest {
 	return map[string]Manifest{
 		"src": {
@@ -104,8 +102,6 @@ func TestValidateRuntime(t *testing.T) {
 			wantSub: "unknown on_error",
 		},
 		{
-			// A tenant's runner and MCP drops are absent from the default
-			// catalog; "unknown here" is not "invalid".
 			name: "module missing from the catalog is tolerated",
 			g: Graph{
 				Nodes: []Node{{ID: "a", Module: "some-runner-drop"}, sinkNode("b")},
@@ -113,13 +109,10 @@ func TestValidateRuntime(t *testing.T) {
 			},
 		},
 		{
-			// The editor nags about this; at run time the step fails on its
-			// own with a better message than the validator's.
 			name: "unconnected required input is not a run-path error",
 			g:    Graph{Nodes: []Node{sinkNode("b")}},
 		},
 		{
-			// subgraph's input_map/output_map name its real ports.
 			name: "dynamic-port step wired to a mapped port",
 			g: Graph{
 				Nodes: []Node{{ID: "call", Module: "dyn"}, sinkNode("b")},
@@ -159,7 +152,6 @@ func TestValidateRuntime(t *testing.T) {
 	}
 }
 
-// With no catalog the port rules are impossible; the structural ones still hold.
 func TestValidateRuntime_NoCatalogDegradesToStructural(t *testing.T) {
 	g := Graph{
 		Nodes: []Node{srcNode("a"), sinkNode("b")},
@@ -177,7 +169,6 @@ func TestValidateRuntime_NoCatalogDegradesToStructural(t *testing.T) {
 	}
 }
 
-// The editor keeps the two authoring rules the run path drops.
 func TestValidateWithManifests_KeepsAuthoringRules(t *testing.T) {
 	manifests := runtimeManifests()
 	unconnected := Graph{Nodes: []Node{sinkNode("b")}}

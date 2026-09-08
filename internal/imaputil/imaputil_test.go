@@ -35,9 +35,6 @@ func TestParseMode(t *testing.T) {
 	}
 }
 
-// The port default follows the security mode, and both callers — the drop and
-// the verifier — go through this one function precisely so a "Test connection"
-// can't probe a different port than the run will use.
 func TestParsePortFollowsTheMode(t *testing.T) {
 	for _, tc := range []struct {
 		port, mode string
@@ -107,8 +104,6 @@ func TestDialRefusesACleartextLogin(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "refusing") {
 		t.Fatalf("want a refusal before dialing, got %v", err)
 	}
-	// The message has to name both ways out: "none" is a choice someone made
-	// on the integration page, so they need to know which fix applies.
 	for _, want := range []string{"starttls", "implicit"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("refusal doesn't mention %q: %v", want, err)
@@ -116,10 +111,6 @@ func TestDialRefusesACleartextLogin(t *testing.T) {
 	}
 }
 
-// Loopback is exempt, for the same reason PlainAuth exempts it: a local mail
-// bridge has no network to sniff. The dial then fails on the egress guard
-// (this package's tests don't opt into private egress) — which is a different
-// error, and that difference is the assertion.
 func TestDialAllowsACleartextLoginToLoopback(t *testing.T) {
 	for _, host := range []string{"127.0.0.1", "localhost", "::1"} {
 		_, err := Dial(context.Background(), Config{

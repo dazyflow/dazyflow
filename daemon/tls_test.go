@@ -35,8 +35,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// testCerts holds an in-memory PKI tree: one CA signs both a server cert
-// (SAN: localhost, 127.0.0.1) and a client cert.
 type testCerts struct {
 	caPEM         []byte
 	serverCertPEM []byte
@@ -49,7 +47,6 @@ func makeTestCerts(t *testing.T) *testCerts {
 	t.Helper()
 	now := time.Now()
 
-	// --- CA ---
 	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatalf("ca key: %v", err)
@@ -70,7 +67,6 @@ func makeTestCerts(t *testing.T) *testCerts {
 	caCert, _ := x509.ParseCertificate(caBytes)
 	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caBytes})
 
-	// --- Server cert ---
 	serverKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	serverTmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(2),
@@ -86,7 +82,6 @@ func makeTestCerts(t *testing.T) *testCerts {
 	serverCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: serverBytes})
 	serverKeyPEM := marshalECKey(t, serverKey)
 
-	// --- Client cert ---
 	clientKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	clientTmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(3),
@@ -118,9 +113,6 @@ func marshalECKey(t *testing.T, k *ecdsa.PrivateKey) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})
 }
 
-// startTLSServer wires the same gRPC + Service + Worker stack the other
-// tests use, but listening on a real TCP socket with the supplied TLS
-// config. Returns the listen address and a stop func.
 func startTLSServer(t *testing.T, tlsCfg *tls.Config) (string, string, func()) {
 	t.Helper()
 	ks := auth.NewMemKeyStore()
@@ -196,7 +188,6 @@ func TestMTLS_HappyPath(t *testing.T) {
 	defer cancel()
 	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+apiKey)
 
-	// Drive a real RPC to confirm the mTLS handshake actually flowed.
 	resp, err := controlpb.NewDropServiceClient(conn).ListDrops(ctx, &controlpb.ListDropsRequest{})
 	if err != nil {
 		t.Fatalf("ListModules: %v", err)
@@ -213,7 +204,6 @@ func TestMTLS_ClientWithoutCertRejected(t *testing.T) {
 	addr, _, stop := startTLSServer(t, serverCfg)
 	defer stop()
 
-	// Client trusts the server's CA but presents no client cert.
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM(certs.caPEM)
 	clientCfg := &tls.Config{
@@ -233,14 +223,11 @@ func TestMTLS_ClientWithoutCertRejected(t *testing.T) {
 	if err == nil {
 		t.Fatal("RPC succeeded without a client cert")
 	}
-	// Surfaces as either Unavailable (handshake failure) or a TLS error
-	// in the connection state. We just want the call to fail.
 }
 
 func TestMTLS_WrongCARejected(t *testing.T) {
 	t.Parallel()
 	serverCerts := makeTestCerts(t)
-	// A whole second PKI tree the server doesn't trust.
 	otherCerts := makeTestCerts(t)
 
 	serverCfg, _ := daemon.ServerConfigFromPEM(
@@ -248,7 +235,6 @@ func TestMTLS_WrongCARejected(t *testing.T) {
 	addr, _, stop := startTLSServer(t, serverCfg)
 	defer stop()
 
-	// Client uses certs signed by a CA the server doesn't trust.
 	clientCfg, _ := daemon.ClientConfigFromPEM(
 		otherCerts.clientCertPEM, otherCerts.clientKeyPEM, serverCerts.caPEM, "localhost")
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(credentials.NewTLS(clientCfg)))
@@ -272,7 +258,6 @@ func TestMTLS_InsecureClientCannotTalkToTLSServer(t *testing.T) {
 	addr, _, stop := startTLSServer(t, serverCfg)
 	defer stop()
 
-	// Plain insecure client connecting to a TLS server.
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatalf("dial: %v", err)
@@ -285,7 +270,6 @@ func TestMTLS_InsecureClientCannotTalkToTLSServer(t *testing.T) {
 	if err == nil {
 		t.Fatal("insecure client succeeded against TLS server")
 	}
-	// gRPC surfaces this as Unavailable / connection error.
 	if st, ok := status.FromError(err); ok && st.Code() == codes.OK {
 		t.Fatal("RPC reported OK status with err set")
 	}
@@ -293,8 +277,6 @@ func TestMTLS_InsecureClientCannotTalkToTLSServer(t *testing.T) {
 
 func TestMTLS_FileLoaderRoundTrip(t *testing.T) {
 	t.Parallel()
-	// Verify TLSFiles can read PEM files from disk and produce a usable
-	// pair of configs.
 	certs := makeTestCerts(t)
 	dir := t.TempDir()
 	mustWrite := func(name string, data []byte) string {
@@ -325,7 +307,6 @@ func TestMTLS_FileLoaderRoundTrip(t *testing.T) {
 
 func TestMTLS_LoaderRejectsBadInput(t *testing.T) {
 	t.Parallel()
-	// Empty files struct
 	_, err := daemon.TLSFiles{}.LoadServerConfig()
 	if err == nil {
 		t.Error("empty server config should error")
@@ -334,7 +315,6 @@ func TestMTLS_LoaderRejectsBadInput(t *testing.T) {
 	if err == nil {
 		t.Error("empty client config should error")
 	}
-	// Bad CA PEM
 	dir := t.TempDir()
 	bad := dir + "/ca.crt"
 	_ = writeFile(bad, []byte("not a pem"))

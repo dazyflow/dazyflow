@@ -17,8 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/drops/cursor"
 )
 
-// fakeTM is a stand-in Discovery API. Tests read back the last query to assert
-// what Ticketmaster is actually asked for.
 type fakeTM struct {
 	server    *httptest.Server
 	lastQuery url.Values
@@ -48,7 +46,6 @@ func (f *fakeTM) job(p map[string]any) core.Job {
 	return core.Job{ID: "j1", Tenant: "acme", GraphID: "flow1", NodeID: "node1", Params: params}
 }
 
-// eventsPage renders a Discovery page from a list of (id, name) pairs.
 func eventsPage(ids ...string) string {
 	items := make([]string, 0, len(ids))
 	for _, id := range ids {
@@ -122,8 +119,6 @@ func TestSearchEvents_FlattensRows(t *testing.T) {
 	}
 }
 
-// The Search for pin is what a For each over an artist list wires, so it has
-// to beat the keyword typed on the node.
 func TestSearchEvents_InputKeywordOverridesParam(t *testing.T) {
 	f := newFakeTM(t, func(int) string { return eventsPage("Z1") })
 	job := f.job(map[string]any{"keyword": "from-param"})
@@ -206,10 +201,6 @@ func TestSearchEvents_QuotaExhaustedSaysWhatToDo(t *testing.T) {
 	}
 }
 
-// --- the trigger ----------------------------------------------------------
-
-// memCursor wires the cursor store to a map so the trigger's seen-set survives
-// between polls within one test.
 func memCursor(t *testing.T) map[string]string {
 	t.Helper()
 	store := map[string]string{}
@@ -330,7 +321,6 @@ func TestWriteSeen_CapsOldestFirst(t *testing.T) {
 	if len(s.IDs) != seenCap {
 		t.Fatalf("kept %d ids, want the cap %d", len(s.IDs), seenCap)
 	}
-	// The newest survive; the two oldest were evicted to make room.
 	if s.IDs[len(s.IDs)-1] != "new2" || s.IDs[len(s.IDs)-2] != "new1" {
 		t.Errorf("tail = %v, want the newest ids last", s.IDs[len(s.IDs)-2:])
 	}

@@ -19,18 +19,13 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/internal/pgstore"
 )
 
-// tickets.go is the in-memory core.TicketStore (tests + single-node) plus
-// its Postgres mirror for production — the same dual-impl pattern as GrantStore /
-// BundleStore. Tickets and their chat threads live in two tables (tickets,
-// ticket_messages); the store never scrubs bodies itself (the route layer does,
-// on ingest) and never invents a status the core model rejects.
+// tickets.go is the in-memory core.TicketStore plus its Postgres mirror, the
+// dual-impl pattern GrantStore and BundleStore also follow. Tickets and threads
+// live in two tables; the store never scrubs bodies itself — the route layer does
+// that on ingest — and never invents a status the core model rejects.
 
-// DefaultTicketListLimit bounds a listing when the caller passes Limit == 0, so
-// a busy queue can't return an unbounded result set.
 const DefaultTicketListLimit = 200
 
-// erasedIdentity is the package-local alias for the shared marker. See
-// core.ErasedIdentity for why it is single-sourced.
 const erasedIdentity = core.ErasedIdentity
 
 var (
@@ -38,9 +33,6 @@ var (
 	errTicketMsgExists = errors.New("ticket message already exists")
 )
 
-// ---- In-memory -------------------------------------------------------------
-
-// MemTicketStore is a mutex-guarded in-memory core.TicketStore.
 type MemTicketStore struct {
 	mu       sync.Mutex
 	byID     map[string]core.Ticket
@@ -48,7 +40,6 @@ type MemTicketStore struct {
 	msgIDs   map[string]struct{}             // dedupe message IDs across all threads
 }
 
-// NewMemTicketStore returns an empty in-memory ticket store.
 func NewMemTicketStore() *MemTicketStore {
 	return &MemTicketStore{
 		byID:     map[string]core.Ticket{},
@@ -94,8 +85,7 @@ func (s *MemTicketStore) ListQueue(_ context.Context, opts core.TicketListOpts) 
 	return s.list(func(core.Ticket) bool { return true }, opts), nil
 }
 
-// list applies a match predicate + the opts filters, sorts
-// newest-activity-first, and truncates to the opts limit. Caller holds the lock.
+// list sorts newest-activity-first. The caller holds the lock.
 func (s *MemTicketStore) list(match func(core.Ticket) bool, opts core.TicketListOpts) []core.Ticket {
 	out := make([]core.Ticket, 0)
 	for _, t := range s.byID {
@@ -125,8 +115,6 @@ func (s *MemTicketStore) Update(_ context.Context, t core.Ticket) error {
 	return nil
 }
 
-// ticketMatchesOpts applies the status + ownership filters. Unassigned wins over
-// AssignedTo when both are set (see core.TicketListOpts).
 func ticketMatchesOpts(t core.Ticket, opts core.TicketListOpts) bool {
 	if opts.Status != "" && t.Status != opts.Status {
 		return false
@@ -177,10 +165,9 @@ func (s *MemTicketStore) ListMessages(_ context.Context, ticketID string) ([]cor
 	return out, nil
 }
 
-// AnonymizeSubject is the in-memory twin of PgTicketStore.AnonymizeSubject —
-// same contract, same reasoning (see there). Needed because a single-node or
-// self-hosted deployment runs the memory store, and an erasure request there
-// must scrub just as thoroughly as on Postgres rather than log a warning.
+// AnonymizeSubject is the twin of PgTicketStore.AnonymizeSubject, which carries
+// the reasoning. Needed because a single-node deployment runs the memory store,
+// and an erasure request there must scrub just as thoroughly.
 func (s *MemTicketStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
 	ident = strings.TrimSpace(ident)
 	if ident == "" {
@@ -217,8 +204,6 @@ func (s *MemTicketStore) AnonymizeSubject(_ context.Context, ident string) (int,
 	}
 	return n, nil
 }
-
-// ---- Postgres --------------------------------------------------------------
 
 const pgTicketSchema = `
 CREATE TABLE IF NOT EXISTS support_tickets (
@@ -292,64 +277,43 @@ UPDATE support_ticket_messages SET system_code = CASE body
   WHERE author_kind = 'system' AND system_code = '';
 `
 
-// EnsurePgTicketSchema creates the ticket tables. Idempotent.
 func EnsurePgTicketSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return pgstore.ApplySchema(ctx, pool, pgTicketSchema)
 }
 
-// PgTicketStore is the Postgres core.TicketStore. No cached snapshot: tickets are
-// low-volume and every read should be authoritative across nodes.
 type PgTicketStore struct {
 	pool *pgxpool.Pool
 
-	// Cached QueueSummary. The summary is an unindexable GROUP BY over EVERY
-	// ticket ever filed (the tiles must count the whole queue, not a page), so
-	// it costs a full scan — ~30ms at 200k rows single-shot, but p50 111ms /
-	// p95 182ms under 20 concurrent agents, because the parallel scans contend.
-	// The support dashboard calls it on first paint AND on every filter click,
-	// so it dominates the page as the table grows.
+	// The summary is an unindexable GROUP BY over EVERY ticket ever filed — the
+	// tiles must count the whole queue, not a page — so it costs a full scan:
+	// ~30ms at 200k rows single-shot, but p50 111ms / p95 182ms under 20
+	// concurrent agents, whose parallel scans contend. The dashboard calls it on
+	// first paint and on every filter click.
 	//
-	// A few seconds of staleness is invisible here: these are headline counts
-	// next to a list that is itself re-queried live, and no decision turns on
-	// "unassigned: 12" vs "13". Per-process, so a multi-node deployment just
-	// caches independently.
+	// A few seconds of staleness is invisible: these are headline counts beside a
+	// list that is itself re-queried live, and no decision turns on "unassigned:
+	// 12" vs "13". Per-process, so multi-node deployments cache independently.
 	summaryMu     sync.Mutex
 	summaryVal    core.TicketQueueSummary
 	summaryAt     time.Time
 	summaryWarm   bool
 	summaryInFlgt bool
-	// summaryGen counts invalidations. A scan that started before an
-	// invalidation carries pre-write data, so it must not be stored — see
-	// QueueSummary.
+	// summaryGen counts invalidations, so a scan that started before one knows
+	// its result is pre-write and must not be stored.
 	summaryGen uint64
 
-	// summaryCompute overrides the aggregate query. Nil in production (the real
-	// GROUP BY runs); tests set it to control exactly when a scan starts and
-	// finishes, which is the only way to exercise the interleavings the cache
-	// exists to handle.
 	summaryCompute func(context.Context) (core.TicketQueueSummary, error)
 }
 
-// queueSummaryTTL bounds how stale a cached tile count may be.
 const queueSummaryTTL = 5 * time.Second
 
-// invalidateSummary drops the cached counts. Called on every write so an
-// agent's OWN action (claim, resolve, file) shows up in the tiles immediately —
-// the TTL is there to absorb read load from many agents, not to make you wait
-// to see what you just did.
 func (s *PgTicketStore) invalidateSummary() {
 	s.summaryMu.Lock()
 	s.summaryWarm = false
-	// Bump the generation so a scan already in flight — which read the table
-	// BEFORE this write — can tell that its result is out of date and drop it
-	// instead of storing it. Without this, an agent's claim landing mid-scan
-	// was immediately overwritten by the pre-claim counts and stayed wrong for
-	// the whole TTL: exactly the "see what you just did" property above.
 	s.summaryGen++
 	s.summaryMu.Unlock()
 }
 
-// NewPgTicketStore creates the schema and returns the store.
 func NewPgTicketStore(ctx context.Context, pool *pgxpool.Pool) (*PgTicketStore, error) {
 	if err := EnsurePgTicketSchema(ctx, pool); err != nil {
 		return nil, err
@@ -405,17 +369,12 @@ func (s *PgTicketStore) Get(ctx context.Context, id string) (core.Ticket, error)
 	return t, err
 }
 
-// ticketFilterSQL is the opts predicate shared by both listings, written with
-// fixed placeholders (no dynamic SQL) so the query plan is stable and no filter
-// value is ever interpolated. $n..$n+2 are status, assigned_to, unassigned.
 const ticketFilterSQL = `($%d='' OR status=$%d)
 	 AND ($%d='' OR assigned_to=$%d)
 	 AND (NOT $%d OR assigned_to='')`
 
 // ticketFilterArgs are the three opts values ticketFilterSQL binds, in order.
 func ticketFilterArgs(opts core.TicketListOpts) []any {
-	// Unassigned wins over AssignedTo (see core.TicketListOpts), so drop the
-	// assignee predicate when it is set rather than returning nothing at all.
 	assignee := opts.AssignedTo
 	if opts.Unassigned {
 		assignee = ""
@@ -441,9 +400,8 @@ func (s *PgTicketStore) ListQueue(ctx context.Context, opts core.TicketListOpts)
 		append(args, ticketLimit(opts))...)
 }
 
-// QueueSummary aggregates in one GROUP BY — exact counts over every ticket,
-// deliberately unbounded by the list limit (the tiles must not lie when the
-// queue is longer than one page).
+// QueueSummary counts every ticket in one GROUP BY, deliberately unbounded by
+// the list limit: the tiles must not lie when the queue outgrows one page.
 func (s *PgTicketStore) QueueSummary(ctx context.Context) (core.TicketQueueSummary, error) {
 	s.summaryMu.Lock()
 	fresh := s.summaryWarm && time.Since(s.summaryAt) < queueSummaryTTL
@@ -452,11 +410,10 @@ func (s *PgTicketStore) QueueSummary(ctx context.Context) (core.TicketQueueSumma
 		s.summaryMu.Unlock()
 		return cached, nil
 	}
-	// Expired. Exactly ONE caller recomputes; everyone else who arrives during
-	// that window gets the slightly-staler cached value instead of piling a
-	// second full scan onto the database. Without this, every TTL expiry became
-	// a stampede — p50 fell to 2ms but p95 stayed at 116ms because all the
-	// concurrent readers missed at the same instant and each ran the scan.
+	// Exactly ONE caller recomputes; the rest take the staler cached value
+	// rather than pile a second full scan onto the database. Without this every
+	// TTL expiry was a stampede — p50 fell to 2ms but p95 stayed at 116ms,
+	// because the concurrent readers all missed at the same instant.
 	if s.summaryWarm && s.summaryInFlgt {
 		cached := s.summaryVal
 		s.summaryMu.Unlock()
@@ -465,11 +422,10 @@ func (s *PgTicketStore) QueueSummary(ctx context.Context) (core.TicketQueueSumma
 	s.summaryInFlgt = true
 	gen := s.summaryGen
 	s.summaryMu.Unlock()
-	// Deferred, not inline after the scan: a panic in the query or scan path is
-	// recovered by the HTTP middleware, so the process survives — and would
-	// survive with summaryInFlgt stuck true, after which every caller takes the
-	// "someone else is scanning" branch above and gets frozen counts until the
-	// process restarts.
+	// Deferred rather than inline after the scan: the HTTP middleware recovers a
+	// panic in the query path, so the process survives — and would survive with
+	// summaryInFlgt stuck true, freezing every later caller on the branch above
+	// until a restart.
 	defer func() {
 		s.summaryMu.Lock()
 		s.summaryInFlgt = false
@@ -483,8 +439,6 @@ func (s *PgTicketStore) QueueSummary(ctx context.Context) (core.TicketQueueSumma
 	sum, err := compute(ctx)
 	if err == nil {
 		s.summaryMu.Lock()
-		// Only store if nothing was written while we were scanning; otherwise
-		// this snapshot predates that write and the next caller should re-scan.
 		if s.summaryGen == gen {
 			s.summaryVal, s.summaryAt, s.summaryWarm = sum, time.Now(), true
 		}
@@ -493,8 +447,6 @@ func (s *PgTicketStore) QueueSummary(ctx context.Context) (core.TicketQueueSumma
 	return sum, err
 }
 
-// queueSummaryUncached runs the actual aggregate. Split out so the cache above
-// stays readable and the tests can exercise the query directly.
 func (s *PgTicketStore) queueSummaryUncached(ctx context.Context) (core.TicketQueueSummary, error) {
 	sum := core.NewTicketQueueSummary()
 	rows, err := s.pool.Query(ctx,
@@ -562,8 +514,8 @@ func (s *PgTicketStore) AppendMessage(ctx context.Context, m core.TicketMessage)
 	if m.ID == "" {
 		return fmt.Errorf("ticket message id is required")
 	}
-	// The ticket must exist; a foreign-key-less insert would otherwise orphan the
-	// message. Cheap existence check keeps the error mapping (ErrNotFound) clean.
+	// Without a foreign key an insert would orphan the message, and the check
+	// keeps the ErrNotFound mapping clean.
 	if _, err := s.Get(ctx, m.TicketID); err != nil {
 		return err
 	}
@@ -605,14 +557,6 @@ func (s *PgTicketStore) ListMessages(ctx context.Context, ticketID string) ([]co
 	return out, rows.Err()
 }
 
-// DeleteByTenant removes every ticket filed by one org, and the chat messages
-// hanging off them. It satisfies the gdpr.go tenantEraser capability, so
-// deleting an org now takes its support conversations with it — before this,
-// tickets outlived the org that filed them, which is exactly the customer-
-// written content an erasure request is about.
-//
-// Returns the number of TICKETS deleted (not messages): the erase report counts
-// user-visible objects, and a thread is an implementation detail of a ticket.
 func (s *MemTicketStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -631,9 +575,8 @@ func (s *MemTicketStore) DeleteByTenant(ctx context.Context, tenant string) (int
 	return n, nil
 }
 
-// DeleteByTenant removes an org's tickets and their threads. Messages go first
-// so a failure can't strand a thread whose ticket is already gone; both run in
-// one transaction so the pair is all-or-nothing.
+// DeleteByTenant deletes messages first, so a failure can't strand a thread
+// whose ticket is already gone, and runs both in one transaction.
 func (s *PgTicketStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -657,26 +600,23 @@ func (s *PgTicketStore) DeleteByTenant(ctx context.Context, tenant string) (int,
 	return int(ct.RowsAffected()), nil
 }
 
-// AnonymizeSubject scrubs one person's identifiers out of the support history
-// without destroying the org's threads: their email is replaced by '[erased]'
-// wherever it appears as a ticket's author, a ticket's assignee, or a message's
-// author, and the bodies of messages THEY wrote are cleared.
+// AnonymizeSubject scrubs one person out of the support history without
+// destroying the org's threads: their email becomes '[erased]' wherever it names
+// a ticket's author or assignee or a message's author, and the bodies of
+// messages THEY wrote are cleared.
 //
 // Deleting the tickets outright would be wrong — a support conversation is the
-// ORG's record of a problem with the org's flows, and one member leaving must
-// not erase it for everyone else. Deleting nothing would be wrong too: the rows
-// carry the person's email and their own words. So this mirrors exactly what
-// PgAuditLog.AnonymizeActor does for the security trail (actor → '[erased]',
-// detail → empty): keep the shape of what happened, drop the identity and the
-// content. An erased customer's thread therefore reads as agent replies to an
-// anonymous reporter, which is the intended trade.
+// ORG's record of a problem with its flows, and one member leaving must not erase
+// it for everyone else — but so would deleting nothing, the rows carrying the
+// person's email and their own words. So this mirrors PgAuditLog.AnonymizeActor:
+// keep the shape of what happened, drop the identity and the content. An erased
+// customer's thread reads as agent replies to an anonymous reporter.
 //
-// Matches on the identifier as stored, so callers should pass both the email and
-// the subject when they can differ.
+// Matches the identifier as stored, so callers should pass both email and subject
+// where they can differ.
 //
-// Returns the number of ROWS changed — each ticket once however many of its
-// columns named the person, plus one per message they wrote. MemTicketStore
-// counts the same way; the erase report shows this as a count of tickets.
+// Returns ROWS changed — each ticket once however many of its columns named the
+// person, plus one per message they wrote.
 func (s *PgTicketStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
 	ident = strings.TrimSpace(ident)
 	if ident == "" {
@@ -688,16 +628,14 @@ func (s *PgTicketStore) AnonymizeSubject(ctx context.Context, ident string) (int
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	total := 0
-	// erasedIdentity is bound as a parameter, not concatenated. It is a
-	// compile-time constant so the old form was not injectable — but it was the
-	// one place in this file that built SQL by concatenation while the same
-	// statements bound $1 properly two characters away, and that inconsistency
-	// is what eventually gets copied to a value that ISN'T a constant.
+	// erasedIdentity is bound rather than concatenated. The constant was not
+	// injectable, but it was the one place here building SQL by concatenation
+	// beside statements binding $1 properly, and that inconsistency is what gets
+	// copied to a value that ISN'T a constant.
 	//
-	// Both ticket columns move in ONE statement so a ticket counts once. As two
-	// separate UPDATEs their RowsAffected were summed, and the person who filed
-	// a ticket and was then assigned it — the ordinary self-service case —
-	// counted twice, so the erase report claimed more tickets than exist.
+	// Both ticket columns move in ONE statement, so a ticket counts once. As
+	// separate UPDATEs their RowsAffected were summed, and the ordinary
+	// self-service case — filing a ticket then being assigned it — counted twice.
 	ct, err := tx.Exec(ctx,
 		`UPDATE support_tickets
 		    SET created_by  = CASE WHEN created_by  = $1 THEN $2 ELSE created_by  END,
@@ -707,8 +645,6 @@ func (s *PgTicketStore) AnonymizeSubject(ctx context.Context, ident string) (int
 		return 0, err
 	}
 	total += int(ct.RowsAffected())
-	// Messages are counted on top of the tickets, matching MemTicketStore: a
-	// thread is not a ticket, and each message the person wrote is its own row.
 	ct, err = tx.Exec(ctx,
 		`UPDATE support_ticket_messages SET author = $2, body = '' WHERE author = $1`,
 		ident, erasedIdentity)
@@ -719,20 +655,16 @@ func (s *PgTicketStore) AnonymizeSubject(ctx context.Context, ident string) (int
 	if err := tx.Commit(ctx); err != nil {
 		return 0, err
 	}
-	// The queue-summary tiles count by status per tenant; anonymising doesn't
-	// change a status, but it does change what an agent sees, so drop the cache
-	// rather than reason about which parts stayed true.
 	s.invalidateSummary()
 	return total, nil
 }
 
-// Prune deletes CLOSED and RESOLVED tickets (and their threads) last touched
-// before the retention window, oldest first, up to batch rows. Open tickets are
-// never pruned no matter how old — an unanswered ticket is a backlog item, not
-// garbage, and silently deleting one would hide a support failure.
+// Prune deletes CLOSED and RESOLVED tickets and their threads, oldest first.
+// Open tickets are never pruned however old: an unanswered ticket is a backlog
+// item rather than garbage, and deleting one would hide a support failure.
 //
-// Same (olderThan, batch) shape as the audit and run-log pruners so the sweep
-// loop in cmd/dzd treats it identically. olderThan <= 0 is a no-op.
+// Same (olderThan, batch) shape as the audit and run-log pruners, so cmd/dzd's
+// sweep loop treats it identically. olderThan <= 0 is a no-op.
 func (s *PgTicketStore) Prune(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
 	if olderThan <= 0 {
 		return 0, nil
@@ -746,9 +678,8 @@ func (s *PgTicketStore) Prune(ctx context.Context, olderThan time.Duration, batc
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	// Pick the victims once, then delete messages and tickets against that same
-	// id set — re-running the predicate for each delete could drift if a ticket
-	// is updated between statements.
+	// Pick the victims once: re-running the predicate per delete could drift if
+	// a ticket is updated between statements.
 	rows, err := tx.Query(ctx,
 		`SELECT id FROM support_tickets
 		  WHERE status IN ('resolved','closed') AND updated_at < $1

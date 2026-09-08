@@ -20,11 +20,8 @@
 // round-tripping a rejection.
 export const MAX_LOGO_BYTES = 16 * 1024;
 
-// LOGO_BOX is what an oversized raster is redrawn to. The mark renders at about
-// 32px, so 64 covers a 2x display with nothing to spare.
 const LOGO_BOX = 64;
 
-// LOGO_ACCEPT is the file picker's filter, and the same set the daemon inlines.
 export const LOGO_ACCEPT =
   "image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon,image/vnd.microsoft.icon";
 
@@ -39,9 +36,6 @@ export function dataURIBytes(uri: string): number {
   return Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
 }
 
-// fileToLogo reads a picked file and returns the data: URI to save, shrinking it
-// if it does not fit. It throws an Error whose message is one of the codes
-// "unsupportedType", "svgTooBig", "tooBig" or "unreadable"; the page owns the wording.
 export async function fileToLogo(file: File): Promise<string> {
   if (!LOGO_TYPES.has(file.type)) {
     throw new Error("unsupportedType");

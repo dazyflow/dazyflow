@@ -16,12 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// FSQuota tracks per-tenant disk usage by walking the tenant directory
-// under the sandbox base. It pairs naturally with FSSandbox.
-//
-// Limits are configured once at construction. Used() walks the tenant's
-// subtree and caches the result for CacheTTL (1s by default) to keep the
-// cost predictable when a graph fires many jobs back-to-back.
 type FSQuota struct {
 	base     string
 	limits   map[string]int64
@@ -71,7 +65,6 @@ func NewFSQuota(base string, limits map[string]int64) (*FSQuota, error) {
 	}, nil
 }
 
-// SetCacheTTL overrides the default 1s usage cache (tests want zero).
 func (q *FSQuota) SetCacheTTL(d time.Duration) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -216,8 +209,6 @@ func (q *FSQuota) Usage() []core.QuotaUsage {
 	return out
 }
 
-// Invalidate clears the cached usage for tenant. Tests that mutate files
-// outside the standard write path call this so the next Used() re-walks.
 func (q *FSQuota) Invalidate(tenant string) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -247,13 +238,11 @@ func walkUsage(root string) (int64, error) {
 		return nil
 	})
 	if errors.Is(err, fs.ErrNotExist) {
-		// Tenant directory doesn't exist yet — no usage.
 		return 0, nil
 	}
 	return total, err
 }
 
-// Ensure FSQuota satisfies the interfaces at compile time.
 var (
 	_ core.QuotaProvider = (*FSQuota)(nil)
 	_ core.QuotaReserver = (*FSQuota)(nil)

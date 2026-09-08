@@ -12,8 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// benchPgSeq keeps each benchmark's workspace to itself, so a rerun does not
-// list a previous one's flows.
 var benchPgSeq atomic.Int64
 
 func benchPgWorkspace(tb testing.TB) *Store {
@@ -74,9 +72,6 @@ func benchWorkspace(tb testing.TB, flows, steps int) *Store {
 	return seedFlows(tb, s, flows, steps)
 }
 
-// BenchmarkFlowListPgLoad and BenchmarkFlowListPgAtHead are the same pair
-// against the Postgres graph store, where the per-flow shape costs three
-// round trips per flow rather than a repeated tree walk.
 func BenchmarkFlowListPgLoad(b *testing.B) {
 	s := seedFlows(b, benchPgWorkspace(b), 50, 30)
 	b.ReportAllocs()
@@ -117,7 +112,6 @@ func BenchmarkFlowListPgAtHead(b *testing.B) {
 	}
 }
 
-// BenchmarkFlowListAtHead is the same list through the one-pass read.
 func BenchmarkFlowListAtHead(b *testing.B) {
 	for _, flows := range []int{10, 50} {
 		b.Run(fmt.Sprintf("flows%d", flows), func(b *testing.B) {
@@ -140,8 +134,6 @@ func BenchmarkFlowListAtHead(b *testing.B) {
 	}
 }
 
-// BenchmarkFlowListLoad is what ListFlowSummaries did: list the ids, then
-// load each flow whole and read a name off it.
 func BenchmarkFlowListLoad(b *testing.B) {
 	for _, flows := range []int{10, 50} {
 		b.Run(fmt.Sprintf("flows%d", flows), func(b *testing.B) {
@@ -168,11 +160,6 @@ func BenchmarkFlowListLoad(b *testing.B) {
 	}
 }
 
-// The flow list serializes on the workspace mutex — deliberately, since
-// go-git's object cache mutates during reads — so what a reader holds that
-// lock for is the workspace's whole read throughput, not just its own
-// latency. These split the two halves of listAtHead: resolving HEAD, and
-// walking its tree to decode every flow.
 func BenchmarkFlowListHeadOnly(b *testing.B) {
 	s := benchWorkspace(b, 30, 25)
 	b.ReportAllocs()
@@ -184,10 +171,6 @@ func BenchmarkFlowListHeadOnly(b *testing.B) {
 	}
 }
 
-// BenchmarkFlowListHeadersAtHead30 is the same read as BenchmarkFlowListAtHead30
-// through the header projection — the difference is the params of ordinary
-// steps, which no list caller reads and which the profile put at 78% of the
-// decode.
 func BenchmarkFlowListHeadersAtHead30(b *testing.B) {
 	s := benchWorkspace(b, 30, 25)
 	b.ReportAllocs()
@@ -218,10 +201,10 @@ func BenchmarkFlowListAtHead30(b *testing.B) {
 	}
 }
 
-// BenchmarkFlowListHeadersParallel is the one that sees the defect the serial
-// benchmarks above cannot: every reader of a workspace serializes on one
-// mutex, so what matters is how much of the read is held under it, not how
-// long the read takes alone. Run it across -cpu to watch the ceiling.
+// The one that sees the defect the serial benchmarks above cannot: every
+// reader of a workspace serializes on one mutex, so what matters is how much
+// of the read is held under it, not how long the read takes alone. Run it
+// across -cpu to watch the ceiling.
 func BenchmarkFlowListHeadersParallel(b *testing.B) {
 	s := benchWorkspace(b, 30, 25)
 	b.ReportAllocs()
@@ -239,10 +222,10 @@ func BenchmarkFlowListHeadersParallel(b *testing.B) {
 	})
 }
 
-// BenchmarkFlowLoadParallel is the single-flow read — opening a flow in the
-// editor, and LoadPublished on every trigger fire — under the contention the
-// serial benchmarks cannot show. It shares the workspace mutex with every
-// list above, so what it holds under the lock bounds them too.
+// The single-flow read — opening a flow in the editor, and LoadPublished on
+// every trigger fire — under the contention the serial benchmarks cannot show.
+// It shares the workspace mutex with every list above, so what it holds under
+// the lock bounds them too.
 func BenchmarkFlowLoadParallel(b *testing.B) {
 	s := benchWorkspace(b, 30, 25)
 	b.ReportAllocs()
@@ -250,7 +233,6 @@ func BenchmarkFlowLoadParallel(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
 		for pb.Next() {
-			// Rotate the flow read so the benchmark is not one hot blob.
 			g, err := s.Load(fmt.Sprintf("flow-%02d", i%30))
 			if err != nil {
 				b.Fatalf("load: %v", err)

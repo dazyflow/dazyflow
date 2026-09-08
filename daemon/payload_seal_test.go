@@ -26,7 +26,6 @@ func TestSealPayload_RoundTripsUnderTheTenantsKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SealPayload: %v", err)
 	}
-	// The point of the exercise: the plaintext is not in what gets stored.
 	if bytes.Contains(blob, []byte("sk_live_realcredential")) {
 		t.Fatal("the sealed blob still contains the secret")
 	}
@@ -39,10 +38,6 @@ func TestSealPayload_RoundTripsUnderTheTenantsKey(t *testing.T) {
 	}
 }
 
-// AAD binds a ciphertext to the row AND the field it belongs in, exactly as
-// secretAAD binds a secret to its name. Without it, GCM only proves the blob
-// was sealed under this tenant's DEK — so someone with database write access
-// could relocate a sealed script into a row they are allowed to read back.
 func TestOpenPayload_RefusesARelocatedCiphertext(t *testing.T) {
 	t.Parallel()
 	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())

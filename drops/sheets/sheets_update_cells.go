@@ -90,7 +90,6 @@ func executeUpdateCells(ctx context.Context, job core.Job, _ chan<- core.Progres
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
 	if len(rows) == 0 {
-		// Nothing to mark is a normal outcome for a "handle what's new" flow.
 		return core.Result{JobID: job.ID, Status: core.StatusOK, Output: map[string]core.Ref{
 			"updated_cells":  {MIME: "text/plain", Inline: "0"},
 			"spreadsheet_id": {MIME: "text/plain", Inline: id},
@@ -106,8 +105,6 @@ func executeUpdateCells(ctx context.Context, job core.Job, _ chan<- core.Progres
 	rowCol := params.StringDefault(job.Params, "row_column", RowNumberColumn)
 	timeout := params.IntDefault(job.Params, "timeout_ms", 15000)
 
-	// Which columns to write: the named ones, else everything the rows carry
-	// apart from the row-number column.
 	want := params.StringSlice(job.Params, "columns")
 	if len(want) == 0 {
 		want = writableColumns(rows, in.Headers, rowCol)
@@ -116,8 +113,6 @@ func executeUpdateCells(ctx context.Context, job core.Job, _ chan<- core.Progres
 		return params.Err(job, "bad_param", "no columns to write — name them in 'Columns to write', or send rows that carry the values"), nil
 	}
 
-	// Map column name → letter from the sheet's own header row, appending any
-	// column the sheet doesn't have yet.
 	existing, err := readSheetHeaders(ctx, job, id, tab, token, timeout)
 	if err != nil {
 		return params.Err(job, "sheets_error", err.Error()), nil
@@ -141,8 +136,6 @@ func executeUpdateCells(ctx context.Context, job core.Job, _ chan<- core.Progres
 	}
 	data := make([]valueRange, 0, len(rows)*len(want)+1)
 
-	// A brand-new column needs its header written too, or the sheet gains a
-	// nameless column that no later read can find.
 	for i, h := range newHeaders {
 		col := columnLetter(len(existing) + i)
 		data = append(data, valueRange{
@@ -234,8 +227,6 @@ func writableColumns(rows []map[string]any, headers []string, rowCol string) []s
 	return out
 }
 
-// rowNumber reads a sheet row position out of whatever the row carries — an
-// int from a fresh read, a float64 after a JSON round-trip, or text.
 func rowNumber(v any) (int, bool) {
 	switch t := v.(type) {
 	case int:

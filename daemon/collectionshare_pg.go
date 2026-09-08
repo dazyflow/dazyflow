@@ -82,8 +82,6 @@ func (s *PgCollectionShareStore) List(ctx context.Context, tenant, workspace str
 
 func (s *PgCollectionShareStore) Upsert(ctx context.Context, tenant, workspace, collection, token, createdBy string) (CollectionShare, error) {
 	sh := CollectionShare{Tenant: tenant, Workspace: workspace, Collection: collection}
-	// Rotate in place: a fresh token replaces the old one, and created_at /
-	// created_by are reset so the dialog reflects the current link's age.
 	err := s.pool.QueryRow(ctx,
 		`INSERT INTO collection_shares (tenant, workspace, collection, token, created_by)
 		   VALUES ($1, $2, $3, $4, $5)
@@ -122,8 +120,6 @@ func (s *PgCollectionShareStore) Lookup(ctx context.Context, token string) (Coll
 	return sh, nil
 }
 
-// DeleteByTenant removes every collection link for a tenant — the org-erasure
-// cascade hook (gdpr.go's tenantEraser).
 func (s *PgCollectionShareStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	tag, err := s.pool.Exec(ctx, `DELETE FROM collection_shares WHERE tenant = $1`, tenant)
 	if err != nil {

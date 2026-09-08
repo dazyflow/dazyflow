@@ -12,8 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Gated on DAZYFLOW_TEST_DB. Uses a unique key per run so concurrent
-// test packages don't fight over the same advisory lock.
 func leaderPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
 	url := os.Getenv("DAZYFLOW_TEST_DB")
@@ -45,9 +43,6 @@ func eventually(t *testing.T, want bool, get func() bool, within time.Duration) 
 	t.Fatalf("condition not %v within %s", want, within)
 }
 
-// TestPgLeader_SingleHolder: two instances, exactly one leads; when the
-// leader's context is cancelled (node dies → lock released), the other
-// takes over.
 func TestPgLeader_SingleHolder(t *testing.T) {
 	pool, _ := leaderPool(t)
 	const key = int64(0x7A7A_0001)
@@ -57,7 +52,6 @@ func TestPgLeader_SingleHolder(t *testing.T) {
 	a := NewPgLeader(pool, key)
 	go a.Run(ctxA)
 
-	// A should win leadership.
 	eventually(t, true, a.IsLeader, 3*time.Second)
 
 	// B starts second; it must NOT become leader while A holds the lock.
@@ -70,9 +64,7 @@ func TestPgLeader_SingleHolder(t *testing.T) {
 		t.Fatal("B became leader while A still holds the lock")
 	}
 
-	// A "dies": cancel its context → connection released → lock freed.
 	cancelA()
 	eventually(t, false, a.IsLeader, 3*time.Second)
-	// B should take over within its retry interval (5s) + slack.
 	eventually(t, true, b.IsLeader, 8*time.Second)
 }

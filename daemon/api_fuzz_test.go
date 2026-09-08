@@ -31,9 +31,6 @@ import (
 // Crash inputs land under testdata/fuzz/<TargetName>/ and become
 // permanent regression cases.
 
-// assertNo5xx flags only true server-crash statuses (500, 502, 503, 504).
-// 501 "Not Implemented" is the documented "feature off" response and is
-// expected on unwired surfaces.
 func assertNo5xx(t *testing.T, where string, rw *httptest.ResponseRecorder) {
 	t.Helper()
 	switch rw.Code {
@@ -43,9 +40,6 @@ func assertNo5xx(t *testing.T, where string, rw *httptest.ResponseRecorder) {
 	}
 }
 
-// fuzzHarness mirrors gatewayHarness but is built from *testing.F so we
-// can do one-time setup outside f.Fuzz without abusing a zero-value
-// *testing.T.
 type fuzzHarness struct {
 	gw    *HTTPGateway
 	svc   *Service
@@ -79,8 +73,6 @@ func newFuzzHarness(f *testing.F) *fuzzHarness {
 	return &fuzzHarness{gw: NewHTTPGateway(svc), svc: svc, ks: ks, token: token}
 }
 
-// withSignup wires the Users/Sessions stores so signup + signin reach
-// the JSON decode + validation code instead of bouncing on 501.
 func (h *fuzzHarness) withSignup(f *testing.F) *fuzzHarness {
 	f.Helper()
 	users, err := auth.OpenJSONUserStore("")
@@ -124,11 +116,6 @@ func (h *fuzzHarness) withGitHubEvents(secret string) *fuzzHarness {
 	return h
 }
 
-// withStripeEvents wires the per-tenant Stripe webhook handler. Unlike
-// Slack/GitHub (one operator secret), Stripe authenticates against a
-// secret saved per-tenant in the encrypted store, so we stand one up and
-// seed tenant "t"'s STRIPE_WEBHOOK_SECRET. now is frozen so a valid-HMAC
-// fuzzer can sign inside the replay-tolerance window deterministically.
 func (h *fuzzHarness) withStripeEvents(f *testing.F, secret string) *fuzzHarness {
 	f.Helper()
 	es, err := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
@@ -145,10 +132,6 @@ func (h *fuzzHarness) withStripeEvents(f *testing.F, secret string) *fuzzHarness
 	h.gw.StripeEvents = handler
 	return h
 }
-
-// ---------------------------------------------------------------------
-// Auth surface
-// ---------------------------------------------------------------------
 
 func FuzzSignIn(f *testing.F) {
 	h := newFuzzHarness(f).withSignup(f)
@@ -206,10 +189,6 @@ func FuzzWhoamiBearer(f *testing.F) {
 	})
 }
 
-// ---------------------------------------------------------------------
-// Graph surface
-// ---------------------------------------------------------------------
-
 func FuzzSaveGraph(f *testing.F) {
 	h := newFuzzHarness(f)
 	f.Add([]byte(`{"id":"g","nodes":[],"edges":[]}`))
@@ -238,8 +217,6 @@ func FuzzRunGraphPath(f *testing.F) {
 	f.Add("t", "ws", "..%2F..")
 	f.Add(makeASCIIRepeat(1024), "ws", "g")
 	f.Fuzz(func(t *testing.T, tenant, workspace, id string) {
-		// flow_id is the percent-encoded composite — encode the slashes
-		// inside as %2F so the value stays in a single mux segment.
 		path := "/api/v1/me/flows/" + escapePathSeg(tenant+"/"+workspace+"/"+id) + "/run"
 		req, err := http.NewRequest("POST", path, nil)
 		if err != nil {
@@ -291,10 +268,6 @@ func FuzzValidateCron(f *testing.F) {
 		assertNo5xx(t, "validateCron", rw)
 	})
 }
-
-// ---------------------------------------------------------------------
-// Secrets, API keys, OAuth
-// ---------------------------------------------------------------------
 
 func FuzzPutSecretName(f *testing.F) {
 	h := newFuzzHarness(f).withSecrets(f)
@@ -379,10 +352,6 @@ func FuzzOAuthCallbackQuery(f *testing.F) {
 		assertNo5xx(t, "oauthCallback", rw)
 	})
 }
-
-// ---------------------------------------------------------------------
-// Webhook + Slack/GitHub events (HMAC ingress)
-// ---------------------------------------------------------------------
 
 func FuzzWebhookTriggerBody(f *testing.F) {
 	// Per-graph secret auth: with no matching graph the listener 404s.
@@ -489,10 +458,10 @@ func FuzzGitHubEventsValidHMAC(f *testing.F) {
 	})
 }
 
-// FuzzStripeEventsBadHMAC feeds arbitrary bodies and arbitrary
-// Stripe-Signature header values to the per-tenant Stripe webhook
-// handler. The handler must reject every forged/garbage signature with a
-// 4xx — never a 5xx and never a panic — before it parses or dispatches.
+// Feeds arbitrary bodies and arbitrary Stripe-Signature header values to the
+// per-tenant Stripe webhook handler. The handler must reject every
+// forged/garbage signature with a 4xx — never a 5xx and never a panic — before
+// it parses or dispatches.
 func FuzzStripeEventsBadHMAC(f *testing.F) {
 	h := newFuzzHarness(f).withStripeEvents(f, "whsec_test_secret")
 	f.Add([]byte(`{}`), "t=1700000000,v1=deadbeef")
@@ -512,11 +481,6 @@ func FuzzStripeEventsBadHMAC(f *testing.F) {
 	})
 }
 
-// FuzzStripeEventsValidHMAC signs each fuzzed body correctly (within the
-// frozen timestamp tolerance) so the input reaches event parsing and the
-// per-type dispatchers — the json.Unmarshal of attacker-shaped event,
-// data.object, payment-intent and subscription payloads. None may panic
-// or 5xx regardless of the envelope shape.
 func FuzzStripeEventsValidHMAC(f *testing.F) {
 	const secret = "whsec_test_secret"
 	h := newFuzzHarness(f).withStripeEvents(f, secret)
@@ -542,7 +506,6 @@ func FuzzStripeEventsValidHMAC(f *testing.F) {
 	})
 }
 
-// ---------------------------------------------------------------------
 // Authenticated JSON-body endpoints
 //
 // These short-circuit to 501/403 when their subsystem is nil, so the
@@ -550,10 +513,7 @@ func FuzzStripeEventsValidHMAC(f *testing.F) {
 // subsystem and a token with the right permission, then mutates the body
 // — exercising the decode + validation logic the route sweep only proves
 // safe at the surface level. Contract is the same: no panic, no 5xx.
-// ---------------------------------------------------------------------
 
-// platformBearer mints an API key carrying platform-admin (⊇ org-admin),
-// for the routes guarded by requirePlatformAdmin.
 func (h *fuzzHarness) platformBearer(f *testing.F) string {
 	f.Helper()
 	role := core.Role{Name: "platform", Permissions: []core.Permission{
@@ -566,9 +526,6 @@ func (h *fuzzHarness) platformBearer(f *testing.F) string {
 	return tok
 }
 
-// FuzzCreateInvitationBody drives POST /api/v1/admin/invitations — the
-// email + roles decode, validSignupEmail, and capRolesToCaller path —
-// with the org-admin fuzz token and a live in-memory invitation store.
 func FuzzCreateInvitationBody(f *testing.F) {
 	h := newFuzzHarness(f)
 	inv, err := auth.OpenJSONInvitationStore("")
@@ -594,10 +551,6 @@ func FuzzCreateInvitationBody(f *testing.F) {
 	})
 }
 
-// FuzzUpsertOAuthProviderBody drives PUT /api/v1/admin/oauth-providers/{name}
-// — platform-admin only — with a live OAuth registry + encrypted secret
-// store, so the client_id/client_secret decode and provider validation
-// run against attacker-shaped bodies.
 func FuzzUpsertOAuthProviderBody(f *testing.F) {
 	h := newFuzzHarness(f)
 	es, err := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
@@ -614,10 +567,6 @@ func FuzzUpsertOAuthProviderBody(f *testing.F) {
 	f.Add([]byte(`{"client_id":123}`), "google")
 	f.Add([]byte(`not-json`), "unknown-provider")
 	f.Fuzz(func(t *testing.T, body []byte, provider string) {
-		// Escape the fuzzed segment so it's a valid single path component
-		// (httptest.NewRequest parses the request line and rejects raw
-		// spaces); the router still PathValue-decodes it back, so provider
-		// handling is exercised.
 		req := httptest.NewRequest("PUT", "/api/v1/admin/oauth-providers/"+url.PathEscape(provider), bytes.NewReader(body))
 		req.Header.Set("Authorization", "Bearer "+tok)
 		req.Header.Set("Content-Type", "application/json")
@@ -627,10 +576,6 @@ func FuzzUpsertOAuthProviderBody(f *testing.F) {
 	})
 }
 
-// FuzzPutOrgAuthConfigBody drives PUT /api/v1/admin/org/auth-config — the
-// org SSO (Google) config decode — against a tiny in-memory OrgAuthStore
-// (the real one is Postgres-only). Exercises the "blank secret keeps the
-// existing one" GetOrgAuth fallback too.
 func FuzzPutOrgAuthConfigBody(f *testing.F) {
 	h := newFuzzHarness(f)
 	h.gw.OrgAuth = newMemOrgAuth()
@@ -650,13 +595,6 @@ func FuzzPutOrgAuthConfigBody(f *testing.F) {
 	})
 }
 
-// ---------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------
-
-// stripeSig builds a Stripe-Signature header (t=<unix>,v1=<hmac-hex>)
-// over "<ts>.<body>" — the *testing.T-free twin of signStripe, usable
-// from inside an f.Fuzz body.
 func stripeSig(secret string, ts time.Time, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	fmt.Fprintf(mac, "%d.", ts.Unix())
@@ -707,12 +645,6 @@ func ghSig(secret string, body []byte) string {
 // save-less graph linter, the RFC-7396 merge-patch path, and the hosted
 // intake form. Same contract: no panic, no 5xx for any input.
 
-// FuzzValidateGraphLiteral drives POST /api/v1/validate/graph. The
-// handler runs core.LintGraph over a fully attacker-controlled Graph
-// document without touching the store, so it's the widest pure-logic
-// surface in the API — the linter walks every node, edge, param and
-// trigger. Distinct from FuzzSaveGraph, which goes through the store's
-// SaveGraph validation rather than the standalone linter.
 func FuzzValidateGraphLiteral(f *testing.F) {
 	h := newFuzzHarness(f)
 	f.Add([]byte(`{"nodes":[],"edges":[]}`))
@@ -734,15 +666,14 @@ func FuzzValidateGraphLiteral(f *testing.F) {
 	})
 }
 
-// FuzzPatchFlow drives PATCH /api/v1/me/flows/{flow_id}. The handler
-// loads HEAD, round-trips it through map[string]any, applies an
-// RFC-7396 merge with the attacker's patch, then unmarshals the merged
-// document back into a Graph and saves. jsonMergePatch recurses on
-// nested objects, so deeply nested patches probe for unbounded
-// recursion; type-confused values (string where an array is expected,
-// etc.) probe the merged-Graph unmarshal. The seeded flow is always a
-// valid Graph after any merge — the handler refuses to persist an
-// invalid one with 422 — so each iteration patches a sane HEAD.
+// Drives PATCH /api/v1/me/flows/{flow_id}. The handler loads HEAD, round-trips
+// it through map[string]any, applies an RFC-7396 merge with the attacker's
+// patch, then unmarshals the merged document back into a Graph and saves.
+// jsonMergePatch recurses on nested objects, so deeply nested patches probe
+// for unbounded recursion; type-confused values (string where an array is
+// expected, etc.) probe the merged-Graph unmarshal. The seeded flow is always
+// a valid Graph after any merge — the handler refuses to persist an invalid
+// one with 422 — so each iteration patches a sane HEAD.
 func FuzzPatchFlow(f *testing.F) {
 	h := newFuzzHarness(f)
 	store, err := h.svc.Workspaces.Open("t", "ws")
@@ -777,11 +708,10 @@ func FuzzPatchFlow(f *testing.F) {
 	})
 }
 
-// FuzzFormSubmit drives the hosted intake form POST. handleForm
-// ParseForm()s an untrusted urlencoded body and folds the values into a
-// flow seed via collectFormValues. A public_form graph is seeded so the
-// request gets past the "don't reveal the graph" 404 gate and reaches
-// the parser + field collection + submit path.
+// Drives the hosted intake form POST. handleForm ParseForm()s an untrusted
+// urlencoded body and folds the values into a flow seed via collectFormValues.
+// A public_form graph is seeded so the request gets past the "don't reveal the
+// graph" 404 gate and reaches the parser + field collection + submit path.
 func FuzzFormSubmit(f *testing.F) {
 	h := newFuzzHarness(f)
 	store, err := h.svc.Workspaces.Open("t", "ws")
@@ -816,8 +746,6 @@ func FuzzFormSubmit(f *testing.F) {
 	})
 }
 
-// nestObjects builds a JSON document nested n objects deep, used to
-// probe jsonMergePatch's recursion for stack exhaustion.
 func nestObjects(n int) string {
 	var b strings.Builder
 	for range n {

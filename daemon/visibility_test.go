@@ -16,10 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// visibilityHarness wires the smallest stack that can exercise the
-// SaveGraph / LoadGraph / ListGraphs visibility plumbing. Two
-// non-admin principals (alice + bob) share a workspace; mallory is
-// the tenant admin.
 type visibilityHarness struct {
 	svc        *daemon.Service
 	alice      core.Principal
@@ -64,7 +60,6 @@ func TestVisibility_PrivateFlowHiddenFromOtherUsers(t *testing.T) {
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 
-	// Alice saves a private flow.
 	if _, err := h.svc.SaveGraph(ctx, h.alice, core.Graph{
 		ID: "alice-secret", Tenant: "t", Workspace: "ws",
 		Visibility: core.VisibilityPrivate,
@@ -82,7 +77,6 @@ func TestVisibility_PrivateFlowHiddenFromOtherUsers(t *testing.T) {
 		t.Errorf("err = %v, want ErrNotFound (visibility should look like missing)", err)
 	}
 
-	// And it doesn't appear in Bob's listing.
 	ids, _ := h.svc.ListGraphs(ctx, h.bob, "t", "ws")
 	for _, id := range ids {
 		if id == "alice-secret" {
@@ -90,7 +84,6 @@ func TestVisibility_PrivateFlowHiddenFromOtherUsers(t *testing.T) {
 		}
 	}
 
-	// Alice herself can load it.
 	g, err := h.svc.LoadGraph(ctx, h.alice, "t", "ws", "alice-secret", "")
 	if err != nil {
 		t.Fatalf("alice load own: %v", err)
@@ -113,11 +106,9 @@ func TestVisibility_TenantAdminBypassesPrivate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	// Mallory (organization:admin) can read alice's private flow.
 	if _, err := h.svc.LoadGraph(ctx, h.mallory, "t", "ws", "private-1", ""); err != nil {
 		t.Errorf("mallory should see private flows: %v", err)
 	}
-	// And lists include it.
 	ids, _ := h.svc.ListGraphs(ctx, h.mallory, "t", "ws")
 	found := false
 	for _, id := range ids {
@@ -136,7 +127,6 @@ func TestVisibility_OrgFlowVisibleToAll(t *testing.T) {
 	ctx := context.Background()
 	if _, err := h.svc.SaveGraph(ctx, h.alice, core.Graph{
 		ID: "shared", Tenant: "t", Workspace: "ws",
-		// Visibility left empty = defaults to org.
 	}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -149,7 +139,6 @@ func TestVisibility_OwnerStampedOnCreate(t *testing.T) {
 	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
-	// Alice creates without specifying owner — daemon stamps it.
 	if _, err := h.svc.SaveGraph(ctx, h.alice, core.Graph{
 		ID: "no-owner-set", Tenant: "t", Workspace: "ws",
 	}); err != nil {
@@ -171,9 +160,6 @@ func TestVisibility_NonOwnerCantEditPrivate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	// Bob tries to overwrite — should fail. Bob can't see it, so the
-	// load-before-edit step inside SaveGraph encounters the existing
-	// flow and rejects.
 	_, err := h.svc.SaveGraph(ctx, h.bob, core.Graph{
 		ID: "alice-flow", Tenant: "t", Workspace: "ws",
 		Visibility: core.VisibilityPrivate,
@@ -187,13 +173,11 @@ func TestVisibility_NonOwnerCantEditOrg(t *testing.T) {
 	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
-	// Alice creates an org-visible flow.
 	if _, err := h.svc.SaveGraph(ctx, h.alice, core.Graph{
 		ID: "shared", Tenant: "t", Workspace: "ws",
 	}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	// Bob can READ it (it's org-visible).
 	if _, err := h.svc.LoadGraph(ctx, h.bob, "t", "ws", "shared", ""); err != nil {
 		t.Fatalf("bob load org: %v", err)
 	}
@@ -216,8 +200,6 @@ func TestVisibility_AdminCanEditOthersFlows(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	// Mallory (admin) flips visibility — recovery path for orphaned
-	// private flows.
 	if _, err := h.svc.SaveGraph(ctx, h.mallory, core.Graph{
 		ID: "private-rec", Tenant: "t", Workspace: "ws",
 		Visibility: core.VisibilityOrg,
@@ -243,10 +225,6 @@ func TestVisibility_NonAdminCantTransferOwner(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	// Alice tries to give the flow to bob. She IS the owner, so the
-	// edit gate passes — but the save path's owner-preservation
-	// keeps the original owner unless an admin reassigns. (Touching
-	// Version too so the commit isn't a no-op against the Git store.)
 	_, err := h.svc.SaveGraph(ctx, h.alice, core.Graph{
 		ID: "shared", Tenant: "t", Workspace: "ws",
 		Owner: "bob", Version: "v2",

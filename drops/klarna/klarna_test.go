@@ -25,8 +25,7 @@ type fakeKlarna struct {
 	lastBody map[string]any
 	lastPath string
 	// order the GET endpoint returns.
-	order string
-	// captureStatus/refundStatus let a test force a non-2xx.
+	order         string
 	captureStatus int
 	refundStatus  int
 }
@@ -74,7 +73,6 @@ func newFakeKlarna(t *testing.T) *fakeKlarna {
 				_, _ = io.WriteString(rw, `{"error_code":"REFUND_NOT_ALLOWED","error_messages":["Amount too high."]}`)
 				return
 			}
-			// Exercise the Location-only fallback (no Refund-ID header).
 			rw.Header().Set("Location", "/ordermanagement/v1/orders/o1/refunds/ref1")
 			rw.WriteHeader(201)
 		default:
@@ -175,7 +173,6 @@ func TestCapture_FullUsesRemainingAuthorized(t *testing.T) {
 	if res.Status != core.StatusOK {
 		t.Fatalf("status = %v, err = %+v", res.Status, res.Error)
 	}
-	// Full capture reads remaining_authorized_amount (4000) and captures it.
 	if got := res.Output["captured_amount"].Inline; got != "4000" {
 		t.Errorf("captured_amount = %v, want 4000 (remaining authorized)", got)
 	}
@@ -236,7 +233,6 @@ func TestRefund_FullUsesRemainingRefundable(t *testing.T) {
 	if res.Status != core.StatusOK {
 		t.Fatalf("status = %v, err = %+v", res.Status, res.Error)
 	}
-	// captured 1000 − refunded 200 = 800 refundable.
 	if got := res.Output["refunded_amount"].Inline; got != "800" {
 		t.Errorf("refunded_amount = %v, want 800", got)
 	}

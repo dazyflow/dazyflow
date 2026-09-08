@@ -43,10 +43,6 @@ function escapeHTML(s: string): string {
     .replace(/>/g, "&gt;");
 }
 
-// previewTokenSpan is the body's decoration: inline styles, not a class, since
-// the preview is rendered in a sandboxed iframe that has none of the app's
-// CSS. Dashed underline + a tint reads as "a value lands here" in every mail
-// client's rendering of the same markup.
 export function previewTokenSpan(label: string): string {
   return (
     '<span style="border-bottom:1px dashed currentColor;opacity:.7">' +

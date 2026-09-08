@@ -46,7 +46,6 @@ describe("fillTokensForPreview", () => {
     );
     expect(out).toContain("<p>Hi <span");
     expect(out).toContain("Each row → name</span>");
-    // The surrounding body markup is the author's own and stays raw.
     expect(out).toContain("</p>");
   });
 

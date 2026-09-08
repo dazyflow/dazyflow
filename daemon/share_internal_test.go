@@ -13,13 +13,10 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestWorkspaceBrand_Cov covers workspaceBrand's branches: named org profile,
-// personal-tenant fallback, and a named (non-personal) tenant fallback.
 func TestWorkspaceBrand_Cov(t *testing.T) {
 	t.Parallel()
 	svc := &Service{}
 
-	// No OrgProfiles store: personal tenant drops its label; named tenant kept.
 	if label, icon := svc.workspaceBrand(context.Background(), "usr_abc123"); label != "" || icon != "" {
 		t.Fatalf("personal tenant brand = %q/%q, want empty", label, icon)
 	}
@@ -27,7 +24,6 @@ func TestWorkspaceBrand_Cov(t *testing.T) {
 		t.Fatalf("named tenant brand = %q, want acme", label)
 	}
 
-	// With a profile carrying a display name + icon.
 	profiles := newCovProfiles()
 	svc.OrgProfiles = profiles
 	_ = profiles.PutOrgProfile(context.Background(), auth.OrgProfile{
@@ -38,8 +34,6 @@ func TestWorkspaceBrand_Cov(t *testing.T) {
 		t.Fatalf("profile brand = %q/%q, want Acme Inc/rocket", label, icon)
 	}
 
-	// A profile with only an icon (no display name) for a personal tenant:
-	// icon survives, label is dropped.
 	_ = profiles.PutOrgProfile(context.Background(), auth.OrgProfile{
 		Tenant: "usr_x", Icon: "star",
 	})
@@ -49,7 +43,6 @@ func TestWorkspaceBrand_Cov(t *testing.T) {
 	}
 }
 
-// TestShareError_Cov covers shareError's three status mappings.
 func TestShareError_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)

@@ -12,15 +12,6 @@ import (
 	"unicode"
 )
 
-// OrgProfile is the human-facing identity for an org — kept separate
-// from the immutable tenant ID (the random usr_<hex> minted at signup)
-// because users want to rename their org without changing every
-// downstream reference. The ID lives in URLs, audit logs, webhook
-// paths; the DisplayName is what shows up in the switcher and admin
-// header.
-//
-// Currently we only carry the display name; future expansion (logo,
-// billing email, support contact, custom domain) lives here.
 type OrgProfile struct {
 	Tenant      string `json:"tenant"`
 	DisplayName string `json:"display_name"`
@@ -37,42 +28,23 @@ type OrgProfile struct {
 	Subdomain string    `json:"subdomain,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// Platform-admin moderation, mirroring auth.User: Status is "active"
-	// or "suspended". A suspended org keeps its data but its scheduled and
-	// triggered flows stop firing (the scheduler and inbound webhook/form
-	// paths skip suspended tenants) and its members are locked out at
-	// auth. SuspendedAt / SuspendReason feed the audit trail and the
-	// operator UI. A ban additionally blocklists the org's members'
-	// re-signup; the profile row only tracks the suspension. omitempty
-	// keeps existing stores byte-compatible.
 	Status        string     `json:"status,omitempty"`
 	SuspendedAt   *time.Time `json:"suspended_at,omitempty"`
 	SuspendReason string     `json:"suspend_reason,omitempty"`
 }
 
-// Suspended reports whether a platform admin has locked this org. Empty
-// status reads as active, so pre-moderation rows need no backfill.
 func (p OrgProfile) Suspended() bool { return p.Status == StatusSuspended }
 
-// OrgProfileStore is the lookup boundary. Tenants with no profile
-// row return ErrUnknownOrgProfile; the UI falls back to the raw
-// tenant ID in that case, so a missing profile is non-fatal.
 type OrgProfileStore interface {
 	GetOrgProfile(ctx context.Context, tenant string) (OrgProfile, error)
 	PutOrgProfile(ctx context.Context, p OrgProfile) error
 	ListOrgProfiles(ctx context.Context, tenants []string) (map[string]OrgProfile, error)
-	// GetOrgProfileBySubdomain resolves a claimed subdomain label back to its
-	// org profile (and thus tenant). Returns ErrUnknownOrgProfile when no org
-	// has claimed that label. The lookup is case-insensitive on the label.
 	GetOrgProfileBySubdomain(ctx context.Context, subdomain string) (OrgProfile, error)
 }
 
 var (
 	ErrUnknownOrgProfile = errors.New("no profile for tenant")
-	// ErrSubdomainTaken is returned by PutOrgProfile when the requested
-	// subdomain is already claimed by a DIFFERENT org. The handler maps it to
-	// a 409 so the UI can say "that subdomain is taken" rather than a 500.
-	ErrSubdomainTaken = errors.New("subdomain already taken")
+	ErrSubdomainTaken    = errors.New("subdomain already taken")
 	// ErrInvalidSubdomain is returned by ValidateSubdomain for a label that
 	// isn't a usable DNS label or is reserved.
 	ErrInvalidSubdomain = errors.New("invalid subdomain")
@@ -104,18 +76,8 @@ var reservedSubdomains = map[string]bool{
 // subset of reservedSubdomains: only names we truly front.
 var servedInfraSubdomains = map[string]bool{
 	"docs": true,
-	// NOTE: "registry" used to be here, for the registry.dazyflow.app site block
-	// that fronted a self-hosted registry:2 container CI pushed releases to.
-	// Release images come from ghcr now, that site block is gone from
-	// deploy/Caddyfile, and authorizing a cert for a host nothing serves just
-	// spends a Let's Encrypt issuance on a name that answers 404. It stays in
-	// reservedSubdomains above — no org should be able to claim it — which is
-	// exactly the "reserved but not served" case this map exists to distinguish.
 }
 
-// IsServedInfraSubdomain reports whether label is a reserved infrastructure
-// subdomain that Dazyflow serves and should be granted an on-demand TLS
-// certificate. Input is normalized (lowercased/trimmed) to match host parsing.
 func IsServedInfraSubdomain(label string) bool {
 	return servedInfraSubdomains[strings.ToLower(strings.TrimSpace(label))]
 }
@@ -136,20 +98,6 @@ func ValidateSubdomain(s string) (string, error) {
 	return s, nil
 }
 
-// DefaultOrgDisplayName picks a sensible initial name for the org an
-// account is signing up into. Logic:
-//
-//  1. Take the email's domain ("alice@acme.test" → "acme.test").
-//  2. Trim generic prefixes ("my.acme.com" → "acme.com") that often
-//     wrap a real brand.
-//  3. Take the leftmost remaining label ("acme.test" → "acme").
-//  4. Title-case it ("acme" → "Acme").
-//
-// For widely-shared consumer email providers (gmail.com, outlook.com,
-// hotmail.com, yahoo.com, icloud.com) the brand name is itself the
-// least useful default — those users are sole proprietors who want
-// their *own* name, not "Gmail". We fall back to the local-part
-// title-cased in that case ("alice@gmail.com" → "Alice").
 func DefaultOrgDisplayName(email string) string {
 	at := strings.LastIndex(email, "@")
 	if at < 1 || at == len(email)-1 {
@@ -160,8 +108,6 @@ func DefaultOrgDisplayName(email string) string {
 	if isConsumerEmailDomain(domain) {
 		return titleize(local)
 	}
-	// Strip leading generic labels people prepend ("my.", "team.",
-	// "mail.") so the brand is what surfaces.
 	parts := strings.Split(domain, ".")
 	for len(parts) > 1 && isGenericDomainPrefix(parts[0]) {
 		parts = parts[1:]
@@ -193,9 +139,6 @@ func isGenericDomainPrefix(label string) bool {
 	return false
 }
 
-// titleize uppercases the first letter and lowercases the rest;
-// strings.Title is deprecated and cases.Title pulls in golang.org/x.
-// We only need ASCII-clean behaviour for an org default.
 func titleize(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {

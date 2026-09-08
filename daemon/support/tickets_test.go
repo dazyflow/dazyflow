@@ -49,23 +49,19 @@ func ticketStoreLifecycle(t *testing.T, s core.TicketStore) {
 		t.Errorf("get missing = %v, want ErrNotFound", err)
 	}
 
-	// Tenant scoping.
 	acme, _ := s.ListForTenant(ctx, "acme", core.TicketListOpts{})
 	if len(acme) != 1 || acme[0].ID != "t1" {
 		t.Errorf("acme list = %+v, want [t1]", acme)
 	}
-	// Status filter.
 	none, _ := s.ListForTenant(ctx, "acme", core.TicketListOpts{Status: core.TicketResolved})
 	if len(none) != 0 {
 		t.Errorf("resolved filter = %d, want 0", len(none))
 	}
-	// Cross-tenant queue sees both.
 	queue, _ := s.ListQueue(ctx, core.TicketListOpts{})
 	if len(queue) != 2 {
 		t.Errorf("queue = %d, want 2", len(queue))
 	}
 
-	// Update: resolve the ticket and bump activity.
 	got.Status = core.TicketResolved
 	got.AssignedTo = "agent@vendor.com"
 	got.BundleID = "b1"
@@ -81,7 +77,6 @@ func ticketStoreLifecycle(t *testing.T, s core.TicketStore) {
 		t.Errorf("update missing = %v, want ErrNotFound", err)
 	}
 
-	// Messages: chronological, deduped, and rejected for a missing ticket.
 	m1 := core.TicketMessage{ID: "m1", TicketID: "t1", Author: "user@acme.com", AuthorKind: core.AuthorUser, Body: "help", CreatedAt: now}
 	m2 := core.TicketMessage{ID: "m2", TicketID: "t1", Author: "agent@vendor.com", AuthorKind: core.AuthorSupport, Body: "on it", CreatedAt: now.Add(time.Minute)}
 	if err := s.AppendMessage(ctx, m2); err != nil { // append out of order
@@ -121,8 +116,6 @@ func ticketStoreLifecycle(t *testing.T, s core.TicketStore) {
 		t.Errorf("system note round-trip = code %q body %q, want %q / %q",
 			got.SystemCode, got.Body, core.NoteCustomerClosed, sysNote.Body)
 	}
-	// A person's message carries no code — the column defaults to empty rather
-	// than picking up the previous row's value.
 	if msgs[0].SystemCode != "" {
 		t.Errorf("m1 (a person's message) has SystemCode %q, want empty", msgs[0].SystemCode)
 	}
@@ -162,9 +155,6 @@ func ticketStoreLifecycle(t *testing.T, s core.TicketStore) {
 		}
 	}
 
-	// ---- Ownership filters + queue summary (the support dashboard) -----------
-	// State here: t1 = acme, resolved, assigned to agent@vendor.com;
-	//             t2 = globex, open, unassigned.
 	assigned, _ := s.ListQueue(ctx, core.TicketListOpts{AssignedTo: "agent@vendor.com"})
 	if len(assigned) != 1 || assigned[0].ID != "t1" {
 		t.Errorf("assignee filter = %+v, want [t1]", assigned)
@@ -182,14 +172,12 @@ func ticketStoreLifecycle(t *testing.T, s core.TicketStore) {
 	if len(both) != 1 || both[0].ID != "t2" {
 		t.Errorf("unassigned+assignee = %+v, want unassigned to win with [t2]", both)
 	}
-	// Filters compose with status, and apply to the tenant listing too.
 	if hit, _ := s.ListQueue(ctx, core.TicketListOpts{Unassigned: true, Status: core.TicketResolved}); len(hit) != 0 {
 		t.Errorf("unassigned+resolved = %d, want 0 (t2 is open, t1 is assigned)", len(hit))
 	}
 	if mine, _ := s.ListForTenant(ctx, "acme", core.TicketListOpts{AssignedTo: "agent@vendor.com"}); len(mine) != 1 {
 		t.Errorf("tenant listing + assignee filter = %d, want 1", len(mine))
 	}
-	// Limit bounds the result set.
 	if one, _ := s.ListQueue(ctx, core.TicketListOpts{Limit: 1}); len(one) != 1 {
 		t.Errorf("limit 1 returned %d rows", len(one))
 	}
@@ -201,8 +189,6 @@ func ticketStoreLifecycle(t *testing.T, s core.TicketStore) {
 	if sum.Total != 2 {
 		t.Errorf("summary Total = %d, want 2", sum.Total)
 	}
-	// Only t2 is live; t1 is resolved, so it counts in ByStatus but not in
-	// Open/Unassigned/ByAssignee.
 	if sum.Open != 1 || sum.Unassigned != 1 {
 		t.Errorf("summary Open/Unassigned = %d/%d, want 1/1", sum.Open, sum.Unassigned)
 	}
@@ -218,7 +204,6 @@ func TestMemTicketStore(t *testing.T) {
 	ticketStoreLifecycle(t, NewMemTicketStore())
 }
 
-// Gated on DAZYFLOW_TEST_DB, like the other Postgres support tests.
 func TestPgTicketStore(t *testing.T) {
 	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
@@ -240,11 +225,6 @@ func TestPgTicketStore(t *testing.T) {
 	ticketStoreLifecycle(t, s)
 }
 
-// The backfill is the difference between "new notes are translated" and "this
-// bug is fixed". Without it every thread that predates the system_code column
-// keeps its English sentence wedged between translated messages forever, which
-// is indistinguishable from not having fixed anything for anyone who already
-// had tickets.
 func TestPgTicketStore_BackfillsPreExistingSystemNotes(t *testing.T) {
 	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
@@ -263,7 +243,6 @@ func TestPgTicketStore_BackfillsPreExistingSystemNotes(t *testing.T) {
 		t.Fatalf("truncate: %v", err)
 	}
 
-	// Rows exactly as an older daemon wrote them: prose, no code.
 	legacy := []struct{ id, body, want string }{
 		{"L1", "The customer closed this ticket.", "customer_closed"},
 		{"L2", "The customer reopened this ticket.", "customer_reopened"},
@@ -290,7 +269,6 @@ func TestPgTicketStore_BackfillsPreExistingSystemNotes(t *testing.T) {
 		t.Fatalf("seed P1: %v", err)
 	}
 
-	// Re-applying the schema is what a daemon restart does.
 	if err := EnsurePgTicketSchema(ctx, pool); err != nil {
 		t.Fatalf("re-apply schema: %v", err)
 	}

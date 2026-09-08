@@ -16,13 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// PgWorkspaces is the WorkspaceLookup for Postgres-backed flow storage.
-//
-// Unlike AutoFSWorkspaces there is nothing to cache or evict: a Store here is a
-// handle over the shared pool, not an open git repository, so Open mints one
-// per call and the resident cost of an install is its connection pool rather
-// than one repository per tenant. Nothing is provisioned either — a workspace
-// exists once something is saved into it.
 type PgWorkspaces struct {
 	pool *pgxpool.Pool
 	// mirrorCache is where git mirroring keeps the repository it synthesizes
@@ -42,8 +35,6 @@ func NewPgWorkspaces(pool *pgxpool.Pool) *PgWorkspaces {
 	return &PgWorkspaces{pool: pool}
 }
 
-// SetMirrorCache enables git mirroring, using dir as the root for each
-// workspace's synthesized repository.
 func (p *PgWorkspaces) SetMirrorCache(dir string) { p.mirrorCache = dir }
 
 func (p *PgWorkspaces) Open(tenant, ws string) (*workspace.Store, error) {
@@ -58,9 +49,6 @@ func (p *PgWorkspaces) Open(tenant, ws string) (*workspace.Store, error) {
 	return workspace.OpenPostgres(p.pool, st, wsClean, opts...)
 }
 
-// List returns the workspaces a tenant has saved anything into. A tenant with
-// none lists empty rather than erroring — the switcher then shows the default,
-// matching the filesystem lookup.
 func (p *PgWorkspaces) List(tenant string) ([]string, error) {
 	st, _, err := safeWorkspaceSegment(tenant, "main")
 	if err != nil {
@@ -87,7 +75,6 @@ func (p *PgWorkspaces) List(tenant string) ([]string, error) {
 	return out, nil
 }
 
-// All yields every workspace that holds at least one flow.
 func (p *PgWorkspaces) All() iter.Seq2[string, *workspace.Store] {
 	return func(yield func(string, *workspace.Store) bool) {
 		rows, err := p.pool.Query(context.Background(),
@@ -124,8 +111,6 @@ func (p *PgWorkspaces) All() iter.Seq2[string, *workspace.Store] {
 	}
 }
 
-// RemoveTenant deletes every flow, revision and environment pointer a tenant
-// owns — the workspace half of the GDPR erasure cascade (Art. 17). Idempotent.
 func (p *PgWorkspaces) RemoveTenant(tenant string) error {
 	st, _, err := safeWorkspaceSegment(tenant, "main")
 	if err != nil {

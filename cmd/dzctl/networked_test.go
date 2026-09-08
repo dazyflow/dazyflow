@@ -26,9 +26,6 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
-// dzctlHarness stands up the daemon's control-plane gRPC server in-process
-// over a bufconn listener, then redirects the CLI's daemonConn seam at it so
-// every networked subcommand's RunE runs against a real (in-memory) server.
 type dzctlHarness struct {
 	lis     *bufconn.Listener
 	key     string
@@ -50,8 +47,6 @@ func newDzctlHarness(t *testing.T) *dzctlHarness {
 
 	ws, _ := workspace.OpenFS("")
 	jobs := jobstore.NewMemory()
-	// runLogs is shared with the test so it can seed entries the `job logs`
-	// command then replays (the render loop needs real persisted data).
 	runLogs := daemon.NewMemRunLogStore()
 	bus := daemon.NewMemoryBus()
 	eng := &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}}
@@ -94,9 +89,6 @@ func newDzctlHarness(t *testing.T) *dzctlHarness {
 	}
 }
 
-// install points the daemonConn seam at the harness's bufconn server and sets
-// DZCTL_TOKEN so authCtx succeeds. Each command closes the conn it receives
-// (withConn defers Close), so the seam dials a fresh ClientConn per call.
 func (h *dzctlHarness) install(t *testing.T) {
 	t.Helper()
 	t.Setenv("DZCTL_TOKEN", h.key)
@@ -113,8 +105,6 @@ func (h *dzctlHarness) install(t *testing.T) {
 	t.Cleanup(func() { daemonConn = orig })
 }
 
-// bindCtx returns a helper that sets ctx on a command (so authCtx, which reads
-// cmd.Context(), sees it) and returns the command for chaining.
 func bindCtx(ctx context.Context) func(*cobra.Command) *cobra.Command {
 	return func(cmd *cobra.Command) *cobra.Command {
 		cmd.SetContext(ctx)
@@ -122,7 +112,6 @@ func bindCtx(ctx context.Context) func(*cobra.Command) *cobra.Command {
 	}
 }
 
-// mustSetFlags applies name/value flag pairs to cmd, failing the test on error.
 func mustSetFlags(t *testing.T, cmd *cobra.Command, pairs ...string) {
 	t.Helper()
 	for i := 0; i+1 < len(pairs); i += 2 {
@@ -168,9 +157,6 @@ func writeGraphFixture(t *testing.T, id string) string {
 	return p
 }
 
-// TestNetworkedCommands drives every networked subcommand's RunE against the
-// in-process server: graph save/list/load/promote/run, job
-// status/list/cancel/logs, and module list/show — plus key error paths.
 func TestNetworkedCommands(t *testing.T) {
 	h := newDzctlHarness(t)
 	defer h.stop()
@@ -179,10 +165,8 @@ func TestNetworkedCommands(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	// withCtx sets the harness context on a command and wraps it for run().
 	withCtx := bindCtx(ctx)
 
-	// --- graph save ---
 	graphFile := writeGraphFixture(t, "covg")
 	save := withCtx(graphSaveCmd())
 	out, err := run(t, save, []string{graphFile})
@@ -193,13 +177,11 @@ func TestNetworkedCommands(t *testing.T) {
 		t.Error("graph save: expected a commit on stdout")
 	}
 
-	// graph save: missing file -> read error (does not reach the server).
 	saveBad := withCtx(graphSaveCmd())
 	if _, err := run(t, saveBad, []string{filepath.Join(t.TempDir(), "nope.json")}); err == nil {
 		t.Error("graph save missing file should error")
 	}
 
-	// --- graph list ---
 	list := withCtx(graphListCmd())
 	mustSetFlags(t, list, "tenant", "acme", "workspace", "ws1")
 	out, err = run(t, list, nil)
@@ -210,7 +192,6 @@ func TestNetworkedCommands(t *testing.T) {
 		t.Errorf("graph list = %q, want it to contain covg", out)
 	}
 
-	// --- graph load ---
 	load := withCtx(graphLoadCmd())
 	mustSetFlags(t, load, "tenant", "acme", "workspace", "ws1")
 	out, err = run(t, load, []string{"covg"})
@@ -221,14 +202,12 @@ func TestNetworkedCommands(t *testing.T) {
 		t.Errorf("graph load = %q, want graph json", out)
 	}
 
-	// graph load: unknown id -> not-found error from the server.
 	loadMiss := withCtx(graphLoadCmd())
 	mustSetFlags(t, loadMiss, "tenant", "acme", "workspace", "ws1")
 	if _, err := run(t, loadMiss, []string{"ghost"}); err == nil {
 		t.Error("graph load of unknown id should error")
 	}
 
-	// --- graph run (server-streaming to completion) ---
 	gr := withCtx(graphRunCmd())
 	mustSetFlags(t, gr, "tenant", "acme", "workspace", "ws1")
 	out, err = run(t, gr, []string{"covg"})
@@ -239,7 +218,6 @@ func TestNetworkedCommands(t *testing.T) {
 		t.Errorf("graph run output = %q, want a job= line", out)
 	}
 
-	// --- job list (should now show the run we just executed) ---
 	jl := withCtx(jobListCmd())
 	out, err = run(t, jl, []string{"covg"})
 	if err != nil {
@@ -251,7 +229,6 @@ func TestNetworkedCommands(t *testing.T) {
 	}
 	id := jobID[0]
 
-	// --- job status ---
 	js := withCtx(jobStatusCmd())
 	out, err = run(t, js, []string{id})
 	if err != nil {
@@ -261,17 +238,11 @@ func TestNetworkedCommands(t *testing.T) {
 		t.Errorf("job status = %q", out)
 	}
 
-	// job status: unknown id -> error.
 	jsMiss := withCtx(jobStatusCmd())
 	if _, err := run(t, jsMiss, []string{"no-such-job"}); err == nil {
 		t.Error("job status of unknown id should error")
 	}
 
-	// --- job logs (replay, follow=false) ---
-	// Seed persisted entries under the real (authorized) job id so the
-	// command's render loop runs over actual data: one node-labelled status
-	// line, one node-less line (exercises the "run" default), and one with a
-	// stream label (exercises the stdout/stderr branch).
 	for _, e := range []daemon.RunLogEntry{
 		{RunID: id, TS: time.Now().UTC(), NodeID: "a", Kind: "status", Message: "ok"},
 		{RunID: id, TS: time.Now().UTC(), Kind: "terminal", Message: "ok"},
@@ -290,14 +261,10 @@ func TestNetworkedCommands(t *testing.T) {
 		t.Errorf("job logs output = %q, want seeded entries", logOut)
 	}
 
-	// --- job cancel (job is terminal -> server returns an error; the RunE
-	// body's error path executes either way) ---
 	jc := withCtx(jobCancelCmd())
 	mustSetFlags(t, jc, "reason", "cov")
 	_, _ = run(t, jc, []string{id})
 
-	// --- graph promote ---
-	// Promote needs a commit; fetch it from a fresh save so we have one.
 	saveAgain := withCtx(graphSaveCmd())
 	commitOut, err := run(t, saveAgain, []string{graphFile})
 	if err != nil {
@@ -310,7 +277,6 @@ func TestNetworkedCommands(t *testing.T) {
 		t.Fatalf("graph promote: %v", err)
 	}
 
-	// --- module list ---
 	ml := withCtx(moduleListCmd())
 	out, err = run(t, ml, nil)
 	if err != nil {
@@ -320,14 +286,12 @@ func TestNetworkedCommands(t *testing.T) {
 		t.Error("module list: expected built-in modules")
 	}
 
-	// module list --verbose (drives the per-module verbose print branch).
 	mlV := withCtx(moduleListCmd())
 	mustSetFlags(t, mlV, "verbose", "true")
 	if _, err := run(t, mlV, nil); err != nil {
 		t.Fatalf("module list --verbose: %v", err)
 	}
 
-	// module list --verbose with a filter that matches nothing.
 	mlNone := withCtx(moduleListCmd())
 	mustSetFlags(t, mlNone, "query", "zzz-no-such-module")
 	out, err = run(t, mlNone, nil)
@@ -338,7 +302,6 @@ func TestNetworkedCommands(t *testing.T) {
 		t.Errorf("module list no-match output = %q", out)
 	}
 
-	// --- module show (known + unknown) ---
 	msMiss := withCtx(moduleShowCmd())
 	if _, err := run(t, msMiss, []string{"definitely-not-a-module"}); err == nil {
 		t.Error("module show of unknown id should error")
@@ -349,12 +312,9 @@ func TestNetworkedCommands(t *testing.T) {
 	}
 }
 
-// TestNetworkedCommandsAuthError exercises the no-token path: authCtx fails
-// before any RPC, so every networked command surfaces the DZCTL_TOKEN error.
 func TestNetworkedCommandsAuthError(t *testing.T) {
 	h := newDzctlHarness(t)
 	defer h.stop()
-	// Install the dialer but clear the token so authCtx errors.
 	orig := daemonConn
 	daemonConn = func(string) (*grpc.ClientConn, error) {
 		return grpc.NewClient(

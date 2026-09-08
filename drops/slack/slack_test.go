@@ -26,8 +26,6 @@ func withSlackAuthErr(t *testing.T) {
 	t.Cleanup(func() { SetTokenLookup(nil) })
 }
 
-// TestCovDecodeSlackJSON covers the parse-failure path plus a well-formed
-// envelope where the raw map carries extra fields.
 func TestCovDecodeSlackJSON(t *testing.T) {
 	t.Run("malformed", func(t *testing.T) {
 		_, _, err := decodeSlackJSON([]byte("not json"))
@@ -52,8 +50,6 @@ func TestCovDecodeSlackJSON(t *testing.T) {
 	})
 }
 
-// TestCovSlackDo_Non2xx: an upstream non-2xx status is a transport error
-// carrying the status code and body.
 func TestCovSlackDo_Non2xx(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -67,8 +63,6 @@ func TestCovSlackDo_Non2xx(t *testing.T) {
 	}
 }
 
-// TestCovSlackDo_DefaultTimeout: a non-positive timeout falls back to the
-// 15s default and the GET (nil body) omits the Content-Type header.
 func TestCovSlackDo_DefaultTimeout(t *testing.T) {
 	var gotCT string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -87,8 +81,6 @@ func TestCovSlackDo_DefaultTimeout(t *testing.T) {
 	}
 }
 
-// TestCovSlackDo_TransportError: an unreachable host surfaces a transport
-// error (not an envelope).
 func TestCovSlackDo_TransportError(t *testing.T) {
 	_, _, err := slackDo(context.Background(), "GET", "http://127.0.0.1:1/x", "xoxb-tok", nil, 1000)
 	if err == nil {
@@ -96,8 +88,6 @@ func TestCovSlackDo_TransportError(t *testing.T) {
 	}
 }
 
-// TestCovSendMessage_AuthFailure: a failing token lookup short-circuits to an
-// auth error before any HTTP call.
 func TestCovSendMessage_AuthFailure(t *testing.T) {
 	withSlackAuthErr(t)
 	res, _ := executeSlackSendMessage(context.Background(), core.Job{
@@ -108,7 +98,6 @@ func TestCovSendMessage_AuthFailure(t *testing.T) {
 	}
 }
 
-// TestCovSendMessage_HTTPError: a non-2xx upstream surfaces slack_http_error.
 func TestCovSendMessage_HTTPError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
@@ -129,8 +118,6 @@ func TestCovSendMessage_HTTPError(t *testing.T) {
 	}
 }
 
-// TestCovSendMessage_BadBlocks: a malformed blocks payload errors before any
-// HTTP call.
 func TestCovSendMessage_BadBlocks(t *testing.T) {
 	withSlackEnv(t, "http://unused")
 	res, _ := executeSlackSendMessage(context.Background(), core.Job{
@@ -142,8 +129,6 @@ func TestCovSendMessage_BadBlocks(t *testing.T) {
 	}
 }
 
-// TestCovSendMessage_BlocksAndThreadTS: blocks + thread_ts both land in the
-// posted payload, and a blocks-only message (no text) is accepted.
 func TestCovSendMessage_BlocksAndThreadTS(t *testing.T) {
 	srv := newSlackTestServer(t, map[string]any{"ok": true, "channel": "C1", "ts": "1"})
 	withSlackEnv(t, srv.URL)
@@ -166,7 +151,6 @@ func TestCovSendMessage_BlocksAndThreadTS(t *testing.T) {
 	}
 }
 
-// TestCovListChannels_AuthFailure: a failing token lookup yields an auth error.
 func TestCovListChannels_AuthFailure(t *testing.T) {
 	withSlackAuthErr(t)
 	res, _ := executeSlackListChannels(context.Background(), core.Job{
@@ -177,7 +161,6 @@ func TestCovListChannels_AuthFailure(t *testing.T) {
 	}
 }
 
-// TestCovListChannels_HTTPError: a non-2xx upstream surfaces slack_http_error.
 func TestCovListChannels_HTTPError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -196,8 +179,6 @@ func TestCovListChannels_HTTPError(t *testing.T) {
 	}
 }
 
-// TestCovListChannels_SlackError: an {ok:false} envelope maps to slack_error,
-// including the unknown-error fallback when no error string is present.
 func TestCovListChannels_SlackError(t *testing.T) {
 	cases := []struct {
 		name string
@@ -218,8 +199,6 @@ func TestCovListChannels_SlackError(t *testing.T) {
 	}
 }
 
-// TestCovListChannels_QueryParams: exclude_archived false omits the param and
-// custom types/limit reach the query string.
 func TestCovListChannels_QueryParams(t *testing.T) {
 	var gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -244,8 +223,6 @@ func TestCovListChannels_QueryParams(t *testing.T) {
 	}
 }
 
-// TestCovOnMention_Standalone: standalone execution of the trigger returns the
-// no_trigger_data sentinel and preserves the job id.
 func TestCovOnMention_Standalone(t *testing.T) {
 	res, err := executeSlackOnMention(context.Background(), core.Job{ID: "job-77"}, nil)
 	if err != nil {
@@ -259,10 +236,6 @@ func TestCovOnMention_Standalone(t *testing.T) {
 	}
 }
 
-// TestCovListChannelsPicker covers the ListChannels resource picker: mapping
-// channels to AccountResource, the #name label, id-only fallback, skipping
-// rows without an id / non-map entries, the empty-workspace cases, and the
-// error/auth paths.
 func TestCovListChannelsPicker(t *testing.T) {
 	t.Run("maps and filters", func(t *testing.T) {
 		srv := newSlackTestServer(t, map[string]any{"ok": true, "channels": []any{
@@ -335,8 +308,6 @@ func TestCovListChannelsPicker(t *testing.T) {
 	})
 }
 
-// Answering the message that started the flow: the parent's timestamp comes
-// from the trigger, so it has to be wireable.
 func TestSlackSend_ThreadTSInput(t *testing.T) {
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

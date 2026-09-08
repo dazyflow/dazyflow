@@ -58,7 +58,6 @@ func TestDetectAutoFan(t *testing.T) {
 func TestRunMaybeFanned(t *testing.T) {
 	ctx := context.Background()
 	m := core.Manifest{ID: "echo", Inputs: []core.Port{itemInput()}}
-	// exec echoes the item's "a" field onto an "out" output port.
 	echo := func(_ context.Context, _ core.Transport, job core.Job, _ *secretSet) (core.Result, error) {
 		v := job.Input["item"].Inline.(map[string]any)["a"]
 		return core.Result{Status: core.StatusOK, Output: map[string]core.Ref{"out": {Inline: v}}}, nil
@@ -119,22 +118,14 @@ func TestRunMaybeFanned(t *testing.T) {
 	})
 }
 
-// TestRunMaybeFanned_PreservesRefPayload is the regression guard for the two
-// Ref fields the aggregator used to drop on the floor. core.Ref carries its
-// payload in THREE fields (Inline, Ref, Headers); reading only Inline lost the
-// other two while still reporting StatusOK — silent data loss, not a failure.
 func TestRunMaybeFanned_PreservesRefPayload(t *testing.T) {
 	ctx := context.Background()
 
-	// http_download's real port shape: url is text/plain (KindText, One,
-	// non-variadic) so a list landing on it fans; request_body is untyped and
-	// is therefore ignored by detectAutoFan.
 	t.Run("out-of-line file refs survive as a list of paths", func(t *testing.T) {
 		m := core.Manifest{ID: "http_download", Inputs: []core.Port{
 			{Port: "url", MIME: []string{"text/plain"}},
 			{Port: "request_body"},
 		}}
-		// Mirrors executeHTTPDownload's success return: payload in Ref, Inline nil.
 		download := func(_ context.Context, _ core.Transport, job core.Job, _ *secretSet) (core.Result, error) {
 			u, _ := job.Input["url"].Inline.(string)
 			return core.Result{Status: core.StatusOK, Output: map[string]core.Ref{
@@ -208,8 +199,6 @@ func TestRunMaybeFanned_PreservesRefPayload(t *testing.T) {
 		}
 	})
 
-	// An output ref with neither payload aggregates to nil rather than vanishing,
-	// so the port count still matches the item count.
 	t.Run("empty ref aggregates to nil without losing its slot", func(t *testing.T) {
 		m := core.Manifest{ID: "empty", Inputs: []core.Port{itemInput()}}
 		blank := func(_ context.Context, _ core.Transport, job core.Job, _ *secretSet) (core.Result, error) {
@@ -230,15 +219,14 @@ func TestRunMaybeFanned_PreservesRefPayload(t *testing.T) {
 	})
 }
 
-// TestRunMaybeFanned_EmptyList pins the zero-item shape. A fanned node whose list
-// input is empty runs zero times, and must still emit its declared output ports
-// as empty lists ("many" with zero items). Emitting nothing made the ports vanish:
-// downstream, an edge from an absent port classifies as dormant and skips the
-// branch, and on the in-process path AssembleInput omits the input entirely so a
-// loop-body node can run with a required input unwired.
+// Pins the zero-item shape. A fanned node whose list input is empty runs zero
+// times, and must still emit its declared output ports as empty lists ("many"
+// with zero items). Emitting nothing made the ports vanish: downstream, an
+// edge from an absent port classifies as dormant and skips the branch, and on
+// the in-process path AssembleInput omits the input entirely so a loop-body
+// node can run with a required input unwired.
 func TestRunMaybeFanned_EmptyList(t *testing.T) {
 	ctx := context.Background()
-	// Fails the test if the transport is ever invoked — zero items means zero runs.
 	never := func(_ context.Context, _ core.Transport, _ core.Job, _ *secretSet) (core.Result, error) {
 		t.Helper()
 		t.Fatal("exec must not run for an empty item list")
@@ -317,10 +305,10 @@ func TestRunMaybeFanned_EmptyList(t *testing.T) {
 	})
 }
 
-// TestDetectAutoFan_SkipsFlowControl locks in that a flow-control drop
-// (NoPassthrough — a router/predicate like Branch) never auto-fans, even when a
-// list lands on its typed scalar input. Otherwise a list of bools into Branch's
-// `condition` would silently turn the router into an aggregating loop.
+// Locks in that a flow-control drop (NoPassthrough — a router/predicate like
+// Branch) never auto-fans, even when a list lands on its typed scalar input.
+// Otherwise a list of bools into Branch's `condition` would silently turn the
+// router into an aggregating loop.
 func TestDetectAutoFan_SkipsFlowControl(t *testing.T) {
 	list := core.Ref{Inline: []any{true, false}}
 	m := core.Manifest{

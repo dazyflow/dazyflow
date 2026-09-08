@@ -18,8 +18,6 @@ vi.mock("../auth", () => {
 
 const listBoards = vi.fn();
 const getBoard = vi.fn();
-// The page also asks which collections have a public link, to mark them.
-// Best-effort on the page, so the default is an empty list.
 const listCollectionShares = vi.fn((..._a: unknown[]) =>
   Promise.resolve({ shares: [] }),
 );
@@ -35,11 +33,6 @@ vi.mock("../api", () => ({
 
 import { Results } from "./Results";
 
-// The columns of a collection are the user's data, not our vocabulary. Every
-// other .run-table in the app heads its columns with a label we wrote, and the
-// shared style upper-cases them ("STATUS"); applied here it reported
-// `orderTotal` as ORDERTOTAL — a name that appears nowhere in the data, in a
-// step, or in the CSV the same page downloads.
 describe("Collections table headers", () => {
   const setup = () => {
     listBoards.mockResolvedValue({ boards: [{ name: "orders", rows: 1 }] });
@@ -64,8 +57,6 @@ describe("Collections table headers", () => {
     const { container } = setup();
     await waitFor(() => expect(screen.getByText("customer_email")).toBeInTheDocument());
     const headers = [...container.querySelectorAll("thead th")].map((th) => th.textContent);
-    // Including case: a header is a name someone has to match against their
-    // data, so "Ordered" is not "ordered" and `orderTotal` keeps its hump.
     expect(headers).toEqual(["Ordered", "customer_email", "orderTotal", ""]);
   });
 
@@ -97,19 +88,12 @@ describe("Collections table headers", () => {
     const cells = [...container.querySelectorAll("tbody td")].map(
       (td) => td.textContent,
     );
-    // Local "YYYY-MM-DD HH:MM" — the exact clock depends on the runner's zone,
-    // so assert the shape and that the raw instant is gone.
     expect(cells[1]).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
     expect(cells[1]).not.toContain("T");
-    // A free-text column that merely CONTAINS a date is left alone: only a
-    // cell that IS an instant is rewritten.
     expect(cells[0]).toBe("does 2026-08-31T07:21:54Z stay put in prose?");
   });
 
   it("marks the table as data-headed so the label casing doesn't apply", async () => {
-    // The uppercasing lives in CSS, which jsdom doesn't apply — the class is
-    // the only thing a test can hold onto, and losing it is how the bug
-    // returns.
     const { container } = setup();
     await waitFor(() => expect(screen.getByText("customer_email")).toBeInTheDocument());
     expect(container.querySelector("table.run-table")).toHaveClass("data-headers");
@@ -144,8 +128,6 @@ describe("Collections sorting", () => {
       (tr) => tr.querySelectorAll("td")[idx]?.textContent,
     );
 
-  // The header's own text is its accessible name — the column name is what a
-  // reader is looking for, and what a screen reader should announce.
   const header = (col: string) => screen.getByRole("button", { name: col });
   const ready = () => waitFor(() => expect(header("name")).toBeTruthy());
 
@@ -167,8 +149,6 @@ describe("Collections sorting", () => {
   });
 
   it("sorts a column of numbers by value, not as text", async () => {
-    // The store is all TEXT, so "9" against "100" is the case a naive string
-    // compare gets wrong.
     const { container } = setup();
     await ready();
     await userEvent.click(header("spend"));
@@ -187,9 +167,6 @@ describe("Collections sorting", () => {
   });
 
   it("exports the CSV in the order shown on screen", async () => {
-    // The download builds a Blob and hands it to URL.createObjectURL. jsdom
-    // implements neither the object-URL methods nor Blob.text(), so the CSV is
-    // captured from the Blob constructor's own argument.
     const written: string[] = [];
     const g = globalThis as unknown as Record<string, unknown>;
     const origBlob = g.Blob;
@@ -223,8 +200,6 @@ describe("Collections sorting", () => {
   });
 
   it("drops the sort when another collection is opened", async () => {
-    // The next collection has its own columns, so the sorted one usually isn't
-    // among them.
     const { container } = setup([
       { name: "orders", rows: 3 },
       { name: "leads", rows: 3 },
@@ -241,17 +216,9 @@ describe("Collections sorting", () => {
   });
 });
 
-// Paging. A collection that outgrew the endpoint's 1000-row window used to
-// end there: the footer said "first 1000 loaded" and no control reached row
-// 1001, so months of saved rows were in the store and unreachable.
-//
-// The fixtures return a handful of rows rather than a full 1000 — the window
-// SIZE is the daemon's business (boardRowLimit); what this page owes is the
-// offset it asks for, the range it reports, and which way it can still move.
 describe("Collections paging", () => {
   const PAGE = 1000;
 
-  // A window of `count` rows starting at `offset`, out of `total`.
   const page = (offset: number, total: number, count: number, name = "orders") => ({
     name,
     columns: ["name"],
@@ -273,7 +240,6 @@ describe("Collections paging", () => {
 
     await waitFor(() => expect(screen.getByText("row-1")).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: /common\.nextPage/ })).toBeNull();
-    // The range still reports itself.
     expect(screen.getByText(/results\.rowRange:1,3,3/)).toBeInTheDocument();
   });
 
@@ -309,15 +275,12 @@ describe("Collections paging", () => {
     expect(prev()).toBeDisabled();
     expect(next()).toBeEnabled();
 
-    // A window that reaches the end: offset + rows === total.
     getBoard.mockResolvedValue(page(PAGE, PAGE + 3, 3));
     await userEvent.click(next());
     await waitFor(() => expect(next()).toBeDisabled());
     expect(prev()).toBeEnabled();
   });
 
-  // Landing on page four of a collection you have only just opened reads as
-  // missing rows, so switching collections starts at the beginning.
   it("returns to the first page when another collection is picked", async () => {
     listBoards.mockResolvedValue({
       boards: [

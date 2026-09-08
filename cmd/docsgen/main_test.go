@@ -132,10 +132,6 @@ func TestEmptyParams(t *testing.T) {
 	}
 }
 
-// TestRunGeneratesTheCatalog is the end-to-end check: run against the real drop
-// registry and assert the shape the docs SPA relies on. It also guards the
-// promise in the package comment — that output is deterministic, so a re-run
-// produces a clean diff rather than churn.
 func TestRunGeneratesTheCatalog(t *testing.T) {
 	dir := t.TempDir()
 	if err := run(dir); err != nil {
@@ -159,7 +155,6 @@ func TestRunGeneratesTheCatalog(t *testing.T) {
 		t.Fatalf("got %d pages, want the index plus a page per group", len(pages))
 	}
 
-	// No page may carry the Vue-era brace entity any more.
 	for _, p := range pages {
 		b, err := os.ReadFile(p)
 		if err != nil {
@@ -170,7 +165,6 @@ func TestRunGeneratesTheCatalog(t *testing.T) {
 		}
 	}
 
-	// Deterministic: a second run into a fresh directory is byte-identical.
 	again := t.TempDir()
 	if err := run(again); err != nil {
 		t.Fatalf("second run: %v", err)

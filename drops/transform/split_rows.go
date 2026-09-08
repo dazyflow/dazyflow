@@ -88,10 +88,6 @@ func executeSplitRows(ctx context.Context, job core.Job, _ chan<- core.Progress)
 		return params.Err(job, "bad_param", "filter: required"), nil
 	}
 
-	// Pre-size each side optimistically; if the split is skewed,
-	// one slice grows and the other stays small — slightly wasteful
-	// in the worst case but avoids repeated append-grows on the
-	// common balanced case.
 	matched := make([]map[string]any, 0, len(rows)/2+1)
 	unmatched := make([]map[string]any, 0, len(rows)/2+1)
 	for i, row := range rows {

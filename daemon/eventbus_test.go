@@ -66,12 +66,11 @@ func TestMemoryBus_UnsubscribeCloses(t *testing.T) {
 	}
 }
 
-// TestMemoryBus_PublishCancelRace is the regression test for the
-// send-on-closed-channel race: publishers fan out concurrently while
-// subscribers churn subscribe→cancel (which closes their channel). On the
-// pre-fix code — snapshot under lock, send after unlock — a publish sends
-// to a channel cancel() just closed and the runtime panics. With the send
-// held under the lock, close and send are mutually exclusive. Passing
+// The regression test for the send-on-closed-channel race: publishers fan out
+// concurrently while subscribers churn subscribe→cancel (which closes their
+// channel). On the pre-fix code — snapshot under lock, send after unlock — a
+// publish sends to a channel cancel() just closed and the runtime panics. With
+// the send held under the lock, close and send are mutually exclusive. Passing
 // means no panic (and `-race` finds any residual data race).
 func TestMemoryBus_PublishCancelRace(t *testing.T) {
 	t.Parallel()
@@ -109,9 +108,9 @@ func TestMemoryBus_PublishCancelRace(t *testing.T) {
 	pubWg.Wait()
 }
 
-// TestPgBus_FanoutCancelRace exercises the same race on the PgBus fan-out
-// path. fanout/Subscribe touch only the mutex + subs map (no pool), so the
-// concurrency contract is testable without a database.
+// Exercises the same race on the PgBus fan-out path. fanout/Subscribe touch
+// only the mutex + subs map (no pool), so the concurrency contract is testable
+// without a database.
 func TestPgBus_FanoutCancelRace(t *testing.T) {
 	t.Parallel()
 	b := &PgBus{}
@@ -166,7 +165,6 @@ func TestMemoryBus_SlowSubscriberDoesNotBlockPublisher(t *testing.T) {
 	}()
 	wg.Wait() // returns immediately if drops happen; would deadlock if not
 
-	// At least one event made it through.
 	select {
 	case <-ch:
 	default:

@@ -14,8 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// nodeOutcome captures a RunNode call's result, plus whether it panicked or
-// ran past a watchdog (a hang).
 type nodeOutcome struct {
 	result   core.Result
 	err      error
@@ -50,9 +48,6 @@ func runNodeSafely(e *Engine, g core.Graph, nodeID string, prior map[string]core
 	return out
 }
 
-// sinkDrop is a no-op that simply succeeds — used as the downstream node whose
-// params carry adversarial templates, so the interesting work is the engine's
-// pre-Execute template resolution, not the drop itself.
 func sinkDrop() NativeDrop {
 	return NativeDrop{
 		Manifest: core.Manifest{
@@ -68,15 +63,12 @@ func sinkDrop() NativeDrop {
 	}
 }
 
-// TestRunNode_AdversarialUpstreamTemplates proves the ${upstream.…} resolver
-// never panics or hangs, whatever path syntax or payload shape an upstream
-// node produced — malformed paths degrade to a clean error, pathological
-// payloads resolve in bounded time.
+// Proves the ${upstream.…} resolver never panics or hangs, whatever path
+// syntax or payload shape an upstream node produced — malformed paths degrade
+// to a clean error, pathological payloads resolve in bounded time.
 func TestRunNode_AdversarialUpstreamTemplates(t *testing.T) {
 	e := newEngineWith(t, sinkDrop())
 
-	// A deeply nested and a very wide upstream payload — JSON-stringified
-	// when a template references the whole value.
 	deep := any("leaf")
 	for i := 0; i < 2000; i++ {
 		deep = map[string]any{"k": deep}
@@ -174,10 +166,6 @@ func echoSecretDrop() NativeDrop {
 	}
 }
 
-// TestRunNode_SecretRedactionDefenseInDepth runs the full RunNode pipeline
-// (resolve ${secret.api} → Execute echoes it everywhere → redact) and asserts
-// the plaintext secret survives nowhere in the persisted Result — including
-// when a malicious drop uses it as a map key.
 func TestRunNode_SecretRedactionDefenseInDepth(t *testing.T) {
 	const secret = "sk_live_aVeryRealLookingSecretValue_01234"
 	e := newEngineWith(t, echoSecretDrop())
@@ -197,12 +185,11 @@ func TestRunNode_SecretRedactionDefenseInDepth(t *testing.T) {
 	}
 }
 
-// TestRunNode_TransformedSecretIsNotRedacted documents a deliberate limit:
-// substring redaction cannot catch a secret a drop has *transformed* (e.g.
-// base64-encoded), because the plaintext no longer appears. This is by design
-// — such cases are the save-time secret-to-output lint's job, not the runtime
-// scrubber's. The test pins the boundary so a future reader knows it's
-// intentional, not an oversight.
+// Documents a deliberate limit: substring redaction cannot catch a secret a
+// drop has *transformed* (e.g. base64-encoded), because the plaintext no
+// longer appears. This is by design — such cases are the save-time secret-to-
+// output lint's job, not the runtime scrubber's. The test pins the boundary so
+// a future reader knows it's intentional, not an oversight.
 func TestRunNode_TransformedSecretIsNotRedacted(t *testing.T) {
 	const secret = "sk_live_aVeryRealLookingSecretValue_01234"
 	e := newEngineWith(t, NativeDrop{
@@ -215,8 +202,6 @@ func TestRunNode_TransformedSecretIsNotRedacted(t *testing.T) {
 		},
 		Execute: func(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 			tok, _ := job.Params["token"].(string)
-			// Reverse the string — a stand-in for any transform (base64,
-			// hashing, chunking) that the substring scrubber can't see through.
 			r := []rune(tok)
 			for i, j := 0, len(r)-1; i < j; i, j = i+1, j-1 {
 				r[i], r[j] = r[j], r[i]
@@ -232,8 +217,6 @@ func TestRunNode_TransformedSecretIsNotRedacted(t *testing.T) {
 	if out.panicVal != nil {
 		t.Fatalf("PANIC: %v", out.panicVal)
 	}
-	// The transformed value is present (redaction can't see it) but the
-	// raw plaintext is NOT — the transform is what protects it here.
 	blob, _ := json.Marshal(out.result)
 	if strings.Contains(string(blob), secret) {
 		t.Fatalf("raw secret leaked (transform should have hidden it): %s", blob)

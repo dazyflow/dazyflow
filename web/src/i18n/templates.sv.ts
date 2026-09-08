@@ -155,9 +155,6 @@ export const SV_TEMPLATE_PROSE: DescriptionMap = {
   },
 };
 
-// Category headings. A plain map keyed by the English, because these are short
-// shared strings rather than per-template prose: a new category added to
-// index.json simply misses here and renders in English until it is translated.
 export const SV_TEMPLATE_CATEGORIES: Record<string, string> = {
   "Try it now": "Prova direkt",
   "Spreadsheets": "Kalkylblad",

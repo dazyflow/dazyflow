@@ -12,12 +12,12 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestGraphPBRoundTrip pins the core.Graph <-> controlpb.Graph conversion
-// shared by the gRPC daemon handlers and the dzctl client. Uses only the
-// fields the conversion carries, with string params (JSON-stable), so a
-// clean round-trip must reproduce the graph exactly. Notably guards the
-// poll trigger's IntervalSeconds, which used to be dropped over the wire
-// on the daemon side before the conversion was unified here.
+// Pins the core.Graph <-> controlpb.Graph conversion shared by the gRPC daemon
+// handlers and the dzctl client. Uses only the fields the conversion carries,
+// with string params (JSON-stable), so a clean round-trip must reproduce the
+// graph exactly. Notably guards the poll trigger's IntervalSeconds, which used
+// to be dropped over the wire on the daemon side before the conversion was
+// unified here.
 func TestGraphPBRoundTrip(t *testing.T) {
 	orig := core.Graph{
 		ID: "g1", Version: "v2", Tenant: "acme", Workspace: "ws",
@@ -53,8 +53,6 @@ func TestGraphPBRoundTrip(t *testing.T) {
 	}
 }
 
-// TestGraphFromPBNil mirrors the daemon SaveGraph guard: a nil graph is an
-// error rather than a panic.
 func TestGraphFromPBNil(t *testing.T) {
 	if _, err := GraphFromPB(nil); err == nil {
 		t.Fatal("GraphFromPB(nil) = nil error, want error")
@@ -62,7 +60,6 @@ func TestGraphFromPBNil(t *testing.T) {
 }
 
 func TestGraphToPB_MarshalError(t *testing.T) {
-	// A channel can't be JSON-marshaled, so node param encoding fails.
 	g := core.Graph{Nodes: []core.Node{
 		{ID: "bad", Params: map[string]any{"ch": make(chan int)}},
 	}}

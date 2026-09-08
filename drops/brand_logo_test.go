@@ -41,7 +41,6 @@ func TestAllDrops_BrandLogosResolve(t *testing.T) {
 	}
 }
 
-// repoRootForBrands walks up from the cwd looking for go.mod.
 func repoRootForBrands(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()

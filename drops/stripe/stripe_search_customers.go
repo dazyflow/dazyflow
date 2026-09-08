@@ -43,10 +43,6 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "customers", Label: "Customers", MIME: []string{"application/json"}},
-				// first_id/first_email carry the first match's fields so the
-				// common single-match lookup (search by email) wires straight
-				// into a Customer input without a For-each — mirrors List
-				// subscriptions' first_id.
 				{Port: "first_id", Label: "First ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"cus_RkP2mNaB1cDeFg"`)},
 				{Port: "first_email", Label: "First email", MIME: []string{"text/plain"}, Example: json.RawMessage(`"anna@nordkraft.se"`)},
 				{Port: "count", Label: "Count", MIME: []string{"application/json"}},
@@ -99,9 +95,6 @@ func executeSearchCustomers(ctx context.Context, job core.Job, _ chan<- core.Pro
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		return params.Err(job, "stripe_error", "could not decode Stripe search response"), nil
 	}
-	// The first match's id/email as scalars — the common "search by email →
-	// one customer → next Stripe step" case wires these straight in without
-	// a For-each. Empty when there were no matches.
 	firstID, firstEmail := "", ""
 	if len(parsed.Data) > 0 {
 		firstID, _ = parsed.Data[0]["id"].(string)

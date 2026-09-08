@@ -10,9 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// One submitted run with two executed nodes meters exactly one graph run
-// and two node executions for the graph's tenant — wired through the real
-// SubmitGraph + worker paths, not the store in isolation.
 func TestUsageMetering_CountsRunAndNodeExecutions(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)

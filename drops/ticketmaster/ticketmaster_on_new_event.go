@@ -78,18 +78,12 @@ func init() {
 					"timeout_ms":{"type":"integer","default":15000,"minimum":1,"description":"Hard deadline for the request, in milliseconds."}
 				}
 			}`),
-			// A fire is a discrete poll observation: rerunning re-reads against
-			// the stored seen-set rather than re-deriving a past announcement.
 			Idempotent: false,
 		},
 		Execute: executeOnNewEvent,
 	})
 }
 
-// executeOnNewEvent polls the watched search and fires only on ids the node has
-// not recorded. An empty batch emits no outputs, leaving downstream edges
-// dormant so the rest of the flow is skipped — the same non-event shape the
-// Google Forms and Home Assistant triggers use.
 func executeOnNewEvent(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	limit := params.ClampInt(params.IntDefault(job.Params, "limit", 50), 1, pageLimit)
 
@@ -98,8 +92,6 @@ func executeOnNewEvent(ctx context.Context, job core.Job, _ chan<- core.Progress
 		return *fail, nil
 	}
 
-	// cursor.ticketmaster.<graph>.<node>: per-(flow,node) seen-set. The store
-	// hides the "cursor." prefix from the Credentials UI.
 	name := fmt.Sprintf("cursor.ticketmaster.%s.%s", job.GraphID, job.NodeID)
 	priorIDs, seen, first, rerr := readSeen(ctx, job.Tenant, name)
 	if rerr != nil {
@@ -122,9 +114,6 @@ func executeOnNewEvent(ctx context.Context, job core.Job, _ chan<- core.Progress
 		}
 	}
 
-	// First check after publishing: learn what is already on sale, fire
-	// nothing. Without this, turning the flow on pages you about every event
-	// that already existed.
 	if first {
 		// Nothing fired, so there is no batch a later run could re-fire: a
 		// failed write here just means the next check is a first check too.
@@ -158,13 +147,10 @@ func executeOnNewEvent(ctx context.Context, job core.Job, _ chan<- core.Progress
 	}, nil
 }
 
-// noNewEvents is the empty result for a check that found nothing new: no
-// output ports, so every downstream edge is dormant.
 func noNewEvents(job core.Job) core.Result {
 	return core.Result{JobID: job.ID, Status: core.StatusOK, Output: map[string]core.Ref{}}
 }
 
-// seenState is what we persist between checks: the ids acted on, oldest first.
 type seenState struct {
 	IDs []string `json:"ids"`
 }

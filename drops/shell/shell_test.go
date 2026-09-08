@@ -16,19 +16,16 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/sandbox"
 )
 
-// mkdirSub creates a subdirectory under root.
 func mkdirSub(root, name string) error {
 	return os.MkdirAll(filepath.Join(root, name), 0o755)
 }
 
-// stdoutOf pulls the inline stdout string out of a result.
 func stdoutOf(t *testing.T, res core.Result) string {
 	t.Helper()
 	s, _ := res.Output["stdout"].Inline.(string)
 	return s
 }
 
-// metaOf pulls the meta map out of a result.
 func metaOf(t *testing.T, res core.Result) map[string]any {
 	t.Helper()
 	m, ok := res.Output["meta"].Inline.(map[string]any)
@@ -50,8 +47,6 @@ func TestExecuteShell_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	// The drop always returns ok so downstream notify nodes still fire;
-	// success/failure is carried in meta.
 	if res.Status != core.StatusOK {
 		t.Fatalf("status = %q, err = %+v", res.Status, res.Error)
 	}
@@ -179,7 +174,6 @@ func TestExecuteShell_RunsInWorkdir(t *testing.T) {
 	if out := stdoutOf(t, res); !strings.Contains(out, "sub") {
 		t.Errorf("pwd output = %q, want it to contain the 'sub' workdir", out)
 	}
-	// meta.path is the cleaned relative path, not the absolute workdir.
 	if metaOf(t, res)["path"] != "sub" {
 		t.Errorf("meta.path = %v, want sub", metaOf(t, res)["path"])
 	}
@@ -193,9 +187,8 @@ func TestExecuteShell_PathInputOverridesParam(t *testing.T) {
 	res, _ := executeShell(t.Context(), core.Job{
 		ID:            "j9",
 		WorkspaceRoot: root,
-		// param says ".", but a wired path input should win.
-		Params: map[string]any{"command": "sh", "args": []any{"-c", "pwd"}, "path": "."},
-		Input:  map[string]core.Ref{"path": {Inline: "wired"}},
+		Params:        map[string]any{"command": "sh", "args": []any{"-c", "pwd"}, "path": "."},
+		Input:         map[string]core.Ref{"path": {Inline: "wired"}},
 	}, nil)
 	if res.Status != core.StatusOK {
 		t.Fatalf("status = %q, err = %+v", res.Status, res.Error)
@@ -217,17 +210,15 @@ func TestExecuteShell_ScrubsDazyflowEnv(t *testing.T) {
 	if strings.Contains(out, "DAZYFLOW_TEST_SECRET") || strings.Contains(out, "leak-me-please") {
 		t.Errorf("DAZYFLOW_* secret leaked into command env:\n%s", out)
 	}
-	// Sanity check: ordinary CI vars still pass through.
 	if !strings.Contains(out, "PATH=") {
 		t.Errorf("PATH missing from scrubbed env; scrub was too aggressive")
 	}
 }
 
-// TestPumpStream_LongLineDoesNotTruncate is the regression test for the
-// bug this replaced: pumpStream used a bufio.Scanner with a 64 KiB token
-// cap, and a Scanner stops PERMANENTLY once a token exceeds that cap. A
-// single over-long line therefore discarded every byte after it — silently,
-// since the exit code still reported success.
+// The regression test for the bug this replaced: pumpStream used a
+// bufio.Scanner with a 64 KiB token cap, and a Scanner stops PERMANENTLY once
+// a token exceeds that cap. A single over-long line therefore discarded every
+// byte after it — silently, since the exit code still reported success.
 func TestPumpStream_LongLineDoesNotTruncate(t *testing.T) {
 	long := strings.Repeat("x", maxLogLineBytes*2+17) // spans 3 chunks
 	src := strings.NewReader("before\n" + long + "\nafter\n")
@@ -253,10 +244,9 @@ func TestPumpStream_LongLineDoesNotTruncate(t *testing.T) {
 	}
 }
 
-// TestPumpStream_NormalizesCRLF pins the pty line-ending behaviour the old
-// bufio.ScanLines split provided: a command runs on a pty, so complete lines
-// arrive CRLF-terminated, and the CR must not leak into captured output or
-// the streamed progress message.
+// Pins the pty line-ending behaviour the old bufio.ScanLines split provided: a
+// command runs on a pty, so complete lines arrive CRLF-terminated, and the CR
+// must not leak into captured output or the streamed progress message.
 func TestPumpStream_NormalizesCRLF(t *testing.T) {
 	ch := make(chan core.Progress, 8)
 	dst := &boundedBuffer{}
@@ -275,8 +265,8 @@ func TestPumpStream_NormalizesCRLF(t *testing.T) {
 	}
 }
 
-// TestPumpStream_UnterminatedTail covers output whose final line has no
-// trailing newline — the Scanner emitted it as a last token, and so must we.
+// Covers output whose final line has no trailing newline — the Scanner emitted
+// it as a last token, and so must we.
 func TestPumpStream_UnterminatedTail(t *testing.T) {
 	dst := &boundedBuffer{}
 	pumpStream(strings.NewReader("a\nb"), dst, nil, core.Job{ID: "j"}, "stdout")
@@ -285,8 +275,6 @@ func TestPumpStream_UnterminatedTail(t *testing.T) {
 	}
 }
 
-// TestPumpStream_Empty covers a command that produces no output at all: no
-// spurious blank line should be synthesized.
 func TestPumpStream_Empty(t *testing.T) {
 	dst := &boundedBuffer{}
 	pumpStream(strings.NewReader(""), dst, nil, core.Job{ID: "j"}, "stdout")
@@ -295,9 +283,8 @@ func TestPumpStream_Empty(t *testing.T) {
 	}
 }
 
-// TestPumpStream_BlankLinesPreserved guards the `len(line) > 0 || err == nil`
-// emit condition: an empty COMPLETE line is real output and must survive,
-// even though it trims to zero bytes.
+// Guards the `len(line) > 0 || err == nil` emit condition: an empty COMPLETE
+// line is real output and must survive, even though it trims to zero bytes.
 func TestPumpStream_BlankLinesPreserved(t *testing.T) {
 	dst := &boundedBuffer{}
 	pumpStream(strings.NewReader("a\n\n\nb\n"), dst, nil, core.Job{ID: "j"}, "stdout")
@@ -306,23 +293,15 @@ func TestPumpStream_BlankLinesPreserved(t *testing.T) {
 	}
 }
 
-// TestExecuteShell_LongLineEndToEnd drives the real drop with a command whose
-// output contains a line far longer than the chunk size, proving the fix holds
-// through the pty path and not just against an in-memory reader.
 func TestExecuteShell_LongLineEndToEnd(t *testing.T) {
-	// printf's zero-padding emits the long line in one write; the sentinel
-	// follows it. (Building the line with a shell/awk concat loop instead is
-	// quadratic and takes ~a minute — this is instant.)
 	const longLineLen = 200000
 	script := fmt.Sprintf("printf '%%0%dd\\n' 0; echo SENTINEL-TAIL", longLineLen)
 	res, err := executeShell(t.Context(), core.Job{
 		ID:            "longline",
 		WorkspaceRoot: t.TempDir(),
 		Params: map[string]any{
-			"command": "sh",
-			"args":    []any{"-c", script},
-			// Well above the ~200 KB the script emits, so the cap isn't what
-			// we're measuring here.
+			"command":          "sh",
+			"args":             []any{"-c", script},
 			"max_output_bytes": 4 << 20,
 		},
 	}, nil)
@@ -374,7 +353,6 @@ func TestBoundedBuffer(t *testing.T) {
 		if n != 5 {
 			t.Errorf("Write reported %d, want 5", n)
 		}
-		// Reports the full length of subsequent writes but discards them.
 		n, _ = b.Write([]byte("world"))
 		if n != 5 {
 			t.Errorf("Write reported %d, want 5 (full input length)", n)
@@ -400,9 +378,6 @@ func TestBoundedBuffer(t *testing.T) {
 	})
 }
 
-// TestResolveTimeoutMs pins the clamp on the timeout param. As with
-// max_output_bytes, the ParamsSchema's "minimum" is advisory — nothing
-// validates job params against it before Execute — so this is the real check.
 func TestResolveTimeoutMs(t *testing.T) {
 	cases := []struct {
 		name string
@@ -427,7 +402,7 @@ func TestResolveTimeoutMs(t *testing.T) {
 	}
 }
 
-// TestResolveTimeoutMs_NeverProducesExpiredDuration is the property that
+// The property that
 // actually matters: whatever the param, converting the resolved value to a
 // Duration must yield a positive deadline.
 //
@@ -441,18 +416,15 @@ func TestResolveTimeoutMs_NeverProducesExpiredDuration(t *testing.T) {
 		if got <= 0 {
 			t.Errorf("timeout_ms=%d resolved to a non-positive deadline %v — the command would be killed instantly", in, got)
 		}
-		// Guard the raw conversion the clamp protects, so this test keeps
-		// documenting *why* the clamp exists.
 		if raw := time.Duration(in) * time.Millisecond; in > maxTimeoutMs && raw > 0 && raw >= got {
 			t.Errorf("timeout_ms=%d: expected the unclamped conversion to be wrong, got %v", in, raw)
 		}
 	}
 }
 
-// TestExecuteShell_ZeroTimeoutUsesDefault is the regression test: timeout_ms:0
-// used to build an already-expired context, so the command was killed the
-// moment it started (or failed to start at all). It must now run normally
-// under the default deadline.
+// The regression test: timeout_ms:0 used to build an already-expired context,
+// so the command was killed the moment it started (or failed to start at all).
+// It must now run normally under the default deadline.
 func TestExecuteShell_ZeroTimeoutUsesDefault(t *testing.T) {
 	res, err := executeShell(t.Context(), core.Job{
 		ID:            "zerotimeout",
@@ -474,10 +446,10 @@ func TestExecuteShell_ZeroTimeoutUsesDefault(t *testing.T) {
 	}
 }
 
-// TestExecuteShell_HugeTimeoutDoesNotOverflow covers the inverted-overflow
-// case end to end: an absurdly large timeout_ms wraps to a negative Duration
-// unclamped, which would kill the command instantly — the opposite of the
-// "wait practically forever" the value asks for.
+// Covers the inverted-overflow case end to end: an absurdly large timeout_ms
+// wraps to a negative Duration unclamped, which would kill the command
+// instantly — the opposite of the "wait practically forever" the value asks
+// for.
 func TestExecuteShell_HugeTimeoutDoesNotOverflow(t *testing.T) {
 	res, err := executeShell(t.Context(), core.Job{
 		ID:            "hugetimeout",
@@ -499,10 +471,6 @@ func TestExecuteShell_HugeTimeoutDoesNotOverflow(t *testing.T) {
 	}
 }
 
-// TestResolveMaxOutputBytes pins the clamp that keeps the OOM guard from
-// being switched off by a param. Nothing validates job params against the
-// drop's ParamsSchema at run time, so the schema's "minimum" is advisory and
-// this function is the actual enforcement.
 func TestResolveMaxOutputBytes(t *testing.T) {
 	cases := []struct {
 		name string
@@ -525,13 +493,10 @@ func TestResolveMaxOutputBytes(t *testing.T) {
 	}
 }
 
-// TestExecuteShell_ZeroMaxOutputDoesNotDisableCap is the regression test:
-// max_output_bytes:0 used to reach boundedBuffer as "no limit", giving a
-// runaway command an unbounded in-memory buffer. It must now be capped at
-// the default instead.
+// The regression test: max_output_bytes:0 used to reach boundedBuffer as "no
+// limit", giving a runaway command an unbounded in-memory buffer. It must now
+// be capped at the default instead.
 func TestExecuteShell_ZeroMaxOutputDoesNotDisableCap(t *testing.T) {
-	// Emit comfortably more than the 1 MiB default so an uncapped buffer is
-	// distinguishable from a capped one.
 	script := "for i in $(seq 1 40); do printf '%050000d\\n' 0; done"
 	res, err := executeShell(t.Context(), core.Job{
 		ID:            "zerocap",
@@ -550,15 +515,11 @@ func TestExecuteShell_ZeroMaxOutputDoesNotDisableCap(t *testing.T) {
 		t.Errorf("captured %d bytes with max_output_bytes:0 — cap was disabled, want <= %d",
 			len(out), defaultMaxOutputBytes)
 	}
-	// Sanity: the cap engaged rather than the command simply producing nothing.
 	if len(out) == 0 {
 		t.Error("captured no output at all; the test script did not run as expected")
 	}
 }
 
-// TestExecuteShell_MaxOutputBytesHonoured checks the other direction — an
-// explicit small cap still truncates, so the clamp didn't turn every value
-// into the default.
 func TestExecuteShell_MaxOutputBytesHonoured(t *testing.T) {
 	res, err := executeShell(t.Context(), core.Job{
 		ID:            "smallcap",
@@ -598,9 +559,6 @@ func TestScrubbedEnv(t *testing.T) {
 	}
 }
 
-// TestScrubbedEnv_Allowlist: with DAZYFLOW_SHELL_ENV_ALLOW set, the command
-// sees ONLY the listed vars plus the PATH/HOME base — third-party secrets
-// the prefix scrub wouldn't catch (e.g. AWS_*) are withheld.
 func TestScrubbedEnv_Allowlist(t *testing.T) {
 	t.Setenv("DAZYFLOW_MASTER_KEY", "topsecret") // app secret: always scrubbed
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "leak-me") // third-party secret
@@ -630,10 +588,10 @@ func TestScrubbedEnv_Allowlist(t *testing.T) {
 	}
 }
 
-// TestExecuteShell_KillsProcessGroupOnTimeout proves the timeout tears down
-// the whole process group, not just the direct child: a grandchild the
-// command backgrounded must NOT outlive the node. Without the group-kill
-// the backgrounded subshell would survive its parent and write the marker.
+// Proves the timeout tears down the whole process group, not just the direct
+// child: a grandchild the command backgrounded must NOT outlive the node.
+// Without the group-kill the backgrounded subshell would survive its parent
+// and write the marker.
 func TestExecuteShell_KillsProcessGroupOnTimeout(t *testing.T) {
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "orphan-was-here")
@@ -659,8 +617,6 @@ func TestExecuteShell_KillsProcessGroupOnTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	// The timeout path reports a "timeout" error — that's expected here; the
-	// behaviour under test is what happens to the grandchild, below.
 	if res.Error == nil || res.Error.Code != "timeout" {
 		t.Fatalf("expected timeout error, got status=%q err=%+v", res.Status, res.Error)
 	}
@@ -705,13 +661,10 @@ func TestShellEnabled(t *testing.T) {
 	}
 }
 
-// TestEmitProgress_NilChannel covers the nil-channel guard (no panic, no send).
 func TestEmitProgress_NilChannel(t *testing.T) {
 	params.EmitProgress(nil, core.Job{ID: "j"}, 0.5, "halfway")
 }
 
-// TestEmitProgress_Delivers covers the successful-send branch and the field
-// wiring (JobID/NodeID/Percent/Message).
 func TestEmitProgress_Delivers(t *testing.T) {
 	ch := make(chan core.Progress, 1)
 	params.EmitProgress(ch, core.Job{ID: "j", NodeID: "n"}, 0.25, "quarter")
@@ -724,21 +677,15 @@ func TestEmitProgress_Delivers(t *testing.T) {
 	}
 }
 
-// TestEmitProgress_FullChannelDrops covers the select default: a full channel
-// drops the update instead of blocking.
 func TestEmitProgress_FullChannelDrops(t *testing.T) {
 	ch := make(chan core.Progress) // unbuffered, no reader → send not ready
 	params.EmitProgress(ch, core.Job{ID: "j"}, 1.0, "done")
-	// If we got here without blocking, the default branch fired.
 }
 
-// TestEmitLogProgress_NilChannel covers the nil-channel guard.
 func TestEmitLogProgress_NilChannel(t *testing.T) {
 	emitLogProgress(nil, core.Job{ID: "j"}, "stdout", "line")
 }
 
-// TestEmitLogProgress_Delivers covers the successful-send branch and the Data
-// payload wiring.
 func TestEmitLogProgress_Delivers(t *testing.T) {
 	ch := make(chan core.Progress, 1)
 	emitLogProgress(ch, core.Job{ID: "j", NodeID: "n"}, "stderr", "boom")
@@ -751,7 +698,6 @@ func TestEmitLogProgress_Delivers(t *testing.T) {
 	}
 }
 
-// TestEmitLogProgress_FullChannelDrops covers the select default branch.
 func TestEmitLogProgress_FullChannelDrops(t *testing.T) {
 	ch := make(chan core.Progress) // unbuffered, no reader
 	emitLogProgress(ch, core.Job{ID: "j"}, "stdout", "x")

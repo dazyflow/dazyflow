@@ -13,8 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/auth"
 )
 
-// withGoogleEndpoints points the package-level token/userinfo endpoints at
-// test servers for the duration of a test, restoring them afterward.
 func withGoogleEndpoints(t *testing.T, tokenURL, userinfoURL string) {
 	t.Helper()
 	ot, ou := googleTokenURL, googleUserinfoURL
@@ -130,7 +128,6 @@ func TestExchangeGoogleCode_BadUserinfoJSON(t *testing.T) {
 }
 
 func TestExchangeGoogleCode_TokenTransportError(t *testing.T) {
-	// Point at a closed port so the token POST fails at transport.
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	addr := srv.URL
 	srv.Close()

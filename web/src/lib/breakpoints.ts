@@ -19,8 +19,6 @@
 // now fails the build if a value here has no matching @media rule, so the
 // mirror is checked rather than remembered.
 
-// MOBILE is the phone/tablet cutoff: below it the sidebar collapses to an
-// overlay and the docs nav becomes a drawer. Mirrors `@media (max-width: 768px)`.
 export const MOBILE = 768;
 
 // EDITOR_NARROW is where the flow editor stops reserving canvas room beside
@@ -37,9 +35,6 @@ export const MOBILE = 768;
 // and nothing appeared.
 export const EDITOR_NARROW = 1100;
 
-// isNarrower reports whether the viewport is at or below a breakpoint. Returns
-// false when there is no window (SSR, jsdom without layout) so callers render
-// the wide layout rather than crashing.
 export function isNarrower(breakpoint: number): boolean {
   if (typeof window === "undefined") return false;
   return window.innerWidth <= breakpoint;

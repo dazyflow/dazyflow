@@ -25,7 +25,6 @@ import (
 	"time"
 )
 
-// inputLayouts are the absolute formats accepted, most specific first.
 var inputLayouts = []string{
 	time.RFC3339Nano,
 	time.RFC3339,
@@ -35,9 +34,6 @@ var inputLayouts = []string{
 	"2006-01-02",
 }
 
-// ParseOffset parses a signed duration that, on top of Go's h/m/s, also
-// understands w (weeks) and d (days) — e.g. "3d", "-2h30m", "1w2d". An empty
-// string is a zero offset.
 func ParseOffset(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -109,9 +105,6 @@ func IsRelative(s string) bool {
 	return false
 }
 
-// Resolve turns s into a concrete time. loc anchors the day boundaries of the
-// named days (nil means UTC); now is the reference instant. An empty s returns
-// the zero time and ok=false so callers can treat "unset" as "no bound".
 func Resolve(s string, loc *time.Location, now time.Time) (t time.Time, ok bool, err error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -133,7 +126,6 @@ func Resolve(s string, loc *time.Location, now time.Time) (t time.Time, ok bool,
 	case "yesterday":
 		anchor = startOfDay(now, loc, -1)
 	case "":
-		// A bare offset ("+3d") is relative to now.
 		anchor = now
 	default:
 		abs, aerr := parseAbsolute(base)
@@ -153,8 +145,6 @@ func Resolve(s string, loc *time.Location, now time.Time) (t time.Time, ok bool,
 	return anchor.UTC(), true, nil
 }
 
-// ResolveRFC3339 is Resolve rendered for an API query parameter. Absolute
-// values that already parse are re-rendered, so callers get one shape.
 func ResolveRFC3339(s string, loc *time.Location, now time.Time) (string, error) {
 	t, ok, err := Resolve(s, loc, now)
 	if err != nil || !ok {
@@ -163,11 +153,6 @@ func ResolveRFC3339(s string, loc *time.Location, now time.Time) (string, error)
 	return t.Format(time.RFC3339), nil
 }
 
-// splitBase cuts s into its named/absolute base and a trailing signed offset.
-// "tomorrow+9h" → ("tomorrow", "+9h"); "+3d" → ("", "+3d"); an absolute
-// timestamp keeps its own sign-bearing zone suffix (e.g. "…+02:00") because
-// the split only fires on a +/- that follows a letter or digit AND is not part
-// of a time zone offset.
 func splitBase(s string) (base, offset string) {
 	for i := len(s) - 1; i >= 0; i-- {
 		if s[i] != '+' && s[i] != '-' {
@@ -189,7 +174,6 @@ func splitBase(s string) (base, offset string) {
 	return s, ""
 }
 
-// startOfDay is midnight in loc, dayOffset days from now.
 func startOfDay(now time.Time, loc *time.Location, dayOffset int) time.Time {
 	local := now.In(loc).AddDate(0, 0, dayOffset)
 	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc)

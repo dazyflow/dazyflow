@@ -41,9 +41,6 @@ import (
 	"github.com/dazyflow/dazyflow/pollstate"
 )
 
-// stack is a self-contained Dazyflow install: the HTTP API the web UI
-// talks to, backed by an in-memory control plane and a real worker so
-// saved flows actually run.
 type stack struct {
 	gw *daemon.HTTPGateway
 }
@@ -58,10 +55,6 @@ func newStack(t *testing.T) *stack {
 	}
 	sessions := auth.NewMemSessionStore()
 
-	// AutoFSWorkspaces lazily provisions a workspace per signed-up
-	// tenant, exactly like the self-serve daemon does. FSSandbox gives
-	// filesystem-touching drops (and the Collections store) a place to
-	// write under each workspace.
 	wsRoot := t.TempDir()
 	sandbox, err := daemon.NewFSSandbox(t.TempDir())
 	if err != nil {
@@ -98,10 +91,6 @@ func newStack(t *testing.T) *stack {
 	gw.Sessions = sessions
 	gw.EnableSignup = true
 
-	// Make the connectable accounts visible, like an install whose
-	// admin has set up the OAuth providers. (A fresh self-host with no
-	// OAuth configured returns 501 on /me/connections — a separate
-	// onboarding gap noted in the friction report.)
 	reg := daemon.NewOAuthRegistry("http://localhost:8080", nil)
 	for _, def := range daemon.KnownOAuthProviderDefaults {
 		reg.Register(daemon.OAuthProvider{
@@ -113,8 +102,6 @@ func newStack(t *testing.T) *stack {
 	}
 	gw.OAuth = reg
 
-	// A worker in the background so a fired flow makes progress, like
-	// the real daemon. Fast poll so tests don't dawdle.
 	workerCtx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	w := daemon.NewWorker(daemon.WorkerConfig{
@@ -161,8 +148,6 @@ func wireNodeState(t *testing.T) {
 	})
 }
 
-// resp is a tiny view over an HTTP response: status + raw body, with a
-// helper to decode JSON.
 type resp struct {
 	t      *testing.T
 	status int
@@ -177,9 +162,6 @@ func (r resp) decode(v any) resp {
 	return r
 }
 
-// call issues one HTTP request through the real gateway. token may be
-// empty (for unauthenticated calls like signup). bearerOverride lets the
-// webhook trigger send its per-flow secret instead of the user token.
 func (s *stack) call(t *testing.T, method, path, token string, body any) resp {
 	t.Helper()
 	var rdr *bytes.Buffer
@@ -206,10 +188,6 @@ func (s *stack) call(t *testing.T, method, path, token string, body any) resp {
 	return resp{t: t, status: rw.Code, body: rw.Body.Bytes()}
 }
 
-// --- the newcomer ----------------------------------------------------
-
-// newcomer is a person who just found Dazyflow. They hold a session
-// token and are bound to the tenant/workspace signup minted for them.
 type newcomer struct {
 	t         *testing.T
 	s         *stack
@@ -218,7 +196,6 @@ type newcomer struct {
 	workspace string
 }
 
-// signUp is step one for everyone: create an account and get signed in.
 func (s *stack) signUp(t *testing.T, email string) *newcomer {
 	t.Helper()
 	r := s.call(t, "POST", "/api/v1/auth/signup", "", map[string]any{
@@ -237,14 +214,10 @@ func (s *stack) signUp(t *testing.T, email string) *newcomer {
 	return &newcomer{t: t, s: s, token: out.Token, tenant: out.Tenant, workspace: out.Workspace}
 }
 
-// flowPath builds the percent-encoded tenant/workspace/id the /me/flows
-// routes expect (the web client does the same encoding).
 func (n *newcomer) flowPath(id string) string {
 	return "/api/v1/me/flows/" + n.tenant + "%2F" + n.workspace + "%2F" + id
 }
 
-// catalogModuleIDs returns the set of drop IDs the catalog offers — what
-// a newcomer browsing the palette can actually find and drag in.
 func (n *newcomer) catalogModuleIDs() map[string]bool {
 	r := n.s.call(n.t, "GET", "/api/v1/catalog/drops", n.token, nil)
 	if r.status != http.StatusOK {
@@ -263,7 +236,6 @@ func (n *newcomer) catalogModuleIDs() map[string]bool {
 	return ids
 }
 
-// search mimics typing words into the catalog search box.
 func (n *newcomer) search(query string) []string {
 	r := n.s.call(n.t, "GET", "/api/v1/catalog/drops?q="+query, n.token, nil)
 	var out struct {
@@ -279,8 +251,6 @@ func (n *newcomer) search(query string) []string {
 	return ids
 }
 
-// connectableProviders is what the Connections page shows: the accounts
-// a newcomer can hook up.
 func (n *newcomer) connectableProviders() []string {
 	r := n.s.call(n.t, "GET", "/api/v1/me/connections", n.token, nil)
 	if r.status != http.StatusOK {
@@ -299,12 +269,10 @@ func (n *newcomer) connectableProviders() []string {
 	return names
 }
 
-// saveFlow stores a flow exactly as the editor's Save button does.
 func (n *newcomer) saveFlow(id string, graphJSON []byte) resp {
 	return n.s.call(n.t, "PUT", n.flowPath(id), n.token, graphJSON)
 }
 
-// validateResult is the {ok, issues} the editor shows under a flow.
 type validateResult struct {
 	OK     bool `json:"ok"`
 	Issues []struct {
@@ -332,11 +300,6 @@ func (n *newcomer) enableFlow(id string) {
 	}
 }
 
-// publishFlow makes the saved draft the live revision — what the editor's
-// Publish button does. Nothing fires until this happens: the scheduler, the
-// /trigger webhook, the hosted form and the provider-event fan-outs all
-// refuse an unpublished flow. The journey covers it because a user who skips
-// it has a flow that looks on and does nothing.
 func (n *newcomer) publishFlow(id string) {
 	r := n.s.call(n.t, "POST", n.flowPath(id)+"/publish", n.token, nil)
 	if r.status != http.StatusOK {
@@ -344,10 +307,6 @@ func (n *newcomer) publishFlow(id string) {
 	}
 }
 
-// eventually polls until cond holds, or fails with what was still wrong.
-// Needed wherever a run's side effect happens CONCURRENTLY with the state the
-// test can observe: a parked run publishes "awaiting" the moment it parks,
-// while the notification carrying its approval link is dispatched just after.
 func eventually(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(journeyWaitCeiling)
@@ -373,9 +332,6 @@ func (n *newcomer) fireForm(id string, fields map[string]any) string {
 	return n.latestRun(id)
 }
 
-// latestRun returns the newest run of a flow, waiting briefly for it to
-// appear — the form answers the visitor before the record is necessarily
-// visible to a list query.
 func (n *newcomer) latestRun(id string) string {
 	deadline := time.Now().Add(journeyWaitCeiling)
 	for time.Now().Before(deadline) {
@@ -445,8 +401,6 @@ func (n *newcomer) waitForPending(runID string) string {
 	return ""
 }
 
-// runFlow triggers a manual run (the editor's Run button) and returns
-// the run id.
 func (n *newcomer) runFlow(id string) string {
 	r := n.s.call(n.t, "POST", n.flowPath(id)+"/run", n.token, nil)
 	if r.status != http.StatusAccepted {
@@ -493,8 +447,6 @@ func (n *newcomer) waitForRun(runID string) string {
 	return last
 }
 
-// failedNodeReport lists the non-succeeded nodes of a run with their
-// error, for when a run fails and we want to know which step and why.
 func (n *newcomer) failedNodeReport(runID string) string {
 	r := n.s.call(n.t, "GET", "/api/v1/me/runs/"+runID+"/nodes", n.token, nil)
 	var out struct {
@@ -518,8 +470,6 @@ func (n *newcomer) failedNodeReport(runID string) string {
 	return b.String()
 }
 
-// dumpRun returns every node's id, status, and outputs for a run, for
-// debugging why a run did or didn't do what was expected.
 func (n *newcomer) dumpRun(runID string) string {
 	r := n.s.call(n.t, "GET", "/api/v1/me/runs/"+runID+"/nodes", n.token, nil)
 	var out struct {
@@ -555,8 +505,6 @@ type nodeView struct {
 	Error   *core.JobError      `json:"error"`
 }
 
-// nodeRecord fetches one node's record within a run, as the Run detail
-// page does when you click a node.
 func (n *newcomer) nodeRecord(runID, nodeID string) nodeView {
 	r := n.s.call(n.t, "GET", "/api/v1/me/runs/"+runID+"/nodes/"+nodeID, n.token, nil)
 	if r.status != http.StatusOK {
@@ -567,11 +515,8 @@ func (n *newcomer) nodeRecord(runID, nodeID string) nodeView {
 	return v
 }
 
-// --- scenario files --------------------------------------------------
-
 const scenarioDir = "../scenarios"
 
-// scenarioFiles lists the NN-*.json graphs that back tests/scenarios/README.md.
 func scenarioFiles(t *testing.T) []string {
 	t.Helper()
 	files, err := filepath.Glob(filepath.Join(scenarioDir, "*.json"))
@@ -607,16 +552,11 @@ func neededModules(g core.Graph) []string {
 		out = append(out, id)
 	}
 	for _, node := range g.Nodes {
-		// A for_each's per-item step is now an ordinary node wired to its
-		// `body` pin, so collecting every node's module already covers it.
 		add(node.Module)
 	}
 	return out
 }
 
-// fillBlanks replaces the REPLACE_WITH_… template placeholders with
-// plausible values, standing in for a newcomer who filled the form
-// fields in the editor.
 func fillBlanks(raw []byte) []byte {
 	repl := strings.NewReplacer(
 		"REPLACE_WITH_SHEET_ID", "1AbcDEFghIJklmNOPqrsTUVwxyZ_0123456789abcd",

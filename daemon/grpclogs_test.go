@@ -17,8 +17,6 @@ import (
 	controlpb "github.com/dazyflow/dazyflow/api/gen/control"
 )
 
-// seedLoggedRun stores a graph-run record and swaps the harness onto a
-// RecordingBus + log store, mirroring dzd's production wiring.
 func seedLoggedRun(t *testing.T, h *harness, runID, tenant string) *daemon.MemRunLogStore {
 	t.Helper()
 	store := daemon.NewMemRunLogStore()
@@ -79,7 +77,6 @@ func TestGRPC_StreamJobLogs_Replay(t *testing.T) {
 		t.Errorf("entry shape = %+v", got[0])
 	}
 
-	// Cursor resume: after the first entry's seq → only the second.
 	stream, _ = js.StreamJobLogs(ctx, &controlpb.StreamJobLogsRequest{
 		JobId: "run-logs-1", AfterSeq: got[0].Seq,
 	})
@@ -128,7 +125,6 @@ func TestGRPC_StreamJobLogs_Follow(t *testing.T) {
 		}
 	}()
 
-	// Give the stream a beat to subscribe, then emit live events.
 	time.Sleep(100 * time.Millisecond)
 	publishProgress(h, "run-logs-2", "a", "live line")
 	h.svc.Bus.Publish("run-logs-2", daemon.BusEvent{Terminal: &daemon.TerminalEvent{
@@ -166,14 +162,12 @@ func TestGRPC_StreamJobLogs_AuthzAndGaps(t *testing.T) {
 	ctx, cancel := h.ctxWithAuth(t)
 	defer cancel()
 
-	// Another tenant's run is invisible (the key is bound to "acme").
 	seedLoggedRun(t, h, "foreign-run", "globex")
 	stream, _ := js.StreamJobLogs(ctx, &controlpb.StreamJobLogsRequest{JobId: "foreign-run"})
 	if _, err := stream.Recv(); err == nil {
 		t.Fatal("cross-tenant stream succeeded")
 	}
 
-	// Unknown run errors rather than hanging.
 	stream, _ = js.StreamJobLogs(ctx, &controlpb.StreamJobLogsRequest{JobId: "ghost"})
 	if _, err := stream.Recv(); err == nil {
 		t.Fatal("unknown run streamed")

@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// A Thursday afternoon, so the weekday and the 12-hour clock are both
-// distinguishable from their alternatives in the assertions below.
 var ref = time.Date(2026, 8, 27, 14, 5, 9, 0, time.UTC)
 
 func TestRenderCustom(t *testing.T) {
@@ -27,20 +25,14 @@ func TestRenderCustom(t *testing.T) {
 		{"24-hour clock", "HH:mm:ss", "14:05:09"},
 		{"12-hour clock", "hh:mm A", "02:05 PM"},
 		{"lowercase meridiem", "h:mm a", "2:05 pm"},
-		// The distinction the tokens are case-sensitive FOR: getting these two
-		// the wrong way round is the mistake the whole vocabulary risks.
 		{"MM is the month, mm the minute", "MM mm", "08 05"},
 		{"date and time together", "YYYY-MM-DD HH:mm", "2026-08-27 14:05"},
 		{"zone offset", "YYYY-MM-DDZ", "2026-08-27+00:00"},
 		{"zone name", "HH:mm z", "14:05 UTC"},
-		// Literals: punctuation and digits pass through, and a bracketed word
-		// survives even though its letters are all tokens.
 		{"bracketed literal", "[week of] D MMM", "week of 27 Aug"},
 		{"literal made of token letters", "[Monday] [and] [DD]", "Monday and DD"},
 		{"tokens with no separator", "YYYYMMDD", "20260827"},
 		{"punctuation only", "--/--", "--/--"},
-		// Only NON-LETTERS pass through unbracketed; a word is a word even
-		// when it's Swedish, so "år" goes in brackets like any other.
 		{"literal word in brackets", "D MMM [år] YYYY", "27 Aug år 2026"},
 		{"empty", "", ""},
 	}
@@ -62,14 +54,9 @@ func TestRenderCustom(t *testing.T) {
 // email, and a format that is wrong is worth a red node, not a silent guess.
 func TestRenderCustom_RejectsUnknownTokens(t *testing.T) {
 	cases := []struct{ format, wantIn string }{
-		// Lowercase spellings are the common near-miss, so they get named.
 		{"yyyy-mm-dd", `did you mean "YYYY"`},
-		// Go has no unpadded 24-hour hour, so H is not a token.
 		{"H:mm", `did you mean "HH"`},
-		// Anything else lists the vocabulary rather than guessing.
 		{"YYYY quux DD", "isn't a format token"},
-		// A repeated token letter renders a plausible-looking number rather
-		// than failing, which is the worst possible outcome: "mmm" as mm+m.
 		{"YYYY-mmm-DD", `did you mean "MMM"`},
 		{"YYYYY", `did you mean "YYYY"`},
 		{"DD of MMM", "isn't a format token"},
@@ -115,7 +102,6 @@ func TestParseClock(t *testing.T) {
 			t.Errorf("parseClock(%q) = %d:%d:%d, want %d:%d:%d", c.in, h, m, s, c.h, c.m, c.s)
 		}
 	}
-	// Out of range is a typo, not a request for the next day.
 	for _, bad := range []string{"", "9", "25:00", "09:60", "09:00:60", "-1:00", "nine", "09:00:00:00", "09:xx"} {
 		if _, _, _, err := parseClock(bad); err == nil {
 			t.Errorf("parseClock(%q) should have errored", bad)

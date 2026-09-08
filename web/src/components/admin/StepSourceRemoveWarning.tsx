@@ -33,8 +33,6 @@ export function StepSourceRemoveWarning({
   const total = usage.flows.length + usage.hidden;
   if (total === 0) return <>{t(`${ns}.removeUnused`)}</>;
 
-  // Published ones are already sorted to the front by the daemon. The list is
-  // capped: a warning is for deciding, not for auditing.
   const shown = usage.flows.slice(0, 3);
   const names = shown.map((f) => f.name || f.flow_id).join(", ");
   const rest = total - shown.length;

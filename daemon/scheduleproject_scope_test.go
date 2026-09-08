@@ -15,18 +15,16 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// TestReconcileSchedules_UnreadableWorkspaceKeepsItsRows pins the scope rule:
-// a workspace whose listing FAILED contributes no live flows, and the prune
-// must not read that silence as "every flow here was deleted". Without the
-// scope the reconcile deletes the whole workspace's projection and its
-// scheduled flows stop firing until a later pass rebuilds them.
+// Pins the scope rule: a workspace whose listing FAILED contributes no live
+// flows, and the prune must not read that silence as "every flow here was
+// deleted". Without the scope the reconcile deletes the whole workspace's
+// projection and its scheduled flows stop firing until a later pass rebuilds
+// them.
 func TestReconcileSchedules_UnreadableWorkspaceKeepsItsRows(t *testing.T) {
 	healthy, err := workspace.OpenFS("")
 	if err != nil {
 		t.Fatalf("open healthy: %v", err)
 	}
-	// A workspace that opens, then becomes unreadable: a file where its
-	// directory was makes ListGraphs fail rather than report an empty set.
 	dir := filepath.Join(t.TempDir(), "ws")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -46,7 +44,6 @@ func TestReconcileSchedules_UnreadableWorkspaceKeepsItsRows(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	// One live flow in the healthy workspace.
 	commit, err := healthy.Save(core.Graph{
 		ID: "keeper", Tenant: "t", Workspace: "ws",
 		Nodes:    []core.Node{{ID: "a", Module: "noop"}},
@@ -59,8 +56,6 @@ func TestReconcileSchedules_UnreadableWorkspaceKeepsItsRows(t *testing.T) {
 		t.Fatalf("publish: %v", err)
 	}
 
-	// What an earlier, healthy pass had projected for both workspaces, plus a
-	// row for a flow that really was deleted from the healthy workspace.
 	seed := []ScheduleSpec{
 		{Tenant: "t", Workspace: "broken", GraphID: "b1",
 			EntryKey: "t/broken/b1#0", SpecKey: "cron:0 * * * *", Cron: "0 * * * *"},
@@ -75,7 +70,6 @@ func TestReconcileSchedules_UnreadableWorkspaceKeepsItsRows(t *testing.T) {
 		t.Fatalf("seed deleted: %v", err)
 	}
 
-	// Break the workspace only now, so it opened cleanly first.
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -117,12 +111,6 @@ func TestReconcileSchedules_UnreadableWorkspaceKeepsItsRows(t *testing.T) {
 	}
 }
 
-// TestReconcileSchedules_VanishedWorkspaceKeepsItsRows is the same rule for the
-// case that used to slip through: a workspace directory that is GONE rather
-// than unreadable. go-git resolves no HEAD for it exactly as it does for a repo
-// with no commits, so it once listed cleanly as "no flows" and the prune took
-// every schedule the workspace owned. workspace.ListGraphs now errors instead,
-// which puts the workspace outside the prune's scope.
 func TestReconcileSchedules_VanishedWorkspaceKeepsItsRows(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ws")
 	gone, err := workspace.OpenFS(dir)
@@ -146,7 +134,6 @@ func TestReconcileSchedules_VanishedWorkspaceKeepsItsRows(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	// The volume disappears under a running daemon.
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}

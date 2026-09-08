@@ -9,9 +9,8 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestFoldedHeaders_ReadFromRowsRef proves the folded-headers model: column
-// order travels ON the rows value (Ref.Headers), so a consumer gets it with no
-// separate `headers` input wired.
+// Proves the folded-headers model: column order travels ON the rows value
+// (Ref.Headers), so a consumer gets it with no separate `headers` input wired.
 func TestFoldedHeaders_ReadFromRowsRef(t *testing.T) {
 	job := core.Job{
 		ID: "j",
@@ -51,8 +50,8 @@ func TestFoldedHeaders_DerivedWhenValueCarriesNone(t *testing.T) {
 	}
 }
 
-// TestFoldedHeaders_OutputCarriesHeaders proves resultRows attaches the column
-// order to the rows Ref (so downstream reads it from the value).
+// Proves resultRows attaches the column order to the rows Ref (so downstream
+// reads it from the value).
 func TestFoldedHeaders_OutputCarriesHeaders(t *testing.T) {
 	res := resultRows(core.Job{ID: "j"}, []map[string]any{{"a": 1}}, []string{"a", "z"})
 	got := res.Output["rows"]

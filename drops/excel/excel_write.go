@@ -42,10 +42,6 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
-				// Named after the param so the card shows an inline editable box
-				// (Unreal-style); a wired value overrides the typed one — e.g. a
-				// date-stamped filename built by an upstream step, or an Excel
-				// read's 'path' output to write back to the same file.
 				{Port: "path", Label: "File", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
@@ -72,7 +68,6 @@ func init() {
 
 func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	path := params.StringDefault(job.Params, "path", "")
-	// The File input overrides the param when wired (same as excel_read).
 	if in, ok := job.Input["path"]; ok && in.Inline != nil {
 		path = rowsutil.Cell(in.Inline)
 	}
@@ -109,9 +104,6 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		if err != nil {
 			return params.Err(job, "bad_input", err.Error()), nil
 		}
-		// Bound decompression like excel_read does: readSandboxFile only caps
-		// the COMPRESSED bytes, so without an unzip limit a crafted .xlsx
-		// (zip-bomb) inflates to many GB inside OpenReader and OOMs the daemon.
 		f, err = excelize.OpenReader(bytes.NewReader(data), excelize.Options{
 			UnzipSizeLimit:    maxSandboxFileBytes,
 			UnzipXMLSizeLimit: maxSandboxFileBytes,
@@ -128,8 +120,6 @@ func executeExcelWrite(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		}
 	} else {
 		f = excelize.NewFile()
-		// excelize seeds a default "Sheet1"; create our sheet and drop the
-		// default when it differs, so the workbook has exactly our sheet.
 		if sheet != "Sheet1" {
 			f.NewSheet(sheet)
 			_ = f.DeleteSheet("Sheet1")

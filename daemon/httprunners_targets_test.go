@@ -71,16 +71,11 @@ func TestListRunnerTargets_AnEditorCanSeeTheMachinesItMayTarget(t *testing.T) {
 	if strings.Join(got.Runners[0].Tags, ",") != "build,invoices-box,linux" {
 		t.Errorf("tags = %v, want the labels and the name, normalized", got.Runners[0].Tags)
 	}
-	// Just registered, so it has checked in: the picker says so while choosing,
-	// which is the difference between a step that runs and one that waits and
-	// then fails.
 	if !got.Runners[0].Online {
 		t.Error("a runner that just registered reads as offline")
 	}
 }
 
-// The narrower shape is the point of the separate endpoint: an editor is told
-// where work can go, not who administers the fleet.
 func TestListRunnerTargets_SaysNothingAboutAdministeringTheFleet(t *testing.T) {
 	t.Parallel()
 	h := targetsGateway(t)
@@ -118,8 +113,6 @@ func TestListRunnerTargets_IsScopedToTheCallersOrg(t *testing.T) {
 	}
 }
 
-// A deployment without Postgres has no runners at all, and the picker degrades
-// to a text box on the strength of this answer.
 func TestListRunnerTargets_SaysRunnersAreNotConfigured(t *testing.T) {
 	t.Parallel()
 	h := &HTTPGateway{}
@@ -129,8 +122,6 @@ func TestListRunnerTargets_SaysRunnersAreNotConfigured(t *testing.T) {
 	}
 }
 
-// The list is derived from check-ins rather than reported, so a machine that
-// stopped polling has to fall out of "online" on its own.
 func TestListRunnerTargets_AStaleMachineReadsAsOffline(t *testing.T) {
 	t.Parallel()
 	store := NewMemRunnerStore()
@@ -155,8 +146,6 @@ func TestListRunnerTargets_AStaleMachineReadsAsOffline(t *testing.T) {
 	}
 }
 
-// ---- retagging a machine from the admin page --------------------------
-
 func setLabels(t *testing.T, h *HTTPGateway, p core.Principal, name, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	rw := httptest.NewRecorder()
@@ -179,19 +168,13 @@ func TestSetRunnerLabels_RetagsAMachineWithoutVisitingIt(t *testing.T) {
 	if err := json.Unmarshal(rw.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	// Normalized the way registration stores them, so a step targeting "build"
-	// matches a machine the page shows as carrying it.
 	if strings.Join(got.Labels, ",") != "build,linux" {
 		t.Errorf("labels = %v, want them normalized and de-duplicated", got.Labels)
 	}
-	// The answer is the updated row, so the page can replace it without a
-	// refetch racing the poll it already runs.
 	if got.Name != "invoices-box" || !got.Online {
 		t.Errorf("row = %+v, want the whole updated runner", got)
 	}
 
-	// Audited like registration: this is the moment a machine starts or stops
-	// receiving a pool's work, and nobody touched the machine or a flow to do it.
 	events, err := audit.List(context.Background(), core.AuditQuery{Tenant: "acme"})
 	if err != nil {
 		t.Fatalf("audit list: %v", err)
@@ -207,8 +190,6 @@ func TestSetRunnerLabels_RetagsAMachineWithoutVisitingIt(t *testing.T) {
 	}
 }
 
-// Retagging reroutes every step aimed at the label, so it belongs with
-// registration rather than with editing a flow.
 func TestSetRunnerLabels_NeedsRunnerAdminRatherThanGraphEdit(t *testing.T) {
 	t.Parallel()
 	h := targetsGateway(t)
@@ -224,7 +205,6 @@ func TestSetRunnerLabels_RefusesALabelTheInstallCommandCouldNotExpress(t *testin
 	if rw.Code != 400 {
 		t.Fatalf("code %d body %s, want 400", rw.Code, rw.Body)
 	}
-	// The message has to say which label and why — the page shows it verbatim.
 	if !strings.Contains(rw.Body.String(), "comma") {
 		t.Errorf("body = %s, want it to name the problem", rw.Body)
 	}
@@ -233,8 +213,6 @@ func TestSetRunnerLabels_RefusesALabelTheInstallCommandCouldNotExpress(t *testin
 func TestSetRunnerLabels_CannotReachAnotherOrgsMachine(t *testing.T) {
 	t.Parallel()
 	h := targetsGateway(t)
-	// Same name, different organisation: names are unique only per org, so the
-	// tenant is what stops one org retagging another's fleet.
 	if rw := setLabels(t, h, adminPrincipal("globex"), "invoices-box", `{"labels":["theirs"]}`); rw.Code != 404 {
 		t.Errorf("code %d, want 404 across the tenant boundary", rw.Code)
 	}
@@ -251,13 +229,10 @@ func TestSetRunnerLabels_ClearingThemIsAllowed(t *testing.T) {
 	if err := json.Unmarshal(rw.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	// A machine with no labels is the ordinary state of one targeted by name.
 	if len(got.Labels) != 0 {
 		t.Errorf("labels = %v, want none", got.Labels)
 	}
 }
-
-// ---- what the step says while it waits ---------------------------------
 
 // Work goes to whichever eligible machine polls first, so an offline machine is
 // never sent anything — there is no claim-time preference to make. What CAN go
@@ -285,19 +260,14 @@ func TestWaitingMessage_SaysWhenNothingIsThereToTakeIt(t *testing.T) {
 	req := DispatchRequest{Tenant: "acme", Tags: []string{"build", "gpu"}}
 	stale := now.Add(-2 * RunnerOnlineWindow)
 
-	// Several machines carry the tags and none is on: the step is going to fail,
-	// and saying so while the run is open beats saying it thirty seconds later.
 	got := waitingMessage(req, []Runner{{Name: "a", LastSeen: stale}, {Name: "b", LastSeen: stale}}, now)
 	if !strings.Contains(got, "none of the 2 machines") || !strings.Contains(got, "will fail") {
 		t.Errorf("message = %q, want it to say nothing is there", got)
 	}
-	// The tags read the way the rule works: all of them, not any.
 	if !strings.Contains(got, "build + gpu") {
 		t.Errorf("message = %q, want the tags joined with +", got)
 	}
 
-	// One machine gets named — with a single candidate, which machine to go and
-	// switch on is the whole answer.
 	one := waitingMessage(req, []Runner{{Name: "render-01", LastSeen: stale}}, now)
 	if !strings.Contains(one, "render-01") {
 		t.Errorf("message = %q, want the one machine named", one)

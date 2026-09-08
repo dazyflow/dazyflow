@@ -7,23 +7,6 @@ import { Link } from "react-router-dom";
 import { Check } from "lucide-react";
 import { ICON } from "../../../icons";
 
-// Says so when a run worked. Without this the only success signal was a border
-// tint on each node, which reads as "nothing happened" to anyone not looking
-// for it.
-//
-// It lives in the TOOLBAR, beside the button that started the run, and it fades
-// on its own. It used to float over the canvas at top-centre and stay until
-// dismissed, which is the worst of both: a flow reads from its top-left, so
-// that is exactly where the panel sat, and it sat there until the next run or
-// an explicit click. The outcome now appears where the user was already
-// looking — they just pressed Run — and then gets out of the way.
-//
-// What the last step PRODUCED is no longer printed here. It used to fold open
-// into a `JSON.stringify(…, null, 2)` scroll box; for the audience this product
-// is for that is a wall of syntax rather than an answer, and the canvas already
-// answers it better in two places — the data face folds every card open to show
-// what each step emitted, and an output pin peeks its value on hover. "See the
-// full run" remains for the whole picture.
 const FADE_AFTER_MS = 6000;
 
 export function RunSucceededStatus({
@@ -52,10 +35,6 @@ export function RunSucceededStatus({
     return () => clearTimeout(timer);
   }, [held, run.runID]);
 
-  // The full sentence, naming the step whose output was found. It is the title
-  // rather than the visible text because the toolbar is the one place with no
-  // room to spare — the visible half truncates, and this is what a hover (or a
-  // screen reader, via the status role) gets in full.
   const sentence = run.label
     ? t("editor.runSucceededWith", { label: run.label })
     : t("editor.runSucceeded");

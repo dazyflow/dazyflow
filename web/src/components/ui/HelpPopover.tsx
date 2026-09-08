@@ -41,9 +41,6 @@ export function HelpPopover({ label, body }: { label: string; body: string }) {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      // Escape closes the popover and stops there — without this the same
-      // keypress continues to the Inspector and closes the panel behind it,
-      // so one press loses the step you were reading about.
       e.stopPropagation();
       setOpen(false);
       trigger.current?.focus();

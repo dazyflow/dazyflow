@@ -19,10 +19,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fakeProvider stands in for a real OAuth server. It serves the
-// /token endpoint with a configurable response. Tests build one,
-// register it in the OAuthRegistry, and drive the flow without
-// touching the real Slack/Google/etc. APIs.
 type fakeProvider struct {
 	server         *httptest.Server
 	tokenStatus    int
@@ -46,10 +42,6 @@ func newFakeProvider(t *testing.T) *fakeProvider {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
-		// Real providers serve an HTML consent page here. For the
-		// tests we don't actually drive a browser through this; the
-		// flow tests construct the callback URL by hand using the
-		// state token from the authorize redirect.
 		w.WriteHeader(200)
 	})
 	mux.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
@@ -75,22 +67,15 @@ func (fp *fakeProvider) provider() OAuthProvider {
 	}
 }
 
-// providerBasic is the same fake provider configured for
-// client_secret_basic (the Fortnox style): credentials go in an HTTP
-// Basic header, not the form body.
 func (fp *fakeProvider) providerBasic() OAuthProvider {
 	p := fp.provider()
 	p.TokenAuthStyle = "basic"
 	return p
 }
 
-// newOAuthHarness builds a gateway with EncryptedSecrets +
-// OAuthRegistry wired up, registers the fake provider, and returns
-// everything tests need.
 func newOAuthHarness(t *testing.T) (*gatewayHarness, *fakeProvider) {
 	t.Helper()
 	h := newGatewayHarness(t)
-	// Wire encrypted secrets so OAuth has somewhere to store tokens.
 	key := make([]byte, 32)
 	for i := range key {
 		key[i] = byte(i + 7)
@@ -104,13 +89,9 @@ func newOAuthHarness(t *testing.T) (*gatewayHarness, *fakeProvider) {
 	fp := newFakeProvider(t)
 	reg := NewOAuthRegistry("https://example.test", es)
 	reg.Register(fp.provider())
-	// Stub HTTPClient so callbacks talk to the fakeProvider rather
-	// than the real internet.
 	reg.HTTPClient = fp.server.Client()
 	h.gw.OAuth = reg
 
-	// Upgrade the default token to include secret:write so the
-	// authorize endpoint is reachable.
 	role := core.Role{Name: "oauth-admin", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 		core.PermSecretRead, core.PermSecretWrite,
@@ -122,8 +103,6 @@ func newOAuthHarness(t *testing.T) (*gatewayHarness, *fakeProvider) {
 	h.token = tok
 	return h, fp
 }
-
-// ---- State store ----------------------------------------------------
 
 func TestOAuthState_MintConsume(t *testing.T) {
 	t.Parallel()
@@ -171,8 +150,6 @@ func TestOAuthState_Expiry(t *testing.T) {
 	}
 }
 
-// ---- Token exchange & storage --------------------------------------
-
 func TestOAuth_ExchangeAndStore(t *testing.T) {
 	t.Parallel()
 	es, _ := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
@@ -201,7 +178,6 @@ func TestOAuth_ExchangeAndStore(t *testing.T) {
 		t.Errorf("extras.team = %+v, want {id:T123,...}", tok.Extras["team"])
 	}
 
-	// Round-trip through the encrypted store.
 	name, err := reg.store(t.Context(), "acme", "test", "main", tok)
 	if err != nil {
 		t.Fatalf("store: %v", err)
@@ -238,9 +214,6 @@ func TestOAuth_ExchangeFailsOnNon2xx(t *testing.T) {
 
 func TestOAuth_ExchangeFailsOnProviderError(t *testing.T) {
 	t.Parallel()
-	// Slack returns HTTP 200 with `error` in the JSON body. The
-	// generic OAuth response shape doesn't catch that, so we
-	// special-case it.
 	es, _ := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
 	fp := newFakeProvider(t)
 	fp.tokenBody = `{"ok":false,"error":"invalid_code"}`
@@ -261,8 +234,6 @@ func TestOAuth_GetTokenRequiresTenantInCtx(t *testing.T) {
 		t.Fatal("expected error without tenant in ctx")
 	}
 }
-
-// ---- End-to-end HTTP flow ------------------------------------------
 
 func TestHTTPOAuth_AuthorizeRedirectsToProvider(t *testing.T) {
 	t.Parallel()
@@ -298,7 +269,6 @@ func TestHTTPOAuth_AuthorizeUnknownProvider(t *testing.T) {
 
 func TestHTTPOAuth_AuthorizeRequiresSecretWrite(t *testing.T) {
 	t.Parallel()
-	// Runner-only role lacks secret:write → 403.
 	h, _ := newOAuthHarness(t)
 	role := core.Role{Name: "runner", Permissions: []core.Permission{core.PermGraphRun}}
 	_, tok, _ := auth.IssueAPIKey(h.ks, t.Context(), "runner", "t", "ws", "bob", []core.Role{role}, nil)
@@ -321,10 +291,6 @@ func TestHTTPOAuth_AuthorizeBadReturnTo(t *testing.T) {
 	}
 }
 
-// callbackWithBinding builds an OAuth callback request that carries the
-// dz_oauth_state cookie set by the authorize step, so the browser-binding
-// check (RFC 6749 §10.12) passes — mirroring a real browser that keeps the
-// cookie across the redirect.
 func callbackWithBinding(authResp *httptest.ResponseRecorder, target string) *http.Request {
 	req := httptest.NewRequest("GET", target, nil)
 	for _, c := range authResp.Result().Cookies() {
@@ -337,10 +303,6 @@ func callbackWithBinding(authResp *httptest.ResponseRecorder, target string) *ht
 
 func TestHTTPOAuth_CallbackHappyPath(t *testing.T) {
 	t.Parallel()
-	// 1. Hit authorize, capture the state from the redirect.
-	// 2. POST that state + a fake code to /callback.
-	// 3. Verify the token landed in encrypted secrets and the user
-	//    got redirected to return_to with oauth=success.
 	h, _ := newOAuthHarness(t)
 	rw := h.do(t, "GET", "/api/v1/oauth/test/authorize?account=main&return_to=/apps", nil)
 	if rw.Code != http.StatusFound {
@@ -352,7 +314,6 @@ func TestHTTPOAuth_CallbackHappyPath(t *testing.T) {
 		t.Fatal("state missing")
 	}
 
-	// Callback is unauthenticated, but carries the browser-binding cookie.
 	req := callbackWithBinding(rw, "/api/v1/oauth/test/callback?code=the-code&state="+state)
 	cb := httptest.NewRecorder()
 	ServeForTest(h.gw, cb, req)
@@ -370,7 +331,6 @@ func TestHTTPOAuth_CallbackHappyPath(t *testing.T) {
 		t.Errorf("account=%q", loc2.Query().Get("account"))
 	}
 
-	// Verify the token landed in encrypted secrets under the expected name.
 	raw, err := h.gw.EncryptedSecrets.Get(core.WithTenant(t.Context(), "t"), "oauth.test.main")
 	if err != nil {
 		t.Fatalf("get stored secret: %v", err)
@@ -395,7 +355,6 @@ func TestHTTPOAuth_CallbackRejectsWrongBrowser(t *testing.T) {
 	loc, _ := url.Parse(rw.Header().Get("Location"))
 	state := loc.Query().Get("state")
 
-	// No cookie attached → binding check fails.
 	req := httptest.NewRequest("GET", "/api/v1/oauth/test/callback?code=the-code&state="+state, nil)
 	cb := httptest.NewRecorder()
 	ServeForTest(h.gw, cb, req)
@@ -434,7 +393,6 @@ func TestHTTPOAuth_CallbackReplayRejected(t *testing.T) {
 	if first.Code != http.StatusFound {
 		t.Fatalf("first callback: %d", first.Code)
 	}
-	// Replay the same state.
 	req2 := callbackWithBinding(rw, "/api/v1/oauth/test/callback?code=c&state="+state)
 	replay := httptest.NewRecorder()
 	ServeForTest(h.gw, replay, req2)
@@ -445,8 +403,6 @@ func TestHTTPOAuth_CallbackReplayRejected(t *testing.T) {
 
 func TestHTTPOAuth_CallbackProviderDeniedConsent(t *testing.T) {
 	t.Parallel()
-	// User clicks "Deny" → provider redirects with ?error=access_denied.
-	// We should bounce back to return_to with oauth=error.
 	h, _ := newOAuthHarness(t)
 	rw := h.do(t, "GET", "/api/v1/oauth/test/authorize?return_to=/apps", nil)
 	loc, _ := url.Parse(rw.Header().Get("Location"))
@@ -465,7 +421,6 @@ func TestHTTPOAuth_CallbackProviderDeniedConsent(t *testing.T) {
 	if !strings.Contains(loc2.Query().Get("error"), "access_denied") {
 		t.Errorf("error=%q", loc2.Query().Get("error"))
 	}
-	// And no token written to the store.
 	_, err := h.gw.EncryptedSecrets.Get(core.WithTenant(t.Context(), "t"), "oauth.test.default")
 	if err == nil {
 		t.Error("expected no stored token after denied consent")
@@ -474,10 +429,7 @@ func TestHTTPOAuth_CallbackProviderDeniedConsent(t *testing.T) {
 
 func TestHTTPOAuth_ListProvidersShowsConnectedAccounts(t *testing.T) {
 	t.Parallel()
-	// After a successful flow, GET /oauth/providers should report
-	// the accounts under each provider.
 	h, _ := newOAuthHarness(t)
-	// Complete a flow first.
 	rw := h.do(t, "GET", "/api/v1/oauth/test/authorize?account=main&return_to=/x", nil)
 	loc, _ := url.Parse(rw.Header().Get("Location"))
 	state := loc.Query().Get("state")
@@ -527,8 +479,6 @@ func TestHTTPOAuth_NotConfiguredIs501(t *testing.T) {
 		})
 	}
 }
-
-// ---- secretNameFor naming convention -------------------------------
 
 func TestSecretNameFor(t *testing.T) {
 	t.Parallel()
@@ -581,9 +531,6 @@ func TestOAuth_ExchangeFormBodyShape(t *testing.T) {
 // carry for the fake provider's test-client/test-secret credentials.
 var wantBasic = "Basic " + base64.StdEncoding.EncodeToString([]byte("test-client:test-secret"))
 
-// With TokenAuthStyle "basic", the code exchange presents credentials in an
-// HTTP Basic header and drops them from the body — the shape Fortnox's token
-// endpoint requires. The non-credential fields stay in the form.
 func TestOAuth_ExchangeUsesBasicAuthWhenConfigured(t *testing.T) {
 	t.Parallel()
 	es, _ := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
@@ -606,7 +553,6 @@ func TestOAuth_ExchangeUsesBasicAuthWhenConfigured(t *testing.T) {
 	if got := fp.lastFormBody.Get("client_id"); got != "" {
 		t.Errorf("client_id leaked into body: %q", got)
 	}
-	// The rest of the grant is unchanged.
 	if got := fp.lastFormBody.Get("grant_type"); got != "authorization_code" {
 		t.Errorf("grant_type = %q, want authorization_code", got)
 	}
@@ -639,7 +585,6 @@ func TestOAuth_RefreshUsesBasicAuthWhenConfigured(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	// Fortnox rotates the refresh_token on every refresh.
 	fp.tokenBody = `{"access_token":"new-access","refresh_token":"rotating-2","token_type":"Bearer","expires_in":3600}`
 
 	got, err := reg.GetOAuthToken(core.WithTenant(t.Context(), "acme"), "test", "main")

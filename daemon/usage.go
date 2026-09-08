@@ -24,7 +24,6 @@ import (
 // node completion because metering failed. Implementations return the
 // error for logging only.
 
-// UsageCounters is one tenant-month bucket.
 type UsageCounters struct {
 	Period         string `json:"period"` // "2026-06" (UTC month)
 	GraphRuns      int64  `json:"graph_runs"`
@@ -40,18 +39,9 @@ type UsageCounters struct {
 // store) and increments must be atomic across replicas for the Postgres
 // backend.
 type UsageStore interface {
-	// AddRun counts one submitted graph run for the tenant, in the
-	// month bucket containing now.
 	AddRun(ctx context.Context, tenant string, now time.Time) error
-	// AddNodeExecutions counts n executed node attempts for the tenant,
-	// in the month bucket containing now.
 	AddNodeExecutions(ctx context.Context, tenant string, n int, now time.Time) error
-	// AddSkippedRun counts one scheduled fire refused by the run-cap gate,
-	// in the month bucket containing now.
 	AddSkippedRun(ctx context.Context, tenant string, now time.Time) error
-	// Usage returns the tenant's most recent buckets, newest first, at
-	// most months entries. Months with no activity have no bucket; the
-	// caller synthesizes zeros where it wants them.
 	Usage(ctx context.Context, tenant string, months int) ([]UsageCounters, error)
 }
 
@@ -76,21 +66,13 @@ type runReleaser interface {
 // rather than a racy read-then-add that lets concurrent submissions at the
 // limit all pass. A store without it falls back to the racy path in reserveRun.
 type runReserver interface {
-	// AddRunIfUnder atomically increments the run count for the month of `now`
-	// iff the current count is < limit, reporting whether it counted. limit is
-	// always > 0 here (uncapped tenants skip this path).
 	AddRunIfUnder(ctx context.Context, tenant string, now time.Time, limit int) (admitted bool, err error)
 }
 
-// usagePeriod buckets a timestamp into its UTC calendar month.
 func usagePeriod(t time.Time) string {
 	return t.UTC().Format("2006-01")
 }
 
-// MemUsageStore is the in-process UsageStore for dev/no-DSN deployments
-// and tests. Counts vanish on restart — same caveat as the rest of the
-// in-memory stores, and dzd already logs the loud "lost on restart"
-// warning when running without Postgres.
 type MemUsageStore struct {
 	mu      sync.Mutex
 	buckets map[string]map[string]*UsageCounters // tenant → period → counters
@@ -167,7 +149,6 @@ func (m *MemUsageStore) Usage(_ context.Context, tenant string, months int) ([]U
 	for _, c := range m.buckets[tenant] {
 		out = append(out, *c)
 	}
-	// "YYYY-MM" sorts chronologically as a string; newest first.
 	sort.Slice(out, func(i, j int) bool { return out[i].Period > out[j].Period })
 	if months > 0 && len(out) > months {
 		out = out[:months]
@@ -225,8 +206,6 @@ func (b *BufferedUsage) AddRunIfUnder(ctx context.Context, tenant string, now ti
 	return true, b.inner.AddRun(ctx, tenant, now)
 }
 
-// AddSkippedRun passes through unbatched — skips only happen at the cap,
-// far rarer than node executions, and the gate doesn't read them.
 func (b *BufferedUsage) AddSkippedRun(ctx context.Context, tenant string, now time.Time) error {
 	return b.inner.AddSkippedRun(ctx, tenant, now)
 }
@@ -246,14 +225,10 @@ func (b *BufferedUsage) Usage(ctx context.Context, tenant string, months int) ([
 	return b.inner.Usage(ctx, tenant, months)
 }
 
-// Flush writes all pending counts through. Counts that fail to write
-// are re-queued so a transient store error loses nothing.
 func (b *BufferedUsage) Flush(ctx context.Context) error {
 	var firstErr error
 	for key, n := range b.snapshot() {
 		tenant, periodKey, _ := strings.Cut(key, "\x00")
-		// Reconstruct a timestamp inside the bucket's month so the
-		// inner store lands the count in the right period.
 		ts, err := time.Parse("2006-01", periodKey)
 		if err != nil {
 			continue // unreachable: keys are built from usagePeriod
@@ -279,8 +254,6 @@ func (b *BufferedUsage) snapshot() map[string]int {
 	return out
 }
 
-// Run flushes every interval until ctx is cancelled, then flushes one
-// last time so a graceful shutdown loses nothing.
 func (b *BufferedUsage) Run(ctx context.Context, every time.Duration) {
 	if every <= 0 {
 		every = 5 * time.Second
@@ -294,8 +267,6 @@ func (b *BufferedUsage) Run(ctx context.Context, every time.Duration) {
 			return
 		case <-t.C:
 			if err := b.Flush(ctx); err != nil {
-				// Logged by callers' stores already; nothing more to do —
-				// the counts are re-queued.
 				continue
 			}
 		}

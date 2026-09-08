@@ -1,18 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package runner hosts the step that runs a script on one of the
-// organisation's own machines.
-//
-// The machine runs a small agent that asks the daemon for work, so nothing has
-// to reach it: it can sit behind NAT, on a laptop, inside a network the daemon
-// has never heard of. Installing one is a single command with a token.
-//
-// This step is deliberately the ONLY one in this package. A runner is not a way
-// to add typed steps to the catalog — it is a way to run a command somewhere
-// else. Everything about what the command does lives in the script, on the
-// org's machine, under the org's control.
 package runner
+
+// The machine runs a small agent that ASKS the daemon for work, so nothing has to
+// reach it: it can sit behind NAT, on a laptop, inside a network the daemon has
+// never heard of.
+//
+// This step is deliberately the ONLY one in this package. A runner is not a way to
+// add typed steps to the catalog — it is a way to run a command somewhere else.
 
 import (
 	"context"
@@ -28,30 +24,22 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// Dispatcher sends a script to a runner and waits for the result. The daemon
-// installs one at boot; without it this step reports that runners are not
-// configured rather than failing obscurely.
+// Injected by the daemon at boot, so this package does not import it. Without
+// one the step reports that runners are not configured.
 type Dispatcher interface {
 	Dispatch(ctx context.Context, req Request, onProgress func(string)) (Result, error)
 }
 
-// Request is one script to run.
 type Request struct {
-	Tenant string
-	// Tags is where to run: a machine carrying ALL of them. A machine's own name
-	// is one of its tags, so pinning a step to one machine is a single-tag list.
-	Tags   []string
-	Script string
-	// Shell names the interpreter the agent starts the script with — one of
-	// Shells. Empty (and DefaultShell) mean the machine's own shell, which is
-	// what a runner did before this was a choice.
+	Tenant  string
+	Tags    []string
+	Script  string
 	Shell   string
 	Env     map[string]string
 	Stdin   string
 	Timeout time.Duration
 }
 
-// Result is what came back.
 type Result struct {
 	ExitCode int
 	Stdout   string
@@ -64,9 +52,6 @@ var (
 	dispatcher Dispatcher
 )
 
-// SetDispatcher installs the daemon's dispatcher. Follows the same injection
-// shape as the other daemon-backed drops (io.SetQuotaReserver, and so on) so
-// this package does not import the daemon.
 func SetDispatcher(d Dispatcher) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -79,46 +64,17 @@ func current() Dispatcher {
 	return dispatcher
 }
 
-// DefaultTimeout bounds a script that never returns. Ten minutes is long
-// enough for real work and short enough that a hung script does not hold a run
-// open for the rest of the day.
 const DefaultTimeout = 10 * time.Minute
 
-// DefaultShell means "whatever this machine runs scripts with" — /bin/sh on a
-// unix box, cmd on Windows. It is the value a step carries when nobody chose,
-// and it is what a runner did before choosing was possible, so an existing flow
-// keeps behaving exactly as it did.
 const DefaultShell = "default"
 
-// Shells are the interpreters a step may ask for.
-//
-// A short, closed list rather than a free-text command, because the daemon has
-// to be able to say "that is not a shell" while the author is still editing —
-// and because the value crosses to another machine, where an arbitrary string
-// would be an arbitrary program to start. Anything not on it belongs inside the
-// script, behind a shebang or an explicit interpreter call.
-//
-// The agent maps each of these to the program it actually starts and picks the
-// file extension the script is written to; see runner/dzrunner.py.
 var Shells = []string{DefaultShell, "sh", "bash", "python", "powershell", "node"}
 
-// What a non-zero exit means for the step. Two words rather than a boolean
-// because they say what happens, and a `"on_nonzero_exit": "continue"` in a
-// saved flow reads without a lookup — where `"ignore_exit_code": true` would
-// claim the code is ignored when it is in fact handed to the flow.
 const (
-	// ExitFail is the default and the long-standing behaviour: a script that
-	// exits non-zero has failed, and so has the step.
-	ExitFail = "fail"
-	// ExitContinue succeeds the step and puts the code on an output for the
-	// flow to branch on. Covers ONLY a script that ran and returned a code —
-	// see the param's description for the cases it deliberately does not.
+	ExitFail     = "fail"
 	ExitContinue = "continue"
 )
 
-// knownShell reports whether s is one of Shells. The empty string is the same
-// as DefaultShell: a task queued before this param existed carries no shell,
-// and so does a step nobody has touched.
 func knownShell(s string) bool {
 	if s == "" {
 		return true
@@ -196,23 +152,12 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{
-					Port:  "in",
-					Label: "Input",
-					MIME:  []string{"text/plain", "application/json"},
-					// A runner is on another machine, so a file path from the
-					// daemon's disk means nothing there. Values only.
+					Port:       "in",
+					Label:      "Input",
+					MIME:       []string{"text/plain", "application/json"},
 					InlineOnly: true,
 				},
 				{
-					// The script itself, when an earlier step builds it —
-					// picked from a table, filled into a template, written by
-					// the AI step. Wired, it wins over the typed one; unwired,
-					// the box on the step is the script, which is how nearly
-					// every flow uses this.
-					//
-					// Separate from 'in' on purpose. One port carrying either
-					// the program or its data would make "what did this run?"
-					// depend on which upstream step happened to be connected.
 					Port:       "script",
 					Label:      "Script",
 					MIME:       []string{"text/plain"},
@@ -221,10 +166,6 @@ func init() {
 			},
 			Outputs: []core.Port{
 				{Port: "out", Label: "Output", MIME: []string{"text/plain"}, Example: json.RawMessage(`"3 files changed, 41 insertions(+), 8 deletions(-)"`)},
-				// The script's own report on how it went. Emitted on every run
-				// that actually reached the machine, success or not — a script
-				// that succeeds can still have written warnings to stderr, and
-				// a flow handling its own failures needs the number.
 				{Port: "exit_code", Label: "Exit code", MIME: []string{"text/plain"}, Example: json.RawMessage(`"0"`)},
 				{Port: "stderr", Label: "Error output", MIME: []string{"text/plain"}, Example: json.RawMessage(`"warning: 2 deprecated flags ignored"`)},
 			},
@@ -276,9 +217,6 @@ func init() {
   },
   "required": ["tags", "script"]
 }`),
-			// Not idempotent, and this is the one manifest flag worth being
-			// careful about: the daemon has no idea what the script does, so it
-			// must never assume running it twice is harmless.
 			Idempotent: false,
 		},
 		Execute: execute,
@@ -293,16 +231,10 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 	}
 	tenant, _ := core.TenantFromContext(ctx)
 	if tenant == "" {
-		// Without a tenant there is no way to know whose runners these are, and
-		// guessing would mean running a script on someone else's machine.
 		return params.Err(job, "no_tenant", "this step has no organisation to run against"), nil
 	}
 
 	tags := targetTags(job)
-	// The 'script' input wins over the typed box, so an earlier step can build
-	// the script — from a template, a table cell, the AI step. Only the
-	// surrounding blank space goes: the inside of a script is significant, and
-	// a Python one stops working if its indentation is rearranged.
 	script, ok := params.TextInputOr(job, "script", params.StringDefault(job.Params, "script", ""))
 	if !ok {
 		return params.Err(job, "bad_input",
@@ -314,9 +246,6 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 		return params.Err(job, "no_script", "this step has no script to run"), nil
 	}
 	if bad := badEnvName(job); bad != "" {
-		// Refused here rather than on the machine: an environment block cannot
-		// carry these, and a script that starts with a mangled environment fails
-		// somewhere far from the field that caused it.
 		return params.Err(job, "bad_env",
 			"the environment variable name "+bad+" cannot be used — a name must not be "+
 				"empty, contain '=', or contain control characters"), nil
@@ -327,18 +256,12 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 		onNonzero = ExitFail
 	}
 	if onNonzero != ExitFail && onNonzero != ExitContinue {
-		// Refused rather than read as the default: someone who wrote "ignore"
-		// meant not to fail, and silently failing anyway would look like the
-		// setting does nothing.
 		return params.Err(job, "bad_param",
 			"'if the script exits non-zero' is "+onNonzero+", which is neither "+
 				ExitFail+" nor "+ExitContinue), nil
 	}
 	shell := strings.ToLower(strings.TrimSpace(params.StringDefault(job.Params, "shell", "")))
 	if !knownShell(shell) {
-		// Refused here rather than on the machine: the daemon knows the list,
-		// and a typo caught before the task is queued is a message about a
-		// field instead of a script that never started.
 		return params.Err(job, "bad_shell",
 			"this step asks to run the script with "+shell+
 				", which is not one of "+strings.Join(Shells, ", ")), nil
@@ -355,18 +278,10 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 	}
 
 	res, err := d.Dispatch(ctx, Request{
-		Tenant: tenant,
-		Tags:   tags,
-		Script: script,
-		Shell:  shell,
-		// What the script reads from its environment, with ${secret.…} already
-		// resolved by the engine — for both the node's own env and the step's
-		// own field, since the engine resolves params and env in one pass.
-		//
-		// The step's field wins over the node's env, which wins over whatever
-		// the machine already has (the agent merges over its own environment).
-		// Deliberately that order: the field is the one a person can see while
-		// editing the step, so it must not be the one silently overridden.
+		Tenant:  tenant,
+		Tags:    tags,
+		Script:  script,
+		Shell:   shell,
 		Env:     mergeEnv(job),
 		Stdin:   stdinFrom(job),
 		Timeout: timeout,
@@ -380,41 +295,23 @@ func execute(ctx context.Context, job core.Job, progress chan<- core.Progress) (
 		return params.Err(job, "runner_error", res.Error), nil
 	}
 	if res.ExitCode != 0 && onNonzero != ExitContinue {
-		// The script's own stderr is the useful part — it is the author's
-		// message about what went wrong, and burying it would leave them with
-		// only a number.
 		msg := fmt.Sprintf("the command exited with status %d", res.ExitCode)
 		if trimmed := strings.TrimSpace(res.Stderr); trimmed != "" {
 			msg += ": " + trimmed
 		}
 		return params.Err(job, "nonzero_exit", msg), nil
 	}
-	// Reached either because the script succeeded, or because the flow asked to
-	// handle the exit code itself. Both emit the same three outputs, so a step
-	// switched from one mode to the other does not change what its wires carry.
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"out": {MIME: "text/plain", Inline: res.Stdout},
-			// Text, not a number, matching the shell drop's 'Exit code' — it is
-			// compared against "0" and routed on, not arithmetic.
+			"out":       {MIME: "text/plain", Inline: res.Stdout},
 			"exit_code": {MIME: "text/plain", Inline: strconv.Itoa(res.ExitCode)},
 			"stderr":    {MIME: "text/plain", Inline: res.Stderr},
 		},
 	}, nil
 }
 
-// targetTags reads where this step should run: the `tags` field, and only that
-// one. The `runner` and `label` fields it replaced are not read — a machine's
-// own name is one of its tags, which is why one field could replace two.
-//
-// Normalized the same way registration normalizes labels: lower-cased and
-// trimmed. A runner installed with `--labels Linux,Build` is stored (and listed
-// in the admin page) as linux and build, so a step targeting "Linux" — or
-// "build " with a trailing space from a paste — matched nothing and failed while
-// the page plainly showed one. Names get the same treatment, since
-// validRunnerName only ever allows lower-case.
 func targetTags(job core.Job) []string {
 	raw := params.StringSlice(job.Params, "tags")
 	seen := map[string]struct{}{}
@@ -433,13 +330,6 @@ func targetTags(job core.Job) []string {
 	return out
 }
 
-// stdinFrom renders the wired input as the text the script reads.
-//
-// A file reference cannot reach here: the port is InlineOnly and the engine
-// refuses such a job before the step runs (engine.refuseInlineOnlyFileRefs).
-// The nil case below is therefore "nothing wired in", not "a file was wired
-// in" — which is what it used to be, and why a file-producing step upstream
-// made the script run with empty stdin and report SUCCESS.
 func stdinFrom(job core.Job) string {
 	ref, ok := job.Input["in"]
 	if !ok {
@@ -451,8 +341,6 @@ func stdinFrom(job core.Job) string {
 	case string:
 		return v
 	default:
-		// Anything structured goes across as JSON, which is what a script can
-		// actually parse — jq, python, a Go program all read it the same way.
 		b, err := json.Marshal(v)
 		if err != nil {
 			return fmt.Sprint(v)
@@ -461,18 +349,6 @@ func stdinFrom(job core.Job) string {
 	}
 }
 
-// mergeEnv builds the environment the script runs with.
-//
-// Two sources, because there were already two: core.Node.Env, which every step
-// has and almost none uses, and this step's own `env` param, which is the one
-// with a box in the editor. Merging rather than choosing means a flow already
-// setting node env keeps working, and the layering has an order somebody can
-// predict — see the note at the call site.
-//
-// Both arrive with ${secret.…} already expanded: the engine resolves params and
-// node env in the same pass before the step runs, and the resolved values exist
-// only for the length of this call plus the sealed queue row. Nothing here
-// writes them anywhere.
 func mergeEnv(job core.Job) map[string]string {
 	out := map[string]string{}
 	for k, v := range job.Env {
@@ -482,18 +358,11 @@ func mergeEnv(job core.Job) map[string]string {
 		out[k] = v
 	}
 	if len(out) == 0 {
-		// nil rather than an empty map, so the task row's env column stays NULL
-		// and there is nothing to seal.
 		return nil
 	}
 	return out
 }
 
-// envParam reads the step's `env` field as strings.
-//
-// Non-string values are stringified rather than dropped: the schema says string,
-// but a flow built by the API or an older editor can carry a number, and a
-// script asking for $RETRIES would rather have "3" than nothing.
 func envParam(job core.Job) map[string]string {
 	raw, ok := job.Params["env"].(map[string]any)
 	if !ok {
@@ -513,14 +382,6 @@ func envParam(job core.Job) map[string]string {
 	return out
 }
 
-// badEnvName returns the first environment variable name that cannot be put in
-// an environment block, quoted, or "" when they are all usable.
-//
-// Not a security boundary — the author of this step can already run any script
-// on that machine, so there is no privilege here to protect. It is about the
-// failure being legible: a name containing '=' splits the assignment, and a
-// name with a newline in it corrupts everything after it, both of which surface
-// on the machine as something unrelated going wrong.
 func badEnvName(job core.Job) string {
 	for name := range mergeEnv(job) {
 		if name == "" {
@@ -545,7 +406,5 @@ func emit(job core.Job, progress chan<- core.Progress, msg string) {
 	select {
 	case progress <- core.Progress{JobID: job.ID, NodeID: job.NodeID, Message: msg}:
 	default:
-		// A full progress channel must not stall the step; the message is
-		// advisory and the result is what matters.
 	}
 }

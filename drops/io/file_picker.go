@@ -18,21 +18,15 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:       "file_picker",
-			Version:  "1.0",
-			Label:    "File",
-			Subtitle: "Pick file",
-			Color:    "#7a8cff",
-			Icon:     "file-input",
-			Category: "io",
-			Provider: "internal",
-			Tags:     []string{"filesystem", "picker", "input", "sandbox"},
-			// A "source" drop: it doesn't read the file's contents,
-			// it just publishes a stable reference so downstream
-			// readers (excel_read, file_read, sqlite_*) can open it
-			// through the sandbox. Useful as the front of a pipeline
-			// where the user picks an input file via the schema-form's
-			// workspace-path picker.
+			ID:          "file_picker",
+			Version:     "1.0",
+			Label:       "File",
+			Subtitle:    "Pick file",
+			Color:       "#7a8cff",
+			Icon:        "file-input",
+			Category:    "io",
+			Provider:    "internal",
+			Tags:        []string{"filesystem", "picker", "input", "sandbox"},
 			Description: "Pick a workspace file to start a flow with. The chosen file comes out on the File port for reader steps (Excel, CSV, …), and its path on the Path port. By default the file's bytes are NOT loaded into memory — set inline=true for handoff to remote modules that don't share the workspace.",
 			Summary:     "Pick a workspace file and hand it to the steps that follow.",
 			Examples: []core.ParamsExample{
@@ -86,7 +80,6 @@ func executeFilePicker(_ context.Context, job core.Job, _ chan<- core.Progress) 
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	// Resolves workspace-relative and scratch:// paths alike.
 	root, rel, err := openSandboxRoot(job, path)
 	if err != nil {
 		return params.Err(job, "no_sandbox", err.Error()), nil

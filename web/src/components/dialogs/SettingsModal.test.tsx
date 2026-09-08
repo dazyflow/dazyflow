@@ -60,8 +60,6 @@ describe("SettingsModal flow language", () => {
     expect(screen.getByLabelText("settings.general.language")).toHaveValue("sv");
   });
 
-  // Switching back to English clears the field rather than writing "en": empty
-  // IS English on the Go side, and a flow shouldn't grow a field to say so.
   it("clears the field when switched back to English", async () => {
     const onSave = open({ ...graph, language: "sv" });
     await generalTab();

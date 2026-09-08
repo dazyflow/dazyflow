@@ -33,34 +33,25 @@ const maxResponseBytes = 32 << 20
 
 const formsAPIBase = "https://forms.googleapis.com/v1"
 
-// --- OAuth token lookup (mirrors drops/sheets/helpers.go) -------------------
-
-// SetTokenLookup wires the shared Google OAuth token resolver (one provider
-// serves every Google connector — see drops/internal/google). Retained as a
-// package entry point for tests. cmd/dzd wires the "google" provider once.
 func SetTokenLookup(fn google.TokenLookup) { google.SetTokenLookup(fn) }
 
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
 	return google.ResolveToken(ctx, job)
 }
 
-// --- HTTP (SSRF-guarded, test seam) -----------------------------------------
+// HTTP (SSRF-guarded, test seam)
 
 var (
 	baseMu    sync.RWMutex
 	formsBase = formsAPIBase
 )
 
-// SetHTTPBase swaps the Forms API root (tests point it at an httptest server).
 func SetHTTPBase(base string) {
 	baseMu.Lock()
 	defer baseMu.Unlock()
 	formsBase = base
 }
 
-// base_url is no longer a user-facing param (removed from the schema) but is
-// still honored when present — the integration tests point it at an httptest
-// server. The egress guard in googleGet still bounds the dial.
 func formsBaseURL(job core.Job) string {
 	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
 		return b
@@ -76,13 +67,6 @@ func googleGet(ctx context.Context, url, token string, timeoutMS int) (int, []by
 
 func formsErr(body []byte) string { return google.ErrMessage(body, 512) }
 
-// --- form ID extraction -----------------------------------------------------
-
-// formIDRe pulls the ID out of an edit/responder URL
-// (…/forms/d/<id>/edit, …/forms/d/e/<id>/viewform). The "d/e/" responder
-// form has a different, longer ID than the API form ID, so editors should
-// paste the /forms/d/<id>/edit URL or the bare API ID; we extract the
-// segment after /d/ (skipping a leading "e/") best-effort.
 var formIDRe = regexp.MustCompile(`/forms/d/(?:e/)?([a-zA-Z0-9-_]+)`)
 
 func extractFormID(raw string) string {
@@ -92,8 +76,6 @@ func extractFormID(raw string) string {
 	}
 	return raw
 }
-
-// --- Forms API shapes + answer mapping --------------------------------------
 
 type formStructure struct {
 	Items []struct {
@@ -107,7 +89,6 @@ type formStructure struct {
 	} `json:"items"`
 }
 
-// titleMap returns questionId → title for every question item in the form.
 func (f formStructure) titleMap() map[string]string {
 	out := make(map[string]string, len(f.Items))
 	for _, it := range f.Items {
@@ -216,8 +197,6 @@ func nowRFC3339() string {
 	return time.Now().UTC().Format(time.RFC3339)
 }
 
-// --- form-structure (title) cache -------------------------------------------
-
 // titleCacheTTL bounds how stale a cached questionId→title map may be. A
 // form's questions change rarely, so a short window spares a forms.get per
 // trigger fire and per mapping-editor open while still reflecting edits
@@ -251,7 +230,6 @@ func storeTitles(formID string, titles map[string]string) {
 	titleCache[formID] = titleCacheEntry{titles: titles, expires: time.Now().Add(titleCacheTTL)}
 }
 
-// maxTime returns the later of two RFC3339 timestamps (string form preserved).
 func maxTime(a, b string) string {
 	if a == "" {
 		return b

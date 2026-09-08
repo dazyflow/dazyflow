@@ -10,13 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// conn_pgx.go adapts a pgxpool.Pool (the Postgres backend) to the conn
-// interface in dialect.go. pgx is a native driver, not database/sql:
-// values come back already Go-typed via rows.Values(), column names via
-// FieldDescriptions(), and a transaction's Rollback is a no-op once
-// Committed, so the deferred rollback covers every error path without an
-// explicit call.
-
 type pgxConn struct {
 	pool *pgxpool.Pool
 }
@@ -33,9 +26,6 @@ func (c pgxConn) query(ctx context.Context, query string, args []any, limit int)
 	}
 	defer rows.Close()
 
-	// Column names come from FieldDescriptions, captured once before we
-	// start iterating so we can map values back to names per row without
-	// re-fetching metadata.
 	fields := rows.FieldDescriptions()
 	columns := make([]string, len(fields))
 	for i, f := range fields {

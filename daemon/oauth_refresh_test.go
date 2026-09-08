@@ -10,8 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// refreshHarness wires an encrypted store + registry + fake provider,
-// the shared setup for the refresh-on-expiry tests.
 func refreshHarness(t *testing.T) (*OAuthRegistry, *fakeProvider) {
 	t.Helper()
 	es, err := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
@@ -41,9 +39,6 @@ func getToken(t *testing.T, reg *OAuthRegistry) *StoredOAuthToken {
 	return tok
 }
 
-// An expired access token with a refresh_token is transparently
-// refreshed: the caller gets a fresh access token, the provider is hit
-// with grant_type=refresh_token, and the new token is persisted.
 func TestOAuth_GetToken_RefreshesExpired(t *testing.T) {
 	t.Parallel()
 	reg, fp := refreshHarness(t)
@@ -54,8 +49,6 @@ func TestOAuth_GetToken_RefreshesExpired(t *testing.T) {
 		ExpiresAt:    &past,
 		ObtainedAt:   past,
 	})
-	// Google-style refresh response: a new access token, no new
-	// refresh_token (the old one stays valid).
 	fp.tokenBody = `{"access_token":"new-access","token_type":"Bearer","expires_in":3600}`
 	fp.lastFormBody = nil
 
@@ -73,8 +66,6 @@ func TestOAuth_GetToken_RefreshesExpired(t *testing.T) {
 		t.Errorf("sent refresh_token = %q", fp.lastFormBody.Get("refresh_token"))
 	}
 
-	// The refreshed token is persisted: a second read (now valid for an
-	// hour) returns it without another provider call.
 	fp.lastFormBody = nil
 	again := getToken(t, reg)
 	if again.AccessToken != "new-access" {
@@ -85,7 +76,6 @@ func TestOAuth_GetToken_RefreshesExpired(t *testing.T) {
 	}
 }
 
-// A token comfortably within its lifetime is returned untouched.
 func TestOAuth_GetToken_ValidNotRefreshed(t *testing.T) {
 	t.Parallel()
 	reg, fp := refreshHarness(t)
@@ -107,8 +97,6 @@ func TestOAuth_GetToken_ValidNotRefreshed(t *testing.T) {
 	}
 }
 
-// Expired but with no refresh_token: nothing to refresh, so the stored
-// (expired) token comes back as-is and the provider isn't called.
 func TestOAuth_GetToken_ExpiredNoRefreshToken(t *testing.T) {
 	t.Parallel()
 	reg, fp := refreshHarness(t)
@@ -129,8 +117,6 @@ func TestOAuth_GetToken_ExpiredNoRefreshToken(t *testing.T) {
 	}
 }
 
-// When the refresh call fails, GetOAuthToken falls back to the stored
-// token (best-effort) rather than hard-failing the lookup.
 func TestOAuth_GetToken_RefreshFailureFallsBackToStored(t *testing.T) {
 	t.Parallel()
 	reg, fp := refreshHarness(t)
@@ -150,11 +136,6 @@ func TestOAuth_GetToken_RefreshFailureFallsBackToStored(t *testing.T) {
 	}
 }
 
-// A refresh the provider definitively rejects means the GRANT is dead — the
-// user revoked access, changed their password, or it simply expired. That is
-// the only moment the daemon knows, and it is what lets the Apps page offer
-// "reconnect this account" instead of showing it as healthy while every run
-// comes back 401.
 func TestOAuth_DeadGrantIsRecordedForReconnect(t *testing.T) {
 	t.Parallel()
 	reg, fp := refreshHarness(t)
@@ -167,15 +148,12 @@ func TestOAuth_DeadGrantIsRecordedForReconnect(t *testing.T) {
 	})
 	ctx := core.WithTenant(t.Context(), "acme")
 
-	// Storing a token clears any previous marker, so we start clean.
 	if got := reg.ReconnectNeeded(ctx, "acme", "test", []string{"main"}); len(got) != 0 {
 		t.Fatalf("a freshly stored token should not need reconnecting: %v", got)
 	}
 
 	fp.tokenStatus = 400
 	fp.tokenBody = `{"error":"invalid_grant","error_description":"Token has been expired or revoked."}`
-	// The lookup still hands back the stored token — the API call is what
-	// surfaces the authoritative 401 — but the account is now flagged.
 	if _, err := reg.GetOAuthToken(ctx, "test", "main"); err != nil {
 		t.Fatalf("GetOAuthToken should degrade, not fail: %v", err)
 	}
@@ -183,12 +161,10 @@ func TestOAuth_DeadGrantIsRecordedForReconnect(t *testing.T) {
 	if len(dead) != 1 || dead[0] != "main" {
 		t.Fatalf("the dead account was not flagged: %v", dead)
 	}
-	// Another account of the same provider is unaffected.
 	if got := reg.ReconnectNeeded(ctx, "acme", "test", []string{"other"}); len(got) != 0 {
 		t.Errorf("an unrelated account was flagged: %v", got)
 	}
 
-	// Reconnecting is the fix: storing a working token forgets the flag.
 	fp.tokenStatus = 200
 	if _, err := reg.store(ctx, "acme", "test", "main", &StoredOAuthToken{
 		AccessToken: "fresh", RefreshToken: "good", ObtainedAt: time.Now().UTC(),
@@ -200,8 +176,6 @@ func TestOAuth_DeadGrantIsRecordedForReconnect(t *testing.T) {
 	}
 }
 
-// A refresh that WORKS clears a previous flag too — the account healed
-// itself (a transient provider outage, say) and shouldn't keep nagging.
 func TestOAuth_SuccessfulRefreshClearsTheFlag(t *testing.T) {
 	t.Parallel()
 	reg, fp := refreshHarness(t)
@@ -250,8 +224,6 @@ func TestOAuth_RefreshStaleAccounts_FindsDeadGrantWithoutARun(t *testing.T) {
 	}
 }
 
-// An account whose token is still valid costs nothing: no refresh call, and
-// nothing to report.
 func TestOAuth_RefreshStaleAccounts_LeavesHealthyTokensAlone(t *testing.T) {
 	t.Parallel()
 	reg, fp := refreshHarness(t)

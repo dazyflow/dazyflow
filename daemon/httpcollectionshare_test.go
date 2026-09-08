@@ -13,10 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// newCollectionShareGateway wires the gateway harness with a sandbox holding
-// the seeded `leads` collection and an in-memory link store, so the HTTP
-// surface reaches its real path instead of short-circuiting on a nil
-// dependency.
 func newCollectionShareGateway(t *testing.T) (*gatewayHarness, *memCollectionShareStore) {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -31,7 +27,6 @@ func newCollectionShareGateway(t *testing.T) (*gatewayHarness, *memCollectionSha
 	return h, shares
 }
 
-// anonGet hits a path with no Authorization header — the public surface.
 func anonGet(t *testing.T, h *gatewayHarness, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -44,7 +39,6 @@ func TestHTTPCollectionShare_MintCopyRevoke(t *testing.T) {
 	t.Parallel()
 	h, _ := newCollectionShareGateway(t)
 
-	// Nothing published yet.
 	if rw := h.do(t, http.MethodGet, "/api/v1/me/collection-shares/leads", nil); rw.Code != http.StatusNotFound {
 		t.Fatalf("GET before minting: status %d, body %s", rw.Code, rw.Body.String())
 	}
@@ -69,7 +63,6 @@ func TestHTTPCollectionShare_MintCopyRevoke(t *testing.T) {
 		t.Errorf("url = %q, want a /board/<token> page", link.URL)
 	}
 
-	// It now shows up in the listing the Collections page reads.
 	rw = h.do(t, http.MethodGet, "/api/v1/me/collection-shares", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("list: status %d", rw.Code)
@@ -84,7 +77,6 @@ func TestHTTPCollectionShare_MintCopyRevoke(t *testing.T) {
 		t.Fatalf("list = %+v", list.Shares)
 	}
 
-	// And revoking takes the link down.
 	if rw := h.do(t, http.MethodDelete, "/api/v1/me/collection-shares/leads", nil); rw.Code != http.StatusNoContent {
 		t.Fatalf("DELETE: status %d, body %s", rw.Code, rw.Body.String())
 	}
@@ -93,8 +85,6 @@ func TestHTTPCollectionShare_MintCopyRevoke(t *testing.T) {
 	}
 }
 
-// The public page takes no credential but the token, and its body is the
-// collection's own rows.
 func TestHTTPCollectionShare_PublicReadIsUnauthenticated(t *testing.T) {
 	t.Parallel()
 	h, shares := newCollectionShareGateway(t)
@@ -125,14 +115,11 @@ func TestHTTPCollectionShare_PublicReadIsUnauthenticated(t *testing.T) {
 		t.Errorf("Cache-Control = %q, must not allow shared caches",
 			rw.Header().Get("Cache-Control"))
 	}
-	// The row-delete handle stays inside the app.
 	if strings.Contains(rw.Body.String(), boardRowIDKey) {
 		t.Errorf("public body leaked %s: %s", boardRowIDKey, rw.Body.String())
 	}
 }
 
-// A wrong or rotated token is a flat 404 that says nothing about whether the
-// workspace or the collection exists.
 func TestHTTPCollectionShare_UnknownTokenIs404(t *testing.T) {
 	t.Parallel()
 	h, _ := newCollectionShareGateway(t)
@@ -172,7 +159,6 @@ func TestHTTPCollectionShare_NoStore(t *testing.T) {
 	if rw := anonGet(t, h, "/api/v1/public/collection/anything"); rw.Code != http.StatusNotFound {
 		t.Errorf("public GET: status %d, want 404", rw.Code)
 	}
-	// A listing still answers — "no links exist" is true and renderable.
 	if rw := h.do(t, http.MethodGet, "/api/v1/me/collection-shares", nil); rw.Code != http.StatusOK {
 		t.Errorf("list: status %d, want 200", rw.Code)
 	}

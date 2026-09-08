@@ -36,18 +36,6 @@ func SystemPrincipal(subject, tenant, workspace string) core.Principal {
 	}
 }
 
-// fanoutSeed implements the shared trigger fan-out the github, slack,
-// and stripe event handlers all need: walk every workspace under the
-// tenant, load each graph's published-or-head revision, skip disabled
-// flows, seed every node the match predicate selects, and submit a run
-// under a system principal. The per-handler logger is threaded through
-// so each event source keeps its own log prefix; subject names the
-// system principal; seedLabel is the human-readable trigger name used
-// in the "fired … (N <label> seed(s))" line.
-//
-// match decides which nodes in a graph receive the seed — github and
-// stripe match purely on module ID; slack additionally checks the
-// node's channel filter. Returning true seeds that node.
 func fanoutSeed(
 	ctx context.Context,
 	svc *Service,

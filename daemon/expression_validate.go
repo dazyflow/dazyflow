@@ -28,7 +28,6 @@ func (h *flowAPI) validateExpression(rw http.ResponseWriter, r *http.Request, _ 
 	}
 	issue, err := celexpr.Validate(body.Expr)
 	if err != nil {
-		// An env-construction failure is an internal problem, not a user typo.
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}

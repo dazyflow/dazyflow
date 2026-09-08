@@ -29,10 +29,6 @@ import {
   approvalContextView,
 } from "../../lib/approvalContext";
 
-// Approvals is the inbox for await_approval nodes parked across the
-// workspace. Polls on the `watched` tier so a freshly-pending node shows up
-// manual refresh. Approve / Reject buttons call POST /approvals/...
-// which Service.Approve services (same code path as the HMAC endpoint).
 export function Approvals() {
   const { t } = useTranslation();
   const { token, me, activeTenant, activeWorkspace } = useAuth();
@@ -45,9 +41,6 @@ export function Approvals() {
   const [acting, setActing] = useState<Record<string, "approve" | "reject">>(
     {},
   );
-  // Optional note attached to a decision, keyed by `${runID}/${nodeID}`.
-  // Sent with both approve and reject (matching the editor's inline panel),
-  // so an approver can leave a "why" without opening the flow.
   const [comments, setComments] = useState<Record<string, string>>({});
   // Resolve graph_id → flow name so the card names the automation the
   // approver is deciding on, not a raw slug like "order-alert-3f2a".
@@ -85,9 +78,6 @@ export function Approvals() {
   const refresh = useCallback(async () => {
     if (!token) return;
     try {
-      // Narrow to the workspace currently selected in the switcher so
-      // an admin's inbox tracks the rest of the UI. Empty string =
-      // tenant-wide view (returns everything the principal can see).
       const r = await api.listPendingApprovals(token, {
         workspace: activeWorkspace || undefined,
         tenant: activeTenant || undefined,
@@ -144,8 +134,6 @@ export function Approvals() {
     const key = `${item.run_id}/${item.node_id}`;
     setActing((s) => ({ ...s, [key]: decision }));
     try {
-      // Both approve and reject carry the inline note (if any) — same
-      // shape as the editor's await_approval panel.
       const comment = comments[key]?.trim() || undefined;
       await api.approveNode(
         token,
@@ -154,14 +142,10 @@ export function Approvals() {
         decision,
         comment,
       );
-      // The row doesn't vanish, it MOVES — reload both lists so the decision
-      // lands in the history in the same beat it leaves the inbox.
       await Promise.all([refresh(), refreshHistory()]);
     } catch (e) {
       const err = e as APIError | Error;
       if (err instanceof APIError && err.status === 409) {
-        // Someone else (or an earlier click) already resumed it; just
-        // refresh and move on — their decision is now part of the history.
         await Promise.all([refresh(), refreshHistory()]);
         return;
       }
@@ -338,8 +322,6 @@ export function Approvals() {
           {historyError && <ErrorNotice>{historyError}</ErrorNotice>}
           <div className="approval-history-list">
             {history.map((d) => {
-              // Three outcomes, not two: a cancelled run ends its pending
-              // approvals without anyone deciding them.
               const verdict = t(
                 d.decision === "approve"
                   ? "approvals.historyApproved"

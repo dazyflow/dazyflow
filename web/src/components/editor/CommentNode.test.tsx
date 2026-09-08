@@ -10,7 +10,6 @@ import type { NodeProps } from "@xyflow/react";
 // name is its colour name, so a missing key would leave six buttons that a
 // screen reader reads as nothing, and that is exactly what this asserts on.
 vi.mock("@xyflow/react", () => ({
-  // The resizer draws canvas-only drag handles; it needs a React Flow store.
   NodeResizer: () => null,
 }));
 
@@ -26,7 +25,6 @@ describe("CommentNode colour", () => {
     const group = screen.getByRole("group", { name: "Comment colour" });
     const swatches = [...group.querySelectorAll("button.dz-frame-swatch")];
     expect(swatches).toHaveLength(FRAME_COLORS.length);
-    // Every swatch carries its own name, and no two share one.
     const names = swatches.map((b) => b.getAttribute("aria-label") ?? "");
     expect(names.filter((n) => n.trim() !== "")).toHaveLength(FRAME_COLORS.length);
     expect(new Set(names).size).toBe(FRAME_COLORS.length);
@@ -64,8 +62,6 @@ describe("CommentNode colour", () => {
     document.removeEventListener("click", seenByCanvas);
 
     expect(onColorChange).toHaveBeenCalledWith(target.hex);
-    // A swatch click that bubbles also re-selects and can start dragging the
-    // frame under the pointer.
     expect(seenByCanvas).not.toHaveBeenCalled();
   });
 

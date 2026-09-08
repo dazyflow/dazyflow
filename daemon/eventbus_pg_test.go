@@ -15,8 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Gated on DAZYFLOW_TEST_DB (a real Postgres), like the jobstore/auth
-// integration tests.
 func pgBusPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
 	url := os.Getenv("DAZYFLOW_TEST_DB")
@@ -29,11 +27,6 @@ func pgBusPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 		cancel()
 		t.Fatalf("pgxpool.New: %v", err)
 	}
-	// Single cleanup so ordering is explicit: cancel ctx FIRST (so the
-	// listener goroutine drops its held connection), THEN close the
-	// pool. The reverse (two separate LIFO cleanups) deadlocks —
-	// pool.Close waits on the conn the listener won't release until ctx
-	// is done.
 	t.Cleanup(func() {
 		cancel()
 		pool.Close()
@@ -56,8 +49,6 @@ func recv(t *testing.T, ch <-chan BusEvent, within time.Duration) BusEvent {
 	}
 }
 
-// TestPgBus_CrossInstance is the core HA property: an event published on
-// one dzd reaches a subscriber on a *different* dzd.
 func TestPgBus_CrossInstance(t *testing.T) {
 	pool, ctx := pgBusPool(t)
 	busA, err := NewPgBus(ctx, pool) // "node A"
@@ -71,7 +62,6 @@ func TestPgBus_CrossInstance(t *testing.T) {
 
 	ch, cancel := busB.Subscribe("run-1")
 	defer cancel()
-	// Give B's listener a moment to establish LISTEN before A publishes.
 	time.Sleep(200 * time.Millisecond)
 
 	busA.Publish("run-1", BusEvent{
@@ -84,8 +74,6 @@ func TestPgBus_CrossInstance(t *testing.T) {
 	}
 }
 
-// TestPgBus_TerminalRoundTrip checks a full terminal event (with a
-// GraphResult) survives the JSON spool round-trip.
 func TestPgBus_TerminalRoundTrip(t *testing.T) {
 	pool, ctx := pgBusPool(t)
 	bus, err := NewPgBus(ctx, pool)
@@ -109,8 +97,6 @@ func TestPgBus_TerminalRoundTrip(t *testing.T) {
 	}
 }
 
-// TestPgBus_NoCrossTalk: a subscriber for one job doesn't receive
-// another job's events.
 func TestPgBus_NoCrossTalk(t *testing.T) {
 	pool, ctx := pgBusPool(t)
 	bus, err := NewPgBus(ctx, pool)
@@ -128,12 +114,9 @@ func TestPgBus_NoCrossTalk(t *testing.T) {
 	case ev := <-ch:
 		t.Errorf("received cross-job event: %+v", ev)
 	case <-time.After(500 * time.Millisecond):
-		// good — nothing for run-3
 	}
 }
 
-// TestPgBus_DeleteByTenant covers the erasure-cascade hook: spooled events for
-// a tenant's runs are removed via the jobs join, leaving other tenants' events.
 func TestPgBus_DeleteByTenant(t *testing.T) {
 	pool, ctx := pgBusPool(t)
 
@@ -150,7 +133,6 @@ func TestPgBus_DeleteByTenant(t *testing.T) {
 		t.Fatalf("NewPgBus: %v", err)
 	}
 
-	// Two jobs owned by different tenants.
 	for id, tenant := range map[string]string{"run-acme": "acme", "run-other": "elsewhere"} {
 		if err := js.Enqueue(ctx, core.JobRecord{
 			ID: id, Kind: core.JobKindGraph, Tenant: tenant, Workspace: "ws",
@@ -161,7 +143,6 @@ func TestPgBus_DeleteByTenant(t *testing.T) {
 		}
 	}
 
-	// Spool an event for each run.
 	bus.Publish("run-acme", BusEvent{NodeStatus: &NodeStatusEvent{NodeID: "n", Status: core.JobStatusRunning}})
 	bus.Publish("run-other", BusEvent{NodeStatus: &NodeStatusEvent{NodeID: "n", Status: core.JobStatusRunning}})
 
@@ -173,7 +154,6 @@ func TestPgBus_DeleteByTenant(t *testing.T) {
 		t.Fatalf("DeleteByTenant = %d, want 1", n)
 	}
 
-	// elsewhere's event survives.
 	var remaining int
 	if err := pool.QueryRow(ctx,
 		`SELECT count(*) FROM bus_events WHERE job_id = 'run-other'`).Scan(&remaining); err != nil {

@@ -28,7 +28,6 @@ export function AdminGitCredentials() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // New-credential form.
   const [account, setAccount] = useState("");
   const [privateKey, setPrivateKey] = useState("");
   const [passphrase, setPassphrase] = useState("");

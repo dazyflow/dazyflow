@@ -19,8 +19,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// --- createOrg validation branches ------------------------------------
-
 func TestCreateOrg_NotConfigured(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t) // no Memberships/Profiles
@@ -53,8 +51,6 @@ func TestCreateOrg_NameTooLong(t *testing.T) {
 	}
 }
 
-// --- getOrgAuthConfig / deleteOrgAuthConfig ---------------------------
-
 func TestGetOrgAuthConfig_NotConfigured(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t) // no OrgAuth
@@ -68,7 +64,6 @@ func TestGetOrgAuthConfig_Forbidden(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.OrgAuth = newMemOrgAuth()
-	// Default editor token lacks organization:admin.
 	rw := h.do(t, "GET", "/api/v1/admin/org/auth-config", nil)
 	if rw.Code != http.StatusForbidden {
 		t.Fatalf("non-admin OrgAuth = %d (%s), want 403", rw.Code, rw.Body.String())
@@ -144,8 +139,6 @@ func TestDeleteOrgAuthConfig_OK(t *testing.T) {
 	}
 }
 
-// TestCallerIsOrgOwner_Cov covers callerIsOrgOwner: the nil-store guard, a
-// matching home owner, and a non-owner.
 func TestCallerIsOrgOwner_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -172,14 +165,11 @@ func TestCallerIsOrgOwner_Cov(t *testing.T) {
 	}
 }
 
-// TestPeerAdminBlocked_Cov covers peerAdminBlocked's legs: non-admin target,
-// self-action, and a non-owner admin blocked from touching a peer admin.
 func TestPeerAdminBlocked_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 	users, _ := auth.OpenJSONUserStore("")
 	h.gw.Users = users
-	// Make "owner@acme.test" the home owner of acme.
 	_ = users.PutUser(context.Background(), auth.User{
 		Email: "owner@acme.test", Subject: "owner@acme.test", Tenant: "acme",
 	})
@@ -188,27 +178,21 @@ func TestPeerAdminBlocked_Cov(t *testing.T) {
 	memberRoles := []core.Role{core.TeamRoleEditor()}
 	caller := core.Principal{Subject: "coadmin@acme.test"}
 
-	// Target isn't an admin -> not blocked.
 	if h.gw.orgAPI().peerAdminBlocked(context.Background(), caller, "bob@acme.test", "acme", memberRoles) {
 		t.Fatal("editing a non-admin should not be blocked")
 	}
-	// Acting on yourself -> not blocked.
 	if h.gw.orgAPI().peerAdminBlocked(context.Background(), caller, "coadmin@acme.test", "acme", adminRoles) {
 		t.Fatal("acting on yourself should not be blocked")
 	}
-	// A non-owner admin touching a peer admin -> blocked.
 	if !h.gw.orgAPI().peerAdminBlocked(context.Background(), caller, "peer@acme.test", "acme", adminRoles) {
 		t.Fatal("non-owner admin touching a peer admin should be blocked")
 	}
-	// The org owner touching a peer admin -> allowed.
 	owner := core.Principal{Subject: "owner@acme.test"}
 	if h.gw.orgAPI().peerAdminBlocked(context.Background(), owner, "peer@acme.test", "acme", adminRoles) {
 		t.Fatal("org owner should be allowed to touch a peer admin")
 	}
 }
 
-// TestSeatQuotaExceeded_Cov covers seatQuotaExceeded: no-cap default, and an
-// at-capacity org under a free-tier seat limit.
 func TestSeatQuotaExceeded_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -218,7 +202,6 @@ func TestSeatQuotaExceeded_Cov(t *testing.T) {
 		t.Fatal("uncapped org should not exceed seats")
 	}
 
-	// Cap of 1, with 1 existing member -> exceeded.
 	h.svc.FreeMaxMembers = 1
 	mem := newFakeMembershipStore()
 	h.gw.Memberships = mem
@@ -232,9 +215,6 @@ func TestSeatQuotaExceeded_Cov(t *testing.T) {
 	}
 }
 
-// sessionDo runs a request authenticated by a session token (dzs_…),
-// which several org routes require (switch-org, accept-invitation reject
-// API keys). The harness's auth chain gets a SessionAuthenticator added.
 func sessionDo(t *testing.T, h *gatewayHarness, token, method, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	var rdr *bytes.Buffer
@@ -252,8 +232,6 @@ func sessionDo(t *testing.T, h *gatewayHarness, token, method, path string, body
 	return rw
 }
 
-// orgsSessionHarness wires Users + Sessions + Memberships and a session
-// authenticator, returning a signed-in session token for `user`.
 func orgsSessionHarness(t *testing.T, user auth.User) (*gatewayHarness, *fakeMembershipStore, *auth.MemSessionStore, string) {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -264,7 +242,6 @@ func orgsSessionHarness(t *testing.T, user auth.User) (*gatewayHarness, *fakeMem
 	h.gw.Users = users
 	h.gw.Sessions = sessions
 	h.gw.Memberships = mem
-	// Add session auth to the chain so dzs_ tokens authenticate.
 	h.svc.Auth = auth.Chain{
 		&auth.APIKeyAuthenticator{Store: h.ks},
 		&auth.SessionAuthenticator{Store: sessions},
@@ -283,15 +260,12 @@ func TestSwitchOrg_Cov(t *testing.T) {
 	ctx := context.Background()
 	_ = mem.PutMembership(ctx, auth.Membership{UserEmail: "alice@example.com", Tenant: "acme", Workspace: "ws2", Roles: []core.Role{core.TeamRoleViewer()}})
 
-	// Missing tenant -> 400.
 	if rw := sessionDo(t, h, tok, "POST", "/api/v1/auth/switch-org", map[string]any{}); rw.Code != http.StatusBadRequest {
 		t.Fatalf("no tenant = %d, want 400", rw.Code)
 	}
-	// Switch to current tenant (no-op OK).
 	if rw := sessionDo(t, h, tok, "POST", "/api/v1/auth/switch-org", map[string]any{"tenant": "home"}); rw.Code != http.StatusOK {
 		t.Fatalf("noop switch = %d: %s", rw.Code, rw.Body.String())
 	}
-	// Switch to a member org.
 	rw := sessionDo(t, h, tok, "POST", "/api/v1/auth/switch-org", map[string]any{"tenant": "acme"})
 	if rw.Code != http.StatusOK {
 		t.Fatalf("switch = %d: %s", rw.Code, rw.Body.String())
@@ -304,7 +278,6 @@ func TestSwitchOrg_Cov(t *testing.T) {
 	if resp.Tenant != "acme" || resp.Workspace != "ws2" {
 		t.Fatalf("switch resp = %+v", resp)
 	}
-	// Switch to a non-member org -> 403.
 	if rw := sessionDo(t, h, tok, "POST", "/api/v1/auth/switch-org", map[string]any{"tenant": "stranger"}); rw.Code != http.StatusForbidden {
 		t.Fatalf("non-member switch = %d, want 403", rw.Code)
 	}
@@ -312,7 +285,6 @@ func TestSwitchOrg_Cov(t *testing.T) {
 
 func TestSwitchOrg_APIKeyRejected(t *testing.T) {
 	t.Parallel()
-	// An API-key principal has no User record -> can't switch.
 	h := newGatewayHarness(t)
 	users, _ := auth.OpenJSONUserStore("")
 	h.gw.Users = users
@@ -331,11 +303,9 @@ func TestListMembers_Cov(t *testing.T) {
 	h.gw.Memberships = mem
 	h.gw.Users = users
 	ctx := context.Background()
-	// Home owner of tenant "t".
 	_ = users.PutUser(ctx, auth.User{Email: "owner@example.com", Subject: "owner@example.com", Tenant: "t", Workspace: "ws", Roles: []core.Role{core.TeamRoleAdmin()}})
 	_ = mem.PutMembership(ctx, auth.Membership{UserEmail: "member@example.com", Tenant: "t", Workspace: "ws", Roles: []core.Role{core.TeamRoleEditor()}})
 
-	// Non-admin (editor token) -> 403.
 	if rw := h.do(t, "GET", "/api/v1/admin/members", nil); rw.Code != http.StatusForbidden {
 		t.Fatalf("editor list members = %d, want 403", rw.Code)
 	}
@@ -355,7 +325,6 @@ func TestListMembers_Cov(t *testing.T) {
 		t.Fatalf("members = %+v, want 2 (owner + member)", lr.Members)
 	}
 
-	// Listing another tenant without platform admin -> 403.
 	if rw := teamAdminDo(t, h, "GET", "/api/v1/admin/members?tenant=other", nil); rw.Code != http.StatusForbidden {
 		t.Fatalf("cross-tenant list = %d, want 403", rw.Code)
 	}
@@ -379,7 +348,6 @@ func TestInvitationFlow_Cov(t *testing.T) {
 	}
 	_ = invites.PutInvitation(ctx, pending)
 
-	// viewInvitation (unauthenticated) shows org display name.
 	rw := rawDo(t, h, "GET", "/api/v1/invitations/inv_good", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("view = %d: %s", rw.Code, rw.Body.String())
@@ -392,12 +360,10 @@ func TestInvitationFlow_Cov(t *testing.T) {
 	if vr.TenantDisplay != "Acme Inc" || !vr.Pending {
 		t.Fatalf("view resp = %+v", vr)
 	}
-	// Unknown token -> 404.
 	if rw := rawDo(t, h, "GET", "/api/v1/invitations/nope", nil); rw.Code != http.StatusNotFound {
 		t.Fatalf("view unknown = %d, want 404", rw.Code)
 	}
 
-	// Accept it (session-authed, matching email).
 	rw = sessionDo(t, h, tok, "POST", "/api/v1/invitations/inv_good/accept", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("accept = %d: %s", rw.Code, rw.Body.String())
@@ -405,12 +371,10 @@ func TestInvitationFlow_Cov(t *testing.T) {
 	if m, err := mem.GetMembership(ctx, "invitee@example.com", "acme"); err != nil || m.Workspace != "ws" {
 		t.Fatalf("membership after accept = %+v / %v", m, err)
 	}
-	// Re-accepting a used invite -> 410 Gone.
 	if rw := sessionDo(t, h, tok, "POST", "/api/v1/invitations/inv_good/accept", nil); rw.Code != http.StatusGone {
 		t.Fatalf("re-accept = %d, want 410", rw.Code)
 	}
 
-	// Wrong-email invite -> 403.
 	_ = invites.PutInvitation(ctx, auth.Invitation{
 		Token: "inv_other", Email: "someoneelse@example.com", Tenant: "acme",
 		Workspace: "ws", ExpiresAt: time.Now().Add(time.Hour),
@@ -430,31 +394,26 @@ func TestRevokeInvitation_Cov(t *testing.T) {
 		Token: "inv_rev", Email: "x@example.com", Tenant: "t",
 		ExpiresAt: time.Now().Add(time.Hour),
 	})
-	// Foreign-tenant invitation -> 403.
 	_ = invites.PutInvitation(ctx, auth.Invitation{
 		Token: "inv_foreign", Email: "y@example.com", Tenant: "other",
 		ExpiresAt: time.Now().Add(time.Hour),
 	})
 
-	// Non-admin -> 403.
 	if rw := h.do(t, "DELETE", "/api/v1/admin/invitations/inv_rev", nil); rw.Code != http.StatusForbidden {
 		t.Fatalf("editor revoke = %d, want 403", rw.Code)
 	}
-	// Admin revokes own-tenant invite.
 	if rw := teamAdminDo(t, h, "DELETE", "/api/v1/admin/invitations/inv_rev", nil); rw.Code != http.StatusNoContent {
 		t.Fatalf("revoke = %d: %s", rw.Code, rw.Body.String())
 	}
-	// Unknown token -> 404.
 	if rw := teamAdminDo(t, h, "DELETE", "/api/v1/admin/invitations/ghost", nil); rw.Code != http.StatusNotFound {
 		t.Fatalf("revoke ghost = %d, want 404", rw.Code)
 	}
-	// Foreign tenant -> 403.
 	if rw := teamAdminDo(t, h, "DELETE", "/api/v1/admin/invitations/inv_foreign", nil); rw.Code != http.StatusForbidden {
 		t.Fatalf("revoke foreign = %d, want 403", rw.Code)
 	}
 }
 
-// TestSeatQuota_CountsTheOwner — the seat gate must count the organization
+// The seat gate must count the organization
 // owner, who holds no membership row.
 //
 // Ownership is implicit in the home tenant: `memberships` carries a row for
@@ -476,7 +435,6 @@ func TestSeatQuota_CountsTheOwner(t *testing.T) {
 	}
 	h.gw.Invitations = invites
 
-	// adminDo authenticates as an organization:admin bound to tenant "t".
 	const tenant = "t"
 
 	users, _ := auth.OpenJSONUserStore("")
@@ -495,13 +453,11 @@ func TestSeatQuota_CountsTheOwner(t *testing.T) {
 	})
 	h.svc.Entitlements = ents
 
-	// Owner alone: one seat of three used, so inviting is fine.
 	if rw := h.adminDo(t, "POST", "/api/v1/admin/invitations",
 		map[string]any{"email": "first@example.com"}); rw.Code != http.StatusCreated {
 		t.Fatalf("invite with 1/3 seats used = %d: %s", rw.Code, rw.Body.String())
 	}
 
-	// Two invited members joined. That is owner + 2 = 3 people = the cap.
 	for _, email := range []string{"first@example.com", "second@example.com"} {
 		if err := mem.PutMembership(t.Context(), auth.Membership{
 			UserEmail: email, Tenant: tenant, Workspace: "main",
@@ -522,9 +478,6 @@ func TestSeatQuota_CountsTheOwner(t *testing.T) {
 	}
 }
 
-// TestSeatQuota_NoOwnerRowStillCounts — a tenant with no home user (an org
-// created by an operator, say) falls back to counting rows alone rather than
-// erroring, so seats still cap and nobody is locked out.
 func TestSeatQuota_NoOwnerRowStillCounts(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -555,8 +508,6 @@ func TestSeatQuota_NoOwnerRowStillCounts(t *testing.T) {
 	}
 }
 
-// seatHarness stands up a gateway with a home owner, an entitlement limit, and
-// an invitation store — the shape every seat-counting test needs.
 func seatHarness(t *testing.T, limit int) (*gatewayHarness, *fakeMembershipStore, auth.InvitationStore) {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -586,30 +537,19 @@ func seatHarness(t *testing.T, limit int) (*gatewayHarness, *fakeMembershipStore
 	return h, mem, invites
 }
 
-// TestSeatQuota_PendingInvitationsHoldASeat — an outstanding invitation counts
-// against the cap, so an admin can't hand out more promises than the plan can
-// honour.
-//
-// Counting only the seated let every invitation pass on its own, because none
-// of them had been accepted yet. Three invitations went out on a 3-seat plan
-// that already had two people, and the refusal surfaced on whichever invitee
-// clicked second — as "ask an admin to upgrade". The admin saw nothing wrong.
 func TestSeatQuota_PendingInvitationsHoldASeat(t *testing.T) {
 	t.Parallel()
 	h, mem, _ := seatHarness(t, 3)
 
-	// Owner + one member = 2 of 3 seats used.
 	_ = mem.PutMembership(t.Context(), auth.Membership{
 		UserEmail: "first@example.com", Tenant: "t", Workspace: "main",
 		Roles: []core.Role{core.TeamRoleViewer()},
 	})
 
-	// The third seat is available, so one invitation is fine.
 	if rw := h.adminDo(t, "POST", "/api/v1/admin/invitations",
 		map[string]any{"email": "second@example.com"}); rw.Code != http.StatusCreated {
 		t.Fatalf("invite for the last free seat = %d: %s", rw.Code, rw.Body.String())
 	}
-	// That invitation now holds the last seat: the next one has nowhere to go.
 	rw := h.adminDo(t, "POST", "/api/v1/admin/invitations",
 		map[string]any{"email": "third@example.com"})
 	if rw.Code != http.StatusPaymentRequired {
@@ -620,8 +560,8 @@ func TestSeatQuota_PendingInvitationsHoldASeat(t *testing.T) {
 	}
 }
 
-// TestSeatQuota_ReInviteDoesNotCountTwice — re-sending an invitation to someone
-// who already has one outstanding must not run them against their own seat.
+// Re-sending an invitation to someone who already has one outstanding must not
+// run them against their own seat.
 func TestSeatQuota_ReInviteDoesNotCountTwice(t *testing.T) {
 	t.Parallel()
 	h, mem, _ := seatHarness(t, 3)
@@ -637,9 +577,6 @@ func TestSeatQuota_ReInviteDoesNotCountTwice(t *testing.T) {
 	}
 }
 
-// TestSeatQuota_SpentInvitationsFreeTheirSeat — revoked, expired and accepted
-// invitations stop holding a seat. Only one that can still be walked through
-// the door counts.
 func TestSeatQuota_SpentInvitationsFreeTheirSeat(t *testing.T) {
 	t.Parallel()
 	h, mem, invites := seatHarness(t, 3)
@@ -661,14 +598,13 @@ func TestSeatQuota_SpentInvitationsFreeTheirSeat(t *testing.T) {
 			t.Fatalf("seed %s: %v", inv.Token, err)
 		}
 	}
-	// None of those three hold the last seat, so a real invitation still fits.
 	if rw := h.adminDo(t, "POST", "/api/v1/admin/invitations",
 		map[string]any{"email": "live@example.com"}); rw.Code != http.StatusCreated {
 		t.Fatalf("spent invitations should not hold seats, got %d: %s", rw.Code, rw.Body.String())
 	}
 }
 
-// TestSeatQuota_AcceptIgnoresOtherPendingInvitations — accept-time counts real
+// Accept-time counts real
 // occupancy, not promises.
 //
 // The two gates deliberately count differently. If accepting also counted
@@ -689,8 +625,6 @@ func TestSeatQuota_AcceptIgnoresOtherPendingInvitations(t *testing.T) {
 	h.svc.Entitlements = ents
 
 	future := time.Now().UTC().Add(time.Hour)
-	// One seat is genuinely taken; the other is spoken for by an invitation
-	// that nobody has opened.
 	_ = mem.PutMembership(t.Context(), auth.Membership{
 		UserEmail: "seated@example.com", Tenant: "acme", Workspace: "main",
 		Roles: []core.Role{core.TeamRoleViewer()},
@@ -710,7 +644,7 @@ func TestSeatQuota_AcceptIgnoresOtherPendingInvitations(t *testing.T) {
 	}
 }
 
-// TestSeatMembership_ConcurrentAcceptsCannotOverfill — the last free seat goes
+// The last free seat goes
 // to exactly one of the people racing for it.
 //
 // The gate used to count seats and then insert as two separate steps, so
@@ -771,16 +705,15 @@ func TestSeatMembership_ConcurrentAcceptsCannotOverfill(t *testing.T) {
 		if err != nil {
 			t.Fatalf("list: %v", err)
 		}
-		// Owner (no row) + 2 rows = the 3 the plan allows.
 		if len(rows) != 2 {
 			t.Fatalf("round %d: membership rows = %d, want 2 (owner holds the third seat without one)", round, len(rows))
 		}
 	}
 }
 
-// TestSeatMembership_UpdatingAnExistingMemberIsNeverRefused — a role change on
-// someone already seated must go through even when the org is full. They
-// occupy a seat already; refusing would make a full org unable to fix a role.
+// A role change on someone already seated must go through even when the org is
+// full. They occupy a seat already; refusing would make a full org unable to
+// fix a role.
 func TestSeatMembership_UpdatingAnExistingMemberIsNeverRefused(t *testing.T) {
 	t.Parallel()
 	h, mem, _ := seatHarness(t, 2) // owner + 1 row = full
@@ -802,7 +735,6 @@ func TestSeatMembership_UpdatingAnExistingMemberIsNeverRefused(t *testing.T) {
 	if len(m.Roles) == 0 || m.Roles[0].Name != core.TeamRoleAdmin().Name {
 		t.Errorf("roles = %+v, want the update applied", m.Roles)
 	}
-	// And a genuinely new person is still refused.
 	if ok, _, _ := h.gw.seats().seatMembership(t.Context(), auth.Membership{
 		UserEmail: "newcomer@example.com", Tenant: "t", Workspace: "main",
 	}); ok {

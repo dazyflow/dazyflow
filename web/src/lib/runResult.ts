@@ -4,14 +4,7 @@
 import type { Edge, JobRecord, JobStatus, Ref } from "../types";
 import { columnsOfRows } from "./rowColumns";
 
-// What a person means by "the result" of a run is the output of the steps at
-// the end of the flow — not the intermediate plumbing. Both the editor (after
-// pressing Run) and the run-detail page answer that question, and they have
-// to answer it the same way, so the picking and the formatting live here.
 
-// RUN_PREVIEW_MAX caps an inline result so a step that emitted a thousand
-// rows still leaves the banner a banner. Full values stay available in the
-// run timeline's per-port disclosure.
 export const RUN_PREVIEW_MAX = 600;
 
 // previewOutput renders a step's output ports as one short human-readable
@@ -107,9 +100,6 @@ export function resultView(output: Record<string, Ref> | undefined): ResultView 
   return { kind: "none" };
 }
 
-// safeJSON pretty-prints a value, falling back to String for the cyclic /
-// unserializable cases so the panel shows something rather than throwing
-// inside a render.
 function safeJSON(v: unknown): string {
   try {
     return JSON.stringify(v, null, 2);
@@ -118,19 +108,10 @@ function safeJSON(v: unknown): string {
   }
 }
 
-// RESULT_ROW_LIMIT caps the rows the panel renders. A step that emitted ten
-// thousand rows should still leave the page scrollable and the timeline
-// reachable; the CSV download carries every row it was given.
 export const RESULT_ROW_LIMIT = 200;
 
-// RESULT_TEXT_MAX is where the panel folds a long text result behind a
-// "show everything" toggle. Far larger than RUN_PREVIEW_MAX (a one-line
-// banner) because this is the surface a reader came to read.
 export const RESULT_TEXT_MAX = 4000;
 
-// resultFilename names the file a result downloads as. Extension follows the
-// shape, not the MIME: rows always leave as CSV (the point is a spreadsheet),
-// and text leaves as .json only when it really is JSON.
 export function resultFilename(view: ResultView, flow: string): string {
   const stem = (flow || "result").replace(/[^\w.-]+/g, "-").replace(/^-|-$/g, "") || "result";
   if (view.kind === "rows") return `${stem}.csv`;
@@ -170,7 +151,6 @@ export function pickResultNode(
   const withValue = (n: JobRecord) => previewOutput(n.Result?.output) !== "";
   const endValue = [...terminal].reverse().find(withValue);
   if (endValue) return endValue;
-  // No value at the end. Is that because the end wrote a file?
   const endWroteFile = terminal.some((n) =>
     Object.values(n.Result?.output ?? {}).some((r) => !!r?.ref),
   );

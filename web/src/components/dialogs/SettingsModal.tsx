@@ -17,19 +17,10 @@ import { FlowIcon, ICON } from "../../icons";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { useEscapeToClose } from "../ui/useEscapeToClose";
 
-// SettingsModal hosts graph-level configuration that doesn't fit in
-// the per-node Inspector. Triggers ("how this flow starts") have their
-// own toolbar button + modal (see TriggersModal); what remains here is
-// Notifications (failure alerts) and General (name, icon, visibility,
-// timeout). Future tabs (retention, tagging, …) can slot in alongside.
 type Props = {
   graph: Graph;
   onClose: () => void;
   onSave: (next: Graph) => void | Promise<void>;
-  // onDelete permanently removes the flow, given the re-entered account
-  // password (the daemon re-verifies it). The parent owns the API call and
-  // the navigation away from the now-gone editor; this modal only drives the
-  // confirm UI. Omit to hide the delete control entirely.
   onDelete?: (password: string) => Promise<void>;
 };
 
@@ -40,24 +31,14 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
   const { hasPerm } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("notifications");
-  // Local working copy: edits only commit to the parent on Save.
-  // Cancel discards by simply not calling onSave.
   const [draft, setDraft] = useState<Graph>(graph);
-  // Delete flow: the password-gated confirm (DeleteFlowModal) handles its
-  // own in-flight/error state; we just track whether it's open.
   const [confirmDelete, setConfirmDelete] = useState(false);
-  // Deletion mutates the workspace, so it follows the same permission as
-  // every other write here (graph:edit) — matching the daemon's gate.
   const canDelete = !!onDelete && hasPerm("graph:edit");
 
-  // Sync the draft if the parent graph changes while the modal is open
-  // (e.g. a programmatic reload). In practice this rarely fires.
   useEffect(() => {
     setDraft(graph);
   }, [graph.id]);
 
-  // ESC closes; click on the backdrop closes; clicks inside the dialog
-  // don't bubble.
   useEscapeToClose(onClose);
 
   return (
@@ -432,7 +413,6 @@ function FlowSecretsTab({ graph }: { graph: Graph }) {
       })
       .catch((e) => {
         const status = e instanceof APIError ? e.status : 0;
-        // 501 not configured / 401-403 not permitted → hide the manager.
         if (status === 501 || status === 401 || status === 403) {
           setOff(true);
         } else {

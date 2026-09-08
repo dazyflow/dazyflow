@@ -12,8 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// plainPairRequest is a request that asks for no compression, so the
-// writer emits the bytes directly and they can be compared as-is.
 func plainPairRequest() *http.Request {
 	return httptest.NewRequest("GET", "/api/v1/drops", nil)
 }

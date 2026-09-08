@@ -91,9 +91,6 @@ func main() {
 		srv.Register(t)
 	}
 
-	// Honor INT/TERM so the LLM client can shut us down cleanly. EOF
-	// on stdin (the client closed the pipe) is the normal exit path
-	// and Serve handles that on its own.
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 

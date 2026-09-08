@@ -8,39 +8,24 @@ import (
 	"strings"
 )
 
-// dialects.go holds the three concrete SQL flavors. Each is a tiny value
-// (the per-backend differences are quoting, placeholders, and the upsert
-// tail) consumed by the generic execute* skeleton in dialect.go.
-
-// --- SQLite -----------------------------------------------------------
-
 type sqliteDialect struct{}
 
 func (sqliteDialect) quote(ident string) string { return quoteIdent(ident) }
 func (sqliteDialect) placeholder(int) string    { return "?" }
 
-// upsertClause for SQLite: INSERT ... ON CONFLICT (k) DO UPDATE SET
-// col = excluded.col, or DO NOTHING when no update columns. Lowercase
-// `excluded` matches SQLite's convention (Postgres uses upper).
 func (d sqliteDialect) upsertClause(conflictCols, updateCols []string) string {
 	return onConflictClause(d, conflictCols, updateCols, "excluded")
 }
-
-// --- Postgres ---------------------------------------------------------
 
 type postgresDialect struct{}
 
 func (postgresDialect) quote(ident string) string { return quoteIdent(ident) }
 func (postgresDialect) placeholder(i int) string  { return fmt.Sprintf("$%d", i) }
 
-// upsertClause for Postgres: identical structure to SQLite but with the
-// uppercase EXCLUDED pseudo-table.
 func (d postgresDialect) upsertClause(conflictCols, updateCols []string) string {
 	return onConflictClause(d, conflictCols, updateCols, "EXCLUDED")
 }
 
-// onConflictClause renders the ON CONFLICT (...) tail shared by SQLite
-// and Postgres, differing only in the excluded-table spelling.
 func onConflictClause(d dialect, conflictCols, updateCols []string, excluded string) string {
 	conflictList := strings.Join(quoteAll(d, conflictCols), ", ")
 	if len(updateCols) == 0 {
@@ -53,8 +38,6 @@ func onConflictClause(d dialect, conflictCols, updateCols []string, excluded str
 	}
 	return fmt.Sprintf("ON CONFLICT (%s) DO UPDATE SET %s", conflictList, strings.Join(assignments, ", "))
 }
-
-// --- MySQL ------------------------------------------------------------
 
 type mysqlDialect struct{}
 

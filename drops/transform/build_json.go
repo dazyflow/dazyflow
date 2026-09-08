@@ -48,9 +48,6 @@ func init() {
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				// Text, not application/json: the point of this step is a
-				// STRING to put in a body or a file. A port that already
-				// carries structured JSON needs no serialising.
 				{Port: "out", Label: "JSON", MIME: []string{"text/plain", "application/json"}},
 			},
 			ParamsSchema: json.RawMessage(`{
@@ -86,10 +83,6 @@ func executeBuildJSON(_ context.Context, job core.Job, _ chan<- core.Progress) (
 
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
-	// HTML escaping off: Go's encoder turns < > & into < and friends by
-	// default, which is right for embedding in a page and wrong for an API
-	// body — a URL or a "Smith & Sons" arrives mangled to anything reading
-	// the raw text.
 	enc.SetEscapeHTML(false)
 	if params.BoolDefault(job.Params, "indent", false) {
 		enc.SetIndent("", "  ")
@@ -97,7 +90,6 @@ func executeBuildJSON(_ context.Context, job core.Job, _ chan<- core.Progress) (
 	if err := enc.Encode(payload); err != nil {
 		return params.Err(job, "bad_input", "those rows can't be written as JSON: "+err.Error()), nil
 	}
-	// Encode appends a newline; a body is cleaner without it.
 	out := bytes.TrimRight(buf.Bytes(), "\n")
 
 	return core.Result{
@@ -127,9 +119,6 @@ func chosenColumns(job core.Job, headers []string) ([]string, core.Result, bool)
 	return cols, core.Result{}, true
 }
 
-// projectRows narrows and orders each row to cols. An empty cols means "every
-// field, as it came" — the rows pass through untouched, which keeps a nested
-// value nested rather than flattening it.
 func projectRows(rows []map[string]any, cols []string) []map[string]any {
 	if len(cols) == 0 {
 		if rows == nil {

@@ -25,9 +25,6 @@ import (
 // in it can't fill the run's scratch area.
 const MaxBytes = 32 << 20 // 32 MiB
 
-// KeepExtensions parses the "only these types" setting into a lowercase
-// extension set. An empty setting means "keep everything", expressed as a nil
-// map so Keep can tell it apart from "keep nothing".
 func KeepExtensions(s string) map[string]bool {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -45,7 +42,6 @@ func KeepExtensions(s string) map[string]bool {
 	return out
 }
 
-// Keep reports whether a file passes the extension filter.
 func Keep(name string, wanted map[string]bool) bool {
 	if len(wanted) == 0 {
 		return true
@@ -53,10 +49,6 @@ func Keep(name string, wanted map[string]bool) bool {
 	return wanted[strings.ToLower(strings.TrimPrefix(path.Ext(name), "."))]
 }
 
-// Dest names the saved file. The message id prefixes the name so two emails
-// whose invoice is called "invoice.pdf" don't overwrite each other, and the
-// index disambiguates within one message. An empty folder puts the file in the
-// run's scratch area, which is reclaimed when the run ends.
 func Dest(folder, msgID string, idx int, filename string) string {
 	safe := SanitizeFilename(filename)
 	name := fmt.Sprintf("%s-%d-%s", SanitizeFilename(msgID), idx+1, safe)

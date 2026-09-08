@@ -115,8 +115,6 @@ func TestResource_FetchErrorIsTaggedResource(t *testing.T) {
 }
 
 func TestResource_NoProviderLeavesRefUntouched(t *testing.T) {
-	// With no resource provider configured, a ${resource.…} string is an
-	// unknown scheme — left as-is, not an error.
 	job := &core.Job{Params: map[string]any{"rows": "${resource.leads.rows}"}}
 	if _, err := resolveTemplatesCollecting(context.Background(), nil, nil, core.Graph{}, nil, job); err != nil {
 		t.Fatalf("resolve: %v", err)

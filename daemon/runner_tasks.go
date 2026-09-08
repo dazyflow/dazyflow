@@ -17,28 +17,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// How work reaches a runner.
-//
-// The runner has no address, so nothing can be pushed to it. Instead a step
-// enqueues a task, the agent's next poll claims it, and the step waits for the
-// result. That inverts the usual direction and buys the whole "one line to
-// install" property: a machine behind NAT can do this, and a machine that
-// needs an inbound port cannot.
-//
-// The lease is the same idea the job queue already uses, with one deliberate
-// difference. A claim holds a task for a bounded time; if the agent dies
-// mid-task the lease lapses. The daemon's own workers then RETRY the job. A
-// runner task is instead FAILED, and never handed out twice.
-//
-// The reason is that the daemon cannot know what the script did before the
-// machine went down. `run_on_runner` declares itself non-idempotent because a
-// script is arbitrary: it may have sent the invoices, charged the card, or
-// appended to a ledger. Re-running it is not a retry, it is a second
-// side effect — and a script that crashes its own machine would loop forever.
-// Failing once, loudly, is the only answer the daemon can give honestly; the
-// author is the only one who knows whether re-running is safe.
+// How work reaches a runner: the daemon queues a task, an agent inside the org's
+// network claims it, and the waiting step polls for the outcome. The daemon never
+// dials the agent, which is the whole point — the agent is behind NAT.
 
-// RunnerTaskState is where a task is in its life.
 type RunnerTaskState string
 
 const (
@@ -48,41 +30,23 @@ const (
 	TaskFailed  RunnerTaskState = "failed"
 )
 
-// ErrTaskNotClaimable is returned when a result or progress arrives for a task
-// the caller does not hold — a lapsed lease, or another agent's task.
 var ErrTaskNotClaimable = errors.New("task is not held by this runner")
 
-// RunnerTask is one unit of work for a runner.
 type RunnerTask struct {
 	ID     string
 	Tenant string
-	// Tags is what the step asked for: a machine carrying ALL of them. A
-	// machine's own name is one of its tags, so a step pinned to one machine is
-	// simply a task whose tags are that name.
-	Tags []string
+	Tags   []string
 
-	Script string
-	// Shell names the interpreter the agent starts the script with — the
-	// step's "Run it with" choice, one of drops/runner.Shells. Empty means the
-	// machine's own shell, which is what every task queued before the choice
-	// existed carries, and what the agent does with a value it does not know.
+	Script  string
 	Shell   string
 	Env     map[string]string
 	Timeout time.Duration
-	// Stdin is the value wired into the step, handed to the script on standard
-	// input. A value, never a path: the runner is on another machine and a path
-	// on the daemon's disk means nothing there.
-	Stdin string
+	Stdin   string
 
-	// sealedEnv carries the env column when it was stored sealed, between the
-	// row scan and the decrypt pass. Never set on a task the caller sees.
 	sealedEnv string
 
-	State     RunnerTaskState
-	ClaimedBy string
-	// Progress is the last line the agent reported while the script ran. The
-	// waiting step polls the row, so this is the only way a message from
-	// another daemon's agent reaches it.
+	State      RunnerTaskState
+	ClaimedBy  string
 	Progress   string
 	LeaseUntil time.Time
 	Result     *RunnerTaskResult
@@ -90,53 +54,26 @@ type RunnerTask struct {
 	FinishedAt time.Time
 }
 
-// RunnerTaskResult is what the agent reports back.
 type RunnerTaskResult struct {
 	ExitCode int    `json:"exit_code"`
 	Stdout   string `json:"stdout,omitempty"`
 	Stderr   string `json:"stderr,omitempty"`
-	// Error is set when the agent could not run the script at all — a command
-	// not on its allow-list, a binary that does not exist, a timeout. Distinct
-	// from a non-zero exit, which means the script ran and failed.
-	Error string `json:"error,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
-// TaskLease is how long a claim holds a task before it lapses. Generous,
-// because a script may legitimately run for minutes without saying anything;
-// the agent extends it by reporting progress.
+// Generous: a lapsed claim strands work an agent may still be running.
 const TaskLease = 2 * time.Minute
 
-// RunnerPickupGrace is how long a task may sit unclaimed while no eligible
-// runner is online before the step gives up.
-//
-// There is a grace period at all because a runner restarting is normal and
-// brief. It is short because the online window is already generous: a runner
-// that has not been seen for RunnerOnlineWindow is genuinely not there, and a
-// step that hangs instead of saying so is the worst outcome — the run looks
-// alive and the author has no idea their machine is down.
+// Unclaimed with no eligible runner online: the step fails rather than hanging.
 const RunnerPickupGrace = 30 * time.Second
 
-// RunnerDispatchGrace is the slack added to a task's own timeout to get the
-// ceiling on the whole dispatch.
-//
-// The agent enforces the timeout on the script and reports back, which produces
-// a far better message than a deadline here ever could. So this ceiling is
-// deliberately the LOSER of that race: it exists only for the case where the
-// agent never answers at all, and wants to fire after the agent would have.
+// Slack above the task's own timeout, so the runner's deadline expires first and
+// the more useful message wins.
 const RunnerDispatchGrace = 30 * time.Second
 
 const (
-	// runnerPollTightFor is how long the waiting step polls at its base rate
-	// before loosening. Long enough that anything a person would call quick
-	// still feels immediate.
-	runnerPollTightFor = 30 * time.Second
-	// runnerPollSlow is the rate after that. A script running for minutes does
-	// not become more urgent at minute nine.
-	runnerPollSlow = 2 * time.Second
-	// runnerOnlineCheckEvery bounds how often the "is any runner online?"
-	// listing runs while a task sits queued. The answer changes on the scale of
-	// the heartbeat, not the poll, so re-asking every tick was a second query
-	// per waiting step per half-second for no new information.
+	runnerPollTightFor     = 30 * time.Second
+	runnerPollSlow         = 2 * time.Second
 	runnerOnlineCheckEvery = 5 * time.Second
 )
 
@@ -173,94 +110,29 @@ CREATE INDEX IF NOT EXISTS runner_tasks_prune_idx
     WHERE state IN ('done', 'failed');
 `
 
-// EnsurePgRunnerTaskSchema creates the task table.
 func EnsurePgRunnerTaskSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return pgstore.ApplySchema(ctx, pool, pgRunnerTaskSchema)
 }
 
-// RunnerTaskStore is the task queue.
 type RunnerTaskStore interface {
 	Enqueue(ctx context.Context, t RunnerTask) error
-	// Claim hands the oldest task this runner is eligible for to the agent,
-	// or returns ErrNoTask when there is nothing to do.
 	Claim(ctx context.Context, r Runner, now time.Time, lease time.Duration) (RunnerTask, error)
-	// Extend pushes a held task's lease out, so a long script does not lapse.
-	//
-	// Takes the whole Runner rather than its name because the name alone is not
-	// an identity: tenant_runners is keyed on (tenant, name), so "build" in one
-	// org and "build" in another are different machines. Matching on the name
-	// by itself would let either one write to the other's task.
-	// message, when non-empty, is recorded as the task's latest progress line
-	// so the waiting step can show it — the step may be on another daemon, so
-	// the row is the only channel between them.
+	// So a long script does not lapse mid-run.
 	Extend(ctx context.Context, r Runner, id string, until time.Time, message string) error
-	// Complete records a result. Refuses a task the runner does not hold — see
-	// the note on Extend for why that check needs the tenant too.
 	Complete(ctx context.Context, r Runner, id string, res RunnerTaskResult, now time.Time) error
-	// FailAbandoned marks a task whose lease has lapsed as failed, reporting
-	// whether this call is the one that did it.
-	//
-	// The bool matters: a result can land between the caller noticing the lapse
-	// and this call, and the agent's real answer must win over our guess that
-	// it was gone. False means exactly that happened, and the caller should
-	// read the task again rather than reporting a failure that did not occur.
+	// A lapsed claim: the agent took the task and stopped answering.
 	FailAbandoned(ctx context.Context, tenant, id string, now time.Time) (bool, error)
-	// CancelQueued closes a task nobody has claimed yet, reporting whether it
-	// did.
-	//
-	// This is what stops a script from running after the step that asked for it
-	// has given up. A task left queued stays claimable forever, so a machine
-	// switched on an hour later would happily run it — which for a script that
-	// sends invoices is the same harm as running it twice.
-	//
-	// Only 'queued' is touched. False means it was claimed in the meantime, and
-	// a claimed task belongs to the agent holding it: killing that would create
-	// exactly the ambiguity the lease rules exist to avoid.
+	// Only a task nobody has claimed; a held one must be left to its agent.
 	CancelQueued(ctx context.Context, tenant, id string, res RunnerTaskResult, now time.Time) (bool, error)
 	Get(ctx context.Context, tenant, id string) (RunnerTask, error)
-	// OrphanedTasks lists non-terminal tasks nobody is waiting for any more,
-	// oldest first and bounded by limit.
-	//
-	// It exists because Dispatch's goroutine was the only thing that ever
-	// closed a task, and that goroutine does not survive a redeploy or an
-	// OOM kill. What it leaves behind is worse than a stale row: a QUEUED task
-	// stays claimable forever, so a machine switched on an hour later runs a
-	// script for a run that is already dead — the same harm CancelQueued exists
-	// to prevent. And because Prune only collects 'done' and 'failed', neither
-	// shape is ever removed, so they accumulate inside runner_tasks_claim_idx
-	// and slow the hot claim path.
-	//
-	// Two shapes qualify. A RUNNING task whose lease has lapsed: the agent is
-	// presumed gone. A QUEUED task older than its own timeout plus the dispatch
-	// grace: whoever was waiting has given up by definition, so nothing will
-	// ever read the result. Rows carrying no timeout fall back to
-	// queuedCeiling.
+	// Nobody is waiting any more, so the agent would run work with no reader.
 	OrphanedTasks(ctx context.Context, now time.Time, grace, queuedCeiling time.Duration, limit int) ([]RunnerTask, error)
-	// DeleteByTenant removes every queued, running and terminal task belonging
-	// to a tenant, returning the count. The erasure-cascade entry point (GDPR
-	// Art. 17).
-	//
-	// The retention sweep is not a substitute: Prune only collects terminal
-	// rows, and only once they age out. A task row carries the script, its
-	// env and its stdin — the org's data, and the reason erasure cannot wait
-	// for a retention window to pass.
 	DeleteByTenant(ctx context.Context, tenant string) (int, error)
 }
 
-// ErrNoTask means the queue had nothing for this runner. Not a failure — it is
-// the normal answer to most polls.
 var ErrNoTask = errors.New("no task available")
 
-// eligible reports whether a runner may claim a task.
-//
-// A task names tags; a machine may claim it when it carries every one of them.
-// Its own name counts as a tag, so "run this on invoices-box" and "run this on
-// any linux build machine" are the same rule with different tags — one that
-// exactly one machine satisfies, and one that a pool does.
-//
-// No tags means nothing may claim it. A task with no target is a bug upstream,
-// and letting any runner take it would run someone's script on an arbitrary
-// machine.
+// A runner must carry ALL of the task's tags.
 func eligible(t RunnerTask, r Runner) bool {
 	if t.Tenant != r.Tenant {
 		return false
@@ -268,29 +140,15 @@ func eligible(t RunnerTask, r Runner) bool {
 	return r.HasTags(t.Tags)
 }
 
-// heldBy reports that this runner currently holds this task.
-//
-// All three parts are load-bearing. The tenant is the boundary: names are only
-// unique per organisation, so without it an agent could report on a same-named
-// runner's task in another org. The claimant is the ownership check within an
-// organisation. And 'running' is what refuses a result for a task already
-// closed — accepting one would resurrect a step that has already failed.
 func heldBy(t RunnerTask, r Runner) bool {
 	return t.Tenant == r.Tenant && t.ClaimedBy == r.Name && t.State == TaskRunning
 }
 
-// abandoned reports that a claim has lapsed: the agent took the task and then
-// stopped saying anything, so the machine is presumed gone.
-//
-// A zero LeaseUntil is not abandonment. It means the row was written without a
-// claim ever being recorded, and treating "no lease" as "expired lease" would
-// condemn a task the moment it appeared.
+// The agent took the task and then stopped answering.
 func abandoned(t RunnerTask, now time.Time) bool {
 	return t.State == TaskRunning && !t.LeaseUntil.IsZero() && now.After(t.LeaseUntil)
 }
 
-// orphaned reports that nothing is waiting for this task any more. The two
-// shapes are documented on RunnerTaskStore.OrphanedTasks.
 func orphaned(t RunnerTask, now time.Time, grace, queuedCeiling time.Duration) bool {
 	switch t.State {
 	case TaskRunning:
@@ -306,23 +164,15 @@ func orphaned(t RunnerTask, now time.Time, grace, queuedCeiling time.Duration) b
 	}
 }
 
-// abandonedResult is the result recorded for a task whose runner vanished. It
-// goes in the Error field rather than the exit code, because the script did not
-// exit — nobody knows what it did.
 func abandonedResult(runner string) RunnerTaskResult {
 	return RunnerTaskResult{Error: "the runner " + runner +
 		" stopped responding while this step was running, so it was not finished"}
 }
 
-// cancelledResult is recorded for a task the waiting step gave up on, so the
-// row says why it was closed rather than looking like a task that vanished.
 func cancelledResult(reason string) RunnerTaskResult {
 	return RunnerTaskResult{Error: "this step gave up before any runner ran it: " + reason}
 }
 
-// ---- in-memory store --------------------------------------------------
-
-// MemRunnerTaskStore implements the queue in process.
 type MemRunnerTaskStore struct {
 	mu    sync.Mutex
 	tasks map[string]*RunnerTask
@@ -356,7 +206,6 @@ func (m *MemRunnerTaskStore) DeleteByTenant(_ context.Context, tenant string) (i
 func (m *MemRunnerTaskStore) Claim(_ context.Context, r Runner, now time.Time, lease time.Duration) (RunnerTask, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// Oldest first, so a queue drains in the order it was filled.
 	var ids []string
 	for id := range m.tasks {
 		ids = append(ids, id)
@@ -369,9 +218,8 @@ func (m *MemRunnerTaskStore) Claim(_ context.Context, r Runner, now time.Time, l
 		if !eligible(*t, r) {
 			continue
 		}
-		// Queued only. A lapsed claim is NOT up for grabs again — see the
-		// note at the top of this file; handing it out twice would run
-		// someone's script twice.
+		// Queued only. A lapsed claim is NOT re-offered: the first agent may still be
+		// running the script, and a second run would repeat its side effects.
 		if t.State != TaskQueued {
 			continue
 		}
@@ -407,8 +255,6 @@ func (m *MemRunnerTaskStore) Complete(_ context.Context, r Runner, id string, re
 	stored := res
 	t.Result = &stored
 	t.FinishedAt = now
-	// A non-zero exit is a FAILED task, not a done one: the step should fail
-	// the same way it would if a built-in step had errored.
 	if res.Error != "" || res.ExitCode != 0 {
 		t.State = TaskFailed
 	} else {
@@ -424,8 +270,6 @@ func (m *MemRunnerTaskStore) FailAbandoned(_ context.Context, tenant, id string,
 	if !ok || t.Tenant != tenant {
 		return false, fmt.Errorf("task %q not found", id)
 	}
-	// Re-check under the lock rather than trusting the caller's earlier read:
-	// that read was outside it, and the agent may have reported in between.
 	if !abandoned(*t, now) {
 		return false, nil
 	}
@@ -479,24 +323,13 @@ func (m *MemRunnerTaskStore) Get(_ context.Context, tenant, id string) (RunnerTa
 	return *t, nil
 }
 
-// ---- the dispatcher the step calls -------------------------------------
-
-// RunnerDispatcher enqueues a task and waits for a runner to finish it.
 type RunnerDispatcher struct {
-	Tasks   RunnerTaskStore
-	Runners *Runners
-	// PollInterval is how often the waiting step checks for a result. Polling
-	// rather than an in-process signal because a deployment may run several
-	// daemons: the agent's result can land on a different one from the step
-	// that is waiting, and only the database is shared.
-	PollInterval time.Duration
-	// PickupGrace and DispatchGrace override RunnerPickupGrace and
-	// RunnerDispatchGrace; zero means the constant. Overridable so a test can
-	// exercise the give-up paths without waiting out a real timeout.
+	Tasks         RunnerTaskStore
+	Runners       *Runners
+	PollInterval  time.Duration
 	PickupGrace   time.Duration
 	DispatchGrace time.Duration
-	// NewID generates task ids; overridable for tests.
-	NewID func() string
+	NewID         func() string
 }
 
 func (d *RunnerDispatcher) pickupGrace() time.Duration {
@@ -513,28 +346,16 @@ func (d *RunnerDispatcher) dispatchGrace() time.Duration {
 	return RunnerDispatchGrace
 }
 
-// DispatchRequest is what the step asks for.
 type DispatchRequest struct {
-	Tenant string
-	// Tags is the step's target: a machine carrying all of them.
-	Tags   []string
-	Script string
-	// Shell is the interpreter the agent should start the script with; empty
-	// means the machine's own shell. See RunnerTask.Shell.
+	Tenant  string
+	Tags    []string
+	Script  string
 	Shell   string
 	Env     map[string]string
 	Stdin   string
 	Timeout time.Duration
 }
 
-// Dispatch enqueues a task and blocks until it finishes, the context is
-// cancelled, or nothing picks it up in time.
-//
-// The "nothing picked it up" case gets its own error deliberately. A step that
-// simply hangs when a runner is offline is the worst outcome: the run looks
-// alive, the lease machinery has nothing to reclaim, and the author has no idea
-// their machine is down. Failing with a message that names the runner turns it
-// into something actionable.
 func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, onProgress func(string)) (RunnerTaskResult, error) {
 	if d == nil || d.Tasks == nil {
 		return RunnerTaskResult{}, fmt.Errorf("runners are not configured on this deployment")
@@ -542,8 +363,6 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 	if len(req.Tags) == 0 {
 		return RunnerTaskResult{}, fmt.Errorf("this step needs at least one tag saying where to run")
 	}
-	// Refuse up front when the target cannot possibly answer, rather than
-	// enqueueing into a queue nothing reads.
 	matches, err := d.checkTargetExists(ctx, req)
 	if err != nil {
 		return RunnerTaskResult{}, err
@@ -572,37 +391,23 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 	if poll <= 0 {
 		poll = 500 * time.Millisecond
 	}
-	// The ceiling on the whole wait. Without one, a step whose runner goes
-	// away between claiming and answering waits on the ambient run context —
-	// which may have no deadline at all, leaving the run alive forever.
+	// Without it a step whose runner goes away waits for ever.
 	var deadline time.Time
 	if req.Timeout > 0 {
 		deadline = time.Now().Add(req.Timeout + d.dispatchGrace())
 	}
 	queuedSince := time.Now()
-	// The last line already shown, so a repeated poll of an unchanged row does
-	// not repeat it. Seeded with the waiting message for the same reason.
 	lastProgress := ""
-	// When the "is any runner online?" check last ran. It lists the org's
-	// runners, so running it on every tick cost a second query per waiting step
-	// per half-second — for minutes, whenever the target is online but busy
-	// with another task, which is the normal way a queue drains.
 	var lastOnlineCheck time.Time
 
 	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
-	// The poll starts tight and loosens. Half a second is what makes a quick
-	// script feel immediate; holding that rate for a script that runs for ten
-	// minutes is 1200 pointless round trips, and the result is not more urgent
-	// at minute nine than it was at minute one.
 	slowPollAfter := time.Now().Add(runnerPollTightFor)
 	slowed := false
 	for {
 		select {
 		case <-ctx.Done():
-			// The run was cancelled or ran out of time. Close the task so a
-			// runner cannot pick up a script for a run that is already over.
-			// On a detached context, because ctx is what just died.
+			// Close the task, or an agent picks up work nobody will read.
 			_, _ = d.Tasks.CancelQueued(context.WithoutCancel(ctx), req.Tenant, task.ID,
 				cancelledResult("the run was cancelled"), time.Now())
 			return RunnerTaskResult{}, ctx.Err()
@@ -617,9 +422,6 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 		if err != nil {
 			return RunnerTaskResult{}, fmt.Errorf("read the task back: %w", err)
 		}
-		// Anything the script said since the last tick. The agent posts it to
-		// whichever daemon answers, which may not be this one, so the row is
-		// the only channel between them.
 		if onProgress != nil && cur.Progress != "" && cur.Progress != lastProgress {
 			lastProgress = cur.Progress
 			onProgress(cur.Progress)
@@ -632,16 +434,12 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 			return *cur.Result, nil
 
 		case TaskRunning:
-			// Claimed, then silence. The task is failed rather than left for
-			// another runner to pick up, and the step is told which machine
-			// went quiet.
 			if abandoned(cur, now) {
 				failed, err := d.Tasks.FailAbandoned(ctx, req.Tenant, task.ID, now)
 				if err != nil {
 					return RunnerTaskResult{}, fmt.Errorf("fail the abandoned task: %w", err)
 				}
 				if !failed {
-					// It answered after all. Next tick reads the real result.
 					continue
 				}
 				return RunnerTaskResult{}, fmt.Errorf(
@@ -651,13 +449,6 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 			}
 
 		case TaskQueued:
-			// Nothing has picked it up. That is normal for a moment, and
-			// normal for a while if the runner is busy with another task —
-			// its heartbeat keeps it online meanwhile. It is only a problem
-			// once no runner that COULD take this work is there at all.
-			// Bounded by the pickup grace as well, so a test that shrinks the
-			// grace to exercise the give-up path is not left waiting on a
-			// production-sized interval.
 			if now.Sub(queuedSince) > d.pickupGrace() &&
 				now.Sub(lastOnlineCheck) >= min(runnerOnlineCheckEvery, d.pickupGrace()) {
 				lastOnlineCheck = now
@@ -665,14 +456,10 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 					cancelled, cerr := d.Tasks.CancelQueued(ctx, req.Tenant, task.ID,
 						cancelledResult(err.Error()), now)
 					if cerr != nil {
-						// Say both: the diagnosis is still right, and a task
-						// left claimable is the dangerous half.
 						return RunnerTaskResult{}, fmt.Errorf(
 							"%w (and the queued task could not be closed: %v)", err, cerr)
 					}
 					if !cancelled {
-						// A runner claimed it as we were giving up, so one is
-						// there after all. Keep waiting for its answer.
 						continue
 					}
 					return RunnerTaskResult{}, err
@@ -684,10 +471,6 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 			if cur.State == TaskQueued {
 				reason := fmt.Sprintf("no machine tagged %s picked this step up within %s",
 					tagList(req.Tags), req.Timeout)
-				// Unlike the path above, the outcome does not change with the
-				// answer: the ceiling stops the step regardless. If it was
-				// claimed in the last instant there is nothing to close and
-				// nothing to be done about it.
 				if _, cerr := d.Tasks.CancelQueued(ctx, req.Tenant, task.ID,
 					cancelledResult(reason), now); cerr != nil {
 					return RunnerTaskResult{}, fmt.Errorf(
@@ -701,17 +484,12 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 	}
 }
 
-// checkTargetOnline reports that no runner able to take this task is currently
-// present. Distinct from checkTargetExists, which asks whether one is
-// registered at all: a registered machine that is switched off is the common
-// case, and the message has to name it to be worth anything.
 func (d *RunnerDispatcher) checkTargetOnline(ctx context.Context, req DispatchRequest, now time.Time) error {
 	if d.Runners == nil {
 		return nil
 	}
 	matches, err := d.eligibleRunners(ctx, req)
 	if err != nil {
-		// A database blip is not evidence the runner is down; keep waiting.
 		return nil
 	}
 	for _, r := range matches {
@@ -719,20 +497,10 @@ func (d *RunnerDispatcher) checkTargetOnline(ctx context.Context, req DispatchRe
 			return nil
 		}
 	}
-	// Naming the machines that DO match is the useful half: the tags are right,
-	// so what the author has to act on is a machine that is switched off.
 	return fmt.Errorf("no machine tagged %s has checked in recently (%s) — "+
 		"the agent is not running there", tagList(req.Tags), runnerNames(matches))
 }
 
-// checkTargetExists rejects a target no registered runner could serve, and
-// returns the machines that DO carry the tags.
-//
-// The caller wants them for the waiting message: whether any of them is switched
-// on is the difference between "this will start in a second" and "this will fail
-// in thirty", and that is worth saying while the step is waiting rather than
-// only once it has given up. A nil slice with a nil error means there was no
-// registry to ask, which is not the same as no machine matching.
 func (d *RunnerDispatcher) checkTargetExists(ctx context.Context, req DispatchRequest) ([]Runner, error) {
 	if d.Runners == nil {
 		return nil, nil
@@ -744,9 +512,6 @@ func (d *RunnerDispatcher) checkTargetExists(ctx context.Context, req DispatchRe
 	if len(matches) > 0 {
 		return matches, nil
 	}
-	// One tag that matches nothing is usually a typo; several that match
-	// nothing individually are usually a combination no machine has. Saying
-	// which is which saves the author checking each one by hand.
 	if missing, err := d.unmatchedTags(ctx, req); err == nil && len(missing) > 0 {
 		return nil, fmt.Errorf("no machine carries the tag %s", tagList(missing))
 	}
@@ -754,8 +519,6 @@ func (d *RunnerDispatcher) checkTargetExists(ctx context.Context, req DispatchRe
 		"each tag exists, but no machine has the whole set", tagList(req.Tags))
 }
 
-// unmatchedTags returns the requested tags that no machine in this organisation
-// carries at all.
 func (d *RunnerDispatcher) unmatchedTags(ctx context.Context, req DispatchRequest) ([]string, error) {
 	rs, err := d.Runners.List(ctx, req.Tenant)
 	if err != nil {
@@ -776,9 +539,6 @@ func (d *RunnerDispatcher) unmatchedTags(ctx context.Context, req DispatchReques
 	return missing, nil
 }
 
-// eligibleRunners lists this organisation's runners that carry every requested
-// tag — the same rule the claim uses, asked ahead of time so the step can fail
-// with something to act on instead of waiting out a queue nothing reads.
 func (d *RunnerDispatcher) eligibleRunners(ctx context.Context, req DispatchRequest) ([]Runner, error) {
 	rs, err := d.Runners.List(ctx, req.Tenant)
 	if err != nil {
@@ -793,20 +553,10 @@ func (d *RunnerDispatcher) eligibleRunners(ctx context.Context, req DispatchRequ
 	return out, nil
 }
 
-// waitingMessage says what the step is waiting for, and — when it is known —
-// whether anything is there to answer.
-//
-// The distinction is the whole point. Work goes to whichever eligible machine
-// polls first, so an offline machine is never sent anything; but a step whose
-// machines are ALL switched off waits out the pickup grace and then fails, and
-// for those thirty seconds "waiting for a machine tagged build" is a message
-// that reads like progress. Saying how many of them are actually there turns it
-// into something the author can act on while the run is still open.
+// Names what is being waited for, so a stuck step is diagnosable from the run view.
 func waitingMessage(req DispatchRequest, matches []Runner, now time.Time) string {
 	base := "waiting for a machine tagged " + tagList(req.Tags)
 	if len(matches) == 0 {
-		// No registry to ask (a deployment without runners reaches this), so
-		// promising anything about who is there would be a guess.
 		return base
 	}
 	online := 0
@@ -826,8 +576,6 @@ func waitingMessage(req DispatchRequest, matches []Runner, now time.Time) string
 	return fmt.Sprintf("%s (%d of %d switched on)", base, online, len(matches))
 }
 
-// tagList renders tags the way the step's field reads them: joined with "+",
-// because the rule is AND. "linux, gpu" would read as a choice between two.
 func tagList(tags []string) string {
 	if len(tags) == 0 {
 		return "(none)"
@@ -835,8 +583,6 @@ func tagList(tags []string) string {
 	return strings.Join(tags, " + ")
 }
 
-// runnerNames names the machines a message is about, so "not checked in
-// recently" says WHICH machine to go and look at.
 func runnerNames(rs []Runner) string {
 	if len(rs) == 0 {
 		return "none"
@@ -852,21 +598,14 @@ func (d *RunnerDispatcher) newID() string {
 	if d.NewID != nil {
 		return d.NewID()
 	}
-	// Reuse the same random-id shape the rest of the daemon uses for
-	// externally visible ids.
 	plain, _, err := newRunnerSecret("task_")
 	if err != nil {
-		// rand failing is not recoverable and not worth a second error path
-		// through every caller; a time-based id is still unique enough to
-		// correlate one task.
 		return fmt.Sprintf("task_%d", time.Now().UnixNano())
 	}
 	return plain
 }
 
-// tagsOrEmpty keeps a nil slice out of a NOT NULL array column. A task with no
-// tags is refused long before this, so this is about the column's shape rather
-// than about a case that should reach the database.
+// A nil slice would violate the NOT NULL array column.
 func tagsOrEmpty(tags []string) []string {
 	if tags == nil {
 		return []string{}
@@ -874,8 +613,6 @@ func tagsOrEmpty(tags []string) []string {
 	return tags
 }
 
-// jsonOrNil marshals a map for storage, returning nil for an empty one so the
-// column stays NULL rather than holding "{}".
 func jsonOrNil(m map[string]string) []byte {
 	if len(m) == 0 {
 		return nil

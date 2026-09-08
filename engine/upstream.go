@@ -13,26 +13,20 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// upstreamSubstituter resolves ${upstream.nodeID.port.path...} into a
-// string drawn from a previously-completed node's output.
+// upstreamSubstituter draws a string from a completed node's output:
 //
-// Path syntax:
-//
-//	${upstream.excel_read.headers}        → entire headers value (JSON-stringified)
-//	${upstream.excel_read.headers[0]}     → first element of the headers array
+//	${upstream.excel_read.headers}        → the whole value, JSON-stringified
+//	${upstream.excel_read.headers[0]}     → first element
 //	${upstream.postgres_query.rows[0].name}
-//	${upstream.loader.meta.status}        → a nested map field
 //
-// First segment is always the nodeID; second is the output port name;
-// remaining segments walk the port's Inline value as a tree of
-// maps and slices. `.field` descends into a map; `[N]` indexes a
-// slice. Mixed-type paths produce a typed error so the user sees
-// "expected map, got string at .name" rather than an empty result.
+// First segment is the nodeID, second the output port; the rest walk the port's
+// Inline value, `.field` into a map and `[N]` into a slice. A mixed-type path
+// produces a typed error, so the user sees "expected map, got string at .name"
+// rather than an empty result.
 //
-// Returns ok=false (not an error) when the scheme isn't "upstream"
-// or when prior is nil — that way an `${upstream.…}` reference in a
-// graph triggered without recorded predecessor outputs degrades to
-// the literal placeholder rather than failing the run.
+// Not-ok rather than an error when the scheme isn't "upstream" or prior is nil,
+// so a reference in a graph triggered without recorded predecessor outputs
+// degrades to the literal placeholder rather than failing the run.
 func upstreamSubstituter(prior map[string]core.Result) Substituter {
 	return func(_ context.Context, scheme, path string) (string, bool, error) {
 		if scheme != "upstream" {
@@ -49,9 +43,6 @@ func upstreamSubstituter(prior map[string]core.Result) Substituter {
 	}
 }
 
-// resolveUpstreamPath drills into prior[nodeID].Output[port].Inline
-// using the dot/bracket path syntax described above. Returns the
-// raw Go value at that location — stringification happens later.
 func resolveUpstreamPath(prior map[string]core.Result, path string) (any, error) {
 	if path == "" {
 		return nil, fmt.Errorf("upstream: empty path")
@@ -68,9 +59,6 @@ func resolveUpstreamPath(prior map[string]core.Result, path string) (any, error)
 		return nil, fmt.Errorf("upstream: path must include a port (e.g. %q)", nodeID+".out")
 	}
 
-	// The port name is the next segment up to the next '.' OR '[' so
-	// that "rows[0]" parses as port=rows then index 0. Trim either
-	// terminator before re-parsing the remainder.
 	stopAt := strings.IndexAny(rest, ".[")
 	var port, tail string
 	if stopAt < 0 {
@@ -98,11 +86,6 @@ func resolveUpstreamPath(prior map[string]core.Result, path string) (any, error)
 	return walkPath(value, tail)
 }
 
-// walkPath descends through `value` using the path tail. The tail
-// uses bare identifiers separated by dots for map lookups and `[N]`
-// for slice indexing — same surface as JavaScript object access,
-// no escaping, no quoting. Bracket-only access (`rows[0]`) is
-// supported by starting the tail with `[`.
 func walkPath(value any, path string) (any, error) {
 	pos := 0
 	for pos < len(path) {
@@ -125,7 +108,6 @@ func walkPath(value any, path string) (any, error) {
 			}
 			pos += end + 2
 		default:
-			// Identifier: read up to the next '.' or '['.
 			next := strings.IndexAny(path[pos:], ".[")
 			var field string
 			if next < 0 {
@@ -145,9 +127,6 @@ func walkPath(value any, path string) (any, error) {
 	return value, nil
 }
 
-// getField reads `field` from a value that should be a map. We
-// accept both map[string]any (native) and map[string]string (older
-// drops still emit this for excel_read untyped mode).
 func getField(value any, field string) (any, error) {
 	switch m := value.(type) {
 	case map[string]any:
@@ -164,8 +143,6 @@ func getField(value any, field string) (any, error) {
 	return nil, fmt.Errorf("upstream path: field %q not present", field)
 }
 
-// indexValue reads `idx` from a value that should be a slice. Handles
-// the three common slice shapes we actually emit from drops.
 func indexValue(value any, idx int) (any, error) {
 	switch s := value.(type) {
 	case []any:
@@ -192,10 +169,6 @@ func indexValue(value any, idx int) (any, error) {
 	return nil, fmt.Errorf("upstream path: expected array for [%d], got %T", idx, value)
 }
 
-// stringifyForTemplate renders a resolved value for substitution into
-// the surrounding string. Primitive types use Sprint; complex types
-// (maps, slices, structs) marshal to JSON so the substitution stays
-// machine-readable even when it lands inside another JSON document.
 func stringifyForTemplate(v any) string {
 	if v == nil {
 		return ""

@@ -25,24 +25,17 @@ import (
 // exactly once (on the replica that produced it; PgBus distribution
 // happens beneath the decorator).
 
-// RunLogEntry is one line of a run's log.
 type RunLogEntry struct {
 	// Seq orders entries within a run and is the resume cursor for
 	// streaming. Assigned by the store (monotonic per store, not per
 	// run — gaps within a run are fine, order is what matters).
-	Seq    int64     `json:"seq"`
-	RunID  string    `json:"run_id"`
-	TS     time.Time `json:"ts"`
-	NodeID string    `json:"node_id,omitempty"`
-	// Kind: "progress" (in-flight message from a running node),
-	// "status" (node terminal transition), "terminal" (run finished),
-	// "truncated" (the per-run cap was hit; later events were dropped).
-	Kind string `json:"kind"`
-	// Stream labels progress lines from drops that distinguish their
-	// output channels ("stdout"/"stderr" — the shell and git drops'
-	// data.stream convention). Empty for unlabelled lines.
-	Stream  string `json:"stream,omitempty"`
-	Message string `json:"message"`
+	Seq     int64     `json:"seq"`
+	RunID   string    `json:"run_id"`
+	TS      time.Time `json:"ts"`
+	NodeID  string    `json:"node_id,omitempty"`
+	Kind    string    `json:"kind"`
+	Stream  string    `json:"stream,omitempty"`
+	Message string    `json:"message"`
 }
 
 // RunLogStore persists run logs. Implementations must be safe for
@@ -58,23 +51,16 @@ const (
 	// maxRunLogEntries caps how many entries one run may persist — a
 	// runaway shell streaming stdout must not grow the table without
 	// bound. The live SSE stream is uncapped; only persistence truncates.
-	maxRunLogEntries = 5000
-	// defaultRunLogPage bounds a single List call.
+	maxRunLogEntries  = 5000
 	defaultRunLogPage = 1000
-	// maxRunLogMessage truncates absurdly long single lines.
-	maxRunLogMessage = 8 * 1024
+	maxRunLogMessage  = 8 * 1024
 )
 
-// MemRunLogStore is the in-process RunLogStore for dev/tests.
 type MemRunLogStore struct {
 	mu      sync.Mutex
 	nextSeq int64
 	byRun   map[string][]RunLogEntry
 
-	// Jobs answers "has this run finished, and when?". Set it and Prune is
-	// run-scoped like the Postgres store; left nil it falls back to the
-	// line's own age, which is dev-only behaviour — it deletes the start of
-	// a log that a parked run is still writing.
 	Jobs core.JobStore
 }
 
@@ -91,8 +77,6 @@ func (m *MemRunLogStore) AppendRunLog(_ context.Context, e RunLogEntry) error {
 	return nil
 }
 
-// DeleteRun drops a run's log lines (GDPR P2.1). Mirrors the Pg store so
-// the per-run deletion endpoint works in dev/tests too.
 func (m *MemRunLogStore) DeleteRun(_ context.Context, runID string) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -129,11 +113,6 @@ type RecordingBus struct {
 	store RunLogStore
 	log   *log.Logger
 
-	// logPayloads gates persistence of content lines (streamed
-	// stdout/stderr / progress messages, which can carry arbitrary
-	// personal data from a flow). When false, only the structural trail —
-	// node status transitions and the terminal line — is kept, so a run's
-	// history stays auditable without retaining payload PII. Default true.
 	logPayloads bool
 
 	mu     sync.Mutex
@@ -150,9 +129,6 @@ func NewRecordingBus(inner Bus, store RunLogStore) *RecordingBus {
 	}
 }
 
-// SetLogPayloads toggles persistence of content (progress) log lines. Wire
-// it from DAZYFLOW_LOG_RUN_PAYLOADS to let an operator keep run logs free
-// of payload PII (GDPR P2.1) while preserving the status/terminal trail.
 func (b *RecordingBus) SetLogPayloads(v bool) { b.logPayloads = v }
 
 func (b *RecordingBus) Subscribe(jobID string) (<-chan BusEvent, func()) {
@@ -181,8 +157,6 @@ func (b *RecordingBus) record(runID string, e RunLogEntry, terminal bool) {
 		// the run's cap counter is done.
 		delete(b.counts, runID)
 	case n == maxRunLogEntries:
-		// First event past the cap: persist one truncation marker, then
-		// drop everything until terminal.
 		b.counts[runID] = n + 1
 		b.mu.Unlock()
 		marker := RunLogEntry{
@@ -200,24 +174,17 @@ func (b *RecordingBus) record(runID string, e RunLogEntry, terminal bool) {
 		b.counts[runID] = n + 1
 	}
 	b.mu.Unlock()
-	// Detached context: Publish callers are often on cancelled run
-	// contexts by the time the terminal event flows.
 	if err := b.store.AppendRunLog(context.Background(), e); err != nil {
 		b.log.Printf("append for %s: %v", runID, err)
 	}
 }
 
-// entryForEvent renders a BusEvent as a log line. Paused events are
-// interactive-debugger chrome, not log content — skipped.
 func entryForEvent(runID string, ev BusEvent) (RunLogEntry, bool) {
 	now := time.Now().UTC()
 	switch {
 	case ev.Progress != nil:
 		p := ev.Progress.Progress
 		msg := p.Message
-		// Drops that stream output lines put them in data.line (the
-		// LiveConsole convention) — prefer the raw line when present,
-		// and keep the stdout/stderr label that rides next to it.
 		var stream string
 		if line, ok := p.Data["line"].(string); ok && line != "" {
 			msg = line
@@ -248,8 +215,6 @@ func entryForEvent(runID string, ev BusEvent) (RunLogEntry, bool) {
 
 var _ Bus = (*RecordingBus)(nil)
 
-// Prune mirrors the Pg store's retention hook for the in-memory store
-// (tests, dev): drop entries older than the cutoff.
 func (m *MemRunLogStore) Prune(ctx context.Context, olderThan time.Duration, _ int) (int, error) {
 	if olderThan <= 0 {
 		return 0, nil
@@ -259,8 +224,6 @@ func (m *MemRunLogStore) Prune(ctx context.Context, olderThan time.Duration, _ i
 	defer m.mu.Unlock()
 	total := 0
 	for runID, entries := range m.byRun {
-		// A run still going keeps its whole log however old the lines are;
-		// a finished one goes whole, once the RUN is past the cutoff.
 		if m.Jobs != nil {
 			rec, err := m.Jobs.Get(ctx, runID)
 			if err == nil {
@@ -272,8 +235,6 @@ func (m *MemRunLogStore) Prune(ctx context.Context, olderThan time.Duration, _ i
 				delete(m.byRun, runID)
 				continue
 			}
-			// Unknown run: the record is already gone, so fall through and
-			// age the orphaned lines out on their own ts.
 		}
 		kept := entries[:0:0]
 		for _, e := range entries {

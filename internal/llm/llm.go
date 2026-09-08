@@ -1,16 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package llm is the shared LLM provider layer: the provider-neutral
-// request/response types plus a process-global registry of backends
-// (Claude, ChatGPT, …). Both the flow drops and editor/platform features
-// (the render_template AI assist, future "draft a flow") go through it, so
-// there's ONE place a provider lives and one place to add a new one.
-//
-// The registry is populated by the provider packages at init (the dzd
-// binary imports them for drop registration), so a feature in the daemon
-// can read the registry at run time WITHOUT importing the drops — it just
-// asks the registry which providers exist and calls Generate.
 package llm
 
 import (
@@ -30,7 +20,6 @@ type Tool struct {
 	Schema      map[string]any
 }
 
-// Request is one single-turn generation, provider-neutral.
 type Request struct {
 	Model       string
 	System      string
@@ -55,10 +44,7 @@ type Request struct {
 	Files []File
 }
 
-// File is one document or image to send with a request.
 type File struct {
-	// Name is the original filename, used to label the file for providers
-	// that show one to the model and to name it in error messages.
 	Name string
 	// MIME is the content type — "application/pdf", "image/png". Required:
 	// every provider needs it on the wire, and guessing from the extension is
@@ -67,30 +53,22 @@ type File struct {
 	Data []byte
 }
 
-// IsImage reports whether the file is an image, which is the line every
-// provider draws: images are near-universally supported, documents are not.
 func (f File) IsImage() bool { return strings.HasPrefix(strings.ToLower(f.MIME), "image/") }
 
-// IsPDF reports whether the file is a PDF — the one document type the cloud
-// providers read natively, and the one this feature exists for.
 func (f File) IsPDF() bool {
 	return strings.EqualFold(strings.TrimSpace(strings.SplitN(f.MIME, ";", 2)[0]), "application/pdf")
 }
 
-// Result is the normalized provider response.
 type Result struct {
 	Text string
 	Tool map[string]any
 	Raw  map[string]any
 }
 
-// Provider is one LLM backend — the vendor API call + response parsing.
-// Implementations live in the per-vendor drop packages and register here.
 type Provider interface {
 	Call(ctx context.Context, apiKey string, req Request) (Result, *core.JobError)
 }
 
-// ModelOption is one entry in a model picker.
 type ModelOption struct {
 	ID    string
 	Label string
@@ -117,12 +95,9 @@ type ProviderInfo struct {
 	Name         string // stable id, e.g. "claude", "openai"
 	Integration  string // "Claude" / "ChatGPT" — drives conn.<slug>.api_key
 	DefaultModel string
-	// Models is the fallback catalog: what the picker offers before
-	// ListModels has answered, and what it keeps offering when there is no
-	// ListModels, no connection, or the vendor is unreachable.
-	Models     []ModelOption
-	ListModels ModelLister
-	Provider   Provider
+	Models       []ModelOption
+	ListModels   ModelLister
+	Provider     Provider
 }
 
 var (
@@ -131,8 +106,6 @@ var (
 	order     []string // registration order, for a stable default
 )
 
-// Register adds (or replaces) a provider. Called from each vendor package's
-// init via llmtask.RegisterAll. Safe for concurrent use.
 func Register(p ProviderInfo) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -142,7 +115,6 @@ func Register(p ProviderInfo) {
 	providers[p.Name] = p
 }
 
-// Get returns a provider by id.
 func Get(name string) (ProviderInfo, bool) {
 	mu.RLock()
 	defer mu.RUnlock()
@@ -161,10 +133,6 @@ func Registered() []ProviderInfo {
 	return out
 }
 
-// Generate runs one request against the named provider with the given API
-// key, defaulting the model to the provider's default. Returns a plain error
-// (the provider's friendly JobError message) so non-flow callers don't need
-// the core.JobError type.
 func Generate(ctx context.Context, name, apiKey string, req Request) (Result, error) {
 	p, ok := Get(name)
 	if !ok {

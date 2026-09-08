@@ -11,9 +11,6 @@ function Boom(): JSX.Element {
 }
 
 describe("ErrorBoundary", () => {
-  // React logs every caught error to console.error by design. Silenced so a
-  // passing run stays readable — and asserted on below, because that log is
-  // the only record a crash leaves in this build.
   let spy: ReturnType<typeof vi.spyOn>;
   beforeEach(() => {
     spy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -37,8 +34,6 @@ describe("ErrorBoundary", () => {
       </ErrorBoundary>,
     );
 
-    // The failure this exists to prevent is an EMPTY document, so assert on
-    // what the user can actually see and do.
     expect(
       screen.getByRole("heading", { name: "Something went wrong" }),
     ).toBeInTheDocument();
@@ -57,8 +52,6 @@ describe("ErrorBoundary", () => {
         <Boom />
       </ErrorBoundary>,
     );
-    // Collapsed in a <details>, but present in the DOM either way — the point
-    // is that it can be copied, not that it is on screen.
     expect(screen.getByText(/kaboom from a child/)).toBeInTheDocument();
     expect(spy).toHaveBeenCalled();
   });

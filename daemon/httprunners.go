@@ -15,8 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// runnerAPI serves the self-hosted runner endpoints. Its fields are the whole of what
-// those handlers touch.
 type runnerAPI struct {
 	auditor
 	urlBuilder
@@ -26,52 +24,27 @@ type runnerAPI struct {
 	RunnerTasks RunnerTaskStore
 }
 
-// runnerAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) runnerAPI() *runnerAPI {
 	return &runnerAPI{auditor: h.auditor(), urlBuilder: h.urls(), svc: h.svc, logger: h.logger, Runners: h.Runners, RunnerTasks: h.RunnerTasks}
 }
 
-// Two audiences, two kinds of credential, and they must not be confused.
-//
-//	The ADMIN endpoints are used by a person in the web UI (or an API key), and
-//	go through the normal session/key auth like every other admin route.
-//
-//	The RUNNER endpoints are used by an agent on someone's machine, holding a
-//	credential that identifies exactly one runner and authorises nothing else.
-//	They sit OUTSIDE requireAuth: an agent has no session, no user, and no
-//	permissions, and giving it a normal API key would hand a machine in a
-//	cupboard the ability to read flows.
-//
-// The asymmetry is the point. A stolen runner credential lets someone claim
-// that runner's tasks — bad, but bounded, and revoked by deleting the runner.
+// Two audiences and two credentials that must not be confused: an admin holds a
+// session, an agent holds a runner key. The agent's endpoints therefore sit
+// outside requireAuth.
 
-// ---- admin side -------------------------------------------------------
-
-// runnerRow is the admin list's shape. There is no credential in it and no
-// field for one: the agent's credential is shown once, at registration, and
-// never again.
+// No credential in it, and none is ever returned by this API.
 type runnerRow struct {
-	Name    string   `json:"name"`
-	Labels  []string `json:"labels,omitempty"`
-	Version string   `json:"version,omitempty"`
-	// Online is derived from LastSeen rather than reported, because there is no
-	// connection to observe — a runner is present if it has asked for work
-	// recently.
+	Name      string    `json:"name"`
+	Labels    []string  `json:"labels,omitempty"`
+	Version   string    `json:"version,omitempty"`
 	Online    bool      `json:"online"`
 	LastSeen  time.Time `json:"last_seen,omitempty"`
 	CreatedBy string    `json:"created_by,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// requireStepSourceAdmin gates the endpoints that add or remove a SOURCE of
-// steps — a runner here, an MCP server in httpmcpservers.go.
-//
-// organization:admin is what a human managing the org already holds;
-// module:register is what an API key for automation can carry without also
-// being able to administer everything else. Deliberately NOT graph:edit —
-// registering a runner is what makes a machine available at all, which is a
-// different act from using it in a flow, and the same distinction applies to
-// pointing the daemon at someone else's MCP endpoint.
+// Adding a source of executable steps is a bigger power than editing a flow, so
+// it is gated above graph:edit.
 func requireStepSourceAdmin(rw http.ResponseWriter, p core.Principal) bool {
 	if core.CanAdminOrg(p) || p.Has(core.PermModuleRegister) {
 		return true
@@ -89,10 +62,6 @@ func (h *runnerAPI) runnersConfigured(rw http.ResponseWriter) bool {
 	return true
 }
 
-// runnerTasksConfigured is the agent endpoints' gate: the registry AND the
-// queue. One function rather than `!h.runnersConfigured(rw) || h.RunnerTasks
-// == nil` followed by a write, which sent the 501 body TWICE when the registry
-// was the missing half — two concatenated JSON envelopes in one response.
 func (h *runnerAPI) runnerTasksConfigured(rw http.ResponseWriter) bool {
 	if !h.runnersConfigured(rw) {
 		return false
@@ -129,33 +98,13 @@ func (h *runnerAPI) listRunners(rw http.ResponseWriter, r *http.Request, p core.
 	writeJSON(rw, http.StatusOK, map[string]any{"runners": out})
 }
 
-// runnerTargetRow is the flow editor's shape: what a step needs to choose where
-// to run, and nothing else.
-//
-// Deliberately narrower than runnerRow. Who registered a machine, when, and
-// which agent version it reported are facts about administering the fleet; a
-// picker in the inspector needs the name, the labels it can be targeted by, and
-// whether it is there right now.
 type runnerTargetRow struct {
-	Name string `json:"name"`
-	// Tags is everything this machine can be targeted by, its own name
-	// included — the exact set the step's field offers, so the editor does not
-	// have to know that the name is also a tag.
+	Name   string   `json:"name"`
 	Tags   []string `json:"tags,omitempty"`
 	Online bool     `json:"online"`
 }
 
-// listRunnerTargets answers the "Where to run it" tag picker on the Run on your
-// machine step.
-//
-// Gated on graph:edit rather than requireStepSourceAdmin, and that difference is the
-// whole reason this route exists next to the admin one. Using a runner in a flow
-// already needs graph:edit and nothing more (see docs/guide/runners.md), so an
-// editor who may target a machine may obviously be told which machines there
-// are — while the admin endpoint stays admin-only, because it also mints
-// credentials and deletes runners. Sending an editor to the admin route instead
-// would have meant either a 403 on a field they are entitled to fill in, or
-// widening the endpoint that hands out registration tokens.
+// Every tag NARROWS the set, so the count tells the author what a tag matches.
 func (h *runnerAPI) listRunnerTargets(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !core.CanAdminOrg(p) && !p.Has(core.PermGraphEdit) {
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "graph:edit required")
@@ -181,28 +130,14 @@ func (h *runnerAPI) listRunnerTargets(rw http.ResponseWriter, r *http.Request, p
 	writeJSON(rw, http.StatusOK, map[string]any{"runners": out})
 }
 
-// mintTokenRequest is the optional body of a mint call.
 type mintTokenRequest struct {
-	// Name pins the token to one machine: it may register (or replace) only a
-	// runner of this name. Blank mints an OPEN token, which may bring a new
-	// machine in but cannot overwrite one already registered — so a token that
-	// leaks cannot be used to evict and impersonate a live runner. Replacing a
-	// specific machine (a rebuilt host reclaiming its name) is what a named
-	// token is for.
 	Name string `json:"name,omitempty"`
 }
 
-// mintRunnerToken returns a registration token, shown once.
-//
-// POST rather than GET because it creates something, and because a token in a
-// URL would end up in a proxy log.
 func (h *runnerAPI) mintRunnerToken(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.runnersConfigured(rw) {
 		return
 	}
-	// The body is optional: callers minting an open token send none, so an
-	// empty body (io.EOF) is not an error — only a body that is present and
-	// malformed is.
 	var req mintTokenRequest
 	if err := decodeRunnerBody(r, &req); err != nil && !errors.Is(err, io.EOF) {
 		writeJSONError(rw, http.StatusBadRequest, "malformed request body")
@@ -219,31 +154,14 @@ func (h *runnerAPI) mintRunnerToken(rw http.ResponseWriter, r *http.Request, p c
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// Audited: this is the moment a new machine becomes able to join the org.
-	// The name (or "" for an open token) records what the token may register.
 	h.audit(r.Context(), p, "runner.token", req.Name, "")
 	writeJSON(rw, http.StatusOK, tok)
 }
 
-// setRunnerLabelsRequest replaces the whole set. There is no add or remove
-// verb: the labels are what routes work to this machine, so two admins editing
-// the same one should each end with a set they meant, not a merge of both.
 type setRunnerLabelsRequest struct {
 	Labels []string `json:"labels"`
 }
 
-// setRunnerLabels retags a machine — which pools it belongs to — from the admin
-// page, rather than only at install time via `--labels`.
-//
-// It exists because a label was previously decided on the machine and fixed
-// there forever: putting an existing server into a new pool meant a visit to it
-// (or deleting the runner, minting a token, and re-installing), for a change
-// that is purely about how this Dazyflow routes work.
-//
-// Admin-gated and audited like registration, and deliberately not graph:edit.
-// Retagging reroutes every step that targets the label — a machine can be
-// pulled into, or out of, work it was never meant for without anyone touching
-// a flow.
 func (h *runnerAPI) setRunnerLabels(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.runnersConfigured(rw) {
 		return
@@ -260,8 +178,6 @@ func (h *runnerAPI) setRunnerLabels(rw http.ResponseWriter, r *http.Request, p c
 			writeJSONError(rw, http.StatusNotFound, "no runner named "+name)
 			return
 		}
-		// A rejected label is the caller's mistake and the message names which
-		// one and why, so it goes back as a 400 rather than a 500.
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -294,8 +210,6 @@ func (h *runnerAPI) deleteRunner(rw http.ResponseWriter, r *http.Request, p core
 	writeJSON(rw, http.StatusOK, map[string]any{"deleted": name})
 }
 
-// ---- runner side ------------------------------------------------------
-
 type registerRequest struct {
 	Token   string   `json:"token"`
 	Name    string   `json:"name"`
@@ -308,12 +222,6 @@ type registerResponse struct {
 	Credential string `json:"credential"`
 }
 
-// registerRunner exchanges a registration token for a credential.
-//
-// Note what the request does NOT carry: a tenant. The token decides which
-// organisation the runner joins. Accepting one from the caller would make a
-// typo a cross-tenant registration, and the token the only thing standing
-// between one org and another's work queue.
 func (h *runnerAPI) registerRunner(rw http.ResponseWriter, r *http.Request) {
 	if !h.runnersConfigured(rw) {
 		return
@@ -327,20 +235,12 @@ func (h *runnerAPI) registerRunner(rw http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrBadRunnerToken):
-			// 401, not 400: the token is a credential, and this is an
-			// authentication failure. The message stays vague on purpose —
-			// distinguishing expired from unknown would help someone probing.
 			writeJSONError(rw, http.StatusUnauthorized, "registration token is not valid")
 		case errors.Is(err, ErrRunnerNameTaken):
-			// 409: the token is good, but this name is already a live runner
-			// and an open token may not overwrite it. A conflict, not an auth
-			// failure — and the operator can retry under a free name, or an
-			// admin can mint a token pinned to this name to replace it.
 			writeJSONError(rw, http.StatusConflict,
 				"a runner with this name already exists; choose another name, "+
 					"or have an admin mint a token for this name to replace it")
 		case errors.Is(err, ErrRunnerNameMismatch):
-			// 403: the token authorises one specific name and this is not it.
 			writeJSONError(rw, http.StatusForbidden,
 				"this registration token is for a different runner name")
 		default:
@@ -352,7 +252,6 @@ func (h *runnerAPI) registerRunner(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, http.StatusOK, registerResponse{Name: runner.Name, Credential: cred})
 }
 
-// authRunner identifies the agent behind a request, or writes the 401 itself.
 func (h *runnerAPI) authRunner(rw http.ResponseWriter, r *http.Request) (Runner, bool) {
 	cred := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	cred = strings.TrimSpace(cred)
@@ -362,8 +261,6 @@ func (h *runnerAPI) authRunner(rw http.ResponseWriter, r *http.Request) (Runner,
 	}
 	runner, err := h.Runners.Authenticate(r.Context(), cred)
 	if err != nil {
-		// A deleted runner lands here too, which is the intended way to revoke
-		// one: the credential simply stops identifying anything.
 		writeJSONError(rw, http.StatusUnauthorized, "runner credential is not valid")
 		return Runner{}, false
 	}
@@ -371,26 +268,14 @@ func (h *runnerAPI) authRunner(rw http.ResponseWriter, r *http.Request) (Runner,
 }
 
 type claimResponse struct {
-	ID     string `json:"id"`
-	Script string `json:"script"`
-	// Shell is the interpreter to start the script with, omitted when the step
-	// asked for the machine's own shell. An agent that predates the field
-	// ignores it and uses the machine's shell — which is why the step's help
-	// names the agent version the choice needs.
+	ID      string            `json:"id"`
+	Script  string            `json:"script"`
 	Shell   string            `json:"shell,omitempty"`
 	Stdin   string            `json:"stdin,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
 	Timeout int64             `json:"timeout_seconds,omitempty"`
 }
 
-// claimRunnerTask hands the agent its next piece of work.
-//
-// 204 for "nothing to do" rather than an empty 200: it is the answer to most
-// polls, and a status code the agent can branch on without parsing a body.
-//
-// The call doubles as the heartbeat — Authenticate records the check-in — which
-// is why an idle agent must keep polling rather than sleeping quietly. That is
-// also what makes "online" mean something without a connection to watch.
 func (h *runnerAPI) claimRunnerTask(rw http.ResponseWriter, r *http.Request) {
 	if !h.runnerTasksConfigured(rw) {
 		return
@@ -422,12 +307,6 @@ type progressRequest struct {
 	Message string `json:"message,omitempty"`
 }
 
-// runnerTaskProgress extends the lease and forwards a line of output.
-//
-// Extending on progress is what lets a long script hold its task without the
-// lease having to be set to the longest imaginable runtime: a script that says
-// nothing for the whole lease is indistinguishable from an agent that died, and
-// the honest response to that is to let the task go.
 func (h *runnerAPI) runnerTaskProgress(rw http.ResponseWriter, r *http.Request) {
 	if !h.runnerTasksConfigured(rw) {
 		return
@@ -446,7 +325,6 @@ func (h *runnerAPI) runnerTaskProgress(rw http.ResponseWriter, r *http.Request) 
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// runnerTaskResult records the outcome and releases the task.
 func (h *runnerAPI) runnerTaskResult(rw http.ResponseWriter, r *http.Request) {
 	if !h.runnerTasksConfigured(rw) {
 		return
@@ -459,10 +337,6 @@ func (h *runnerAPI) runnerTaskResult(rw http.ResponseWriter, r *http.Request) {
 	if err := decodeRunnerBody(r, &res); err != nil {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
-			// 413, and a message that says what to do. The old 400 read as
-			// "your agent is broken" for a script that simply printed a lot,
-			// and the agent treated it as terminal — so the task stranded and
-			// the step blamed a machine that was online and healthy.
 			writeJSONError(rw, http.StatusRequestEntityTooLarge,
 				"this step's output is larger than the server accepts; "+
 					"have the script write it to a file or print less")
@@ -479,36 +353,17 @@ func (h *runnerAPI) runnerTaskResult(rw http.ResponseWriter, r *http.Request) {
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// writeRunnerTaskError separates "this task is not yours" from "the database
-// was briefly unhappy".
-//
-// The distinction is the agent's, not ours: it treats a 409 as terminal and
-// moves on, so collapsing a transient pool error into one throws away a result
-// that could have been retried, and the step then fails with "the runner
-// stopped responding" for a machine that is online and holding the answer.
 func writeRunnerTaskError(rw http.ResponseWriter, err error) {
 	if errors.Is(err, ErrTaskNotClaimable) {
-		// 409: the agent is reporting on work it no longer holds, which is a
-		// state conflict rather than a bad request. It should stop and poll.
 		writeJSONError(rw, http.StatusConflict, "this task is no longer yours")
 		return
 	}
-	// 503 rather than 500: it is worth retrying, and the agent branches on it.
 	writeJSONError(rw, http.StatusServiceUnavailable,
 		"could not record this just now — try again")
 }
 
-// decodeRunnerBody reads a bounded JSON body.
-//
-// The cap matters more here than on most endpoints: an agent posts a script's
-// entire output, and a runaway script producing gigabytes must not become the
-// daemon's problem.
 func decodeRunnerBody(r *http.Request, into any) error {
 	return json.NewDecoder(http.MaxBytesReader(nil, r.Body, MaxRunnerBodyBytes)).Decode(into)
 }
 
-// MaxRunnerBodyBytes caps an agent's request body. Exported because the agent
-// is the one that has to stay under it: it trims its own output first, so the
-// step gets a clear "the script printed too much" rather than a rejected POST
-// and a task nobody ever closes.
 const MaxRunnerBodyBytes = 4 << 20

@@ -13,9 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// sessionHarness wires a session store + the SessionAuthenticator into the
-// chain, then issues a session whose ExpiresAt/CreatedAt the caller can
-// position relative to the idle window to drive renewal.
 func sessionHarness(t *testing.T) (*gatewayHarness, auth.SessionStore) {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -42,8 +39,6 @@ func issueSessionAt(t *testing.T, store auth.SessionStore, created, expires time
 	if err != nil {
 		t.Fatalf("issue session: %v", err)
 	}
-	// Reposition the stored record's timestamps to drive the renewal
-	// threshold deterministically (IssueSession always uses now).
 	key := auth.SessionLookupKey(token)
 	sess, err := store.GetSession(t.Context(), key)
 	if err != nil {
@@ -83,7 +78,6 @@ func TestSessionRenewal_SlidesInSecondHalf(t *testing.T) {
 	t.Parallel()
 	h, store := sessionHarness(t)
 	now := time.Now()
-	// Deep in the second half of the 7d window, well within the 30d cap.
 	token := issueSessionAt(t, store, now.Add(-6*24*time.Hour), now.Add(time.Hour))
 
 	rw := cookieGet(t, h, token)
@@ -111,7 +105,6 @@ func TestSessionRenewal_NoWriteInFirstHalf(t *testing.T) {
 	t.Parallel()
 	h, store := sessionHarness(t)
 	now := time.Now()
-	// Issued moments ago: nearly the full 7d remains → first half.
 	token := issueSessionAt(t, store, now, now.Add(7*24*time.Hour))
 	before, _ := store.GetSession(t.Context(), auth.SessionLookupKey(token))
 
@@ -135,9 +128,6 @@ func TestSessionRenewal_CappedAtMaxAge(t *testing.T) {
 	t.Parallel()
 	h, store := sessionHarness(t)
 	now := time.Now()
-	// Created ~30d ago so the cap sits just 2h out; current expiry is in
-	// the second half so a renewal fires, but is clamped to the cap rather
-	// than sliding the full 7d.
 	created := now.Add(-30*24*time.Hour + 2*time.Hour)
 	token := issueSessionAt(t, store, created, now.Add(30*time.Minute))
 	cap := created.Add(30 * 24 * time.Hour)
@@ -155,9 +145,6 @@ func TestSessionRenewal_CappedAtMaxAge(t *testing.T) {
 	}
 }
 
-// TestSessionRenewal_BearerNotCookied: a session token presented as a
-// bearer header (not a cookie) authenticates but gets no Set-Cookie — only
-// browser cookie sessions need their Expires refreshed.
 func TestSessionRenewal_BearerNotCookied(t *testing.T) {
 	t.Parallel()
 	h, store := sessionHarness(t)

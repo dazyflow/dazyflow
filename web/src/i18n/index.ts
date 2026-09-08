@@ -8,20 +8,10 @@ import { loadVocabulary } from "../lib/dropText";
 import { primaryLanguage } from "../lib/language";
 import en from "./en.json";
 
-// A reader needs ONE catalogue, but every visitor was shipped all of them: the
-// two are ~45 KB gzipped each and both sat in the entry chunk, so the sign-in
-// page downloaded and parsed the language its reader had not chosen before it
-// could paint. Only the FALLBACK is bundled now — it is the one catalogue that
-// has to be resident, since it answers any key another language is missing —
-// and the rest are code-split, fetched when the reader's language selects them.
 const CATALOGUES: Record<string, () => Promise<{ default: object }>> = {
   sv: () => import("./sv.json"),
 };
 
-// Resource loading for the fallback stays synchronous (a JSON import bundled
-// by Vite) so a reader on it has strings at init, with no fetch in front of
-// the first paint. partialBundledLanguages says the store being incomplete is
-// expected: another language's catalogue arrives through loadLanguage below.
 const initialized = i18n
   .use(LanguageDetector)
   .use(initReactI18next)
@@ -29,9 +19,6 @@ const initialized = i18n
     resources: { en: { translation: en } },
     partialBundledLanguages: true,
     fallbackLng: "en",
-    // Match "sv-SE", "sv-FI", etc. to "sv" so OS-level regional Swedish
-    // locales still resolve to our sv bundle rather than falling
-    // through to English.
     load: "languageOnly",
     supportedLngs: ["en", "sv"],
     nonExplicitSupportedLngs: true,
@@ -70,10 +57,6 @@ async function loadLanguage(tag: string): Promise<void> {
   await Promise.all([catalogue, loadVocabulary(code)]);
 }
 
-// setLanguage is the only way the app should switch languages. changeLanguage
-// on its own re-renders every consumer the moment it is called — with the new
-// language selected and its catalogue not yet fetched, which paints raw
-// message keys. Loading first makes the switch atomic.
 export async function setLanguage(tag: string): Promise<void> {
   await loadLanguage(tag);
   await i18n.changeLanguage(tag);

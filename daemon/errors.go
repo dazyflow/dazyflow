@@ -53,11 +53,6 @@ type ErrorDetail struct {
 	Issue string `json:"issue,omitempty"`
 }
 
-// writeAPIError emits the structured envelope. Every error response on
-// the API goes through here — either directly (handlers with a specific
-// machine code) or via writeJSONError (which derives the code from the
-// HTTP status). Pass an empty `details` slice (or no extra args) when you
-// don't have per-field validation info.
 func writeAPIError(rw http.ResponseWriter, status int, code, message string, details ...ErrorDetail) {
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(status)
@@ -74,9 +69,6 @@ func writeAPIError(rw http.ResponseWriter, status int, code, message string, det
 	}
 }
 
-// codeForStatus maps an HTTP status to the stable snake_case error code
-// used when a caller only supplied a status + message. Keeps the envelope
-// machine-readable even for the generic legacy error paths.
 func codeForStatus(status int) string {
 	switch status {
 	case http.StatusBadRequest:
@@ -112,11 +104,6 @@ func codeForStatus(status int) string {
 	}
 }
 
-// decodeRequestJSON decodes the request body into a T, writing a 400
-// "decode_failed" envelope and returning ok=false on a parse error. It
-// centralizes the ~identical json.NewDecoder(r.Body).Decode(&x) +
-// 400-on-error dance scattered across the handlers, standardizing the code
-// on "decode_failed" and the message on "decode body: <err>".
 func decodeRequestJSON[T any](rw http.ResponseWriter, r *http.Request) (T, bool) {
 	var v T
 	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
@@ -126,10 +113,6 @@ func decodeRequestJSON[T any](rw http.ResponseWriter, r *http.Request) (T, bool)
 	return v, true
 }
 
-// decodeRequestJSONOptional is decodeRequestJSON for handlers whose body is
-// optional: an empty body (io.EOF) decodes to the zero T and is treated as
-// success. Any other parse error still writes the 400 envelope and returns
-// ok=false.
 func decodeRequestJSONOptional[T any](rw http.ResponseWriter, r *http.Request) (T, bool) {
 	var v T
 	if r.Body == nil {
@@ -142,11 +125,6 @@ func decodeRequestJSONOptional[T any](rw http.ResponseWriter, r *http.Request) (
 	return v, true
 }
 
-// requireOrgAdmin gates a handler on the organization:admin capability,
-// writing a 403 "forbidden" / "organization:admin required" envelope and
-// returning false when the caller lacks it. Consolidates the open-coded
-// `if !core.CanAdminOrg(p) { … }` checks across the admin handlers onto one
-// envelope + code.
 func requireOrgAdmin(rw http.ResponseWriter, p core.Principal) bool {
 	if !core.CanAdminOrg(p) {
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "organization:admin required")
@@ -214,18 +192,10 @@ func (w *jsonErrorWriter) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 
-// Flush propagates to the underlying writer when it supports it, so SSE
-// streams keep flushing through the wrapper.
 func (w *jsonErrorWriter) Flush() {
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
 }
 
-// Unwrap exposes the wrapped writer to http.ResponseController. This is the
-// innermost wrapper in the middleware chain, so it's the one handlers actually
-// receive — without Unwrap every ResponseController call below it fails with
-// http.ErrNotSupported, including the per-request read deadline the upload
-// route needs to outlive the server's global ReadTimeout (see
-// uploadWorkspaceFile). statusRecorder already does the same.
 func (w *jsonErrorWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }

@@ -5,11 +5,6 @@ package core
 
 import "testing"
 
-// The Regex step's pattern left the params schema's `required` list, because a
-// Replacements table can stand in for it in replace mode and `required` knows
-// nothing about `mode`. This is what keeps the author from hearing about a
-// step with nothing to search for only when it runs.
-
 func regexNode(params map[string]any) Graph {
 	return Graph{ID: "g", Nodes: []Node{{ID: "re_1", Module: "regex", Params: params}}}
 }
@@ -28,9 +23,7 @@ func TestLintRegexPattern_FlagsAStepWithNothingToSearchFor(t *testing.T) {
 		{},
 		{"mode": "match"},
 		{"pattern": "   "},
-		// A table is no help outside replace mode: its values mean nothing there.
 		{"mode": "extract", "replacements": map[string]any{"Clouds": "Molnigt"}},
-		// A half-typed row is not a configured table.
 		{"mode": "replace", "replacements": map[string]any{"": "Molnigt"}},
 	} {
 		if !hasCode(LintGraph(regexNode(params)), "regex_no_pattern") {
@@ -43,7 +36,6 @@ func TestLintRegexPattern_QuietWhenConfigured(t *testing.T) {
 	for _, params := range []map[string]any{
 		{"pattern": "[0-9]+"},
 		{"pattern": "[0-9]+", "mode": "replace", "replacement": "-"},
-		// The table supplies the words, so no pattern is needed.
 		{"mode": "replace", "replacements": map[string]any{"Clouds": "Molnigt"}},
 	} {
 		if hasCode(LintGraph(regexNode(params)), "regex_no_pattern") {
@@ -66,7 +58,6 @@ func TestLintRegexPattern_NamesTheStepAndTheField(t *testing.T) {
 	if len(got.Fields) != 1 || got.Fields[0] != "pattern" {
 		t.Errorf("Fields = %v, want [pattern]", got.Fields)
 	}
-	// Replace mode has two ways out, and the message should say so.
 	if got.Severity != LintError {
 		t.Errorf("Severity = %v, want error", got.Severity)
 	}

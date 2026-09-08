@@ -29,8 +29,6 @@ func webAPICatalog(t *testing.T, tenant string) *webapi.Catalog {
 	return cat
 }
 
-// A web-API step resolves for the org that configured it, and for nobody else.
-// The tenant travels on ctx, so this is the check that the resolver reads it.
 func TestNodeResolver_WebAPIIsTenantScoped(t *testing.T) {
 	r := &NodeResolver{Native: NewRegistry(), WebAPI: webAPICatalog(t, "acme")}
 
@@ -58,8 +56,6 @@ func TestNodeResolver_WebAPIManifestsMatchResolution(t *testing.T) {
 	if m.Label == "" || m.Summary == "" {
 		t.Errorf("manifest = %+v, want it palette-ready", m)
 	}
-	// WithPassthrough is applied on the way out, as it is for every other
-	// catalog — the pin the editor expects on a processing step.
 	if _, hasPass := m.Output(core.PassPort); !hasPass {
 		t.Error("no passthrough pin: ManifestsForTenant did not decorate this manifest like the others")
 	}

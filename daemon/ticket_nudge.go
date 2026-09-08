@@ -35,7 +35,6 @@ import (
 // that mails every hour is one people filter, and a filtered reminder is worse
 // than none because it also buries the reply that follows.
 
-// NudgeSide names which end of a thread is being reminded.
 type NudgeSide string
 
 const (
@@ -62,8 +61,6 @@ const (
 // msgs is the ticket's thread; order does not matter, the newest is found by
 // timestamp.
 func ticketNudge(t core.Ticket, msgs []core.TicketMessage, now time.Time, after time.Duration) (NudgeSide, bool) {
-	// A resolved or closed ticket is finished. Nobody owes anyone a reply, and
-	// a reminder about a ticket you deliberately closed reads as a bug.
 	if t.Status.IsTerminal() {
 		return "", false
 	}
@@ -79,7 +76,6 @@ func ticketNudge(t core.Ticket, msgs []core.TicketMessage, now time.Time, after 
 	if last.CreatedAt.IsZero() {
 		return "", false // nothing said yet
 	}
-	// Whoever did not write it is the one waiting.
 	side, read, nudged := NudgeSupport, t.SupportReadAt, t.SupportNudgedAt
 	if last.AuthorKind == core.AuthorSupport {
 		side, read, nudged = NudgeUser, t.UserReadAt, t.UserNudgedAt

@@ -17,8 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// fireGraphSvc assembles a Service whose scheduler can be driven through the
-// skip/error legs of fireGraph directly (white-box).
 func fireGraphSvc(t *testing.T) (*Service, *workspace.Store, core.JobStore) {
 	t.Helper()
 	ks := auth.NewMemKeyStore()
@@ -39,11 +37,6 @@ func fireGraphSvc(t *testing.T) (*Service, *workspace.Store, core.JobStore) {
 	return svc, wsStore, jobs
 }
 
-// TestFireGraph_TriggerQuotaSkip drives the plan-gate (checkTriggerQuota) skip
-// leg of fireGraph: with the free-polling gate on and a free tenant, no run is
-// submitted — but the skip is now VISIBLE. It used to be a log line and
-// nothing else, so a flow whose schedule was gated looked, from inside the
-// app, exactly like a flow that was running fine.
 func TestFireGraph_TriggerQuotaSkip(t *testing.T) {
 	t.Parallel()
 	svc, _, jobs := fireGraphSvc(t)
@@ -68,14 +61,9 @@ func TestFireGraph_TriggerQuotaSkip(t *testing.T) {
 	}
 }
 
-// TestFireGraph_RunCapSkip drives the ErrPlanLimit-from-SubmitGraph leg of
-// fireGraph: the trigger gate passes, but the monthly run cap is already hit,
-// so SubmitGraph returns ErrPlanLimit — AddSkippedRun is counted, the Runs-list
-// marker is written, and no real run is submitted.
 func TestFireGraph_RunCapSkip(t *testing.T) {
 	t.Parallel()
 	svc, ws, jobs := fireGraphSvc(t)
-	// Free tenant with a 1-run/month cap, already consumed.
 	plans := NewMemPlanStore()
 	_ = plans.SetPlan(t.Context(), TenantPlan{Tenant: "acme", Plan: PlanFree})
 	svc.Plans = plans
@@ -101,7 +89,6 @@ func TestFireGraph_RunCapSkip(t *testing.T) {
 	e := &scheduledGraph{graphID: "capped", tenant: "acme", workspace: "ws1"}
 	sched.fireGraph(context.Background(), e)
 
-	// A skipped-run marker should have been written to the Runs list.
 	recs, err := jobs.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
 		Tenant: "acme", Status: core.JobStatusSkipped, Limit: 10,
 	})
@@ -111,15 +98,14 @@ func TestFireGraph_RunCapSkip(t *testing.T) {
 	if len(recs) != 1 {
 		t.Fatalf("skipped markers = %d, want 1", len(recs))
 	}
-	// AddSkippedRun counted the skip.
 	buckets, _ := usage.Usage(t.Context(), "acme", 1)
 	if len(buckets) == 0 || buckets[0].SkippedRuns == 0 {
 		t.Errorf("skipped-run counter not incremented: %+v", buckets)
 	}
 }
 
-// TestFireGraph_NotPublishedSkip covers the belt-and-braces not-published gate
-// inside fireGraph: a saved-but-unpublished flow never fires.
+// Covers the belt-and-braces not-published gate inside fireGraph: a saved-but-
+// unpublished flow never fires.
 func TestFireGraph_NotPublishedSkip(t *testing.T) {
 	t.Parallel()
 	svc, ws, jobs := fireGraphSvc(t)
@@ -139,13 +125,13 @@ func TestFireGraph_NotPublishedSkip(t *testing.T) {
 	}
 }
 
-// TestFireGraph_OpenWorkspaceError covers fireGraph's open-workspace failure
-// leg. No run is submitted — the flow cannot even be reached — but this is the
-// case that most needed a record: the schedule is dead and stays dead, and it
-// used to leave nothing behind but one line in the daemon log. It is marked
-// FAILED rather than skipped, because "did not run and the owner has to fix
-// something" is a different fact from "did not run, nothing lost", and only
-// the failed one reaches the notification sweep.
+// Covers fireGraph's open-workspace failure leg. No run is submitted — the
+// flow cannot even be reached — but this is the case that most needed a
+// record: the schedule is dead and stays dead, and it used to leave nothing
+// behind but one line in the daemon log. It is marked FAILED rather than
+// skipped, because "did not run and the owner has to fix something" is a
+// different fact from "did not run, nothing lost", and only the failed one
+// reaches the notification sweep.
 func TestFireGraph_OpenWorkspaceError(t *testing.T) {
 	t.Parallel()
 	svc, _, jobs := fireGraphSvc(t)
@@ -172,8 +158,6 @@ func TestFireGraph_OpenWorkspaceError(t *testing.T) {
 	}
 }
 
-// TestFireGraph_HappyPath fires a published graph directly and confirms a run
-// is submitted.
 func TestFireGraph_HappyPath(t *testing.T) {
 	t.Parallel()
 	svc, ws, jobs := fireGraphSvc(t)
@@ -199,8 +183,6 @@ func TestFireGraph_HappyPath(t *testing.T) {
 	}
 }
 
-// onlyEntry returns the scheduler's single tracked entry, failing if there is
-// any other number of them.
 func onlyEntry(t *testing.T, s *Scheduler) *scheduledGraph {
 	t.Helper()
 	s.mu.Lock()
@@ -214,18 +196,16 @@ func onlyEntry(t *testing.T, s *Scheduler) *scheduledGraph {
 	return nil
 }
 
-// TestRescan_CronEditRecomputesScheduleAt is the regression test for the
-// cron-edit-takes-effect bug: editing a published flow's cron must recompute
-// the next fire on the next rescan, not keep the stale next-fire from the old
-// expression. Previously rescan preserved scheduleAt whenever the entry key
-// still existed, so tightening a yearly schedule to every-minute idled until
-// the old yearly fire elapsed.
+// The regression test for the cron-edit-takes-effect bug: editing a published
+// flow's cron must recompute the next fire on the next rescan, not keep the
+// stale next-fire from the old expression. Previously rescan preserved
+// scheduleAt whenever the entry key still existed, so tightening a yearly
+// schedule to every-minute idled until the old yearly fire elapsed.
 func TestRescan_CronEditRecomputesScheduleAt(t *testing.T) {
 	t.Parallel()
 	svc, ws, _ := fireGraphSvc(t)
 	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 
-	// Publish a flow that fires yearly (next fire: 2027-01-01).
 	g := core.Graph{
 		ID: "edit", Tenant: "acme", Workspace: "ws1",
 		Nodes:    []core.Node{{ID: "n", Module: "delay", Params: map[string]any{"ms": 1}}},
@@ -239,8 +219,6 @@ func TestRescan_CronEditRecomputesScheduleAt(t *testing.T) {
 	if err := sched.rescan(context.Background()); err != nil {
 		t.Fatalf("rescan 1: %v", err)
 	}
-	// Entries are keyed by the schedule itself, so an edit replaces the entry
-	// rather than updating it in place — read the flow's only entry either way.
 	before := onlyEntry(t, sched)
 	if before.scheduleAt.Year() != 2027 {
 		t.Fatalf("yearly first fire = %v, want 2027", before.scheduleAt)
@@ -263,10 +241,10 @@ func TestRescan_CronEditRecomputesScheduleAt(t *testing.T) {
 	}
 }
 
-// TestReanchor_AdvancesStaleScheduleAt is the regression test for the leader-
-// failover re-fire bug: a follower inherits a frozen scheduleAt that is never
-// advanced, so on takeover a stale (past) value would fire a tick the old
-// leader already handled. reanchor must push it to the next fire after now.
+// The regression test for the leader- failover re-fire bug: a follower
+// inherits a frozen scheduleAt that is never advanced, so on takeover a stale
+// (past) value would fire a tick the old leader already handled. reanchor must
+// push it to the next fire after now.
 func TestReanchor_AdvancesStaleScheduleAt(t *testing.T) {
 	t.Parallel()
 	svc, _, _ := fireGraphSvc(t)
@@ -287,9 +265,6 @@ func TestReanchor_AdvancesStaleScheduleAt(t *testing.T) {
 	}
 }
 
-// publishPollFlow saves and publishes a flow whose only node is a poll trigger
-// on the given interval, and returns the scheduler key rescan will track it
-// under.
 func publishPollFlow(t *testing.T, ws *workspace.Store, id string, seconds int) string {
 	t.Helper()
 	g := core.Graph{
@@ -310,12 +285,12 @@ func publishPollFlow(t *testing.T, ws *workspace.Store, id string, seconds int) 
 	return "acme/ws1/" + id + "@tick"
 }
 
-// TestReanchor_PreservesPollStagger pins that a leadership takeover keeps poll
-// flows spread out. reanchor recomputes every tracked entry from ONE clock
-// read, so anchoring on a bare nextFireFrom(now) lands every flow sharing a
-// cadence on the identical instant — the thundering herd pollJitter exists to
-// break up, arriving right as a node has gone down. Cron entries carry no
-// interval and must keep their exact wall-clock anchor.
+// Pins that a leadership takeover keeps poll flows spread out. reanchor
+// recomputes every tracked entry from ONE clock read, so anchoring on a bare
+// nextFireFrom(now) lands every flow sharing a cadence on the identical
+// instant — the thundering herd pollJitter exists to break up, arriving right
+// as a node has gone down. Cron entries carry no interval and must keep their
+// exact wall-clock anchor.
 func TestReanchor_PreservesPollStagger(t *testing.T) {
 	t.Parallel()
 	svc, _, _ := fireGraphSvc(t)
@@ -348,13 +323,12 @@ func TestReanchor_PreservesPollStagger(t *testing.T) {
 			t.Errorf("%s: reanchored past one interval: %v (now %v)", key, got, now)
 		}
 	}
-	// A cron entry has no interval, so its wall-clock anchor is exact.
 	if h := sched.tracked["acme/ws1/hourly@c"].scheduleAt; !h.Equal(cron.Next(now)) {
 		t.Errorf("cron entry jittered: got %v, want %v", h, cron.Next(now))
 	}
 }
 
-// TestRun_StartupDoesNotCollapsePollStagger is the regression test for the
+// The regression test for the
 // startup re-anchor bug. Run seeded its leadership tracking with
 // `s.leader == nil`, but NewScheduler always installs a non-nil predicate — so
 // the test was never true, every deploy took the "just took over" branch on its
@@ -368,15 +342,12 @@ func TestReanchor_PreservesPollStagger(t *testing.T) {
 func TestRun_StartupDoesNotCollapsePollStagger(t *testing.T) {
 	t.Parallel()
 	svc, ws, _ := fireGraphSvc(t)
-	// Two flows on the same cadence, long enough that nothing is ever due
-	// during the test — we're asserting on scheduling, not firing.
 	keyA := publishPollFlow(t, ws, "alpha", 3600)
 	keyB := publishPollFlow(t, ws, "beta", 3600)
 
 	sched := NewScheduler(svc)
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	sched.SetClock(func() time.Time { return now })
-	// Fast ticks; rescan far enough out that only the initial one runs.
 	sched.SetInterval(time.Millisecond, time.Hour)
 	// Stand in for NewScheduler's always-true single-node predicate, while
 	// counting ticks so the assertion can't pass vacuously on a loop that
@@ -411,10 +382,6 @@ func TestRun_StartupDoesNotCollapsePollStagger(t *testing.T) {
 	}
 }
 
-// Identical schedules on one flow collapse into a single scheduler entry.
-// Entries used to be keyed by position in the trigger array, so every copy got
-// its own entry and its own fire: 2000 pasted "* * * * *" triggers were 2000
-// runs a minute from one saved flow.
 func TestRescan_IdenticalCronTriggersCollapse(t *testing.T) {
 	t.Parallel()
 	svc, wsStore, _ := fireGraphSvc(t)
@@ -485,8 +452,6 @@ func TestRecordMissedFires_MarksTheGap(t *testing.T) {
 	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
 	sched.SetClock(func() time.Time { return now })
 
-	// An every-minute poll entry that was due half an hour ago: 30 fires went
-	// missing while nobody was firing it.
 	e := &scheduledGraph{
 		graphID: "g", tenant: "acme", workspace: "ws1",
 		interval:   time.Minute,
@@ -505,8 +470,6 @@ func TestRecordMissedFires_MarksTheGap(t *testing.T) {
 		runs[0].Result.Error.Code != "schedule_fires_missed" {
 		t.Fatalf("marker does not say why: %+v", runs[0].Result)
 	}
-	// The count is the useful part: "it was late" and "it missed 30 runs" ask
-	// for different reactions.
 	if !strings.Contains(runs[0].Result.Error.Message, "30") {
 		t.Errorf("marker does not say how many were missed: %q", runs[0].Result.Error.Message)
 	}
@@ -521,8 +484,6 @@ func TestRecordMissedFires_QuietWhenOnTime(t *testing.T) {
 	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
 	sched.SetClock(func() time.Time { return now })
 
-	// Due one second ago on a one-minute cadence: normal tick latency, no
-	// whole fire has elapsed.
 	e := &scheduledGraph{
 		graphID: "g", tenant: "acme", workspace: "ws1",
 		interval:   time.Minute,
@@ -565,7 +526,6 @@ func TestReanchor_RecordsWhatTheDeadLeaderOwed(t *testing.T) {
 	if runs, _ := jobs.ListByGraph(t.Context(), "fine"); len(runs) != 0 {
 		t.Errorf("takeover marked a healthy entry as having missed fires (%d)", len(runs))
 	}
-	// And the re-anchor still happened: both entries now point at the future.
 	for k, e := range sched.tracked {
 		if !e.scheduleAt.After(now) {
 			t.Errorf("%s was not re-anchored (scheduleAt %s)", k, e.scheduleAt)

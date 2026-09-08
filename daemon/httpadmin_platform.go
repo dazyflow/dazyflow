@@ -15,8 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// platformAdminAPI serves the platform-admin console endpoints. Its fields are the whole of what
-// those handlers touch.
 type platformAdminAPI struct {
 	auditor
 	adminCheck
@@ -31,7 +29,6 @@ type platformAdminAPI struct {
 	DropSwitches        DropSwitchStore
 }
 
-// platformAdminAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) platformAdminAPI() *platformAdminAPI {
 	return &platformAdminAPI{auditor: h.auditor(), adminCheck: h.admins(), svc: h.svc, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, PlatformAdminGrants: h.PlatformAdminGrants, DropSwitches: h.DropSwitches}
 }
@@ -44,29 +41,18 @@ func (h *HTTPGateway) platformAdminAPI() *platformAdminAPI {
 // state they flip is enforced elsewhere: the auth ModerationGate (lockout),
 // SubmitGraph (org flow halt), and the engine resolver (drop killswitch).
 
-// ---- request/response shapes ---------------------------------------
-
 type platformUserDTO struct {
-	Email   string `json:"email"`
-	Subject string `json:"subject"`
-	Tenant  string `json:"tenant"`
-	// TenantName is the home org's human-facing display name, resolved
-	// from the profile store so the UI can show "Brightleaf" instead of
-	// the opaque "usr_38f4657c". Empty when the org has no profile — the
-	// client falls back to the raw id.
-	TenantName    string     `json:"tenant_name,omitempty"`
-	Status        string     `json:"status"`
-	SuspendedAt   *time.Time `json:"suspended_at,omitempty"`
-	SuspendReason string     `json:"suspend_reason,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	Verified      bool       `json:"verified"`
-	// PlatformAdmin is the effective status (env allowlist OR runtime grant).
-	// PlatformAdminEnv flags the immutable env-allowlist source: the UI shows
-	// a non-revocable badge and hides the revoke control for it (revoking a
-	// runtime grant for such a user is futile — they'd be re-elevated on next
-	// login).
-	PlatformAdmin    bool `json:"platform_admin"`
-	PlatformAdminEnv bool `json:"platform_admin_env"`
+	Email            string     `json:"email"`
+	Subject          string     `json:"subject"`
+	Tenant           string     `json:"tenant"`
+	TenantName       string     `json:"tenant_name,omitempty"`
+	Status           string     `json:"status"`
+	SuspendedAt      *time.Time `json:"suspended_at,omitempty"`
+	SuspendReason    string     `json:"suspend_reason,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	Verified         bool       `json:"verified"`
+	PlatformAdmin    bool       `json:"platform_admin"`
+	PlatformAdminEnv bool       `json:"platform_admin_env"`
 }
 
 type platformOrgDTO struct {
@@ -83,20 +69,15 @@ type platformOrgDTO struct {
 }
 
 type platformDropDTO struct {
-	ID          string `json:"id"`
-	Label       string `json:"label"`
-	Integration string `json:"integration,omitempty"`
-	// Icon / Category / Color / BrandLogo mirror the manifest so the page
-	// can render the exact same glyph treatment as the build palette.
-	Icon      string `json:"icon,omitempty"`
-	Category  string `json:"category,omitempty"`
-	Color     string `json:"color,omitempty"`
-	BrandLogo string `json:"brand_logo,omitempty"`
-	// GloballyDisabled is set when a switch with empty tenant exists.
-	GloballyDisabled bool `json:"globally_disabled"`
-	// DisabledTenants lists the tenants this drop is switched off for
-	// (excludes the global switch). Empty when only globally toggled.
-	DisabledTenants []string `json:"disabled_tenants,omitempty"`
+	ID               string   `json:"id"`
+	Label            string   `json:"label"`
+	Integration      string   `json:"integration,omitempty"`
+	Icon             string   `json:"icon,omitempty"`
+	Category         string   `json:"category,omitempty"`
+	Color            string   `json:"color,omitempty"`
+	BrandLogo        string   `json:"brand_logo,omitempty"`
+	GloballyDisabled bool     `json:"globally_disabled"`
+	DisabledTenants  []string `json:"disabled_tenants,omitempty"`
 	// OwnedByTenants is set only for a tenant runner's drop, naming the orgs
 	// that registered it. Empty for a built-in, which every org shares — so
 	// the page can say whose machine a step belongs to before switching it off.
@@ -104,15 +85,10 @@ type platformDropDTO struct {
 	Reason         string   `json:"reason,omitempty"`
 }
 
-// moderationBody is the shared JSON body for suspend/ban/disable actions.
 type moderationBody struct {
 	Reason string `json:"reason"`
-	// Tenant scopes a drop switch to one org ("" = global). Ignored by the
-	// user/org handlers.
 	Tenant string `json:"tenant"`
-	// Domain, on a user ban, blocks the whole email domain rather than the
-	// single address — for shutting down a throwaway-domain abuser.
-	Domain bool `json:"domain"`
+	Domain bool   `json:"domain"`
 }
 
 func decodeModerationBody(r *http.Request) moderationBody {
@@ -140,10 +116,6 @@ func (h *platformAdminAPI) requirePlatform(rw http.ResponseWriter, p core.Princi
 	return true
 }
 
-// ---- users ----------------------------------------------------------
-
-// platformListUsers returns every account on the deployment with its
-// moderation state — the platform-admin user roster.
 func (h *platformAdminAPI) platformListUsers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
@@ -153,8 +125,6 @@ func (h *platformAdminAPI) platformListUsers(rw http.ResponseWriter, r *http.Req
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// Resolve every home-org id to its display name in one batch so the
-	// roster shows real names, not opaque tenant ids.
 	tenants := make([]string, 0, len(users))
 	for _, u := range users {
 		tenants = append(tenants, u.Tenant)
@@ -188,9 +158,6 @@ func (h *platformAdminAPI) toPlatformUserDTO(u auth.User, tenantName string) pla
 	}
 }
 
-// tenantNames batch-resolves tenant ids to org display names via the
-// profile store. Missing profiles / a nil store simply yield no entry —
-// callers fall back to the raw id.
 func (h *platformAdminAPI) tenantNames(ctx context.Context, tenants []string) map[string]string {
 	out := map[string]string{}
 	if h.Profiles == nil || len(tenants) == 0 {
@@ -208,7 +175,6 @@ func (h *platformAdminAPI) tenantNames(ctx context.Context, tenants []string) ma
 	return out
 }
 
-// platformGetUser returns one account plus the orgs it belongs to.
 func (h *platformAdminAPI) platformGetUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
@@ -220,7 +186,6 @@ func (h *platformAdminAPI) platformGetUser(rw http.ResponseWriter, r *http.Reque
 		return
 	}
 	resp := map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])}
-	// Org memberships, if the multi-org store is wired.
 	if h.Memberships != nil {
 		if rows, err := h.Memberships.ListByEmail(r.Context(), email); err == nil {
 			orgs := make([]string, 0, len(rows))
@@ -233,9 +198,6 @@ func (h *platformAdminAPI) platformGetUser(rw http.ResponseWriter, r *http.Reque
 	writeJSON(rw, http.StatusOK, resp)
 }
 
-// platformSuspendUser locks an account: it sets the suspended status and
-// kills the user's live sessions. Future requests (sessions AND API keys)
-// are refused by the auth ModerationGate. Reversible via unsuspend.
 func (h *platformAdminAPI) platformSuspendUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
@@ -260,7 +222,6 @@ func (h *platformAdminAPI) platformSuspendUser(rw http.ResponseWriter, r *http.R
 	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
 }
 
-// platformUnsuspendUser reverses a suspension, restoring access.
 func (h *platformAdminAPI) platformUnsuspendUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
@@ -333,8 +294,6 @@ func (h *platformAdminAPI) platformGrantAdmin(rw http.ResponseWriter, r *http.Re
 		writeJSONError(rw, http.StatusNotFound, "no such account")
 		return
 	}
-	// Env-allowlist admins are already platform admins, immutably — granting is
-	// a no-op, so report success without writing a redundant row.
 	if h.isPlatformAdminEmail(email) {
 		writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
 		return
@@ -343,7 +302,6 @@ func (h *platformAdminAPI) platformGrantAdmin(rw http.ResponseWriter, r *http.Re
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// Drop live sessions so the next request re-issues with the new role.
 	h.revokeSubjectSessions(r.Context(), u.Subject)
 	h.audit(r.Context(), p, "platform.user.grant_admin", email, "")
 	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
@@ -380,14 +338,10 @@ func (h *platformAdminAPI) platformRevokeAdmin(rw http.ResponseWriter, r *http.R
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// Best-effort session drop so the role is gone on their next request, not
-	// only when the session expires. No account row is fine (grant to a
-	// not-yet-signed-in email) — there are no sessions to drop.
 	if u, err := h.Users.GetByEmail(r.Context(), email); err == nil {
 		h.revokeSubjectSessions(r.Context(), u.Subject)
 	}
 	h.audit(r.Context(), p, "platform.user.revoke_admin", email, "")
-	// Return the refreshed view (best-effort; the account may not exist).
 	u, err := h.Users.GetByEmail(r.Context(), email)
 	if err != nil {
 		writeJSON(rw, http.StatusOK, map[string]any{"email": email, "platform_admin": false})
@@ -452,10 +406,6 @@ func (h *platformAdminAPI) guardUserModeration(rw http.ResponseWriter, ctx conte
 		writeJSONError(rw, http.StatusBadRequest, "you can't moderate your own account")
 		return auth.User{}, false
 	}
-	// Block moderating a platform admin by EITHER layer (env allowlist or
-	// runtime grant) — they're a fellow operator. To suspend/ban/delete a
-	// runtime-granted admin, revoke the grant first; an env admin needs the
-	// env var edited and a restart.
 	if h.isPlatformAdmin(email) {
 		writeJSONError(rw, http.StatusForbidden, "can't moderate a platform admin")
 		return auth.User{}, false
@@ -468,9 +418,6 @@ func (h *platformAdminAPI) guardUserModeration(rw http.ResponseWriter, ctx conte
 	return u, true
 }
 
-// revokeSubjectSessions kills every live session for a subject so a
-// suspension/ban takes effect immediately, not just on the session's
-// next request. Best-effort: the ModerationGate is the real enforcement.
 func (h *platformAdminAPI) revokeSubjectSessions(ctx context.Context, subject string) {
 	if rev, ok := h.Sessions.(auth.SessionRevoker); ok && subject != "" {
 		_, _ = rev.RevokeSubjectSessions(ctx, subject)
@@ -489,11 +436,6 @@ func (h *platformAdminAPI) invalidateModeration(subject, tenant string) {
 	}
 }
 
-// signInLockout reports whether a freshly password-verified user is
-// barred from signing in by platform-admin moderation — their own
-// account suspended, or their home org suspended — and a user-facing
-// reason. Used by the sign-in and TOTP-completion paths so a locked-out
-// account fails at the door instead of one request later.
 func (h *platformAdminAPI) signInLockout(ctx context.Context, u auth.User) (string, bool) {
 	if u.Suspended() {
 		return "your account has been suspended", true
@@ -512,9 +454,6 @@ func emailDomainOf(email string) string {
 	return email[at+1:]
 }
 
-// ---- orgs -----------------------------------------------------------
-
-// platformListOrgs returns every org profile with its moderation state.
 func (h *platformAdminAPI) platformListOrgs(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
@@ -562,7 +501,6 @@ func (h *platformAdminAPI) toPlatformOrgDTO(ctx context.Context, pr auth.OrgProf
 	}
 }
 
-// platformGetOrg returns one org plus its member emails.
 func (h *platformAdminAPI) platformGetOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
@@ -580,9 +518,7 @@ func (h *platformAdminAPI) platformGetOrg(rw http.ResponseWriter, r *http.Reques
 		pr = auth.OrgProfile{Tenant: tenant, DisplayName: tenant, Status: auth.StatusActive}
 	}
 	resp := map[string]any{
-		"org": h.toPlatformOrgDTO(r.Context(), pr),
-		// The resolved limits + plan in force right now, so the detail
-		// page can show what the org actually gets without recomputing.
+		"org":       h.toPlatformOrgDTO(r.Context(), pr),
 		"effective": h.svc.effectiveLimits(r.Context(), tenant),
 	}
 	if h.Memberships != nil {
@@ -597,14 +533,10 @@ func (h *platformAdminAPI) platformGetOrg(rw http.ResponseWriter, r *http.Reques
 	writeJSON(rw, http.StatusOK, resp)
 }
 
-// platformSuspendOrg halts an org: scheduled and triggered flows stop
-// firing (SubmitGraph refuses) and every member is locked out at auth.
-// Member sessions are revoked for immediate effect.
 func (h *platformAdminAPI) platformSuspendOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	h.setOrgSuspended(rw, r, p, true, false)
 }
 
-// platformUnsuspendOrg reverses an org suspension.
 func (h *platformAdminAPI) platformUnsuspendOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	h.setOrgSuspended(rw, r, p, false, false)
 }
@@ -666,8 +598,6 @@ func (h *platformAdminAPI) setOrgSuspended(rw http.ResponseWriter, r *http.Reque
 	writeJSON(rw, http.StatusOK, map[string]any{"org": h.toPlatformOrgDTO(r.Context(), pr)})
 }
 
-// revokeOrgMemberSessions kills the live sessions of every member of a
-// tenant, so an org suspension boots them immediately. Best-effort.
 func (h *platformAdminAPI) revokeOrgMemberSessions(ctx context.Context, tenant string) {
 	for _, email := range h.orgMemberEmails(ctx, tenant) {
 		if u, err := h.Users.GetByEmail(ctx, email); err == nil {
@@ -676,7 +606,6 @@ func (h *platformAdminAPI) revokeOrgMemberSessions(ctx context.Context, tenant s
 	}
 }
 
-// banOrgMembers blocklists every member email of a banned org.
 func (h *platformAdminAPI) banOrgMembers(ctx context.Context, p core.Principal, tenant, reason string) {
 	if h.Blocklist == nil {
 		return
@@ -691,8 +620,6 @@ func (h *platformAdminAPI) banOrgMembers(ctx context.Context, p core.Principal, 
 	}
 }
 
-// orgMemberEmails collects the distinct member emails of a tenant: the
-// explicit memberships plus any users whose home org is this tenant.
 func (h *platformAdminAPI) orgMemberEmails(ctx context.Context, tenant string) []string {
 	seen := map[string]bool{}
 	if h.Memberships != nil {
@@ -702,8 +629,6 @@ func (h *platformAdminAPI) orgMemberEmails(ctx context.Context, tenant string) [
 			}
 		}
 	}
-	// Home-org owners aren't always in the memberships table (a personal
-	// org's owner, e.g.), so sweep users for a matching home tenant.
 	if users, err := h.Users.ListUsers(ctx); err == nil {
 		for _, u := range users {
 			if u.Tenant == tenant {
@@ -718,11 +643,6 @@ func (h *platformAdminAPI) orgMemberEmails(ctx context.Context, tenant string) [
 	return out
 }
 
-// ---- drops (killswitch) --------------------------------------------
-
-// platformListDrops returns the full drop catalog with each drop's
-// killswitch state (global + per-tenant). Unlike the build-time palette
-// (ListDrops), this includes drops that are switched off.
 func (h *platformAdminAPI) platformListDrops(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
@@ -749,7 +669,6 @@ func (h *platformAdminAPI) platformListDrops(rw http.ResponseWriter, r *http.Req
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// Index switches by drop id.
 	global := map[string]string{}      // id -> reason
 	perTenant := map[string][]string{} // id -> tenants
 	for _, sw := range switches {
@@ -812,7 +731,6 @@ func (h *platformAdminAPI) platformDisableDrop(rw http.ResponseWriter, r *http.R
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// platformEnableDrop clears a drop switch (global or per-tenant).
 func (h *platformAdminAPI) platformEnableDrop(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
@@ -840,8 +758,6 @@ func (h *platformAdminAPI) platformEnableDrop(rw http.ResponseWriter, r *http.Re
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// ---- tiers ----------------------------------------------------------
-
 func (h *platformAdminAPI) requirePlatformEntitlements(rw http.ResponseWriter, p core.Principal) bool {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
@@ -854,7 +770,6 @@ func (h *platformAdminAPI) requirePlatformEntitlements(rw http.ResponseWriter, p
 	return true
 }
 
-// platformListTiers returns every tier (built-in + custom).
 func (h *platformAdminAPI) platformListTiers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatformEntitlements(rw, p) {
 		return
@@ -867,8 +782,6 @@ func (h *platformAdminAPI) platformListTiers(rw http.ResponseWriter, r *http.Req
 	writeJSON(rw, http.StatusOK, map[string]any{"tiers": tiers})
 }
 
-// platformPutTier creates or updates a tier. The id comes from the body
-// (slugified by the client) on create, or the path on update.
 func (h *platformAdminAPI) platformPutTier(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatformEntitlements(rw, p) {
 		return
@@ -886,7 +799,6 @@ func (h *platformAdminAPI) platformPutTier(rw http.ResponseWriter, r *http.Reque
 		writeJSONError(rw, http.StatusBadRequest, "tier id required")
 		return
 	}
-	// Don't let a client flip the built-in flag; preserve the stored value.
 	if existing, ok := h.svc.Entitlements.GetTier(r.Context(), t.ID); ok {
 		t.BuiltIn = existing.BuiltIn
 	} else {
@@ -900,7 +812,6 @@ func (h *platformAdminAPI) platformPutTier(rw http.ResponseWriter, r *http.Reque
 	writeJSON(rw, http.StatusOK, map[string]any{"tier": t})
 }
 
-// platformDeleteTier removes a custom tier (built-ins are protected).
 func (h *platformAdminAPI) platformDeleteTier(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatformEntitlements(rw, p) {
 		return
@@ -914,10 +825,6 @@ func (h *platformAdminAPI) platformDeleteTier(rw http.ResponseWriter, r *http.Re
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// ---- per-org entitlement -------------------------------------------
-
-// platformGetEntitlement returns an org's current assignment, the
-// resolved effective limits, and the tier catalog for the editor.
 func (h *platformAdminAPI) platformGetEntitlement(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatformEntitlements(rw, p) {
 		return
@@ -937,8 +844,6 @@ func (h *platformAdminAPI) platformGetEntitlement(rw http.ResponseWriter, r *htt
 	})
 }
 
-// platformPutEntitlement sets an org's tier, plan grant, and per-limit
-// overrides in one call.
 func (h *platformAdminAPI) platformPutEntitlement(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatformEntitlements(rw, p) {
 		return
@@ -969,12 +874,8 @@ func (h *platformAdminAPI) platformPutEntitlement(rw http.ResponseWriter, r *htt
 	})
 }
 
-// ---- cross-tenant invite -------------------------------------------
+// cross-tenant invite
 
-// platformInviteMember mints an org invitation into any tenant — the
-// platform-admin counterpart to the org-admin invite (which is locked to
-// the caller's own org). Role caps don't apply: a platform admin is
-// omnipotent across tenants.
 func (h *platformAdminAPI) platformInviteMember(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")

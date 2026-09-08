@@ -19,8 +19,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// signGitHub produces the X-Hub-Signature-256 header value GitHub
-// sends. Scheme: "sha256=" + hex(hmac-sha256(secret, body)).
 func signGitHub(secret string, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
@@ -118,7 +116,6 @@ func TestGitHubEvents_MissingSignatureRejected(t *testing.T) {
 func TestGitHubEvents_NotConfiguredReturns501(t *testing.T) {
 	t.Parallel()
 	gh := newGatewayHarness(t)
-	// gw.GitHubEvents intentionally nil.
 	body := []byte(`{}`)
 	req := httptest.NewRequest("POST", "/api/v1/events/github/t", bytes.NewReader(body))
 	req.Header.Set("X-GitHub-Event", "ping")
@@ -154,8 +151,6 @@ func TestGitHubEvents_PushDispatchesToSubscribedGraphs(t *testing.T) {
 		t.Fatalf("code=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// The fanout runs in the background, so wait for it rather than for the
-	// clock, then assert once.
 	h.awaitFanout(t)
 	runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
 		Tenant: "t", Workspace: "ws", GraphID: "deploy-graph",
@@ -166,7 +161,6 @@ func TestGitHubEvents_PushDispatchesToSubscribedGraphs(t *testing.T) {
 	if len(runs) == 0 {
 		t.Fatal("the event dispatched no run")
 	}
-	// Verify the trigger node's outputs got the right values.
 	node, err := h.store.Get(t.Context(), NodeJobID(runs[0].ID, "trig"))
 	if err != nil {
 		t.Fatalf("get node record: %v", err)
@@ -210,8 +204,6 @@ func TestGitHubEvents_PullRequestOpenedDispatches(t *testing.T) {
 		t.Fatalf("code=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// The fanout runs in the background, so wait for it rather than for the
-	// clock, then assert once.
 	h.awaitFanout(t)
 	runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
 		Tenant: "t", Workspace: "ws", GraphID: "triage-graph",
@@ -291,9 +283,8 @@ func TestGitHubOnNewPR_StandaloneRunErrors(t *testing.T) {
 	}
 }
 
-// TestGitHubEvents_WrongSigPrefixRejected — a valid HMAC hex under the
-// wrong algorithm prefix (sha1=) must be rejected; the handler requires
-// the sha256= scheme GitHub actually uses.
+// A valid HMAC hex under the wrong algorithm prefix (sha1=) must be rejected;
+// the handler requires the sha256= scheme GitHub actually uses.
 func TestGitHubEvents_WrongSigPrefixRejected(t *testing.T) {
 	t.Parallel()
 	h := newGitHubHarness(t)
@@ -310,9 +301,8 @@ func TestGitHubEvents_WrongSigPrefixRejected(t *testing.T) {
 	}
 }
 
-// TestGitHubEvents_UppercaseHexSigRejected — GitHub signs with lowercase
-// hex; an uppercased hex of an otherwise-correct HMAC must not validate
-// (the compare is byte-for-byte, not case-folded).
+// GitHub signs with lowercase hex; an uppercased hex of an otherwise-correct
+// HMAC must not validate (the compare is byte-for-byte, not case-folded).
 func TestGitHubEvents_UppercaseHexSigRejected(t *testing.T) {
 	t.Parallel()
 	h := newGitHubHarness(t)
@@ -330,9 +320,9 @@ func TestGitHubEvents_UppercaseHexSigRejected(t *testing.T) {
 	}
 }
 
-// TestGitHubEvents_SparsePushAcked — a push with most fields absent
-// (only ref) is structurally valid; the handler must parse it without
-// erroring (200), not 4xx/5xx on missing commits/repository/pusher.
+// A push with most fields absent (only ref) is structurally valid; the handler
+// must parse it without erroring (200), not 4xx/5xx on missing
+// commits/repository/pusher.
 func TestGitHubEvents_SparsePushAcked(t *testing.T) {
 	t.Parallel()
 	h := newGitHubHarness(t)

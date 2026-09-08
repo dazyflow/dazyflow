@@ -111,9 +111,6 @@ func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progres
 	if err != nil {
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
-	// normalizeResultList doesn't cap (unlike normalizeRows), so bound the
-	// input here — and the output is amplified (each wrapper's chosen port
-	// can expand into many rows), so it's re-checked as it grows below.
 	if err := capRows(len(wrappers)); err != nil {
 		return params.Err(job, "too_many_rows", err.Error()), nil
 	}
@@ -142,10 +139,6 @@ func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progres
 			continue
 		}
 
-		// for_each runs a body SUBGRAPH per item, so each result wraps the
-		// body's per-node outputs under `nodes`: {status, nodes:{<id>:{output:{port:val}}}}.
-		// Pick the body node (named, or inferred when the body is one node),
-		// then one of its output ports.
 		nodes, ok := asAnyMap(payload["nodes"])
 		if !ok {
 			return params.Err(job, "bad_input",
@@ -233,10 +226,6 @@ func selectPort(outputs map[string]any, port string) (any, error) {
 	return nil, fmt.Errorf("step has %d output ports (%s); set 'port' to pick one", len(outputs), strings.Join(slices.Sorted(maps.Keys(outputs)), ", "))
 }
 
-// normalizeResultList coerces the for_each results input into a list of
-// wrapper values. In-process it arrives as []core.Ref (each .Inline a
-// payload map); after a JSON round-trip it's []any of payload maps, or a
-// JSON string. Each returned element is a single wrapper (Ref or map).
 func normalizeResultList(inline any) ([]any, error) {
 	switch v := inline.(type) {
 	case nil:
@@ -263,8 +252,6 @@ func normalizeResultList(inline any) ([]any, error) {
 	return nil, fmt.Errorf("results: expected a for_each results list, got %T", inline)
 }
 
-// refInline unwraps a core.Ref (or a JSON-serialized Ref {"data":…}) to
-// its underlying value, passing plain values through unchanged.
 func refInline(v any) any {
 	switch r := v.(type) {
 	case core.Ref:
@@ -272,8 +259,6 @@ func refInline(v any) any {
 	case *core.Ref:
 		return r.Inline
 	case map[string]any:
-		// A serialized Ref carries the value under "data" (Ref.Inline's
-		// json tag). Anything else is already a plain value.
 		if d, ok := r["data"]; ok {
 			if _, hasMIME := r["mime"]; hasMIME {
 				return d
@@ -284,9 +269,6 @@ func refInline(v any) any {
 	return v
 }
 
-// asAnyMap accepts the two shapes an output/payload map takes: the
-// in-process map[string]core.Ref / map[string]any, or anything coerced
-// from JSON.
 func asAnyMap(v any) (map[string]any, bool) {
 	switch m := v.(type) {
 	case map[string]any:
@@ -301,10 +283,6 @@ func asAnyMap(v any) (map[string]any, bool) {
 	return nil, false
 }
 
-// valueToRows turns an unwrapped port value into zero or more rows. A
-// list of objects flattens to many rows; a single object is one row; a
-// scalar (or anything else) is wrapped as {"value": v} so it still lands
-// in the table.
 func valueToRows(value any) []map[string]any {
 	switch v := value.(type) {
 	case nil:

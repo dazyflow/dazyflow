@@ -115,8 +115,6 @@ func executePDFSplit(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 		rows = append(rows, map[string]any{
 			"path": dest,
 			"name": fmt.Sprintf("%s-%d.pdf", prefix, i+1),
-			// The page range each piece covers, so a flow can label or route
-			// by it rather than counting along in a loop.
 			"from": s.From,
 			"to":   s.Thru,
 		})

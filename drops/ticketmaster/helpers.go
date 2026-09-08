@@ -37,25 +37,16 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// maxResponseBytes caps how much of a response we buffer. A 200-event page
-// with full venue and attraction embeds runs to a few MiB at most.
 const maxResponseBytes = 16 << 20 // 16 MiB
 
-// pageLimit is Ticketmaster's per-page maximum. Deep paging is separately
-// capped at the 1000th item (size × page < 1000).
 const pageLimit = 200
 
 var httpBase = apibase.New("https://app.ticketmaster.com/discovery/v2")
 
-// SetHTTPBase swaps the Discovery API root (tests point it at httptest).
 func SetHTTPBase(base string) { httpBase.Set(base) }
 
 func baseURL(job core.Job) string { return httpBase.For(job) }
 
-// connectionFields is the per-tenant Ticketmaster connection: one API key,
-// entered on the Apps page (stored as conn.ticketmaster.*) and injected into
-// each node's params at run time. Shared by both drops so the integration
-// configures from one place.
 func connectionFields() []core.ConnectionField {
 	return []core.ConnectionField{
 		{Key: "api_key", Label: "API key", Secret: true, Required: true,
@@ -63,8 +54,6 @@ func connectionFields() []core.ConnectionField {
 	}
 }
 
-// resolveKey reads the injected connection key. Empty means the integration
-// has not been set up, and the error says exactly that.
 func resolveKey(job core.Job) (string, error) {
 	key := strings.TrimSpace(params.StringDefault(job.Params, "api_key", ""))
 	if key == "" {
@@ -73,9 +62,6 @@ func resolveKey(job core.Job) (string, error) {
 	return key, nil
 }
 
-// eventQuery builds the Discovery event-search query shared by both drops:
-// the same filters mean the same thing whether they are searched once or
-// polled. `now` is passed in so tests get a fixed clock.
 func eventQuery(job core.Job, limit int, now time.Time) (url.Values, error) {
 	q := url.Values{}
 	if kw := strings.TrimSpace(params.StringDefault(job.Params, "keyword", "")); kw != "" {
@@ -109,7 +95,6 @@ func eventQuery(job core.Job, limit int, now time.Time) (url.Values, error) {
 		if !ok {
 			continue
 		}
-		// Discovery rejects a zone offset — it wants a bare UTC stamp.
 		q.Set(param, t.UTC().Format("2006-01-02T15:04:05Z"))
 	}
 	q.Set("size", strconv.Itoa(limit))
@@ -119,8 +104,6 @@ func eventQuery(job core.Job, limit int, now time.Time) (url.Values, error) {
 	return q, nil
 }
 
-// searchEvents runs one event search and returns the flattened rows plus the
-// page envelope. Both drops go through here so their output rows are identical.
 func searchEvents(ctx context.Context, job core.Job, limit, page int, now time.Time) ([]map[string]any, pageInfo, *core.Result) {
 	key, err := resolveKey(job)
 	if err != nil {
@@ -158,7 +141,6 @@ func searchEvents(ctx context.Context, job core.Job, limit, page int, now time.T
 	return rows, parsed.Page, nil
 }
 
-// pageInfo is Discovery's paging envelope.
 type pageInfo struct {
 	Size          int `json:"size"`
 	TotalElements int `json:"totalElements"`
@@ -180,9 +162,6 @@ func tmGet(ctx context.Context, url string, timeoutMS int) (int, []byte, error) 
 	return status, raw, err
 }
 
-// extractTMError pulls the human message out of either error shape Discovery
-// returns: the gateway's {"fault":{"faultstring":…}} for a bad key, and the
-// API's own {"errors":[{"detail":…}]} for a bad query.
 func extractTMError(body []byte) string {
 	var e struct {
 		Fault struct {
@@ -204,9 +183,6 @@ func extractTMError(body []byte) string {
 	return params.Truncate(string(body), 200)
 }
 
-// tmFailure maps a transport error or non-2xx response to an error Result, or
-// nil on success. The two statuses worth naming are the ones an operator can
-// act on: a rejected key, and the daily quota running out.
 func tmFailure(job core.Job, status int, body []byte, err error) *core.Result {
 	if err != nil {
 		r := params.Err(job, "ticketmaster_http_error", err.Error())
@@ -228,9 +204,6 @@ func tmFailure(job core.Job, status int, body []byte, err error) *core.Result {
 	return params.HTTPFailure(job, "ticketmaster", "Ticketmaster", status, body, nil, extractTMError)
 }
 
-// flattenEvent reduces one Discovery event to the fields a flow templates. The
-// raw object nests venue and artist two levels down through _embedded, which is
-// unreadable in a reference token and unusable in a sheet column.
 func flattenEvent(e map[string]any) map[string]any {
 	row := map[string]any{
 		"id":   str(e["id"]),
@@ -293,8 +266,6 @@ func widestImage(v any) string {
 	return best
 }
 
-// str reads a JSON string field, yielding "" for a missing or non-string value
-// so a partial event still produces a complete row shape.
 func str(v any) string {
 	s, _ := v.(string)
 	return s

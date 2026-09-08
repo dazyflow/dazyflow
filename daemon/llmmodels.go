@@ -89,8 +89,6 @@ func (s *Service) liveModels(tenant string, info llm.ProviderInfo) []llm.ModelOp
 	return models
 }
 
-// refreshModels does the vendor round trip off the request path and stores the
-// result. Runs detached: the request that triggered it has long since answered.
 func (s *Service) refreshModels(key, tenant string, info llm.ProviderInfo) {
 	ctx, cancel := context.WithTimeout(context.Background(), modelFetchBudget)
 	defer cancel()
@@ -115,9 +113,6 @@ func (s *Service) refreshModels(key, tenant string, info llm.ProviderInfo) {
 	// still a better answer than none, and the next attempt is minutes away.
 }
 
-// fetchModels resolves this tenant's connection and asks the vendor. Returns
-// nil when the tenant has not connected the integration at all, which is not a
-// failure: there is simply nothing to ask with.
 func (s *Service) fetchModels(ctx context.Context, tenant string, info llm.ProviderInfo) ([]llm.ModelOption, error) {
 	apiKey, _ := s.EncryptedSecrets.GetExact(ctx, tenant, core.ConnectionSecretKey(info.Integration, "api_key"))
 	baseURL, _ := s.EncryptedSecrets.GetExact(ctx, tenant, core.ConnectionSecretKey(info.Integration, "base_url"))
@@ -141,8 +136,6 @@ func (s *Service) overlayLiveModels(p core.Principal, out map[string]core.Manife
 	if s.EncryptedSecrets == nil || p.Tenant == "" {
 		return
 	}
-	// One lookup per integration, not per drop: each provider registers five
-	// task drops that share a catalog.
 	byIntegration := map[string][]llm.ModelOption{}
 	resolved := map[string]bool{}
 
@@ -167,17 +160,6 @@ func (s *Service) overlayLiveModels(p core.Principal, out map[string]core.Manife
 	}
 }
 
-// withModelEnum replaces the model property's enum with the live list. Reports
-// false and changes nothing when the schema is not the shape it expects, so an
-// unrelated drop that happens to share an integration name is left alone.
-//
-// It also repairs the default. A default outside the offered list is how the
-// Ollama steps failed before this existed: llama3.1 is a reasonable guess at
-// what an operator has pulled and a 404 on the machines where they haven't,
-// and it reached the model field of every step nobody had configured. When the
-// compiled-in default is not something this credential can call, the first
-// live model stands in — chosen by the vendor's own ordering, which puts the
-// current generation first.
 func withModelEnum(schema json.RawMessage, models []llm.ModelOption) (json.RawMessage, bool) {
 	var doc map[string]any
 	if err := json.Unmarshal(schema, &doc); err != nil {

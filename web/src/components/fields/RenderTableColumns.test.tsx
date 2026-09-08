@@ -1,17 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The column editor writes render_table's `columns` param, and the shape it
-// writes is a contract with the drop (drops/transform/render_table.go): a bare
-// name means "head this column with the data's own name", an object means "read
-// this field, head it with that text".
-//
-// A row is a pair — the data column and, optionally, the heading over it — and
-// the pair is entered in ONE row. Two earlier shapes of this failed: renaming
-// wrote the new name as the key (a correct-looking heading over an empty
-// column), and then the heading moved to a separate params field, which put the
-// two halves of one decision in two places. These tests are on the param and on
-// the row, because that is where both failures were.
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -39,11 +28,8 @@ function renderEditor(columns?: unknown, onApply = vi.fn()) {
 
 const addBox = () => screen.getByRole("textbox", { name: "renderTableColumns.addPlaceholder" });
 const nameBoxes = () => screen.getAllByRole("textbox", { name: "renderTableColumns.customName" });
-// The add row's custom-name box is the last one on screen (the edit row, when
-// open, renders above it).
 const addNameBox = () => nameBoxes()[nameBoxes().length - 1];
 
-// A tap with no movement is what the component treats as "edit this row".
 async function tapRow(text: string) {
   const row = screen.getByText(text).closest(".rtc-fg") as HTMLElement;
   await userEvent.pointer([
@@ -101,7 +87,6 @@ describe("RenderTableColumns — adding a column", () => {
 describe("RenderTableColumns — editing a row", () => {
   it("shows the column and its heading as a pair", () => {
     renderEditor([{ column: "customer_email", label: "Customer" }]);
-    // Both halves on screen: the field it reads, and the heading it shows.
     expect(screen.getByText("customer_email")).toBeInTheDocument();
     expect(screen.getByText("Customer")).toBeInTheDocument();
   });
@@ -129,7 +114,6 @@ describe("RenderTableColumns — editing a row", () => {
     expect(screen.getByRole("textbox", { name: "renderTableColumns.columnField" })).toHaveValue(
       "customer_email",
     );
-    // Blank, not pre-filled with the value it is meant to replace.
     expect(nameBoxes()[0]).toHaveValue("");
   });
 
@@ -163,7 +147,6 @@ describe("RenderTableColumns — editing a row", () => {
   });
 
   it("keeps the row when the column box is emptied", async () => {
-    // Removing a row is the swipe; an empty box is an unfinished edit.
     const onApply = renderEditor(["name"]);
     await tapRow("name");
     const col = screen.getByRole("textbox", { name: "renderTableColumns.columnField" });
@@ -228,12 +211,10 @@ describe("RenderTableColumns — discovering the columns", () => {
     );
     await waitFor(() => expect(screen.getByText("customer_email")).toBeInTheDocument());
     expect(screen.getByText("created_at")).toBeInTheDocument();
-    // Live rows are already in hand; no need to go back to the server for them.
     expect(getNodeRecord).not.toHaveBeenCalled();
   });
 
   it("reads them back off the stored run when the stream is gone", async () => {
-    // What a reload looks like: no live rows, but a run id and an edge.
     getNodeRecord.mockResolvedValue({
       Result: { output: { out: { data: [{ name: "Ada" }, { name: "Bo", note: "late" }] } } },
     });
@@ -246,9 +227,7 @@ describe("RenderTableColumns — discovering the columns", () => {
       />,
     );
     await waitFor(() => expect(screen.getByText("name")).toBeInTheDocument());
-    // The producer's node is the one asked, not this step.
     expect(getNodeRecord).toHaveBeenCalledWith("tok", "run_1", "json_1");
-    // And a column that only shows up in the second row still counts.
     expect(screen.getByText("note")).toBeInTheDocument();
   });
 
@@ -278,11 +257,6 @@ describe("RenderTableColumns — discovering the columns", () => {
   });
 });
 
-// Leaving the panel without leaving the field. Clicking the canvas is how you
-// leave a panel, and React Flow preventDefaults the pane's mousedown so it can
-// start a drag — focus stays in the box, no blur fires, and the click then
-// deselects the step and unmounts this editor. React fires no blur on unmount
-// either, so a name typed and left that way was discarded.
 describe("RenderTableColumns — the panel going away mid-edit", () => {
   it("saves a heading typed into an open row", async () => {
     const onApply = vi.fn();
@@ -343,7 +317,6 @@ describe("RenderTableColumns — the panel going away mid-edit", () => {
     );
     await userEvent.type(addNameBox(), "Belopp");
     unmount();
-    // A heading with no column names nothing.
     expect(onApply).not.toHaveBeenCalled();
   });
 });

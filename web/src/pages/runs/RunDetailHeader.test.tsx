@@ -6,8 +6,6 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 
 vi.mock("react-i18next", () => {
-  // Only the strings these tests read back; everything else falls through as
-  // its key, matching the simpler mock the other RunDetail tests use.
   const catalog: Record<string, string> = {
     "relative.justNow": "just now",
     // The catalogue splits this into _one/_other; formatRelative passes the
@@ -56,12 +54,6 @@ function renderRun() {
   );
 }
 
-// The page used to introduce itself as "Run 69a6f59b21aa3a4e7530df27" —
-// twenty-four characters of hex directly under the title, which is the first
-// thing a non-technical user read and the only thing they couldn't act on.
-// Every other detail page uses that slot for a human subtitle. The id is still
-// needed (support, dzctl, bug reports), so it moved down into the details card
-// with the rest of the plumbing.
 describe("RunDetail header", () => {
   it("titles the page with the flow, not the run id", async () => {
     getJob.mockResolvedValue({ ID: RUN_ID, GraphID: "refunds", Status: "succeeded" });
@@ -70,8 +62,6 @@ describe("RunDetail header", () => {
 
     const heading = await screen.findByRole("heading", { level: 1 });
     expect(heading).toHaveTextContent("refunds");
-    // The whole title block, not just the h1: the id used to sit in the
-    // subtitle line right beneath it, which is the actual complaint.
     expect(container.querySelector(".page-title")).not.toHaveTextContent(RUN_ID);
   });
 
@@ -86,9 +76,6 @@ describe("RunDetail header", () => {
   });
 });
 
-// The slot the hex id vacated now answers "which run is this?" the way a
-// person actually asks it. The exact instant stays in the details card (and on
-// hover), so the coarse label is orientation, not the record.
 describe("RunDetail subtitle", () => {
   it("says how long ago the run started", async () => {
     const started = new Date(Date.now() - 5 * 60 * 1000).toISOString();
@@ -101,7 +88,6 @@ describe("RunDetail subtitle", () => {
     await screen.findByRole("heading", { level: 1 });
     const sub = container.querySelector(".page-title .sub");
     expect(sub).toHaveTextContent("Started 5 minutes ago");
-    // The precise timestamp stays one hover away.
     expect(sub?.getAttribute("title")).toBeTruthy();
   });
 

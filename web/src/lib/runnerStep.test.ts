@@ -12,7 +12,6 @@ describe("runnerStep", () => {
     expect(isRunnerStep("run_on_runner")).toBe(true);
     expect(isRunnerStep("http_request")).toBe(false);
     expect(isRunnerStep(undefined)).toBe(false);
-    // The old namespaced form is not a step id any more.
     expect(isRunnerStep("runner/invoices/fetch")).toBe(false);
   });
 
@@ -28,13 +27,8 @@ describe("runnerStep", () => {
   });
 
   it("still reads a step saved before this field took tags", () => {
-    // Those flows are in production. Both old params were a single target and
-    // both are one tag now, so an old step reads correctly instead of going
-    // blank and looking unconfigured.
     expect(runnerTargetOf({ runner: "invoices-box" })).toBe("invoices-box");
     expect(runnerTargetOf({ label: "linux" })).toBe("linux");
-    // Once tags are set they are the answer; the leftovers are ignored, exactly
-    // as the drop ignores them at run time.
     expect(runnerTargetOf({ tags: ["gpu"], runner: "old-box" })).toBe("gpu");
   });
 

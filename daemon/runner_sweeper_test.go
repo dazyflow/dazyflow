@@ -42,7 +42,6 @@ func TestSweep_ClosesAQueuedTaskNobodyIsWaitingFor(t *testing.T) {
 	if got.Result == nil || !strings.Contains(got.Result.Error, "restarted") {
 		t.Errorf("result = %+v, want an error explaining the daemon went away", got.Result)
 	}
-	// And it is no longer claimable, which is the whole point.
 	if _, err := q.Claim(t.Context(), Runner{Tenant: "acme", Name: "box"}, time.Now(), TaskLease); err == nil {
 		t.Error("a swept task was still handed out to a runner")
 	}
@@ -67,8 +66,6 @@ func TestSweep_LeavesATaskSomeoneIsStillWaitingFor(t *testing.T) {
 	}
 }
 
-// A running task whose lease lapsed is an agent that vanished. The dispatcher
-// only notices while it is still waiting; after a restart nobody is.
 func TestSweep_CondemnsARunningTaskWhoseAgentVanished(t *testing.T) {
 	t.Parallel()
 	q := NewMemRunnerTaskStore()
@@ -90,14 +87,11 @@ func TestSweep_CondemnsARunningTaskWhoseAgentVanished(t *testing.T) {
 	if got.State != TaskFailed {
 		t.Errorf("state = %q, want failed", got.State)
 	}
-	// FailAbandoned's wording names the machine, which is the actionable part.
 	if got.Result == nil || !strings.Contains(got.Result.Error, "box") {
 		t.Errorf("result = %+v, want an error naming the runner", got.Result)
 	}
 }
 
-// A task carrying no timeout of its own falls back to the ceiling rather than
-// being closed the moment the sweep first sees it.
 func TestSweep_UntimedTaskUsesTheCeiling(t *testing.T) {
 	t.Parallel()
 	q := NewMemRunnerTaskStore()

@@ -50,24 +50,13 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
-			// The mail account (server/port/security/login/folder) is a
-			// per-tenant ConnectionFields bundle configured once on the
-			// integration page, exactly like the Email drop's SMTP server —
-			// the engine injects it into each node's params at run time, so
-			// flows carry only the per-search fields.
+			// A tenant connection, so the fields are injected rather than typed per node.
 			ConnectionFields: connectionFields(),
 			Inputs: []core.Port{
-				// Named after their params so the card shows inline editable
-				// boxes; a wired value overrides the typed one. From and
-				// Subject are the two worth wiring — "search for whatever the
-				// last step produced" is almost always one of those.
 				{Port: "from", Label: "From", MIME: []string{"text/plain"}},
 				{Port: "subject", Label: "Subject", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				// The same record shape Gmail's Search emails emits — {id,
-				// date, from, subject, body, unread} — so the For each /
-				// ${item.id} idioms built on that carry over unchanged.
 				{Port: "messages", Label: "Matching emails", MIME: []string{"application/json"},
 					Example: json.RawMessage(`[
 						{"id":"4471","date":"Thu, 12 Feb 2026 09:12:04 +0100","from":"Fortnox <faktura@fortnox.se>","subject":"Faktura 4471","body":"Din faktura 4471 är nu tillgänglig.","unread":true},
@@ -116,7 +105,6 @@ func executeIMAPSearch(ctx context.Context, job core.Job, progress chan<- core.P
 	}
 	defer client.Close()
 
-	// Read-only (EXAMINE): a search must never change a flag on the server.
 	folder, err := client.Select(cfg.Folder, true)
 	if err != nil {
 		return params.Err(job, "imap_error", err.Error()), nil
@@ -128,17 +116,10 @@ func executeIMAPSearch(ctx context.Context, job core.Job, progress chan<- core.P
 		var rerr error
 		mark, rerr = readWatermark(ctx, job, cfg.Folder, folder)
 		if rerr != nil {
-			// Without the stored UID this run cannot ask the server for "mail
-			// after the last one I handled". Re-baselining would record the
-			// folder's current end as handled and skip everything that arrived
-			// since the last successful poll.
+			// Without the stored UID there is no way to ask for "mail since last time".
 			return cursor.FailRead(job, rerr), nil
 		}
 		if !mark.replay {
-			// Ask the server for nothing older than the last UID we emitted.
-			// This is the part that has no Gmail equivalent: the watermark is
-			// the folder's own message numbering rather than a timestamp, so
-			// there is no window where two emails share a cursor value.
 			var set imap.UIDSet
 			set.AddRange(mark.lastUID+1, 0) // 0 == "*", i.e. up to the newest
 			criteria.UID = append(criteria.UID, set)
@@ -151,15 +132,7 @@ func executeIMAPSearch(ctx context.Context, job core.Job, progress chan<- core.P
 	}
 	uids := found.AllUIDs()
 
-	// Drop anything at or below the watermark. The UID range asked for
-	// `lastUID+1:*` and that is NOT enough on its own: in an IMAP range `*` is
-	// the highest UID that currently exists, and RFC 3501 says a range is
-	// interpreted regardless of order — so once the watermark passes the
-	// newest message, `3:*` against a folder whose highest UID is 2 becomes
-	// the range 2:3 and matches message 2. Left unfiltered, every empty poll
-	// would re-emit the newest email forever, which is precisely the
-	// re-processing this mode exists to prevent. The range still earns its
-	// place as a server-side narrowing; the client owns the boundary.
+	// The requested range is inclusive, so the watermark itself comes back.
 	if mark != nil && !mark.replay {
 		kept := uids[:0]
 		for _, uid := range uids {
@@ -170,21 +143,8 @@ func executeIMAPSearch(ctx context.Context, job core.Job, progress chan<- core.P
 		uids = kept
 	}
 
-	// Capped — and which END of the matches the cap keeps depends on what the
-	// step is being asked to do. IMAP returns matches in ascending UID order,
-	// so the head is the oldest mail and the tail the newest.
-	//
-	//	Ad-hoc search (only_new off): keep the TAIL. Someone asking a
-	//	5000-message folder for 50 matches wants the 50 most recent, not the 50
-	//	oldest, and no watermark moves so nothing is lost either way.
-	//
-	//	Poll (only_new on): keep the HEAD. The watermark advances to the newest
-	//	UID emitted, so keeping the newest 50 of a 200-message backlog would
-	//	step the watermark over the other 150 and they would never be offered
-	//	again — silently, on a green run. Draining from the oldest end instead
-	//	means each poll takes the next `limit` in order and the backlog empties
-	//	over the following polls, in the order the mail arrived. Same shape as
-	//	sftp_list_files, which caps oldest-first for exactly this reason.
+	// Which END the cap keeps matters: a poll must drain the OLDEST first, or the
+	// watermark steps over everything below it and that mail is never offered again.
 	truncated := 0
 	if len(uids) > limit {
 		truncated = len(uids) - limit
@@ -201,13 +161,8 @@ func executeIMAPSearch(ctx context.Context, job core.Job, progress chan<- core.P
 	}
 
 	msgs := make([]any, 0, len(uids))
-	// fetched is the UIDs the server actually returned, which is what the
-	// watermark advances over. See the short-FETCH note below.
 	fetched := make([]imap.UID, 0, len(uids))
 	if len(uids) > 0 {
-		// One FETCH for the whole batch. Gmail's search needs a second HTTPS
-		// request per match to turn its {id} stubs into real emails; IMAP
-		// hands back every envelope and body in a single command.
 		bufs, ferr := client.Fetch(imap.UIDSetNum(uids...), searchFetchOptions()).Collect()
 		if ferr != nil {
 			return params.Err(job, "imap_error", fmt.Sprintf("found %d emails but couldn't read them: %v", len(uids), ferr)), nil
@@ -216,14 +171,7 @@ func executeIMAPSearch(ctx context.Context, job core.Job, progress chan<- core.P
 			msgs = append(msgs, messageRecord(buf))
 			fetched = append(fetched, buf.UID)
 		}
-		// A server may answer with fewer messages than were asked for and no
-		// error — a UID expunged between the SEARCH and the FETCH returns no
-		// data at all. That is benign in itself (a deleted email needs no
-		// processing), but the watermark must not be advanced from the
-		// REQUESTED set on the strength of it: any UID that did not come back
-		// for some other reason would be stepped over and never offered again.
-		// So the watermark is computed from what actually arrived, and the
-		// gap is stated rather than inferred.
+		// A short answer with no error is legal, so a gap must not advance the watermark.
 		if len(bufs) != len(uids) {
 			params.EmitProgress(progress, job, 1, fmt.Sprintf(
 				"read %d of %d matching emails; the rest were not returned by the server "+
@@ -236,9 +184,6 @@ func executeIMAPSearch(ctx context.Context, job core.Job, progress chan<- core.P
 		return emitOnlyNew(ctx, job, msgs, safeAdvance(uids, fetched), mark), nil
 	}
 
-	// An ad-hoc search reports an empty result as an empty list, not as a
-	// missing port: the author asked a question and "no matches" is the
-	// answer. only_new is the mode where empty means "non-event" (below).
 	pollstate.Report(ctx, job, len(msgs) > 0)
 	return core.Result{
 		JobID:  job.ID,
@@ -249,18 +194,9 @@ func executeIMAPSearch(ctx context.Context, job core.Job, progress chan<- core.P
 	}, nil
 }
 
-// searchCriteria turns the step's fields into an IMAP SEARCH.
-//
-// Typed fields rather than one Gmail-style query box, deliberately. IMAP's
-// SEARCH is a different language with no equivalent of `is:unread
-// newer_than:1d`, and a box that silently ignored what someone typed into it
-// would be worse than no box: the search would succeed and return the wrong
-// mail. Each field below maps onto exactly one SEARCH key.
 func searchCriteria(job core.Job) (*imap.SearchCriteria, error) {
 	c := &imap.SearchCriteria{}
 
-	// The From and Subject input pins override their params when wired (the
-	// same "input overrides param" pattern as Gmail search's query pin).
 	from, ok := params.TextInputOr(job, "from", params.StringDefault(job.Params, "from", ""))
 	if !ok {
 		return nil, fmt.Errorf("input port 'from' must be text")
@@ -270,10 +206,7 @@ func searchCriteria(job core.Job) (*imap.SearchCriteria, error) {
 		return nil, fmt.Errorf("input port 'subject' must be text")
 	}
 
-	// A slice, not a map: ranging a map put the SEARCH keys in a different
-	// order on every run, which makes one command hard to compare against
-	// another in a server log or a packet capture. The semantics are unchanged
-	// (SEARCH keys are ANDed), so this costs nothing.
+	// A slice, not a map: map order made the SEARCH non-deterministic.
 	for _, h := range []imap.SearchCriteriaHeaderField{
 		{Key: "From", Value: from},
 		{Key: "To", Value: params.StringDefault(job.Params, "to", "")},
@@ -290,55 +223,30 @@ func searchCriteria(job core.Job) (*imap.SearchCriteria, error) {
 		c.NotFlag = append(c.NotFlag, imap.FlagSeen)
 	}
 	if days := params.IntDefault(job.Params, "since_days", 0); days > 0 {
-		// SEARCH SINCE compares dates, not instants — the server ignores the
-		// time of day — so this is "on or after that calendar day".
 		c.Since = time.Now().AddDate(0, 0, -days)
 	}
 	return c, nil
 }
 
-// watermark is the "only new since last run" position: the folder identity the
-// UIDs were counted in, and the last UID already emitted.
 type watermark struct {
 	uidValidity uint32
 	lastUID     imap.UID
 
-	// folder is the folder these UIDs were counted in — part of the cursor
-	// key, so pointing a step at another folder keeps its own position.
-	folder string
-	// uidNext is the folder's UIDNext at select time: the UID the server will
-	// hand the next message to arrive. Everything already in the folder is
-	// therefore below it, which is what a first run baselines to.
+	folder  string
 	uidNext imap.UID
 
-	// baseline means this run must not emit anything — either it is the first
-	// run, or the folder was renumbered underneath us. It records where the
-	// folder is up to and stops.
+	// A baseline run emits nothing; it only records where to start.
 	baseline bool
-	// replay means the stored position can't be used to narrow the search, so
-	// the criteria go out unbounded. Set alongside baseline.
-	replay bool
+	replay   bool
 }
 
-// cursorName is the per-(flow, node) watermark key. The folder is part of it:
-// pointing one step at another folder is a different position, and inheriting
-// INBOX's UID would silently skip mail.
+// The folder is part of the key, or switching folders reuses a foreign position.
 func cursorName(job core.Job, folder string) string {
 	return fmt.Sprintf("cursor.imap_search.%s.%s.%s", job.GraphID, job.NodeID, folder)
 }
 
-// readWatermark loads the stored position and decides what this run may emit.
-//
-// UIDVALIDITY is the part with no Gmail counterpart and the part that must not
-// be got wrong. A UID identifies a message only within one incarnation of a
-// folder: if the folder is deleted and recreated, or the server rebuilds its
-// index, UIDVALIDITY changes and every stored UID becomes meaningless. The RFC
-// requires a client to discard what it cached. Treating a stale UID as a
-// watermark anyway would compare against numbers from a folder that no longer
-// exists — which, depending on which way the new numbering falls, either
-// replays the whole folder into a flow that acts on each email, or skips mail
-// forever. So a UIDVALIDITY change re-baselines: emit nothing once, resume
-// cleanly after.
+// A UIDVALIDITY change means the server renumbered, so the stored UID means
+// nothing and the run must re-baseline rather than emit.
 func readWatermark(ctx context.Context, job core.Job, folder string, state *imap.SelectData) (*watermark, error) {
 	mark := &watermark{uidValidity: state.UIDValidity, folder: folder, uidNext: state.UIDNext}
 
@@ -358,23 +266,8 @@ func readWatermark(ctx context.Context, job core.Job, folder string, state *imap
 	return mark, nil
 }
 
-// safeAdvance returns the leading run of requested UIDs that actually came
-// back, which is how far the watermark may move.
-//
-// The watermark used to be computed from the REQUESTED set. A server can
-// answer with fewer messages than were asked for and no error — a UID
-// expunged between the SEARCH and the FETCH simply returns no data — and
-// taking the maximum of the requested set then steps the watermark over
-// whatever did not arrive, so that mail is never offered again.
-//
-// Stopping at the first UID that did not come back means a hole is retried on
-// the next poll instead of skipped. It cannot stall: a genuinely expunged
-// message drops out of the next SEARCH too, so the run extends past it then.
-// The cost is re-emitting messages above a hole — at-least-once, which is the
-// direction this file chooses everywhere else.
-//
-// requested must be ascending, which is the order IMAP returns and the order
-// the caller preserves.
+// Only the LEADING run of requested UIDs that actually arrived: advancing past a
+// gap would skip the missing mail for good.
 func safeAdvance(requested, fetched []imap.UID) []imap.UID {
 	got := make(map[imap.UID]bool, len(fetched))
 	for _, uid := range fetched {
@@ -390,11 +283,7 @@ func safeAdvance(requested, fetched []imap.UID) []imap.UID {
 	return safe
 }
 
-// parseWatermark reads a stored "<uidvalidity>:<uid>" position. Anything it
-// can't parse is treated as absent, which re-baselines: a corrupt value will
-// not heal itself, so there is no position to resume from. A failed READ is
-// handled separately by readWatermark, which stops rather than re-baselining
-// over a position that is probably still good.
+// Anything unparseable re-baselines rather than guessing a position.
 func parseWatermark(s string) (validity uint32, uid imap.UID, ok bool) {
 	before, after, found := strings.Cut(strings.TrimSpace(s), ":")
 	if !found {
@@ -408,19 +297,7 @@ func parseWatermark(s string) (validity uint32, uid imap.UID, ok bool) {
 	return uint32(v), imap.UID(u), true
 }
 
-// emitOnlyNew advances the watermark and emits the fresh batch.
-//
-// First run (or a re-baseline): record where the folder is up to and emit
-// NOTHING, so a flow published against a full mailbox starts watching from
-// "now" instead of blasting the backlog. Mirrors gmail_search's emitOnlyNew
-// and the google_form_trigger.
-//
-// A nothing-new run emits no output ports at all, so downstream edges go
-// dormant and the rest of the flow is skipped — an empty poll is a non-event,
-// not an empty list. The cursor write is best-effort/at-least-once: a failed
-// write means at worst the next run re-emits this batch, never a silent drop.
-// uids here is what the run may safely advance over — see safeAdvance — not
-// everything the search matched.
+// At-least-once: a failed cursor write re-emits, never silently drops.
 func emitOnlyNew(ctx context.Context, job core.Job, msgs []any, uids []imap.UID, mark *watermark) core.Result {
 	next := mark.lastUID
 	for _, uid := range uids {
@@ -429,23 +306,14 @@ func emitOnlyNew(ctx context.Context, job core.Job, msgs []any, uids []imap.UID,
 		}
 	}
 	if mark.baseline {
-		// Nothing matched yet on a first run, but the folder still has a
-		// position: baseline to the newest message in it so the next run
-		// doesn't hand back mail that was already sitting there. UIDs only
-		// ever increase within a UIDVALIDITY, so this can't skip a later
-		// arrival. (Gmail's date watermark can't do this — with no matches
-		// there is no timestamp to remember, so it stays unbaselined.)
+		// A first run with no matches still records the folder's position.
 		if next == 0 && mark.uidNext > 0 {
 			next = mark.uidNext - 1
 		}
 		msgs = nil
 	}
 	if next > mark.lastUID {
-		// Ignorable once mail has been emitted — the next run re-emits it. On
-		// a baseline (first run, or a folder renumbered by UIDVALIDITY) nothing
-		// was emitted, so a failed write means the next run baselines again,
-		// and a persistent failure means this folder is never really watched.
-		// See cursor.FailBaseline.
+		// Ignorable once mail is emitted; on a baseline run it is not.
 		werr := cursor.Write(ctx, job.Tenant, cursorName(job, mark.folder),
 			fmt.Sprintf("%d:%d", mark.uidValidity, next))
 		if werr != nil && mark.baseline {

@@ -72,9 +72,6 @@ func init() {
 	})
 }
 
-// omCurrent is the subset of the /v1/forecast response (current block) the
-// summary uses. Fields the API omits decode to their zero value; the JSON
-// output pin carries the full, untrimmed response so nothing is lost.
 type omCurrent struct {
 	Current struct {
 		Time        string  `json:"time"`
@@ -86,9 +83,6 @@ type omCurrent struct {
 	} `json:"current"`
 }
 
-// executeCurrent fetches the current conditions for the resolved coordinate
-// and emits a readable summary, the bare temperature and conditions word, and
-// the full response as JSON.
 func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	lat, lon, err := geoloc.ResolveLatLon(job)
 	if err != nil {
@@ -125,8 +119,6 @@ func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 	}, nil
 }
 
-// currentSummary renders the current conditions as one human line, e.g.
-// "Partly cloudy, 12.3°C (feels 11.1°C), humidity 64%, wind 3.4 m/s".
 func currentSummary(c omCurrent, units string) string {
 	desc := geoloc.CapitalizeFirst(wmo[c.Current.WeatherCode])
 	tu, su := geoloc.TempUnit(units), geoloc.SpeedUnit(units)

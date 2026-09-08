@@ -14,10 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// searchParams is the filter surface both drops share, spliced into each
-// drop's own schema so a filter means the same thing in the search step and
-// the trigger. Kept as a string rather than composed at run time because
-// ParamsSchema is raw JSON the catalog serves verbatim.
 const searchParams = `
 	"keyword":{"type":"string","title":"Search for","description":"Artist, team or event name to search for — e.g. \"Robyn\". Leave empty to list everything matching the other filters."},
 	"attraction_id":{"type":"string","title":"Attraction ID","x_advanced":true,"description":"Ticketmaster's own id for one artist or team (e.g. K8vZ9171C-f). More exact than a name search when you have it."},
@@ -57,8 +53,6 @@ func init() {
 			ExecutionModel:   core.ExecutionBatch,
 			ProcessModel:     core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Wireable so a For each over an artist list can drive the
-				// search; a wired value overrides the param.
 				{Port: "keyword", Label: "Search for", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
@@ -85,7 +79,6 @@ func init() {
 
 func executeSearchEvents(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	if kw, ok := params.TextInputOr(job, "keyword", ""); ok && kw != "" {
-		// Copy rather than mutate: the wired keyword belongs to this run.
 		p := make(map[string]any, len(job.Params)+1)
 		for k, v := range job.Params {
 			p[k] = v

@@ -13,8 +13,6 @@ const bare = [{ module: "delay", params: { ms: 1 } }];
 
 describe("flowRunStatusPublished", () => {
   it("treats an unpublished flow as not-published whatever the trigger", () => {
-    // The regression this guards: webhooks used to fire while unpublished, so
-    // this returned "live" for the webhook case and hid a real difference.
     expect(flowRunStatusPublished(false, [], cron, false)).toBe("needs_publish");
     expect(flowRunStatusPublished(false, [], webhook, false)).toBe("needs_publish");
     expect(flowRunStatusPublished(false, [], mention, false)).toBe("needs_publish");
@@ -32,8 +30,6 @@ describe("flowRunStatusPublished", () => {
   });
 
   it("counts provider-event triggers as automatic", () => {
-    // Previously "manual": a flow whose only trigger was "On mention" claimed
-    // it ran only on Run, while firing on every mention.
     expect(flowRunStatus(false, [], mention)).toBe("live");
     expect(flowRunStatus(false, [], bare)).toBe("manual");
   });

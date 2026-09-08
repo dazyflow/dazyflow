@@ -1,10 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package git provides nodes that clone repositories and run builds
-// against the resulting working tree. Output is workspace-relative so
-// downstream nodes (file_read, shell, ...) can pick it up via the
-// shared sandbox.
 package git
 
 import (
@@ -59,11 +55,6 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Outputs: []core.Port{
-				// Only the friendly scalars are pins; the full checkout
-				// metadata (url, ref, mode, …) is still EMITTED under "meta"
-				// so run records keep it for debugging — it's just not a pin.
-				// `path` is the auto-assigned workspace folder the repo landed
-				// in — downstream steps (shell, file_read) read it from here.
 				{Port: "path", Label: "Repository folder", MIME: []string{"text/plain"}, Example: json.RawMessage(`"repos/dazyflow"`)},
 				{Port: "sha", Label: "Commit SHA", MIME: []string{"text/plain"}, Example: json.RawMessage(`"c0c3608e7a1d4f9b2e8c5a3d6f0b1e4a9c7d2f83"`)},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
@@ -101,11 +92,6 @@ func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.
 	ref := params.StringDefault(job.Params, "ref", "")
 	depth := params.IntDefault(job.Params, "depth", 0)
 
-	// The checkout folder is auto-assigned per (flow, node) — there's no
-	// folder param. It's stable across runs, so the clone is reused as a
-	// cache (a re-run fetches + resets instead of re-cloning), and it's
-	// removed when the flow is deleted (see Service.DeleteGraph). The
-	// resulting folder is emitted on `path` for downstream steps.
 	cleanRel := core.GitCheckoutRel(job.GraphID, job.NodeID)
 	dst := filepath.Join(job.WorkspaceRoot, cleanRel)
 
@@ -118,9 +104,6 @@ func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.
 			"this organization is at its %d-byte storage limit (%d used); free space before checking out a repository",
 			job.QuotaLimit, job.QuotaUsed)), nil
 	}
-	// Measured before the transfer so a re-run can subtract what this
-	// checkout already contributed to job.QuotaUsed. Skipped entirely for
-	// unlimited tenants so the common case pays no walk.
 	var sizeBefore int64
 	if job.QuotaLimit > 0 {
 		sizeBefore = dirSize(dst)
@@ -207,11 +190,6 @@ func guardRepoURL(ctx context.Context, rawURL string) error {
 	}
 }
 
-// scpLikeHost extracts the host from scp-like ssh syntax
-// ("[user@]host:path", no "://"). It reports false when the string isn't
-// scp-like — a colon that follows a slash is a path, not a host:path
-// separator, so a bare path like "/srv/repos/x.git" is correctly not
-// treated as a remote.
 func scpLikeHost(s string) (string, bool) {
 	colon := strings.Index(s, ":")
 	if colon < 0 {
@@ -298,13 +276,9 @@ func openOrClone(ctx context.Context, dst, url, ref string, depth int, progress 
 	shallow := depth > 0
 	sha := ref != "" && looksLikeSHA(ref)
 
-	// shallowTarget: the one path where the clone lands directly on the ref
-	// (ReferenceName), which fetches *only* that ref. Every other path does a
-	// full all-refs clone and checks the ref out afterwards.
 	shallowTarget := false
 	switch {
 	case ref == "":
-		// Default branch — nothing to target.
 	case sha:
 		// A commit SHA can't be a ReferenceName and may live anywhere in
 		// history, so it always needs a full clone; depth can't help.
@@ -313,16 +287,10 @@ func openOrClone(ctx context.Context, dst, url, ref string, depth int, progress 
 			emitLogProgress(progress, job, "git", "ignoring depth: a commit SHA needs full history")
 		}
 	default:
-		// Branch or tag. Validate up front (fast-fail with a clear error
-		// before downloading anything) and classify branch-vs-tag.
 		rn, rErr := remoteRefName(ctx, url, ref, auth)
 		if rErr != nil {
 			return nil, "ref_not_found", rErr
 		}
-		// Only target the ref (single-ref fetch) when shallow, so depth
-		// applies to it. A full clone keeps the default all-refs fetch so
-		// every branch/tag is present and cross-branch git_log/git_diff keep
-		// working; it checks the ref out below.
 		if shallow {
 			opts.ReferenceName = rn
 			opts.SingleBranch = true
@@ -343,19 +311,10 @@ func openOrClone(ctx context.Context, dst, url, ref string, depth int, progress 
 	return repo, "cloned", nil
 }
 
-// shaPattern matches an abbreviated-or-full hex commit id (git's minimum
-// unambiguous abbreviation is 7). A ref this shape is treated as a commit
-// rather than a branch/tag name; a branch literally named in hex is a rare
-// collision we accept against the common case of pasting a SHA.
 var shaPattern = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
 
 func looksLikeSHA(ref string) bool { return shaPattern.MatchString(ref) }
 
-// remoteRefName classifies a short ref against the remote's advertised
-// refs, returning the fully-qualified name to clone (refs/heads/<ref> or
-// refs/tags/<ref>). It prefers a branch over a same-named tag, matching
-// git's precedence, and accepts an already-qualified ref verbatim. Failing
-// fast here keeps a typo'd ref from writing a half-clone into the sandbox.
 func remoteRefName(ctx context.Context, url, ref string, auth gogittransport.AuthMethod) (plumbing.ReferenceName, error) {
 	rem := gogit.NewRemote(memory.NewStorage(), &config.RemoteConfig{
 		Name: "origin",
@@ -401,8 +360,6 @@ func checkout(repo *gogit.Repository, ref string) error {
 	if rr, err := repo.Reference(plumbing.NewRemoteReferenceName("origin", ref), true); err == nil {
 		local := plumbing.NewBranchReferenceName(ref)
 		if _, existsErr := repo.Reference(local, false); existsErr == nil {
-			// Local branch already exists (a re-run): switch to it, then
-			// fast-forward to the updated remote tip.
 			if err := wt.Checkout(&gogit.CheckoutOptions{Branch: local, Force: true}); err != nil {
 				return err
 			}
@@ -422,10 +379,6 @@ func checkout(repo *gogit.Repository, ref string) error {
 	return wt.Checkout(&gogit.CheckoutOptions{Hash: *hash, Force: true})
 }
 
-// updateCurrentBranch fast-forwards the checked-out branch to its
-// remote-tracking tip after a fetch. It is a no-op when HEAD is detached or
-// the branch has no origin counterpart — there is nothing well-defined to
-// advance to in those cases.
 func updateCurrentBranch(repo *gogit.Repository) error {
 	head, err := repo.Head()
 	if err != nil {
@@ -445,10 +398,6 @@ func updateCurrentBranch(repo *gogit.Repository) error {
 	return wt.Reset(&gogit.ResetOptions{Mode: gogit.HardReset, Commit: rr.Hash()})
 }
 
-// progressSink turns the chatty stream go-git writes during clone/fetch
-// ("Counting objects: 42%", "Resolving deltas: 100%", …) into one
-// progress event per line. go-git uses '\r' for in-place updates, so we
-// split on either CR or LF.
 type progressSink struct {
 	progress chan<- core.Progress
 	job      core.Job
@@ -490,9 +439,6 @@ func (s *progressSink) flush() {
 	s.buf.Reset()
 }
 
-// emitLogProgress emits a line-shaped progress event the frontend
-// LiveConsole will display. Kept in this file so git_checkout doesn't
-// depend on internals of shell.
 func emitLogProgress(ch chan<- core.Progress, job core.Job, stream, line string) {
 	if ch == nil {
 		return

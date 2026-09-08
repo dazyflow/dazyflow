@@ -44,10 +44,8 @@ type fakeSaaS struct {
 
 	mu sync.Mutex
 
-	// sheet is a tab name → grid, row 1 being the header row.
 	sheet map[string][][]any
 
-	// what the world received
 	slack      []string
 	discord    []string
 	ntfy       []string
@@ -60,16 +58,11 @@ type fakeSaaS struct {
 	events     []string // calendar event summaries
 	uploads    []string // drive file names
 
-	// failing services answer 5xx, for the fault-injection tests
 	failing map[string]bool
 
-	// site is what the uptime check sees
 	siteStatus int
 	siteBody   string
 
-	// inbox is what a Gmail search finds, newest last. Mutable so a test
-	// can deliver a new email between runs — the only way "only new since
-	// last run" can actually be checked.
 	inbox []fakeEmail
 }
 
@@ -90,7 +83,6 @@ func newFakeSaaS(t *testing.T) *fakeSaaS {
 	}
 	mux := http.NewServeMux()
 
-	// --- Google Sheets: a real little spreadsheet ---------------------
 	mux.HandleFunc("/spreadsheets/", func(rw http.ResponseWriter, r *http.Request) {
 		if f.down(rw, "sheets") {
 			return
@@ -105,7 +97,6 @@ func newFakeSaaS(t *testing.T) *fakeSaaS {
 		}
 	})
 
-	// --- Gmail --------------------------------------------------------
 	mux.HandleFunc("/users/me/messages/send", func(rw http.ResponseWriter, r *http.Request) {
 		if f.down(rw, "gmail") {
 			return
@@ -128,7 +119,6 @@ func newFakeSaaS(t *testing.T) *fakeSaaS {
 		}
 		writeJSON(rw, map[string]any{"messages": stubs})
 	})
-	// Hydration for each search hit.
 	mux.HandleFunc("/users/me/messages/", func(rw http.ResponseWriter, r *http.Request) {
 		if f.down(rw, "gmail") {
 			return
@@ -155,7 +145,6 @@ func newFakeSaaS(t *testing.T) *fakeSaaS {
 		writeJSON(rw, map[string]any{"id": id, "messages": msgs})
 	})
 
-	// --- Google Calendar ----------------------------------------------
 	mux.HandleFunc("/calendars/", func(rw http.ResponseWriter, r *http.Request) {
 		if f.down(rw, "calendar") {
 			return
@@ -171,7 +160,6 @@ func newFakeSaaS(t *testing.T) *fakeSaaS {
 		writeJSON(rw, map[string]any{"items": []any{}})
 	})
 
-	// --- Google Drive ---------------------------------------------------
 	mux.HandleFunc("/files", func(rw http.ResponseWriter, r *http.Request) {
 		if f.down(rw, "drive") {
 			return
@@ -180,7 +168,6 @@ func newFakeSaaS(t *testing.T) *fakeSaaS {
 		writeJSON(rw, map[string]any{"id": "file1", "webViewLink": "https://drive.example/file1"})
 	})
 
-	// --- Slack / Discord / ntfy / Twilio --------------------------------
 	mux.HandleFunc("/chat.postMessage", func(rw http.ResponseWriter, r *http.Request) {
 		if f.downSlack(rw) {
 			return
@@ -207,8 +194,6 @@ func newFakeSaaS(t *testing.T) *fakeSaaS {
 		if title := r.Header.Get("Title"); title != "" {
 			msg = title + ": " + msg
 		}
-		// The tap target matters as much as the text for an approval
-		// notification — it's the whole point of the message.
 		click := r.Header.Get("Click")
 		f.record(func() {
 			f.ntfy = append(f.ntfy, msg)
@@ -225,7 +210,6 @@ func newFakeSaaS(t *testing.T) *fakeSaaS {
 		writeJSON(rw, map[string]any{"sid": "SM1", "status": "queued"})
 	})
 
-	// --- Fortnox --------------------------------------------------------
 	mux.HandleFunc("/invoices", func(rw http.ResponseWriter, r *http.Request) {
 		if f.down(rw, "fortnox") {
 			return
@@ -233,14 +217,12 @@ func newFakeSaaS(t *testing.T) *fakeSaaS {
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		f.record(func() { f.invoices = append(f.invoices, body) })
-		// Fortnox returns the document number as a string.
 		writeJSON(rw, map[string]any{"Invoice": map[string]any{
 			"DocumentNumber": strconv.Itoa(len(f.invoices) + 100),
 			"CustomerNumber": "1001",
 		}})
 	})
 
-	// --- nShift (book a consignment) -------------------------------------
 	mux.HandleFunc("/rs-extapi/v1/shipments", func(rw http.ResponseWriter, r *http.Request) {
 		if f.down(rw, "nshift") {
 			return
@@ -259,7 +241,6 @@ func newFakeSaaS(t *testing.T) *fakeSaaS {
 		})
 	})
 
-	// --- 46elks (SMS) -----------------------------------------------------
 	mux.HandleFunc("/sms", func(rw http.ResponseWriter, r *http.Request) {
 		if f.down(rw, "elks") {
 			return
@@ -271,7 +252,6 @@ func newFakeSaaS(t *testing.T) *fakeSaaS {
 		writeJSON(rw, map[string]any{"id": "smsid1", "status": "created", "to": r.PostForm.Get("to")})
 	})
 
-	// --- Claude ---------------------------------------------------------
 	mux.HandleFunc("/v1/messages", func(rw http.ResponseWriter, r *http.Request) {
 		if f.down(rw, "claude") {
 			return
@@ -311,7 +291,6 @@ func newFakeSaaS(t *testing.T) *fakeSaaS {
 		})
 	})
 
-	// --- the site the uptime check watches -------------------------------
 	mux.HandleFunc("/site", func(rw http.ResponseWriter, _ *http.Request) {
 		f.mu.Lock()
 		status, body := f.siteStatus, f.siteBody
@@ -335,7 +314,6 @@ func (f *fakeSaaS) Close() {
 	}
 }
 
-// URL is the base every connector is pointed at.
 func (f *fakeSaaS) URL() string { return f.srv.URL }
 
 func (f *fakeSaaS) record(fn func()) {
@@ -344,8 +322,6 @@ func (f *fakeSaaS) record(fn func()) {
 	fn()
 }
 
-// fail makes one service answer 500 until cleared — the fault injection the
-// degradation tests need.
 func (f *fakeSaaS) fail(service string, down bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -363,8 +339,6 @@ func (f *fakeSaaS) down(rw http.ResponseWriter, service string) bool {
 	return bad
 }
 
-// Slack answers 200 with ok:false when it fails — the shape its API really
-// uses, so the drop's own error handling is what's exercised.
 func (f *fakeSaaS) downSlack(rw http.ResponseWriter) bool {
 	f.mu.Lock()
 	bad := f.failing["slack"]
@@ -375,8 +349,6 @@ func (f *fakeSaaS) downSlack(rw http.ResponseWriter) bool {
 	return bad
 }
 
-// deliver adds an email to what a search will find, newer than everything
-// already there.
 func (f *fakeSaaS) deliver(id, thread, from, subject string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -425,9 +397,6 @@ func userText(messages []struct {
 	return b.String()
 }
 
-// toolAnswer is the stand-in model's judgement. It reads what the person
-// wrote rather than being scripted per test, so a test states the input (a
-// spammy enquiry) and not the answer.
 func (f *fakeSaaS) toolAnswer(tool, prompt string) map[string]any {
 	low := strings.ToLower(prompt)
 	switch tool {
@@ -454,9 +423,6 @@ func truncateForMock(s string) string {
 	return s
 }
 
-// --- the in-memory spreadsheet -------------------------------------------
-
-// putSheet seeds a tab. Row 1 is the header row, as in a real sheet.
 func (f *fakeSaaS) putSheet(tab string, grid [][]any) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -473,7 +439,6 @@ func (f *fakeSaaS) getSheet(tab string) [][]any {
 	return out
 }
 
-// cell reads one cell by header name, 1-based sheet row.
 func (f *fakeSaaS) cell(tab, header string, row int) string {
 	grid := f.getSheet(tab)
 	if len(grid) == 0 || row < 1 || row > len(grid) {
@@ -487,7 +452,6 @@ func (f *fakeSaaS) cell(tab, header string, row int) string {
 	return ""
 }
 
-// tabFromRange pulls the tab name out of an A1 range ('Jobs'!C5 → Jobs).
 func tabFromRange(rng string) string {
 	rng = strings.TrimPrefix(rng, "'")
 	if i := strings.Index(rng, "'!"); i >= 0 {
@@ -500,7 +464,6 @@ func tabFromRange(rng string) string {
 }
 
 func (f *fakeSaaS) sheetsGet(rw http.ResponseWriter, r *http.Request) {
-	// .../values/<range>
 	i := strings.LastIndex(r.URL.Path, "/values/")
 	rng := ""
 	if i >= 0 {
@@ -532,8 +495,6 @@ func (f *fakeSaaS) sheetsAppend(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, map[string]any{"updates": map[string]any{"updatedRows": n}})
 }
 
-// sheetsBatchUpdate applies the per-cell writes Update cells sends, so a
-// later read sees them — the whole point of the round trip.
 func (f *fakeSaaS) sheetsBatchUpdate(rw http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Data []struct {
@@ -566,7 +527,6 @@ func (f *fakeSaaS) sheetsBatchUpdate(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, map[string]any{"totalUpdatedCells": updated})
 }
 
-// parseA1 turns 'Jobs'!C5 into a zero-based column and a 1-based row.
 func parseA1(rng string) (col, row int, ok bool) {
 	if i := strings.Index(rng, "!"); i >= 0 {
 		rng = rng[i+1:]
@@ -599,8 +559,6 @@ func unescape(s string) string {
 	s = strings.ReplaceAll(s, "%20", " ")
 	return s
 }
-
-// --- accessors ------------------------------------------------------------
 
 func (f *fakeSaaS) slackPosts() []string   { return f.snapshot(func() []string { return f.slack }) }
 func (f *fakeSaaS) discordPosts() []string { return f.snapshot(func() []string { return f.discord }) }
@@ -641,8 +599,6 @@ func (f *fakeSaaS) invoicesRaised() []map[string]any {
 	return append([]map[string]any(nil), f.invoices...)
 }
 
-// --- a minimal SMTP server, for the Email step ---------------------------
-
 func (f *fakeSaaS) startSMTP() {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -660,8 +616,6 @@ func (f *fakeSaaS) startSMTP() {
 	}()
 }
 
-// serveSMTP speaks just enough of the protocol for the mail step: greet,
-// accept the envelope, take the DATA blob, and record it.
 func (f *fakeSaaS) serveSMTP(conn net.Conn) {
 	defer conn.Close()
 	r := bufio.NewReader(conn)
@@ -731,10 +685,6 @@ func (f *fakeSaaS) smtpHostPort() (host, port string) {
 	return "127.0.0.1", strconv.Itoa(addr.Port)
 }
 
-// --- helpers --------------------------------------------------------------
-
-// gmailMessageAt renders an inbox entry with its own timestamp, which is what
-// the "only new since last run" watermark compares against.
 func gmailMessageAt(m fakeEmail) map[string]any {
 	msg := gmailMessage(m.ID, m.Thread, m.From, m.Subject, m.Sent)
 	msg["internalDate"] = strconv.FormatInt(m.EpochMS, 10)

@@ -20,13 +20,12 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// TestSecrets_E2E_AuthorizationHeader exercises the full chain:
+// Exercises the full chain:
 //   - graph stores secret reference (builtin://API_KEY) in params
 //   - dzd engine resolves it just before Execute
 //   - http_request sends the resolved value as the Authorization header
 //   - JobStore retains the unresolved reference, never the value
 func TestSecrets_E2E_AuthorizationHeader(t *testing.T) {
-	// Backing server that captures the Authorization header.
 	var captured string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured = r.Header.Get("Authorization")
@@ -35,7 +34,6 @@ func TestSecrets_E2E_AuthorizationHeader(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Build the stack with both providers configured.
 	ks := auth.NewMemKeyStore()
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,

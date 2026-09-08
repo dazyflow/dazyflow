@@ -12,10 +12,6 @@ import type { IssuedAPIKey, Permission, Role } from "../../types";
 import { formatDate } from "../../lib/datetime";
 import { useEscapeToClose } from "../ui/useEscapeToClose";
 
-// Role templates — common shapes admins reach for. "Custom" disables
-// the template effect so the checkbox grid is the source of truth.
-// The display name + description are i18n keys (resolved at render
-// time) so the picker tracks the active locale.
 type Template = {
   id: string;
   nameKey: string;
@@ -74,9 +70,6 @@ const PERMISSION_LABEL_KEYS: Record<Permission, string> = {
   "secret:write": "issueKey.perm.secretWrite",
   "organization:admin": "issueKey.perm.orgAdmin",
   "platform:admin": "issueKey.perm.platformAdmin",
-  // Not offered in the grant grid (AVAILABLE_PERMISSIONS) — it's a role
-  // provisioned by a platform admin, not something you attach to an API key.
-  // Listed only to keep this label map exhaustive over Permission.
   "support:agent": "issueKey.perm.supportAgent",
 };
 
@@ -101,7 +94,6 @@ function expiryToISO(choice: ExpiryChoice): string | undefined {
 }
 
 type Props = {
-  // Pre-fill the subject when issuing from a user's detail card.
   initialSubject?: string;
   onCancel: () => void;
   onIssued: (issued: IssuedAPIKey) => void;
@@ -141,8 +133,6 @@ export function IssueKeyModal({
       const next = new Set(s);
       if (next.has(p)) next.delete(p);
       else next.add(p);
-      // Selecting permissions manually pops us off the active template
-      // so we don't pretend a custom set is one of the canned roles.
       setTemplateID("custom");
       return next;
     });

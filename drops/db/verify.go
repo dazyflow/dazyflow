@@ -34,10 +34,6 @@ func init() {
 	engine.RegisterConnectionVerifier("MySQL", verifyMySQL)
 }
 
-// verifyPostgres opens a short-lived pool from the candidate DSN and pings
-// it. The caller's ctx carries the timeout. Errors are wrapped so the user
-// sees "could not connect: …" — pgx error text names the host/db but not the
-// password, so it's safe to surface.
 func verifyPostgres(ctx context.Context, conn map[string]string) error {
 	dsn := strings.TrimSpace(conn["dsn"])
 	if dsn == "" {

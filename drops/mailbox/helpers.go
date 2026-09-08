@@ -1,19 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package mailbox holds the drops that READ a mail account over IMAP —
-// searching a folder, reading one message, taking its attachments, marking it
-// read. The send side is a different protocol and a different drop: SMTP
-// (drops/notify, the Email step) can only submit mail, because SMTP has no
-// command to list, fetch or search a mailbox at all.
-//
-// Kept a separate integration from Email rather than more fields on that one.
-// Two reasons, in order of how much they'd hurt: the connection UI resolves an
-// integration's fields from the FIRST drop it finds declaring them
-// (daemon/httpconnectionverify.go), so sharing "Email" would force IMAP fields
-// onto a send-only setup; and the two halves genuinely differ — imap.host vs
-// smtp.host, 993 vs 587 — so one bundle would ask everybody for six fields
-// they may not have. The cost is that someone doing both configures two pages.
+// The drops that READ a mail account over IMAP; sending lives elsewhere.
 package mailbox
 
 import (
@@ -38,31 +26,14 @@ import (
 	"github.com/dazyflow/dazyflow/internal/imaputil"
 )
 
-// integration is the label every drop here shares — the name of the page a
-// tenant configures once, and the key its stored connection hangs off.
 const integration = "Mailbox"
 
-// maxRawBytes caps how much of each message the search pulls down. IMAP can
-// slice a message server-side (a partial FETCH), so a mailbox full of 30 MB
-// attachments costs a search nothing: what arrives is the front of the
-// message, which is where the headers and the readable body are. Download
-// attachments fetches the parts it wants in full, separately.
 const maxRawBytes = 256 << 10
 
-// maxBodyBytes caps the body carried in a search result — the same cap Gmail's
-// Search emails applies, for the same reason: fifty matches must not turn into
-// a multi-megabyte payload the editor then has to render. Read email returns
-// the body uncapped when a single message needs all of it.
+// The same cap Gmail's search uses, so the two steps behave alike.
 const maxBodyBytes = 20000
 
-// connectionFields is the mailbox connection, configured once on the Mailbox
-// integration page and injected into every node's params at run time
-// (injectConnectionDefaults) — so flows carry only the per-search fields, and
-// the password never lands in a graph.
-//
-// Every drop in the integration MUST declare this same slice: the connection
-// UI takes the fields from whichever drop it finds first, so a drop that
-// declared a subset would render a page missing whatever it left out.
+// Configured once per tenant, so a flow carries no credentials.
 func connectionFields() []core.ConnectionField {
 	return []core.ConnectionField{
 		{Key: "host", Label: "Mail server (IMAP)", Required: true, Placeholder: "imap.example.com"},
@@ -74,11 +45,6 @@ func connectionFields() []core.ConnectionField {
 	}
 }
 
-// configFromJob assembles the mailbox connection from the params the engine
-// injected. `folder` is declared as a param as well as a connection field, so
-// a step can point at another folder while everything else comes from the
-// connection — injectConnectionDefaults leaves an author's per-step value
-// alone.
 func configFromJob(job core.Job) (imaputil.Config, error) {
 	host := strings.TrimSpace(params.StringDefault(job.Params, "host", ""))
 	if host == "" {
@@ -88,9 +54,7 @@ func configFromJob(job core.Job) (imaputil.Config, error) {
 	if err != nil {
 		return imaputil.Config{}, err
 	}
-	// ConnectionFields inject the port as a string ("993"). ParsePort defaults
-	// it by TLS mode when it is empty and rejects anything that isn't a number,
-	// so a port stored in some other shape is reported rather than guessed at.
+	// Injected as a string, so it has to be parsed rather than asserted.
 	port, err := imaputil.ParsePort(params.StringDefault(job.Params, "port", ""), mode)
 	if err != nil {
 		return imaputil.Config{}, err
@@ -109,10 +73,7 @@ func configFromJob(job core.Job) (imaputil.Config, error) {
 	}, nil
 }
 
-// searchFetchOptions is what one message costs on the wire: its UID, flags,
-// receive time, decoded envelope, and the capped front of the raw message.
-// BODY.PEEK (not BODY) is load-bearing — a plain BODY[] fetch sets \Seen as a
-// side effect, so merely searching a mailbox would mark it all read.
+// What one message costs on the wire; the body is the expensive part.
 func searchFetchOptions() *imap.FetchOptions {
 	return &imap.FetchOptions{
 		UID:          true,
@@ -126,18 +87,6 @@ func searchFetchOptions() *imap.FetchOptions {
 	}
 }
 
-// messageRecord reduces one fetched message to the friendly record a flow
-// works with: date / from / subject / body plus the id.
-//
-// Deliberately the SAME shape Gmail's Search emails emits, so the idioms built
-// on that one — For each over the matches, ${item.id} into a step that reads
-// or files the mail, an AI step handed ${item.body} — carry over unchanged,
-// and a Gmail flow becomes an IMAP flow by swapping the step.
-//
-// `id` is the message's UID. Unlike a Gmail id it is only meaningful inside
-// one folder, and only while the folder's UIDVALIDITY holds — which is why the
-// steps that take an id also take the folder, and why the watermark below
-// stores both.
 func messageRecord(buf *imapclient.FetchMessageBuffer) map[string]any {
 	rec := map[string]any{
 		"id":      strconv.FormatUint(uint64(buf.UID), 10),
@@ -154,13 +103,6 @@ func messageRecord(buf *imapclient.FetchMessageBuffer) map[string]any {
 	return rec
 }
 
-// headerValues derives the three header fields both Search emails and Read
-// email present, so the two steps can't disagree about them.
-//
-// The envelope is the server's own parse, already decoded out of RFC 2047 word
-// encoding — so a Swedish subject arrives as text rather than
-// =?iso-8859-1?Q?...?=. Preferred over re-parsing the raw bytes, which the
-// search only ever holds a truncated prefix of.
 func headerValues(buf *imapclient.FetchMessageBuffer) (date, from, subject string) {
 	if env := buf.Envelope; env != nil {
 		subject = env.Subject
@@ -170,15 +112,11 @@ func headerValues(buf *imapclient.FetchMessageBuffer) (date, from, subject strin
 		}
 	}
 	if date == "" && !buf.InternalDate.IsZero() {
-		// No parseable Date: header — fall back to the server's receive time,
-		// which is also what the watermark orders by.
 		date = buf.InternalDate.Format(time.RFC1123Z)
 	}
 	return date, from, subject
 }
 
-// hasFlag reports whether the message carries flag (IMAP flags are
-// case-insensitive).
 func hasFlag(flags []imap.Flag, want imap.Flag) bool {
 	for _, f := range flags {
 		if strings.EqualFold(string(f), string(want)) {
@@ -188,9 +126,6 @@ func hasFlag(flags []imap.Flag, want imap.Flag) bool {
 	return false
 }
 
-// formatAddressList renders an envelope address list the way a person reads
-// it — `Ada Lovelace <ada@example.com>`, comma-separated — matching what
-// Gmail's From field carries.
 func formatAddressList(addrs []imap.Address) string {
 	out := make([]string, 0, len(addrs))
 	for i := range addrs {
@@ -207,16 +142,7 @@ func formatAddressList(addrs []imap.Address) string {
 	return strings.Join(out, ", ")
 }
 
-// bodyText pulls readable text out of a raw RFC 5322 message: the first
-// text/plain part, falling back to text/html when a message carries no plain
-// alternative (mirroring Gmail's Search emails, which prefers plain, then
-// html, then the snippet).
-//
-// Everything here is best-effort by design. The raw bytes may have been cut
-// mid-part by the partial fetch, and mail in the wild is routinely malformed;
-// a body that won't parse must degrade to "" — a search that returns matches
-// with empty bodies is recoverable, one that fails the whole run because a
-// single message has a broken MIME boundary is not.
+// The first text/plain part, falling back to stripped HTML.
 func bodyText(raw []byte) string {
 	if len(raw) == 0 {
 		return ""
@@ -225,8 +151,6 @@ func bodyText(raw []byte) string {
 	if entity == nil {
 		return ""
 	}
-	// A charset or encoding this build can't decode is reported by Read but
-	// still yields a usable entity, so only a nil entity is fatal here.
 	_ = err
 
 	var plain, html string
@@ -239,9 +163,7 @@ func bodyText(raw []byte) string {
 		if _, isAttachment := part.Header.(*mail.AttachmentHeader); isAttachment {
 			continue
 		}
-		// Read through the PartHeader interface rather than the concrete
-		// inline/attachment types: a part with no Content-Type at all is
-		// text/plain by RFC 2045, which is exactly what a bare Get gives us.
+		// Through the interface: the concrete type differs between library versions.
 		mimeType := "text/plain"
 		if ct := part.Header.Get("Content-Type"); ct != "" {
 			parsed, _, mErr := mime.ParseMediaType(ct)
@@ -270,9 +192,7 @@ func bodyText(raw []byte) string {
 	return truncateAtRuneBoundary(strings.TrimSpace(body), maxBodyBytes)
 }
 
-// truncateAtRuneBoundary caps s at limit bytes without splitting a multi-byte
-// character: the cut moves back to a rune boundary rather than leaving half a
-// character, which would render as a replacement glyph in the editor.
+// Without splitting a multi-byte rune, which would emit invalid UTF-8.
 func truncateAtRuneBoundary(s string, limit int) string {
 	if len(s) <= limit {
 		return s
@@ -284,9 +204,6 @@ func truncateAtRuneBoundary(s string, limit int) string {
 	return s[:cut] + "…"
 }
 
-// folderName is the folder a step is pointed at, for the error and detail
-// messages that name it. The param wins when set, otherwise it is whatever the
-// connection injected — which is the same order configFromJob resolves in.
 func folderName(job core.Job) string {
 	if f := strings.TrimSpace(params.StringDefault(job.Params, "folder", "")); f != "" {
 		return f
@@ -294,16 +211,7 @@ func folderName(job core.Job) string {
 	return imaputil.DefaultFolder
 }
 
-// openMailbox resolves the connection from the job's params, dials, and
-// selects the folder. A non-nil result is the caller's cue to return it
-// unchanged; on success the caller owns Close().
-//
-// ctx must already carry the step's deadline — the cancel belongs in the
-// caller's defer, next to the Close.
-//
-// readOnly picks EXAMINE over SELECT, and every step that only reads passes
-// true. It is the difference between a flow that reads a mailbox and one that
-// quietly marks it all read.
+// Resolves, dials and selects in one place, so every step opens identically.
 func openMailbox(ctx context.Context, job core.Job, readOnly bool) (*imaputil.Client, *imap.SelectData, *core.Result) {
 	cfg, err := configFromJob(job)
 	if err != nil {
@@ -324,16 +232,7 @@ func openMailbox(ctx context.Context, job core.Job, readOnly bool) (*imaputil.Cl
 	return client, state, nil
 }
 
-// resolveUID works out which message a step was pointed at. It accepts either
-// a single id (text, e.g. ${item.id} inside a For each) or Search emails'
-// "Matching emails" list wired straight in — in which case the FIRST match is
-// used, so the obvious drag (Matching emails → Email) just works. Mirrors
-// gmail_get_message's resolveMessageID, for the same reason the record shape
-// is shared: the two steps have to feel like the same step.
-//
-// The id is a UID, so it is only meaningful inside one folder. A value that
-// isn't a number says so plainly — the likeliest cause is a Gmail id wired
-// into a Mailbox step, and "invalid syntax" would not point at that.
+// A UID or a message-id, since a flow may carry either.
 func resolveUID(job core.Job) (imap.UID, *core.Result) {
 	raw, ok := resolveIDText(job)
 	if !ok {
@@ -353,16 +252,12 @@ func resolveUID(job core.Job) (imap.UID, *core.Result) {
 	return imap.UID(n), nil
 }
 
-// resolveIDText pulls the id out of the param or the input port, whichever is
-// wired. ok=false means the input carried something that can't be an id at
-// all.
 func resolveIDText(job core.Job) (string, bool) {
 	fallback := params.StringDefault(job.Params, "id", "")
 	in, present := job.Input["id"]
 	if !present || in.Inline == nil {
 		return fallback, true
 	}
-	// A match record, as emitted by Search emails.
 	recordID := func(v any) string {
 		m, isMap := v.(map[string]any)
 		if !isMap {
@@ -388,7 +283,6 @@ func resolveIDText(job core.Job) (string, bool) {
 		}
 		return "", false
 	case []any:
-		// The whole "Matching emails" list: take the first match.
 		for _, item := range v {
 			if s := recordID(item); s != "" {
 				return s, true
@@ -400,13 +294,7 @@ func resolveIDText(job core.Job) (string, bool) {
 	}
 }
 
-// fetchOneUID runs a FETCH for a single message and returns its buffer, or a
-// result explaining that the message isn't there.
-//
-// "Not there" is a real, ordinary outcome, not a protocol error: a UID stops
-// existing the moment someone deletes or moves the mail, which can happen
-// between a search and the step that reads a match. Saying so in those terms
-// beats a bare empty FETCH response.
+// A UID that no longer exists is not an error: the message was deleted.
 func fetchOneUID(client *imaputil.Client, job core.Job, uid imap.UID, opts *imap.FetchOptions) (*imapclient.FetchMessageBuffer, *core.Result) {
 	bufs, err := client.Fetch(imap.UIDSetNum(uid), opts).Collect()
 	if err != nil {

@@ -18,10 +18,9 @@ import (
 )
 
 const (
-	maxWatchBytes  = 5 << 20 // 5 MiB of page is plenty to compare
-	maxStoredValue = 4 << 10 // how much of the watched text we keep to show as "before"
-	watchCursorPfx = "cursor.webwatch."
-	// RE2 has no backreferences, so each element gets its own alternative.
+	maxWatchBytes    = 5 << 20 // 5 MiB of page is plenty to compare
+	maxStoredValue   = 4 << 10 // how much of the watched text we keep to show as "before"
+	watchCursorPfx   = "cursor.webwatch."
 	watchStripScript = `(?is)<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>|<head\b[^>]*>.*?</head\s*>|<!--.*?-->`
 )
 
@@ -81,11 +80,7 @@ func init() {
 				},
 				"required":["url"]
 			}`),
-			// A check advances the remembered value, so two runs of the same
-			// step are not interchangeable — same reason rss isn't idempotent.
 			Idempotent: false,
-			// The remembered value is hidden per-node memory: surface it so a
-			// user can clear it and start watching afresh.
 			NodeState: &core.NodeState{
 				Label:     "What the page last said",
 				ResetHint: "Forget what the page said last time. The next check records the page as it is then, and only later changes fire.",
@@ -104,9 +99,6 @@ func watchName(flow, node string) string {
 	return watchCursorPfx + flow + "." + node
 }
 
-// watchState is what we remember between checks: a hash of the full watched
-// text (cheap, bounded) plus a truncated copy to show the reader what it used
-// to say.
 type watchState struct {
 	Hash    string `json:"hash"`
 	Preview string `json:"preview"`
@@ -207,7 +199,6 @@ func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	// Don't split a multi-byte character.
 	cut := n
 	for cut > 0 && !isUTF8Start(s[cut]) {
 		cut--

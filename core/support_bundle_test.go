@@ -10,10 +10,6 @@ import (
 	"time"
 )
 
-// sampleGraph builds a flow that exercises every redaction danger zone: a
-// literal secret pasted into a param, a ${secret.…} reference, a nested object,
-// an env credential, a webhook trigger with a bearer secret, and a secret
-// pasted into the flow name.
 func sampleGraph() Graph {
 	return Graph{
 		ID:        "daily-invoice",
@@ -74,8 +70,6 @@ func sampleRun() *RunSnapshot {
 	}
 }
 
-// serialize is the check surface: the bundle is only ever shared as JSON, so
-// "appears nowhere" means "not in the marshaled bytes."
 func serialize(t *testing.T, b SupportBundle) string {
 	t.Helper()
 	raw, err := json.Marshal(b)
@@ -88,8 +82,6 @@ func serialize(t *testing.T, b SupportBundle) string {
 // The raw secrets and run payloads must appear NOWHERE in the serialized bundle,
 // in either mode.
 func TestBuildSupportBundle_NoSecretsOrPayloads(t *testing.T) {
-	// Note: JobError.Message ("node exceeded 30s") is intentionally NOT here —
-	// it's contractually user-facing and kept (see TestBuildSupportBundle_KeepsDiagnostics).
 	mustNotContain := []string{
 		"sk_live_abcdefgh12345678",      // param literal secret
 		"sk_test_zzzzzzzz99999999",      // env secret
@@ -136,7 +128,6 @@ func TestBuildSupportBundle_KeepsDiagnostics(t *testing.T) {
 		}
 	}
 
-	// Structure: keys kept, edges intact, error Details dropped.
 	charge := findNode(t, b, "charge")
 	if _, ok := charge.Params["api_key"]; !ok {
 		t.Error("param KEY api_key should be kept (only its value redacted)")
@@ -152,21 +143,17 @@ func TestBuildSupportBundle_KeepsDiagnostics(t *testing.T) {
 	}
 }
 
-// Structure-only redacts a literal to a shape marker but keeps a reference.
 func TestBuildSupportBundle_StructureOnlyShapes(t *testing.T) {
 	b := BuildSupportBundle(sampleGraph(), sampleRun(), nil, RedactStructureOnly)
 	charge := findNode(t, b, "charge")
 
-	// email is a ${secret.…} reference — kept verbatim.
 	if charge.Params["email"] != "${secret.CUSTOMER_EMAIL}" {
 		t.Errorf("reference not kept verbatim: %v", charge.Params["email"])
 	}
-	// name is a plain literal — redacted to a shape marker even though it's not a secret.
 	shape, ok := charge.Params["name"].(map[string]any)
 	if !ok || shape["__redacted"] != "string" {
 		t.Errorf("literal 'name' should be a string shape marker, got %v", charge.Params["name"])
 	}
-	// A run's output port drops its value but keeps MIME + shape + header count.
 	chargeRun := findNodeRun(t, b, "charge")
 	rows := chargeRun.Output["rows"]
 	if rows.MIME != "application/json" || !rows.HasValue || rows.Shape != "array" {
@@ -177,8 +164,6 @@ func TestBuildSupportBundle_StructureOnlyShapes(t *testing.T) {
 	}
 }
 
-// Values mode keeps non-secret literals but still redacts secrets (by key name
-// or by known pattern) and still keeps header names.
 func TestBuildSupportBundle_ValuesModeKeepsNonSecrets(t *testing.T) {
 	b := BuildSupportBundle(sampleGraph(), sampleRun(), nil, RedactStructurePlusValues)
 	charge := findNode(t, b, "charge")
@@ -186,11 +171,9 @@ func TestBuildSupportBundle_ValuesModeKeepsNonSecrets(t *testing.T) {
 	if charge.Params["name"] != "Acme AB" {
 		t.Errorf("values mode should keep the non-secret literal 'name', got %v", charge.Params["name"])
 	}
-	// api_key is under a secret-shaped key → still redacted.
 	if _, redacted := charge.Params["api_key"].(map[string]any); !redacted {
 		t.Errorf("api_key must stay redacted even in values mode, got %v", charge.Params["api_key"])
 	}
-	// nested.token is a secret-shaped key → redacted; nested.label kept.
 	nested := charge.Params["nested"].(map[string]any)
 	if _, redacted := nested["token"].(map[string]any); !redacted {
 		t.Errorf("nested.token must be redacted, got %v", nested["token"])
@@ -198,15 +181,12 @@ func TestBuildSupportBundle_ValuesModeKeepsNonSecrets(t *testing.T) {
 	if nested["label"] != "friendly" {
 		t.Errorf("nested.label should be kept, got %v", nested["label"])
 	}
-	// Header names survive in values mode.
 	rows := findNodeRun(t, b, "charge").Output["rows"]
 	if len(rows.Headers) != 2 {
 		t.Errorf("values mode should keep header names, got %+v", rows)
 	}
 }
 
-// Property: NO known-secret pattern survives anywhere in the serialized bundle,
-// across both modes — the final scrub-pass guarantee.
 func TestBuildSupportBundle_NoKnownSecretSurvives(t *testing.T) {
 	for _, mode := range []RedactMode{RedactStructureOnly, RedactStructurePlusValues} {
 		b := BuildSupportBundle(sampleGraph(), sampleRun(), nil, mode)
@@ -217,7 +197,6 @@ func TestBuildSupportBundle_NoKnownSecretSurvives(t *testing.T) {
 	}
 }
 
-// Trigger bearer secrets are dropped; presence is recorded.
 func TestBuildSupportBundle_TriggerSecretScrubbed(t *testing.T) {
 	b := BuildSupportBundle(sampleGraph(), nil, nil, RedactStructureOnly)
 	var webhook *BundleTrigger
@@ -232,14 +211,12 @@ func TestBuildSupportBundle_TriggerSecretScrubbed(t *testing.T) {
 	if !webhook.HasSecret {
 		t.Error("HasSecret should be true")
 	}
-	// The BundleTrigger type has no Secret field at all — nothing to leak — and
-	// the value must not appear in the serialized form.
+	// BundleTrigger has no Secret field at all, so there is nothing to leak.
 	if strings.Contains(serialize(t, b), "super-secret-bearer-token") {
 		t.Error("trigger bearer secret leaked")
 	}
 }
 
-// nil run → no Run section, structure still produced.
 func TestBuildSupportBundle_NoRun(t *testing.T) {
 	b := BuildSupportBundle(sampleGraph(), nil, nil, RedactStructureOnly)
 	if b.Run != nil {
@@ -250,7 +227,6 @@ func TestBuildSupportBundle_NoRun(t *testing.T) {
 	}
 }
 
-// Empty/unknown mode defaults to structure-only.
 func TestBuildSupportBundle_ModeDefault(t *testing.T) {
 	b := BuildSupportBundle(sampleGraph(), nil, nil, "")
 	if b.Mode != RedactStructureOnly {
@@ -298,13 +274,11 @@ func TestNewSupportBundleRecord(t *testing.T) {
 	if rec.Mode != RedactStructureOnly || rec.CreatedBy != "agent-a" || !rec.CreatedAt.Equal(at) {
 		t.Errorf("record fields wrong: %+v", rec)
 	}
-	// The payload is the redacted bundle — no source secret survives.
 	for _, leak := range []string{"sk_live_abcdefgh12345678", "cus_secretCustomerId", "super-secret-bearer-token"} {
 		if strings.Contains(string(rec.Payload), leak) {
 			t.Errorf("stored payload leaked %q", leak)
 		}
 	}
-	// And it round-trips back into a SupportBundle.
 	var back SupportBundle
 	if err := json.Unmarshal(rec.Payload, &back); err != nil {
 		t.Fatalf("payload is not a SupportBundle: %v", err)

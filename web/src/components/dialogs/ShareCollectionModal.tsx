@@ -31,8 +31,6 @@ import { Loading } from "../ui/Loading";
 export function ShareCollectionModal({
   collection,
   onClose,
-  // Told to the caller so the Collections list can mark the collection public
-  // (or stop marking it) without refetching the whole list.
   onChange,
 }: {
   collection: string;
@@ -64,7 +62,6 @@ export function ShareCollectionModal({
       })
       .catch((e) => {
         if (cancelled) return;
-        // No link yet is the expected first-open state, not an error.
         if (!isErrorCode(e, "share_not_found")) {
           setError(explainApiError(e, t));
         }

@@ -3,7 +3,6 @@
 
 import type { Manifest } from "../types";
 
-// ---------------------------------------------------------------------------
 // Swedish → catalog vocabulary.
 //
 // The drop catalog is authored in English (label, subtitle, integration and
@@ -19,7 +18,6 @@ import type { Manifest } from "../types";
 // ("frakt" → nshift, but not "faktura" → fortnox). Values must occur in some
 // manifest's text. Keys are natural Swedish; lookup folds both sides.
 const SV_ALIASES: Record<string, string[]> = {
-  // --- messaging -----------------------------------------------------------
   "e-post": ["email", "gmail", "smtp"],
   epost: ["email", "gmail", "smtp"],
   mejl: ["email", "gmail", "smtp"],
@@ -45,7 +43,6 @@ const SV_ALIASES: Record<string, string[]> = {
   avisera: ["notify", "notification", "ntfy"],
   påminnelse: ["reminder", "ntfy", "notify"],
   larm: ["alert", "notify", "ntfy"],
-  // --- triggers, schedule, time -------------------------------------------
   schema: ["schedule", "cron", "recurring", "timer"],
   schemalägg: ["schedule", "cron", "recurring"],
   schemalagd: ["schedule", "cron", "recurring"],
@@ -55,9 +52,6 @@ const SV_ALIASES: Record<string, string[]> = {
   dagligen: ["daily", "schedule", "cron"],
   återkommande: ["recurring", "schedule", "cron", "interval"],
   intervall: ["interval", "poll", "schedule"],
-  // Kept as a search synonym even though the UI now says "trigger" throughout:
-  // this map exists to accept whatever word the user reaches for, and someone
-  // who learned the old term should still find the drop.
   utlösare: ["trigger", "webhook", "schedule"],
   händelse: ["event", "trigger", "webhook"],
   händelser: ["events", "trigger", "webhook"],
@@ -74,7 +68,6 @@ const SV_ALIASES: Record<string, string[]> = {
   godkännande: ["approval", "wait for approval"],
   godkänn: ["approval", "wait for approval"],
   attest: ["approval", "wait for approval"],
-  // --- tabular data --------------------------------------------------------
   tabell: ["table", "rows", "make a table"],
   rader: ["rows", "table"],
   kolumn: ["columns", "rename columns", "calculated column"],
@@ -108,7 +101,6 @@ const SV_ALIASES: Record<string, string[]> = {
   slinga: ["loop", "for each", "iterate"],
   upprepa: ["loop", "for each", "iterate"],
   iterera: ["iterate", "for each", "loop"],
-  // --- files, storage, web -------------------------------------------------
   fil: ["file", "read", "write"],
   filer: ["files", "file", "list files"],
   mapp: ["folder", "drive", "files"],
@@ -134,7 +126,6 @@ const SV_ALIASES: Record<string, string[]> = {
   nyckel: ["secret", "key", "hmac"],
   kryptera: ["hash", "hmac", "checksum"],
   checksumma: ["checksum", "hash"],
-  // --- text, logic, computation -------------------------------------------
   mall: ["template", "fill a template", "render"],
   mallar: ["template", "render"],
   formel: ["formula", "expression", "cel", "compute"],
@@ -155,7 +146,6 @@ const SV_ALIASES: Record<string, string[]> = {
   extrahera: ["extract", "parse", "structured"],
   språkmodell: ["ai", "llm", "claude", "chatgpt"],
   artificiell: ["ai", "llm", "claude", "chatgpt"],
-  // --- Nordic business domain ---------------------------------------------
   faktura: ["invoice", "billing"],
   fakturor: ["invoice", "billing"],
   fakturera: ["invoice", "send invoice"],
@@ -182,7 +172,6 @@ const SV_ALIASES: Record<string, string[]> = {
   orgnr: ["orgnr", "org-number", "company", "roaring"],
   företag: ["company", "business", "roaring", "enrichment"],
   bolag: ["company", "business", "roaring"],
-  // --- everyday services ---------------------------------------------------
   kalender: ["calendar", "events"],
   möte: ["calendar", "event", "create event"],
   bokning: ["calendar", "event", "create event"],
@@ -226,8 +215,6 @@ function fold(s: string): string {
     .replace(/[^a-z0-9]+/g, "");
 }
 
-// Folded lookup table. Two natural-Swedish keys can fold to the same string,
-// so terms are merged rather than overwritten.
 const FOLDED: Map<string, string[]> = (() => {
   const m = new Map<string, string[]>();
   for (const [k, terms] of Object.entries(SV_ALIASES)) {
@@ -245,10 +232,6 @@ const FOLDED: Map<string, string[]> = (() => {
 
 const FOLDED_KEYS = [...FOLDED.keys()];
 
-// Swedish inflection endings, longest first. Stripping one of these and
-// retrying turns the forms people actually type ("fakturor", "kunder",
-// "notiser", "betalningar") back into a table key, without carrying a real
-// stemmer around.
 const SV_ENDINGS = [
   "arna",
   "erna",
@@ -322,19 +305,11 @@ export function expandToken(tok: string): string[] {
   return terms;
 }
 
-// LocalizedText is a drop's label/subtitle as the reader currently SEES them
-// (see lib/dropText.ts). Passed in rather than resolved here so this module
-// stays free of locale state, and searched alongside the English original at
-// full weight: someone reading a Swedish palette will type what the row says,
-// while someone who knows the product by its English name still finds it.
 export type LocalizedText = {
   label?: string;
   subtitle?: string;
 };
 
-// Fields is a drop's searchable text, lowercased once per scoreDrop call.
-// labels/subtitles hold the English catalog string plus the localized one when
-// it differs — every rung of the ladder below scores the best of them.
 type Fields = {
   labels: string[];
   id: string;
@@ -344,8 +319,6 @@ type Fields = {
   tags: string[];
 };
 
-// variants lowercases `base` and appends `extra` when it says something
-// different, so the common all-English case allocates a single-element array.
 function variants(base: string, extra?: string): string[] {
   const b = base.toLowerCase();
   const e = (extra ?? "").toLowerCase();
@@ -363,9 +336,6 @@ function fieldsOf(drop: Manifest, localized?: LocalizedText): Fields {
   };
 }
 
-// fieldScore scores one term against one drop: field priority (label >
-// integration > tags > description) crossed with match position (exact >
-// start > word-start > anywhere).
 function fieldScore(f: Fields, tok: string): number {
   const anyLabel = (pred: (s: string) => boolean) => f.labels.some(pred);
   const anySubtitle = (pred: (s: string) => boolean) => f.subtitles.some(pred);
@@ -375,8 +345,6 @@ function fieldScore(f: Fields, tok: string): number {
   else if (f.id.startsWith(tok)) s = Math.max(s, 450);
   else if (f.integration.startsWith(tok)) s = Math.max(s, 380);
   else if (anyLabel((l) => wordStarts(l, tok))) s = Math.max(s, 300);
-  // The subtitle holds the action ("Append rows") when several drops
-  // share a product title, so it ranks close to the label.
   else if (anySubtitle((sub) => sub.startsWith(tok) || wordStarts(sub, tok)))
     s = Math.max(s, 290);
   else if (wordStarts(f.integration, tok)) s = Math.max(s, 250);
@@ -420,9 +388,6 @@ export function scoreDrop(
   return total;
 }
 
-// wordStarts returns true if `tok` is the prefix of any word (split on
-// non-alpha) inside `s`. Lets "send" hit "Gmail send message" without
-// matching "send" inside "ascend".
 function wordStarts(s: string, tok: string): boolean {
   const parts = s.split(/[^a-z0-9]+/);
   for (const p of parts) if (p.startsWith(tok)) return true;

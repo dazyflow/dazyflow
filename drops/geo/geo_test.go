@@ -14,15 +14,11 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// The network drops dial a 127.0.0.1 httptest server, so they need the same
-// private-egress opt-in production gets via DAZYFLOW_ALLOW_PRIVATE_EGRESS.
 func init() { hfnet.SetAllowPrivateEgress(true) }
 
 const sampleSearch = `[{"lat":"59.3293","lon":"18.0686","display_name":"Stockholm, Sweden","address":{"city":"Stockholm","country":"Sweden"}}]`
 const sampleReverse = `{"lat":"59.3293","lon":"18.0686","display_name":"Stockholm, Södermanland, Sweden","address":{"city":"Stockholm","country":"Sweden"}}`
 
-// stubNominatim points nominatimURL at a server that records the request and
-// returns the given status + body. It restores nominatimURL on cleanup.
 func stubNominatim(t *testing.T, status int, body string, gotReq **http.Request) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -51,10 +47,7 @@ func textPin(t *testing.T, r core.Result, port string) string {
 	return s
 }
 
-// --- Location (geo_location) --------------------------------------------------
-
 func TestExecuteLocation_Point(t *testing.T) {
-	// Map pin only, no Place → coordinate from the pin, no network.
 	r, _ := executeLocation(context.Background(), core.Job{Params: map[string]any{"point": "59.3293,18.0686"}}, nil)
 	if r.Status != core.StatusOK {
 		t.Fatalf("status %v err %+v", r.Status, r.Error)
@@ -105,12 +98,9 @@ func TestExecuteLocation_PlaceInputOverridesParam(t *testing.T) {
 	}
 }
 
-// --- Reverse geocode (geo_reverse) -------------------------------------------
-
 func TestExecuteReverse_Point(t *testing.T) {
 	var req *http.Request
 	stubNominatim(t, 200, sampleReverse, &req)
-	// Map pin (point param), no Coordinate input.
 	r, err := executeReverse(context.Background(), core.Job{Params: map[string]any{"point": "59.3293,18.0686"}}, nil)
 	if err != nil || r.Status != core.StatusOK {
 		t.Fatalf("status %v err %v %+v", r.Status, err, r.Error)
@@ -163,7 +153,6 @@ func TestHTTPFailure_RateLimited(t *testing.T) {
 	}
 }
 
-// errCode returns the error code of a result, or "" when there is no error.
 func errCode(r core.Result) string {
 	if r.Error == nil {
 		return ""
@@ -171,13 +160,7 @@ func errCode(r core.Result) string {
 	return r.Error.Code
 }
 
-// --- parseLatLon edge cases --------------------------------------------------
-
-// --- executeLocation input/precedence paths ----------------------------------
-
 func TestExecuteLocation_NonTextPlaceInput(t *testing.T) {
-	// A non-string, non-[]byte Place input is a wiring mistake → bad_input,
-	// and no network is touched.
 	job := core.Job{
 		Params: map[string]any{"point": "1,2"},
 		Input:  map[string]core.Ref{"place": {Inline: 42}},
@@ -189,7 +172,6 @@ func TestExecuteLocation_NonTextPlaceInput(t *testing.T) {
 }
 
 func TestExecuteLocation_BadPointParam(t *testing.T) {
-	// No Place, malformed point param → bad_param (parseLatLon error surfaced).
 	r, _ := executeLocation(context.Background(), core.Job{Params: map[string]any{"point": "not-a-coord"}}, nil)
 	if errCode(r) != "bad_param" {
 		t.Fatalf("bad point → want bad_param, got %+v", r.Error)
@@ -197,8 +179,6 @@ func TestExecuteLocation_BadPointParam(t *testing.T) {
 }
 
 func TestExecuteLocation_ForwardErrorSurfaced(t *testing.T) {
-	// A Place that the backend rejects (non-2xx) surfaces the geocoder error
-	// Result through executeLocation's errRes branch.
 	stubNominatim(t, 500, `boom`, nil)
 	job := core.Job{Params: map[string]any{"place": "Nowhere"}}
 	r, _ := executeLocation(context.Background(), job, nil)
@@ -206,8 +186,6 @@ func TestExecuteLocation_ForwardErrorSurfaced(t *testing.T) {
 		t.Fatalf("500 on forward → want geocoder_error, got %+v", r.Error)
 	}
 }
-
-// --- executeReverse / resolveCoord input paths -------------------------------
 
 func TestResolveCoord_NonTextInput(t *testing.T) {
 	job := core.Job{
@@ -227,8 +205,6 @@ func TestExecuteReverse_ReverseErrorSurfaced(t *testing.T) {
 		t.Fatalf("500 on reverse → want geocoder_error, got %+v", r.Error)
 	}
 }
-
-// --- geoHTTPFailure status classification ------------------------------------
 
 func TestGeoHTTPFailure_StatusCodes(t *testing.T) {
 	cases := []struct {
@@ -254,7 +230,6 @@ func TestGeoHTTPFailure_StatusCodes(t *testing.T) {
 }
 
 func TestGeoHTTPFailure_LongBodyTruncated(t *testing.T) {
-	// A >200-byte non-2xx body is truncated into the error message.
 	long := strings.Repeat("x", 500)
 	stubNominatim(t, 502, long, nil)
 	r, _ := executeReverse(context.Background(), core.Job{Params: map[string]any{"point": "1,2"}}, nil)
@@ -267,14 +242,10 @@ func TestGeoHTTPFailure_LongBodyTruncated(t *testing.T) {
 }
 
 func TestGeoHTTPFailure_TransportError(t *testing.T) {
-	// Point the backend at an unreachable host so the dial fails with a
-	// transport error (not an HTTP status). SSRF guard allows 127.0.0.1; an
-	// unused high port refuses the connection.
 	prev := nominatimURL
 	nominatimURL = "http://127.0.0.1:1"
 	t.Cleanup(func() { nominatimURL = prev })
 	r, _ := executeReverse(context.Background(), core.Job{Params: map[string]any{"point": "1,2", "timeout_ms": 1000}}, nil)
-	// Either a transport error or an SSRF block — both are error Results.
 	if r.Error == nil {
 		t.Fatalf("transport failure → want an error Result, got %+v", r)
 	}
@@ -284,9 +255,6 @@ func TestGeoHTTPFailure_TransportError(t *testing.T) {
 }
 
 func TestGeoHTTPFailure_SSRFBlocked(t *testing.T) {
-	// Disable the private-egress opt-in so the SSRF guard blocks the dial to
-	// the 127.0.0.1 httptest server, exercising the egress_blocked branch.
-	// Restored on cleanup so other tests keep their loopback access.
 	var req *http.Request
 	stubNominatim(t, 200, sampleReverse, &req)
 	hfnet.SetAllowPrivateEgress(false)
@@ -300,12 +268,9 @@ func TestGeoHTTPFailure_SSRFBlocked(t *testing.T) {
 	}
 }
 
-// --- geoFetch: Accept-Language header + timeout fallback ----------------------
-
 func TestGeoFetch_AcceptLanguageHeader(t *testing.T) {
 	var req *http.Request
 	stubNominatim(t, 200, sampleReverse, &req)
-	// language set → Accept-Language header; timeout_ms <= 0 → falls back to default.
 	job := core.Job{Params: map[string]any{"point": "59.3293,18.0686", "language": "sv", "timeout_ms": 0}}
 	r, _ := executeReverse(context.Background(), job, nil)
 	if r.Status != core.StatusOK {
@@ -315,8 +280,6 @@ func TestGeoFetch_AcceptLanguageHeader(t *testing.T) {
 		t.Errorf("Accept-Language = %q, want sv", got)
 	}
 }
-
-// --- nominatim forward/reverse parse & match paths ---------------------------
 
 func TestNominatimForward_CountryCodes(t *testing.T) {
 	var req *http.Request
@@ -348,7 +311,6 @@ func TestNominatimForward_BadJSON(t *testing.T) {
 }
 
 func TestNominatimReverse_NoMatch(t *testing.T) {
-	// A valid object with an empty display_name → no_match.
 	stubNominatim(t, 200, `{"lat":"1","lon":"2","display_name":""}`, nil)
 	r, _ := executeReverse(context.Background(), core.Job{Params: map[string]any{"point": "1,2"}}, nil)
 	if errCode(r) != "no_match" {
@@ -363,8 +325,6 @@ func TestNominatimReverse_BadJSON(t *testing.T) {
 		t.Fatalf("malformed JSON → want geocoder_error, got %+v", r.Error)
 	}
 }
-
-// --- toGeoPlace malformed coordinate paths -----------------------------------
 
 func TestToGeoPlace_MalformedCoordinate(t *testing.T) {
 	cases := []struct {
@@ -385,12 +345,9 @@ func TestToGeoPlace_MalformedCoordinate(t *testing.T) {
 	}
 }
 
-// --- locationiq forward missing-key path -------------------------------------
-
 func TestLocationIQ_ForwardMissingKey(t *testing.T) {
 	var req *http.Request
 	stubLocationIQ(t, 200, sampleSearch, &req)
-	// Select LocationIQ but supply no api_key, via the forward (Place) path.
 	job := core.Job{Params: map[string]any{"backend": "locationiq", "place": "Stockholm"}}
 	r, _ := executeLocation(context.Background(), job, nil)
 	if errCode(r) != "not_connected" {
@@ -400,8 +357,6 @@ func TestLocationIQ_ForwardMissingKey(t *testing.T) {
 		t.Error("should not hit the network without a key")
 	}
 }
-
-// --- photon forward/reverse + firstFeature paths -----------------------------
 
 func TestPhoton_ForwardLangAndNoMatch(t *testing.T) {
 	var req *http.Request
@@ -417,8 +372,6 @@ func TestPhoton_ForwardLangAndNoMatch(t *testing.T) {
 }
 
 func TestPhoton_ForwardRateLimited(t *testing.T) {
-	// A non-2xx on the Photon forward path returns the failure Result before
-	// firstFeature (the g.fail branch in forward).
 	stubPhoton(t, 429, `slow down`, nil)
 	r, _ := executeLocation(context.Background(), photonJob(map[string]any{"place": "Stockholm"}), nil)
 	if errCode(r) != "rate_limited" {
@@ -427,8 +380,6 @@ func TestPhoton_ForwardRateLimited(t *testing.T) {
 }
 
 func TestPhoton_ForwardSuccess(t *testing.T) {
-	// A successful Photon forward (Place) lookup exercises firstFeature's
-	// happy path through the forward entry point.
 	var req *http.Request
 	stubPhoton(t, 200, samplePhoton, &req)
 	job := photonJob(map[string]any{"place": "Stockholm"})
@@ -445,8 +396,6 @@ func TestPhoton_ForwardSuccess(t *testing.T) {
 }
 
 func TestExecuteReverse_NoAddress(t *testing.T) {
-	// A reverse hit with no address object → the address pin falls back to an
-	// empty object (the addr == nil branch).
 	stubNominatim(t, 200, `{"lat":"59.33","lon":"18.07","display_name":"Somewhere"}`, nil)
 	r, _ := executeReverse(context.Background(), core.Job{Params: map[string]any{"point": "1,2"}}, nil)
 	if r.Status != core.StatusOK {

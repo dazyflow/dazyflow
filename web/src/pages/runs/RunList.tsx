@@ -22,8 +22,6 @@ import { EmptyState } from "../../components/ui/EmptyState";
 
 const PAGE_SIZE = 50;
 
-// runStatusLabel maps a run's machine status to a human label so the status
-// column carries meaning beyond the color dot (accessibility + clarity).
 function runStatusLabel(status: JobStatus, t: (key: string) => string): string {
   switch (status) {
     case "queued":
@@ -45,8 +43,6 @@ function runStatusLabel(status: JobStatus, t: (key: string) => string): string {
 
 export function RunList() {
   const { t } = useTranslation();
-  // Status filter chips. Label keys (not literals) are resolved against
-  // i18n at render time so the chips switch with the active locale.
   const STATUS_CHIPS: { labelKey: string; value: JobStatus | "" }[] = [
     { labelKey: "runList.filterAll", value: "" },
     { labelKey: "runList.filterRunning", value: "running" },
@@ -60,45 +56,19 @@ export function RunList() {
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Seed the status filter from a ?status= query param so deep links (e.g. the
-  // dashboard's "Needs attention" card → ?status=failed) land pre-filtered.
-  // Only a value matching one of the chips is honoured; anything else = all.
   const [filter, setFilter] = useState<JobStatus | "">(() => {
     const s = searchParams.get("status");
     return STATUS_CHIPS.some((c) => c.value === s) ? (s as JobStatus) : "";
   });
-  // Free-text filter over the loaded rows (run id + flow name). Client-side
-  // by design: the runs API has no text-search param, so this narrows what's
-  // already fetched rather than querying the server.
   const [query, setQuery] = useState("");
-  // Per-flow filter. "" = all flows (listAllRuns); a graph_id switches the
-  // fetch to that flow's own run history (listRuns), so it's server-side and
-  // paginates correctly past the first page.
   const [flowFilter, setFlowFilter] = useState("");
-  // Date-range filter over a run's enqueue time. Both are "YYYY-MM-DD" from
-  // <input type="date">; they're resolved to local-midnight ISO instants
-  // before the fetch (see dayStartISO/dayEndExclusiveISO). Server-side and
-  // paginated — unlike the text `query`, which only narrows loaded rows.
-  // Seeded from ?since=/?until= the same way the status chip is seeded from
-  // ?status=, so the dashboard's "Runs today" card lands on today's runs.
   const [since, setSince] = useState(() => dateParam(searchParams, "since"));
   const [until, setUntil] = useState(() => dateParam(searchParams, "until"));
-  // Whether the FETCH was narrowed — status chip, flow picker, date range.
-  // Deliberately excludes `query`, which only filters rows already loaded and
-  // has its own "no matches" state below. This is what tells an empty response
-  // "nothing matched your filter" apart from "this account has no runs".
   const hasServerFilter = !!filter || !!flowFilter || !!since || !!until;
   const [hasMore, setHasMore] = useState(false);
-  // Failed-runs inbox: ids the user has checked for bulk retry. Only
-  // populated/shown in the Failed filter, where retrying makes sense.
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [retrying, setRetrying] = useState(false);
-  // Confirm before a bulk retry — it resumes many runs at once (re-running
-  // their failed-and-downstream steps, side effects included).
   const [confirmBulk, setConfirmBulk] = useState(false);
-  // graph_id → display name, so the FLOW column reads "Order received
-  // alert" instead of the slug. Best-effort: a missing entry (deleted
-  // flow, fetch error) falls back to the raw id.
   const [flowNames, setFlowNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -120,10 +90,6 @@ export function RunList() {
     };
   }, [token, activeTenant, activeWorkspace, me]);
 
-  // One fetch path for every load site (initial, poll, load-more, post-retry
-  // refresh) so the all-flows vs per-flow branch lives in a single place.
-  // Per-flow uses listRuns (that flow's own paginated history); all-flows uses
-  // listAllRuns. Both honour the status filter.
   const fetchRunsPage = useCallback(
     (offset: number, limit: number = PAGE_SIZE) => {
       const tok = token!;
@@ -207,8 +173,6 @@ export function RunList() {
     return () => window.clearInterval(t);
   }, [token, anyLive, fetchRunsPage]);
 
-  // The Failed filter doubles as a retry inbox: checkboxes + a bulk
-  // "Retry selected" that resumes each failed run from where it failed.
   const showInbox = filter === "failed";
 
   const toggleSelected = (id: string) =>
@@ -252,7 +216,6 @@ export function RunList() {
       if (failures > 0) {
         setError(t("runList.bulkRetryPartial", { failed: failures, total: ids.length }));
       }
-      // Refresh so the new runs appear and the retried ones update.
       setRuns(await fetchRunsPage(0));
     } catch (e) {
       setError(explainApiError(e, t));
@@ -275,15 +238,12 @@ export function RunList() {
     }
   };
 
-  // Flow dropdown options, sorted by display name — only flows that have a
-  // name resolved (others stay reachable via "All flows").
   const flowOptions = useMemo(
     () =>
       Object.entries(flowNames).sort((a, b) => a[1].localeCompare(b[1])),
     [flowNames],
   );
 
-  // Text filter applied to the loaded rows: matches run id or flow name.
   const visibleRuns = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return runs;

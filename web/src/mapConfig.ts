@@ -13,18 +13,10 @@ import { api } from "./api";
 // wants the same two strings, and they can't change without a daemon restart.
 
 export type MapConfig = {
-  // Leaflet tile template, e.g. "https://tile.openstreetmap.org/{z}/{x}/{y}.png".
   tileUrl: string;
-  // Nominatim-compatible base, no trailing slash. "/search" is appended.
   geocoderUrl: string;
 };
 
-// The public OpenStreetMap instances — the same defaults the daemon applies.
-// Used only if the config call fails (an old daemon that doesn't serve the
-// route, or a blip): better a map that works on the public servers than a
-// blank one. If the deployment self-hosts, its CSP won't list these and the
-// requests are blocked — but that deployment's config call is also the one
-// that isn't failing.
 const FALLBACK: MapConfig = {
   tileUrl: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
   geocoderUrl: "https://nominatim.openstreetmap.org",
@@ -43,7 +35,6 @@ export function mapConfig(): Promise<MapConfig> {
   return cached;
 }
 
-// resetMapConfigForTest drops the memoised promise. Tests only.
 export function resetMapConfigForTest() {
   cached = null;
 }

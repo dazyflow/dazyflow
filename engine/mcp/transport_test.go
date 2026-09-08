@@ -15,8 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/mcp/mcptest"
 )
 
-// registerInProcess wires a FakeServer into a fresh Catalog using
-// RegisterStream — no subprocess, just io.Pipe.
 func registerInProcess(t *testing.T, serverName string, srv *mcptest.FakeServer) *mcp.Catalog {
 	t.Helper()
 	clientReadFromServer, serverWritesToClient := io.Pipe()
@@ -108,8 +106,6 @@ func TestTransport_ExecuteEchoesToolResult(t *testing.T) {
 }
 
 func TestTransport_InputPortMergesIntoArguments(t *testing.T) {
-	// The "input" port lets one node's output feed another's tool args
-	// without hardcoding them in the graph. Verify the merge happens.
 	var seen map[string]any
 	srv := &mcptest.FakeServer{
 		Tools: []mcp.Tool{{Name: "noop"}},
@@ -144,9 +140,6 @@ func TestTransport_InputPortMergesIntoArguments(t *testing.T) {
 }
 
 func TestTransport_InputPortAcceptsJSONString(t *testing.T) {
-	// http_request emits its response_body as a string when MIME is text/json.
-	// branch can route it; if the recipient is an MCP tool, the transport
-	// has to JSON-decode it to extract arguments.
 	var seen map[string]any
 	srv := &mcptest.FakeServer{
 		Tools: []mcp.Tool{{Name: "noop"}},
@@ -271,9 +264,6 @@ func TestCatalog_RejectsDuplicateServerName(t *testing.T) {
 	}
 }
 
-// TestCatalog_CaptionsWithTheToolTitle covers the display half of a tool
-// descriptor: the server's own title becomes the caption, while the id — the
-// part a flow holds — stays on the wire name.
 func TestCatalog_CaptionsWithTheToolTitle(t *testing.T) {
 	srv := &mcptest.FakeServer{
 		Tools: []mcp.Tool{
@@ -291,13 +281,11 @@ func TestCatalog_CaptionsWithTheToolTitle(t *testing.T) {
 	if titled.Label != "fs — Weather Information Provider" {
 		t.Errorf("Label = %q, want the server's title", titled.Label)
 	}
-	// A tool with no title is captioned by its wire name, as before.
 	if untitled := manifests["mcp:fs:list_dir"]; untitled.Label != "fs — list_dir" {
 		t.Errorf("untitled Label = %q", untitled.Label)
 	}
 }
 
-// TestToolDisplayName bounds what a third party can put in a palette row.
 func TestToolDisplayName(t *testing.T) {
 	cases := []struct {
 		name, title, want string
@@ -305,7 +293,6 @@ func TestToolDisplayName(t *testing.T) {
 		{"get_weather", "", "get_weather"},
 		{"get_weather", "  Weather  ", "Weather"},
 		{"get_weather", "   ", "get_weather"},
-		// A paragraph is not a caption: first line only.
 		{"get_weather", "Weather\nUse this for forecasts.", "Weather"},
 		{"get_weather", strings.Repeat("x", 200), strings.Repeat("x", 60) + "…"},
 	}
@@ -317,9 +304,6 @@ func TestToolDisplayName(t *testing.T) {
 	}
 }
 
-// TestCatalog_InlinesAToolIcon covers the wiring from a tool descriptor to the
-// manifest field the palette reads. A data: icon keeps this off the network:
-// what is under test here is that the logo reaches the manifest at all.
 func TestCatalog_InlinesAToolIcon(t *testing.T) {
 	const png = "data:image/png;base64," +
 		"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -327,8 +311,6 @@ func TestCatalog_InlinesAToolIcon(t *testing.T) {
 		Tools: []mcp.Tool{
 			{Name: "with_icon", Icons: []mcp.Icon{{Src: png, MimeType: "image/png"}}},
 			{Name: "without_icon"},
-			// A source we will not fetch or inline leaves the tool bare rather
-			// than failing the handshake.
 			{Name: "bad_icon", Icons: []mcp.Icon{{Src: "http://example.test/x.png"}}},
 		},
 	}
@@ -344,16 +326,11 @@ func TestCatalog_InlinesAToolIcon(t *testing.T) {
 	if got := manifests["mcp:fs:bad_icon"].BrandLogo; got != "" {
 		t.Errorf("a refused icon reached a manifest: %.40q", got)
 	}
-	// The tool is still there and still callable — an icon is decoration.
 	if _, ok := cat.Get("", "mcp:fs:bad_icon"); !ok {
 		t.Error("a tool lost its transport over an icon")
 	}
 }
 
-// TestCatalog_StepsReportMCPAsTheirApp: without an Integration the palette
-// badges these steps "Built-in" — its fallback for a manifest with no app —
-// and the Apps page files them under the standard library. Both are wrong: the
-// step came from someone else's server that an org added deliberately.
 func TestCatalog_StepsReportMCPAsTheirApp(t *testing.T) {
 	srv := &mcptest.FakeServer{Tools: []mcp.Tool{{Name: "create_issue"}}}
 	cat := registerInProcess(t, "vendor", srv)
@@ -365,8 +342,6 @@ func TestCatalog_StepsReportMCPAsTheirApp(t *testing.T) {
 	if man.Integration != mcp.Integration {
 		t.Errorf("Integration = %q, want %q", man.Integration, mcp.Integration)
 	}
-	// The provider stays per-server: it is what scopes a step to the server it
-	// came from, and only the APP grouping is shared.
 	if man.Provider != "mcp:vendor" {
 		t.Errorf("Provider = %q, want it to stay per-server", man.Provider)
 	}

@@ -56,7 +56,6 @@ func TestProvider_OrgResolvesByTenant(t *testing.T) {
 		t.Errorf("html=%q", html)
 	}
 
-	// Tenant isolation: another tenant can't see it.
 	_, _, ok, err = p.TemplateHTML(t.Context(), "other", "welcome")
 	if err != nil {
 		t.Fatalf("cross-tenant lookup err: %v", err)
@@ -76,7 +75,6 @@ func TestProvider_UnknownMisses(t *testing.T) {
 	if ok {
 		t.Error("unknown id should miss (ok=false)")
 	}
-	// Unknown built-in id also misses cleanly.
 	if _, _, ok, _ := p.TemplateHTML(t.Context(), "t", "builtin:nope"); ok {
 		t.Error("unknown built-in id should miss")
 	}

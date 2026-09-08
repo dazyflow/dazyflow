@@ -14,8 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
-// scriptedProvider returns a pre-baked graph per call, so we can drive the
-// validate-and-repair loop deterministically (no real LLM).
 type scriptedProvider struct {
 	calls  int
 	graphs []map[string]any
@@ -98,8 +96,6 @@ func TestGenerateFlow_UnparseableErrors(t *testing.T) {
 	}
 }
 
-// TestGenerateFlow_CronTrigger: a valid cron schedule is kept and stamped
-// with the caller's timezone.
 func TestGenerateFlow_CronTrigger(t *testing.T) {
 	t.Parallel()
 	sp := &scriptedProvider{graphs: []map[string]any{{
@@ -125,8 +121,6 @@ func TestGenerateFlow_CronTrigger(t *testing.T) {
 	}
 }
 
-// TestGenerateFlow_BadCronStripped: an unparseable schedule is dropped (so the
-// draft still saves) and surfaced as a warning rather than shipped broken.
 func TestGenerateFlow_BadCronStripped(t *testing.T) {
 	t.Parallel()
 	sp := &scriptedProvider{graphs: []map[string]any{{
@@ -204,8 +198,6 @@ func TestCompactCatalog(t *testing.T) {
 	}
 }
 
-// TestFlowGenerate_NeedsProvider: the endpoint asks to connect a provider
-// when none is connected (no secret store in the harness).
 func TestFlowGenerate_NeedsProvider(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -230,20 +222,15 @@ func TestFlowGenerate_EmptyDescription(t *testing.T) {
 	}
 }
 
-// TestPickProvider_Cov covers pickProvider: no connected providers, the
-// default-to-first choice, and an explicit want that matches a connected one.
 func TestPickProvider_Cov(t *testing.T) {
 	t.Parallel()
 	h := newSecretsHarness(t)
 	ctx := core.WithTenant(context.Background(), "t")
 
-	// No providers connected yet -> empty.
 	if chosen, conn := h.gw.flowAPI().pickProvider(ctx, ""); conn != nil || chosen.info.Name != "" {
 		t.Fatalf("no-connection pick = %+v / %v, want empty", chosen, conn)
 	}
 
-	// Register two test providers and store an api_key for each so both count
-	// as connected.
 	llm.Register(llm.ProviderInfo{Name: "testprov_a", Integration: "TestProvA"})
 	llm.Register(llm.ProviderInfo{Name: "testprov_b", Integration: "TestProvB"})
 	for _, p := range []struct{ integ, key string }{
@@ -265,7 +252,6 @@ func TestPickProvider_Cov(t *testing.T) {
 		t.Fatalf("default pick is empty: %+v", chosen)
 	}
 
-	// Explicit want selects the matching provider.
 	want, _ := h.gw.flowAPI().pickProvider(ctx, "testprov_b")
 	if want.info.Name != "testprov_b" || want.key != "key-b" {
 		t.Fatalf("want=testprov_b pick = %+v", want)
@@ -293,7 +279,6 @@ func TestGeneratedFromGraph_Cov(t *testing.T) {
 		t.Fatalf("trigger = %+v", out.Trigger)
 	}
 
-	// No cron trigger -> nil trigger.
 	g2 := core.Graph{Name: "n", Triggers: []core.GraphTrigger{{Type: "webhook"}}}
 	if out := generatedFromGraph(g2); out.Trigger != nil {
 		t.Fatalf("webhook graph trigger = %+v, want nil", out.Trigger)
@@ -314,7 +299,6 @@ func TestStampGraph_Cov(t *testing.T) {
 		t.Fatalf("node ids = %q, %q", g.Nodes[0].ID, g.Nodes[1].ID)
 	}
 
-	// Existing name is kept.
 	g2 := core.Graph{Name: "Keep Me"}
 	stampGraph(&g2, "t", "w")
 	if g2.Name != "Keep Me" {
@@ -322,7 +306,6 @@ func TestStampGraph_Cov(t *testing.T) {
 	}
 }
 
-// generatedFromGraph reverses the generator for round-trip assertions.
 func generatedFromGraph(g core.Graph) generatedGraph {
 	out := generatedGraph{Name: g.Name}
 	for _, n := range g.Nodes {

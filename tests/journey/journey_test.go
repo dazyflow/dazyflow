@@ -14,15 +14,10 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestJourney_EveryScenario_NewcomerCanSetItUp walks a fresh user
-// through the setup half of every scenario: can they find the pieces,
-// see which accounts to connect, save the flow, and does the app guide
-// them to fill in the blanks before it calls the flow ready to run.
 func TestJourney_EveryScenario_NewcomerCanSetItUp(t *testing.T) {
 	s := newStack(t)
 	me := s.signUp(t, "newcomer@example.com")
 
-	// The Connections page works and offers accounts to hook up.
 	if got := me.connectableProviders(); len(got) == 0 {
 		t.Errorf("a newcomer opening Connections sees nothing to connect: %v", got)
 	}
@@ -51,15 +46,12 @@ func TestJourney_EveryScenario_NewcomerCanSetItUp(t *testing.T) {
 			raw, g := readGraph(t, file)
 			me.t = t // route helper failures to this subtest
 
-			// 1. Discover: every building block the scenario needs is in
-			//    the catalog the newcomer can browse.
 			for _, mod := range neededModules(g) {
 				if !catalog[mod] {
 					t.Errorf("scenario needs %q but a newcomer cannot find it in the catalog", mod)
 				}
 			}
 
-			// 2. Save the forked template, blanks and all.
 			if r := me.saveFlow(g.ID, raw); r.status != 200 {
 				t.Fatalf("a newcomer could not save the flow: status=%d body=%s", r.status, r.body)
 			}
@@ -77,8 +69,6 @@ func TestJourney_EveryScenario_NewcomerCanSetItUp(t *testing.T) {
 				}
 			}
 
-			// 4. Fill in the blanks (the user types real values) and save
-			//    again. Now the app should call it ready.
 			if r := me.saveFlow(g.ID, fillBlanks(raw)); r.status != 200 {
 				t.Fatalf("saving the filled-in flow failed: status=%d body=%s", r.status, r.body)
 			}
@@ -90,11 +80,6 @@ func TestJourney_EveryScenario_NewcomerCanSetItUp(t *testing.T) {
 	}
 }
 
-// TestJourney_LeadIntake_RunsEndToEnd takes one scenario all the way: a
-// newcomer publishes the "capture web-form leads" flow, a lead comes in
-// through the public webhook, and the run succeeds with the lead stored.
-// This is the only journey that needs no external accounts, so it can
-// run the whole loop for real.
 func TestJourney_LeadIntake_RunsEndToEnd(t *testing.T) {
 	s := newStack(t)
 	me := s.signUp(t, "shopkeeper@example.com")
@@ -102,7 +87,6 @@ func TestJourney_LeadIntake_RunsEndToEnd(t *testing.T) {
 	raw, _ := readGraph(t, filepath.Join(scenarioDir, "07-lead-intake.json"))
 	const flowID = "lead-intake"
 
-	// Save with the webhook secret filled in, then check the app is happy.
 	if r := me.saveFlow(flowID, fillBlanks(raw)); r.status != 200 {
 		t.Fatalf("could not save the lead-intake flow: status=%d body=%s", r.status, r.body)
 	}
@@ -110,7 +94,6 @@ func TestJourney_LeadIntake_RunsEndToEnd(t *testing.T) {
 		t.Fatalf("app would not call the lead-intake flow ready: %s", issuesJSON(v))
 	}
 
-	// Turn it on AND publish it — both are required before anything fires.
 	me.enableFlow(flowID)
 	me.publishFlow(flowID)
 	lead := map[string]any{
@@ -124,7 +107,6 @@ func TestJourney_LeadIntake_RunsEndToEnd(t *testing.T) {
 		t.Fatalf("the lead-intake run did not succeed: status=%q", status)
 	}
 
-	// The lead was parsed into a row and stored.
 	store := me.nodeRecord(runID, "store_lead")
 	if string(store.Status) != "succeeded" {
 		t.Fatalf("the store step did not succeed: %q", store.Status)
@@ -138,11 +120,6 @@ func TestJourney_LeadIntake_RunsEndToEnd(t *testing.T) {
 	}
 }
 
-// --- small helpers ---------------------------------------------------
-
-// hasParamPlaceholder reports whether any node's params still carry a
-// REPLACE_WITH_… marker (the kind the validate step flags). Markers that
-// live only on a trigger secret are not linted, so they don't count.
 func hasParamPlaceholder(g core.Graph) bool {
 	for _, n := range g.Nodes {
 		raw, _ := json.Marshal(n.Params)

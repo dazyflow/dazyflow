@@ -16,12 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// stripeCurrencies is Stripe's supported presentment-currency set (ISO 4217
-// code → display name), majors first then alphabetical. It populates the
-// Send invoice currency combobox (format:"suggest"); codes are stored/sent
-// lowercase, the name is display only. The field is a free-text combobox, so
-// a code not listed here (or a ${item.currency} reference) still works — this
-// is the suggestion list, not a whitelist.
 var stripeCurrencies = []struct{ code, name string }{
 	{"usd", "US Dollar"}, {"eur", "Euro"}, {"gbp", "British Pound"},
 	{"sek", "Swedish Krona"}, {"nok", "Norwegian Krone"}, {"dkk", "Danish Krone"},
@@ -70,10 +64,6 @@ var stripeCurrencies = []struct{ code, name string }{
 	{"yer", "Yemeni Rial"}, {"zar", "South African Rand"}, {"zmw", "Zambian Kwacha"},
 }
 
-// currencyEnumJSON returns the JSON arrays for the currency field's `enum`
-// (lowercase codes) and `enumNames` ("USD — US Dollar"), built from
-// stripeCurrencies so the 130-odd entries live in a reviewable Go table
-// instead of a giant inline schema literal.
 func stripeCurrencyLists() (codes, labels []string) {
 	codes = make([]string, len(stripeCurrencies))
 	labels = make([]string, len(stripeCurrencies))
@@ -84,18 +74,9 @@ func stripeCurrencyLists() (codes, labels []string) {
 	return codes, labels
 }
 
-// sendInvoiceParamsSchema is the drop's ParamsSchema with the currency
-// enum/enumNames filled in from stripeCurrencies. Built once at package load
-// (before init registers the drop).
 var sendInvoiceParamsSchema = buildSendInvoiceParamsSchema()
 
 func buildSendInvoiceParamsSchema() json.RawMessage {
-	// Marshalled from a map rather than spliced into a format string. The
-	// values are static today, so the Sprintf form was safe — but it was the
-	// one schema in the catalog built by string interpolation, and a schema
-	// that can be malformed by its own inputs is a footgun waiting for the
-	// day a currency label contains a quote. Marshalling makes that
-	// impossible by construction.
 	currencies, currencyNames := stripeCurrencyLists()
 	schema := map[string]any{
 		"type": "object",
@@ -133,8 +114,6 @@ func buildSendInvoiceParamsSchema() json.RawMessage {
 	}
 	raw, err := json.Marshal(schema)
 	if err != nil {
-		// Unreachable: the map holds only JSON-native values. Panicking at
-		// package load beats registering a drop with a broken schema.
 		panic("stripe_send_invoice: build params schema: " + err.Error())
 	}
 	return raw
@@ -246,7 +225,6 @@ func executeSendInvoice(ctx context.Context, job core.Job, _ chan<- core.Progres
 		return params.Err(job, "stripe_error", "Stripe response had no invoice id"), nil
 	}
 
-	// 2. The line item, attached to that invoice explicitly.
 	form = url.Values{}
 	form.Set("customer", customer)
 	form.Set("invoice", inv.ID)
@@ -260,14 +238,12 @@ func executeSendInvoice(ctx context.Context, job core.Job, _ chan<- core.Progres
 		return *r, nil
 	}
 
-	// 3. Finalize — the draft becomes a numbered, immutable invoice.
 	invPath := base + "/invoices/" + url.PathEscape(inv.ID)
 	status, body, err = stripeDoIdem(ctx, job, http.MethodPost, invPath+"/finalize", "", idem+":finalize")
 	if r := stripeFailure(job, status, body, err); r != nil {
 		return *r, nil
 	}
 
-	// 4. Send — Stripe emails the hosted invoice page to the customer.
 	status, body, err = stripeDoIdem(ctx, job, http.MethodPost, invPath+"/send", "", idem+":send")
 	if r := stripeFailure(job, status, body, err); r != nil {
 		return *r, nil

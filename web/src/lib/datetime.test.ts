@@ -42,7 +42,6 @@ describe("formatRelative", () => {
   });
 
   it("hands off to an absolute date past a week", () => {
-    // 30 days back — coarse 'ago' stops being useful, so we show the date.
     expect(formatRelative("2026-05-24T12:00:00Z", t, now)).toMatch(
       /^\d{4}-\d{2}-\d{2}$/,
     );

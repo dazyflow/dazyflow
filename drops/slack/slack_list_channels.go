@@ -73,9 +73,6 @@ func init() {
 	})
 }
 
-// executeSlackListChannels lists conversations the bot can see. One page
-// up to `limit`, matching the former scripted drop; downstream nodes
-// paginate if they need more.
 func executeSlackListChannels(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	token, err := resolveToken(ctx, job)
 	if err != nil {
@@ -115,14 +112,6 @@ func executeSlackListChannels(ctx context.Context, job core.Job, _ chan<- core.P
 	}, nil
 }
 
-// ListChannels powers the "slack-channel" resource picker: the public and
-// private channels the connected bot can see, one AccountResource each (ID =
-// channel id like C0123ABC, Name = "#general"). It mirrors the
-// slack_list_channels conversations.list call but maps to the picker shape —
-// the dropdown stores the ID (which resolves for private channels and DMs
-// too) while showing the friendly #name. job carries the account/token in its
-// Params; the daemon wires the lister so resolveToken can reach the OAuth
-// registry. A nil/empty workspace yields an empty list, not an error.
 func ListChannels(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
 	token, err := resolveToken(ctx, job)
 	if err != nil {

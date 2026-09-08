@@ -4,9 +4,6 @@
 import { primaryLanguage } from "./language";
 import type { Manifest } from "../types";
 
-// The resolvers take the smallest shape that carries the text, so the
-// platform-admin catalog rows (api.PlatformDrop) localize through the same
-// vocabulary as a full Manifest.
 type LabelledDrop = Pick<Manifest, "label"> &
   Partial<Pick<Manifest, "id" | "subtitle" | "description">>;
 
@@ -31,15 +28,6 @@ export function descriptionFingerprint(text: string): string {
   return h.toString(16).padStart(8, "0");
 }
 
-// Category chips on the palette and drop cards. Keyed by the raw category the
-// manifest carries.
-//
-// EN_CATEGORIES exists because the raw values are ENGINE vocabulary, not
-// product vocabulary: unmapped, an English reader saw a chip reading
-// "network", "io" or "transformation" — while a Swedish reader, who had a
-// map, got real words. This is the base layer, applied whatever the language,
-// so a locale without its own map still gets human names rather than enum
-// values; SV_CATEGORIES overrides it for Swedish.
 const EN_CATEGORIES: Record<string, string> = {
   ai: "AI",
   flow_control: "Flow control",
@@ -51,8 +39,6 @@ const EN_CATEGORIES: Record<string, string> = {
   trigger: "Triggers",
 };
 
-// DescriptionMap is keyed by drop id; `en` is the fingerprint of the English
-// paragraph the translation was made from.
 export type DescriptionMap = Record<string, { en: string; sv: string }>;
 
 export type Vocabulary = {
@@ -70,26 +56,12 @@ export type Vocabulary = {
   appNames: Record<string, string>;
 };
 
-// VOCABULARY is filled at boot, not at build time. Every table in it is one
-// language's translation of the whole catalog — ~90 KB gzipped for Swedish —
-// and a reader needs exactly one of them, so they are code-split per language
-// and loaded by loadVocabulary below. An English reader loads none: the empty
-// registry is already the right answer, because every resolver falls back to
-// the manifest's own English when its language has no vocabulary.
 const VOCABULARY: Record<string, Vocabulary> = {};
 
-// The languages with a vocabulary module, and how to fetch it. English is
-// absent on purpose — it is the fallback every resolver already returns.
 const VOCABULARY_LOADERS: Record<string, () => Promise<Vocabulary>> = {
   sv: () => import("../i18n/drops/sv").then((m) => m.SV_VOCABULARY),
 };
 
-// loadVocabulary makes `lang`'s drop text available to the resolvers below,
-// and resolves once it is. Await it before the first render (and again on a
-// language change) so no screen paints English that is about to become
-// Swedish. A language with no module, a failed fetch: both leave the registry
-// as it was, which renders the catalog's English — the same fallback a missing
-// translation already takes.
 export async function loadVocabulary(lang: string | undefined): Promise<void> {
   const code = primaryLanguage(lang);
   if (!code || VOCABULARY[code]) return;
@@ -102,25 +74,15 @@ export async function loadVocabulary(lang: string | undefined): Promise<void> {
   }
 }
 
-// registerVocabulary is loadVocabulary's synchronous half, for tests that want
-// the Swedish text without an await.
 export function registerVocabulary(lang: string, v: Vocabulary): void {
   VOCABULARY[primaryLanguage(lang)] = v;
 }
 
-// vocabularyFor resolves a language tag to its vocabulary. Regional tags
-// ("sv-SE", "sv-FI") collapse to the base language, matching the i18n config's
-// load: "languageOnly". An unknown language has no vocabulary, so every
-// lookup falls back to the catalog's English.
 function vocabularyFor(lang: string | undefined): Vocabulary | undefined {
   if (!lang) return undefined;
   return VOCABULARY[primaryLanguage(lang)];
 }
 
-// dropLabel / dropSubtitle / dropDescription return the drop's text in `lang`,
-// falling back to the manifest's English whenever there is no translation —
-// which is the normal case for a brand name, an unknown locale, and every
-// description today.
 export function dropLabel(drop: LabelledDrop, lang?: string): string {
   const v = vocabularyFor(lang);
   return v?.labels[drop.label] ?? drop.label;
@@ -139,8 +101,6 @@ export function dropDescription(drop: LabelledDrop, lang?: string): string {
   const v = vocabularyFor(lang);
   const entry = v?.descriptions[drop.id];
   if (!entry) return desc;
-  // Drifted since it was translated → show the current English, which is at
-  // least true, rather than a paragraph describing older behaviour.
   return entry.en === descriptionFingerprint(desc) ? entry.sv : desc;
 }
 
@@ -189,25 +149,15 @@ export function enumLabel(label: string, lang?: string): string {
 // stored string and need its label). enumValueLabel does the lookup so no
 // caller has to remember which it is holding.
 
-// enumOptionLabel: what the i-th option of an enum is called. Falls back to
-// the raw value, which is the right answer for enums whose value IS the name
-// a user knows (HTTP methods, currency codes — see rawValueEnums in the Go
-// enum_labels guard).
 export function enumOptionLabel(
   schema: { enum?: unknown[]; enumNames?: string[] } | undefined,
   i: number,
   lang?: string,
 ): string {
-  // Takes the SCHEMA, not the names array, so no caller has to touch
-  // .enumNames to use this — which is what the guard checks for, and what
-  // keeps a sixth open-coded copy from creeping back in.
   const name = schema?.enumNames?.[i];
   return name ? enumLabel(name, lang) : String(schema?.enum?.[i] ?? "");
 }
 
-// enumValueLabel: what a STORED enum value is called. A value the schema no
-// longer lists returns as itself rather than blank — a graph saved against an
-// older version still has to render.
 export function enumValueLabel(
   schema: { enum?: unknown[]; enumNames?: string[] } | undefined,
   value: unknown,
@@ -251,11 +201,6 @@ export function nodeStateText(text: string, lang?: string): string {
   return vocabularyFor(lang)?.nodeState[text] ?? text;
 }
 
-// integrationProse localizes one Apps-page paragraph — an integration's
-// description or its collapsible technical notes. `key` is the entry to look
-// up ("stripe.description", "slack.technical_notes") and `english`
-// the copy integrationMeta.ts carries; the fingerprint guard means editing that
-// English falls back to it rather than showing a translation of the old text.
 export function integrationProse(
   key: string,
   english: string,
@@ -267,11 +212,6 @@ export function integrationProse(
   return entry.en === descriptionFingerprint(english) ? entry.sv : english;
 }
 
-// integrationName localizes an app's name — the heading on its Apps page, the
-// name in a "needs setup" message, the group a step belongs to in the palette.
-// Takes the English name rather than the slug so both spellings the product
-// uses go through one map: the curated display name ("Mailbox (IMAP)") and the
-// shorter Integration a manifest carries ("Calendar").
 export function integrationName(name: string, lang?: string): string {
   if (!name) return "";
   return vocabularyFor(lang)?.appNames[name] ?? name;

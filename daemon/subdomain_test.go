@@ -58,7 +58,6 @@ func TestOriginAllowed(t *testing.T) {
 		}
 	}
 
-	// With the feature off, only the exact list matches.
 	off := &HTTPGateway{AllowedOrigins: []string{"https://dazyflow.app"}}
 	if off.originAllowed("https://acme.dazyflow.app") {
 		t.Error("subdomain should not be allowed when WildcardDomain is empty")

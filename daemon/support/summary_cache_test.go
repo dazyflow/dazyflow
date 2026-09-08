@@ -23,7 +23,6 @@ func summaryWith(n int) core.TicketQueueSummary {
 	return sum
 }
 
-// awaiting pulls the one count these tests vary, whatever shape the summary has.
 func awaiting(t *testing.T, sum core.TicketQueueSummary) int {
 	t.Helper()
 	return sum.ByStatus[core.TicketAwaitingSupport]
@@ -33,7 +32,6 @@ func TestQueueSummaryCache_InvalidationDuringScanIsNotLost(t *testing.T) {
 	ctx := context.Background()
 	s := &PgTicketStore{}
 
-	// A scan we can hold open, so a write can land in the middle of it.
 	started := make(chan struct{})
 	release := make(chan struct{})
 	s.summaryCompute = func(context.Context) (core.TicketQueueSummary, error) {
@@ -51,7 +49,6 @@ func TestQueueSummaryCache_InvalidationDuringScanIsNotLost(t *testing.T) {
 		done <- sum
 	}()
 	<-started
-	// The agent claims a ticket while the scan is in flight.
 	s.invalidateSummary()
 	close(release)
 	<-done
@@ -79,7 +76,6 @@ func TestQueueSummaryCache_PanicDoesNotWedgeTheCache(t *testing.T) {
 		panic("scan blew up")
 	}
 	func() {
-		// The HTTP middleware recovers this in production; the process lives on.
 		defer func() { _ = recover() }()
 		_, _ = s.QueueSummary(ctx)
 	}()

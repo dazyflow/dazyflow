@@ -110,7 +110,6 @@ export function classifyDelta(prev: HistoryDoc | null, next: HistoryDoc): DeltaK
     return { kind: "positions" };
   }
 
-  // Exactly one param of exactly one node differs → typing in a field.
   if (
     prevNodes.length === nextNodes.length &&
     prevNodes.every((n, i) => n.id === nextNodes[i].id)
@@ -124,8 +123,6 @@ export function classifyDelta(prev: HistoryDoc | null, next: HistoryDoc): DeltaK
       if (diff.length) changed.push({ nodeID: prevNodes[i].id, keys: diff });
     }
     if (changed.length === 1 && changed[0].keys.length === 1) {
-      // Confirm nothing ELSE moved, so a param edit bundled with a structural
-      // change isn't misfiled as coalescible.
       const strip = (g: HistoryDoc) => ({
         ...g,
         nodes: (g.nodes ?? []).map((n) => ({ ...n, params: undefined })),
@@ -136,7 +133,6 @@ export function classifyDelta(prev: HistoryDoc | null, next: HistoryDoc): DeltaK
     }
   }
 
-  // A single free-text field on the flow itself → typing in the settings modal.
   const metaFields = ["name", "description", "icon"] as const;
   const metaChanged = metaFields.filter((f) => !sameJSON(prev[f], next[f]));
   if (metaChanged.length === 1) {
@@ -180,15 +176,11 @@ function coalescible(a: DeltaKind, b: DeltaKind): boolean {
  */
 export function record(state: HistoryState, doc: HistoryDoc, now: number): HistoryState {
   if (state.present === null) {
-    // First observation is the baseline, not an edit.
     return { past: [], present: doc, future: [], presentDelta: { kind: "none" }, presentAt: now };
   }
   const delta = classifyDelta(state.present, doc);
   if (delta.kind === "none") return state;
 
-  // Merge into the current step instead of pushing, when this is a
-  // continuation of the same gesture. `past` is untouched, so one drag or one
-  // run of keystrokes stays a single Ctrl+Z.
   if (
     coalescible(state.presentDelta, delta) &&
     now - state.presentAt <= COALESCE_WINDOW_MS
@@ -200,7 +192,6 @@ export function record(state: HistoryState, doc: HistoryDoc, now: number): Histo
     ...state.past,
     { doc: state.present, delta: state.presentDelta, at: state.presentAt },
   ];
-  // Drop the oldest when over the cap.
   while (past.length > HISTORY_LIMIT) past.shift();
   return { past, present: doc, future: [], presentDelta: delta, presentAt: now };
 }

@@ -18,14 +18,11 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// filesAPI serves the workspace-file endpoints. Its fields are the whole of what
-// those handlers touch.
 type filesAPI struct {
 	svc    *Service
 	logger *log.Logger
 }
 
-// filesAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) filesAPI() *filesAPI {
 	return &filesAPI{svc: h.svc, logger: h.logger}
 }
@@ -50,7 +47,6 @@ func (h *HTTPGateway) filesAPI() *filesAPI {
 // from mutation — browsing or deleting it would only confuse users and
 // could break in-flight runs.
 
-// fileEntry is one row in a directory listing.
 type fileEntry struct {
 	Name    string    `json:"name"`
 	Path    string    `json:"path"` // workspace-relative path to this entry
@@ -120,8 +116,6 @@ func cleanWorkspaceRel(raw string) (string, error) {
 	return c, nil
 }
 
-// isScratch reports whether rel is the internal scratch directory or
-// anything inside it — those are hidden and protected from mutation.
 func isScratch(rel string) bool {
 	return rel == scratchDirName || strings.HasPrefix(rel, scratchDirName+"/")
 }
@@ -165,7 +159,6 @@ func (h *filesAPI) listWorkspaceFiles(rw http.ResponseWriter, r *http.Request, p
 		if rel != "." {
 			child = path.Join(rel, de.Name())
 		}
-		// Hide the internal per-run scratch tree from the listing.
 		if isScratch(child) {
 			continue
 		}
@@ -346,8 +339,6 @@ func (h *filesAPI) renameWorkspaceFile(rw http.ResponseWriter, r *http.Request, 
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("stat %q: %v", to, err))
 		return
 	}
-	// Create the destination's parent if the move targets a new folder, so
-	// "report.txt" → "archive/2026/report.txt" works in one call.
 	if dir := path.Dir(to); dir != "." {
 		if err := rootFS.MkdirAll(dir, 0o755); err != nil {
 			writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("mkdir %q: %v", dir, err))
@@ -376,10 +367,6 @@ func (h *filesAPI) workspaceFileUsage(rw http.ResponseWriter, r *http.Request, p
 	writeJSON(rw, http.StatusOK, map[string]any{"used": used, "limit": limit})
 }
 
-// sanitizeFilename strips characters that could break out of the quoted
-// Content-Disposition filename (quotes, backslashes, control bytes incl.
-// CR/LF for header-injection). The result is only a display hint; the
-// actual file is identified by the request path.
 func sanitizeFilename(name string) string {
 	var b strings.Builder
 	for _, r := range name {

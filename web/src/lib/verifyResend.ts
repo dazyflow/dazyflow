@@ -21,7 +21,6 @@ export type ResendOutcome = "verified" | "sent" | "failed";
 export function resendOutcome(
   res: { sent?: boolean; already_verified?: boolean } | null,
 ): ResendOutcome {
-  // null = the call threw. The route's only failure mode is "couldn't send".
   if (!res) return "failed";
   if (res.already_verified) return "verified";
   return res.sent ? "sent" : "failed";

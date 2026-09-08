@@ -31,8 +31,6 @@ export function AdminMCPServers() {
   const [servers, setServers] = useState<MCPServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // editing holds the server being edited, or "new" for the add form, or null
-  // when the form is closed.
   const [editing, setEditing] = useState<MCPServer | "new" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
@@ -59,8 +57,6 @@ export function AdminMCPServers() {
   const save = async (input: MCPServerInput, existingName?: string) => {
     if (!token) return;
     setError(null);
-    // A create has no id yet — the daemon derives one — so the busy key is the
-    // label until the row comes back with its name.
     setBusy(existingName ?? input.label);
     try {
       const saved = await api.saveMCPServer(token, input, existingName);
@@ -92,8 +88,6 @@ export function AdminMCPServers() {
     }
   };
 
-  // askToRemove opens the confirmation and, in parallel, finds out what the
-  // server is used by. The warning fills in when the answer arrives.
   const askToRemove = (name: string) => {
     setConfirmRemove(name);
     if (!token || usage[name]) return;
@@ -430,8 +424,6 @@ function MCPStatusChip({ server }: { server: MCPServer }) {
   );
 }
 
-// MCPTools shows what the org actually gained. A count alone leaves an admin
-// guessing at what to search the palette for, so the first few ids are named.
 function MCPTools({ server }: { server: MCPServer }) {
   const { t } = useTranslation();
   const ids = server.tool_ids ?? [];

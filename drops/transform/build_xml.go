@@ -129,10 +129,6 @@ func executeBuildXML(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	}, nil
 }
 
-// cellText renders one field as element text. A nested value has no
-// row-per-element representation, so it is written as its JSON — visible and
-// recoverable, rather than Go's "map[...]" rendering which nothing can read
-// back.
 func cellText(v any) string {
 	switch t := v.(type) {
 	case nil:

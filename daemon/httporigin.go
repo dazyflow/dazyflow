@@ -3,11 +3,6 @@
 
 package daemon
 
-// Cross-origin and transport policy: the CORS/CSP/logging middleware every
-// response passes through, and the host checks it relies on — which origins
-// are allowed, whether a request arrived over HTTPS, and whether a host is
-// one of the deployment's org subdomains.
-
 import (
 	"net/http"
 	"net/url"
@@ -16,16 +11,8 @@ import (
 )
 
 func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
-	// Cookie-based sessions require reflecting the EXACT origin plus
-	// Access-Control-Allow-Credentials: true — the wildcard "*" is incompatible
-	// with credentials per the CORS spec. A deployment that configures no
-	// browser origin at all (neither AllowedOrigins nor WildcardDomain) hasn't
-	// opted into browser auth, so it serves "*" without credentials instead.
 	allowCreds := len(h.AllowedOrigins) > 0 || h.WildcardDomain != ""
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		// Wrap the writer to capture the status code, and time the
-		// request for the RED metrics. The recorder delegates Flush so
-		// SSE streams are unaffected.
 		if h.Metrics != nil {
 			rec := &statusRecorder{ResponseWriter: rw}
 			rw = rec
@@ -47,8 +34,6 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 			rw.Header().Set("Access-Control-Allow-Origin", origin)
 			rw.Header().Set("Access-Control-Allow-Credentials", "true")
 		case !allowCreds:
-			// No browser origin configured: open to any origin, but only
-			// without credentials.
 			rw.Header().Set("Access-Control-Allow-Origin", "*")
 		default:
 			// Credentialed mode with a missing or disallowed Origin. Emit no
@@ -60,17 +45,10 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 		}
 		rw.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		rw.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")
-		// HSTS only over HTTPS — sending it on a plain-HTTP response is
-		// pointless (browsers ignore it) and on a mixed setup could
-		// wedge a not-yet-TLS host. 1 year, includeSubDomains.
 		if h.requestIsHTTPS(r) {
 			rw.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
-		// Conservative content-type hardening for the API surface.
 		rw.Header().Set("X-Content-Type-Options", "nosniff")
-		// Clickjacking + referrer hardening for the authenticated app surface.
-		// The /form/ surface is deliberately embeddable (it sets its own
-		// permissive CSP), so don't frame-deny it.
 		if !strings.HasPrefix(r.URL.Path, "/form/") {
 			rw.Header().Set("X-Frame-Options", "DENY")
 			rw.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -84,14 +62,6 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 	})
 }
 
-// appCSP is the Content-Security-Policy for the authenticated app surface
-// (everything except the deliberately-embeddable /form/ pages, which set
-// their own). Cheap defense-in-depth given the cookie-auth model: it was the
-// one standard header missing here, so an injected <script> or a stolen
-// stylesheet origin had nothing standing in its way.
-//
-// Built once per gateway (the map origins below come from config that is
-// fixed by the time we serve) and cached, since this runs on every response.
 func (h *HTTPGateway) appCSP() string {
 	h.cspOnce.Do(func() {
 		m := h.mapAPI()
@@ -199,19 +169,12 @@ func (h *HTTPGateway) originAllowed(origin string) bool {
 	return false
 }
 
-// hostIsSubdomainOf reports whether host is a (single- or multi-level)
-// subdomain of domain. Both are compared case-insensitively. The apex
-// (host == domain) returns false — only strict subdomains match.
 func hostIsSubdomainOf(host, domain string) bool {
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	domain = strings.ToLower(domain)
 	return domain != "" && strings.HasSuffix(host, "."+domain)
 }
 
-// isOrgSubdomainHost reports whether an inbound request's Host is a per-org
-// wildcard subdomain (anything under the configured apex), so the landing
-// handler can serve the app rather than the marketing page there. The port,
-// if any, is stripped first; false when the wildcard feature is off.
 func isOrgSubdomainHost(host, wildcardDomain string) bool {
 	if wildcardDomain == "" {
 		return false
@@ -246,14 +209,6 @@ func IsValidWildcardDomain(d string) bool {
 	return true
 }
 
-// effectiveBaseURL returns the origin to build user-facing URLs (trigger,
-// hosted form, editor link) against. The operator's --public-base-url is
-// authoritative when set. Otherwise we derive it from the request — honoring
-// X-Forwarded-Proto/Host so a reverse proxy's external origin wins — so the
-// trigger/form links a user gets are USABLE (absolute) instead of bare paths
-// like "/form/...". The derived value is best-effort: behind a proxy that
-// doesn't forward those headers it may be the internal host, which is why
-// public_base_configured still reports whether the authoritative value is set.
 func (u urlBuilder) effectiveBaseURL(r *http.Request) string {
 	if b := strings.TrimRight(u.svc.PublicBaseURL, "/"); b != "" {
 		return b
@@ -265,10 +220,6 @@ func (u urlBuilder) effectiveBaseURL(r *http.Request) string {
 	if u.requestIsHTTPS(r) {
 		scheme = "https"
 	}
-	// Only trust X-Forwarded-Host when the operator has opted into proxy
-	// headers (DAZYFLOW_TRUST_PROXY_HEADERS), mirroring requestIsHTTPS. Without
-	// the gate a client could set X-Forwarded-Host to reflect an attacker origin
-	// back into the convenience URLs (canvas/trigger/share links) it receives.
 	host := r.Host
 	if u.trustProxy {
 		if fwd := r.Header.Get("X-Forwarded-Host"); fwd != "" {
@@ -281,7 +232,6 @@ func (u urlBuilder) effectiveBaseURL(r *http.Request) string {
 	return scheme + "://" + host
 }
 
-// urls exposes the request-origin helpers to a domain handler.
 func (h *HTTPGateway) urls() urlBuilder {
 	return urlBuilder{svc: h.svc, trustProxy: h.TrustProxyHeaders}
 }

@@ -27,24 +27,12 @@ import (
 )
 
 const (
-	// defaultMapTileURL is OpenStreetMap's public tile server, in Leaflet's
-	// {z}/{x}/{y} template form. Free and key-less; their fair-use policy
-	// covers the editor's usage (one fetch per tile per pan) but not bulk
-	// traffic, so a busy deployment should point this at its own.
-	defaultMapTileURL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-	// defaultMapGeocoderURL is the public Nominatim instance — the same
-	// default the `geo` drop uses, and rate-limited the same way (~1 req/s,
-	// no bulk use).
+	defaultMapTileURL     = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 	defaultMapGeocoderURL = "https://nominatim.openstreetmap.org"
 )
 
-// mapAPI serves the editor's map configuration. Its fields are the whole of
-// what the handler touches: two already-defaulted URLs.
 type mapAPI struct {
-	// TileURL is the Leaflet tile template.
-	TileURL string
-	// GeocoderURL is the Nominatim-compatible base, trailing slash trimmed
-	// (the client appends "/search").
+	TileURL     string
 	GeocoderURL string
 }
 
@@ -97,8 +85,6 @@ func cspOrigin(raw string) string {
 		log.Printf("map config: ignoring non-HTTP URL %q for CSP", raw)
 		return ""
 	}
-	// Host is already host[:port]; reject anything with CSP-significant
-	// characters rather than let it break the header.
 	if strings.ContainsAny(u.Host, " ;,'\"") {
 		log.Printf("map config: ignoring malformed host %q for CSP", u.Host)
 		return ""

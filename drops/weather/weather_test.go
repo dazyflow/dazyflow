@@ -16,11 +16,8 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// The drops dial a 127.0.0.1 httptest server, so they need the same
-// private-egress opt-in production gets via DAZYFLOW_ALLOW_PRIVATE_EGRESS.
 func init() { hfnet.SetAllowPrivateEgress(true) }
 
-// Current Weather 2.5 (/data/2.5/weather) sample.
 const sampleCurrent = `{
 	"coord":{"lon":18.07,"lat":59.33},
 	"weather":[{"id":800,"main":"Clear","description":"clear sky","icon":"01d"}],
@@ -30,8 +27,6 @@ const sampleCurrent = `{
 	"dt":1719223200,"name":"Stockholm","cod":200
 }`
 
-// 5-day/3-hour Forecast 2.5 (/data/2.5/forecast) sample: three 3-hour slots on
-// 2024-06-24, one on 06-25, one on 06-26. timezone=0 so local day == UTC day.
 const sampleForecast = `{
 	"cod":"200","cnt":5,
 	"list":[
@@ -44,8 +39,6 @@ const sampleForecast = `{
 	"city":{"id":1,"name":"Stockholm","timezone":0}
 }`
 
-// stubServer points BOTH 2.5 endpoints at a test server that records the query
-// it was called with and returns the given status + body. It restores them.
 func stubServer(t *testing.T, status int, body string, gotQuery *map[string][]string) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,8 +70,6 @@ func textPin(t *testing.T, r core.Result, port string) string {
 	return s
 }
 
-// The display symbols live in drops/internal/geoloc; OpenWeather's own units
-// mapping is the only part that stays local (it alone has Kelvin).
 func TestNormalizeUnits(t *testing.T) {
 	if normalizeUnits("METRIC") != "metric" || normalizeUnits("imperial") != "imperial" ||
 		normalizeUnits("standard") != "standard" || normalizeUnits("bananas") != "metric" ||
@@ -121,7 +112,6 @@ func TestExecuteCurrent_Success(t *testing.T) {
 		t.Error("missing weather pin")
 	}
 
-	// Request carried the right query and NO 'exclude' (that was a One Call param).
 	if q["appid"][0] != "testkey" || q["units"][0] != "metric" || q["lat"][0] != "59.33" {
 		t.Errorf("query = %v", map[string][]string(q))
 	}
@@ -157,11 +147,9 @@ func TestExecuteForecast_Success(t *testing.T) {
 	if strings.Count(summary, "\n") != 1 { // days=2 → 2 lines → 1 break
 		t.Errorf("want 2 summary lines, got %q", summary)
 	}
-	// Day 1: aggregated min 9.1→9, max 18.7→19, pop 0.2→20%, noon slot = Rain.
 	if !strings.Contains(summary, "Mon Jun 24: Light rain, 9–19°C, rain 20%") {
 		t.Errorf("day-1 line off: %q", summary)
 	}
-	// Day 2: Clear, 10–20°C, 0%.
 	if !strings.Contains(summary, "Clear sky, 10–20°C, rain 0%") {
 		t.Errorf("day-2 line off: %q", summary)
 	}
@@ -170,7 +158,6 @@ func TestExecuteForecast_Success(t *testing.T) {
 		t.Errorf("third day leaked past days=2: %q", summary)
 	}
 
-	// Daily pin: 2 aggregated days, with the rolled-up values.
 	daily, ok := r.Output["daily"].Inline.([]dayAgg)
 	if !ok || len(daily) != 2 {
 		t.Fatalf("daily pin = %T len %d, want 2 dayAgg", r.Output["daily"].Inline, len(daily))
@@ -195,7 +182,6 @@ func TestVerifyOpenWeather(t *testing.T) {
 		t.Error("empty key: want error")
 	}
 
-	// 401 → surfaced verbatim.
 	const owmMsg = "Invalid API key. Please see https://openweathermap.org/faq#error401 for more info."
 	stubServer(t, 401, `{"cod":401,"message":"`+owmMsg+`"}`, nil)
 	err := verifyOpenWeather(context.Background(), map[string]string{"api_key": "bad"})
@@ -337,7 +323,6 @@ func TestCovExecuteForecastBadJSON(t *testing.T) {
 }
 
 func TestCovExecuteCurrentLangAndTimeout(t *testing.T) {
-	// Exercises the lang param branch and the timeout clamp in owmGet.
 	var q map[string][]string
 	stubServer(t, 200, sampleCurrent, &q)
 	job := core.Job{Params: keyParams(map[string]any{"lat": 1.0, "lon": 2.0, "lang": "sv", "timeout_ms": 0})}
@@ -351,11 +336,9 @@ func TestCovExecuteCurrentLangAndTimeout(t *testing.T) {
 }
 
 func TestCovVerifyOpenWeather(t *testing.T) {
-	// Empty key.
 	if err := verifyOpenWeather(context.Background(), map[string]string{}); err == nil {
 		t.Fatal("empty key should error")
 	}
-	// 401 with message.
 	stubServer(t, 401, `{"message":"Invalid API key"}`, nil)
 	if err := verifyOpenWeather(context.Background(), map[string]string{"api_key": "bad"}); err == nil || err.Error() != "Invalid API key" {
 		t.Fatalf("401 should surface message, got %v", err)

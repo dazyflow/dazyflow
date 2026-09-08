@@ -74,11 +74,9 @@ describe("ShareCollectionModal", () => {
         screen.getByText("shareCollection.beforeYouShare"),
       ).toBeInTheDocument(),
     );
-    // The create button is there, but the warning came first.
     expect(
       screen.getByRole("button", { name: /shareCollection\.create/ }),
     ).toBeInTheDocument();
-    // And no URL is on screen yet.
     expect(document.querySelector(".secret-reveal")).toBeNull();
   });
 
@@ -93,9 +91,6 @@ describe("ShareCollectionModal", () => {
     expect(screen.queryByText(/apiError|internal_error/)).toBeNull();
   });
 
-  // Behind a dev proxy the daemon's derived base URL can be the internal
-  // host, while window.location.origin is always the address the operator is
-  // actually looking at.
   it("shows the link against the browser's own origin", async () => {
     getCollectionShare.mockResolvedValue(link);
     openDialog();
@@ -104,7 +99,6 @@ describe("ShareCollectionModal", () => {
         `${window.location.origin}/board/tok-abc`,
       ),
     );
-    // Not the server-reported internal host.
     expect(document.body.textContent).not.toContain("internal:8642");
   });
 
@@ -132,7 +126,6 @@ describe("ShareCollectionModal", () => {
       ),
     );
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(link));
-    // Once live, the dialog says the link keeps following the collection.
     expect(screen.getByText("shareCollection.liveWarning")).toBeInTheDocument();
   });
 
@@ -160,13 +153,11 @@ describe("ShareCollectionModal", () => {
       ),
     );
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(null));
-    // Back to the pre-publication state, warning included.
     expect(
       screen.getByText("shareCollection.beforeYouShare"),
     ).toBeInTheDocument();
   });
 
-  // A viewer who lacks edit authority gets the reason, not a raw 403.
   it("explains a refusal in words", async () => {
     getCollectionShare.mockRejectedValue(apiError("share_not_found"));
     createCollectionShare.mockRejectedValue(apiError("forbidden"));

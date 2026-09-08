@@ -50,11 +50,6 @@ func init() {
 	})
 }
 
-// executeJSON parses the `json` param into a real value and emits it on 'out'.
-// The param is normally the string a graph author typed; a structured value
-// (programmatically-built param) is passed through untouched. Invalid JSON
-// surfaces as a clear bad_json error rather than a downstream type mismatch —
-// the whole point of authoring JSON at a typed source instead of a Text node.
 func executeJSON(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	raw, ok := job.Params["json"]
 	if !ok || raw == nil {
@@ -72,7 +67,6 @@ func executeJSON(_ context.Context, job core.Job, _ chan<- core.Progress) (core.
 			return badJSON(job, "This isn't valid JSON. Check for missing quotes, trailing commas, or single quotes — and remember an array must be wrapped in [ … ].", err.Error())
 		}
 	default:
-		// Already structured (e.g. a param built by another tool) — emit as-is.
 		value = v
 	}
 

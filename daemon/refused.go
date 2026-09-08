@@ -16,58 +16,27 @@ import (
 	"github.com/dazyflow/dazyflow/internal/emailtheme"
 )
 
-// Records for the fires and deliveries a submission gate refused, so a refusal
-// is something the owner can find rather than a line in the daemon log.
-//
-// Two shapes, because two different things happen to the work:
-//
-//	recordSkippedFire      — a SCHEDULED fire that didn't happen. Nothing was
-//	                         lost: the trigger comes round again on the next
-//	                         tick. Written as a terminal `skipped` run,
-//	                         coalesced by the caller, no payload.
-//
-//	recordRefusedDelivery  — an INBOUND delivery (hosted form, webhook) that
-//	                         didn't run. Someone typed something, or a service
-//	                         sent an event, and it is gone unless we keep it.
-//	                         Written as a terminal `failed` run WITH the
-//	                         payload, so it is visible, retryable and mailed
-//	                         about.
-//
-// The asymmetry is the point. `skipped` means "didn't run"; `failed` means
-// "didn't run and something was lost".
+// A hosted form is an open door, so a record per refused submission is a
+// table-growth vector.
 
-// maxCapturedRefusalsPerWindow bounds how many refused deliveries one flow
-// stores per refusalWindow. A hosted form is an open door — anyone with the
-// link can post to it — so a record per refused submission is a table-growth
-// vector on a flow whose org is over its cap. Past the bound the payload is
-// dropped and one marker per window says how many, which is the honest answer:
-// we would rather tell an owner "42 more were refused and not kept" than
-// pretend we kept them.
+// A refused SCHEDULED fire is recorded as a terminal `skipped` run with no
+// payload — nothing was lost, the trigger comes round again. A refused INBOUND
+// delivery is recorded as `failed` WITH the payload, because someone typed
+// something and it is gone unless it is kept. The asymmetry is the point.
 //
-// Twenty is chosen so a real small-business form loses nothing (a contact form
-// taking twenty submissions an hour while its org sits over the run cap is
-// already an unusual hour) while a flood is bounded. The honeypot and the
-// per-IP throttle on the route absorb most bot traffic upstream of here.
+// A hosted form is an open door, so a record per refused submission is a
+// table-growth vector; hence the per-window cap.
+
 const maxCapturedRefusalsPerWindow = 20
 
-// refusalWindow is the period maxCapturedRefusalsPerWindow applies over, and
-// how often an over-bound flow writes its "and N more" marker.
 const refusalWindow = time.Hour
 
-// refusalCounter tracks captures per flow per window. In memory, in the same
-// shape as the scheduler's skip coalescing: this sits on the inbound request
-// path, so it must not cost a query, and a restart resetting it is worth at
-// most one extra window's captures.
 type refusalCounter struct {
-	mu    sync.Mutex
-	seen  map[string]*refusalWindowState
-	clock func() time.Time
-	// window overrides refusalWindow for counters measuring something else
-	// (the run-cap email is per day). Zero means refusalWindow.
+	mu     sync.Mutex
+	seen   map[string]*refusalWindowState
+	clock  func() time.Time
 	window time.Duration
-	// cap overrides maxCapturedRefusalsPerWindow. Zero means that default;
-	// 1 makes the counter a plain "once per window" gate.
-	cap int
+	cap    int
 }
 
 func (c *refusalCounter) windowLen() time.Duration {
@@ -87,17 +56,12 @@ func (c *refusalCounter) capacity() int {
 type refusalWindowState struct {
 	start    time.Time
 	captured int
-	// dropped counts refusals past the bound since the last marker.
-	dropped int
-	// markedAt is when this flow last wrote an "and N more" marker.
+	dropped  int
 	markedAt time.Time
 }
 
 var refusals = &refusalCounter{clock: time.Now}
 
-// admit reports what to do with one refusal: capture it with its payload, or
-// drop the payload and (when the window turns over) write a counting marker
-// for everything dropped since the last one.
 func (c *refusalCounter) admit(key string) (capture bool, marker bool, dropped int) {
 	now := c.clock()
 	c.mu.Lock()
@@ -107,8 +71,6 @@ func (c *refusalCounter) admit(key string) (capture bool, marker bool, dropped i
 	}
 	st, ok := c.seen[key]
 	if !ok || now.Sub(st.start) >= c.windowLen() {
-		// A fresh window keeps whatever the last one dropped, so the count in
-		// the marker covers every refusal since the marker before it.
 		carried := 0
 		if ok {
 			carried = st.dropped
@@ -130,9 +92,6 @@ func (c *refusalCounter) admit(key string) (capture bool, marker bool, dropped i
 	return false, false, 0
 }
 
-// refusalCode maps a submission gate's error to a stable code for the run
-// record. Anything unrecognised is still recorded, under a generic code —
-// a refusal we can't name is exactly the kind we want a record of.
 func refusalCode(err error) string {
 	switch {
 	case errors.Is(err, core.ErrPlanLimit):
@@ -148,10 +107,6 @@ func refusalCode(err error) string {
 	}
 }
 
-// refusalMessage is what the owner reads in the Runs list and in the mail.
-// Each one names the cause and the way out, because the recovery is not
-// obvious: the delivery is sitting in this run, and Retry replays it once
-// whatever refused it is fixed.
 func refusalMessage(err error) string {
 	const kept = " The delivery is kept in this run — press Retry to process it."
 	switch {
@@ -169,25 +124,6 @@ func refusalMessage(err error) string {
 	}
 }
 
-// recordRefusedDelivery persists an inbound delivery that a submission gate
-// refused, as a terminal FAILED run carrying the delivery itself.
-//
-// Why failed rather than skipped: the payload is lost unless someone acts on
-// it, and every mechanism that acts on a lost run is keyed to failure. The run
-// lists as a failure; the run-detail page shows the submitted values; the
-// account export includes it; and ResumeFailedRun already accepts a failed run
-// and re-seeds from succeeded, inline node-records — which is exactly what the
-// seeds written here are. So the recovery path needs no new code: the owner
-// fixes what was refused (upgrades, un-suspends, repairs the flow), presses
-// Retry, and the delivery processes.
-//
-// Returns the run ID and whether the payload was actually stored. A caller
-// answering a machine should let that decide the status code: a captured
-// delivery is ours now and must not be retried, an uncaptured one should be.
-//
-// Best-effort about its own failures, like recordSkippedFire: the delivery was
-// already not going to run, and a store error here must not turn into a second
-// error on top of the refusal.
 func (s *Service) recordRefusedDelivery(
 	ctx context.Context,
 	g core.Graph,
@@ -202,8 +138,6 @@ func (s *Service) recordRefusedDelivery(
 	switch {
 	case capture:
 	case marker:
-		// Over the bound: say how many deliveries were refused and NOT kept,
-		// so the gap in the record is stated rather than inferred.
 		s.recordRefusalOverflow(ctx, g, dropped)
 		return "", false
 	default:
@@ -218,8 +152,6 @@ func (s *Service) recordRefusedDelivery(
 	if err != nil {
 		return "", false
 	}
-	// Enqueued live, then completed: Complete is what stamps finished_at, and
-	// retention reads that to decide when this run ages out.
 	rec := core.JobRecord{
 		ID:           id,
 		Kind:         core.JobKindGraph,
@@ -235,10 +167,6 @@ func (s *Service) recordRefusedDelivery(
 		s.logRefusal(g, fmt.Errorf("enqueue run: %w", err))
 		return "", false
 	}
-	// The delivery itself, stored the way a deferred run stores one: a
-	// succeeded node-record per seeded trigger node, outputs inline. This is
-	// the whole point of the record — without it there is a note that
-	// something arrived and no way to find out what.
 	stored := true
 	if errs := persistSeedsOnly(ctx, s.Jobs, g, id, seeds); len(errs) > 0 {
 		stored = false
@@ -263,9 +191,6 @@ func (s *Service) recordRefusedDelivery(
 	return id, stored
 }
 
-// recordRefusalOverflow writes the "and N more" marker for a flow past the
-// capture bound: a terminal failed run with no payload, whose message is the
-// count. Same best-effort contract as the capture path.
 func (s *Service) recordRefusalOverflow(ctx context.Context, g core.Graph, dropped int) {
 	id, err := newID()
 	if err != nil {
@@ -303,17 +228,6 @@ func (s *Service) recordRefusalOverflow(ctx context.Context, g core.Graph, dropp
 	s.notifyRefusedDelivery(g, id, "deliveries_refused_not_stored", msg)
 }
 
-// notifyRefusedDelivery mails/webhooks the owner about a refused delivery.
-//
-// Detached, because the caller is holding a visitor's HTTP request open: the
-// notification does SMTP and an outbound POST with a 10s timeout each, and a
-// form's confirmation page must not wait on either. Bounded so a wedged mail
-// host can't leak goroutines.
-//
-// Routed through the ordinary failure-notification path, so the per-flow hourly
-// throttle covers it: a flow whose form is refusing every submission sends one
-// mail, not one per visitor. That the run is already in the store before this
-// runs is what makes the throttle see it.
 func (s *Service) notifyRefusedDelivery(g core.Graph, runID, code, message string) {
 	if s.Mailer == nil && (g.FailureNotify == nil || g.FailureNotify.Webhook == "") {
 		return
@@ -344,17 +258,13 @@ func (s *Service) logRefusal(g core.Graph, err error) {
 	}
 }
 
-// recordSkippedFire writes a terminal "skipped" graph run so a cap-blocked
-// scheduled fire is visible in the Runs list, not just the server log. It
-// enqueues a bare graph record (no node work, so nothing dispatches) and
-// immediately completes it skipped with the reason. Best-effort: a write
-// failure is logged, never propagated — the fire already wasn't going to run.
-// The scheduler coalesces calls (one per flow per window); the precise count
-// lives in the usage counter.
-//
-// No payload and no notification, unlike recordRefusedDelivery above: a
-// scheduled fire that didn't happen lost nothing to keep, and the next tick
-// will try again.
+// A refused SCHEDULED fire is written as a terminal `skipped` run with no
+// payload — nothing was lost, the trigger comes round again. A refused INBOUND
+// delivery is written as `failed` WITH the payload, because someone typed
+// something and it is gone unless it is kept. The asymmetry is the point:
+// `skipped` means "didn't run", `failed` means "didn't run and something was
+// lost".
+
 func (s *Service) recordSkippedFire(ctx context.Context, tenant, workspace, graphID, code, message string) {
 	if s.Jobs == nil {
 		return
@@ -363,8 +273,6 @@ func (s *Service) recordSkippedFire(ctx context.Context, tenant, workspace, grap
 	if err != nil {
 		return
 	}
-	// A minimal (node-less) graph payload so the run-detail view renders
-	// safely rather than choking on an empty payload.
 	payload, _ := json.Marshal(core.Graph{ID: graphID, Tenant: tenant, Workspace: workspace})
 	rec := core.JobRecord{
 		ID:           id,
@@ -390,23 +298,6 @@ func (s *Service) recordSkippedFire(ctx context.Context, tenant, workspace, grap
 	})
 }
 
-// recordBrokenSchedule records a scheduled fire that did NOT happen because
-// the flow itself could not be reached or read — its workspace would not open,
-// its published revision would not load, or the submission gate refused it for
-// something the owner has to fix.
-//
-// Written FAILED rather than skipped, which is the difference that matters:
-// skipped means "did not run, nothing lost, the next tick will try again", and
-// that is true of a plan-cap skip. This is not that. A flow whose published
-// revision no longer loads has STOPPED WORKING, silently, and every one of
-// these paths used to be a single line in the daemon log — no run record, no
-// marker, nothing in the Runs list. The owner's daily report simply stopped
-// arriving and the first sign was somebody downstream asking where it was.
-// Failed puts it in the Runs list and hands it to the notification sweep, so
-// it reaches a person.
-//
-// The caller coalesces (see Scheduler.markOnce): a per-minute cron that cannot
-// load its flow would otherwise write 1440 identical records a day.
 func (s *Service) recordBrokenSchedule(ctx context.Context, g core.Graph, code, message string) {
 	if s.Jobs == nil {
 		return
@@ -441,23 +332,8 @@ func (s *Service) recordBrokenSchedule(ctx context.Context, g core.Graph, code, 
 	}); err != nil {
 		s.logRefusal(g, fmt.Errorf("complete broken-schedule marker: %w", err))
 	}
-	// No direct notify call: the record is failed, so SweepFailureNotifications
-	// picks it up with the same throttle and escalation as any other failure.
 }
 
-// notifyRunCapReached tells the flow's owner that the organisation has run out
-// of its monthly allowance and its scheduled flows have stopped firing.
-//
-// Nothing told them before. The signals were an in-app Usage banner and a
-// coalesced marker in the Runs list — both of which require somebody to be
-// looking at the app, which is precisely what an automation product's users
-// are not doing. Their flows stop, everything looks calm, and they find out
-// from a customer.
-//
-// Coalesced per ORGANISATION, not per flow: a tenant over its cap has every
-// scheduled flow skipping at once, so per-flow mail would be a storm about a
-// single fact. The owner of whichever flow trips it first is the recipient —
-// they are a person who cares, and resolving it (upgrading) is org-wide.
 func (s *Service) notifyRunCapReached(g core.Graph) {
 	if s.Mailer == nil || s.Users == nil {
 		return
@@ -495,10 +371,6 @@ func (s *Service) notifyRunCapReached(g core.Graph) {
 	}()
 }
 
-// runCapMail coalesces the run-cap email to one per organisation per day. A
-// day rather than an hour because the fact does not change until somebody
-// upgrades, and the calendar month is the window it is about.
 var runCapMail = &refusalCounter{clock: time.Now, window: runCapMailWindow, cap: 1}
 
-// runCapMailWindow is refusalWindow's equivalent for the run-cap email.
 const runCapMailWindow = 24 * time.Hour

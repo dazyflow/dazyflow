@@ -43,9 +43,6 @@ var (
 	credLookup   GitCredLookup
 )
 
-// SetGitCredLookup installs the credential resolver. Called once at daemon
-// startup; nil in unit tests that don't exercise the org credential store
-// (they pass inline ssh_private_key / token params instead).
 func SetGitCredLookup(fn GitCredLookup) {
 	credLookupMu.Lock()
 	defer credLookupMu.Unlock()
@@ -64,9 +61,6 @@ gitlab.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAfuCHKVTjquxvt6CM6tdG4SLp1Btn/nO
 git.sr.ht ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMZvRd4EtM7R+IHVMWmDkVU3VLQTSwQDSAvW0t2Tkj60
 `
 
-// sshURLParts reports whether rawURL is an SSH remote and, if so, its user
-// and host. It recognizes both the ssh:// scheme and scp-like syntax
-// (git@host:path). user defaults to "git" when the URL omits it.
 func sshURLParts(rawURL string) (user, host string, isSSH bool) {
 	raw := strings.TrimSpace(rawURL)
 	if strings.HasPrefix(raw, "ssh://") {
@@ -185,9 +179,6 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 		return SSHAuth(rawURL, cred.PrivateKey, cred.Passphrase, cred.KnownHosts)
 	}
 
-	// https — authenticate with the access token (PAT) when present. GitHub,
-	// GitLab, Bitbucket et al. accept the token as the basic-auth password
-	// with any non-empty username; default to "git" when none is set.
 	if cred.Token != "" {
 		username := cred.Username
 		if username == "" {

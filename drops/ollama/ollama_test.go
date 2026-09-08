@@ -20,13 +20,10 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// httptest listens on 127.0.0.1, which the SSRF guard blocks by default —
-	// the same guard a real localhost Ollama meets. See the package doc.
 	hfnet.SetAllowPrivateEgress(true)
 	os.Exit(m.Run())
 }
 
-// chatServer replies to /v1/chat/completions with resp and records the request.
 func chatServer(t *testing.T, resp map[string]any) (*httptest.Server, *map[string]any, *http.Header) {
 	t.Helper()
 	var body map[string]any
@@ -45,9 +42,8 @@ func textReply(content string) map[string]any {
 	return map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": content}}}}
 }
 
-// TestCall_KeylessSendsNoAuthHeader is the case that separates this provider
-// from its cloud siblings: no key configured must mean no Authorization header
-// at all, not an empty bearer.
+// The case that separates this provider from its cloud siblings: no key
+// configured must mean no Authorization header at all, not an empty bearer.
 func TestCall_KeylessSendsNoAuthHeader(t *testing.T) {
 	srv, _, hdr := chatServer(t, textReply("Hej!"))
 
@@ -65,7 +61,6 @@ func TestCall_KeylessSendsNoAuthHeader(t *testing.T) {
 	}
 }
 
-// A key is still forwarded — a shared instance behind an authenticating proxy.
 func TestCall_KeyIsForwardedWhenSet(t *testing.T) {
 	srv, _, hdr := chatServer(t, textReply("ok"))
 
@@ -111,9 +106,6 @@ func TestCall_ToolArgsObjectAndStringForms(t *testing.T) {
 	}
 }
 
-// The reason this provider has a fallback at all: Ollama honours a forced
-// tool_choice only on some models. A model that answers in prose still has to
-// produce a working Extract fields step.
 func TestCall_FallsBackToJSONInProse(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -155,7 +147,6 @@ func TestCall_NoStructuredOutputIsAnActionableError(t *testing.T) {
 	if jerr.Code != "ollama_no_tool_call" {
 		t.Errorf("code = %q", jerr.Code)
 	}
-	// The message has to carry the model name and a way forward.
 	if !strings.Contains(jerr.Message, "tinyllama") || !strings.Contains(jerr.Message, "llama3.1") {
 		t.Errorf("message is not actionable: %q", jerr.Message)
 	}
@@ -199,8 +190,6 @@ func TestJSONFromText(t *testing.T) {
 	}
 }
 
-// The connection test asks the question that actually fails for a local
-// runtime — reachability and whether anything is pulled — not key validity.
 func TestVerifyReachable(t *testing.T) {
 	t.Run("no models pulled", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -227,8 +216,6 @@ func TestVerifyReachable(t *testing.T) {
 	})
 
 	t.Run("unreachable", func(t *testing.T) {
-		// A closed port on an address the guard permits under this test's
-		// SetAllowPrivateEgress — the operator's real "wrong URL" case.
 		srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 		url := srv.URL
 		srv.Close()
@@ -240,15 +227,12 @@ func TestVerifyReachable(t *testing.T) {
 }
 
 func TestOllamaError(t *testing.T) {
-	// Ollama's own flat shape.
 	if got := ollamaError([]byte(`{"error":"model not found"}`)); got != "model not found" {
 		t.Errorf("flat: %q", got)
 	}
-	// The OpenAI-compatible nested shape, which the same server also emits.
 	if got := ollamaError([]byte(`{"error":{"message":"bad request"}}`)); got != "bad request" {
 		t.Errorf("nested: %q", got)
 	}
-	// Anything else comes back verbatim rather than as an empty string.
 	if got := ollamaError([]byte(`upstream exploded`)); got != "upstream exploded" {
 		t.Errorf("raw: %q", got)
 	}
@@ -285,7 +269,6 @@ func TestCall_ImagesRideOnTheMessage(t *testing.T) {
 
 	msgs, _ := got["messages"].([]any)
 	last, _ := msgs[len(msgs)-1].(map[string]any)
-	// The text stays a plain string; the image rides beside it.
 	if s, _ := last["content"].(string); s != "what is this" {
 		t.Errorf("content = %#v, want the prompt as a plain string", last["content"])
 	}

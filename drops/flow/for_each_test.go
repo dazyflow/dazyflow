@@ -21,13 +21,10 @@ import (
 // collection) in isolation; the real body execution is covered by the daemon's
 // loopbody e2e tests.
 
-// withRunner attaches a stub body runner to a fresh context.
 func withRunner(fn engine.BodyRunner) context.Context {
 	return engine.WithBodyRunner(context.Background(), fn)
 }
 
-// echoRunner emits the current item on body node "body", port "out" — mirroring
-// a one-node loop body. The results wrapper is then {status, nodes:{body:{output:{out}}}}.
 func echoRunner(_ context.Context, item core.Ref) (engine.GraphResult, error) {
 	return engine.GraphResult{
 		Status: core.StatusOK,
@@ -37,7 +34,6 @@ func echoRunner(_ context.Context, item core.Ref) (engine.GraphResult, error) {
 	}, nil
 }
 
-// bodyOut reads body node "body" port "out" out of a results-wrapper Ref.
 func bodyOut(t *testing.T, r core.Ref) string {
 	t.Helper()
 	payload, _ := r.Inline.(map[string]any)
@@ -74,7 +70,6 @@ func TestForEach_RunsBodyPerItemInOrder(t *testing.T) {
 	}
 }
 
-// failRunner errors on the item "bad", echoes everything else.
 func failRunner(ctx context.Context, item core.Ref) (engine.GraphResult, error) {
 	if s, _ := item.Inline.(string); s == "bad" {
 		return engine.GraphResult{Status: core.StatusError, Error: &core.JobError{Code: "boom", Message: s}}, nil
@@ -175,16 +170,15 @@ func TestForEach_RespectsConcurrencyCap(t *testing.T) {
 	if peak.Load() > 3 {
 		t.Errorf("peak in-flight = %d, want <= 3", peak.Load())
 	}
-	// 10 items / 3 parallel @ 40ms ≈ 4 waves ≈ 160ms minimum.
 	if elapsed < 120*time.Millisecond {
 		t.Errorf("ran in %v — too fast for concurrency cap of 3", elapsed)
 	}
 }
 
-// TestForEach_ClampsExcessiveConcurrency guards the DoS fix: an author-set
-// concurrency far above maxForEachConcurrency must not spawn one goroutine per
-// item (each iteration runs a full body subgraph). Peak in-flight must stay at
-// or below the hard ceiling.
+// Guards the DoS fix: an author-set concurrency far above
+// maxForEachConcurrency must not spawn one goroutine per item (each iteration
+// runs a full body subgraph). Peak in-flight must stay at or below the hard
+// ceiling.
 func TestForEach_ClampsExcessiveConcurrency(t *testing.T) {
 	var inflight, peak atomic.Int32
 	runner := func(ctx context.Context, item core.Ref) (engine.GraphResult, error) {
@@ -308,10 +302,6 @@ func TestForEach_PartialFailureStillSucceeds(t *testing.T) {
 	}
 }
 
-// A run where most of the work failed used to be GREEN: the step succeeded,
-// the run succeeded, nothing was emailed, and a later step marked the work
-// done. The all-or-nothing guard conceded that there is a line past which
-// "partial success" is the wrong word — it just drew it at 100%.
 func TestForEach_MostItemsFailedIsAFailure(t *testing.T) {
 	job := core.Job{
 		Input: map[string]core.Ref{"items": {Inline: []any{"bad", "bad", "bad", "good"}}},
@@ -326,9 +316,6 @@ func TestForEach_MostItemsFailedIsAFailure(t *testing.T) {
 	if res.Error == nil || res.Error.Code != "most_items_failed" {
 		t.Fatalf("error = %+v, want most_items_failed", res.Error)
 	}
-	// Nothing is thrown away by failing: the successes are still on results
-	// and the failures still on errors, so a downstream read of either port —
-	// or a Retry — sees everything.
 	if _, ok := res.Output["results"]; !ok {
 		t.Error("results port missing on a most-failed run")
 	}

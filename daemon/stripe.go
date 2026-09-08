@@ -28,16 +28,12 @@ import (
 // calls don't route through the SSRF guard the tenant-supplied-URL drops
 // use.
 
-// maxStripeResponseBytes caps how much of a Stripe response we buffer.
 const maxStripeResponseBytes = 1 << 20 // 1 MiB
 
 type StripeClient struct {
-	// SecretKey is the sk_live_/sk_test_ API key.
 	SecretKey string
-	// PriceID is the recurring price the pro plan subscribes to.
-	PriceID string
-	// BaseURL overrides the API host (tests). Empty = api.stripe.com.
-	BaseURL string
+	PriceID   string
+	BaseURL   string
 
 	httpc *http.Client
 }
@@ -57,8 +53,6 @@ func (c *StripeClient) base() string {
 	return "https://api.stripe.com"
 }
 
-// post runs one form-encoded Stripe API call and decodes the JSON
-// response, surfacing Stripe's error.message on non-2xx.
 func (c *StripeClient) post(ctx context.Context, path string, form url.Values) (map[string]any, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		c.base()+path, strings.NewReader(form.Encode()))
@@ -125,8 +119,6 @@ func (c *StripeClient) CreateCheckoutSession(ctx context.Context, tenant, custom
 	return u, nil
 }
 
-// CreatePortalSession mints a billing-portal session (manage / cancel
-// the subscription) for an existing Stripe customer.
 func (c *StripeClient) CreatePortalSession(ctx context.Context, customerID, returnURL string) (string, error) {
 	form := url.Values{}
 	form.Set("customer", customerID)

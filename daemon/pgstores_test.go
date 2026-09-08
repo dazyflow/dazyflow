@@ -15,9 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TestPgShareStore_CRUD exercises the durable ShareStore end-to-end:
-// Upsert (insert + rotate), Get, Lookup, Delete, and the DeleteByTenant
-// erasure-cascade hook.
 func TestPgShareStore_CRUD(t *testing.T) {
 	pool, ctx := covPGPool(t)
 	store, err := NewPgShareStore(ctx, pool)
@@ -28,24 +25,20 @@ func TestPgShareStore_CRUD(t *testing.T) {
 		t.Fatalf("truncate: %v", err)
 	}
 
-	// Missing share -> ErrNotFound.
 	if _, err := store.Get(ctx, "acme", "main"); err != core.ErrNotFound {
 		t.Fatalf("Get(missing) = %v, want ErrNotFound", err)
 	}
 
-	// Insert.
 	sh, err := store.Upsert(ctx, "acme", "main", "tok-1", "alice")
 	if err != nil || sh.Token != "tok-1" || sh.CreatedBy != "alice" {
 		t.Fatalf("Upsert = %+v / %v", sh, err)
 	}
 
-	// Get round-trips.
 	got, err := store.Get(ctx, "acme", "main")
 	if err != nil || got.Token != "tok-1" {
 		t.Fatalf("Get = %+v / %v", got, err)
 	}
 
-	// Lookup by token.
 	byTok, err := store.Lookup(ctx, "tok-1")
 	if err != nil || byTok.Tenant != "acme" || byTok.Workspace != "main" {
 		t.Fatalf("Lookup = %+v / %v", byTok, err)
@@ -54,7 +47,6 @@ func TestPgShareStore_CRUD(t *testing.T) {
 		t.Fatalf("Lookup(missing) = %v, want ErrNotFound", err)
 	}
 
-	// Rotate in place (same PK, new token).
 	rot, err := store.Upsert(ctx, "acme", "main", "tok-2", "bob")
 	if err != nil || rot.Token != "tok-2" || rot.CreatedBy != "bob" {
 		t.Fatalf("rotate = %+v / %v", rot, err)
@@ -63,11 +55,9 @@ func TestPgShareStore_CRUD(t *testing.T) {
 		t.Fatalf("old token still resolvable after rotate: %v", err)
 	}
 
-	// A second workspace, so DeleteByTenant has more than one row to clear.
 	_, _ = store.Upsert(ctx, "acme", "other", "tok-3", "carol")
 	_, _ = store.Upsert(ctx, "elsewhere", "main", "tok-4", "dave")
 
-	// DeleteByTenant clears only acme's shares.
 	n, err := store.DeleteByTenant(ctx, "acme")
 	if err != nil || n != 2 {
 		t.Fatalf("DeleteByTenant = %d / %v, want 2", n, err)
@@ -79,7 +69,6 @@ func TestPgShareStore_CRUD(t *testing.T) {
 		t.Fatalf("other tenant's share was clobbered: %v", err)
 	}
 
-	// Delete the remaining share directly (idempotent on a missing row).
 	if err := store.Delete(ctx, "elsewhere", "main"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
@@ -88,14 +77,9 @@ func TestPgShareStore_CRUD(t *testing.T) {
 	}
 }
 
-// TestPgRunLogStore_TenantMethods exercises the tenant-scoped run-log methods
-// that the contract test doesn't reach: DeleteRun, DeleteByTenant,
-// PruneTenant, and RunLogTenants. These join the jobs table, so the test
-// provisions it via the jobstore Postgres and seeds owning job records.
 func TestPgRunLogStore_TenantMethods(t *testing.T) {
 	pool, ctx := covPGPool(t)
 
-	// Provision + clear the jobs table via the jobstore Postgres schema.
 	js, err := jobstore.NewPostgresFromPool(ctx, pool)
 	if err != nil {
 		t.Fatalf("jobstore schema: %v", err)
@@ -113,8 +97,6 @@ func TestPgRunLogStore_TenantMethods(t *testing.T) {
 		t.Fatalf("truncate run_logs: %v", err)
 	}
 
-	// Seed jobs owned by different tenants. Retention is run-scoped, so what
-	// decides a log's fate is the RUN's finished_at, not the line's ts.
 	old := time.Now().Add(-72 * time.Hour).UTC()
 	now := time.Now().UTC()
 	mustEnqueue := func(id, tenant string, finishedAt *time.Time) {
@@ -142,8 +124,6 @@ func TestPgRunLogStore_TenantMethods(t *testing.T) {
 	mustEnqueue("run-parked", "acme", nil) // still running (an approval)
 	mustEnqueue("run-other", "elsewhere", &old)
 
-	// Two old + one fresh line for acme's finished run; one old line for the
-	// run still going; one for elsewhere.
 	for _, e := range []RunLogEntry{
 		{RunID: "run-acme", TS: old, Kind: "progress", Message: "old-1"},
 		{RunID: "run-acme", TS: old, Kind: "progress", Message: "old-2"},
@@ -156,7 +136,6 @@ func TestPgRunLogStore_TenantMethods(t *testing.T) {
 		}
 	}
 
-	// RunLogTenants lists distinct owning tenants.
 	tenants, err := store.RunLogTenants(ctx)
 	if err != nil {
 		t.Fatalf("RunLogTenants: %v", err)
@@ -169,16 +148,12 @@ func TestPgRunLogStore_TenantMethods(t *testing.T) {
 		t.Fatalf("RunLogTenants = %v, want acme + elsewhere", tenants)
 	}
 
-	// PruneTenant: non-positive duration / empty tenant are no-ops.
 	if n, err := store.PruneTenant(ctx, "acme", 0, 0); err != nil || n != 0 {
 		t.Fatalf("PruneTenant(0 dur) = %d / %v, want 0", n, err)
 	}
 	if n, err := store.PruneTenant(ctx, "", time.Hour, 0); err != nil || n != 0 {
 		t.Fatalf("PruneTenant(empty tenant) = %d / %v, want 0", n, err)
 	}
-	// PruneTenant takes acme's finished run WHOLE — the fresh line included,
-	// because the run it belongs to is past the window — and does not touch
-	// the run still going, nor elsewhere's.
 	pruned, err := store.PruneTenant(ctx, "acme", 24*time.Hour, 0)
 	if err != nil || pruned != 3 {
 		t.Fatalf("PruneTenant = %d / %v, want 3", pruned, err)
@@ -193,22 +168,17 @@ func TestPgRunLogStore_TenantMethods(t *testing.T) {
 		t.Fatalf("elsewhere's logs were pruned: %+v", other)
 	}
 
-	// DeleteRun clears one run's lines.
 	d, err := store.DeleteRun(ctx, "run-parked")
 	if err != nil || d != 1 {
 		t.Fatalf("DeleteRun = %d / %v, want 1", d, err)
 	}
 
-	// DeleteByTenant clears the remaining tenant's logs by jobs join.
 	db, err := store.DeleteByTenant(ctx, "elsewhere")
 	if err != nil || db != 1 {
 		t.Fatalf("DeleteByTenant = %d / %v, want 1", db, err)
 	}
 }
 
-// covPGPool dials the gated test database and returns a pool plus a
-// cancelable context. Mirrors pgBusPool but kept separate so coverage
-// tests don't depend on bus-specific cleanup ordering.
 func covPGPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
 	url := os.Getenv("DAZYFLOW_TEST_DB")
@@ -228,9 +198,6 @@ func covPGPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	return pool, ctx
 }
 
-// TestPgEntitlementStore_CRUD exercises the Postgres entitlement store:
-// schema provisioning, built-in seeding, tier put/get/list/delete (with
-// built-in protection), and entitlement put/get/list with grant overrides.
 func TestPgEntitlementStore_CRUD(t *testing.T) {
 	pool, ctx := covPGPool(t)
 	if _, err := pool.Exec(ctx, "DROP TABLE IF EXISTS tenant_entitlements, tiers CASCADE"); err != nil {
@@ -241,7 +208,6 @@ func TestPgEntitlementStore_CRUD(t *testing.T) {
 		t.Fatalf("NewPgEntitlementStore: %v", err)
 	}
 
-	// Built-ins seeded.
 	if tr, ok := store.GetTier(ctx, "free"); !ok || tr.Plan != PlanFree || !tr.BuiltIn {
 		t.Fatalf("free tier = %+v ok=%v, want built-in free", tr, ok)
 	}
@@ -249,12 +215,10 @@ func TestPgEntitlementStore_CRUD(t *testing.T) {
 		t.Fatalf("pro tier = %+v ok=%v, want pro", tr, ok)
 	}
 
-	// PutTier validation: empty id rejected.
 	if err := store.PutTier(ctx, Tier{}); err == nil {
 		t.Fatal("PutTier(empty id) = nil, want error")
 	}
 
-	// Add a custom tier; non-pro plan coerced to free.
 	allowed := true
 	custom := Tier{ID: "team", Name: "Team", Plan: "weird", RunsPerMonth: 100, MaxFlows: 7, PollingAllowed: &allowed}
 	if err := store.PutTier(ctx, custom); err != nil {
@@ -268,13 +232,11 @@ func TestPgEntitlementStore_CRUD(t *testing.T) {
 		t.Fatalf("custom tier polling = %v, want true", got.PollingAllowed)
 	}
 
-	// ListTiers includes built-ins + custom.
 	tiers, err := store.ListTiers(ctx)
 	if err != nil || len(tiers) != 3 {
 		t.Fatalf("ListTiers = %d / %v, want 3", len(tiers), err)
 	}
 
-	// DeleteTier: built-ins protected, custom deletable.
 	if err := store.DeleteTier(ctx, "free"); err == nil {
 		t.Fatal("DeleteTier(free) = nil, want built-in protection error")
 	}
@@ -285,7 +247,6 @@ func TestPgEntitlementStore_CRUD(t *testing.T) {
 		t.Fatal("team tier still present after delete")
 	}
 
-	// Entitlements: empty tenant rejected.
 	if err := store.PutEntitlement(ctx, TenantEntitlement{}); err == nil {
 		t.Fatal("PutEntitlement(empty tenant) = nil, want error")
 	}
@@ -314,15 +275,14 @@ func TestPgEntitlementStore_CRUD(t *testing.T) {
 		t.Fatalf("ListEntitlements = %d / %v, want 1", len(ents), err)
 	}
 
-	// Unknown tenant: not found, no error.
 	if _, ok := store.GetEntitlement(ctx, "ghost"); ok {
 		t.Fatal("GetEntitlement(ghost) = ok, want not found")
 	}
 }
 
-// TestPgWriteDedupeStore exercises the shared write-dedupe store: a miss, a
-// recorded result round-tripping back, first-writer-wins on conflict, and a
-// stale row reading as absent.
+// Exercises the shared write-dedupe store: a miss, a recorded result round-
+// tripping back, first-writer-wins on conflict, and a stale row reading as
+// absent.
 func TestPgWriteDedupeStore(t *testing.T) {
 	pool, ctx := covPGPool(t)
 	if _, err := pool.Exec(ctx, "DROP TABLE IF EXISTS write_dedupe"); err != nil {
@@ -333,12 +293,10 @@ func TestPgWriteDedupeStore(t *testing.T) {
 		t.Fatalf("NewPgWriteDedupeStore: %v", err)
 	}
 
-	// Miss on an unknown key.
 	if _, ok := store.Get(ctx, "job-1"); ok {
 		t.Fatal("Get(unknown) = ok, want miss")
 	}
 
-	// Put then Get round-trips the result.
 	want := core.Result{JobID: "job-1", Status: core.StatusOK,
 		Output: map[string]core.Ref{"sid": {Inline: "SM123"}}}
 	store.Put(ctx, "job-1", want)
@@ -365,9 +323,6 @@ func TestPgWriteDedupeStore(t *testing.T) {
 	}
 }
 
-// TestPgDropSwitchStore_Lifecycle exercises the killswitch store: schema,
-// disable/enable, global vs per-tenant precedence, the in-memory Disabled
-// fast path, and List.
 func TestPgDropSwitchStore_Lifecycle(t *testing.T) {
 	pool, ctx := covPGPool(t)
 	if err := EnsurePgDropSwitchSchema(ctx, pool); err != nil {
@@ -381,17 +336,14 @@ func TestPgDropSwitchStore_Lifecycle(t *testing.T) {
 		t.Fatalf("NewPgDropSwitchStore: %v", err)
 	}
 
-	// Validation: empty drop id.
 	if err := store.Disable(ctx, DropSwitch{}); err == nil {
 		t.Fatal("Disable(empty drop id) = nil, want error")
 	}
 
-	// Nothing disabled initially.
 	if store.Disabled("slack.post", "acme") {
 		t.Fatal("Disabled before any switch = true")
 	}
 
-	// Per-tenant switch only affects that tenant.
 	if err := store.Disable(ctx, DropSwitch{DropID: "slack.post", Tenant: "acme", DisabledBy: "op", Reason: "abuse"}); err != nil {
 		t.Fatalf("Disable tenant: %v", err)
 	}
@@ -402,7 +354,6 @@ func TestPgDropSwitchStore_Lifecycle(t *testing.T) {
 		t.Fatal("Disabled(other) = true, per-tenant switch leaked")
 	}
 
-	// Global switch affects everyone.
 	if err := store.Disable(ctx, DropSwitch{DropID: "http.request"}); err != nil {
 		t.Fatalf("Disable global: %v", err)
 	}
@@ -410,13 +361,11 @@ func TestPgDropSwitchStore_Lifecycle(t *testing.T) {
 		t.Fatal("global switch not applied to all tenants")
 	}
 
-	// List returns both.
 	list, err := store.List(ctx)
 	if err != nil || len(list) != 2 {
 		t.Fatalf("List = %d / %v, want 2", len(list), err)
 	}
 
-	// Enable clears the per-tenant switch (idempotent).
 	if err := store.Enable(ctx, "slack.post", "acme"); err != nil {
 		t.Fatalf("Enable: %v", err)
 	}
@@ -428,9 +377,6 @@ func TestPgDropSwitchStore_Lifecycle(t *testing.T) {
 	}
 }
 
-// TestPgAuditLog_Operations exercises the Postgres audit log: append,
-// list (with tenant scoping, ordering, and limit), anonymize, prune, and
-// delete-by-tenant.
 func TestPgAuditLog_Operations(t *testing.T) {
 	pool, ctx := covPGPool(t)
 	log, err := NewPgAuditLog(ctx, pool)
@@ -453,7 +399,6 @@ func TestPgAuditLog_Operations(t *testing.T) {
 		}
 	}
 
-	// List scoped to t1, newest first.
 	got, err := log.List(ctx, core.AuditQuery{Tenant: "t1"})
 	if err != nil || len(got) != 2 {
 		t.Fatalf("List t1 = %d / %v, want 2", len(got), err)
@@ -462,13 +407,11 @@ func TestPgAuditLog_Operations(t *testing.T) {
 		t.Fatalf("List order: first = %q, want bob (newest)", got[0].Actor)
 	}
 
-	// Limit caps the page; negative offset normalized.
 	page, err := log.List(ctx, core.AuditQuery{Tenant: "t1", Limit: 1, Offset: -5})
 	if err != nil || len(page) != 1 {
 		t.Fatalf("limited list = %d / %v, want 1", len(page), err)
 	}
 
-	// AnonymizeActor scrubs alice across tenants.
 	n, err := log.AnonymizeActor(ctx, "alice")
 	if err != nil || n != 2 {
 		t.Fatalf("AnonymizeActor = %d / %v, want 2", n, err)
@@ -480,11 +423,9 @@ func TestPgAuditLog_Operations(t *testing.T) {
 		}
 	}
 
-	// Prune with non-positive duration is a no-op.
 	if pruned, err := log.Prune(ctx, 0, 0); err != nil || pruned != 0 {
 		t.Fatalf("Prune(0) = %d / %v, want 0", pruned, err)
 	}
-	// Prune everything older than 1ns ago (all rows). batch defaulting path.
 	if _, err := log.Prune(ctx, time.Nanosecond, 1); err != nil {
 		t.Fatalf("Prune: %v", err)
 	}
@@ -493,7 +434,6 @@ func TestPgAuditLog_Operations(t *testing.T) {
 		t.Fatalf("after prune t1 has %d rows, want 0", len(remaining))
 	}
 
-	// DeleteByTenant on already-empty tenant returns 0.
 	if d, err := log.DeleteByTenant(ctx, "t2"); err != nil {
 		t.Fatalf("DeleteByTenant: %v", err)
 	} else if d < 0 {
@@ -501,7 +441,7 @@ func TestPgAuditLog_Operations(t *testing.T) {
 	}
 }
 
-// TestPgAuditLog_PruneKeepsApprovals pins the one action retention must not
+// Pins the one action retention must not
 // reach. Retention is there to stop routine chatter accumulating; an approval
 // is the record of who authorised something, and that is asked about long
 // after the window closes — at Pro's 90 days a production deploy's
@@ -554,9 +494,6 @@ func TestPgAuditLog_PruneKeepsApprovals(t *testing.T) {
 	}
 }
 
-// TestPgDropSwitchStore_DeleteByTenant covers the erasure hook against the real
-// DB: per-tenant switches go, the GLOBAL switch stays, and an empty tenant is
-// refused rather than matching every global row.
 func TestPgDropSwitchStore_DeleteByTenant(t *testing.T) {
 	pool, ctx := covPGPool(t)
 	if err := EnsurePgDropSwitchSchema(ctx, pool); err != nil {
@@ -609,8 +546,6 @@ func TestPgDropSwitchStore_DeleteByTenant(t *testing.T) {
 	}
 }
 
-// TestPgRunnerStore_DeleteByTenant covers the two-table transaction: runners and
-// unspent registration tokens both go, scoped to one tenant.
 func TestPgRunnerStore_DeleteByTenant(t *testing.T) {
 	pool, ctx := covPGPool(t)
 	store, err := NewPgRunnerStore(ctx, pool)
@@ -644,7 +579,6 @@ func TestPgRunnerStore_DeleteByTenant(t *testing.T) {
 	if got, _ := store.List(ctx, "doomed"); len(got) != 0 {
 		t.Errorf("runners survived: %v", got)
 	}
-	// Count tokens directly — nothing in the interface lists them.
 	var tokens int
 	if err := pool.QueryRow(ctx,
 		`SELECT count(*) FROM runner_tokens WHERE tenant=$1`, "doomed").Scan(&tokens); err != nil {
@@ -663,9 +597,6 @@ func TestPgRunnerStore_DeleteByTenant(t *testing.T) {
 	}
 }
 
-// TestPgScheduleStore_Projection exercises the durable ScheduleStore: schema
-// provisioning, the per-flow replace that adds/updates/removes in one shot, the
-// erasure cascade, and the reconcile's prune.
 func TestPgScheduleStore_Projection(t *testing.T) {
 	pool, ctx := covPGPool(t)
 	if _, err := pool.Exec(ctx, "DROP TABLE IF EXISTS flow_schedules CASCADE"); err != nil {
@@ -684,7 +615,6 @@ func TestPgScheduleStore_Projection(t *testing.T) {
 		}
 	}
 
-	// Two triggers on one flow, plus a flow in another tenant.
 	if err := store.ReplaceFlowSchedules(ctx, "t1", "ws", "f1", []ScheduleSpec{
 		spec("t1", "f1", "#a", "cron:a"), spec("t1", "f1", "#b", "cron:b"),
 	}); err != nil {
@@ -700,7 +630,6 @@ func TestPgScheduleStore_Projection(t *testing.T) {
 		t.Fatalf("ListSchedules = %d / %v, want 3", len(all), err)
 	}
 
-	// A poll spec round-trips its interval rather than a cron expression.
 	poll := ScheduleSpec{Tenant: "t1", Workspace: "ws", GraphID: "f3",
 		EntryKey: "t1/ws/f3@n1", SpecKey: "poll:300", IntervalSeconds: 300}
 	if err := store.ReplaceFlowSchedules(ctx, "t1", "ws", "f3", []ScheduleSpec{poll}); err != nil {
@@ -720,7 +649,6 @@ func TestPgScheduleStore_Projection(t *testing.T) {
 		t.Fatal("poll spec missing after replace")
 	}
 
-	// Replace is a complete swap: two entries become one, the other dropped.
 	if err := store.ReplaceFlowSchedules(ctx, "t1", "ws", "f1", []ScheduleSpec{
 		spec("t1", "f1", "#b", "cron:b-edited"),
 	}); err != nil {
@@ -739,7 +667,6 @@ func TestPgScheduleStore_Projection(t *testing.T) {
 		}
 	}
 
-	// An empty set takes the flow offline.
 	if err := store.ReplaceFlowSchedules(ctx, "t1", "ws", "f1", nil); err != nil {
 		t.Fatalf("clear f1: %v", err)
 	}
@@ -748,8 +675,6 @@ func TestPgScheduleStore_Projection(t *testing.T) {
 		t.Fatalf("after clear = %d entries, want 2", len(all))
 	}
 
-	// A spec naming a different flow than the one being replaced is refused,
-	// and the transaction leaves nothing behind.
 	err = store.ReplaceFlowSchedules(ctx, "t1", "ws", "f3", []ScheduleSpec{spec("t1", "other", "#x", "cron:x")})
 	if err == nil {
 		t.Fatal("ReplaceFlowSchedules accepted a spec for another flow")
@@ -759,7 +684,6 @@ func TestPgScheduleStore_Projection(t *testing.T) {
 		t.Fatalf("failed replace changed the table: %d entries, want 2", len(all))
 	}
 
-	// PruneMissingFlows drops rows for flows the workspaces no longer hold.
 	n, err := store.PruneMissingFlows(ctx, map[string]struct{}{"t2/ws/f2": {}}, nil)
 	if err != nil || n != 1 {
 		t.Fatalf("PruneMissingFlows = %d / %v, want 1", n, err)
@@ -769,7 +693,6 @@ func TestPgScheduleStore_Projection(t *testing.T) {
 		t.Fatalf("after prune = %+v, want only t2's row", all)
 	}
 
-	// Erasure cascade.
 	d, err := store.DeleteByTenant(ctx, "t2")
 	if err != nil || d != 1 {
 		t.Fatalf("DeleteByTenant = %d / %v, want 1", d, err)
@@ -816,7 +739,6 @@ func TestPgScheduleStore_AcceptsEveryDerivedSpecSet(t *testing.T) {
 		stored += len(specs)
 	}
 
-	// Everything derived is readable back, unchanged and complete.
 	back, err := store.ListSchedules(ctx)
 	if err != nil {
 		t.Fatal(err)

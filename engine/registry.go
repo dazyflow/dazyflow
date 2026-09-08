@@ -11,17 +11,9 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Registry holds the set of native modules available to the engine. It is
-// safe for concurrent reads; registration is expected to happen during init.
 type Registry struct {
-	mu    sync.RWMutex
-	nodes map[string]NativeDrop
-	// derived caches DerivedManifests. Applying the universal transforms
-	// costs an allocation per port slice per drop — half a megabyte across
-	// the built-in catalog — and the catalog is asked for on every graph
-	// validation, save and submit, which are request paths. Registration
-	// happens at init, so this is built once and dropped only if a drop
-	// registers later.
+	mu      sync.RWMutex
+	nodes   map[string]NativeDrop
 	derived map[string]core.Manifest
 }
 
@@ -105,8 +97,6 @@ func (r *Registry) Get(id string) (core.Transport, bool) {
 	return &nativeTransport{node: n}, true
 }
 
-// Manifests returns a snapshot of all registered manifests, keyed by module
-// ID — useful for graph validation.
 func (r *Registry) Manifests() map[string]core.Manifest {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -117,13 +107,8 @@ func (r *Registry) Manifests() map[string]core.Manifest {
 	return out
 }
 
-// Default is the package-level registry that init()-based modules register
-// into.
 var Default = NewRegistry()
 
-// Register is a convenience wrapper that registers into Default. Panics on
-// error — registration mistakes should fail loud at startup, not silently
-// produce a half-built engine.
 func Register(n NativeDrop) {
 	if err := Default.Register(n); err != nil {
 		panic(err)

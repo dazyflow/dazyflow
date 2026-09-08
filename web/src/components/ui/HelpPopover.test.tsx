@@ -74,10 +74,6 @@ describe("HelpPopover", () => {
     expect(onKey).not.toHaveBeenCalled();
   });
 
-  // The panel used to be an absolute child of the (i), which meant the
-  // inspector's scroll container clipped it and the editor canvas painted over
-  // it. Portaled to <body> with fixed coords, neither can happen — so where it
-  // renders is behaviour worth holding onto, not an implementation detail.
   it("renders the panel at document.body, outside the trigger's subtree", async () => {
     const user = userEvent.setup();
     const btn = setup();
@@ -88,9 +84,6 @@ describe("HelpPopover", () => {
     expect(note).toHaveStyle({ position: "fixed" });
   });
 
-  // Reading a long description means scrolling it; a pointerdown inside the
-  // portaled panel is not an "outside" click even though it isn't a
-  // descendant of the trigger.
   it("stays open when the pointer goes down inside the panel", async () => {
     const user = userEvent.setup();
     const btn = setup();

@@ -112,10 +112,6 @@ func executeCalDAVList(ctx context.Context, job core.Job, _ chan<- core.Progress
 		return params.Err(job, "caldav_error", err.Error()), nil
 	}
 
-	// A time-range filter on the VEVENT component. The server does the
-	// window, including expanding recurring events into the instances that
-	// fall inside it — which is why this is a REPORT query rather than
-	// fetching everything and filtering here.
 	comp := dav.CompFilter{Name: "VEVENT"}
 	if hasStart {
 		comp.Start = start

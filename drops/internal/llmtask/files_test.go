@@ -13,8 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
-// jobWithFiles builds a job whose Files input is wired the way the engine
-// wires a variadic port: file[0], file[1], … plus somewhere to read from.
 func jobWithFiles(t *testing.T, files map[string][]byte, order ...string) core.Job {
 	t.Helper()
 	root := t.TempDir()
@@ -45,8 +43,6 @@ func TestResolveFiles_ReadsWiredFilesInOrder(t *testing.T) {
 	if files[0].Name != "a.pdf" || files[1].Name != "b.png" {
 		t.Errorf("order/names wrong: %q, %q", files[0].Name, files[1].Name)
 	}
-	// The MIME is SNIFFED from the bytes, not guessed from the extension —
-	// that's what stops a mislabelled file being sent as the wrong block type.
 	if !files[0].IsPDF() {
 		t.Errorf("a.pdf detected as %q", files[0].MIME)
 	}
@@ -77,8 +73,6 @@ func TestResolveFiles_SniffsBytesNotTheExtension(t *testing.T) {
 	}
 }
 
-// A ref that carries its own MIME is trusted: the step that produced it knew
-// what it had, which is more reliable than sniffing.
 func TestResolveFiles_RefMIMEWins(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "f"), []byte("%PDF-1.4\n"), 0o644); err != nil {
@@ -97,8 +91,6 @@ func TestResolveFiles_RefMIMEWins(t *testing.T) {
 	}
 }
 
-// An empty upstream is a mistake worth naming: sending an empty document
-// means the model answers about nothing.
 func TestResolveFiles_EmptyFileIsAnError(t *testing.T) {
 	job := jobWithFiles(t, map[string][]byte{"empty.pdf": {}}, "empty.pdf")
 
@@ -165,7 +157,6 @@ func TestCheckFileSupport(t *testing.T) {
 	if jerr := checkFileSupport(Config{Integration: "Something"}, []llm.File{img}); jerr == nil {
 		t.Error("the default must refuse files")
 	}
-	// And no files is always fine, whatever the provider.
 	if jerr := checkFileSupport(Config{}, nil); jerr != nil {
 		t.Errorf("no files should never error: %+v", jerr)
 	}
@@ -197,8 +188,6 @@ func TestWithFiles_NoFilesLeavesTheRequestAlone(t *testing.T) {
 	}
 }
 
-// Only providers that can carry a file advertise the pin — a step backed by a
-// text-only provider shouldn't show an input that always errors.
 func TestInputsWithFiles(t *testing.T) {
 	text := core.Port{Port: "text", Label: "Text"}
 	if got := inputsWithFiles(Config{}, text); len(got) != 1 {

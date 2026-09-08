@@ -15,17 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/daemon"
 )
 
-// The hosted form is the one page in the product an unauthenticated stranger
-// can GET: /form/<tenant>/<workspace>/<id>, no token, possession of the link is
-// the capability. Its field list comes straight off the webhook_input step's
-// form_fields param, and it is rendered in full on every request.
-//
-// An inbound SUBMISSION is capped (daemon.maxFormFields, 50). The RENDER is
-// not: nothing counts form_fields at the save gate or at render time, so the
-// only ceiling is the 16 MiB graph budget the names are charged against — and
-// each name comes back as a label, an input, an id and a for=, so the page
-// amplifies what the graph stores several times over. One saved flow then
-// answers every anonymous GET with it.
 func TestHostedForm_FieldCountIsCapped(t *testing.T) {
 	const fields = 100_000
 
@@ -84,15 +73,6 @@ func TestHostedForm_FieldCountIsCapped(t *testing.T) {
 	}
 }
 
-// The same amplifier with the other half of the field list unbounded. Capping
-// the COUNT at MaxHostedFormFields left the LENGTH of a name free, and a name
-// has no natural size — so the attack rebuilds itself inside the cap: 50
-// declared fields, each named 300 KB, is a ~14 MiB graph that sits inside
-// MaxGraphBytes and comes back four times over on every anonymous GET (for=,
-// the label text, id= and name=).
-//
-// This is the count/length confusion TestIdentifierBytes_AreCapped is about,
-// on the one endpoint that needs no credential.
 func TestHostedForm_FieldNameLengthIsCapped(t *testing.T) {
 	const (
 		fields  = core.MaxHostedFormFields // sit exactly on the count ceiling

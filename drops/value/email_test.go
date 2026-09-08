@@ -34,17 +34,12 @@ func TestEmail_SplitsAPlainAddress(t *testing.T) {
 	if got := res.Output["domain"].Inline; got != "acme.com" {
 		t.Errorf("domain = %v, want acme.com", got)
 	}
-	// Present but empty, so a template referencing it renders nothing rather
-	// than failing on a missing pin.
 	if got := res.Output["name"].Inline; got != "" {
 		t.Errorf("name = %q, want empty", got)
 	}
 }
 
 func TestEmail_LowercasesTheDomainButNotTheLocalPart(t *testing.T) {
-	// The domain is case-insensitive by spec; a local part is the receiving
-	// server's business, and folding it can turn a working address into a
-	// bounce.
 	res := runEmail(t, map[string]any{"email": "Ada.Lovelace@Acme.COM"}, nil)
 	if res.Status != core.StatusOK {
 		t.Fatalf("status = %v, err = %+v", res.Status, res.Error)
@@ -73,8 +68,6 @@ func TestEmail_TakesTheAddressOutOfDisplayNameForm(t *testing.T) {
 }
 
 func TestEmail_QuotedLocalPartSurvives(t *testing.T) {
-	// The case a regex gets wrong: legal per RFC 5322, and the last '@' is the
-	// separator, not the first.
 	res := runEmail(t, map[string]any{"email": `"ada@home"@acme.com`}, nil)
 	if res.Status != core.StatusOK {
 		t.Fatalf("status = %v, err = %+v", res.Status, res.Error)
@@ -138,8 +131,6 @@ func TestEmail_MissingAddressSaysWhatToDo(t *testing.T) {
 }
 
 func TestEmail_TrimsSurroundingWhitespace(t *testing.T) {
-	// A value pasted from a spreadsheet cell or a CSV column usually arrives
-	// with something clinging to it.
 	res := runEmail(t, map[string]any{"email": "  ada@acme.com\n"}, nil)
 	if res.Status != core.StatusOK {
 		t.Fatalf("status = %v, err = %+v", res.Status, res.Error)

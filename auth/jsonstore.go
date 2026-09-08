@@ -30,11 +30,6 @@ type jsonFileStore[K comparable, V any] struct {
 	normalize func(V) V
 }
 
-// newJSONFileStore constructs the embedded store and loads any existing
-// file. keyOf extracts the map key from a record. normalize canonicalizes
-// a record on load (e.g. lower-casing an email) before it's keyed and
-// stored — pass nil for identity. An empty path means in-memory only
-// (load is a no-op, flush is skipped).
 func newJSONFileStore[K comparable, V any](path string, keyOf func(V) K, normalize func(V) V) (*jsonFileStore[K, V], error) {
 	if normalize == nil {
 		normalize = func(v V) V { return v }

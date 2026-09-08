@@ -36,13 +36,8 @@ import (
 // streaming an unbounded body.
 const maxResponseBytes = 16 << 20 // 16 MiB
 
-// tokenHook holds the daemon's per-account Fortnox OAuth lookup plus the
-// resolve sequence shared with the other OAuth connectors (see
-// drops/internal/oauthtok). display/slug/noun feed its "not connected" errors.
 var tokenHook = oauthtok.New("Fortnox", "fortnox", "Fortnox")
 
-// SetTokenLookup wires (or clears) the daemon's token lookup. Called once at
-// dzd startup (cmd/dzd/main.go, bound to the "fortnox" OAuth provider).
 func SetTokenLookup(fn oauthtok.Lookup) { tokenHook.Set(fn) }
 
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
@@ -75,9 +70,6 @@ func fortnoxDo(ctx context.Context, method, url, token string, body []byte, time
 	return status, raw, err
 }
 
-// call is the shared prologue for the drops: resolve the token, run the
-// request, and hand back status/body. Keeps each Execute free of auth
-// boilerplate.
 func call(ctx context.Context, job core.Job, method, path string, body []byte) (int, []byte, error) {
 	token, err := resolveToken(ctx, job)
 	if err != nil {
@@ -86,10 +78,6 @@ func call(ctx context.Context, job core.Job, method, path string, body []byte) (
 	return fortnoxDo(ctx, method, baseURL(job)+path, token, body, params.TimeoutMS(job, 15000))
 }
 
-// extractFortnoxError pulls the human message out of Fortnox's error envelope
-// — {"ErrorInformation":{"Error":1,"Message":"…","Code":2000434}} — so the
-// real reason ("Kunden kunde inte hittas") reaches the user instead of a bare
-// HTTP status.
 func extractFortnoxError(body []byte) string {
 	var e struct {
 		ErrorInformation struct {
@@ -109,19 +97,10 @@ func extractFortnoxError(body []byte) string {
 	return string(body)
 }
 
-// fortnoxFailure maps a transport error or a non-2xx Fortnox response to an
-// error Result, or returns nil when the call succeeded — the shared epilogue of
-// every drop's call(). Delegates to params.HTTPFailure (the shared
-// transport-error/non-2xx epilogue) with Fortnox's error extractor.
 func fortnoxFailure(job core.Job, status int, body []byte, err error) *core.Result {
 	return params.HTTPFailure(job, "fortnox", "Fortnox", status, body, err, extractFortnoxError)
 }
 
-// ListCustomers enumerates the connected account's customers as picker options
-// — the backend for the "fortnox-customer" param format, so a user picks
-// "Acme AB — 1234" from a dropdown instead of pasting a customer number.
-// Called by the daemon's resource-picker endpoint (not by a drop), with the
-// account already in the job params.
 func ListCustomers(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
 	status, body, err := call(ctx, job, http.MethodGet, "/customers", nil)
 	if err != nil {
@@ -142,8 +121,6 @@ func ListCustomers(ctx context.Context, job core.Job) ([]core.AccountResource, e
 	}
 	out := make([]core.AccountResource, 0, len(parsed.Customers))
 	for _, c := range parsed.Customers {
-		// Label with the name, then the customer number that identifies it;
-		// fall back to the number alone for an unnamed customer.
 		name := c.Name
 		if c.CustomerNumber != "" {
 			if name != "" {

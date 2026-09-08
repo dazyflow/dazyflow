@@ -15,9 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Gated on DAZYFLOW_TEST_DB (a real Postgres), like the jobstore/billing
-// integration tests. Exercises the same lifecycle the in-memory tests cover, so
-// the two impls stay behaviorally identical.
 func TestPgGrantStore(t *testing.T) {
 	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
@@ -41,19 +38,15 @@ func TestPgGrantStore(t *testing.T) {
 	if err := s.Create(ctx, reqGrant("g1", "agent-a", now)); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	// Duplicate create is rejected.
 	if err := s.Create(ctx, reqGrant("g1", "agent-a", now)); !errors.Is(err, errGrantExists) {
 		t.Errorf("duplicate create = %v, want errGrantExists", err)
 	}
-	// Requested → not active.
 	if _, ok, _ := s.ActiveGrant(ctx, "agent-a", "acme", "daily-invoice", now); ok {
 		t.Fatal("requested grant must not be active")
 	}
-	// Can't revoke a requested grant.
 	if err := s.Revoke(ctx, "g1", "admin", now); !errors.Is(err, errGrantNotRevocable) {
 		t.Errorf("revoke requested = %v, want errGrantNotRevocable", err)
 	}
-	// Approve with a 1h box.
 	if err := s.Decide(ctx, "g1", core.GrantApproved, "admin-1", now, now.Add(time.Hour)); err != nil {
 		t.Fatalf("decide approve: %v", err)
 	}
@@ -61,22 +54,18 @@ func TestPgGrantStore(t *testing.T) {
 	if !ok || g.DecidedBy != "admin-1" || !g.ExpiresAt.Equal(now.Add(time.Hour)) {
 		t.Errorf("approved grant wrong: ok=%v %+v", ok, g)
 	}
-	// Past expiry → inactive.
 	if _, ok, _ := s.ActiveGrant(ctx, "agent-a", "acme", "daily-invoice", now.Add(2*time.Hour)); ok {
 		t.Error("expired grant must not be active")
 	}
-	// Double-decide rejected.
 	if err := s.Decide(ctx, "g1", core.GrantDenied, "admin-2", now, now); !errors.Is(err, errGrantNotDecidable) {
 		t.Errorf("double-decide = %v, want errGrantNotDecidable", err)
 	}
-	// Revoke ends it.
 	if err := s.Revoke(ctx, "g1", "admin-1", now.Add(time.Minute)); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 	if _, ok, _ := s.ActiveGrant(ctx, "agent-a", "acme", "daily-invoice", now.Add(2*time.Minute)); ok {
 		t.Error("revoked grant must not be active")
 	}
-	// Missing → ErrNotFound.
 	if _, err := s.Get(ctx, "nope"); !errors.Is(err, core.ErrNotFound) {
 		t.Errorf("get missing = %v, want ErrNotFound", err)
 	}
@@ -106,7 +95,6 @@ func TestPgBundleStore(t *testing.T) {
 	}
 	now := time.Unix(1_700_000_000, 0).UTC()
 
-	// Build a real redacted record so the payload round-trips through BYTEA.
 	graph := core.Graph{
 		ID: "daily-invoice", Tenant: "acme", Workspace: "main",
 		Nodes: []core.Node{{ID: "charge", Module: "stripe_create_customer",

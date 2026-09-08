@@ -1,9 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package mailmsg holds the MIME assembly shared by the email-sending
-// drops (gmail_send_email, email_send): loading attachments from the
-// variadic 'attachments' input and the multipart/mixed encoding helpers.
 package mailmsg
 
 import (
@@ -62,8 +59,6 @@ func WrapWithTemplate(ctx context.Context, job core.Job, body, subject string) (
 	return wrapped, nil
 }
 
-// LoadAttachments collects every ref wired into the variadic 'attachments'
-// input, resolving inline bytes or sandbox files into Attachment records.
 func LoadAttachments(job core.Job) ([]Attachment, *core.JobError) {
 	refs := core.VariadicInputs(job.Input, "attachments")
 	out := make([]Attachment, 0, len(refs))
@@ -81,8 +76,6 @@ func LoadAttachments(job core.Job) ([]Attachment, *core.JobError) {
 	return out, nil
 }
 
-// ReadRefBytes returns the bytes behind an input Ref: inline []byte/string,
-// or a sandbox file when the ref carries a path.
 func ReadRefBytes(job core.Job, ref core.Ref) ([]byte, error) {
 	switch v := ref.Inline.(type) {
 	case []byte:

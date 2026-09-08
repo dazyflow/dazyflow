@@ -23,13 +23,9 @@ import (
 // which key each drop lands under, what is refused, and that the connection is
 // shared rather than duplicated per drop.
 
-// multiDrop is a NodeService that serves whatever manifests it is given, so a
-// test can describe a runner by its declared drops alone.
 type multiDrop struct {
 	nodepb.UnimplementedNodeServiceServer
-	manifests []*nodepb.Manifest
-	// lastDropID records what Execute was told to run, which is the only way a
-	// runner serving several drops can tell them apart.
+	manifests  []*nodepb.Manifest
 	lastDropID string
 }
 
@@ -52,9 +48,6 @@ func drops(ids ...string) []*nodepb.Manifest {
 	return out
 }
 
-// serve stands up a multiDrop on a real loopback port and returns its address.
-// A real listener rather than bufconn because Register dials by endpoint
-// string, which is the path under test.
 func serve(t *testing.T, srvImpl *multiDrop) string {
 	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -88,14 +81,11 @@ func TestRegister_FilesEveryDeclaredDrop(t *testing.T) {
 			t.Errorf("drop %q is not resolvable by the id it declared", id)
 		}
 	}
-	// And nothing invented a namespaced alias alongside it.
 	if _, ok := c.Get("acme", RunnerNamespace+"box/fetch"); ok {
 		t.Error("a namespaced id is still being filed")
 	}
 }
 
-// Twelve drops should cost one TCP connection, not twelve. The catalog owns
-// the connection and the per-drop transports share it.
 func TestRegister_SharesOneConnectionAcrossDrops(t *testing.T) {
 	c := NewRemoteCatalog()
 	defer c.Close()
@@ -118,8 +108,6 @@ func TestRegister_SharesOneConnectionAcrossDrops(t *testing.T) {
 	}
 }
 
-// A runner serving several drops has no way to tell which one a job is for —
-// a job names only the graph and node it came from. The transport stamps it.
 func TestExecute_TellsTheRunnerWhichDrop(t *testing.T) {
 	impl := &multiDrop{manifests: drops("fetch", "render")}
 	c := NewRemoteCatalog()
@@ -184,14 +172,11 @@ func TestRegister_TwoRemotesMayNotDeclareTheSameDropName(t *testing.T) {
 	if err == nil {
 		t.Fatal("a second remote claimed a drop id already served in this tenant")
 	}
-	// The message has to name both remotes and the drop, or the operator has
-	// to guess which two of their remotes are fighting.
 	for _, want := range []string{"box-a", "box-b", "fetch"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("err = %v, want it to name %q", err, want)
 		}
 	}
-	// And the refusal left the first remote exactly as it was.
 	if _, ok := c.Get("acme", "fetch"); !ok {
 		t.Error("the refused registration disturbed the remote that was already there")
 	}
@@ -216,15 +201,12 @@ func TestRegister_ARefusedReRegistrationChangesNothing(t *testing.T) {
 	if err := register(t, c, "acme", "other", &multiDrop{manifests: drops("legacy")}); err != nil {
 		t.Fatalf("other: %v", err)
 	}
-	// "box" comes back claiming a drop "other" already serves.
 	if err := register(t, c, "acme", "box", &multiDrop{manifests: drops("legacy")}); err == nil {
 		t.Fatal("box claimed a drop another remote serves")
 	}
-	// box keeps what it had...
 	if _, ok := c.Get("acme", "fetch"); !ok {
 		t.Error("the refused re-registration retired the drop box was still serving")
 	}
-	// ...and other keeps what it had.
 	if tr, ok := c.Get("acme", "legacy"); !ok {
 		t.Error("legacy vanished")
 	} else if rt, isRemote := tr.(*RemoteTransport); isRemote && rt.Descriptor.ID != "other" {
@@ -235,8 +217,6 @@ func TestRegister_ARefusedReRegistrationChangesNothing(t *testing.T) {
 	}
 }
 
-// Same drop id in two DIFFERENT tenants is not a clash — it is the expected
-// case, and the whole reason the catalog is keyed by tenant.
 func TestRegister_SameDropIDInDifferentTenantsIsFine(t *testing.T) {
 	c := NewRemoteCatalog()
 	defer c.Close()

@@ -4,15 +4,7 @@
 import { isImageIcon } from "../../lib/iconImage";
 import { iconFor, dropColor, isBrandedIcon } from "../../icons";
 
-// PlatformAvatar renders the identity tiles used across the platform-admin
-// moderation pages: a rounded-square OrgAvatar (uploaded logo or a tinted
-// monogram) and a circular UserAvatar (a tinted monogram of the email).
-// Both fall back to a deterministic colour derived from the seed, so the
-// same org/user always gets the same hue — recognisable at a glance in a
-// long list without needing a real photo.
 
-// AVATAR_TINTS is a small palette of accessible, muted-but-distinct hues.
-// White monogram text sits on all of them with comfortable contrast.
 const AVATAR_TINTS = [
   "#3b6fb5", // blue
   "#9b59b6", // purple
@@ -24,19 +16,15 @@ const AVATAR_TINTS = [
   "#b4763c", // bronze
 ];
 
-// tintFor hashes a seed to a stable palette index (djb2). Deterministic so
-// an org/user keeps the same colour across reloads and pages.
 function tintFor(seed: string): string {
   let h = 5381;
   for (let i = 0; i < seed.length; i++) h = (h * 33 + seed.charCodeAt(i)) >>> 0;
   return AVATAR_TINTS[h % AVATAR_TINTS.length];
 }
 
-// monogram takes the first 1–2 meaningful characters of a label, upper-cased.
 function monogram(label: string): string {
   const trimmed = label.trim();
   if (!trimmed) return "?";
-  // For an email, use the local part's first letter only.
   const base = trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
   return base.slice(0, 1).toUpperCase();
 }
@@ -76,9 +64,6 @@ export function OrgAvatar({
   );
 }
 
-// DropGlyph renders a drop's icon exactly as the build palette does: the
-// vendor brand logo when present, a branded lucide glyph, or a lucide
-// glyph on a gradient tile tinted by the drop's category/colour.
 export function DropGlyph({
   icon,
   category,

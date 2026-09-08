@@ -8,10 +8,6 @@ import (
 	"testing"
 )
 
-// HTTP-handler error branches of the run-lifecycle endpoints
-// (cancel/resume/retry). The service-level happy paths live in
-// cancel_test.go / resume_test.go / retry_test.go.
-
 func TestCancelRunMe_NotFound(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)

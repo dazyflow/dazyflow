@@ -12,15 +12,6 @@ import { ICON } from "../../icons";
 import { useEscapeToClose } from "../ui/useEscapeToClose";
 import { DOCS } from "../../lib/externalLinks";
 
-// HelpModal is what the header's "?" button and the "?" key open.
-//
-// It used to be shortcuts-only, which quietly failed the person who needed it
-// most: "?" is the universally understood ASK-FOR-HELP affordance, so someone
-// stuck on "what is a trigger" pressed it and got a table of accelerators.
-// Meanwhile the documentation site had no link from anywhere in the app. So
-// the modal now leads with the two things a stuck user actually wants — the
-// docs and a human — and keeps the shortcuts below, where they cost a power
-// user one extra glance and nothing else.
 
 const isMac =
   typeof navigator !== "undefined" && /mac/i.test(navigator.platform);

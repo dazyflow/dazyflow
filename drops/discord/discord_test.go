@@ -101,12 +101,10 @@ func TestSend_ThreadID(t *testing.T) {
 
 func TestSend_Validation(t *testing.T) {
 	f := newFakeDiscord(t)
-	// Missing content.
 	res := f.run(t, map[string]any{}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
 		t.Errorf("missing content res = %+v", res)
 	}
-	// Over the 2000-char limit.
 	res = f.run(t, map[string]any{"content": strings.Repeat("x", maxContentLen+1)}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
 		t.Errorf("too-long res = %+v", res)
@@ -138,9 +136,6 @@ func TestSend_APIErrorSurfacesMessage(t *testing.T) {
 	}
 }
 
-// TestBuildEndpoint covers the query-merge and validation branches: a plain
-// webhook URL gains wait=true; a thread_id is added; an existing query is
-// preserved; and a non-http(s) URL is rejected.
 func TestBuildEndpoint(t *testing.T) {
 	t.Run("adds wait", func(t *testing.T) {
 		got, err := buildEndpoint("https://discord.test/api/webhooks/1/tok", "")
@@ -181,8 +176,6 @@ func TestBuildEndpoint(t *testing.T) {
 	})
 }
 
-// TestSend_BadWebhookURL covers executeSendMessage's bad_param branch when
-// buildEndpoint rejects the webhook URL (non-http scheme).
 func TestSend_BadWebhookURL(t *testing.T) {
 	res, err := executeSendMessage(context.Background(), core.Job{
 		ID: "j1",
@@ -199,8 +192,6 @@ func TestSend_BadWebhookURL(t *testing.T) {
 	}
 }
 
-// TestSend_ContentInputNonText covers the bad_input branch for a non-text
-// Content wire.
 func TestSend_ContentInputNonText(t *testing.T) {
 	res, err := executeSendMessage(context.Background(), core.Job{
 		ID:     "j1",
@@ -215,9 +206,6 @@ func TestSend_ContentInputNonText(t *testing.T) {
 	}
 }
 
-// TestSend_HTTPError covers the discord_http_error branch: the webhook host is
-// unroutable so net.Do returns a transport error (private egress is on per
-// TestMain, so this is a real dial failure, not an SSRF block).
 func TestSend_HTTPError(t *testing.T) {
 	res, err := executeSendMessage(context.Background(), core.Job{
 		ID: "j1",
@@ -236,7 +224,6 @@ func TestSend_HTTPError(t *testing.T) {
 	}
 }
 
-// TestSend_AvatarURLIncluded covers the avatar_url payload branch.
 func TestSend_AvatarURLIncluded(t *testing.T) {
 	f := newFakeDiscord(t)
 	f.run(t, map[string]any{"content": "hi", "avatar_url": "https://img.test/a.png"}, nil)
@@ -245,8 +232,6 @@ func TestSend_AvatarURLIncluded(t *testing.T) {
 	}
 }
 
-// TestSend_ZeroTimeoutDefaults covers discordDo's timeout_ms<=0 → default
-// branch while still completing a successful send.
 func TestSend_ZeroTimeoutDefaults(t *testing.T) {
 	f := newFakeDiscord(t)
 	res := f.run(t, map[string]any{"content": "hi", "timeout_ms": 0}, nil)
@@ -255,8 +240,6 @@ func TestSend_ZeroTimeoutDefaults(t *testing.T) {
 	}
 }
 
-// TestExtractDiscordError covers the error-body extraction wrapper, including a
-// body without a recognizable message.
 func TestExtractDiscordError(t *testing.T) {
 	if got := extractDiscordError([]byte(`{"code":50027,"message":"Invalid Webhook Token"}`)); !strings.Contains(got, "Invalid Webhook Token") {
 		t.Errorf("got %q", got)

@@ -19,9 +19,6 @@ import { NAV } from "./content";
 import { SITE, SOURCE, LICENSE, CONTACT, INVITE } from "./links";
 import { COPYRIGHT_YEAR } from "../lib/externalLinks";
 
-// The guide, split at the point where it stops being a walkthrough and starts
-// being reference. slice() rather than two hand-written lists so a page added
-// to the sidebar lands in a column instead of going missing.
 const GUIDE = NAV[0].items.slice(0, 5);
 const REFERENCE = [...NAV[0].items.slice(5), ...NAV[1].items.slice(0, 1)];
 

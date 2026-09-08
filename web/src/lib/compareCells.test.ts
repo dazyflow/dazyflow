@@ -12,8 +12,6 @@ const order = (vals: unknown[]) => vals.slice().sort((a, b) => compareCells(a, b
 
 describe("compareCells", () => {
   it("orders string-encoded numbers numerically", () => {
-    // The bug a plain string compare gives you, and the reason this exists: a
-    // collection's store is all TEXT.
     expect(order(["10", "2", "1", "100"])).toEqual(["1", "2", "10", "100"]);
   });
 

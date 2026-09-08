@@ -13,9 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/daemon"
 )
 
-// TestCancelGraphRun_FlipsRecords covers the happy path: a running
-// graph with a mix of queued + awaiting node-records is cancelled in
-// one call and every non-terminal record ends up marked Cancelled.
 func TestCancelGraphRun_FlipsRecords(t *testing.T) {
 	t.Parallel()
 	h := newVisibilityHarness(t)
@@ -34,8 +31,6 @@ func TestCancelGraphRun_FlipsRecords(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 
-	// Seed a fake live run: a graph-record + three node-records in
-	// queued / running / awaiting respectively.
 	payload, _ := json.Marshal(g)
 	if err := h.svc.Jobs.Enqueue(ctx, core.JobRecord{
 		ID:           "run-1",
@@ -94,9 +89,8 @@ func TestCancelGraphRun_FlipsRecords(t *testing.T) {
 	}
 }
 
-// TestCancelGraphRun_AlreadyTerminal proves that a finished run can't
-// be cancelled — the user gets ErrConflict rather than a silent
-// re-cancel that would re-publish a Terminal event.
+// Proves that a finished run can't be cancelled — the user gets ErrConflict
+// rather than a silent re-cancel that would re-publish a Terminal event.
 func TestCancelGraphRun_AlreadyTerminal(t *testing.T) {
 	t.Parallel()
 	h := newVisibilityHarness(t)
@@ -127,15 +121,11 @@ func TestCancelGraphRun_AlreadyTerminal(t *testing.T) {
 	}
 }
 
-// TestCancelGraphRun_RequiresGraphRun confirms the principal needs
-// graph:run on the underlying graph — viewers can't cancel.
 func TestCancelGraphRun_RequiresGraphRun(t *testing.T) {
 	t.Parallel()
 	h := newVisibilityHarness(t)
 	ctx := context.Background()
 
-	// Bob is a viewer in 't' but only at the workspace level — give
-	// him no run permission for this test.
 	viewer := core.Principal{
 		Subject: "viewer", Tenant: "t", Workspace: "ws",
 		Roles: []core.Role{{Name: "viewer", Permissions: []core.Permission{}}},

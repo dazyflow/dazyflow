@@ -16,8 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fakeElks stands in for the 46elks API, capturing the last request so tests
-// can assert the form shape and Basic-auth header.
 type fakeElks struct {
 	server   *httptest.Server
 	status   int
@@ -66,15 +64,12 @@ func TestSendSMS_OK(t *testing.T) {
 	if got := res.Output["status"].Inline; got != "created" {
 		t.Errorf("status = %v, want created", got)
 	}
-	// The 46elks form uses lowercase from/to/message.
 	if f.lastForm.Get("from") != "Acme" || f.lastForm.Get("to") != "+46700000000" || f.lastForm.Get("message") != "hej" {
 		t.Errorf("form = %v", f.lastForm)
 	}
-	// dry_run defaults off — no dryrun field.
 	if f.lastForm.Has("dryrun") {
 		t.Errorf("unexpected dryrun in form: %v", f.lastForm)
 	}
-	// HTTP Basic with the API username:password.
 	wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("u1:p1"))
 	if f.lastAuth != wantAuth {
 		t.Errorf("Authorization = %q, want %q", f.lastAuth, wantAuth)

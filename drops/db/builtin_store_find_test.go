@@ -10,8 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestCellFloat covers every numeric type a SQLite scan or TEXT value can
-// carry, plus the non-numeric fallthrough.
 func TestCellFloat(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -37,8 +35,6 @@ func TestCellFloat(t *testing.T) {
 	}
 }
 
-// TestCellString covers nil → "", []byte → string, and the fmt.Sprint
-// fallback for arbitrary values.
 func TestCellString(t *testing.T) {
 	if got := cellString(nil); got != "" {
 		t.Errorf("nil = %q, want empty", got)
@@ -54,8 +50,8 @@ func TestCellString(t *testing.T) {
 	}
 }
 
-// TestCellLess covers numeric ordering when both parse, lexical ordering
-// otherwise, and the NULL-sorts-first behaviour.
+// Covers numeric ordering when both parse, lexical ordering otherwise, and the
+// NULL-sorts-first behaviour.
 func TestCellLess(t *testing.T) {
 	// Numeric: "9" before "10" (lexical would invert).
 	if !cellLess("9", "10") {
@@ -64,21 +60,17 @@ func TestCellLess(t *testing.T) {
 	if cellLess("10", "9") {
 		t.Error(`"10" should not sort before "9"`)
 	}
-	// Mixed (one non-numeric) falls back to lexical.
 	if !cellLess("apple", "banana") {
 		t.Error("lexical: apple < banana")
 	}
-	// nil sorts as empty string, before any non-empty value.
 	if !cellLess(nil, "x") {
 		t.Error("nil should sort before a non-empty string")
 	}
-	// Numeric vs non-numeric: lexical compare of string forms.
 	if cellLess("zebra", "5") {
 		t.Error(`"zebra" should not sort before "5" lexically`)
 	}
 }
 
-// TestResolveTable covers the param/input precedence and both error paths.
 func TestResolveTable(t *testing.T) {
 	t.Run("param used when no input", func(t *testing.T) {
 		got, err := resolveTable(core.Job{Params: map[string]any{"table": "leads"}})
@@ -120,11 +112,8 @@ func TestResolveTable(t *testing.T) {
 	})
 }
 
-// TestMissingCollectionMsg_AndExistingCollections covers the listing helpers
-// through a real built-in store: one with collections and one empty.
 func TestMissingCollectionMsg_AndExistingCollections(t *testing.T) {
 	root := t.TempDir()
-	// Create two collections in the built-in store.
 	for _, tbl := range []string{"invoices", "leads"} {
 		if _, err := executeBuiltinStoreAppend(t.Context(), core.Job{
 			WorkspaceRoot: root,
@@ -155,10 +144,8 @@ func TestMissingCollectionMsg_AndExistingCollections(t *testing.T) {
 	}
 }
 
-// TestMissingCollectionMsg_EmptyStore covers the no-collections branch.
 func TestMissingCollectionMsg_EmptyStore(t *testing.T) {
 	root := t.TempDir()
-	// Create the store file with no user tables by appending an empty body.
 	if _, err := executeBuiltinStoreAppend(t.Context(), core.Job{
 		WorkspaceRoot: root,
 		Params:        map[string]any{"table": "leads"},
@@ -177,8 +164,6 @@ func TestMissingCollectionMsg_EmptyStore(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_FindNegativeLimit covers the negative-limit guard in the
-// find reader.
 func TestBuiltinStore_FindNegativeLimit(t *testing.T) {
 	res, err := executeBuiltinStoreFind(t.Context(), core.Job{
 		WorkspaceRoot: t.TempDir(),
@@ -192,7 +177,6 @@ func TestBuiltinStore_FindNegativeLimit(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_FindBadFilter covers the CEL compile-error path.
 func TestBuiltinStore_FindBadFilter(t *testing.T) {
 	res, err := executeBuiltinStoreFind(t.Context(), core.Job{
 		WorkspaceRoot: t.TempDir(),
@@ -206,8 +190,6 @@ func TestBuiltinStore_FindBadFilter(t *testing.T) {
 	}
 }
 
-// TestBuiltinStore_FindBadTableParam covers the resolveTable error surfaced as
-// a bad_param result.
 func TestBuiltinStore_FindBadTableParam(t *testing.T) {
 	res, err := executeBuiltinStoreFind(t.Context(), core.Job{
 		WorkspaceRoot: t.TempDir(),

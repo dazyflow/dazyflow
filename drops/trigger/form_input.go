@@ -32,9 +32,6 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
-			// No inputs — the submission is the data source. No headers port
-			// either: a person filling in a form has no HTTP metadata worth
-			// wiring, unlike a webhook's sender.
 			Outputs: []core.Port{
 				{Port: "body", Label: "Body"},
 			},

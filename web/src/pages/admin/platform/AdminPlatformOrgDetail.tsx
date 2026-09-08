@@ -19,11 +19,6 @@ import { ErrorNotice } from "../../../components/ui/ErrorNotice";
 import { ICON } from "../../../icons";
 import { Loading } from "../../../components/ui/Loading";
 
-// AdminPlatformOrgDetail is one org's platform-admin moderation page:
-// suspend (halt all its flows + lock out members), ban (suspend +
-// blocklist every member's re-signup), and delete (irreversible erase of
-// the org and all its data, with operator password step-up). Member
-// accounts themselves survive a delete — they may belong to other orgs.
 export function AdminPlatformOrgDetail() {
   const { t } = useTranslation();
   const { token, hasPerm } = useAuth();
@@ -257,8 +252,6 @@ function OrgReasonModal({
   );
 }
 
-// DeleteOrgModal requires the operator to re-enter their own password
-// (the deleteOrg endpoint's step-up auth) and echo the tenant id.
 function DeleteOrgModal({
   tenant,
   onConfirm,

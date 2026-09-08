@@ -11,12 +11,6 @@ import (
 	"testing"
 )
 
-// The bug these tests lock down: the app CSP shipped with `img-src 'self'
-// data: blob:` and `connect-src 'self'` while the editor's map picker fetched
-// tiles and geocoded cross-origin. Both requests were blocked — a blank map
-// and a failing place search — with nothing in the server logs, because a CSP
-// violation happens entirely in the browser.
-
 func TestMapAPI_DefaultsToPublicOSM(t *testing.T) {
 	t.Parallel()
 	m := (&HTTPGateway{}).mapAPI()

@@ -12,12 +12,8 @@ import (
 	_ "github.com/dazyflow/dazyflow/drops" // register the real catalog
 )
 
-// core.EventTriggerModules is a hand-maintained list, so it rots the moment
-// someone adds a new *_on_* trigger drop. Fail here and point at the fix.
 func TestEventTriggerModulesMatchCatalog(t *testing.T) {
 	t.Parallel()
-	// The trigger modules that fire some other way and are handled explicitly
-	// by classifyTriggers.
 	notEvents := map[string]bool{
 		"cron_trigger":              true, // scheduler
 		"poll_trigger":              true, // scheduler
@@ -39,7 +35,6 @@ func TestEventTriggerModulesMatchCatalog(t *testing.T) {
 			"Add them there (or to notEvents here if they fire via the scheduler), "+
 			"or a flow triggered only by one will report as manual-only.", missing)
 	}
-	// And the reverse: a listed module that no longer exists is dead weight.
 	for id := range core.EventTriggerModules {
 		if _, ok := engine.Default.Manifests()[id]; !ok {
 			t.Errorf("core.EventTriggerModules lists %q, which is not in the catalog", id)

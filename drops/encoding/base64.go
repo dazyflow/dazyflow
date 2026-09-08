@@ -1,11 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package encoding hosts small, pure encode/decode/digest drops — the
-// format-and-checksum toolkit a flow reaches for between an API and a
-// downstream step: Base64 (encode a payload for a JSON field or a Basic-auth
-// header, decode an incoming blob) and Hash (a checksum or a signed HMAC for
-// webhook verification). No auth, no network — they transform one value.
 package encoding
 
 import (
@@ -88,9 +83,6 @@ func executeBase64(_ context.Context, job core.Job, _ chan<- core.Progress) (cor
 	}
 }
 
-// stringInput reads a text input, accepting a string or raw []byte (a file
-// read may hand over bytes). Anything else is rejected so the drop errors
-// cleanly instead of stringifying a map/number.
 func stringInput(ref core.Ref) (string, bool) {
 	switch v := ref.Inline.(type) {
 	case string:
@@ -102,7 +94,6 @@ func stringInput(ref core.Ref) (string, bool) {
 	}
 }
 
-// textResult is the shared OK epilogue: one text/plain value on 'out'.
 func textResult(job core.Job, s string) core.Result {
 	return core.Result{
 		JobID:  job.ID,

@@ -18,7 +18,6 @@ func TestHistogram_BucketsCumulativeAndSum(t *testing.T) {
 	h.render(&b, "test_seconds", `k="v"`)
 	out := b.String()
 
-	// Cumulative bucket counts: <=0.1 →1, <=1 →2, <=10 →3, +Inf →4.
 	for _, want := range []string{
 		`test_seconds_bucket{k="v",le="0.1"} 1`,
 		`test_seconds_bucket{k="v",le="1"} 2`,

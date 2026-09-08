@@ -104,9 +104,6 @@ func (s *PgUsageStore) AddSkippedRun(ctx context.Context, tenant string, now tim
 	return s.add(ctx, tenant, 0, 0, 1, now)
 }
 
-// DeleteByTenant removes every monthly counter row for a tenant, returning the
-// count. The erasure cascade's hook (GDPR Art. 17) — nothing else ever deletes
-// from this table, so without it an erased org's usage history is permanent.
 func (s *PgUsageStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	tag, err := s.pool.Exec(ctx, `DELETE FROM usage_counters WHERE tenant=$1`, tenant)
 	if err != nil {

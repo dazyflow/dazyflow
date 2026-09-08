@@ -10,13 +10,10 @@ describe("columnsOfRows", () => {
   });
 
   it("counts a column that only appears in a later row", () => {
-    // The reason this isn't Object.keys(rows[0]): ragged CSVs, APIs that omit
-    // nulls, merged rowsets. The first row is a sample, not a schema.
     expect(columnsOfRows([{ a: 1 }, { a: 1, note: "late" }])).toEqual(["a", "note"]);
   });
 
   it("answers nothing for a value that isn't a list of rows", () => {
-    // These all arrive off a run record, where the port could hold anything.
     for (const v of [undefined, null, "text", 42, { a: 1 }, [], [1, 2], [null]]) {
       expect(columnsOfRows(v)).toEqual([]);
     }

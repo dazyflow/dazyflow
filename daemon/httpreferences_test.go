@@ -15,8 +15,6 @@ import (
 	_ "github.com/dazyflow/dazyflow/drops" // register real manifests (sheets_*, webhook_input)
 )
 
-// refTokens flattens a references response into a kind→set-of-tokens map
-// for easy assertions.
 func refTokens(t *testing.T, body []byte) map[string]map[string]bool {
 	t.Helper()
 	var resp struct {
@@ -64,7 +62,6 @@ func TestReferences_UpstreamAncestorsTriggerAndSecrets(t *testing.T) {
 		t.Fatalf("save graph: %v", err)
 	}
 
-	// One org secret, one flow secret — both should surface.
 	h.do(t, "PUT", "/api/v1/secrets/ORG_KEY", json.RawMessage(putBody("v1")))
 	h.do(t, "PUT", "/api/v1/secrets/FLOW_KEY?scope=flow&flow=leads", json.RawMessage(putBody("v2")))
 
@@ -161,10 +158,6 @@ func TestReferences_NoNodeListsAllNodes(t *testing.T) {
 	}
 }
 
-// The picker names each upstream step, and a step the author renamed has to be
-// named the way they named it: a reference reads as "<step> · <port>", and
-// naming it differently here to the way it is named on the canvas is how you
-// end up hunting for a step that is right in front of you.
 func TestReferences_UpstreamCarriesTheAuthorsStepName(t *testing.T) {
 	t.Parallel()
 	h := newSecretsHarness(t)
@@ -206,7 +199,6 @@ func TestReferences_UpstreamCarriesTheAuthorsStepName(t *testing.T) {
 	if got := seen["read"]; got != "Yesterday's orders" {
 		t.Errorf("renamed step is called %q in the picker, want its own name", got)
 	}
-	// A step nobody renamed still goes by its drop's name.
 	if got := seen["plain"]; got == "" || got == "plain" {
 		t.Errorf("unnamed step is called %q, want the drop's label", got)
 	}

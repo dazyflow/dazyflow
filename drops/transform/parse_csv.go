@@ -61,9 +61,6 @@ func init() {
 	})
 }
 
-// executeParseCSV reads the 'in' text as CSV and emits rows. The input is
-// the raw string an HTTP/file drop produced; a non-string inline value is
-// rejected (use parse_json for already-structured data).
 func executeParseCSV(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	ref, ok := job.Input["in"]
 	if !ok {
@@ -129,7 +126,6 @@ func executeParseCSV(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 				row[h] = "" // pad short rows so every row has every column
 			}
 		}
-		// Cells beyond the header width (ragged long rows) keep a synthetic name.
 		for i := len(headers); i < len(rec); i++ {
 			row[fmt.Sprintf("col%d", i+1)] = rec[i]
 		}
@@ -145,8 +141,6 @@ func executeParseCSV(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	}, nil
 }
 
-// csvDelimiter reads the 'delimiter' param into a single rune, accepting the
-// friendly aliases "tab"/"\t" for a tab. Defaults to comma.
 func csvDelimiter(p map[string]any) (rune, error) {
 	d, _ := p["delimiter"].(string)
 	switch d {
@@ -162,9 +156,6 @@ func csvDelimiter(p map[string]any) (rune, error) {
 	return rs[0], nil
 }
 
-// paramBoolDefault reads a bool param, treating a missing/non-bool value as
-// def. Kept local so the CSV drops don't reach across into the params pkg for
-// a one-liner (transform already avoids that dependency).
 func paramBoolDefault(p map[string]any, key string, def bool) bool {
 	if v, ok := p[key].(bool); ok {
 		return v

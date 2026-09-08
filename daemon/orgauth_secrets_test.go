@@ -25,9 +25,9 @@ func newOrgAuthSecretsFixture(t *testing.T) (*memOrgAuth, auth.OrgAuthStore) {
 	return inner, NewEncryptedOrgAuthStore(inner, es)
 }
 
-// TestEncryptedOrgAuthStore_SecretNeverHitsTheRow is the point of the whole
-// decorator: whatever an admin saves, the org_auth row must not carry the
-// client secret, because a database dump is the exposure being closed.
+// The point of the whole decorator: whatever an admin saves, the org_auth row
+// must not carry the client secret, because a database dump is the exposure
+// being closed.
 func TestEncryptedOrgAuthStore_SecretNeverHitsTheRow(t *testing.T) {
 	t.Parallel()
 	inner, store := newOrgAuthSecretsFixture(t)
@@ -44,7 +44,6 @@ func TestEncryptedOrgAuthStore_SecretNeverHitsTheRow(t *testing.T) {
 	if got := inner.m["acme"].GoogleClientSecret; got != "" {
 		t.Fatalf("plaintext secret reached the row: %q", got)
 	}
-	// The rest of the config still round-trips through the row.
 	if inner.m["acme"].GoogleClientID != "cid.apps.googleusercontent.com" {
 		t.Errorf("client_id = %q", inner.m["acme"].GoogleClientID)
 	}
@@ -52,8 +51,6 @@ func TestEncryptedOrgAuthStore_SecretNeverHitsTheRow(t *testing.T) {
 		t.Errorf("domain = %q", inner.m["acme"].GoogleWorkspaceDomain)
 	}
 
-	// And the caller-visible view is unchanged: GetOrgAuth still yields the
-	// plaintext, so every existing call site keeps working.
 	got, err := store.GetOrgAuth(ctx, "acme")
 	if err != nil {
 		t.Fatalf("GetOrgAuth: %v", err)
@@ -66,15 +63,11 @@ func TestEncryptedOrgAuthStore_SecretNeverHitsTheRow(t *testing.T) {
 	}
 }
 
-// TestEncryptedOrgAuthStore_MigratesLegacyPlaintext covers the upgrade path:
-// a row written before encryption existed is moved across on first read and
-// the column is blanked, with no operator step.
 func TestEncryptedOrgAuthStore_MigratesLegacyPlaintext(t *testing.T) {
 	t.Parallel()
 	inner, store := newOrgAuthSecretsFixture(t)
 	ctx := context.Background()
 
-	// Seed the way the old code did — straight into the row.
 	const legacy = "legacy-plaintext-secret"
 	_ = inner.PutOrgAuth(ctx, auth.OrgAuthConfig{
 		Tenant: "old", GoogleClientID: "cid", GoogleClientSecret: legacy,
@@ -90,16 +83,15 @@ func TestEncryptedOrgAuthStore_MigratesLegacyPlaintext(t *testing.T) {
 	if row := inner.m["old"].GoogleClientSecret; row != "" {
 		t.Fatalf("row still holds plaintext after migration: %q", row)
 	}
-	// Second read comes from the encrypted store and still works.
 	again, err := store.GetOrgAuth(ctx, "old")
 	if err != nil || again.GoogleClientSecret != legacy {
 		t.Fatalf("post-migration read = %q err=%v", again.GoogleClientSecret, err)
 	}
 }
 
-// TestEncryptedOrgAuthStore_ClearAndDelete pins that clearing the secret and
-// deleting the org both remove the ciphertext — a leftover would outlive the
-// org it belonged to, which matters on the GDPR erasure path.
+// Pins that clearing the secret and deleting the org both remove the
+// ciphertext — a leftover would outlive the org it belonged to, which matters
+// on the GDPR erasure path.
 func TestEncryptedOrgAuthStore_ClearAndDelete(t *testing.T) {
 	t.Parallel()
 	inner, store := newOrgAuthSecretsFixture(t)
@@ -142,9 +134,9 @@ func TestEncryptedOrgAuthStore_ClearAndDelete(t *testing.T) {
 	}
 }
 
-// TestEncryptedOrgAuthStore_NoSecretStoreIsPassThrough documents the
-// deliberate escape hatch: an install with no master key has nowhere to put
-// the ciphertext, so wrapping is a no-op rather than a hard failure.
+// Documents the deliberate escape hatch: an install with no master key has
+// nowhere to put the ciphertext, so wrapping is a no-op rather than a hard
+// failure.
 func TestEncryptedOrgAuthStore_NoSecretStoreIsPassThrough(t *testing.T) {
 	t.Parallel()
 	inner := newMemOrgAuth()

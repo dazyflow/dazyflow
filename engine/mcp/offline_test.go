@@ -37,9 +37,6 @@ func offlineCatalog(t *testing.T, reason string) *mcp.Catalog {
 	return cat
 }
 
-// TestRegisterOffline_KeepsThePortsThatHoldAFlowTogether is the whole point:
-// the manifest a disconnected server leaves behind is COMPLETE, because it is
-// what tells the editor which ports a flow's edges are attached to.
 func TestRegisterOffline_KeepsThePortsThatHoldAFlowTogether(t *testing.T) {
 	cat := offlineCatalog(t, "refused the credential (HTTP 401)")
 
@@ -50,8 +47,6 @@ func TestRegisterOffline_KeepsThePortsThatHoldAFlowTogether(t *testing.T) {
 	if !man.Unavailable {
 		t.Error("the step is not marked unavailable")
 	}
-	// The arguments are still ports. Without these the card falls back to a
-	// bare in/out pair and every edge into `repo` or `title` has no handle.
 	ports := map[string]bool{}
 	for _, p := range man.Inputs {
 		ports[p.Port] = true
@@ -64,8 +59,6 @@ func TestRegisterOffline_KeepsThePortsThatHoldAFlowTogether(t *testing.T) {
 	if len(man.Outputs) == 0 {
 		t.Error("the step lost its output port")
 	}
-	// And its identity: the caption and icon survive too, or the card looks
-	// broken rather than merely disconnected.
 	if man.Label != "Vendor Tools — Create an issue" {
 		t.Errorf("Label = %q", man.Label)
 	}
@@ -77,9 +70,6 @@ func TestRegisterOffline_KeepsThePortsThatHoldAFlowTogether(t *testing.T) {
 	}
 }
 
-// TestRegisterOffline_RefusesToRun: describable is not runnable. The failure
-// has to name the connection, before any complaint about arguments, so the
-// author is sent to the admin page rather than into the step's params.
 func TestRegisterOffline_RefusesToRun(t *testing.T) {
 	cat := offlineCatalog(t, "dial tcp: connection refused")
 
@@ -87,8 +77,6 @@ func TestRegisterOffline_RefusesToRun(t *testing.T) {
 	if !ok {
 		t.Fatal("no transport for a described step")
 	}
-	// Deliberately missing both required arguments: the connection is still
-	// what gets reported.
 	res, err := tr.Execute(context.Background(), core.Job{ID: "j1"}, nil)
 	if err != nil {
 		t.Fatalf("Execute returned a transport error: %v", err)
@@ -99,7 +87,6 @@ func TestRegisterOffline_RefusesToRun(t *testing.T) {
 	if res.Error.Code != "mcp_disconnected" {
 		t.Errorf("error code = %q, want mcp_disconnected", res.Error.Code)
 	}
-	// Named by its label, and carrying the endpoint's own words.
 	if !strings.Contains(res.Error.Message, "Vendor Tools") {
 		t.Errorf("message does not name the server: %q", res.Error.Message)
 	}
@@ -124,8 +111,8 @@ func TestRegisterOffline_NothingCachedIsRefused(t *testing.T) {
 	}
 }
 
-// TestRegisterOffline_ReportedAsOfflineNotConnected keeps the admin page
-// honest: a described server is registered, and must not read as working.
+// Keeps the admin page honest: a described server is registered, and must not
+// read as working.
 func TestRegisterOffline_ReportedAsOfflineNotConnected(t *testing.T) {
 	cat := offlineCatalog(t, "HTTP 500")
 	var found bool

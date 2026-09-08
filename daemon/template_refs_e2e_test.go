@@ -12,18 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/daemon"
 )
 
-// The JOIN, through a real worker and a real engine.
-//
-// The unit tests around templateRefs/addTemplateResults all pass with the
-// worker's call to them deleted, because they call those functions directly.
-// That is the same gap that produced the bug in the first place: every layer
-// covered, and nothing covering the wire between them. This one submits a
-// graph and reads what the node actually produced.
-//
-//	text(a) ─▶ delay(b) ─▶ render_template(c)
-//
-// c's only predecessor is b, and its template names a — two hops up. Before
-// the fix that failed the node outright with "no result recorded for node a".
 func TestPerNode_UpstreamResolvesBeyondDirectPredecessors(t *testing.T) {
 	t.Parallel()
 	h := newWorkerHarness(t, 1)

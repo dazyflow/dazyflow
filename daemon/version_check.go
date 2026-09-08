@@ -18,13 +18,10 @@ import (
 	"github.com/dazyflow/dazyflow/core/buildinfo"
 )
 
-// versionAPI serves the update-check endpoints. Its fields are the whole of what
-// those handlers touch.
 type versionAPI struct {
 	UpdateURL string
 }
 
-// versionAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) versionAPI() *versionAPI {
 	return &versionAPI{UpdateURL: h.UpdateURL}
 }
@@ -45,9 +42,6 @@ func (h *HTTPGateway) versionAPI() *versionAPI {
 // cached process-wide so a refreshing admin can't amplify requests against
 // the canonical instance.
 
-// DefaultUpdateURL is the canonical deployment's public service descriptor.
-// Its build.version is, by definition, the latest released version. The dzd
-// binary uses this as the default for DAZYFLOW_UPDATE_URL.
 const DefaultUpdateURL = "https://dazyflow.r8.rs/api/v1"
 
 const releaseCacheTTL = 15 * time.Minute
@@ -76,10 +70,6 @@ var releaseCache struct {
 // the field, so "1.2.0-rc1 < 1.2.0" subtleties don't matter here.
 type semver struct{ major, minor, patch int }
 
-// parseSemver accepts "v1.2.3", "1.2.3", "1.2", or "1", tolerating a leading
-// "v" and a trailing "-suffix"/"+build" (e.g. the "-dirty" git-describe adds
-// to a working-tree build). Returns false for anything that isn't a numeric
-// dotted version, so "dev"/"unknown" placeholders are simply not comparable.
 func parseSemver(s string) (semver, bool) {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(s, "v")
@@ -116,16 +106,12 @@ func (a semver) less(b semver) bool {
 	return a.patch < b.patch
 }
 
-// upstreamDescriptor is the slice of GET /api/v1 we read: the build block's
-// version. Everything else in the descriptor is ignored.
 type upstreamDescriptor struct {
 	Build struct {
 		Version string `json:"version"`
 	} `json:"build"`
 }
 
-// fetchLatestVersion reads the canonical deployment's reported build version
-// from its public service descriptor.
 func fetchLatestVersion(ctx context.Context, url string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -150,15 +136,11 @@ func fetchLatestVersion(ctx context.Context, url string) (string, error) {
 	}
 	v := strings.TrimSpace(d.Build.Version)
 	if v == "" || v == "dev" || v == "unknown" {
-		// The canonical instance is itself unstamped — nothing to compare to.
 		return "", fmt.Errorf("upstream did not report a release version")
 	}
 	return v, nil
 }
 
-// latestRelease returns the newest released version (as reported by the
-// canonical deployment), fetching it at most once per releaseCacheTTL.
-// Returns the parsed semver plus the raw string for display.
 func latestRelease(ctx context.Context, url string) (semver, string, error) {
 	if url == "" {
 		return semver{}, "", fmt.Errorf("update check disabled")
@@ -186,10 +168,6 @@ func latestRelease(ctx context.Context, url string) (semver, string, error) {
 	return v, raw, nil
 }
 
-// versionStatus is the GET /api/v1/admin/version response. It pairs the
-// running build with the newest upstream release so the UI can decide
-// between "you're up to date" and "update available", and always carries
-// the CLI command an operator runs to upgrade.
 type versionStatus struct {
 	Current         string `json:"current"`
 	Commit          string `json:"commit"`
@@ -197,13 +175,9 @@ type versionStatus struct {
 	Latest          string `json:"latest,omitempty"`
 	UpdateAvailable bool   `json:"update_available"`
 	UpgradeCommand  string `json:"upgrade_command"`
-	// CheckError is a short, non-fatal note set when the upstream lookup
-	// failed (or was disabled). The rest of the payload (current build) is
-	// still valid.
-	CheckError string `json:"check_error,omitempty"`
+	CheckError      string `json:"check_error,omitempty"`
 }
 
-// adminVersion handles GET /api/v1/admin/version.
 func (h *versionAPI) adminVersion(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if err := requirePlatformAdmin(p); err != nil {
 		adminError(rw, err)
@@ -222,16 +196,11 @@ func (h *versionAPI) adminVersion(rw http.ResponseWriter, r *http.Request, p cor
 	}
 	latestVer, latestRaw, err := latestRelease(r.Context(), h.UpdateURL)
 	if err != nil {
-		// Best-effort: the operator still sees their running version, just
-		// without an upstream comparison.
 		out.CheckError = "could not reach the release server"
 		writeJSON(rw, http.StatusOK, out)
 		return
 	}
 	out.Latest = latestRaw
-	// Only claim an update when we can parse the running version. A "dev"
-	// (unstamped) build isn't comparable, so we surface the latest version
-	// without nagging — the UI explains the dev-build case.
 	if cur, ok := parseSemver(buildinfo.Version); ok {
 		out.UpdateAvailable = cur.less(latestVer)
 	}

@@ -38,7 +38,6 @@ func TestAutoFSWorkspaces_EvictsBeyondCap(t *testing.T) {
 	if got := a.openCount(); got != 3 {
 		t.Fatalf("open set = %d, want 3", got)
 	}
-	// The three most recent survive; the rest were evicted.
 	for _, k := range []string{"t07/main", "t08/main", "t09/main"} {
 		if !a.isOpen(k) {
 			t.Errorf("%s should still be open", k)
@@ -59,7 +58,6 @@ func TestAutoFSWorkspaces_ReuseKeepsEntryHot(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Touch the oldest so it is no longer the eviction candidate.
 	if _, err := a.Open("t0", "main"); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +93,6 @@ func TestAutoFSWorkspaces_MemoryModeNeverEvicts(t *testing.T) {
 	if got := a.openCount(); got != 8 {
 		t.Fatalf("memory mode open set = %d, want all 8 retained", got)
 	}
-	// And every tenant's graph is still readable.
 	for i := range 8 {
 		st, err := a.Open(fmt.Sprintf("t%d", i), "main")
 		if err != nil {
@@ -145,7 +142,6 @@ func TestAutoFSWorkspaces_EvictedAndReopenedStoresShareTheirLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Push it out, then take a second store for the same directory.
 	if _, err := a.Open("other", "main"); err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +185,6 @@ func TestAutoFSWorkspaces_EvictedAndReopenedStoresShareTheirLock(t *testing.T) {
 		t.Fatalf("concurrent save across two stores for one directory: %v", err)
 	}
 
-	// Every graph both stores wrote is readable through either.
 	ids, err := second.ListGraphs()
 	if err != nil {
 		t.Fatalf("ListGraphs: %v", err)
@@ -199,8 +194,6 @@ func TestAutoFSWorkspaces_EvictedAndReopenedStoresShareTheirLock(t *testing.T) {
 	}
 }
 
-// All is a range-over-func now, so a caller that breaks out mid-sweep stops the
-// iterator rather than running it to completion — and leaves it usable.
 func TestAutoFSWorkspaces_AllStopsOnBreak(t *testing.T) {
 	t.Parallel()
 	a := NewAutoFSWorkspaces(t.TempDir())
@@ -224,7 +217,6 @@ func TestAutoFSWorkspaces_AllStopsOnBreak(t *testing.T) {
 		t.Fatalf("break stopped after %d yields, want 3", seen)
 	}
 
-	// A second, complete pass still sees everything.
 	total := 0
 	for range a.All() {
 		total++
@@ -234,8 +226,6 @@ func TestAutoFSWorkspaces_AllStopsOnBreak(t *testing.T) {
 	}
 }
 
-// Memory mode takes a different branch through All (a snapshot of the open
-// set), so it needs the same guarantee.
 func TestAutoFSWorkspaces_AllStopsOnBreakInMemoryMode(t *testing.T) {
 	t.Parallel()
 	a := NewAutoFSWorkspaces("")
@@ -263,8 +253,6 @@ func TestAutoFSWorkspaces_AllStopsOnBreakInMemoryMode(t *testing.T) {
 	}
 }
 
-// The snapshot in memory mode exists so a consumer can Open during iteration
-// without deadlocking on the registry lock.
 func TestAutoFSWorkspaces_AllToleratesOpenDuringIteration(t *testing.T) {
 	t.Parallel()
 	a := NewAutoFSWorkspaces("")

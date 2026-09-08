@@ -41,8 +41,6 @@ const (
 	defaultDeadline = 60 * time.Second
 )
 
-// Config is one tenant's SFTP server, parsed and defaulted from the
-// ConnectionFields bundle on the integration page.
 type Config struct {
 	Host     string
 	Port     int
@@ -54,23 +52,14 @@ type Config struct {
 	PrivateKey string
 	Passphrase string
 
-	// KnownHosts is one or more OpenSSH known_hosts lines. Fingerprint is the
-	// simpler alternative — an "SHA256:…" string as printed by ssh-keyscan or
-	// published in a provider's docs. Either satisfies host-key verification;
-	// see hostKeyCallback for why one of them is mandatory.
 	KnownHosts  string
 	Fingerprint string
 
-	// Directory is the remote folder the steps work in by default.
 	Directory string
 }
 
-// Addr is the host:port to dial.
 func (c Config) Addr() string { return net.JoinHostPort(c.Host, strconv.Itoa(c.Port)) }
 
-// ParsePort turns the configured port into a number, defaulting to 22.
-// ConnectionFields store every value as a string, so this is the one place
-// that decides what "" and a non-number mean.
 func ParsePort(s string) (int, error) {
 	if s = strings.TrimSpace(s); s != "" {
 		n, err := strconv.Atoi(s)
@@ -88,10 +77,8 @@ func ParsePort(s string) (int, error) {
 // much later, mid-run.
 func ConfigFromConn(conn map[string]string) (Config, error) {
 	cfg := Config{
-		Host:     strings.TrimSpace(conn["host"]),
-		Username: strings.TrimSpace(conn["username"]),
-		// Not trimmed: leading/trailing spaces can be part of a password, and
-		// a private key is whitespace-significant.
+		Host:        strings.TrimSpace(conn["host"]),
+		Username:    strings.TrimSpace(conn["username"]),
 		Password:    conn["password"],
 		PrivateKey:  conn["private_key"],
 		Passphrase:  conn["passphrase"],
@@ -207,10 +194,6 @@ func hostKeyCallback(cfg Config) (cb ssh.HostKeyCallback, algos []string, err er
 	return learnHostKey(cfg), nil, nil
 }
 
-// knownHostsDB parses known_hosts lines into a verification database.
-// skeema/knownhosts reads files, so the lines go through a temp file which is
-// removed as soon as the database is built (it reads eagerly into memory).
-// Same dance drops/git does, for the same reason.
 func knownHostsDB(lines string) (*knownhosts.HostKeyDB, error) {
 	f, err := os.CreateTemp("", "dazyflow-sftp-known-hosts-*")
 	if err != nil {
@@ -227,9 +210,6 @@ func knownHostsDB(lines string) (*knownhosts.HostKeyDB, error) {
 	return knownhosts.NewDB(f.Name())
 }
 
-// fingerprintCallback accepts exactly the one key whose SHA256 fingerprint
-// was configured. Comparison tolerates a missing "SHA256:" prefix, since
-// that is how half the tools print it.
 func fingerprintCallback(want string) ssh.HostKeyCallback {
 	norm := func(s string) string {
 		return strings.TrimPrefix(strings.TrimSpace(s), "SHA256:")
@@ -337,8 +317,6 @@ func Dial(ctx context.Context, cfg Config) (*Client, error) {
 	return &Client{Client: sftpClient, ssh: sshClient, conn: conn, stopWatch: stopWatch}, nil
 }
 
-// sshError translates the handshake's failures into the words of the form
-// someone filled in. A bare "ssh: handshake failed" reads like a client bug.
 func sshError(cfg Config, err error) error {
 	msg := err.Error()
 	switch {

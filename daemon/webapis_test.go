@@ -41,8 +41,6 @@ func sampleInput() WebAPIInput {
 	}
 }
 
-// A save is the whole of the feedback: no handshake, so a saved catalog is a
-// registered catalog and its steps are resolvable immediately.
 func TestWebAPIs_SaveRegisters(t *testing.T) {
 	m := webAPIService(t)
 	saved, err := m.Save(context.Background(), "acme", "alice", sampleInput())
@@ -63,9 +61,6 @@ func TestWebAPIs_SaveRegisters(t *testing.T) {
 	}
 }
 
-// The engine's descriptor validation is the daemon's validation — called, not
-// reimplemented — so a placeholder with no argument is refused at save time
-// with the engine's own message.
 func TestWebAPIs_SaveUsesTheEngineValidation(t *testing.T) {
 	m := webAPIService(t)
 	in := sampleInput()
@@ -120,11 +115,6 @@ func TestWebAPIs_SavePolicyChecks(t *testing.T) {
 	}
 }
 
-// Cleartext http is refused because the credential rides in a header — with the
-// operator's private-egress opt-in as the one exception, which is how someone
-// reaches a service on their own laptop. daemon/main_test.go turns that opt-in
-// ON for the whole package, so this test has to restore the production default
-// to see the refusal at all.
 func TestWebAPIs_SaveRefusesCleartextHTTP(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(false)
 	defer hfnet.SetAllowPrivateEgress(true)
@@ -137,7 +127,6 @@ func TestWebAPIs_SaveRefusesCleartextHTTP(t *testing.T) {
 		t.Fatalf("err = %v, want a refusal of cleartext http", err)
 	}
 
-	// With the opt-in back on it is accepted again, which is the developer case.
 	hfnet.SetAllowPrivateEgress(true)
 	if _, err := m.Save(context.Background(), "acme", "alice", in); err != nil {
 		t.Fatalf("private egress is on, so http should be accepted: %v", err)
@@ -211,8 +200,6 @@ func TestWebAPIs_DerivedNamesAreUnique(t *testing.T) {
 	}
 }
 
-// Saving under an existing name replaces it — and an operation the new
-// descriptor drops stops resolving, which is what a re-import means.
 func TestWebAPIs_SaveReplacesAndDropsOperations(t *testing.T) {
 	m := webAPIService(t)
 	in := sampleInput()
@@ -248,8 +235,6 @@ func TestWebAPIs_SaveReplacesAndDropsOperations(t *testing.T) {
 	}
 }
 
-// Disabling keeps the row and takes the steps out of the palette — the
-// reversible half of deleting.
 func TestWebAPIs_DisableAndReEnable(t *testing.T) {
 	m := webAPIService(t)
 	saved, err := m.Save(context.Background(), "acme", "alice", sampleInput())
@@ -294,8 +279,6 @@ func TestWebAPIs_Delete(t *testing.T) {
 	}
 }
 
-// Reconcile is what puts an org's steps back after a restart: the rows are in
-// the store, the engine catalog is empty, and one pass rebuilds it.
 func TestWebAPIs_ReconcileRebuildsAfterRestart(t *testing.T) {
 	store := NewMemWebAPIStore()
 	first := &WebAPIs{Store: store, Catalog: webapi.NewCatalog()}
@@ -303,7 +286,6 @@ func TestWebAPIs_ReconcileRebuildsAfterRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A fresh process: same store, new (empty) catalog.
 	second := &WebAPIs{Store: store, Catalog: webapi.NewCatalog()}
 	if _, ok := second.Catalog.Get("acme", "api:order-service:get_order"); ok {
 		t.Fatal("the new catalog is not empty; the test proves nothing")
@@ -316,8 +298,6 @@ func TestWebAPIs_ReconcileRebuildsAfterRestart(t *testing.T) {
 	}
 }
 
-// An edit on another replica carries a newer UpdatedAt, which is how this one
-// notices. A row that has not changed is skipped.
 func TestWebAPIs_ReconcilePicksUpAnotherReplicasEdit(t *testing.T) {
 	store := NewMemWebAPIStore()
 	clock := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
@@ -329,7 +309,6 @@ func TestWebAPIs_ReconcilePicksUpAnotherReplicasEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Another replica edits: same store, later UpdatedAt, an extra operation.
 	there := &WebAPIs{Store: store, Catalog: webapi.NewCatalog(), Now: func() time.Time { return clock.Add(time.Minute) }}
 	edit := sampleInput()
 	edit.Name = "order-service"
@@ -346,8 +325,6 @@ func TestWebAPIs_ReconcilePicksUpAnotherReplicasEdit(t *testing.T) {
 	}
 }
 
-// A disabled or deleted row is taken down on the next pass, wherever the change
-// was made.
 func TestWebAPIs_ReconcileTakesDownWhatTheStoreNoLongerWants(t *testing.T) {
 	store := NewMemWebAPIStore()
 	m := &WebAPIs{Store: store, Catalog: webapi.NewCatalog()}
@@ -365,13 +342,8 @@ func TestWebAPIs_ReconcileTakesDownWhatTheStoreNoLongerWants(t *testing.T) {
 	}
 }
 
-// The one case LastError exists for: a stored descriptor the current code
-// refuses. The org's steps are missing, and the row says why instead of the
-// palette going quiet.
 func TestWebAPIs_ReconcileRecordsAnUnregisterableRow(t *testing.T) {
 	store := NewMemWebAPIStore()
-	// Written straight to the store, bypassing Save — which is exactly what a
-	// release that tightened validation leaves behind.
 	if err := store.Put(context.Background(), WebAPI{
 		Tenant: "acme", Name: "broken", BaseURL: "https://api.example.com",
 		Operations: []webapi.Operation{{ID: "op", Method: "GET", Path: "/x/{missing}"}},
@@ -417,8 +389,6 @@ func TestWebAPIs_ReconcileContinuesPastABadRow(t *testing.T) {
 	}
 }
 
-// Operations survive the store's encoding. The memory store round-trips through
-// the same JSON a deployment writes, so a tag mismatch fails here too.
 func TestWebAPIs_OperationsSurviveStorage(t *testing.T) {
 	m := webAPIService(t)
 	in := sampleInput()
@@ -516,7 +486,6 @@ func TestWebAPIs_RefusesADuplicateIntegrationWithinTheOrg(t *testing.T) {
 		t.Fatalf("editing a catalog collided with itself: %v", err)
 	}
 
-	// Another org is unaffected: connections are per-tenant.
 	other := sampleInput()
 	other.Integration = "Internal services"
 	if _, err := m.Save(context.Background(), "globex", "bob", other); err != nil {
@@ -524,8 +493,6 @@ func TestWebAPIs_RefusesADuplicateIntegrationWithinTheOrg(t *testing.T) {
 	}
 }
 
-// The app name is what the connection page is keyed by, so a value with nothing
-// slug-able in it is refused rather than stored as a row nothing can connect.
 func TestWebAPIs_RefusesAnUnusableIntegrationName(t *testing.T) {
 	m := webAPIService(t)
 	// It ends up inside a secret name (conn.<slug>.<field>), whose validator
@@ -541,9 +508,6 @@ func TestWebAPIs_RefusesAnUnusableIntegrationName(t *testing.T) {
 	}
 }
 
-// A duplicate LABEL is legal — that is what the numbered ids are for — so the
-// derived app name falls back to the catalog's own id rather than refusing the
-// second catalog outright.
 func TestWebAPIs_DerivedIntegrationFallsBackToTheID(t *testing.T) {
 	m := webAPIService(t)
 	first, err := m.Save(context.Background(), "acme", "alice", sampleInput())
@@ -562,8 +526,6 @@ func TestWebAPIs_DerivedIntegrationFallsBackToTheID(t *testing.T) {
 	}
 }
 
-// The stored row carries the app name explicitly, so what a connection attaches
-// to is readable rather than re-derived downstream.
 func TestWebAPIs_StoresTheIntegrationExplicitly(t *testing.T) {
 	m := webAPIService(t)
 	saved, err := m.Save(context.Background(), "acme", "alice", sampleInput())
@@ -599,8 +561,6 @@ func TestWebAPIs_EditKeepsTheIntegration(t *testing.T) {
 		t.Fatalf("integration = %q", saved.Integration)
 	}
 
-	// The shape an API caller changing only the address sends: no label, no app
-	// name.
 	edit := WebAPIInput{
 		Name:       saved.Name,
 		BaseURL:    "https://staging.example.com",
@@ -631,8 +591,6 @@ func TestWebAPIs_EditKeepsTheIntegration(t *testing.T) {
 		t.Errorf("label = %q, want the new one", after.Label)
 	}
 
-	// Asking for a different app name explicitly is honoured — it is a move the
-	// caller stated.
 	moved := sampleInput()
 	moved.Name = saved.Name
 	moved.Integration = "Orders API"
@@ -645,12 +603,6 @@ func TestWebAPIs_EditKeepsTheIntegration(t *testing.T) {
 	}
 }
 
-// TestWebAPIs_LabelReachesTheManifest guards the wiring the caption depends on.
-//
-// The label lives on the row and the manifest is built from the Descriptor, so
-// a Descriptor() that forgets to pass it leaves every step captioned by its
-// slug — with nothing failing anywhere. Exactly the kind of gap a test has to
-// hold, because the feature still "works".
 func TestWebAPIs_LabelReachesTheManifest(t *testing.T) {
 	m := webAPIService(t)
 	in := sampleInput()
@@ -674,8 +626,6 @@ func TestWebAPIs_LabelReachesTheManifest(t *testing.T) {
 	}
 }
 
-// TestWebAPIs_OperationNameCaptionsTheStep is the other half: a per-operation
-// name, typed in the admin form, reaching the palette.
 func TestWebAPIs_OperationNameCaptionsTheStep(t *testing.T) {
 	m := webAPIService(t)
 	in := sampleInput()
@@ -694,8 +644,6 @@ func TestWebAPIs_OperationNameCaptionsTheStep(t *testing.T) {
 	}
 }
 
-// TestWebAPIs_OperationNameIsBounded: a name captions a palette row, and the
-// summary is the field for a sentence.
 func TestWebAPIs_OperationNameIsBounded(t *testing.T) {
 	m := webAPIService(t)
 	in := sampleInput()
@@ -706,8 +654,6 @@ func TestWebAPIs_OperationNameIsBounded(t *testing.T) {
 	}
 }
 
-// The catalog's brand mark is guessed once, from the base URL, and reaches
-// every step this catalog contributes — the point of the guess.
 func TestWebAPIs_SaveResolvesTheLogo(t *testing.T) {
 	m := webAPIService(t)
 	var asked []string
@@ -763,7 +709,6 @@ func TestWebAPIs_SaveKeepsTheLogoWhenTheAddressHasNotMoved(t *testing.T) {
 		t.Errorf("logo = %q, want the stored one kept", again.Logo)
 	}
 
-	// A new address is a new service, and gets a fresh guess.
 	moved := relabel
 	moved.BaseURL = "https://api.example.org/v2"
 	after, err := m.Save(context.Background(), "acme", "alice", moved)
@@ -778,8 +723,6 @@ func TestWebAPIs_SaveKeepsTheLogoWhenTheAddressHasNotMoved(t *testing.T) {
 	}
 }
 
-// A catalog with nothing to keep tries again, which is what makes "press Save"
-// the retry for a service whose site was down the first time.
 func TestWebAPIs_SaveRetriesAnUnresolvedLogo(t *testing.T) {
 	m := webAPIService(t)
 	calls := 0
@@ -804,7 +747,6 @@ func TestWebAPIs_SaveRetriesAnUnresolvedLogo(t *testing.T) {
 	}
 }
 
-// A guess that fails is not a save that fails: the whole feature is decoration.
 func TestWebAPIs_SaveSurvivesAResolverThatFindsNothing(t *testing.T) {
 	m := webAPIService(t)
 	m.ResolveLogo = func(context.Context, string) string { return "" }
@@ -817,8 +759,6 @@ func TestWebAPIs_SaveSurvivesAResolverThatFindsNothing(t *testing.T) {
 	}
 }
 
-// pngLogo is a real 1x1 PNG as a data: URI — the shape an admin's upload
-// arrives in, and valid enough to survive the normaliser.
 func pngLogo() string {
 	png := []byte{
 		0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a,
@@ -854,7 +794,6 @@ func TestWebAPIs_CustomLogoOutranksTheGuess(t *testing.T) {
 	if saved.Logo != chosen {
 		t.Errorf("logo = %.40q…, want the chosen image", saved.Logo)
 	}
-	// An image and no mode is a statement: use this.
 	if saved.LogoMode != WebAPILogoCustom {
 		t.Errorf("mode = %q, want %q", saved.LogoMode, WebAPILogoCustom)
 	}
@@ -910,8 +849,6 @@ func TestWebAPIs_LogoModeNoneIsNotRetried(t *testing.T) {
 	}
 }
 
-// Going back to automatic drops the upload and looks again — the point of
-// choosing automatic is to see what the service publishes.
 func TestWebAPIs_BackToAutoDropsTheUpload(t *testing.T) {
 	m := webAPIService(t)
 	m.ResolveLogo = func(context.Context, string) string { return "data:image/png;base64,GUESS" }
@@ -958,8 +895,6 @@ func TestWebAPIs_EditKeepsACustomLogo(t *testing.T) {
 	}
 }
 
-// An admin is a likelier source of a bad image than a favicon host is, and the
-// refusal has to say what was wrong rather than fall back to the globe.
 func TestWebAPIs_RefusesABadCustomLogo(t *testing.T) {
 	cases := map[string]string{
 		"a link rather than the image": "https://example.com/logo.png",
@@ -1007,8 +942,6 @@ func TestWebAPIs_RefusesAnUnknownLogoMode(t *testing.T) {
 	}
 }
 
-// The org's blurb reaches the manifest, where the Apps page and the catalog API
-// both read it off the integration group.
 func TestWebAPIs_DescriptionReachesTheManifest(t *testing.T) {
 	m := webAPIService(t)
 	m.ResolveLogo = func(context.Context, string) string { return "" }

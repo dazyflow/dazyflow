@@ -52,9 +52,6 @@ func init() {
 				},
 				"required":["shipment"]
 			}`),
-			// A booking is a money-moving write with no upstream idempotency key,
-			// so a retried POST books a second consignment. Retries off; the engine
-			// de-dupes a same-job re-execution (expired-lease reclaim / crash).
 			Idempotent:   false,
 			RetryPolicy:  core.RetryNever,
 			DedupeWrites: true,
@@ -81,9 +78,6 @@ func executeCreateShipment(ctx context.Context, job core.Job, _ chan<- core.Prog
 		return *r, nil
 	}
 
-	// The ExtAPI returns the created shipment(s); a create can yield an array
-	// (batch) or a single object. Normalise to the first shipment object for the
-	// extracted pins; the full decoded response always rides the 'shipment' pin.
 	created, raw := firstShipment(respBody)
 	return core.Result{
 		JobID:  job.ID,

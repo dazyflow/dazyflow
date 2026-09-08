@@ -108,8 +108,6 @@ describe("read receipt on the agent's reply", () => {
   });
 
   it("shows nothing at all when no receipt was ever recorded", async () => {
-    // A ticket predating read tracking, or filed through the API. "Not read
-    // yet" there is a confident guess; no badge means no information.
     getSupportTicket.mockResolvedValue(
       view([msg("m1", "user", T0), msg("m2", "support", "2026-07-01T11:00:00Z")]),
     );
@@ -120,8 +118,6 @@ describe("read receipt on the agent's reply", () => {
   });
 
   it("marks only the NEWEST support message, not every one", async () => {
-    // The receipt is per thread. Every older reply has been read too, but
-    // tagging them all turns the signal into wallpaper.
     getSupportTicket.mockResolvedValue(
       view(
         [
@@ -137,7 +133,6 @@ describe("read receipt on the agent's reply", () => {
   });
 
   it("puts no receipt on the customer's own message", async () => {
-    // "Read by customer" under something the customer wrote is nonsense.
     getSupportTicket.mockResolvedValue(
       view([msg("m1", "user", "2026-07-01T11:00:00Z")], "2026-07-01T12:00:00Z"),
     );

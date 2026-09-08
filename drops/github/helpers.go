@@ -38,9 +38,6 @@ import (
 // OOM the daemon by streaming an unbounded body.
 const maxResponseBytes = 64 << 20 // 64 MiB
 
-// tokenHook holds the daemon's per-account GitHub OAuth lookup ("github" in
-// dzd's provider registry) plus the resolve sequence shared with the other
-// OAuth connectors (drops/internal/oauthtok).
 var tokenHook = oauthtok.New("GitHub", "github", "GitHub")
 
 func SetTokenLookup(fn oauthtok.Lookup) { tokenHook.Set(fn) }
@@ -59,11 +56,6 @@ func SetHTTPBase(base string) { httpBase.Set(base) }
 
 func currentHTTPBase() string { return httpBase.Get() }
 
-// gitHubErrorEnvelope mirrors GitHub's REST v3 error shape. Most
-// errors include a message + documentation_url; some include a
-// list of detailed errors. The extractor returns the most useful
-// human-readable string so users see something like "Validation
-// Failed: title is too long" instead of a raw JSON blob.
 type gitHubErrorEnvelope struct {
 	Message          string `json:"message"`
 	DocumentationURL string `json:"documentation_url"`
@@ -87,14 +79,10 @@ func githubDoIdem(ctx context.Context, method, url, token string, body []byte, t
 	return status, raw, err
 }
 
-// githubDoH is githubDo plus the response headers, for callers that need
-// them (e.g. list pagination follows the Link header's rel="next").
 func githubDoH(ctx context.Context, method, url, token string, body []byte, timeoutMS int) (int, []byte, http.Header, error) {
 	return githubDoIdemH(ctx, method, url, token, body, timeoutMS, "")
 }
 
-// githubDoIdemH is the shared implementation: githubDoH plus an optional
-// Idempotency-Key header (sent only when idemKey is non-empty).
 func githubDoIdemH(ctx context.Context, method, url, token string, body []byte, timeoutMS int, idemKey string) (int, []byte, http.Header, error) {
 	if timeoutMS <= 0 {
 		timeoutMS = 15000
@@ -119,11 +107,6 @@ func githubDoIdemH(ctx context.Context, method, url, token string, body []byte, 
 	return hfnet.Do(ctx, method, url, headers, body, timeoutMS, maxResponseBytes)
 }
 
-// parseNextLink extracts the rel="next" URL from a GitHub Link header,
-// returning "" when there is no next page. GitHub's pagination header looks
-// like:
-//
-//	<https://api.github.com/...&page=2>; rel="next", <...&page=9>; rel="last"
 func parseNextLink(header string) string {
 	if header == "" {
 		return ""
@@ -151,11 +134,6 @@ func parseNextLink(header string) string {
 	return ""
 }
 
-// resolveBody figures out the issue/comment body: params.body, overridden
-// by the 'body' input port. A string passes through; a structured value
-// is rendered as a fenced JSON block (so a rows-list wired in still lands
-// as readable Markdown rather than failing). Matches the former scripted
-// behaviour.
 func resolveBody(job core.Job) string {
 	body := params.StringDefault(job.Params, "body", "")
 	if in, ok := job.Input["body"]; ok && in.Inline != nil {
@@ -177,9 +155,6 @@ func extractGitHubError(body []byte) string {
 	var env gitHubErrorEnvelope
 	if err := json.Unmarshal(body, &env); err == nil && env.Message != "" {
 		if len(env.Errors) > 0 {
-			// Surface the first detailed validation error inline —
-			// GitHub puts the actually-helpful detail there ("field
-			// 'title' is missing" rather than just "Validation Failed").
 			e := env.Errors[0]
 			if e.Message != "" {
 				return fmt.Sprintf("%s: %s", env.Message, e.Message)

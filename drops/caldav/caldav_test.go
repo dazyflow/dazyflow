@@ -18,19 +18,11 @@ import (
 	"github.com/dazyflow/dazyflow/internal/caldavutil"
 )
 
-// The suites here point the drops at a 127.0.0.1 HTTP server, so they need
-// the same private-egress opt-in production gets via
-// DAZYFLOW_ALLOW_PRIVATE_EGRESS.
-//
-// Nothing in this package may call t.Parallel(): the egress opt-in is
-// process-global and AssertSSRFBlocked turns it off for the duration of its
-// call.
 func TestMain(m *testing.M) { dropstest.EgressTestMain(m) }
 
-// TestCalDAV_SSRFGuardBlocksPrivate is the assertion every connector owes.
-// It bites here because the URL is tenant-supplied and every request carries
-// a basic-auth header — an unguarded client would hand the calendar
-// credentials to whatever the address resolved to.
+// The assertion every connector owes. It bites here because the URL is tenant-
+// supplied and every request carries a basic-auth header — an unguarded client
+// would hand the calendar credentials to whatever the address resolved to.
 func TestCalDAV_SSRFGuardBlocksPrivate(t *testing.T) {
 	dropstest.AssertSSRFBlocked(t, func() error {
 		return caldavutil.Verify(context.Background(), caldavutil.Config{
@@ -115,9 +107,6 @@ func TestCalDAVList_EmitsGoogleShapedRecords(t *testing.T) {
 	}
 }
 
-// The relative window is what makes a nightly reminder flow work: "tomorrow"
-// to "tomorrow+1d" has to mean exactly the next calendar day in the given
-// timezone, on whatever night the schedule fires.
 func TestCalDAVList_RelativeWindowPicksTomorrow(t *testing.T) {
 	b := newBackend("Work")
 	url := startCalDAV(t, b)
@@ -174,9 +163,6 @@ func TestCalDAVList_RejectsABackwardsWindow(t *testing.T) {
 	}
 }
 
-// Providers hand out URLs that may be a discovery root, a principal or one
-// calendar. Pointing the connection at the root has to work, which means the
-// full discovery walk — principal, then home set, then the collections.
 func TestCalDAV_DiscoversCalendarsFromTheRootURL(t *testing.T) {
 	b := newBackend("Work")
 	url := startCalDAV(t, b)
@@ -188,9 +174,6 @@ func TestCalDAV_DiscoversCalendarsFromTheRootURL(t *testing.T) {
 	}
 }
 
-// An account with several calendars and no choice made is ambiguous, and the
-// error has to NAME them — the fix is to copy one into the field, and a bare
-// "ambiguous" leaves someone guessing at spellings.
 func TestCalDAV_AmbiguousCalendarNamesTheOptions(t *testing.T) {
 	b := newBackend("Work", "Personal")
 	url := startCalDAV(t, b)
@@ -219,8 +202,6 @@ func TestCalDAV_ChoosesTheNamedCalendar(t *testing.T) {
 	if got := summaries(rows); len(got) != 1 || got[0] != "Personal thing" {
 		t.Fatalf("read %v, want only the named calendar's events", got)
 	}
-	// And the name is matched case-insensitively, because nobody types
-	// display names exactly.
 	rows = events(t, run(t, executeCalDAVList, job(t, url, map[string]any{"calendar": "work"})))
 	if got := summaries(rows); len(got) != 1 || got[0] != "Work thing" {
 		t.Fatalf("case-insensitive match read %v", got)
@@ -288,16 +269,12 @@ func TestCalDAVCreate_PutsTheEventOnTheCalendar(t *testing.T) {
 	if rec["description"] != "About the project" {
 		t.Errorf("description = %q", rec["description"])
 	}
-	// Attendees come back as bare addresses, not mailto: URIs — a flow wiring
-	// these into an email's To field wants addresses.
 	guests, _ := rec["attendees"].([]string)
 	if len(guests) != 2 || guests[0] != "ada@example.test" || guests[1] != "bob@example.test" {
 		t.Errorf("attendees = %v, want bare addresses", guests)
 	}
 }
 
-// An end left blank means an hour, which is what every calendar UI does for a
-// new event — a zero-length event renders as a point most clients hide.
 func TestCalDAVCreate_DefaultsToAnHour(t *testing.T) {
 	b := newBackend("Work")
 	url := startCalDAV(t, b)
@@ -342,8 +319,6 @@ func TestCalDAVCreate_RequiresSummaryAndStart(t *testing.T) {
 	}
 }
 
-// Relative times work on a write as well as a read, so a slot can be computed
-// rather than typed — "tomorrow+9h" is how a booking flow actually reads.
 func TestCalDAVCreate_AcceptsRelativeTimes(t *testing.T) {
 	b := newBackend("Work")
 	url := startCalDAV(t, b)
@@ -365,8 +340,6 @@ func TestCalDAVCreate_AcceptsRelativeTimes(t *testing.T) {
 	}
 }
 
-// The wired inputs are the point of creating an event from a flow: the
-// when/who/what came from a form or a row, not from the step.
 func TestCalDAVCreate_InputsOverrideParams(t *testing.T) {
 	b := newBackend("Work")
 	url := startCalDAV(t, b)
@@ -429,7 +402,6 @@ func TestCalDAV_AcceptsWhatTheDateStepEmits(t *testing.T) {
 		t.Fatal("the date drop isn't registered")
 	}
 
-	// Render one fixed instant through each of the Date step's formats.
 	render := func(t *testing.T, format, custom string) string {
 		t.Helper()
 		p := map[string]any{
@@ -456,7 +428,6 @@ func TestCalDAV_AcceptsWhatTheDateStepEmits(t *testing.T) {
 	b := newBackend("Work")
 	url := startCalDAV(t, b)
 
-	// The machine formats: a flow can wire these straight in.
 	t.Run("machine formats flow in", func(t *testing.T) {
 		for _, format := range []string{"iso", "date", "datetime", "unix"} {
 			t.Run(format, func(t *testing.T) {
@@ -508,8 +479,6 @@ func TestCalDAV_AcceptsWhatTheDateStepEmits(t *testing.T) {
 		}
 	})
 
-	// The listing's window takes the same values, so a Date step can drive
-	// either end of it.
 	t.Run("the listing window takes them too", func(t *testing.T) {
 		stamp := render(t, "iso", "")
 		j := job(t, url, map[string]any{"time_max": "+30d", "tz": "UTC"})
@@ -525,9 +494,6 @@ func TestCalDAV_AcceptsWhatTheDateStepEmits(t *testing.T) {
 	})
 }
 
-// All-day events are a date-VALUED DTSTART, not a timed event with a
-// convenient duration. This is the parity gap with gcal_create_event, which
-// gets there by passing a plain date through untouched.
 func TestCalDAVCreate_AllDayEvent(t *testing.T) {
 	b := newBackend("Work")
 	url := startCalDAV(t, b)
@@ -536,8 +502,6 @@ func TestCalDAVCreate_AllDayEvent(t *testing.T) {
 		"summary": "Midsummer", "start": "2026-06-19", "all_day": true,
 	}))
 
-	// Read the raw iCalendar back: the assertion that matters is the VALUE
-	// type on DTSTART, which is the whole difference from a midnight event.
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if len(b.objects) != 1 {
@@ -555,9 +519,6 @@ func TestCalDAVCreate_AllDayEvent(t *testing.T) {
 		if strings.Contains(prop.Value, "T") {
 			t.Errorf("DTSTART = %q, want a bare date", prop.Value)
 		}
-		// DTEND is the day AFTER the last day, which is how a span is
-		// represented; a one-day event ending on its own start day renders as
-		// zero-length in most clients.
 		endProp := ev.Props.Get(ical.PropDateTimeEnd)
 		if endProp == nil || endProp.Value != "20260620" {
 			t.Errorf("DTEND = %#v, want 20260620 (the day after)", endProp)
@@ -595,7 +556,6 @@ func TestCalDAVUpdate_PartialChangeKeepsEverythingElse(t *testing.T) {
 	before := events(t, run(t, executeCalDAVList, job(t, url, nil)))
 	id, _ := before[0]["id"].(string)
 
-	// Move only the room.
 	run(t, executeCalDAVUpdate, job(t, url, map[string]any{"id": id, "location": "Room 4"}))
 
 	after := events(t, run(t, executeCalDAVList, job(t, url, nil)))

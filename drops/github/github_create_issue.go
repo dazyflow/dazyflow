@@ -40,16 +40,10 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Named after their params so the card shows inline editable
-				// boxes (Unreal-style); a wired value overrides the typed one.
 				{Port: "title", Label: "Title", MIME: []string{"text/plain"}},
 				{Port: "body", Label: "Body"},
 			},
 			Outputs: []core.Port{
-				// Only the friendly scalars are pins; the full issue metadata
-				// (id, node_id, state, …) is still EMITTED under "meta" so run
-				// records keep it for debugging — it's just not a pin (same as
-				// gmail send / sheets append).
 				{Port: "issue_url", Label: "Issue link", MIME: []string{"text/plain"}, Example: json.RawMessage(`"https://github.com/dazyflow/dazyflow/issues/128"`)},
 				{Port: "issue_number", Label: "Issue number", MIME: []string{"text/plain"}, Example: json.RawMessage(`"128"`)},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"number":128,"html_url":"https://github.com/dazyflow/dazyflow/issues/128","id":2447108392,"node_id":"I_kwDOMv1cD84Ojd2o","state":"open"}`)},
@@ -88,7 +82,6 @@ func executeGitHubCreateIssue(ctx context.Context, job core.Job, _ chan<- core.P
 	if owner == "" || repo == "" {
 		return params.Err(job, "bad_param", "'owner' and 'repo' are required"), nil
 	}
-	// The Title input overrides the param when wired (input-overrides-param).
 	title, ok := params.TextInputOr(job, "title", params.StringDefault(job.Params, "title", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Title' input must be text"), nil

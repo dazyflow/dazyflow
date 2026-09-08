@@ -54,7 +54,6 @@ export function AcceptInvite() {
     setError(null);
     try {
       const r = await api.acceptInvitation(token, inviteToken);
-      // Switch the session to the new org so the next page lands there.
       setActiveTenant(r.tenant);
       navigate("/");
     } catch (e) {

@@ -1,17 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package llmtask is the shared core behind the per-provider LLM drops
-// (Claude, ChatGPT, …). It owns the task-shaped UX — Ask, Summarize, Extract
-// fields, Classify, Draft reply — as a SINGLE implementation; each provider
-// package supplies a Provider (the vendor API call + response parsing) and a
-// Config (branding, models, ids) and calls RegisterAll.
-//
-// This mirrors how Sheets and Excel stay separate integrations while sharing
-// the rows+headers contract: the task logic + manifests live here once, and
-// the vendor specifics (endpoint, auth header, tool-call shape) live in the
-// provider packages. Adding a provider is one new package + a RegisterAll —
-// no duplicated drops.
 package llmtask
 
 import (
@@ -36,10 +25,6 @@ import (
 // buggy upstream (reachable via the base_url override) can't OOM the daemon.
 const maxResponseBytes = 64 << 20
 
-// The provider-neutral request/response vocabulary now lives in internal/llm
-// (the shared LLM layer used by both these drops and editor features like the
-// render_template AI assist). These aliases keep the provider packages and
-// their tests referring to llmtask.Request/Result/Tool/Provider unchanged.
 type (
 	Tool        = llm.Tool
 	Request     = llm.Request
@@ -54,20 +39,12 @@ type (
 type FileSupportLevel int
 
 const (
-	// FilesNone: the provider takes text only.
 	FilesNone FileSupportLevel = iota
-	// FilesImagesOnly: images go through, documents do not. Where the local
-	// runtimes sit — vision models are common, document readers are not.
 	FilesImagesOnly
-	// FilesDocuments: PDFs and images both, read natively by the model.
 	FilesDocuments
 )
 
-// Config is a provider's branding + model set, supplied to RegisterAll.
 type Config struct {
-	// FileSupport declares what the provider can carry on the Files input.
-	// See checkFileSupport, which turns this into the refusal a flow author
-	// reads.
 	FileSupport    FileSupportLevel
 	Provider       Provider
 	Integration    string // "Claude" / "ChatGPT" — drives grouping + conn.<slug>.api_key
@@ -79,11 +56,7 @@ type Config struct {
 	KeyPlaceholder string
 	AskID          string // "claude" / "chatgpt"
 	TaskIDPrefix   string // "claude" / "gpt" → <prefix>_summarize
-	// KeyOptional marks a provider that needs no API key — a local runtime
-	// (Ollama) rather than a metered cloud API. The connection's api_key field
-	// stops being required, an empty key stops being a run-time error, and the
-	// connection verifier checks reachability instead of credentials.
-	KeyOptional bool
+	KeyOptional    bool
 	// BaseURLLabel, when set, ALSO puts the API host on the connection instead
 	// of only on the step. For a cloud vendor the host is a rare override and
 	// the advanced per-step base_url is the right home; for a local runtime the
@@ -93,17 +66,9 @@ type Config struct {
 	BaseURLLabel       string
 	BaseURLPlaceholder string
 	BaseURLHelp        string
-	// VerifyKey, when set, checks that an API key is usable WITHOUT a
-	// token-costing generation — typically a GET to the provider's models
-	// endpoint (see GetStatus). RegisterAll wires it into the connection
-	// verifier for cfg.Integration so the Apps page can test the key before
-	// saving it. baseURL is "" for the provider default.
-	VerifyKey func(ctx context.Context, apiKey, baseURL string) error
+	VerifyKey          func(ctx context.Context, apiKey, baseURL string) error
 }
 
-// RegisterAll registers all five task drops for a provider, plus (when the
-// provider supplies cfg.VerifyKey) the connection verifier that backs the
-// Apps page's "Test connection" / verify-before-save for this integration.
 func RegisterAll(cfg Config) {
 	engine.Register(askDrop(cfg))
 	engine.Register(summarizeDrop(cfg))
@@ -147,8 +112,6 @@ func PostJSON(ctx context.Context, endpoint string, headers map[string]string, b
 	}
 	resp, err := hfnet.SafeHTTPClient(timeout, hfnet.PrivateEgressAllowed()).Do(req)
 	if err != nil {
-		// A deadline here is almost always "the model took too long", not a
-		// bug — say so and point at the knob, instead of a raw context error.
 		if errors.Is(err, context.DeadlineExceeded) || reqCtx.Err() == context.DeadlineExceeded {
 			return 0, nil, &core.JobError{Code: "llm_timeout", Message: fmt.Sprintf("the AI request timed out after %ds — try again, raise timeout_ms on the step, or shorten the input", timeoutMS/1000)}
 		}
@@ -191,13 +154,6 @@ func GetStatus(ctx context.Context, endpoint string, headers map[string]string) 
 	return resp.StatusCode, body, nil
 }
 
-// HTTPError turns a non-2xx LLM API status into an actionable JobError so
-// the user reads "ChatGPT is rate-limited; try again shortly" instead of
-// an opaque "llm_http_error: 429 …". codePrefix keeps each provider's
-// stable error codes ("claude"/"openai" → claude_rate_limited, …); label
-// is the human integration name woven into the message; detail is the
-// vendor's own extracted error text, appended for debugging. Shared so
-// every provider classifies the common statuses identically.
 func HTTPError(codePrefix, label string, status int, detail string) *core.JobError {
 	detail = strings.TrimSpace(detail)
 	var code, msg string
@@ -221,8 +177,6 @@ func HTTPError(codePrefix, label string, status int, detail string) *core.JobErr
 	return &core.JobError{Code: code, Message: msg}
 }
 
-// --- shared param + key resolution -----------------------------------------
-
 func resolveKey(job core.Job, cfg Config) (string, *core.JobError) {
 	k, _ := params.StringOpt(job.Params, "api_key")
 	if k == "" && !cfg.KeyOptional {
@@ -238,8 +192,6 @@ func model(job core.Job, cfg Config) string {
 func timeoutMS(job core.Job) int  { return params.IntDefault(job.Params, "timeout_ms", 60000) }
 func baseURL(job core.Job) string { return params.StringDefault(job.Params, "base_url", "") }
 
-// resolveText reads the node's text: the "text" input port wins, else the
-// "text" param the author typed inline.
 func resolveText(job core.Job) string {
 	if in, ok := job.Input["text"]; ok && in.Inline != nil {
 		if s := coerceText(in.Inline); s != "" {
@@ -267,7 +219,6 @@ func paramObjList(p map[string]any, key string) []map[string]any {
 	return out
 }
 
-// coerceText flattens whatever arrived on an input into one string.
 func coerceText(v any) string {
 	switch t := v.(type) {
 	case nil:
@@ -296,8 +247,6 @@ func coerceText(v any) string {
 	}
 }
 
-// --- manifest helpers -------------------------------------------------------
-
 func connFields(cfg Config) []core.ConnectionField {
 	fields := []core.ConnectionField{
 		{Key: "api_key", Label: "API key", Secret: true, Required: !cfg.KeyOptional, Placeholder: cfg.KeyPlaceholder},
@@ -311,11 +260,6 @@ func connFields(cfg Config) []core.ConnectionField {
 	return fields
 }
 
-// connNote and unsetHint are the "where do credentials come from" line on a
-// params example. They differ per provider because the mistake each one heads
-// off differs: a keyed provider's reader is about to paste an API key onto the
-// step, while a keyless one has no key to paste and instead needs to know the
-// server address is not a per-step setting either.
 func connNote(cfg Config) string {
 	if cfg.KeyOptional {
 		return "The server URL comes from the connection — leave base_url unset."
@@ -334,8 +278,6 @@ func unsetHint(cfg Config) string {
 
 func taskID(cfg Config, task string) string { return cfg.TaskIDPrefix + "_" + task }
 
-// baseProps returns the params every drop shares: the model picker plus the
-// advanced api_key / base_url / timeout knobs.
 func baseProps(cfg Config) map[string]any {
 	// A vendor with a published catalog gets a picker. A local runtime serves
 	// whatever the operator has pulled, so it gets a free-text field instead —

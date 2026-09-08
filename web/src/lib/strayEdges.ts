@@ -34,17 +34,11 @@
 
 import type { Manifest } from "../types";
 
-// NodePorts is what the detector needs to know about one node: the manifest
-// the editor has resolved for it (undefined when it has none) and whether the
-// author switched it off.
 export type NodePorts = {
   manifest?: Manifest;
   disabled?: boolean;
 };
 
-// EdgeEnds is the shape React Flow holds an edge in. The handle fallbacks
-// below ("out"/"in") are the editor's own, and are what turns a null handle
-// into the port name the daemon then reports as missing.
 export type EdgeEnds = {
   source: string;
   sourceHandle?: string | null;
@@ -58,12 +52,9 @@ export type StrayEdge = {
   end: "from" | "to";
   nodeID: string;
   port: string;
-  // The step's module id, for a message that names something recognisable.
   module?: string;
 };
 
-// strayReason returns why an edge is dead, or null when it is fine or not
-// ours to judge.
 function strayReason(
   e: EdgeEnds,
   nodes: Map<string, NodePorts>,

@@ -11,10 +11,6 @@ import { Button } from "../../../components/ui/Button";
 import { ErrorNotice } from "../../../components/ui/ErrorNotice";
 import { ICON } from "../../../icons";
 
-// AdminPlatform is the platform-operator email surface: a single place to
-// confirm the instance mailer actually delivers. (Signup invites — the
-// other thing that used to live here — moved to /admin/platform/users,
-// next to the account roster they grow.)
 export function AdminPlatform() {
   const { t } = useTranslation();
   const { hasPerm } = useAuth();
@@ -41,10 +37,6 @@ export function AdminPlatform() {
   );
 }
 
-// SmtpTestSection lets a platform admin fire one test message through the
-// instance mailer (DAZYFLOW_SMTP_URL). Boot only checks that the URL
-// parses; this is the only way to confirm the server actually accepts
-// mail. Leave the field blank to send to yourself.
 function SmtpTestSection() {
   const { t } = useTranslation();
   const { token, me } = useAuth();

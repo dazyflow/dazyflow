@@ -41,7 +41,6 @@ func TestEnvInt(t *testing.T) {
 			if c.set {
 				t.Setenv(key, c.val)
 			} else {
-				// t.Setenv on a sibling key keeps this key unset for the subtest.
 				t.Setenv("DAZYFLOW_TEST_UNRELATED", "x")
 			}
 			if got := envInt(key, 7); got != c.want {

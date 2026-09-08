@@ -10,8 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// ntfyManifest is a minimal stand-in for the ntfy drop: an integration
-// with a plain server field and a secret token field.
 func ntfyManifest() core.Manifest {
 	return core.Manifest{
 		ID:          "ntfy",
@@ -34,15 +32,12 @@ func TestInjectConnectionDefaults_FillsUnsetFields(t *testing.T) {
 	job := core.Job{Params: map[string]any{"topic": "alerts"}}
 	injectConnectionDefaults(context.Background(), providers, ntfyManifest(), &job)
 
-	// Plain field injected as its literal value.
 	if got := job.Params["server"]; got != "https://ntfy.acme.com" {
 		t.Fatalf("server = %v, want literal URL", got)
 	}
-	// Secret field injected as a ${secret....} reference (resolved + redacted later).
 	if got := job.Params["token"]; got != "${secret.conn.ntfy.token}" {
 		t.Fatalf("token = %v, want tenant reference", got)
 	}
-	// Author-set param untouched.
 	if got := job.Params["topic"]; got != "alerts" {
 		t.Fatalf("topic = %v, want alerts (untouched)", got)
 	}
@@ -66,9 +61,6 @@ func TestInjectConnectionDefaults_ConnectionOverridesStaleNonSchemaParam(t *test
 	}
 }
 
-// A connection field that IS a declared param (claude exposes api_key as an
-// advanced param — "leave unset, but you may override per-node") keeps the
-// author's value: the connection only fills it when unset.
 func TestInjectConnectionDefaults_DeclaredParamAuthorOverrideWins(t *testing.T) {
 	m := core.Manifest{
 		ID:          "claude",
@@ -90,8 +82,6 @@ func TestInjectConnectionDefaults_DeclaredParamAuthorOverrideWins(t *testing.T) 
 }
 
 func TestInjectConnectionDefaults_UnconfiguredLeavesDefaults(t *testing.T) {
-	// Tenant has nothing stored — params stay absent so the drop's own
-	// default (e.g. ntfy.sh) applies.
 	providers := newProviders(stubProvider{scheme: "secret", values: map[string]string{}})
 	job := core.Job{Params: map[string]any{"topic": "alerts"}}
 	injectConnectionDefaults(context.Background(), providers, ntfyManifest(), &job)

@@ -61,7 +61,6 @@ func TestBase64_EncodeDecodeRoundTrip(t *testing.T) {
 }
 
 func TestBase64_URLVariant(t *testing.T) {
-	// 0xFB 0xFF encodes to "+/8=" standard, "-_8=" url-safe.
 	in := string([]byte{0xfb, 0xff})
 	std := okOut(t, b64(t, in, map[string]any{"mode": "encode"}))
 	url := okOut(t, b64(t, in, map[string]any{"mode": "encode", "variant": "url"}))
@@ -92,7 +91,6 @@ func TestBase64_BytesInput(t *testing.T) {
 }
 
 func TestHash_SHA256Hex(t *testing.T) {
-	// Known SHA-256 of "abc".
 	got := okOut(t, hashJob(t, "abc", map[string]any{"algo": "sha256"}))
 	want := "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
 	if got != want {
@@ -123,7 +121,6 @@ func TestHash_Base64Encoding(t *testing.T) {
 }
 
 func TestHash_HMAC(t *testing.T) {
-	// Known HMAC-SHA256(key="key", msg="The quick brown fox jumps over the lazy dog").
 	got := okOut(t, hashJob(t, "The quick brown fox jumps over the lazy dog",
 		map[string]any{"algo": "sha256", "key": "key"}))
 	want := "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8"

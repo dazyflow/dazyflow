@@ -46,7 +46,6 @@ func TestDate_ParseISOAndReformat(t *testing.T) {
 }
 
 func TestDate_UnixInput(t *testing.T) {
-	// 1_700_000_000 = 2023-11-14T22:13:20Z
 	res := runDate(t, float64(1_700_000_000), map[string]any{"format": "datetime"})
 	if got := outOf(t, res); got != "2023-11-14 22:13:20" {
 		t.Errorf("datetime = %q, want 2023-11-14 22:13:20", got)
@@ -75,7 +74,6 @@ func TestDate_NegativeOffset(t *testing.T) {
 }
 
 func TestDate_Timezone(t *testing.T) {
-	// 2026-01-15T12:00:00Z in New York (EST, UTC-5) is 07:00.
 	res := runDate(t, "2026-01-15T12:00:00Z", map[string]any{"tz": "America/New_York", "format": "time24"})
 	if got := outOf(t, res); got != "07:00:00" {
 		t.Errorf("ny time = %q, want 07:00:00", got)
@@ -95,7 +93,6 @@ func TestDate_NoInputUsesNow(t *testing.T) {
 	before := time.Now().UTC().Add(-2 * time.Second)
 	res := runDate(t, nil, map[string]any{"format": "unix"})
 	got := outOf(t, res)
-	// Just assert it's a plausible current unix timestamp (>= a moment ago).
 	if len(got) < 10 {
 		t.Fatalf("unix now = %q looks wrong", got)
 	}
@@ -183,16 +180,12 @@ func TestDate_TomorrowAtNineLocal(t *testing.T) {
 		"format":        "custom",
 		"custom_format": "DD/MM/YYYY HH:mm",
 	})
-	// 23:40Z on the 27th is 01:40 on the 28th in Stockholm (UTC+2 in August);
-	// +1d makes it the 29th, and 'at' sets the clock to nine that morning.
 	if got := outOf(t, res); got != "29/08/2026 09:00" {
 		t.Errorf("got %q, want 29/08/2026 09:00", got)
 	}
 }
 
 func TestDate_AtSetsTheClockInTheOutputZone(t *testing.T) {
-	// No offset: same day, clock replaced, and the zone offset proves the time
-	// is nine LOCAL rather than nine UTC relabelled.
 	res := runDate(t, "2026-08-27T23:40:00Z", map[string]any{
 		"at": "09:00", "tz": "Europe/Stockholm", "format": "iso",
 	})
@@ -202,8 +195,6 @@ func TestDate_AtSetsTheClockInTheOutputZone(t *testing.T) {
 }
 
 func TestDate_AtStartOfDay(t *testing.T) {
-	// Midnight is what makes 'at' a truncate-to-day as well: a date compared
-	// or printed from here doesn't carry the run's clock time.
 	res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{"at": "00:00", "format": "datetime"})
 	if got := outOf(t, res); got != "2026-08-27 00:00:00" {
 		t.Errorf("got %q, want 2026-08-27 00:00:00", got)
@@ -226,9 +217,6 @@ func TestDate_CustomFormat(t *testing.T) {
 	}
 }
 
-// A bad custom format fails the step. The whole reason for the token
-// vocabulary is that the old behaviour — printing the format string itself —
-// put "YYYY-MM-DD" into live email with nothing anywhere reporting it.
 func TestDate_CustomFormatRejectsUnknownToken(t *testing.T) {
 	res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{
 		"format": "custom", "custom_format": "YYYY-MM-DD at HH:mm",
@@ -247,9 +235,6 @@ func TestDate_CustomWithNoFormatIsAnError(t *testing.T) {
 	}
 }
 
-// A format outside the dropdown is a misconfiguration, not a format string:
-// rendering it there is how "2006-01-02" used to come back as itself. The
-// error names Custom, which is where a pattern belongs.
 func TestDate_OffEnumFormatIsAnError(t *testing.T) {
 	for _, f := range []string{"Mon 2 Jan 2006", "DD/MM/YYYY", "2006-01-02", "sometime soon", "kitchen"} {
 		res := runDate(t, "2026-08-27T13:45:07Z", map[string]any{"format": f})
@@ -260,7 +245,6 @@ func TestDate_OffEnumFormatIsAnError(t *testing.T) {
 }
 
 func TestDate_TimeFormats(t *testing.T) {
-	// The 12/24-hour pair.
 	for _, c := range []struct{ format, want string }{
 		{"time24", "14:05:09"},
 		{"time12", "2:05:09 PM"},
@@ -292,8 +276,6 @@ func TestDate_TimezoneAnyIANAZone(t *testing.T) {
 	}
 }
 
-// A name that is not a zone fails the step and says what a zone looks like.
-// The picker can't produce one, but a template or an API call can.
 func TestDate_TimezoneRejectsNonsense(t *testing.T) {
 	res := runDate(t, "2026-08-27T14:05:09Z", map[string]any{"tz": "Mars/Olympus"})
 	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
@@ -310,9 +292,6 @@ func TestDate_LegacyArbitraryTimezone(t *testing.T) {
 	}
 }
 
-// Weekday as a FORMAT: the day's name out of whatever date you have. This is
-// the common ask ("what day is that?"), distinct from next_weekday, which
-// changes WHICH date you have.
 func TestDate_WeekdayFormat(t *testing.T) {
 	for _, c := range []struct{ format, want string }{
 		{"weekday", "Thursday"},
@@ -325,7 +304,6 @@ func TestDate_WeekdayFormat(t *testing.T) {
 	}
 }
 
-// The pairing that motivated it: today's weekday plus an offset, as a name.
 func TestDate_WeekdayFormatWithOffset(t *testing.T) {
 	res := runDate(t, "2026-08-31T09:00:00Z", map[string]any{ // a Monday
 		"add": "1d", "format": "weekday",
@@ -335,8 +313,6 @@ func TestDate_WeekdayFormatWithOffset(t *testing.T) {
 	}
 }
 
-// The weekday name is read in the OUTPUT timezone, like every other calendar
-// answer this step gives: Monday evening in UTC is already Tuesday in Sydney.
 func TestDate_WeekdayFormatUsesTheOutputTimezone(t *testing.T) {
 	res := runDate(t, "2026-08-31T23:00:00Z", map[string]any{ // Mon 23:00Z
 		"tz": "Australia/Sydney", "format": "weekday",

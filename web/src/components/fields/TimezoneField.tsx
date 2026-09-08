@@ -23,10 +23,6 @@ import { useTranslation } from "react-i18next";
 // actually recognise a zone by ("the one that's GMT+2 in summer") and what
 // tells Europe/Dublin from Europe/London in the two months a year they differ.
 
-// FALLBACK_ZONES is used only when Intl.supportedValuesOf is missing. It is not
-// meant to be complete — the input still accepts any name typed into it, and
-// the drop validates it at run time — just enough that the picker is useful
-// rather than empty.
 const FALLBACK_ZONES = [
   "UTC",
   "Europe/Stockholm",
@@ -81,7 +77,6 @@ function allZones(): string[] {
     const zones = Intl.supportedValuesOf?.("timeZone");
     if (zones?.length) return ["UTC", ...zones.filter((z) => z !== "UTC")];
   } catch {
-    // Engine has the method but refused the key — fall through.
   }
   return FALLBACK_ZONES;
 }
@@ -107,8 +102,6 @@ function offsetOf(zone: string): string {
   return out;
 }
 
-// searchable folds a zone name to what a person types: lowercase, and
-// underscores as spaces, so "new york" finds America/New_York.
 const searchable = (s: string) => s.toLowerCase().replace(/_/g, " ");
 
 export function TimezoneField({
@@ -165,8 +158,6 @@ export function TimezoneField({
       return;
     }
     if (e.key === "Escape" && open) {
-      // Close the list, keep the field. Without stopping it here the Inspector
-      // takes the Escape and the whole panel closes, losing the edit.
       e.stopPropagation();
       setQuery("");
       setOpen(false);

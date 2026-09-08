@@ -17,8 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// attachmentServer serves one message whose payload carries an inline logo and
-// two real attachments, plus the attachment bodies themselves.
 func attachmentServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	b64 := func(s string) string { return base64.RawURLEncoding.EncodeToString([]byte(s)) }
@@ -35,7 +33,6 @@ func attachmentServer(t *testing.T) *httptest.Server {
 					"mimeType": "multipart/mixed",
 					"parts": []any{
 						map[string]any{"mimeType": "text/plain", "body": map[string]any{"data": b64("see attached")}},
-						// Inline signature image: no filename, so not an attachment.
 						map[string]any{"mimeType": "image/png", "filename": "", "body": map[string]any{"attachmentId": "att-logo", "size": 3}},
 						map[string]any{"mimeType": "application/pdf", "filename": "Faktura 2026-08.pdf", "body": map[string]any{"attachmentId": "att-pdf", "size": 16}},
 						map[string]any{"mimeType": "text/csv", "filename": "rows.csv", "body": map[string]any{"attachmentId": "att-csv", "size": 8}},
@@ -72,7 +69,6 @@ func TestGetAttachments_SavesFilesAndSkipsInline(t *testing.T) {
 		t.Errorf("count = %v, want 2", got)
 	}
 
-	// The First file pin is a file ref a filing step can consume directly.
 	first := res.Output["first"]
 	if !strings.HasPrefix(first.Ref, "scratch://") || first.MIME != "application/pdf" {
 		t.Fatalf("first = %+v, want a scratch:// pdf ref", first)

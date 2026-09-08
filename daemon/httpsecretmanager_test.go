@@ -32,9 +32,6 @@ func newSecretManagerHarness(t *testing.T) *gatewayHarness {
 	return h
 }
 
-// fakeVaultServer stands in for OpenBao/Vault: it accepts a token-self lookup
-// from one known token and 403s anything else, so the verify-on-save path is
-// exercised without a real server.
 func fakeVaultServer(t *testing.T, goodToken string) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -68,12 +65,10 @@ func TestSecretManager_SetGetDelete(t *testing.T) {
 	h := newSecretManagerHarness(t)
 	srv := fakeVaultServer(t, "good-token")
 
-	// Save a valid config → verified, then stored.
 	if rw := h.do(t, "PUT", "/api/v1/secret-manager", smBody(srv.URL, "good-token")); rw.Code != http.StatusNoContent {
 		t.Fatalf("PUT status=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// GET returns the redacted view — configured, address shown, credential NOT.
 	rw := h.do(t, "GET", "/api/v1/secret-manager", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("GET status=%d body=%s", rw.Code, rw.Body.String())
@@ -95,7 +90,6 @@ func TestSecretManager_SetGetDelete(t *testing.T) {
 		t.Errorf("secret-manager config leaked into the secret listing: %s", rw.Body.String())
 	}
 
-	// Delete → gone.
 	if rw := h.do(t, "DELETE", "/api/v1/secret-manager", nil); rw.Code != http.StatusNoContent {
 		t.Fatalf("DELETE status=%d", rw.Code)
 	}
@@ -108,7 +102,6 @@ func TestSecretManager_SetGetDelete(t *testing.T) {
 	}
 }
 
-// A config that fails the connection test is rejected (502) and not persisted.
 func TestSecretManager_RejectsUnreachable(t *testing.T) {
 	t.Parallel()
 	h := newSecretManagerHarness(t)
@@ -117,7 +110,6 @@ func TestSecretManager_RejectsUnreachable(t *testing.T) {
 	if rw := h.do(t, "PUT", "/api/v1/secret-manager", smBody(srv.URL, "WRONG-token")); rw.Code != http.StatusBadGateway {
 		t.Fatalf("PUT with bad token status=%d body=%s, want 502", rw.Code, rw.Body.String())
 	}
-	// Nothing stored.
 	rw := h.do(t, "GET", "/api/v1/secret-manager", nil)
 	var view secretManagerView
 	_ = json.Unmarshal(rw.Body.Bytes(), &view)
@@ -126,7 +118,6 @@ func TestSecretManager_RejectsUnreachable(t *testing.T) {
 	}
 }
 
-// An invalid config (bad auth method) is a 400 before any network call.
 func TestSecretManager_ValidatesBody(t *testing.T) {
 	t.Parallel()
 	h := newSecretManagerHarness(t)
@@ -136,14 +127,10 @@ func TestSecretManager_ValidatesBody(t *testing.T) {
 	}
 }
 
-// secretManagerGate forbidden branch: a configured store but a principal
-// without the required secret permission.
-
 func TestSecretManager_ForbiddenWithoutPerm(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.EncryptedSecrets = testEncryptedSecrets(t)
-	// Default editor token lacks secret:read/write.
 	cases := []struct {
 		method, path string
 	}{
@@ -165,11 +152,10 @@ func TestSecretManager_ForbiddenWithoutPerm(t *testing.T) {
 	}
 }
 
-// TestSecretManagerConfig_RequiresOrgAdmin pins the privilege boundary: an
-// editor with secret:read/write can read which backend is configured (GET) but
-// cannot point the org at a new secret-manager backend or remove it (PUT/DELETE)
-// — those are organization:admin. The PUT is rejected at the gate, before the
-// tenant-supplied address is ever dialed.
+// Pins the privilege boundary: an editor with secret:read/write can read which
+// backend is configured (GET) but cannot point the org at a new secret-manager
+// backend or remove it (PUT/DELETE) — those are organization:admin. The PUT is
+// rejected at the gate, before the tenant-supplied address is ever dialed.
 func TestSecretManagerConfig_RequiresOrgAdmin(t *testing.T) {
 	t.Parallel()
 	h := newSecretsHarness(t) // editor token: secret:read/write, NOT organization:admin
@@ -186,7 +172,6 @@ func TestSecretManagerConfig_RequiresOrgAdmin(t *testing.T) {
 			t.Errorf("%s %s as editor = %d (%s), want 403", c.method, c.path, rw.Code, rw.Body.String())
 		}
 	}
-	// GET stays at secret:read, so the editor can still see the backend status.
 	for _, path := range []string{"/api/v1/secret-manager", "/api/v1/secret-manager/aws", "/api/v1/secret-manager/gcp"} {
 		if rw := h.do(t, "GET", path, nil); rw.Code != http.StatusOK {
 			t.Errorf("GET %s as editor = %d (%s), want 200", path, rw.Code, rw.Body.String())

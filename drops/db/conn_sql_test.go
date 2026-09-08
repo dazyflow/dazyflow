@@ -10,7 +10,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// newMemDB opens a fresh in-memory SQLite handle for direct sqlConn tests.
 func newMemDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", ":memory:")
@@ -21,8 +20,6 @@ func newMemDB(t *testing.T) *sql.DB {
 	return db
 }
 
-// TestSQLConn_QueryAndExec covers the database/sql conn adapter's exec, query
-// (including the OK scan path), and the bytesToString conversion knob.
 func TestSQLConn_QueryAndExec(t *testing.T) {
 	db := newMemDB(t)
 	c := sqlConn{db: db}
@@ -48,8 +45,6 @@ func TestSQLConn_QueryAndExec(t *testing.T) {
 	}
 }
 
-// TestSQLConn_QueryLimit covers the user-limit stop path in queryGuard via the
-// adapter.
 func TestSQLConn_QueryLimit(t *testing.T) {
 	db := newMemDB(t)
 	c := sqlConn{db: db}
@@ -69,7 +64,6 @@ func TestSQLConn_QueryLimit(t *testing.T) {
 	}
 }
 
-// TestSQLConn_BytesToString covers the MySQL-style []byte → string conversion.
 func TestSQLConn_BytesToString(t *testing.T) {
 	db := newMemDB(t)
 	c := sqlConn{db: db, bytesToString: true}
@@ -88,7 +82,6 @@ func TestSQLConn_BytesToString(t *testing.T) {
 	}
 }
 
-// TestSQLConn_QueryError covers the query-error branch (bad SQL).
 func TestSQLConn_QueryError(t *testing.T) {
 	c := sqlConn{db: newMemDB(t)}
 	if _, _, err := c.query(t.Context(), `SELECT * FROM no_such_table`, nil, 0); err == nil {
@@ -96,7 +89,6 @@ func TestSQLConn_QueryError(t *testing.T) {
 	}
 }
 
-// TestSQLConn_ExecBatchPrepareError covers the prepare-error rollback branch.
 func TestSQLConn_ExecBatchPrepareError(t *testing.T) {
 	c := sqlConn{db: newMemDB(t)}
 	_, err := c.execBatch(t.Context(), `INSERT INTO missing (x) VALUES (?)`,
@@ -106,22 +98,19 @@ func TestSQLConn_ExecBatchPrepareError(t *testing.T) {
 	}
 }
 
-// TestSQLConn_ExecBatchRowError covers the per-row exec-error rollback branch:
-// a NOT NULL violation on the second row rolls the whole batch back.
+// Covers the per-row exec-error rollback branch: a NOT NULL violation on the
+// second row rolls the whole batch back.
 func TestSQLConn_ExecBatchRowError(t *testing.T) {
 	db := newMemDB(t)
 	c := sqlConn{db: db}
 	if err := c.exec(t.Context(), `CREATE TABLE t (id INTEGER PRIMARY KEY)`); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	// Two rows with the same primary key → the second insert violates the
-	// unique PK and the batch rolls back.
 	_, err := c.execBatch(t.Context(), `INSERT INTO t (id) VALUES (?)`,
 		[]string{"id"}, []map[string]any{{"id": 1}, {"id": 1}}, "insert")
 	if err == nil {
 		t.Fatal("want error for duplicate PK")
 	}
-	// Nothing committed.
 	_, rows, qerr := c.query(t.Context(), `SELECT id FROM t`, nil, 0)
 	if qerr != nil {
 		t.Fatalf("verify query: %v", qerr)

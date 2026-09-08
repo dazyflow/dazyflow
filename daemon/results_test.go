@@ -81,7 +81,6 @@ func TestListBoards(t *testing.T) {
 func TestListBoards_EmptyStoreIsNotAnError(t *testing.T) {
 	t.Parallel()
 	svc, _ := newBoardService(t)
-	// No store file was ever written.
 	boards, err := svc.ListBoards(t.Context(), boardPrincipal, "acme", "main")
 	if err != nil {
 		t.Fatalf("empty store should not error: %v", err)
@@ -142,10 +141,10 @@ func TestBoardRows_UnknownBoardIs404(t *testing.T) {
 	}
 }
 
-// TestBoardRows_RejectsCraftedName is the SQL-injection guard: a table
-// name carrying SQL must never be executed. It's rejected either as an
-// invalid name or — since it isn't in sqlite_master — as an unknown board;
-// what must NOT happen is the leads table getting dropped.
+// The SQL-injection guard: a table name carrying SQL must never be executed.
+// It's rejected either as an invalid name or — since it isn't in sqlite_master
+// — as an unknown board; what must NOT happen is the leads table getting
+// dropped.
 func TestBoardRows_RejectsCraftedName(t *testing.T) {
 	t.Parallel()
 	svc, sb := newBoardService(t)
@@ -203,10 +202,6 @@ func TestBoards_NoSandboxIsUnavailable(t *testing.T) {
 	}
 }
 
-// HTTP-handler authz / scope / not-configured branches of the /me/boards
-// endpoints. The default harness has no Engine.Sandbox, so the board service
-// reports errBoardsUnavailable -> 501.
-
 func TestListBoardsMe_NotConfigured(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -231,12 +226,10 @@ func TestGetBoardMe_NotConfigured(t *testing.T) {
 func TestListBoardsMe_ForbiddenScope(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Cross-tenant ?tenant= -> 403 forbidden_scope.
 	rw := h.do(t, "GET", "/api/v1/me/boards?tenant=other", nil)
 	if rw.Code != http.StatusForbidden {
 		t.Fatalf("cross-tenant boards = %d (%s), want 403", rw.Code, rw.Body.String())
 	}
-	// Cross-workspace.
 	rw = h.do(t, "GET", "/api/v1/me/boards?workspace=other", nil)
 	if rw.Code != http.StatusForbidden {
 		t.Fatalf("cross-workspace boards = %d, want 403", rw.Code)
@@ -246,7 +239,6 @@ func TestListBoardsMe_ForbiddenScope(t *testing.T) {
 func TestListBoardsMe_MissingScope(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// A token with no tenant/workspace binding and no query params -> 400.
 	role := core.Role{Name: "free", Permissions: []core.Permission{core.PermGraphRun}}
 	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-unbound", "", "", "nobody", []core.Role{role}, nil)
 	if err != nil {
@@ -264,7 +256,6 @@ func TestListBoardsMe_MissingScope(t *testing.T) {
 func TestClearBoardMe_ForbiddenWithoutEditPerm(t *testing.T) {
 	t.Parallel()
 	h := newRunOnlyHarness(t)
-	// Run-only token lacks graph:edit; clear is 403.
 	rw := runOnlyDo(t, h, "DELETE", "/api/v1/me/boards/leads", nil)
 	if rw.Code != http.StatusForbidden {
 		t.Fatalf("run-only clear = %d (%s), want 403", rw.Code, rw.Body.String())
@@ -311,7 +302,6 @@ func TestDeleteBoardRow(t *testing.T) {
 			t.Errorf("deleted row (email %v) is still present", target)
 		}
 	}
-	// Idempotent: deleting the same rowid again succeeds with no effect.
 	if err := svc.DeleteBoardRow(t.Context(), boardPrincipal, "acme", "main", "leads", rowID); err != nil {
 		t.Errorf("re-deleting a gone row should be a no-op, got %v", err)
 	}
@@ -329,7 +319,6 @@ func TestDeleteBoardRow_UnknownBoardIs404(t *testing.T) {
 func TestDeleteBoardRowMe_ForbiddenWithoutEditPerm(t *testing.T) {
 	t.Parallel()
 	h := newRunOnlyHarness(t)
-	// Run-only token lacks graph:edit; deleting a row is 403 (same bar as clear).
 	rw := runOnlyDo(t, h, "DELETE", "/api/v1/me/boards/leads/rows/1", nil)
 	if rw.Code != http.StatusForbidden {
 		t.Fatalf("run-only row delete = %d (%s), want 403", rw.Code, rw.Body.String())

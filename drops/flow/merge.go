@@ -51,8 +51,6 @@ func init() {
 	})
 }
 
-// MIMEList marks a Ref whose Inline field carries a []core.Ref. Downstream
-// modules can either consume the list via Inline or split it before reading.
 const MIMEList = "application/x-dazyflow-list+json"
 
 func executeMerge(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {

@@ -14,7 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/mcp"
 )
 
-// portsOf registers a one-tool server and returns that tool's manifest inputs.
 func portsOf(t *testing.T, schema string) []core.Port {
 	t.Helper()
 	srv := newFakeHTTP(t, &fakeHTTPServer{tools: []mcp.Tool{{
@@ -40,8 +39,6 @@ func portNames(ports []core.Port) []string {
 	return out
 }
 
-// TestToolPorts_ScalarArgumentsBecomePorts is the point of the whole thing: an
-// author can wire a value into one argument instead of assembling an object.
 func TestToolPorts_ScalarArgumentsBecomePorts(t *testing.T) {
 	ports := portsOf(t, `{
 		"type": "object",
@@ -54,8 +51,6 @@ func TestToolPorts_ScalarArgumentsBecomePorts(t *testing.T) {
 		"required": ["repo", "title"]
 	}`)
 
-	// Required first (alphabetical), then optional (alphabetical), then the
-	// catch-all overlay.
 	want := []string{"repo", "title", "count", "draft", "input"}
 	if got := portNames(ports); strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("ports = %v, want %v", got, want)
@@ -87,9 +82,6 @@ func TestToolPorts_ScalarArgumentsBecomePorts(t *testing.T) {
 	}
 }
 
-// TestToolPorts_NestedArgumentsStayParams is the declared depth limit: an
-// object or array argument keeps its structure rather than being flattened
-// into invented port names.
 func TestToolPorts_NestedArgumentsStayParams(t *testing.T) {
 	ports := portsOf(t, `{
 		"type": "object",
@@ -158,7 +150,6 @@ func TestToolPorts_CapPrefersRequired(t *testing.T) {
 	schema, _ := json.Marshal(map[string]any{"type": "object", "properties": props, "required": required})
 
 	ports := portsOf(t, string(schema))
-	// 12 argument ports + the overlay.
 	if len(ports) != 13 {
 		t.Fatalf("port count = %d, want the cap plus the overlay", len(ports))
 	}
@@ -186,9 +177,6 @@ func TestToolPorts_UnreadableSchemaStillRegisters(t *testing.T) {
 	}
 }
 
-// TestToolPorts_WiredArgumentBeatsTheOverlay is the precedence rule: a value
-// wired into one argument is a statement about that argument, and beats an
-// object that merely happens to contain a key of the same name.
 func TestToolPorts_WiredArgumentBeatsTheOverlay(t *testing.T) {
 	fake := &fakeHTTPServer{tools: []mcp.Tool{{
 		Name: "act",
@@ -209,13 +197,10 @@ func TestToolPorts_WiredArgumentBeatsTheOverlay(t *testing.T) {
 	tr, _ := cat.Get("acme", "mcp:srv:act")
 
 	res, err := tr.Execute(context.Background(), core.Job{
-		ID: "j1",
-		// Typed on the step.
+		ID:     "j1",
 		Params: map[string]any{"title": "from params", "body": "from params"},
 		Input: map[string]core.Ref{
-			// A whole object wired into the catch-all.
 			"input": {Inline: map[string]any{"title": "from overlay", "body": "from overlay"}},
-			// And one argument wired directly.
 			"title": {Inline: "from the port"},
 		},
 	}, nil)

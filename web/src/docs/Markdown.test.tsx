@@ -32,8 +32,6 @@ describe("docs Markdown", () => {
         />
       </MemoryRouter>,
     );
-    // These exact ids are what the Glossary's own cross-references and the
-    // guide pages' `./glossary#run` links point at.
     expect([...container.querySelectorAll("h3")].map((h) => h.getAttribute("id"))).toEqual([
       "cron--schedule",
       "yesno",
@@ -63,7 +61,6 @@ describe("docs Markdown", () => {
     const img = container.querySelector("h1 img.docs-h1-brand");
     expect(img?.getAttribute("src")).toBe("/brands/46elks.svg");
     expect(container.querySelector("h1")?.getAttribute("id")).toBe("_group");
-    // The mark sits in its tinted tile rather than loose beside the words.
     expect(container.querySelector("h1 .docs-h1-mark img.docs-h1-brand")).not.toBeNull();
   });
 
@@ -75,9 +72,6 @@ describe("docs Markdown", () => {
     );
     const h2 = container.querySelector("h2");
     expect(h2?.querySelector("a.docs-anchor")?.getAttribute("href")).toBe("#elks_send_sms");
-    // The "#" glyph is CSS, not a text node. If it ever becomes one, every
-    // heading's textContent gains a trailing "#" — which is what the "on this
-    // page" rail reads to label its rows.
     expect(h2?.textContent).toBe("Send SMS");
   });
 
@@ -90,8 +84,6 @@ describe("docs Markdown", () => {
         />
       </MemoryRouter>,
     );
-    // Without the wrapper the catalog's wide Settings tables are either clipped
-    // by whatever encloses them or push the whole page sideways.
     expect(container.querySelector(".docs-table-scroll > table")).not.toBeNull();
   });
 
@@ -115,8 +107,6 @@ describe("docs Markdown", () => {
       </MemoryRouter>,
     );
     const icon = container.querySelector(".docs-note-icon");
-    // A lucide glyph, not the compass character: drawing the emoji depends on
-    // the reader having an emoji font, and renders as tofu when they don't.
     expect(icon?.querySelector("svg")).not.toBeNull();
     expect(icon?.textContent).toBe("");
   });
@@ -130,8 +120,6 @@ describe("docs Markdown", () => {
         />
       </MemoryRouter>,
     );
-    // react-markdown has no rehype-raw here, so an un-dropped comment is
-    // ESCAPED and shown — it was the first line of all 43 catalog pages.
     expect(container.textContent).not.toContain("docsgen");
     expect(container.querySelector("h1")?.textContent).toBe("Gmail");
   });
@@ -142,8 +130,6 @@ describe("docs Markdown", () => {
         <Markdown source={"# Gmail\n\n## Send email\n"} base="/reference/steps/gmail" />
       </MemoryRouter>,
     );
-    // Spreading the component props straight onto the element stringified it
-    // as node="[object Object]" on every heading.
     expect(container.innerHTML).not.toContain("[object Object]");
     expect(container.querySelector("h1")?.hasAttribute("node")).toBe(false);
   });
@@ -165,8 +151,6 @@ describe("docs Markdown", () => {
     );
     expect(container.querySelector(".docs-code .docs-code-lang")?.textContent).toBe("JSON");
     expect(container.querySelector(".docs-code-copy")).not.toBeNull();
-    // Painted by the JsonEditor's own tokenizer — the same hues as the field
-    // the reader will paste this into.
     expect(container.querySelector(".docs-code pre code .dz-j-key")?.textContent).toBe('"account"');
     expect(container.querySelector(".docs-code pre code .dz-j-string")?.textContent).toBe('"default"');
   });

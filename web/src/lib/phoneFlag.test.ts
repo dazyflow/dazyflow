@@ -16,8 +16,6 @@ describe("regionFlagEmoji", () => {
     expect(regionFlagEmoji("sE")).toBe(regionFlagEmoji("SE"));
   });
 
-  // Anything that isn't exactly two letters yields "" rather than a pair of
-  // stray regional-indicator codepoints.
   it("returns empty for a non-two-letter code", () => {
     for (const bad of ["", "S", "SWE", "S1", "12", "S-", " SE", "SE "]) {
       expect(regionFlagEmoji(bad)).toBe("");
@@ -27,8 +25,6 @@ describe("regionFlagEmoji", () => {
 
 describe("regionDisplayName", () => {
   it("resolves a region to a readable name", () => {
-    // Intl is available in the test environment; assert the shape rather than a
-    // locale-specific string so this doesn't depend on the runtime's CLDR data.
     const got = regionDisplayName("SE");
     expect(got.length).toBeGreaterThan(0);
     expect(got).not.toBe("");
@@ -38,8 +34,6 @@ describe("regionDisplayName", () => {
     expect(regionDisplayName("se")).toBe(regionDisplayName("SE"));
   });
 
-  // Intl resolves an unassigned code to a placeholder rather than undefined, so
-  // this documents that the ?? fallback is not the path an unknown code takes.
   it("returns Intl's placeholder for an unassigned code", () => {
     expect(regionDisplayName("ZZ").length).toBeGreaterThan(0);
   });
@@ -80,14 +74,11 @@ describe("telFieldFlag", () => {
     expect(telFieldFlag("+442071234567")).toEqual({ flag: "🇬🇧", region: "GB" });
   });
 
-  // "00" is the international dialing prefix across Europe: 0045… is +45.
   it("treats a 00 prefix as international", () => {
     expect(telFieldFlag("004512345678")).toEqual({ flag: "🇩🇰", region: "DK" });
     expect(telFieldFlag("0046701234567")).toEqual({ flag: "🇸🇪", region: "SE" });
   });
 
-  // A SINGLE leading zero is a national trunk digit — 070… is a local Swedish
-  // number, not country code 70. This is the distinction the comment calls out.
   it("treats a single leading zero as a local number", () => {
     expect(telFieldFlag("0701234567")).toBeNull();
     expect(telFieldFlag("08123456")).toBeNull();
@@ -104,7 +95,6 @@ describe("telFieldFlag", () => {
     expect(telFieldFlag("   ")).toBeNull();
   });
 
-  // A wired reference is a template, not a number — there is no country to show.
   it("returns null for a wired reference", () => {
     expect(telFieldFlag("${node.phone}")).toBeNull();
     expect(telFieldFlag("  ${input.tel}  ")).toBeNull();
@@ -121,7 +111,6 @@ describe("telFieldFlag", () => {
   it("prefers the longest matching calling code", () => {
     expect(telFieldFlag("+3541234567")).toEqual({ flag: "🇮🇸", region: "IS" });
     expect(telFieldFlag("+3581234567")).toEqual({ flag: "🇫🇮", region: "FI" });
-    // A one-digit code still resolves when no longer prefix matches.
     expect(telFieldFlag("+12125551234")).toEqual({ flag: "🇺🇸", region: "US" });
   });
 
@@ -142,18 +131,12 @@ describe("telFieldFlag", () => {
     expect(telFieldFlag("+8112345678")).toEqual({ flag: "🌐", region: "" });
   });
 
-  // A bare "+" or "00" is international form with no digits at all: globe, not
-  // a crash and not a wrong country.
   it("returns a globe for an international prefix with no digits", () => {
     expect(telFieldFlag("+")).toEqual({ flag: "🌐", region: "" });
     expect(telFieldFlag("00")).toEqual({ flag: "🌐", region: "" });
     expect(telFieldFlag("+ ")).toEqual({ flag: "🌐", region: "" });
   });
 
-  // +1 is shared by the US and Canada. The module documents that ambiguous
-  // codes resolve to ONE representative region — the backend's libphonenumber
-  // is the source of truth — so this pins that it is deterministic, not that
-  // it is correct for Canada.
   it("resolves an ambiguous code to one representative region", () => {
     expect(telFieldFlag("+16135551234")).toEqual({ flag: "🇺🇸", region: "US" });
   });

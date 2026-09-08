@@ -10,9 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestAutoLiftToList covers the one→many rule: a single value feeding a MANY
-// (list) input port is wrapped into a one-element list, while lists, blob refs,
-// empties, and one-input ports are left untouched.
 func TestAutoLiftToList(t *testing.T) {
 	listPort := core.Port{Port: "rows", List: true}
 	onePort := core.Port{Port: "body"}

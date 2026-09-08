@@ -17,11 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// TestPassthrough_ThreadsValueThroughNode confirms the universal value
-// passthrough: a value wired into a node's reserved "pass" input is re-emitted
-// unchanged on that node's "pass" output when it runs — without the drop
-// itself doing anything. Here a source emits a value into sleep.pass; sleep
-// computes nothing useful, yet its result carries the threaded value.
 func TestPassthrough_ThreadsValueThroughNode(t *testing.T) {
 	t.Parallel()
 	ks := auth.NewMemKeyStore()
@@ -33,8 +28,6 @@ func TestPassthrough_ThreadsValueThroughNode(t *testing.T) {
 
 	ws, _ := workspace.OpenFS("")
 
-	// A local registry: a fixture source that emits a known value, plus the
-	// real default drops (we route through sleep as the pass-through carrier).
 	reg := engine.NewRegistry()
 	const threaded = "correlation-id-99"
 	_ = reg.Register(engine.NativeDrop{
@@ -84,7 +77,6 @@ func TestPassthrough_ThreadsValueThroughNode(t *testing.T) {
 			{ID: "carry", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
-			// Wire the value straight into the carrier's pass input.
 			{From: "src", FromPort: "out", To: "carry", ToPort: core.PassPort},
 		},
 	}

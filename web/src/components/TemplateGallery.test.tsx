@@ -9,8 +9,6 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
-// language is read by the mocked useTranslation below, so a test can re-render
-// the same gallery as a Swedish reader.
 let language = "en";
 
 vi.mock("react-i18next", () => ({
@@ -47,7 +45,6 @@ vi.mock("../api", () => ({
 
 import { TemplateGallery } from "./TemplateGallery";
 
-// The real index entry, so the fingerprints under test are the shipped ones.
 const emailToSlack = {
   id: "email-to-slack",
   title: "New email → Slack message",
@@ -82,7 +79,6 @@ describe("TemplateGallery", () => {
     expect(screen.getByText("Notifications")).toBeInTheDocument();
   });
 
-  // The bug: a Swedish reader got Swedish buttons over English cards.
   it("renders the card and its heading in the reader's language", async () => {
     language = "sv";
     renderGallery();
@@ -94,8 +90,6 @@ describe("TemplateGallery", () => {
     expect(screen.queryByText("Notifications")).toBeNull();
   });
 
-  // Grouping keys stay English, so which cards sit together — and the
-  // ?category= link that reproduces it — do not depend on the language.
   it("groups by the English category whatever the language", async () => {
     language = "sv";
     listTemplates.mockResolvedValue({
@@ -106,8 +100,6 @@ describe("TemplateGallery", () => {
     expect(screen.getAllByText("Aviseringar")).toHaveLength(1);
   });
 
-  // A template with no category falls in the catch-all bucket, whose heading is
-  // an ordinary i18n key rather than server prose.
   it("names the catch-all bucket from the app's own strings", async () => {
     listTemplates.mockResolvedValue({
       templates: [{ ...emailToSlack, category: undefined }],
@@ -156,10 +148,6 @@ describe("TemplateGallery forking stamps the flow's language", () => {
   });
 });
 
-// The card the user clicked and the flow they end up with should be the same
-// thing. Titles render through templateTitle(), so a Swedish reader picked
-// "Webbformulär → Samling" and landed on a flow called "Web form → Collection"
-// — the graph file's raw English name, which the fork copied straight through.
 describe("TemplateGallery names the fork after the card", () => {
   const forkedGraph = async () => {
     const user = userEvent.setup();
@@ -177,8 +165,6 @@ describe("TemplateGallery names the fork after the card", () => {
   it("uses the translated title the card showed", async () => {
     language = "sv";
     const name = (await forkedGraph()).name;
-    // Whatever the Swedish vocabulary carries — the point is that it is the
-    // card's text, not the graph file's English.
     expect(name).toBe(screen.getByRole("heading", { level: 3 }).textContent);
   });
 });

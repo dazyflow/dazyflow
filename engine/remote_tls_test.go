@@ -58,10 +58,6 @@ func TestCredentialsForDescriptor_TLSWinsOverInsecure(t *testing.T) {
 	}
 }
 
-// Integration: build a tiny TLS config, dial through it. We don't run a
-// real server here — that's covered by daemon/tls_test.go's mTLS suite.
-// This test exists to confirm the engine-side wiring accepts and uses
-// the *tls.Config the caller hands over.
 func TestCredentialsForDescriptor_TLSConfigPassesThrough(t *testing.T) {
 	now := time.Now()
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -85,14 +81,9 @@ func TestCredentialsForDescriptor_TLSConfigPassesThrough(t *testing.T) {
 	if err != nil {
 		t.Fatalf("credentials: %v", err)
 	}
-	// We can't really handshake without a listener; just confirm the
-	// credentials reports its desired server name.
 	info := creds.Info()
 	if info.SecurityProtocol != "tls" {
 		t.Errorf("security protocol = %q", info.SecurityProtocol)
 	}
-	// Sanity: ensure the underlying config is wired (no nil deref on
-	// later RPCs). A trivial net.Pipe handshake isn't worth the noise
-	// here since daemon's mTLS test already covers that path.
 	_ = net.IPv4zero
 }

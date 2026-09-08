@@ -10,9 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// runJoin is a thin shim — every test builds a job, calls executeJoinRows,
-// then asserts on output. Centralising avoids per-test boilerplate while
-// keeping each test's intent in plain view.
 func runJoin(t *testing.T, params map[string]any, leftRows, rightRows []map[string]any, leftHeaders, rightHeaders []string) core.Result {
 	t.Helper()
 	in := map[string]core.Ref{
@@ -32,8 +29,6 @@ func runJoin(t *testing.T, params map[string]any, leftRows, rightRows []map[stri
 	return res
 }
 
-// outRows pulls the rows output off a result with type assertion. Lets
-// individual tests do `len(outRows(res))` without re-parsing.
 func outRows(t *testing.T, res core.Result) []map[string]any {
 	t.Helper()
 	if res.Status != core.StatusOK {
@@ -55,9 +50,6 @@ func outHeaders(t *testing.T, res core.Result) []string {
 	return h
 }
 
-// findRow returns the first row matching predicate, or nil. Used to
-// assert "the joined row for user 2 has these values" without baking
-// in slice ordering between left- and outer-join branches.
 func findRow(rows []map[string]any, key string, value any) map[string]any {
 	for _, r := range rows {
 		if r[key] == value {
@@ -66,8 +58,6 @@ func findRow(rows []map[string]any, key string, value any) map[string]any {
 	}
 	return nil
 }
-
-// ---- Inner ----------------------------------------------------------
 
 func TestJoinRows_InnerHappyPath(t *testing.T) {
 	left := []map[string]any{
@@ -103,9 +93,6 @@ func TestJoinRows_InnerHappyPath(t *testing.T) {
 }
 
 func TestJoinRows_KindCoercionAcrossTypes(t *testing.T) {
-	// Excel and JSON inputs often differ on numeric vs string —
-	// fmt.Sprint coercion lets a row with id=30 (int) join a row
-	// with user_id="30" (string) without forcing a pre-cast.
 	left := []map[string]any{{"id": 30, "name": "x"}}
 	right := []map[string]any{{"user_id": "30", "country": "SE"}}
 	res := runJoin(t,
@@ -120,8 +107,6 @@ func TestJoinRows_KindCoercionAcrossTypes(t *testing.T) {
 		t.Errorf("country=%v", rows[0]["country"])
 	}
 }
-
-// ---- Left / right / outer ------------------------------------------
 
 func TestJoinRows_LeftEmitsUnmatchedLeftsWithNilRightCols(t *testing.T) {
 	left := []map[string]any{
@@ -190,13 +175,10 @@ func TestJoinRows_OuterCoversBothUnmatchedSides(t *testing.T) {
 		left, right, nil, nil,
 	)
 	rows := outRows(t, res)
-	// Expect: alice+SE, bob+nil, nil+ZZ — 3 rows.
 	if len(rows) != 3 {
 		t.Fatalf("len=%d want 3; rows=%+v", len(rows), rows)
 	}
 }
-
-// ---- Multi-column key ----------------------------------------------
 
 func TestJoinRows_MultiColumnKey(t *testing.T) {
 	left := []map[string]any{
@@ -207,7 +189,6 @@ func TestJoinRows_MultiColumnKey(t *testing.T) {
 	right := []map[string]any{
 		{"p": 1, "q": "x", "w": "R1"},
 		{"p": 1, "q": "y", "w": "R2"},
-		// (2, "y") has no left match.
 		{"p": 2, "q": "y", "w": "R3"},
 	}
 	res := runJoin(t,
@@ -220,11 +201,7 @@ func TestJoinRows_MultiColumnKey(t *testing.T) {
 	}
 }
 
-// ---- Cartesian within key group ------------------------------------
-
 func TestJoinRows_CartesianWhenRightHasDuplicateKey(t *testing.T) {
-	// One left row, three right rows sharing the key → 3 output rows
-	// (SQL inner-join behavior).
 	left := []map[string]any{{"id": 1, "name": "alice"}}
 	right := []map[string]any{
 		{"user_id": 1, "role": "admin"},
@@ -250,8 +227,6 @@ func TestJoinRows_CartesianWhenRightHasDuplicateKey(t *testing.T) {
 		t.Errorf("roles=%v", roles)
 	}
 }
-
-// ---- Header collisions ---------------------------------------------
 
 func TestJoinRows_CollidingColumnGetsRightSuffix(t *testing.T) {
 	left := []map[string]any{{"id": 1, "country": "SE-left"}}
@@ -294,9 +269,6 @@ func TestJoinRows_CustomRightSuffix(t *testing.T) {
 }
 
 func TestJoinRows_SharedKeyColumnNameDoesNotDuplicate(t *testing.T) {
-	// When both sides name the key the same thing, the right copy
-	// is dropped (same as differently-named keys — the right's key
-	// column is redundant by construction).
 	left := []map[string]any{{"id": 1, "name": "alice"}}
 	right := []map[string]any{{"id": 1, "country": "SE"}}
 	res := runJoin(t,
@@ -323,11 +295,8 @@ func TestJoinRows_SharedKeyColumnNameDoesNotDuplicate(t *testing.T) {
 	}
 }
 
-// ---- Empty sides ---------------------------------------------------
-
 func TestJoinRows_EmptyLeft(t *testing.T) {
 	right := []map[string]any{{"user_id": 1, "country": "SE"}}
-	// Inner with empty left → empty output, no error.
 	res := runJoin(t,
 		map[string]any{"on": map[string]any{"id": "user_id"}},
 		nil, right, []string{"id", "name"}, nil,
@@ -336,7 +305,6 @@ func TestJoinRows_EmptyLeft(t *testing.T) {
 	if len(rows) != 0 {
 		t.Errorf("inner with empty left: want 0, got %d", len(rows))
 	}
-	// Outer with empty left → all right rows surface as unmatched.
 	res = runJoin(t,
 		map[string]any{"on": map[string]any{"id": "user_id"}, "kind": "outer"},
 		nil, right, []string{"id", "name"}, nil,
@@ -349,7 +317,6 @@ func TestJoinRows_EmptyLeft(t *testing.T) {
 
 func TestJoinRows_EmptyRight(t *testing.T) {
 	left := []map[string]any{{"id": 1, "name": "alice"}}
-	// Inner with empty right → empty output.
 	res := runJoin(t,
 		map[string]any{"on": map[string]any{"id": "user_id"}},
 		left, nil, nil, []string{"user_id", "country"},
@@ -357,7 +324,6 @@ func TestJoinRows_EmptyRight(t *testing.T) {
 	if got := len(outRows(t, res)); got != 0 {
 		t.Errorf("inner with empty right: want 0, got %d", got)
 	}
-	// Left with empty right → all left rows pass through.
 	res = runJoin(t,
 		map[string]any{"on": map[string]any{"id": "user_id"}, "kind": "left"},
 		left, nil, nil, []string{"user_id", "country"},
@@ -370,8 +336,6 @@ func TestJoinRows_EmptyRight(t *testing.T) {
 		t.Errorf("left row didn't pass through: %+v", rows[0])
 	}
 }
-
-// ---- Error paths ---------------------------------------------------
 
 func TestJoinRows_MissingOnParamFails(t *testing.T) {
 	left := []map[string]any{{"id": 1}}
@@ -430,8 +394,6 @@ func TestJoinRows_MissingKeyColumnOnRightFails(t *testing.T) {
 		t.Errorf("expected bad_input, got %+v", res)
 	}
 }
-
-// ---- Output port contract pinning ----------------------------------
 
 func TestJoinRows_RowsAndHeadersBothEmitted(t *testing.T) {
 	res := runJoin(t,

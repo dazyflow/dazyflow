@@ -36,7 +36,6 @@ func runDrop(t *testing.T, module string, params map[string]any, in map[string]c
 	return res.Output
 }
 
-// rowsOf normalises a rows output to []map[string]any for comparison.
 func rowsOf(t *testing.T, r core.Ref) []map[string]any {
 	t.Helper()
 	b, err := json.Marshal(r.Inline)
@@ -73,14 +72,7 @@ func nowPlus(t *testing.T, h int) string {
 	return time.Now().UTC().Add(time.Duration(h) * time.Hour).Format(time.RFC3339)
 }
 
-// Use case 3: "email me a summary every Monday" — the week filter and the
-// per-salesperson totals.
 func TestDigestFormulas(t *testing.T) {
-	// The two dates are relative to the run because the filter is: one day
-	// inside the 168h window, one month outside it. A literal date here is a
-	// test with an expiry date — this pair was written as 2026-08-19, one day
-	// old against a 7-day window, and started failing six days later when the
-	// window moved past it. That is what nowPlus is for.
 	out := runDrop(t, "compute_rows", map[string]any{
 		"compute": map[string]any{"amount": "double(row.amount)"},
 		"filter":  "timestamp(row.date) > now - duration('168h')",
@@ -110,8 +102,6 @@ func TestDigestFormulas(t *testing.T) {
 	}
 }
 
-// Use case 7: "text my customers the day before" — only tomorrow's bookings
-// that actually have someone to notify.
 func TestTomorrowsBookingsFilter(t *testing.T) {
 	out := runDrop(t, "compute_rows", map[string]any{
 		"compute": map[string]any{
@@ -151,8 +141,6 @@ func TestNotYetSyncedFilter(t *testing.T) {
 		t.Errorf("anti join leaked a right-side column: %v", rows[0])
 	}
 
-	// Why the graph doesn't do it the other way: after a left join the
-	// unmatched column is present-and-null, so has() is true for it.
 	joined := runDrop(t, "join_rows", map[string]any{
 		"on": map[string]any{"email": "email"}, "kind": "left",
 	}, map[string]core.Ref{"left_rows": left, "right_rows": right})
@@ -211,9 +199,6 @@ func TestReconciliationClassifier(t *testing.T) {
 	}
 }
 
-// Use case 29: each customer's own rows, collected into their own statement.
-// The grouping has to carry the lines along, not just the totals — that list
-// is what the template walks.
 func TestPerCustomerStatement(t *testing.T) {
 	grouped := runDrop(t, "group_aggregate", map[string]any{
 		"by": []any{"customer", "email"},
@@ -236,8 +221,6 @@ func TestPerCustomerStatement(t *testing.T) {
 		t.Fatalf("Acme's lines = %v, want both charges", rows[0]["lines"])
 	}
 
-	// That group is what a loop hands the template as ${item.} — see
-	// engine.TestItemWholeValue_KeepsStructure for the handover itself.
 	out := runDrop(t, "render_template", map[string]any{
 		"template": "<p>Hej {{.customer}},</p><ul>{{range .lines}}<li>{{.}}</li>{{end}}</ul><p>Total: {{.total}} kr</p>",
 	}, map[string]core.Ref{"data": jsonRef(rows[0])})
@@ -249,9 +232,6 @@ func TestPerCustomerStatement(t *testing.T) {
 	}
 }
 
-// Use cases 24 and 27 lean on the string helpers: a title trimmed out of a
-// Slack message, and addresses tidied before they're deduplicated. Without
-// them neither is expressible in a formula at all.
 func TestStringHelpersInScenarios(t *testing.T) {
 	out := runDrop(t, "compute_rows", map[string]any{
 		"compute": map[string]any{
@@ -279,7 +259,6 @@ func TestStringHelpersInScenarios(t *testing.T) {
 	}
 }
 
-// Use case 31: only tomorrow, and only when tomorrow is actually bad.
 func TestTomorrowsWeatherFilter(t *testing.T) {
 	const filter = "row.date == string(now + duration('24h')).substring(0, 10) && " +
 		"(row.temp_min < 0.0 || row.conditions.lowerAscii().contains('rain'))"

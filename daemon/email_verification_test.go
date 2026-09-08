@@ -16,8 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/auth"
 )
 
-// verificationHarness: gateway + in-memory users/sessions + fake SMTP +
-// public base URL, i.e. a verification-active deployment with signup on.
 func verificationHarness(t *testing.T) (*gatewayHarness, *auth.JSONUserStore, *fakeSMTP) {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -34,8 +32,6 @@ func verificationHarness(t *testing.T) (*gatewayHarness, *auth.JSONUserStore, *f
 	sessions := auth.NewMemSessionStore()
 	h.gw.Sessions = sessions
 	h.gw.EnableSignup = true
-	// The harness's chain only knows API keys; verification flows issue
-	// sessions, so add the session authenticator like dzd does.
 	h.svc.Auth = auth.Chain{
 		&auth.APIKeyAuthenticator{Store: h.ks},
 		&auth.SessionAuthenticator{Store: sessions},
@@ -47,8 +43,6 @@ func verificationHarness(t *testing.T) (*gatewayHarness, *auth.JSONUserStore, *f
 
 var verifyLinkRE = regexp.MustCompile(`https://app\.example/verify-email\?email=([^&\s]+)&token=([a-f0-9]{64})`)
 
-// signupAndExtractLink runs a signup and pulls the link out of the
-// captured email — the exact path a real user takes.
 func signupAndExtractLink(t *testing.T, h *gatewayHarness, srv *fakeSMTP, email string) (string, string) {
 	t.Helper()
 	rw := h.do(t, "POST", "/api/v1/auth/signup", map[string]string{
@@ -64,8 +58,6 @@ func signupAndExtractLink(t *testing.T, h *gatewayHarness, srv *fakeSMTP, email 
 	for {
 		_, _, data, _ := srv.snapshot()
 		if m := verifyLinkRE.FindStringSubmatch(qpDecode(data)); m != nil {
-			// The frontend reads the query param via URLSearchParams,
-			// which percent-decodes — mirror that here.
 			email, err := url.QueryUnescape(m[1])
 			if err != nil {
 				t.Fatalf("bad email param %q: %v", m[1], err)
@@ -84,10 +76,6 @@ func TestEmailVerification_FullLifecycle(t *testing.T) {
 	h, users, srv := verificationHarness(t)
 	emailParam, token := signupAndExtractLink(t, h, srv, "new@example.com")
 
-	// Unverified: whoami (as that user) reports pending. The signup
-	// session cookie path is exercised via the user record directly —
-	// the gateway harness's do() uses an API-key token, so check the
-	// store + the gate instead.
 	u, err := users.GetByEmail(t.Context(), "new@example.com")
 	if err != nil || u.EmailVerified() {
 		t.Fatalf("fresh signup should be unverified: %+v / %v", u, err)
@@ -96,7 +84,6 @@ func TestEmailVerification_FullLifecycle(t *testing.T) {
 		t.Fatalf("token not persisted: %+v", u)
 	}
 
-	// A wrong token bounces without flipping anything.
 	rw := h.do(t, "POST", "/api/v1/auth/verify-email", map[string]string{
 		"email": "new@example.com", "token": strings.Repeat("0", 64),
 	})
@@ -104,7 +91,6 @@ func TestEmailVerification_FullLifecycle(t *testing.T) {
 		t.Fatalf("wrong token: %d", rw.Code)
 	}
 
-	// The emailed link verifies.
 	rw = h.do(t, "POST", "/api/v1/auth/verify-email", map[string]string{
 		"email": emailParam, "token": token,
 	})
@@ -116,7 +102,6 @@ func TestEmailVerification_FullLifecycle(t *testing.T) {
 		t.Fatalf("verify should set VerifiedAt and clear the token: %+v", u)
 	}
 
-	// Idempotent: re-clicking the consumed link still succeeds.
 	rw = h.do(t, "POST", "/api/v1/auth/verify-email", map[string]string{
 		"email": emailParam, "token": token,
 	})
@@ -145,7 +130,6 @@ func TestEmailVerification_ExpiredToken(t *testing.T) {
 
 func TestEmailVerification_UnknownEmailSameShape(t *testing.T) {
 	t.Parallel()
-	// "No such account" answers exactly like "bad token" — no enumeration.
 	h, _, _ := verificationHarness(t)
 	rw := h.do(t, "POST", "/api/v1/auth/verify-email", map[string]string{
 		"email": "ghost@example.com", "token": strings.Repeat("a", 64),
@@ -157,7 +141,6 @@ func TestEmailVerification_UnknownEmailSameShape(t *testing.T) {
 
 func TestEmailVerification_InactiveWithoutMailer(t *testing.T) {
 	t.Parallel()
-	// No mailer: signup works exactly as before, nothing pending, no gate.
 	h := newGatewayHarness(t)
 	users, _ := auth.OpenJSONUserStore("")
 	h.gw.Users = users
@@ -174,7 +157,6 @@ func TestEmailVerification_InactiveWithoutMailer(t *testing.T) {
 	if len(u.VerifyTokenHash) != 0 {
 		t.Errorf("no token should be minted without a mailer: %+v", u)
 	}
-	// Resend reports the feature off.
 	if rw := h.do(t, "POST", "/api/v1/me/verification/resend", nil); rw.Code != http.StatusNotImplemented {
 		t.Errorf("resend without mailer: %d, want 501", rw.Code)
 	}
@@ -189,9 +171,6 @@ func TestEmailVerification_InviteGate(t *testing.T) {
 	}
 	h.gw.Invitations = inv
 
-	// An unverified org admin (session-style principal) is blocked. The
-	// harness's admin key has subject "root" (no @) — mint one whose
-	// subject is a real email backed by an unverified user record.
 	emailParam, token := signupAndExtractLink(t, h, srv, "owner@example.com")
 	u, _ := users.GetByEmail(t.Context(), "owner@example.com")
 	adminDoAs := func() *httptest.ResponseRecorder {
@@ -230,12 +209,10 @@ func TestEmailVerification_InviteGate(t *testing.T) {
 	if !strings.HasPrefix(unverified.AcceptURL, "http") {
 		t.Errorf("accept_url = %q, want an absolute link to copy/paste", unverified.AcceptURL)
 	}
-	// And nothing reached the wire addressed to the invitee.
 	if _, _, data, _ := srv.snapshot(); strings.Contains(data, "newcomer@example.com") {
 		t.Error("an invitation email was sent on an unverified inviter's behalf")
 	}
 
-	// Verify, then the same invite is emailed.
 	if rw := h.do(t, "POST", "/api/v1/auth/verify-email", map[string]string{
 		"email": emailParam, "token": token,
 	}); rw.Code != http.StatusOK {
@@ -255,7 +232,6 @@ func TestEmailVerification_InviteGate(t *testing.T) {
 	if !verified.EmailSent {
 		t.Error("a verified inviter's invitation should be emailed")
 	}
-	// API-key principals (harness adminDo, subject "root") bypass the gate.
 	if rw := h.adminDo(t, "POST", "/api/v1/admin/invitations",
 		map[string]any{"email": "second@example.com"}); rw.Code != http.StatusCreated {
 		t.Fatalf("api-key inviter: %d %s", rw.Code, rw.Body.String())
@@ -268,7 +244,6 @@ func TestEmailVerification_Resend(t *testing.T) {
 	_, oldToken := signupAndExtractLink(t, h, srv, "again@example.com")
 	u, _ := users.GetByEmail(t.Context(), "again@example.com")
 
-	// Resend as that user: a fresh token invalidates the old one.
 	_, tok, err := auth.IssueSession(t.Context(), h.gw.Sessions, u, time.Hour)
 	if err != nil {
 		t.Fatalf("issue session: %v", err)
@@ -289,9 +264,6 @@ func TestEmailVerification_Resend(t *testing.T) {
 	var newToken string
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		// The mailer captures every message, so scan for the MOST RECENT
-		// verify link (the resend) rather than the first (the original
-		// signup, whose token is oldToken).
 		_, _, data, _ := srv.snapshot()
 		ms := verifyLinkRE.FindAllStringSubmatch(qpDecode(data), -1)
 		if len(ms) > 0 {
@@ -311,7 +283,6 @@ func TestEmailVerification_Resend(t *testing.T) {
 		t.Fatalf("fresh token: %d %s", rw.Code, rw.Body.String())
 	}
 
-	// Resend on a verified account says so without sending.
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest("POST", "/api/v1/me/verification/resend", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -321,9 +292,6 @@ func TestEmailVerification_Resend(t *testing.T) {
 	}
 }
 
-// TestEmailVerification_ResendRateLimited proves the resend route is behind
-// the auth IP rate limiter (defense against token-churn / email spam): with a
-// 1-request burst, the second resend in the window returns 429.
 func TestEmailVerification_ResendRateLimited(t *testing.T) {
 	t.Parallel()
 	h, users, srv := verificationHarness(t)
@@ -333,8 +301,6 @@ func TestEmailVerification_ResendRateLimited(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issue session: %v", err)
 	}
-	// Enable the limiter only now, so setup's signup (also rate-limited) didn't
-	// consume the burst. 1/min, burst 1 → second resend in the window is 429.
 	h.gw.AuthRateLimit = NewAuthRateLimiter(1, 1)
 	resend := func() int {
 		rec := httptest.NewRecorder()

@@ -23,7 +23,6 @@
 // conflict_columns and STRIPE_API_KEY are what the user types and what the
 // service returns.
 
-// params_schema field labels — the form's left column.
 export const SV_FIELD_TITLES: Record<string, string> = {
   "Rules": "Regler",
   "Route to send it down": "Vägen de ska ta",
@@ -327,7 +326,6 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Let an API key approve this": "Låt en API-nyckel godkänna det här",
 };
 
-// Per-field help text, shown behind the (i) on a field.
 export const SV_FIELD_HELP: Record<string, string> = {
   "Keys a caller may send to start this flow, either as an Authorization: Bearer header or as ?key=… on the end of the address — use the address form for senders that only let you paste a URL. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime.":
     "Nycklar som en avsändare kan skicka för att starta flödet, antingen som rubriken Authorization: Bearer eller som ?key=… sist i adressen — använd adressformen för avsändare som bara låter dig klistra in en URL. Adressen godtar VILKEN som helst av nycklarna i listan, så du kan lägga till en ny nyckel, flytta över avsändarna och sedan återkalla den gamla utan avbrott.",
@@ -881,7 +879,6 @@ export const SV_FIELD_HELP: Record<string, string> = {
     "Låt ett skript eller en agent med en API-nyckel besluta den här grinden via godkännande-API:et i stället för en människa. Av som standard: en paus här betyder att en människa tittar först, och annars skulle vilken nyckel som helst med åtkomst till arbetsytan kunna vinka igenom den. En människa som arbetar i Godkännanden kan alltid besluta den ändå. Observera att det här inte kan begränsa Godkännandelänken — den är en URL, och ett skript som har den ser precis ut som personen den skickades till.",
 };
 
-// Dropdown option labels (schema.enumNames), including the currency list.
 export const SV_ENUM_LABELS: Record<string, string> = {
   "Every row from the first list": "Varje rad från första listan",
   "Every row from the second list": "Varje rad från andra listan",
@@ -889,8 +886,6 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "Everything from both lists": "Allt från båda listorna",
   "Imperial (°F, mph)": "Imperiellt (°F, mph)",
   "Interpret like typing (dates, formulas)": "Tolka som om du skrev (datum, formler)",
-  // Date & time output formats. The format NAMES and their sample renderings
-  // are the same in both languages; only the words around them differ.
   "ISO-8601 (2026-08-27T14:05:09Z)": "ISO 8601 (2026-08-27T14:05:09Z)",
   "Date (2026-08-27)": "Datum (2026-08-27)",
   "Date and time (2026-08-27 14:05:09)": "Datum och tid (2026-08-27 14:05:09)",
@@ -909,27 +904,19 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "Unix milliseconds": "Unix-millisekunder",
   "Email/HTTP (Thu, 27 Aug 2026 14:05:09 UTC)": "E-post/HTTP (Thu, 27 Aug 2026 14:05:09 UTC)",
   "Custom…": "Eget…",
-  // Regex modes.
   "Extract matches": "Plocka ut träffar",
   "Replace matches": "Ersätt träffar",
   "Split on the pattern": "Dela på mönstret",
   "Test for a match": "Testa om det finns en träff",
-  // Base64 / hash. The algorithm and encoding names (SHA-256, Hex, Base64,
-  // Standard) are the same word in Swedish and are left to the fallback.
   Encode: "Koda",
   Decode: "Avkoda",
   "URL-safe": "URL-säker",
-  // Dedupe rows: which member of a duplicate group survives.
   "The first one": "Den första",
   "The last one": "Den sista",
-  // Drive export formats — the file types keep their own names; only the
-  // English word next to one needs translating.
   "Plain text (.txt)": "Vanlig text (.txt)",
-  // Gmail: how much of the message to fetch.
   Everything: "Allt",
   "Headers only": "Bara huvudena",
   "Smallest — ids and labels": "Minsta — id och etiketter",
-  // MQTT delivery guarantees.
   "0 — at most once": "0 — högst en gång",
   "1 — at least once": "1 — minst en gång",
   "2 — exactly once": "2 — exakt en gång",
@@ -959,10 +946,6 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "A is one of B": "A är någon av B",
   "A is outside range B": "A ligger utanför intervallet B",
   "A is within range B": "A ligger inom intervallet B",
-  // The If step's own vocabulary. Its pins read Value / Compare to, so its
-  // operator list says the same rather than "A equals B" — the mismatch
-  // between the two was what made the step hard to read. The "A … B" set
-  // above stays for Compare, where the pins really are called A and B.
   "equals": "är lika med",
   "does not equal": "är inte lika med",
   "is greater than": "är större än",
@@ -1176,8 +1159,6 @@ export const SV_ENUM_LABELS: Record<string, string> = {
     "Sport",
 };
 
-// Connection-field labels and help on the Apps pages. Placeholders and
-// example values are deliberately absent — they fall through unchanged.
 export const SV_CONNECTION_TEXT: Record<string, string> = {
   "993 (SSL/TLS) or 143 (STARTTLS)": "993 (SSL/TLS) eller 143 (STARTTLS)",
   "An alternative to the fingerprint, if you already have an OpenSSH known_hosts line for this server.": "Ett alternativ till fingeravtrycket, om du redan har en OpenSSH-known_hosts-rad för den här servern.",
@@ -1252,7 +1233,6 @@ export const SV_CONNECTION_TEXT: Record<string, string> = {
     "Consumer Key för en app skapad på developer.ticketmaster.com. Den kostnadsfria nivån tillåter 5000 anrop per dygn.",
 };
 
-// The "keeps state" chip and its reset explanation on a node card.
 export const SV_NODE_STATE: Record<string, string> = {
   "Forget what the page said last time. The next check records the page as it is then, and only later changes fire.": "Glöm vad sidan sa förra gången. Nästa kontroll registrerar sidan som den är då, och bara ändringar efter det utlöser.",
   "Forget whether the site was last seen up or down. The next check treats what it finds as the starting point (and still alerts if it finds it down).": "Glöm om sajten senast sågs som uppe eller nere. Nästa kontroll behandlar det den hittar som utgångspunkt (och larmar ändå om den hittar den nere).",

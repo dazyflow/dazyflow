@@ -25,22 +25,16 @@ import (
 // nature and verified via Stripe's HMAC signature instead, mirroring the
 // GitHub/Slack event endpoints.
 
-// billingAPI serves the billing endpoints. Its fields are the whole of what
-// those handlers need: the service for run counts and plan resolution, the
-// Stripe-backed store, and an audit sink.
 type billingAPI struct {
 	auditor
 	svc     *Service
 	Billing *BillingHandler
 }
 
-// billingAPI builds the billing handlers from the gateway's configuration.
 func (h *HTTPGateway) billingAPI() *billingAPI {
 	return &billingAPI{auditor: h.auditor(), svc: h.svc, Billing: h.Billing}
 }
 
-// maxStripeEventBytes caps incoming webhook payloads — Stripe events are
-// a few KB; 1 MiB is generous headroom.
 const maxStripeEventBytes = 1 << 20
 
 // BillingHandler holds the Stripe wiring the billing routes need. Nil
@@ -60,9 +54,6 @@ func NewBillingHandler(stripe *StripeClient, webhookSecret string) *BillingHandl
 	}
 }
 
-// resolveTenantScope applies the shared /me/* scope rule: the
-// principal's own tenant unless a platform admin asks about another.
-// Used by the usage and billing handlers.
 func resolveTenantScope(rw http.ResponseWriter, r *http.Request, p core.Principal) (string, bool) {
 	tenant := r.URL.Query().Get("tenant")
 	if tenant == "" {
@@ -81,9 +72,6 @@ func resolveTenantScope(rw http.ResponseWriter, r *http.Request, p core.Principa
 	return tenant, true
 }
 
-// GET /api/v1/me/billing — everything the Usage page needs to render the
-// plan state: plan, whether upgrading is possible on this deployment,
-// the free-tier cap (0 = no enforcement), and this month's run count.
 func (h *billingAPI) billingMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, ok := resolveTenantScope(rw, r, p)
 	if !ok {
@@ -121,19 +109,11 @@ func (h *billingAPI) billingMe(rw http.ResponseWriter, r *http.Request, p core.P
 		"cancel_at_period_end": plan.CancelAtPeriodEnd,
 		"free_runs_per_month":  h.svc.FreeRunsPerMonth,
 		"runs_this_month":      runsThisMonth,
-		// billing_enabled gates the plan/upgrade surface in the web UI; on a
-		// self-host without Stripe the client shows usage only.
-		"billing_enabled": billingEnabled,
-		// polling_allowed tells the Usage page why a free tenant's
-		// schedules aren't firing on gated deployments.
-		"polling_allowed": !h.svc.FreePollingDisabled || effPlan == PlanPro,
-		// Upgrade is offered only when Stripe is actually configured;
-		// manage (portal) additionally needs an existing customer.
-		"can_upgrade": billingEnabled && effPlan != PlanPro,
-		"can_manage":  billingEnabled && plan.StripeCustomerID != "",
+		"billing_enabled":      billingEnabled,
+		"polling_allowed":      !h.svc.FreePollingDisabled || effPlan == PlanPro,
+		"can_upgrade":          billingEnabled && effPlan != PlanPro,
+		"can_manage":           billingEnabled && plan.StripeCustomerID != "",
 	}
-	// current_period_end is the renewal-or-cancellation date the UI dates
-	// its chip from; omit when unset so the client can distinguish "no date".
 	if !plan.CurrentPeriodEnd.IsZero() {
 		resp["current_period_end"] = plan.CurrentPeriodEnd.UTC().Format(time.RFC3339)
 	}
@@ -161,14 +141,10 @@ type planLimits struct {
 // server-side so the client never re-implements ResolveEffective; the client
 // only formats and diffs the numbers.
 type planOption struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Plan      string `json:"plan"`
-	IsCurrent bool   `json:"is_current"`
-	// IsContact marks a sales-led plan (Enterprise) that isn't self-serve:
-	// the client shows a "Contact sales" CTA instead of an upgrade button.
-	// Its limits are all-unlimited (0) — the real numbers are set per-customer
-	// via a comp/custom tier.
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	Plan      string     `json:"plan"`
+	IsCurrent bool       `json:"is_current"`
 	IsContact bool       `json:"is_contact,omitempty"`
 	Limits    planLimits `json:"limits"`
 }
@@ -182,11 +158,6 @@ type plansResponse struct {
 	Plans         []planOption `json:"plans"`
 }
 
-// planLimitsFrom projects resolved EffectiveLimits onto the display shape. The
-// resolver already encodes the plan — Pro defaults the free-only dims (runs,
-// concurrency, members, retention) to 0 = unlimited but keeps an explicit
-// fair-use cap — so the display is a straight projection that matches what the
-// gates enforce. 0 renders as "Unlimited" on the client.
 func planLimitsFrom(e EffectiveLimits) planLimits {
 	return planLimits{
 		RunsPerMonth:      e.RunsPerMonth,
@@ -201,16 +172,8 @@ func planLimitsFrom(e EffectiveLimits) planLimits {
 	}
 }
 
-// isBuiltinTierID reports the two seeded tier ids the comparison offers as
-// self-serve options. Anything else is an admin-assigned custom (comp) tier.
 func isBuiltinTierID(id string) bool { return id == "free" || id == PlanPro }
 
-// GET /api/v1/me/plans — the data-driven plan comparison the Plans page
-// renders. Returns the resolved limits for each self-serve plan (built-in free
-// + pro, plus the org's own tier when it's a custom comp) so the client can
-// show what differs from the current plan without any per-tier copy. Limits are
-// resolved through the same ResolveEffective the enforcement paths use, so the
-// catalog and reality agree.
 func (h *billingAPI) plansMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, ok := resolveTenantScope(rw, r, p)
 	if !ok {
@@ -219,9 +182,6 @@ func (h *billingAPI) plansMe(rw http.ResponseWriter, r *http.Request, p core.Pri
 	ctx := r.Context()
 	cur := h.svc.effectiveLimits(ctx, tenant)
 
-	// Stripe customer id drives the "manage billing" affordance; the plan
-	// store also gives the customer record. Best-effort — absent store leaves
-	// can_manage false.
 	var customerID string
 	if h.svc.Plans != nil {
 		if tp, err := h.svc.Plans.GetPlan(ctx, tenant); err == nil {
@@ -233,10 +193,6 @@ func (h *billingAPI) plansMe(rw http.ResponseWriter, r *http.Request, p core.Pri
 		runsThisMonth, _ = h.svc.runsThisMonth(ctx, tenant)
 	}
 
-	// Which built-in/custom option represents the org's current standing. The
-	// effective PLAN is the source of truth (a Stripe-pro org keeps the default
-	// "free" tier id but is really on pro); a custom comp tier is keyed by its
-	// own id so it, not the generic pro card, reads as current.
 	currentKey := cur.Plan // "free" | "pro"
 	if cur.TierID != "" && !isBuiltinTierID(cur.TierID) {
 		currentKey = cur.TierID
@@ -264,8 +220,6 @@ func (h *billingAPI) plansMe(rw http.ResponseWriter, r *http.Request, p core.Pri
 			}
 		}
 	} else {
-		// Pre-entitlement deploys have no tier store: synthesize the two plans
-		// straight from the global defaults + plan semantics.
 		free := ResolveEffective(nil, nil, def, PlanFree, now)
 		pro := ResolveEffective(nil, nil, def, PlanPro, now)
 		plans = append(plans,
@@ -273,20 +227,13 @@ func (h *billingAPI) plansMe(rw http.ResponseWriter, r *http.Request, p core.Pri
 			planOption{ID: PlanPro, Name: "Pro", Plan: pro.Plan, Limits: planLimitsFrom(pro)},
 		)
 	}
-	// Enterprise is sales-led, not a self-serve Stripe plan: a hosted tier for
-	// larger orgs whose real limits are provisioned per-customer via a comp/
-	// custom tier. Surface it as a contact-only card (all limits unlimited) so
-	// the comparison renders three columns. Skip it when the org is already on
-	// a custom (non-built-in) tier — that tier IS their enterprise plan and is
-	// already listed above as current.
 	if cur.TierID == "" || isBuiltinTierID(cur.TierID) {
 		plans = append(plans, planOption{
 			ID:        "enterprise",
 			Name:      "Enterprise",
 			Plan:      PlanPro,
 			IsContact: true,
-			// All numeric limits 0 = unlimited; polling included.
-			Limits: planLimits{PollingAllowed: true},
+			Limits:    planLimits{PollingAllowed: true},
 		})
 	}
 
@@ -300,16 +247,12 @@ func (h *billingAPI) plansMe(rw http.ResponseWriter, r *http.Request, p core.Pri
 		CurrentPlan:   cur.Plan,
 		CurrentTierID: cur.TierID,
 		RunsThisMonth: runsThisMonth,
-		// Offer upgrade only when Stripe is configured and the org isn't
-		// already effectively pro (comp/trial included, via cur.Plan).
-		CanUpgrade: h.Billing != nil && h.Billing.Stripe != nil && cur.Plan != PlanPro,
-		CanManage:  h.Billing != nil && h.Billing.Stripe != nil && customerID != "",
-		Plans:      plans,
+		CanUpgrade:    h.Billing != nil && h.Billing.Stripe != nil && cur.Plan != PlanPro,
+		CanManage:     h.Billing != nil && h.Billing.Stripe != nil && customerID != "",
+		Plans:         plans,
 	})
 }
 
-// POST /api/v1/me/billing/checkout — mint a Stripe Checkout session for
-// the pro plan and return its hosted URL; the web client redirects there.
 func (h *billingAPI) billingCheckout(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Billing == nil || h.Billing.Stripe == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured",
@@ -365,8 +308,6 @@ func (h *billingAPI) billingCheckout(rw http.ResponseWriter, r *http.Request, p 
 	writeJSON(rw, http.StatusOK, map[string]string{"url": u})
 }
 
-// POST /api/v1/me/billing/portal — mint a billing-portal session for an
-// already-subscribed tenant (manage payment method, cancel, invoices).
 func (h *billingAPI) billingPortal(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Billing == nil || h.Billing.Stripe == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured",
@@ -392,8 +333,6 @@ func (h *billingAPI) billingPortal(rw http.ResponseWriter, r *http.Request, p co
 			"this organization has no billing account yet — upgrade first")
 		return
 	}
-	// Pinned to the tenant whose billing account this portal manages, for the
-	// same reason as checkout above.
 	u, err := h.Billing.Stripe.CreatePortalSession(r.Context(), plan.StripeCustomerID,
 		withOrg(strings.TrimRight(h.svc.PublicBaseURL, "/")+"/usage", tenant))
 	if err != nil {
@@ -403,8 +342,6 @@ func (h *billingAPI) billingPortal(rw http.ResponseWriter, r *http.Request, p co
 	writeJSON(rw, http.StatusOK, map[string]string{"url": u})
 }
 
-// stripeEvent is the slice of Stripe's event envelope the plan-sync
-// cares about.
 type stripeEvent struct {
 	ID   string `json:"id"`
 	Type string `json:"type"`
@@ -418,11 +355,7 @@ type stripeEvent struct {
 			Metadata          map[string]string `json:"metadata"`
 			CancelAtPeriodEnd bool              `json:"cancel_at_period_end"`
 			CurrentPeriodEnd  int64             `json:"current_period_end"`
-			// Stripe API version 2025-03-31 moved current_period_end off the
-			// subscription object onto each line item; on that version (and
-			// the recent defaults) the top-level field is absent, so we read
-			// it from items too (see applyStripeEvent).
-			Items struct {
+			Items             struct {
 				Data []struct {
 					CurrentPeriodEnd int64 `json:"current_period_end"`
 				} `json:"data"`
@@ -431,10 +364,6 @@ type stripeEvent struct {
 	} `json:"data"`
 }
 
-// POST /api/v1/events/stripe — Stripe webhook. The signature header is
-// the only auth (same model as the GitHub events endpoint). Handled
-// events flip the tenant's plan; everything else acks 200 so Stripe
-// stops retrying.
 func (h *billingAPI) stripeEvents(rw http.ResponseWriter, r *http.Request) {
 	if h.Billing == nil || h.Billing.WebhookSecret == "" {
 		http.Error(rw, "Stripe events endpoint not configured (set DAZYFLOW_STRIPE_WEBHOOK_SECRET)",
@@ -496,9 +425,6 @@ func (h *billingAPI) stripeEvents(rw http.ResponseWriter, r *http.Request) {
 	rw.WriteHeader(http.StatusOK)
 }
 
-// applyStripeEvent maps subscription lifecycle events onto the plan
-// store. The tenant arrives via client_reference_id (checkout) or the
-// subscription metadata stamped at Checkout time (lifecycle events).
 func (h *billingAPI) applyStripeEvent(r *http.Request, ev stripeEvent) error {
 	obj := ev.Data.Object
 	switch ev.Type {

@@ -141,8 +141,6 @@ func errCode(r core.Result) string {
 	return ""
 }
 
-// A non-http(s) URL is rejected up front with bad_url, not left to fail later
-// as an opaque transport error.
 func TestHTTPDownload_RejectsNonHTTPScheme(t *testing.T) {
 	for _, url := range []string{"file:///etc/passwd", "ftp://host/x", "example.com/x"} {
 		res, _ := executeHTTPDownload(t.Context(), core.Job{
@@ -155,8 +153,6 @@ func TestHTTPDownload_RejectsNonHTTPScheme(t *testing.T) {
 	}
 }
 
-// The 'url' input accepts raw bytes (e.g. from an upstream text step) and
-// trims surrounding whitespace so a trailing newline doesn't break the request.
 func TestHTTPDownload_URLFromBytesInputTrimmed(t *testing.T) {
 	ws := t.TempDir()
 	srv := downloadServer(t, []byte("via input"), 200)
@@ -175,8 +171,6 @@ func TestHTTPDownload_URLFromBytesInputTrimmed(t *testing.T) {
 	}
 }
 
-// POST sends a body: from the 'body' param, and from the 'request_body' input
-// port (which wins and JSON-marshals a structured value).
 func TestHTTPDownload_POSTSendsBody(t *testing.T) {
 	ws := t.TempDir()
 	var gotMethod, gotBody string
@@ -189,7 +183,6 @@ func TestHTTPDownload_POSTSendsBody(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	// (a) body from the param
 	res, err := executeHTTPDownload(t.Context(), core.Job{
 		WorkspaceRoot: ws,
 		Params: map[string]any{
@@ -204,7 +197,6 @@ func TestHTTPDownload_POSTSendsBody(t *testing.T) {
 		t.Errorf("param body: method=%q body=%q", gotMethod, gotBody)
 	}
 
-	// (b) request_body input wins over the param and JSON-marshals a struct.
 	res, err = executeHTTPDownload(t.Context(), core.Job{
 		WorkspaceRoot: ws,
 		Input:         map[string]core.Ref{"request_body": {Inline: map[string]any{"k": "v"}}},
@@ -221,8 +213,6 @@ func TestHTTPDownload_POSTSendsBody(t *testing.T) {
 	}
 }
 
-// Saving into a folder that doesn't exist (mkdirs off) gives a friendly
-// message pointing at "Create missing folders", not a raw ENOENT.
 func TestHTTPDownload_MissingFolderFriendlyError(t *testing.T) {
 	srv := downloadServer(t, []byte("x"), 200)
 

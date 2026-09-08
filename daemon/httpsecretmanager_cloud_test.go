@@ -24,7 +24,6 @@ func TestSecretManagerAws_SetGetDelete(t *testing.T) {
 		t.Fatalf("PUT status=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// GET: redacted view — region + key id shown, secret key NEVER.
 	rw := h.do(t, "GET", "/api/v1/secret-manager/aws", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("GET status=%d body=%s", rw.Code, rw.Body.String())
@@ -38,7 +37,6 @@ func TestSecretManagerAws_SetGetDelete(t *testing.T) {
 		t.Errorf("view = %+v", view)
 	}
 
-	// The vault slot is untouched — the providers are independent.
 	rw = h.do(t, "GET", "/api/v1/secret-manager", nil)
 	var vview secretManagerView
 	_ = json.Unmarshal(rw.Body.Bytes(), &vview)
@@ -46,7 +44,6 @@ func TestSecretManagerAws_SetGetDelete(t *testing.T) {
 		t.Error("vault slot reported configured after an AWS save")
 	}
 
-	// DELETE removes it.
 	if rw := h.do(t, "DELETE", "/api/v1/secret-manager/aws", nil); rw.Code != http.StatusNoContent {
 		t.Fatalf("DELETE status=%d", rw.Code)
 	}
@@ -69,7 +66,6 @@ func TestSecretManagerAws_RejectsBadCredentials(t *testing.T) {
 	if rw.Code != http.StatusBadGateway {
 		t.Fatalf("status=%d, want 502 (body %s)", rw.Code, rw.Body.String())
 	}
-	// Nothing persisted on a failed verify.
 	rw = h.do(t, "GET", "/api/v1/secret-manager/aws", nil)
 	var view awsSecretManagerView
 	_ = json.Unmarshal(rw.Body.Bytes(), &view)
@@ -88,7 +84,6 @@ func TestSecretManagerGcp_SetGetDelete(t *testing.T) {
 		t.Fatalf("PUT status=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// GET: redacted view — project + client email shown, private key NEVER.
 	rw := h.do(t, "GET", "/api/v1/secret-manager/gcp", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("GET status=%d body=%s", rw.Code, rw.Body.String())

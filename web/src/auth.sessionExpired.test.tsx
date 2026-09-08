@@ -5,8 +5,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-// Capture the process-wide 401 handler AuthProvider registers so the test can
-// fire it the way api.request() does on an authenticated 401.
 let onUnauthorized: (() => void) | null = null;
 // whoami never settles: it stands in for the bootstrap request still in flight
 // when a *parallel* authenticated call (preferences, or any page fetch) 401s
@@ -36,7 +34,6 @@ vi.mock("./theme", () => ({ applyTheme: vi.fn() }));
 
 import { AuthProvider, useAuth } from "./auth";
 
-// Mirrors the SignIn submit button's gate: disabled={busy || loading || …}.
 function SubmitGate() {
   const { loading } = useAuth();
   return <button disabled={loading}>signIn.submit</button>;
@@ -48,8 +45,6 @@ describe("AuthProvider session expiry", () => {
   });
 
   it("leaves the sign-in submit button enabled after a 401 tears down the session", async () => {
-    // A returning user: the marker makes AuthProvider start in the loading
-    // state while it re-validates the cookie.
     localStorage.setItem("dazyflow.session", "1");
     render(
       <MemoryRouter>

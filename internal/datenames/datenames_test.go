@@ -10,13 +10,11 @@ import (
 )
 
 func TestFor(t *testing.T) {
-	// Only the primary subtag decides, so a region tag is not a trap.
 	for _, code := range []string{"sv", "sv-SE", "SV", "sv_FI", " sv "} {
 		if got := For(code).Days[int(time.Monday)]; got != "måndag" {
 			t.Errorf("For(%q) → %q, want måndag", code, got)
 		}
 	}
-	// Anything we don't carry reads as English rather than as blanks.
 	for _, code := range []string{"", "en", "en-GB", "de", "zz", "nonsense"} {
 		if got := For(code).Days[int(time.Monday)]; got != "Monday" {
 			t.Errorf("For(%q) → %q, want Monday", code, got)
@@ -52,7 +50,6 @@ func TestFormatDate(t *testing.T) {
 	if got := FormatDate(d, "sv"); got != "27 augusti 2026" {
 		t.Errorf("sv = %q, want 27 augusti 2026", got)
 	}
-	// An unknown language is English, not blank.
 	if got := FormatDate(d, "de"); got != "27 August 2026" {
 		t.Errorf("de = %q, want the English fallback", got)
 	}

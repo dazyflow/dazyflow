@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// TestPollNextFires_Cov covers pollNextFires: an interval series projected n
-// steps from a base time.
 func TestPollNextFires_Cov(t *testing.T) {
 	t.Parallel()
 	from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -22,13 +20,11 @@ func TestPollNextFires_Cov(t *testing.T) {
 	if fires[0] != "2026-01-01T00:30:00Z" || fires[2] != "2026-01-01T01:30:00Z" {
 		t.Fatalf("fires = %v", fires)
 	}
-	// n=0 yields an empty (non-nil) slice.
 	if got := pollNextFires(from, time.Minute, 0); len(got) != 0 {
 		t.Fatalf("n=0 fires = %v, want empty", got)
 	}
 }
 
-// TestValidateBoardName_Cov covers validateBoardName's legs.
 func TestValidateBoardName_Cov(t *testing.T) {
 	t.Parallel()
 	if err := validateBoardName("good"); err != nil {
@@ -49,8 +45,6 @@ func TestValidateBoardName_Cov(t *testing.T) {
 	}
 }
 
-// TestQueryInt_Cov covers queryInt: present+valid, absent (default), and
-// present-but-unparseable (default).
 func TestQueryInt_Cov(t *testing.T) {
 	t.Parallel()
 	r := httptest.NewRequest("GET", "/x?limit=42&bad=nope", nil)

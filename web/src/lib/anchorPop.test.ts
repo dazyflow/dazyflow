@@ -4,8 +4,6 @@
 import { describe, expect, it } from "vitest";
 import { anchorBelow } from "./anchorPop";
 
-// A 1000x800 viewport for every case, so the numbers below read as "how far
-// from which edge" rather than as arbitrary arithmetic.
 const VP = { width: 1000, height: 800 };
 const rect = (left: number, top: number, w = 24, h = 24) => ({
   left,
@@ -16,7 +14,6 @@ const rect = (left: number, top: number, w = 24, h = 24) => ({
 
 describe("anchorBelow", () => {
   it("aligns the panel's right edge with the trigger's, below it", () => {
-    // The common case: a topbar three-dots at x=900, plenty of room.
     const pos = anchorBelow(rect(900, 16), { width: 220, height: 60 }, {
       viewport: VP,
     });
@@ -41,7 +38,6 @@ describe("anchorBelow", () => {
   });
 
   it("flips above the trigger when there is no room below", () => {
-    // Trigger near the bottom, panel taller than the gap left under it.
     const pos = anchorBelow(rect(500, 700), { width: 200, height: 300 }, {
       viewport: VP,
     });

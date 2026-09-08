@@ -64,10 +64,6 @@ func init() {
 				{Port: "rows", Label: "Rows", Required: true, MIME: []string{"application/json"}},
 			},
 			Outputs: []core.Port{
-				// Declare text/plain too (like render_template) so the output is
-				// MIME-compatible with text/plain body ports (gmail_send_email.body,
-				// slack/discord message inputs) — they accept any string. The Ref
-				// emitted at run time is text/html so HTML-aware sinks render it.
 				{Port: "html", Label: "HTML table", MIME: []string{"text/html", "text/plain"}},
 			},
 			ParamsSchema: json.RawMessage(`{
@@ -116,9 +112,6 @@ func executeRenderTable(_ context.Context, job core.Job, _ chan<- core.Progress)
 		}
 	}
 
-	// Renames from the {column: heading} map, applied to every column that
-	// didn't state a heading of its own in `columns`. Most specific wins, the
-	// same shape as Sort rows' Direction against its per-column prefixes.
 	if raw, present := job.Params["column_labels"]; present && raw != nil {
 		labels, err := normalizeStringMap(raw, "column_labels")
 		if err != nil {
@@ -166,8 +159,6 @@ type tableColumn struct {
 	named bool
 }
 
-// dataColumns heads each of the data's own columns with its own name — the
-// zero-config default.
 func dataColumns(headers []string) []tableColumn {
 	out := make([]tableColumn, len(headers))
 	for i, h := range headers {
@@ -176,20 +167,11 @@ func dataColumns(headers []string) []tableColumn {
 	return out
 }
 
-// parseTableColumns reads the `columns` param. An entry is either a bare name
-// (header = the data's name for it) or {"column":…,"label":…} (header = label,
-// cells still from `column`). A blank or missing label falls back to the key,
-// so {"column":"name"} is exactly the same as "name".
-//
-// Both shapes coexist because most columns want neither renaming nor the
-// clutter of an object, and the editor writes whichever shape a column
-// actually needs.
 func parseTableColumns(v any) ([]tableColumn, error) {
 	switch list := v.(type) {
 	case []string:
 		return dataColumns(list), nil
 	case []tableColumn:
-		// Native callers (tests) may build the columns directly.
 		return list, nil
 	case []any:
 		out := make([]tableColumn, 0, len(list))
@@ -221,10 +203,7 @@ func parseTableColumns(v any) ([]tableColumn, error) {
 }
 
 const (
-	tableStyle = "border-collapse:collapse;font-family:sans-serif;font-size:14px"
-	// A caption is a heading, so it reads as one: a size up from the cells,
-	// semibold, and left-aligned (a caption centres by default, which floats
-	// oddly over a left-aligned table).
+	tableStyle   = "border-collapse:collapse;font-family:sans-serif;font-size:14px"
 	captionStyle = "font-family:sans-serif;font-size:15px;font-weight:600;text-align:left;padding:0 0 6px"
 	thStyle      = "border:1px solid #ddd;padding:6px 10px;text-align:left;background:#f3f4f6"
 	tdStyle      = "border:1px solid #ddd;padding:6px 10px"
@@ -242,8 +221,6 @@ const (
 func buildHTMLTable(title string, cols []tableColumn, rows []map[string]any) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `<table style=%q>`, tableStyle)
-	// Must precede <thead>: a caption anywhere else in a table is invalid and
-	// browsers relocate it.
 	if title != "" {
 		fmt.Fprintf(&b, `<caption style=%q>%s</caption>`, captionStyle, html.EscapeString(title))
 	}
@@ -263,8 +240,6 @@ func buildHTMLTable(title string, cols []tableColumn, rows []map[string]any) str
 	return b.String()
 }
 
-// cellString renders a cell value as plain text (escaped by the caller). A
-// missing/nil cell is blank rather than "<nil>".
 func cellString(v any) string {
 	if v == nil {
 		return ""

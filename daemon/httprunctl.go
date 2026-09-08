@@ -3,10 +3,6 @@
 
 package daemon
 
-// Routes that act on runs rather than report them: starting a flow, testing
-// a trigger, cancelling and resuming, clearing pending approvals, and the
-// provider webhook endpoints that fire flows from outside.
-
 import (
 	"encoding/json"
 	"errors"
@@ -19,8 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// runCtlAPI serves the run-control endpoints. Its fields are the whole of what
-// those handlers touch.
 type runCtlAPI struct {
 	auditor
 	svc          *Service
@@ -29,19 +23,10 @@ type runCtlAPI struct {
 	StripeEvents *StripeEventsHandler
 }
 
-// runCtlAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) runCtlAPI() *runCtlAPI {
 	return &runCtlAPI{auditor: h.auditor(), svc: h.svc, SlackEvents: h.SlackEvents, GitHubEvents: h.GitHubEvents, StripeEvents: h.StripeEvents}
 }
 
-// listPendingApprovals returns the await_approval inbox: every node
-// in the principal's scope currently parked with Status=awaiting and
-// a `pending_url` output. Sorted newest-first by the service layer.
-//
-// Optional ?workspace= narrows the inbox to a single workspace.
-// Admins (whose principal carries no workspace binding) get the
-// tenant-wide view by default; the UI uses this query param to
-// reflect the workspace switcher's current selection.
 func (h *runCtlAPI) listPendingApprovals(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	approvals, err := h.svc.ListPendingApprovals(
 		r.Context(),
@@ -56,14 +41,6 @@ func (h *runCtlAPI) listPendingApprovals(rw http.ResponseWriter, r *http.Request
 	writeJSON(rw, http.StatusOK, map[string]any{"approvals": approvals})
 }
 
-// countPendingApprovals is the sidebar badge's read: the same query as the
-// list above, answered as one integer.
-//
-// It exists because the badge is the most repeated authenticated request the
-// product makes — every signed-in tab, every 30 seconds, and again on each
-// navigation — and it was being served by the list, which carries each parked
-// step's stashed context so the inbox can render it. Nothing on that response
-// reached the badge except its length.
 func (h *runCtlAPI) countPendingApprovals(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	n, err := h.svc.CountPendingApprovals(
 		r.Context(),
@@ -78,14 +55,6 @@ func (h *runCtlAPI) countPendingApprovals(rw http.ResponseWriter, r *http.Reques
 	writeJSON(rw, http.StatusOK, map[string]any{"count": n})
 }
 
-// listDecidedApprovals returns the history that sits beneath the inbox:
-// await_approval nodes that have been settled, newest decision first.
-//
-// Same scope params as the pending list (?tenant=, ?workspace=), plus an
-// optional ?limit= (default 50, capped by the service). Separate endpoint
-// rather than a ?state= on the pending one: the two return different shapes —
-// a pending row is a thing to act on, a decided row is a record of an act —
-// and the inbox polls on a timer while this does not.
 func (h *runCtlAPI) listDecidedApprovals(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	limit := 0
 	if v := r.URL.Query().Get("limit"); v != "" {
@@ -132,9 +101,6 @@ func (h *runCtlAPI) approveAuthed(rw http.ResponseWriter, r *http.Request, p cor
 	if decision == "" {
 		decision = "approve"
 	}
-	// Tenant scope: load the parent graph through GetJob, which already
-	// enforces the principal's tenant. Prevents a malicious-but-valid
-	// API key from approving someone else's pending node.
 	runRec, err := h.svc.GetJob(r.Context(), p, runID)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
@@ -144,10 +110,6 @@ func (h *runCtlAPI) approveAuthed(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusForbidden, err.Error())
 		return
 	}
-	// A key decides only a step that says a machine may. Read from the run's
-	// own pinned graph, not the flow's current draft: the policy that governs
-	// a parked run is the one it was submitted under, the same rule /trigger
-	// follows in serving the published revision.
 	if auth.IsAPIKeyCredential(credentialFromRequest(r)) && approvalNeedsHuman(runRec, nodeID) {
 		writeJSONError(rw, http.StatusForbidden,
 			"this approval step is for a person to decide, so an API key may not approve it. "+
@@ -166,12 +128,6 @@ func (h *runCtlAPI) approveAuthed(rw http.ResponseWriter, r *http.Request, p cor
 		Approver: p.Subject,
 		Comment:  r.URL.Query().Get("comment"),
 	}); err != nil {
-		// Sentinels, not substrings: Approve documents exactly which errors
-		// it returns (ErrConflict when the node isn't awaiting, ErrNotFound
-		// when the record is unknown, errBadApprovalDecision for a malformed
-		// decision), and matching on message text meant any reword flipped
-		// the status — including "not found" appearing incidentally inside an
-		// unrelated wrapped error.
 		switch {
 		case errors.Is(err, core.ErrConflict):
 			writeJSONError(rw, http.StatusConflict, err.Error())
@@ -203,17 +159,11 @@ func approvalNeedsHuman(runRec core.JobRecord, nodeID string) bool {
 	return core.ApprovalStepRequiresHuman(g, nodeID)
 }
 
-// cancelRun aborts an in-flight run. Body is an optional
-// {"reason":"..."} for the audit trail. Maps service-layer errors to
-// the conventional status codes: 404 unknown run, 409 already
-// terminal, 403 unauthorized.
 func (h *runCtlAPI) cancelRun(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("runID")
 	var body struct {
 		Reason string `json:"reason"`
 	}
-	// Empty body is fine — keep the API ergonomic for the UI's
-	// no-arg cancel click. Only fail on malformed JSON.
 	if r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
@@ -281,17 +231,12 @@ func (h *runCtlAPI) runGraph(rw http.ResponseWriter, r *http.Request, p core.Pri
 		writeJSONError(rw, http.StatusNotFound, err.Error())
 		return
 	}
-	// Manual: this is the editor's Run button (and the runs list's "Run again"),
-	// so somebody is watching. No failure email — see core.JobRecord.Manual.
 	runID, err := h.svc.SubmitGraphOpts(r.Context(), p, g, SubmitOpts{Manual: true})
 	if err != nil {
-		// Plan-gate refusals get 402 so the web client can show an
-		// upgrade prompt instead of a generic error toast.
 		if errors.Is(err, core.ErrPlanLimit) {
 			writeJSONError(rw, http.StatusPaymentRequired, err.Error())
 			return
 		}
-		// A suspended org is locked out — 403, not a generic 400.
 		if errors.Is(err, core.ErrOrgSuspended) {
 			writeJSONError(rw, http.StatusForbidden, err.Error())
 			return
@@ -324,8 +269,6 @@ func (h *runCtlAPI) testTrigger(rw http.ResponseWriter, r *http.Request, p core.
 		writeJSONError(rw, http.StatusNotFound, err.Error())
 		return
 	}
-	// Read the sample body with a cap — a synthetic test payload is
-	// small, and we don't want a stray large POST to balloon memory.
 	var rawBody []byte
 	if r.Body != nil {
 		const maxSampleBytes = 1 << 20 // 1 MiB
@@ -353,8 +296,6 @@ func (h *runCtlAPI) testTrigger(rw http.ResponseWriter, r *http.Request, p core.
 		writeJSONError(rw, http.StatusBadRequest, "flow has no Webhook, Form or Request step to send a test event to")
 		return
 	}
-	// A test fired from the editor with a made-up payload is the definition of
-	// a run someone is watching, so no failure email.
 	runID, err := h.svc.SubmitGraphOpts(r.Context(), p, g, SubmitOpts{Seeds: seeds, Manual: true})
 	if err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
@@ -401,9 +342,6 @@ func (h *runCtlAPI) githubEvents(rw http.ResponseWriter, r *http.Request) {
 	h.GitHubEvents.ServeHTTP(rw, r)
 }
 
-// stripeTenantEvents is the tenant-scoped Stripe webhook (payment
-// triggers) — not to be confused with stripeEvents, the platform
-// billing webhook on the unsuffixed path.
 func (h *runCtlAPI) stripeTenantEvents(rw http.ResponseWriter, r *http.Request) {
 	if h.StripeEvents == nil {
 		http.Error(rw, "Stripe events endpoint not configured (encrypted secret store required)", http.StatusNotImplemented)

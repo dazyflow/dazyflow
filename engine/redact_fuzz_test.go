@@ -10,7 +10,7 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// FuzzRedactResult_NoSecretSurvives is the data-leak guard: for an arbitrary
+// The data-leak guard: for an arbitrary
 // resolved-secret value scattered across every field redactResult is
 // contracted to scrub — the output Ref string, the Inline value (plain
 // string, []byte, nested map KEYS and values, and slice elements at any

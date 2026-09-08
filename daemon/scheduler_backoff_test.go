@@ -66,7 +66,6 @@ func TestPollJitter_DeterministicAndBounded(t *testing.T) {
 	if a1 < 0 || a1 >= interval/4 {
 		t.Fatalf("jitter %v out of [0, interval/4=%v)", a1, interval/4)
 	}
-	// Different keys should (very likely) land on different offsets.
 	if pollJitter("a", interval) == pollJitter("b", interval) &&
 		pollJitter("c", interval) == pollJitter("d", interval) {
 		t.Fatal("jitter shows no spread across distinct keys")
@@ -75,7 +74,6 @@ func TestPollJitter_DeterministicAndBounded(t *testing.T) {
 
 func TestPollJitter_CappedByMax(t *testing.T) {
 	t.Parallel()
-	// A daily poll: interval/4 = 6h, but the absolute cap is maxPollJitter.
 	day := 24 * time.Hour
 	for _, key := range []string{"a", "b", "c", "d", "e"} {
 		if j := pollJitter(key, day); j >= maxPollJitter {
@@ -93,7 +91,6 @@ func TestRefreshEmptyStreak(t *testing.T) {
 	s := &Scheduler{pollState: func(_ context.Context, _, _ string) *pollstate.Marker { return marker }}
 	e := &scheduledGraph{tenant: "t", graphID: "g", interval: time.Minute}
 
-	// Three fresh empty markers → streak climbs to 3.
 	for i := 1; i <= 3; i++ {
 		marker = &pollstate.Marker{Empty: true, At: at(time.Duration(i) * time.Second)}
 		s.foldPollOutcomeLocked(e, s.readPollMarker(context.Background(), e))
@@ -108,7 +105,6 @@ func TestRefreshEmptyStreak(t *testing.T) {
 		t.Fatalf("stale marker inflated streak to %d", e.emptyStreak)
 	}
 
-	// A fresh ACTIVE marker resets the streak.
 	marker = &pollstate.Marker{Empty: false, At: at(10 * time.Second)}
 	s.foldPollOutcomeLocked(e, s.readPollMarker(context.Background(), e))
 	if e.emptyStreak != 0 {
@@ -136,14 +132,11 @@ func TestRefreshEmptyStreak_NoReaderNoop(t *testing.T) {
 // blocks, the signal never arrives, and this deadlocks into a timeout.
 func TestScheduler_PollMarkerReadDoesNotHoldLock(t *testing.T) {
 	t.Parallel()
-	// An empty workspace map makes fireGraph fail its Open and return quietly,
-	// so the test exercises fireDue's locking without needing a real flow.
 	s := NewScheduler(&Service{Workspaces: MapWorkspaces{}})
 
 	lockFree := make(chan struct{})
 	release := make(chan struct{})
 	s.SetPollStateReader(func(context.Context, string, string) *pollstate.Marker {
-		// Prove the lock is available WHILE the reader is in flight.
 		go func() {
 			s.TrackedCount() // would block if fireDue held s.mu
 			close(lockFree)

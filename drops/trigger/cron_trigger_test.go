@@ -30,15 +30,12 @@ func TestCronTrigger_EmitsRFC3339Timestamp(t *testing.T) {
 	if time.Since(parsed) > 5*time.Second {
 		t.Errorf("fired_at %v is older than 5s — clock weirdness?", parsed)
 	}
-	// pass (the primary sequencing output) mirrors fired_at.
 	if got := res.Output[core.PassPort].Inline; got != ts {
 		t.Errorf("pass = %v, want it to mirror fired_at %q", got, ts)
 	}
 }
 
 func TestCronTrigger_NoTimezoneIsUTC(t *testing.T) {
-	// A zone-less schedule is interpreted as UTC by the scheduler, so the
-	// fire stamp matches: a "Z" suffix.
 	res, _ := executeCronTrigger(t.Context(), core.Job{}, nil)
 	ts := res.Output["fired_at"].Inline.(string)
 	if !strings.HasSuffix(ts, "Z") {
@@ -47,11 +44,6 @@ func TestCronTrigger_NoTimezoneIsUTC(t *testing.T) {
 }
 
 func TestCronTrigger_StampsConfiguredTimezone(t *testing.T) {
-	// The whole point: when the node carries a tz (the editor stamps the
-	// author's browser zone), fired_at reads as the wall-clock time in THAT
-	// zone — so the author doesn't have to convert UTC in their head. We
-	// assert the offset matches the zone's offset at the fire instant, which
-	// is DST-correct (e.g. +02:00 in summer, +01:00 in winter for Stockholm).
 	res, err := executeCronTrigger(t.Context(), core.Job{
 		Params: map[string]any{"tz": "Europe/Stockholm"},
 	}, nil)

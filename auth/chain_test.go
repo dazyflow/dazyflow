@@ -11,8 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fatalAuthenticator returns a non-ErrInvalidCredential error to drive
-// Chain's short-circuit branch.
 type fatalAuthenticator struct{ err error }
 
 func (f fatalAuthenticator) Authenticate(context.Context, string) (core.Principal, error) {
@@ -22,19 +20,16 @@ func (f fatalAuthenticator) Authenticate(context.Context, string) (core.Principa
 func TestChain_Cov(t *testing.T) {
 	ctx := context.Background()
 
-	// Empty chain → ErrInvalidCredential.
 	if _, err := (Chain{}).Authenticate(ctx, "x"); !errors.Is(err, ErrInvalidCredential) {
 		t.Errorf("empty chain err = %v", err)
 	}
 
-	// A non-ErrInvalidCredential error short-circuits the whole chain.
 	boom := errors.New("backend down")
 	chain := Chain{fatalAuthenticator{boom}, alwaysReject{}}
 	if _, err := chain.Authenticate(ctx, "x"); !errors.Is(err, boom) {
 		t.Errorf("fatal chain err = %v, want %v", err, boom)
 	}
 
-	// All-reject chain returns the last ErrInvalidCredential.
 	rejectChain := Chain{alwaysReject{}, alwaysReject{}}
 	if _, err := rejectChain.Authenticate(ctx, "x"); !errors.Is(err, ErrInvalidCredential) {
 		t.Errorf("reject chain err = %v", err)
@@ -44,19 +39,16 @@ func TestChain_Cov(t *testing.T) {
 func TestOIDCAuthenticate_Cov(t *testing.T) {
 	ctx := context.Background()
 
-	// No verifier configured → error.
 	a := &OIDCAuthenticator{}
 	if _, err := a.Authenticate(ctx, "a.b.c"); err == nil {
 		t.Error("nil verifier should error")
 	}
 
-	// Non-JWT credential (not two dots) → falls through as ErrInvalidCredential.
 	a = &OIDCAuthenticator{Verifier: stubVerifier{}}
 	if _, err := a.Authenticate(ctx, "notajwt"); !errors.Is(err, ErrInvalidCredential) {
 		t.Errorf("non-jwt err = %v", err)
 	}
 
-	// Verifier failure wraps ErrInvalidCredential.
 	a = &OIDCAuthenticator{Verifier: failVerifier{errors.New("bad sig")}}
 	if _, err := a.Authenticate(ctx, "a.b.c"); !errors.Is(err, ErrInvalidCredential) {
 		t.Errorf("verify failure err = %v", err)
@@ -82,13 +74,11 @@ func TestLooksLikeJWT_Cov(t *testing.T) {
 }
 
 func TestRolePermissions_Cov(t *testing.T) {
-	// Unknown role → no permissions.
 	if perms := rolePermissions("totally-unknown-role"); len(perms) != 0 {
 		t.Errorf("unknown role perms = %v, want none", perms)
 	}
 }
 
-// failKeyStore.PutKey always errors, driving IssueAPIKey's persist-failure path.
 type failKeyStore struct{ err error }
 
 func (f failKeyStore) PutKey(context.Context, APIKey) error { return f.err }
@@ -100,7 +90,6 @@ func TestIssueAPIKey_PutError(t *testing.T) {
 	}
 }
 
-// failSessionStore.PutSession always errors, driving IssueSession's path.
 type failSessionStore struct{ err error }
 
 func (f failSessionStore) GetSession(context.Context, string) (Session, error) {

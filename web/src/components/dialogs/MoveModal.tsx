@@ -41,7 +41,6 @@ export function MoveModal({
   const [error, setError] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
 
-  // The entry's current parent — moving there is a no-op we disable.
   const currentParent = entry.path.includes("/")
     ? entry.path.slice(0, entry.path.lastIndexOf("/"))
     : "";

@@ -14,9 +14,6 @@ func resolveCtx(tenant, flow string) context.Context {
 	return core.WithFlow(core.WithTenant(context.Background(), tenant), flow)
 }
 
-// TestSecretScope_CascadePrecedence proves ${secret.NAME} resolves
-// flow → organization, the nearest scope winning, and that a name present only
-// at the organization scope resolves identically regardless of the flow.
 func TestSecretScope_CascadePrecedence(t *testing.T) {
 	t.Parallel()
 	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
@@ -30,7 +27,6 @@ func TestSecretScope_CascadePrecedence(t *testing.T) {
 	if err := es.PutScoped(ctx, "acme", "flowA", ScopeFlow, "TOKEN", "flow-val"); err != nil {
 		t.Fatal(err)
 	}
-	// A organization-only secret.
 	if err := es.PutScoped(ctx, "acme", "", ScopeTenant, "SHARED", "shared-val"); err != nil {
 		t.Fatal(err)
 	}
@@ -57,9 +53,9 @@ func TestSecretScope_CascadePrecedence(t *testing.T) {
 	}
 }
 
-// TestSecretScope_FlowIsolation proves one flow cannot resolve another flow's
-// secret via the cascade — it's keyed by the running flow's ID, so flowB never
-// sees flowA's value. This is the blast-radius guard.
+// Proves one flow cannot resolve another flow's secret via the cascade — it's
+// keyed by the running flow's ID, so flowB never sees flowA's value. This is
+// the blast-radius guard.
 func TestSecretScope_FlowIsolation(t *testing.T) {
 	t.Parallel()
 	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
@@ -67,7 +63,6 @@ func TestSecretScope_FlowIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	// Only flowA has a flow-scoped DB secret — nothing at the org level.
 	if err := es.PutScoped(ctx, "acme", "flowA", ScopeFlow, "DB", "flowA-db"); err != nil {
 		t.Fatal(err)
 	}
@@ -79,11 +74,11 @@ func TestSecretScope_FlowIsolation(t *testing.T) {
 	}
 }
 
-// TestSecretScope_ConnIsOrgAuthoritative proves a flow-scoped value in the
-// connection/OAuth namespace cannot shadow the organization credential. A
-// graph:edit member could otherwise store flow.<flow>.conn.<x> and have the
-// ${secret.} cascade resolve it ahead of the org's authoritative connection —
-// silently redirecting the integration. Get must skip the flow tier for these.
+// Proves a flow-scoped value in the connection/OAuth namespace cannot shadow
+// the organization credential. A graph:edit member could otherwise store
+// flow.<flow>.conn.<x> and have the ${secret.} cascade resolve it ahead of the
+// org's authoritative connection — silently redirecting the integration. Get
+// must skip the flow tier for these.
 func TestSecretScope_ConnIsOrgAuthoritative(t *testing.T) {
 	t.Parallel()
 	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
@@ -91,7 +86,6 @@ func TestSecretScope_ConnIsOrgAuthoritative(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	// Org-authoritative connection + OAuth credentials.
 	if err := es.Put(ctx, "acme", "conn.slack.token", "org-conn"); err != nil {
 		t.Fatal(err)
 	}
@@ -121,10 +115,10 @@ func TestSecretScope_ConnIsOrgAuthoritative(t *testing.T) {
 	}
 }
 
-// TestCheckReservedSecretWrite pins the write-side guard for the secret CRUD
-// endpoint: the flow-address prefix is refused at any scope (it would forge or
-// nest a flow secret) and conn./oauth. are refused at flow scope (shadow
-// attempts), while ordinary names and tenant-scope conn. (the Connect flow) pass.
+// Pins the write-side guard for the secret CRUD endpoint: the flow-address
+// prefix is refused at any scope (it would forge or nest a flow secret) and
+// conn./oauth. are refused at flow scope (shadow attempts), while ordinary
+// names and tenant-scope conn. (the Connect flow) pass.
 func TestCheckReservedSecretWrite(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -151,8 +145,6 @@ func TestCheckReservedSecretWrite(t *testing.T) {
 	}
 }
 
-// TestSecretScope_ListScoped proves each scope lists only its own names (flow
-// prefix stripped) and the organization scope hides every reserved namespace.
 func TestSecretScope_ListScoped(t *testing.T) {
 	t.Parallel()
 	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())

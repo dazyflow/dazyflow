@@ -49,7 +49,6 @@ func TestValidateSubdomain(t *testing.T) {
 }
 
 func TestValidateSubdomain_LengthCap(t *testing.T) {
-	// 63 chars is the max DNS label.
 	ok := ""
 	for range 63 {
 		ok += "a"

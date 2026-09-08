@@ -22,7 +22,6 @@ describe("Notice", () => {
     expect(el.textContent).toBe("Nothing yet");
   });
 
-  // Inside a dialog or panel a second card reads as a box inside a box.
   it("drops the card chrome when inline", () => {
     const { container } = render(<Notice inline>Nothing yet</Notice>);
     expect(container.firstElementChild!.className).toBe("notice-line");
@@ -49,8 +48,6 @@ describe("Loading", () => {
     expect(el.className).toBe("card notice");
   });
 
-  // The a11y fix this component exists to carry: all 51 hand-written versions
-  // were silent, so a screen-reader user got a page that simply went quiet.
   it("announces itself as a status", () => {
     render(<Loading inline />);
     const el = screen.getByRole("status");

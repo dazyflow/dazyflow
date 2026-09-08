@@ -34,9 +34,6 @@ import (
 
 const maxEmailTemplateBytes = 256 * 1024 // 256 KiB — HTML shells are larger than secrets
 
-// emailTemplateSampleBody is the placeholder message the preview and the
-// "send test" both wrap, so a test email lands looking exactly like the
-// editor preview.
 const emailTemplateSampleBody = `<h1 style="margin:0 0 14px;font-size:22px;">Hello there 👋</h1>` +
 	`<p style="margin:0 0 14px;">This is a preview of your email template with some sample body content so you can see how the layout wraps a real message.</p>` +
 	`<p style="margin:0;">Best,<br>The team</p>`
@@ -99,7 +96,6 @@ func validEmailTemplateName(name string) error {
 	return nil
 }
 
-// putEmailTemplate creates/replaces an org template. Idempotent.
 func (h *secretsAPI) putEmailTemplate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.emailTemplateGate(rw, p, true) {
 		return
@@ -123,8 +119,6 @@ func (h *secretsAPI) putEmailTemplate(rw http.ResponseWriter, r *http.Request, p
 		writeJSONError(rw, http.StatusBadRequest, "html must be a valid template containing the {{.Body}} placeholder")
 		return
 	}
-	// Stored ID equals the name for org templates; Name is the display label
-	// (falls back to the name).
 	display := strings.TrimSpace(body.Name)
 	if display == "" {
 		display = name
@@ -143,9 +137,6 @@ func (h *secretsAPI) putEmailTemplate(rw http.ResponseWriter, r *http.Request, p
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// listEmailTemplates returns the global built-ins followed by this org's
-// templates. HTML is included for both so the editor and live preview need no
-// second round-trip; built-ins are flagged read-only.
 func (h *secretsAPI) listEmailTemplates(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.emailTemplateGate(rw, p, false) {
 		return
@@ -187,15 +178,8 @@ func (h *secretsAPI) previewEmailTemplate(rw http.ResponseWriter, r *http.Reques
 	}
 	r.Body = http.MaxBytesReader(rw, r.Body, maxEmailTemplateBytes)
 	req, ok := decodeRequestJSON[struct {
-		// HTML is a shell to preview directly (the management editor's unsaved
-		// edits). Takes precedence over ID.
-		HTML string `json:"html"`
-		// ID resolves a saved/built-in template's shell — the drop's "Preview
-		// email" button passes the selected template id here.
-		ID string `json:"id"`
-		// Body/Subject are the actual message content to wrap (the drop's typed
-		// body). Body falls back to sample content when empty so an empty-body
-		// preview still shows the layout.
+		HTML    string `json:"html"`
+		ID      string `json:"id"`
 		Body    string `json:"body"`
 		Subject string `json:"subject"`
 	}](rw, r)
@@ -203,9 +187,6 @@ func (h *secretsAPI) previewEmailTemplate(rw http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Resolve the shell: explicit HTML wins; else resolve the template id the
-	// same way the runtime does (built-ins ∪ this tenant's templates); else a
-	// bare passthrough so a no-template preview still shows the body.
 	shell := strings.TrimSpace(req.HTML)
 	logo := h.previewLogo(r, p)
 	if shell == "" && strings.TrimSpace(req.ID) != "" {
@@ -237,8 +218,6 @@ func (h *secretsAPI) previewEmailTemplate(rw http.ResponseWriter, r *http.Reques
 	writeJSON(rw, http.StatusOK, map[string]any{"html": rendered})
 }
 
-// previewLogo returns the org logo for the preview, or "" — same source the
-// runtime provider uses, so the preview matches a real send.
 func (h *secretsAPI) previewLogo(r *http.Request, p core.Principal) string {
 	if h.Profiles == nil {
 		return ""
@@ -251,14 +230,9 @@ func (h *secretsAPI) previewLogo(r *http.Request, p core.Principal) string {
 }
 
 type sendTestEmailBody struct {
-	// To is the recipient. The editor pre-fills it with the caller's own
-	// address; an empty value falls back to the caller server-side.
-	To string `json:"to"`
-	// HTML is the shell to test (the editor's unsaved edits); takes precedence
-	// over ID. ID resolves a saved/built-in template instead.
-	HTML string `json:"html"`
-	ID   string `json:"id"`
-	// Subject overrides the default test subject line.
+	To      string `json:"to"`
+	HTML    string `json:"html"`
+	ID      string `json:"id"`
 	Subject string `json:"subject"`
 }
 
@@ -301,8 +275,6 @@ func (h *secretsAPI) sendTestEmail(rw http.ResponseWriter, r *http.Request, p co
 		return
 	}
 
-	// Load the tenant's Email connection — the same host/login/sender the
-	// email_send drop runs on. Without it there's nothing to send through.
 	integration, fields, err := h.connectionFieldsForSlug(r.Context(), p, "email")
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
@@ -324,9 +296,6 @@ func (h *secretsAPI) sendTestEmail(rw http.ResponseWriter, r *http.Request, p co
 	if from == "" {
 		from = strings.TrimSpace(conn["username"]) // SMTP login is usually the sender
 	}
-	// The configured sender may carry a display name ("Reports
-	// <reports@example.com>"); that form belongs in the header only — the
-	// envelope takes the bare address, same as the Email drop's send.
 	fromHeader, fromAddr := smtputil.SplitSender(from)
 	port := 587
 	if s := strings.TrimSpace(conn["port"]); s != "" {
@@ -342,8 +311,6 @@ func (h *secretsAPI) sendTestEmail(rw http.ResponseWriter, r *http.Request, p co
 		mode = "starttls"
 	}
 
-	// Resolve the shell exactly like the preview: explicit HTML wins (unsaved
-	// edits), else the saved/built-in template id, else a bare passthrough.
 	shell := strings.TrimSpace(body.HTML)
 	logo := h.previewLogo(r, p)
 	if shell == "" && strings.TrimSpace(body.ID) != "" {
@@ -404,7 +371,6 @@ func (h *secretsAPI) sendTestEmail(rw http.ResponseWriter, r *http.Request, p co
 	defer cancel()
 	if err := smtputil.Send(ctx, addr, host, mode, auth, fromAddr, []string{to}, msg); err != nil {
 		h.audit(r.Context(), p, "email_template.test_send", to, "error="+err.Error())
-		// 502: the daemon is fine; the tenant's SMTP server rejected the send.
 		writeJSONError(rw, http.StatusBadGateway, fmt.Sprintf("send failed: %v", err))
 		return
 	}
@@ -412,8 +378,6 @@ func (h *secretsAPI) sendTestEmail(rw http.ResponseWriter, r *http.Request, p co
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "to": to, "from": fromHeader})
 }
 
-// deleteEmailTemplate removes an org template. Idempotent. Built-in IDs are
-// global and read-only — deleting one is rejected.
 func (h *secretsAPI) deleteEmailTemplate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.emailTemplateGate(rw, p, true) {
 		return
@@ -445,8 +409,6 @@ func (h *secretsAPI) emailTemplateStorageNames(ctx context.Context, tenant strin
 	}
 	out := map[string]string{}
 	for _, n := range all {
-		// Org templates are exactly "emailtmpl.<name>" — exclude any
-		// flow-prefixed entries (templates have no flow tier, but be defensive).
 		if strings.HasPrefix(n, secretEmailTmplPrefix) && !strings.HasPrefix(n, secretFlowPrefix) {
 			out[strings.TrimPrefix(n, secretEmailTmplPrefix)] = n
 		}

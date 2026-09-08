@@ -40,8 +40,6 @@ vi.mock("../../i18n", () => ({
   default: { language: "en", t: (k: string) => k },
 }));
 
-// The one thing these tests vary: whether the deployment has the native
-// ticket surface, and what operator contact is configured behind it.
 const me: {
   subject: string;
   tenant: string;
@@ -106,9 +104,6 @@ vi.mock("../../api", () => {
 
 import { FlowEditor } from "./FlowEditor";
 
-// The ticket thread is a real route here, not a stub, because filing is only
-// half the job: the modal navigates on success, and a user left staring at the
-// editor has no idea whether anything was sent.
 function mount(id = "coffee-reorder") {
   return render(
     <MemoryRouter initialEntries={[`/flows/${id}`]}>
@@ -128,9 +123,6 @@ async function emit(kind: string, data: unknown) {
   });
 }
 
-// Run the flow and let one step fail, which is the only way this message
-// appears with a run behind it — then open the toolbar's Errors panel, which
-// is where it lives now (it used to be a banner over the canvas).
 async function failARun() {
   getNodeRecord.mockResolvedValue({
     Result: { error: { message: "no topic configured" } },
@@ -172,19 +164,12 @@ describe("reporting a failure from the editor", () => {
     await waitFor(() => expect(createTicket).toHaveBeenCalled());
     const [token, body] = createTicket.mock.calls[0];
     expect(token).toBe("tok");
-    // The flow id is the route's, not a node's and not the graph's label:
-    // getting this wrong attaches someone else's diagnostic bundle.
     expect(body.flow_id).toBe("coffee-reorder");
-    // The run is what turns "here's my flow" into "here's how it broke".
     expect(body.run_id).toBe("run-1");
-    // And the user is taken to the thread, so the ticket is something they
-    // can see and add to rather than a form that appeared to do nothing.
     expect(await screen.findByText("ticket-thread")).toBeInTheDocument();
   });
 
   it("opens with the error already written in, not an empty box", async () => {
-    // The whole reason people send blank reports: the error is on screen and
-    // the form asks them to retype it.
     await failARun();
     await userEvent.click(await screen.findByText("report.title"));
 

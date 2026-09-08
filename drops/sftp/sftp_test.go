@@ -18,19 +18,12 @@ import (
 	"github.com/dazyflow/dazyflow/internal/sftputil"
 )
 
-// The suites here point the drops at a 127.0.0.1 SSH server, so they need the
-// same private-egress opt-in production gets via
-// DAZYFLOW_ALLOW_PRIVATE_EGRESS.
-//
-// Nothing in this package may call t.Parallel(): both the egress opt-in and
-// the cursor store are process-global, and AssertSSRFBlocked turns the opt-in
-// off for the duration of its call.
 func TestMain(m *testing.M) { dropstest.EgressTestMain(m) }
 
-// TestSFTPDial_SSRFGuardBlocksPrivate is the assertion every connector owes.
-// It matters more here than for a read-only API: a dial is followed by
-// authentication, so an unguarded connector would hand a tenant-supplied
-// address the server password or a signature from the private key.
+// The assertion every connector owes. It matters more here than for a read-
+// only API: a dial is followed by authentication, so an unguarded connector
+// would hand a tenant-supplied address the server password or a signature from
+// the private key.
 func TestSFTPDial_SSRFGuardBlocksPrivate(t *testing.T) {
 	dropstest.AssertSSRFBlocked(t, func() error {
 		_, err := sftputil.Dial(context.Background(), sftputil.Config{
@@ -122,8 +115,6 @@ func TestSFTPList_ListsFilesOldestFirst(t *testing.T) {
 	if got := names(rows); len(got) != 2 || got[0] != "a.csv" || got[1] != "b.csv" {
 		t.Fatalf("listed %v, want oldest first (a.csv, b.csv)", got)
 	}
-	// The full remote path rides on the record so it wires straight into
-	// Download file without the author rebuilding it.
 	if p, _ := rows[0]["path"].(string); p != "a.csv" && p != "./a.csv" {
 		t.Errorf("path = %q, want it to include the folder", p)
 	}
@@ -176,9 +167,6 @@ func TestSFTPList_SkipsFolders(t *testing.T) {
 	}
 }
 
-// only_new, first run: record where the folder is up to and emit NOTHING, so
-// a flow published against a folder holding a year of statements starts from
-// "now" rather than replaying the archive into a step that files or pays.
 func TestSFTPList_OnlyNew_FirstRunBaselinesSilently(t *testing.T) {
 	store := memCursors(t)
 	s := startSFTP(t)
@@ -218,7 +206,6 @@ func TestSFTPList_OnlyNew_EmitsOnlyWhatArrivedSince(t *testing.T) {
 	if got := names(rows); len(got) != 1 || got[0] != "fresh.csv" {
 		t.Fatalf("emitted %v, want just the file that arrived after the baseline", got)
 	}
-	// And a third run with nothing new is a non-event again.
 	if res := run(t, executeSFTPList, s.job(t, map[string]any{"only_new": true})); len(res.Output) != 0 {
 		t.Fatalf("a nothing-new run emitted %v", res.Output)
 	}
@@ -235,7 +222,6 @@ func TestSFTPList_OnlyNew_DoesNotLoseAStragglerInTheSameSecond(t *testing.T) {
 	s.writeFile(t, "batch-a.csv", "a")
 	s.touch(t, "batch-a.csv", 3000)
 
-	// Baseline on an older file so batch-a is genuinely new.
 	s.writeFile(t, "seed.csv", "seed")
 	s.touch(t, "seed.csv", 1000)
 	if res := run(t, executeSFTPList, s.job(t, map[string]any{"only_new": true, "pattern": "seed*"})); len(res.Output) != 0 {
@@ -248,7 +234,6 @@ func TestSFTPList_OnlyNew_DoesNotLoseAStragglerInTheSameSecond(t *testing.T) {
 		t.Fatalf("first poll emitted %v, want batch-a.csv", got)
 	}
 
-	// The rest of the batch lands with the SAME mtime, after the poll.
 	s.writeFile(t, "batch-b.csv", "b")
 	s.writeFile(t, "batch-c.csv", "c")
 	s.touch(t, "batch-b.csv", 3000)
@@ -270,7 +255,6 @@ func TestSFTPList_OnlyNew_DoesNotLoseAStragglerInTheSameSecond(t *testing.T) {
 			t.Errorf("%s was lost — it shares its second with an already-emitted file", want)
 		}
 	}
-	// And it does not re-emit the one already handled.
 	for _, n := range got {
 		if n == "batch-a.csv" {
 			t.Error("batch-a.csv was emitted twice")
@@ -337,7 +321,6 @@ func TestSFTPDownload_RefusesAFolder(t *testing.T) {
 	}
 }
 
-// The obvious drag — List files' whole list into File — takes the first entry.
 func TestSFTPDownload_AcceptsAFileListOnTheInput(t *testing.T) {
 	s := startSFTP(t)
 	s.writeFile(t, "first.csv", "one")
@@ -470,9 +453,6 @@ func TestSFTPUpload_NothingToUpload(t *testing.T) {
 		t.Fatal("an upload with no file should fail the step")
 	}
 }
-
-// Host-key verification is the part of this connector with no safe default,
-// so it gets tested against a real server whose key we know.
 
 // With nothing configured, the connection must fail — and the failure has to
 // carry the server's actual fingerprint, because that is the value the

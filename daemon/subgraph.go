@@ -11,9 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// SubGraphRunner is the hook the Worker uses to submit a child graph
-// after a subgraph module returns its awaiting result. Service satisfies
-// it; tests can stub it.
 type SubGraphRunner interface {
 	SubmitChild(ctx context.Context, parentRec core.JobRecord, graphID string, seeds map[string]core.Result) (string, error)
 }
@@ -92,11 +89,6 @@ func (s *Service) SubmitChild(
 		return "", fmt.Errorf("subgraph fan-out limit reached (max %d descendant runs from one trigger) — a flow is spawning too many sub-runs", maxSubgraphRunsPerRoot)
 	}
 
-	// System principal scoped to the parent's tenant. Subgraphs may
-	// reference private flows — the parent's principal is trusted
-	// because they could load and edit the parent in the first
-	// place. graph:admin lets this synthetic principal bypass the
-	// child's visibility regardless of ownership.
 	principal := SystemPrincipal("dazyflow-subgraph", parentRec.Tenant, parentRec.Workspace)
 	return s.submitGraphWithParent(ctx, principal, g, seeds, parentRec.ID, s.runTriggerDepth(ctx, parentRec.GraphRunID))
 }

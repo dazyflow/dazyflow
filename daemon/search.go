@@ -10,30 +10,17 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// DropSearch describes the filter set ListModules supports. Empty
-// fields are wildcards — an empty DropSearch returns everything.
 type DropSearch struct {
-	// Query substring-matches against ID, Label, Description (case-
-	// insensitive). When present it also drives relevance scoring.
 	Query string
 	// Each filter slice is OR-within (any value matches the manifest's
 	// field); the three filter fields are AND-across (categories AND
 	// providers AND tags must all pass).
-	Categories []string
-	Providers  []string
-	Tags       []string
-	// IncludeDisabled keeps platform-disabled drops in the result, each
-	// stamped Manifest.Disabled=true, instead of hiding them. Only the
-	// editor-facing catalog endpoints set it; everything else (flow
-	// generation, the control API) leaves it false so disabled drops stay
-	// hidden.
+	Categories      []string
+	Providers       []string
+	Tags            []string
 	IncludeDisabled bool
 }
 
-// searchManifests applies filters + query to a manifest list. Results
-// are sorted by relevance when Query is set (highest score first, ties
-// broken alphabetically by ID), or by ID alphabetically when Query is
-// empty.
 func searchManifests(manifests map[string]core.Manifest, q DropSearch) []core.Manifest {
 	type scored struct {
 		m     core.Manifest
@@ -70,8 +57,6 @@ func searchManifests(manifests map[string]core.Manifest, q DropSearch) []core.Ma
 	return final
 }
 
-// filtersPass checks the category/provider/tag filters. Each filter is
-// OR-within (matches any value); across fields the conditions AND.
 func filtersPass(m core.Manifest, q DropSearch) bool {
 	if len(q.Categories) > 0 && !slicesContainsIgnoreCase(q.Categories, m.Category) {
 		return false
@@ -80,8 +65,6 @@ func filtersPass(m core.Manifest, q DropSearch) bool {
 		return false
 	}
 	if len(q.Tags) > 0 {
-		// A manifest passes the tag filter if any of its tags is in the
-		// requested set.
 		hit := false
 		for _, want := range q.Tags {
 			for _, have := range m.Tags {

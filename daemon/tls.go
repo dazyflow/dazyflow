@@ -11,10 +11,6 @@ import (
 	"os"
 )
 
-// TLSFiles holds the file paths for a TLS identity (own cert + key) and
-// the CA bundle used to verify the peer. Either side of the connection
-// uses the same struct: dzd's server config and dzctl's client config
-// both point at PEM files on disk.
 type TLSFiles struct {
 	CertFile string
 	KeyFile  string
@@ -66,8 +62,6 @@ func (f TLSFiles) LoadClientConfig(serverName string) (*tls.Config, error) {
 	return cfg, nil
 }
 
-// ServerConfigFromPEM is the test-friendly variant: caller hands over
-// already-decoded PEM bytes rather than file paths.
 func ServerConfigFromPEM(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
@@ -85,7 +79,6 @@ func ServerConfigFromPEM(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 	}, nil
 }
 
-// ClientConfigFromPEM mirrors ServerConfigFromPEM on the client side.
 func ClientConfigFromPEM(certPEM, keyPEM, caPEM []byte, serverName string) (*tls.Config, error) {
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {

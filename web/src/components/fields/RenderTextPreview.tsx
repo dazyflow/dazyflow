@@ -27,9 +27,6 @@ function rowsData(value: unknown): Record<string, unknown>[] {
   );
 }
 
-// firstRowKeys reads the column names from the first row of the sample, so a
-// preset can build params for the user's ACTUAL columns. Falls back to a
-// generic pair when the sample is empty/invalid.
 function firstRowKeys(sample: string): string[] {
   try {
     const arr = JSON.parse(sample);
@@ -56,8 +53,6 @@ const celCell = (col: string) => {
 const TD = 'style="border:1px solid #ddd;padding:6px 10px"';
 const TH = 'style="border:1px solid #ddd;padding:6px 10px;text-align:left;background:#f3f4f6"';
 
-// A preset turns the current sample columns into a params patch (template /
-// column / separator / prefix / suffix) plus a render mode for the preview.
 type Preset = {
   key: string;
   mode: "html" | "text";
@@ -127,15 +122,8 @@ const DEFAULT_SAMPLE = JSON.stringify(
   2,
 );
 
-// looksHTML decides how to show the rendered output: HTML presets render in a
-// sandboxed iframe; plain text in a <pre>.
 const looksHTML = (s: string) => /<[a-z!/]/i.test(s.trim());
 
-// RenderTextPreview is the non-technical editor for a render_text step: pick a
-// layout (table / bullets / commas) that fills the params for your columns,
-// edit a sample list, and see a live preview rendered by the SAME engine the
-// flow uses at run time. Mirrors RenderTemplatePreview, but for a LIST of rows
-// joined into one string (the list-friendly path that doesn't fan out).
 export function RenderTextPreview({
   params,
   onApply,
@@ -148,33 +136,18 @@ export function RenderTextPreview({
   onApply: (patch: Record<string, unknown>) => void;
   references?: ReferenceCtx;
   currentRunID?: string | null;
-  // Which node+port feeds this step's `rows`, so the rows can be read back off
-  // the stored run after a reload (upstreamRows only survives while the run
-  // stream is live).
   rowsSource?: { nodeId: string; port: string };
-  // upstreamRows: the rows the node feeding this step's `rows` input emitted on
-  // the last run (the producer's OUTPUT, read from the run by the parent). This
-  // is the discovery source that actually covers every producer — including
-  // fixed-shape ones like RSS that declare no schema and whose resolved input
-  // the run record doesn't persist. Presets + the sample seed from it.
   upstreamRows?: Record<string, unknown>[];
 }) {
   const { t } = useTranslation();
   const { token } = useAuth();
   const [sample, setSample] = useState<string>(DEFAULT_SAMPLE);
-  // Once the user edits the sample by hand, stop auto-seeding it from
-  // discovered data (their edit is authoritative).
   const [sampleEdited, setSampleEdited] = useState(false);
   const [text, setText] = useState<string>("");
   const [serverErr, setServerErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const seq = useRef(0);
 
-  // Column discovery — same sources as the Make-a-table editor
-  // (RenderTableColumns), so a preset builds for the step's REAL columns
-  // instead of the demo sample's. schemaCols: the upstream producer's declared
-  // fields (known without a run for introspectable sources). runRows: the exact
-  // rows this step received on its last run (works for any producer once run).
   const refToken = references?.token;
   const tenant = references?.tenant;
   const ws = references?.workspace;
@@ -218,10 +191,6 @@ export function RenderTextPreview({
     };
   }, [token, currentRunID, rowsSource, upstreamRows]);
 
-  // The real columns to build presets from, best source first: the upstream
-  // producer's output rows (covers everything, incl. RSS), then this step's
-  // last-run rows if the parent didn't supply them, then the producer's
-  // declared fields. Empty → the select falls back to the sample's own keys.
   const realRows = upstreamRows?.length ? upstreamRows : runRows;
   const discovered = useMemo(
     () => uniq(realRows.length ? Object.keys(realRows[0]) : [], schemaCols),
@@ -294,8 +263,6 @@ export function RenderTextPreview({
         value={detectPreset(params)}
         onChange={(e) => {
           const p = PRESETS.find((x) => x.key === e.target.value);
-          // Build for the step's real columns when we've discovered them
-          // (last run / declared fields); else fall back to the sample's keys.
           if (p) onApply(p.build(discovered.length ? discovered : firstRowKeys(sample)));
         }}
       >

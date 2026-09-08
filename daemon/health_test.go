@@ -18,7 +18,6 @@ import (
 func TestMonitorGRPCHealth_NilReadyIsServing(t *testing.T) {
 	t.Parallel()
 	hs := health.NewServer()
-	// Returns immediately after marking SERVING (liveness only).
 	daemon.MonitorGRPCHealth(context.Background(), hs, nil, time.Second)
 	resp, err := hs.Check(context.Background(), &healthpb.HealthCheckRequest{})
 	if err != nil {
@@ -50,9 +49,6 @@ func TestMonitorGRPCHealth_TracksReadiness(t *testing.T) {
 	waitForStatus(t, hs, healthpb.HealthCheckResponse_SERVING)
 }
 
-// waitForStatus polls the overall ("") health until it reaches want or
-// the deadline elapses. It tolerates the NotFound error the health server
-// returns before the first status is set.
 func waitForStatus(t *testing.T, hs *health.Server, want healthpb.HealthCheckResponse_ServingStatus) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

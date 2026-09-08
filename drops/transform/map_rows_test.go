@@ -10,10 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// run is a small wrapper that exercises executeMapRows with the
-// common shape — params + rows + optional headers — and returns the
-// output rows + headers, fatal'ing on any error. Test bodies stay
-// close to the test cases that way.
 func run(t *testing.T, params map[string]any, rows []map[string]any, headers []string) (outRows []map[string]any, outHeaders []string) {
 	t.Helper()
 	input := map[string]core.Ref{
@@ -31,7 +27,6 @@ func run(t *testing.T, params map[string]any, rows []map[string]any, headers []s
 }
 
 func TestMapRows_Identity(t *testing.T) {
-	// No params → output equals input (rows + headers).
 	rows, headers := run(t, nil,
 		[]map[string]any{{"a": "1", "b": "2"}, {"a": "3", "b": "4"}},
 		[]string{"a", "b"})
@@ -107,9 +102,6 @@ func TestMapRows_Rename(t *testing.T) {
 }
 
 func TestMapRows_SelectThenRename(t *testing.T) {
-	// select uses INPUT names; rename happens after, so output uses
-	// the renamed names. This is the "match columns to DB schema"
-	// flow that motivated the drop.
 	rows, headers := run(t,
 		map[string]any{
 			"select": []string{"first_name", "age"},
@@ -149,7 +141,6 @@ func TestMapRows_DefaultFillsMissingAndNull(t *testing.T) {
 }
 
 func TestMapRows_DefaultUsesInputColumnName(t *testing.T) {
-	// default refers to INPUT name; rename applies after default fills.
 	rows, _ := run(t,
 		map[string]any{
 			"default": map[string]any{"first_name": "anon"},
@@ -223,8 +214,6 @@ func TestMapRows_FilterIn(t *testing.T) {
 }
 
 func TestMapRows_AllFiltersAreAND(t *testing.T) {
-	// Multiple keys inside filter_eq AND together; multiple filter_*
-	// keys also AND together.
 	rows, _ := run(t,
 		map[string]any{
 			"filter_eq": map[string]any{"status": "active", "country": "SE"},
@@ -243,8 +232,6 @@ func TestMapRows_AllFiltersAreAND(t *testing.T) {
 }
 
 func TestMapRows_FilterAndSelectCompose(t *testing.T) {
-	// Real ETL shape: filter active users, then project the columns
-	// our DB schema wants, then rename.
 	rows, headers := run(t,
 		map[string]any{
 			"filter_eq": map[string]any{"status": "active"},
@@ -296,7 +283,6 @@ func TestMapRows_MissingRowsInput(t *testing.T) {
 }
 
 func TestMapRows_DerivedHeadersWhenNotProvided(t *testing.T) {
-	// No headers input → derived alphabetically from row keys.
 	_, headers := run(t, nil,
 		[]map[string]any{{"zebra": "z", "apple": "a"}},
 		nil)
@@ -306,7 +292,6 @@ func TestMapRows_DerivedHeadersWhenNotProvided(t *testing.T) {
 }
 
 func TestMapRows_JSONRoundtripShape(t *testing.T) {
-	// gRPC/MCP path: rows arrive as []any of map[string]any.
 	res, _ := executeMapRows(t.Context(), core.Job{
 		Params: map[string]any{"select": []string{"a"}},
 		Input: map[string]core.Ref{

@@ -14,8 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// withGHAuthErr points the token lookup at a failing resolver so the
-// connectors take their "auth" error branch.
 func withGHAuthErr(t *testing.T) {
 	t.Helper()
 	SetHTTPBase("http://unused.invalid")
@@ -28,13 +26,8 @@ func withGHAuthErr(t *testing.T) {
 	})
 }
 
-// withGHToken sets a working token lookup but points the base at a URL that
-// fails to connect (so githubDo* returns a transport error).
 func withGHHTTPErr(t *testing.T) {
 	t.Helper()
-	// Reserved TEST-NET-1 address that won't connect; egress is allowed
-	// private in tests, so the failure is a transport/dial error, exercising
-	// the github_http_error branch.
 	SetHTTPBase("http://192.0.2.1:1")
 	SetTokenLookup(func(_ context.Context, account string) (string, error) { return "ghp-" + account, nil })
 	t.Cleanup(func() {
@@ -42,8 +35,6 @@ func withGHHTTPErr(t *testing.T) {
 		SetTokenLookup(nil)
 	})
 }
-
-// --- executeGitHubAddComment gaps -----------------------------------------
 
 func TestGitHubAddComment_ParamGuards(t *testing.T) {
 	cases := []struct {
@@ -104,8 +95,6 @@ func TestGitHubAddComment_APIError(t *testing.T) {
 	}
 }
 
-// --- executeGitHubCreateIssue gaps ----------------------------------------
-
 func TestGitHubCreateIssue_EmptyTitle(t *testing.T) {
 	withGHEnv(t, "http://unused.invalid")
 	res, _ := executeGitHubCreateIssue(context.Background(), core.Job{
@@ -120,8 +109,7 @@ func TestGitHubCreateIssue_TitleInputNonText(t *testing.T) {
 	withGHEnv(t, "http://unused.invalid")
 	res, _ := executeGitHubCreateIssue(context.Background(), core.Job{
 		Params: map[string]any{"owner": "o", "repo": "r", "title": "typed"},
-		// A non-string, non-[]byte inline value makes TextInputOr return ok=false.
-		Input: map[string]core.Ref{"title": {Inline: 42}},
+		Input:  map[string]core.Ref{"title": {Inline: 42}},
 	}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_input" {
 		t.Fatalf("status=%q code=%v, want bad_input", res.Status, res.Error)
@@ -148,8 +136,6 @@ func TestGitHubCreateIssue_HTTPError(t *testing.T) {
 	}
 }
 
-// TestGitHubCreateIssue_FullPayload exercises the optional payload branches:
-// body, labels, assignees and milestone all populate the JSON body.
 func TestGitHubCreateIssue_FullPayload(t *testing.T) {
 	srv := newGHServer(t, 201, map[string]any{"number": 3, "html_url": "https://gh/i/3"})
 	withGHEnv(t, srv.URL)
@@ -172,8 +158,6 @@ func TestGitHubCreateIssue_FullPayload(t *testing.T) {
 		t.Errorf("assignees = %v", srv.lastBody["assignees"])
 	}
 }
-
-// --- executeGitHubListIssues gaps -----------------------------------------
 
 func TestGitHubListIssues_ParamGuards(t *testing.T) {
 	withGHEnv(t, "http://unused.invalid")
@@ -205,8 +189,6 @@ func TestGitHubListIssues_HTTPError(t *testing.T) {
 	}
 }
 
-// TestGitHubListIssues_AssigneeSinceQuery covers the assignee + since query
-// parameter branches.
 func TestGitHubListIssues_AssigneeSinceQuery(t *testing.T) {
 	srv := newGHServer(t, 200, []any{map[string]any{"number": 1}})
 	withGHEnv(t, srv.URL)
@@ -227,8 +209,6 @@ func TestGitHubListIssues_AssigneeSinceQuery(t *testing.T) {
 	}
 }
 
-// TestGitHubListIssues_NonArrayBody covers the bad_response branch when a 2xx
-// carries a body that isn't a JSON array.
 func TestGitHubListIssues_NonArrayBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(200)
@@ -243,8 +223,6 @@ func TestGitHubListIssues_NonArrayBody(t *testing.T) {
 		t.Fatalf("status=%q code=%v, want bad_response", res.Status, res.Error)
 	}
 }
-
-// --- trigger sentinels (0% functions) -------------------------------------
 
 func TestGitHubTriggers_NoTriggerData(t *testing.T) {
 	cases := []struct {
@@ -270,10 +248,6 @@ func TestGitHubTriggers_NoTriggerData(t *testing.T) {
 	}
 }
 
-// --- helpers gaps ----------------------------------------------------------
-
-// TestResolveBody covers resolveBody's string passthrough, []byte case,
-// structured-fenced case, and param fallback.
 func TestResolveBody(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -333,9 +307,6 @@ func TestResolveBody(t *testing.T) {
 	}
 }
 
-// TestExtractGitHubError covers the error-envelope extractor's branches:
-// first detailed message, field-only fallback, bare message, raw passthrough,
-// and >512-byte truncation.
 func TestExtractGitHubError(t *testing.T) {
 	long := strings.Repeat("x", 600)
 	cases := []struct {
@@ -390,8 +361,6 @@ func TestExtractGitHubError(t *testing.T) {
 	})
 }
 
-// TestGithubDoIdemH_Branches covers the helper's optional branches: the
-// default-timeout path, the idempotency-key header, and the no-body path.
 func TestGithubDoIdemH_Branches(t *testing.T) {
 	var gotIdem, gotContentType, gotAuth string
 	var gotMethod string
@@ -406,7 +375,6 @@ func TestGithubDoIdemH_Branches(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	t.Run("with idem key and body and default timeout", func(t *testing.T) {
-		// timeoutMS<=0 exercises the 15000 default.
 		status, _, _, err := githubDoIdemH(context.Background(), "POST", srv.URL, "tok", []byte(`{"a":1}`), 0, "idem-123")
 		if err != nil {
 			t.Fatalf("err: %v", err)

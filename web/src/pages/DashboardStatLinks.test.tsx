@@ -36,12 +36,7 @@ vi.mock("../api", () => ({
 import { Dashboard } from "./Dashboard";
 import { formatDate } from "../lib/datetime";
 
-// Each stat tile is a claim about a subset of runs, and clicking one is how
-// you go see that subset. Landing on the unfiltered run list showed a
-// different number than the one that was clicked, which reads as the tile
-// being wrong. Every tile carries the filter it counted by.
 describe("Dashboard stat tiles", () => {
-  // Scoped to the tile row: "needs attention" also names the panel below it.
   const href = (container: HTMLElement, label: string) =>
     (
       within(container).getByText(label).closest("a") as HTMLAnchorElement
@@ -54,7 +49,6 @@ describe("Dashboard stat tiles", () => {
       </MemoryRouter>,
     );
     const tiles = container.querySelector(".dash-stats") as HTMLElement;
-    // Let the three list calls settle so the tiles show counts, not "—".
     await within(tiles).findAllByText("0");
     const today = formatDate(new Date());
     expect(href(tiles, "dashboard.runsToday")).toBe(

@@ -19,11 +19,7 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// WorkerConfig tunes a single worker goroutine. Production sets
-// PollInterval low (so queued work is picked up promptly), LeaseDuration
-// in tens of seconds (long enough to ride out brief stalls without
-// holding a job hostage if the worker dies), and LeaseRenewEvery to
-// ~one-third of LeaseDuration.
+// One worker goroutine; the pool size is the per-process step concurrency.
 type WorkerConfig struct {
 	ID              string
 	PollInterval    time.Duration
@@ -31,53 +27,25 @@ type WorkerConfig struct {
 	LeaseRenewEvery time.Duration
 	Logger          *log.Logger
 
-	// MaxRetries caps how many total attempts a single node may get,
-	// counting the initial run. Default 3. Set to 1 to disable retries.
 	MaxRetries int
 
-	// RetryBackoff returns the delay before the (attempt+1)-th try given
-	// the count of attempts so far (1-indexed: 1 means "first try just
-	// failed, picking delay before the second"). Default is
-	// exponential: base*2^(attempt-1) with base=1s.
 	RetryBackoff func(attempt int) time.Duration
 
-	// Metrics, when set, receives per-node execution latency (keyed by
-	// terminal status) for the /metrics endpoint. Nil disables it.
 	Metrics *Metrics
 
-	// Usage, when set, counts executed node attempts per tenant per
-	// month (T3 metering). Best-effort: a metering failure is logged,
-	// never affects the node's outcome.
 	Usage UsageStore
 
-	// OnNodeAwaiting, when set, is called once a node has actually been
-	// parked as awaiting — after the status write commits, so it can never
-	// announce a pause that didn't take. Approval mail hangs off it. Runs on
-	// the worker goroutine and must not block: implementations do their own
-	// fan-out. Nil disables it.
+	// Called once the park has COMMITTED, so a fenced park does not notify — the
+	// approval mail must go out exactly once per pause.
 	OnNodeAwaiting func(ctx context.Context, graph core.Graph, runID, nodeID string, result core.Result)
 
-	// DefaultNodeTimeout is the wall-time backstop applied to a node that
-	// sets no explicit TimeoutSeconds. Without it, a node that honors
-	// cancellation but never finishes on its own — a remote gRPC call to a
-	// black-hole host, a native HTTP/DB call to a stalled backend — would
-	// hold its worker slot until the lease churns. The deadline cancels its
-	// context so it returns. (Code that actively ignores ctx can't be
-	// interrupted — Go can't kill a goroutine — so every drop is trusted,
-	// first-party Go that honours its context.) A node's own TimeoutSeconds,
-	// when set, overrides this. It's a generous backstop, not an SLA:
-	// parked nodes (await_approval, subgraph) return from Execute promptly
-	// and so never approach it. Default 30m; set negative to disable.
+	// A backstop for a node that declares none, so a hung drop cannot hold a worker
+	// slot for ever.
 	DefaultNodeTimeout time.Duration
 
-	// Runs is the run-record cache, shared by every worker in the process so a
-	// run is read once per process rather than once per worker that touches
-	// it. nil gives the worker a small private one.
 	Runs *RunCache
 
-	// Wake, when set, lets an enqueue cut short the poll this worker would
-	// otherwise sleep out — see WorkSignal for what that is worth and why the
-	// poll stays. Shared with the Service that enqueues. nil means poll only.
+	// Lets an enqueue cut the poll short, so a submit starts now.
 	Wake *WorkSignal
 }
 
@@ -110,9 +78,7 @@ func (c *WorkerConfig) withDefaults() WorkerConfig {
 				attempt = 1
 			}
 			base := time.Second * time.Duration(1<<uint(attempt-1))
-			// ±25% jitter so a wave of sibling nodes that fail together
-			// (e.g. a shared dependency blips) don't all retry on the
-			// same tick and re-synchronize the thundering herd.
+			// ±25% jitter, so siblings that fail together do not retry in lockstep.
 			factor := 0.75 + rand.Float64()*0.5 // [0.75, 1.25)
 			return time.Duration(float64(base) * factor)
 		}
@@ -120,28 +86,15 @@ func (c *WorkerConfig) withDefaults() WorkerConfig {
 	return out
 }
 
-// Worker drains node-level jobs from a JobStore. Each iteration claims a
-// single node job, executes it via Engine.RunNode, persists the result,
-// and dispatches any newly-ready downstream nodes via the shared
-// Dispatcher (which Service.Approve also uses). Multiple Workers against
-// the same store automatically share the load.
 type Worker struct {
 	cfg        WorkerConfig
 	store      core.JobStore
 	engine     *engine.Engine
 	bus        Bus
 	dispatcher *Dispatcher
-	// graphs caches the parsed graph of recent runs — see fetchGraph. Shared
-	// across the process's workers when WorkerConfig.Runs is set.
-	graphs *RunCache
-	// runState accumulates stored result bytes per run — the ceiling that
-	// stops one payload being amplified across a long chain of steps.
-	runState runStateMeter
-	// SubGraphRunner is optional. When nil and a module's manifest has
-	// SubmitsChildGraph=true, the worker still parks the node but logs
-	// a warning — the graph will hang because no one will submit the
-	// child. Production deployments must wire this (Service satisfies
-	// the interface).
+	graphs     *RunCache
+	runState   runStateMeter
+	// Without it, a module declaring SubmitsChildGraph cannot run.
 	SubGraphRunner SubGraphRunner
 }
 
@@ -168,9 +121,8 @@ func (w *Worker) Run(ctx context.Context) error {
 			w.cfg.Logger.Printf("[%s] stopping: %v", w.cfg.ID, err)
 			return err
 		}
-		// Taken BEFORE the claim: a waiter captured after an empty claim can
-		// miss a Notify that landed in between, and the worker would sleep the
-		// full interval with work already queued. See WorkSignal.Waiter.
+		// Taken BEFORE the claim: a waiter registered after an empty claim can miss a
+		// wake that landed in between, and then sleeps the full interval.
 		wake := w.cfg.Wake.Waiter()
 		rec, err := w.store.Claim(ctx, w.cfg.ID, w.cfg.LeaseDuration)
 		if errors.Is(err, core.ErrNoJobs) {
@@ -181,8 +133,6 @@ func (w *Worker) Run(ctx context.Context) error {
 		}
 		if err != nil {
 			w.cfg.Logger.Printf("[%s] claim error: %v", w.cfg.ID, err)
-			// A failing store is not woken by an enqueue, so this one backs
-			// off on the timer alone rather than spinning on every Notify.
 			if !sleepOrDone(ctx, w.cfg.PollInterval) {
 				return ctx.Err()
 			}
@@ -203,8 +153,6 @@ func sleepOrDone(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-// waitForWork blocks until there may be work, the poll interval expires, or
-// the worker is shutting down. Returns false only on shutdown.
 func waitForWork(ctx context.Context, wake <-chan struct{}, d time.Duration) bool {
 	t := time.NewTimer(d)
 	defer t.Stop()
@@ -218,35 +166,13 @@ func waitForWork(ctx context.Context, wake <-chan struct{}, d time.Duration) boo
 	}
 }
 
-// processNodeJob runs a single node job end-to-end.
 func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
-	// Every store read and write for this job is detached from the claim
-	// context. Once a job is claimed it is OURS to finish: a graceful shutdown
-	// stops the claim loop from taking new work (Run re-checks ctx.Err() before
-	// each Claim), but it must not sever the bookkeeping of a job already in
-	// flight. Letting cancellation through has two failure modes, both bad:
-	//
-	//   - a READ fails (fetchGraph / fetchPredecessors), and the node is
-	//     spuriously marked failed — propagating a fabricated failure through a
-	//     run whose only problem was that we happened to be deploying;
-	//   - a terminal WRITE lands but its dependent dispatch does not, and the
-	//     run strands forever — ReapStuckGraphRuns bails on a MISSING node
-	//     record, so nothing is left that can finish it.
-	//
-	// The only thing that legitimately aborts a claimed job is LEASE LOSS,
-	// which is fenced separately through execCtx/stopLease below. This is the
-	// same reasoning that already governed execCtx; jobCtx extends it from the
-	// node's execution to the node's bookkeeping, so the two can't disagree.
+	// Detached from the claim context, so a shutdown cannot leave the node
+	// terminal-written but its dependents unqueued.
 	jobCtx := context.WithoutCancel(ctx)
 
-	// A panic anywhere in node processing — resolve, template rendering over
-	// untrusted graph data, sandbox setup, connection injection, or a drop —
-	// must NOT crash the whole multi-tenant daemon (only the drop's own Execute
-	// is recover-wrapped in engine; everything before it is not). Recover here,
-	// log with stack, and force-complete the node as a TERMINAL failure: this
-	// propagates the failure so the run doesn't hang, and — because we complete
-	// it directly as Failed rather than scheduling a retry — a deterministically
-	// panicking node isn't reclaimed and re-panicked in a loop.
+	// A panic in node processing must fail the NODE, not the daemon: the engine's
+	// recover only covers the calling goroutine.
 	defer func() {
 		if r := recover(); r != nil {
 			w.cfg.Logger.Printf("[%s] PANIC processing node %s (run %s): %v\n%s",
@@ -262,29 +188,13 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		}
 	}()
 
-	// Announce the transition into "running" right after the claim so the
-	// UI's per-node dot lights up before Execute returns.
 	w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusRunning, nil)
 
-	// execCtx ties the node's execution to the lease. If renewal detects
-	// the lease was lost (another worker reclaimed an expired job), the
-	// renew goroutine flips leaseLost and cancels execCtx to abort the
-	// in-flight run; we then abandon the job without writing a result, so
-	// the new owner's run is authoritative (no double-write, best-effort
-	// no double-execution for ctx-respecting modules).
-	//
-	// It's derived via WithoutCancel so a graceful shutdown (the claim-loop
-	// ctx being cancelled on SIGTERM) does NOT abort a node mid-run: the
-	// claim loop stops taking new work, but the node already in flight runs
-	// to its natural completion (bounded by its own timeout/lease and the
-	// caller's bounded drain). Lease loss still cancels it via the explicit
-	// cancel() below.
+	// Ties execution to the lease: if renewal finds the record reclaimed, the drop
+	// is cancelled rather than left racing the new owner.
 	execCtx, cancel := context.WithCancel(jobCtx)
 	defer cancel()
-	// Attach a retry hint the outbound HTTP choke point (drops/net) writes a
-	// server Retry-After / RateLimit-Reset into on a 429, so maybeScheduleRetry
-	// can delay the requeue by the interval the API actually asked for rather
-	// than the blind exponential backoff.
+	// The outbound choke point writes a server-requested delay here.
 	execCtx, retryHint := core.WithRetryHint(execCtx)
 	var leaseLost atomic.Bool
 	var leaseWg sync.WaitGroup
@@ -296,8 +206,6 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 			cancel()
 		})
 	}()
-	// stopLease halts the renew goroutine and reports whether the lease
-	// was lost during this attempt.
 	stopLease := func() bool {
 		cancel()
 		leaseWg.Wait()
@@ -315,11 +223,6 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	}
 	graph := run.graph
 
-	// Disabled switch: the node is off — record it as skipped without
-	// executing. dispatchReady then evaluates its dependents, and the
-	// standard skip cascade (skipped predecessor blocks a default edge)
-	// prunes everything downstream; maybeCompleteGraph still completes the
-	// run since skipped is terminal.
 	if node, ok := graph.Node(rec.NodeID); ok && node.Disabled {
 		if stopLease() {
 			w.cfg.Logger.Printf("[%s] %s: lease lost; abandoning (reclaimed elsewhere)", w.cfg.ID, rec.ID)
@@ -338,10 +241,6 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 
 	prior, fetchErr := w.fetchPredecessors(jobCtx, graph, rec)
 	if fetchErr == nil {
-		// ${upstream.…} / ${trigger.…} may name a node this one has no edge
-		// from. Those are looked up in the run rather than among the direct
-		// predecessors — see template_refs.go. Additive and best-effort: input
-		// assembly is edge-driven and never sees these entries.
 		w.addTemplateResults(jobCtx, graph, rec, prior)
 	}
 	if fetchErr != nil {
@@ -357,29 +256,13 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	result, runErr := w.runNode(execCtx, graph, rec, prior)
 	nodeElapsed := time.Since(nodeStart)
 	if stopLease() {
-		// Lost the lease mid-execution → another worker owns this job now.
-		// Abandon: writing a terminal result here would clobber the new
-		// owner's run, and retrying/dispatching would duplicate work.
 		w.cfg.Logger.Printf("[%s] %s: lease lost during execution; abandoning (reclaimed elsewhere)", w.cfg.ID, rec.ID)
 		return
 	}
 
-	// Deferral path: the module has nothing to do until a known time and
-	// asked for its slot back. Requeue with that horizon — Claim skips the
-	// record until it passes — and take other work. No result is written and
-	// no dependent advances: the node is still unfinished, it is simply not
-	// occupying a worker while it waits.
-	//
-	// This is what keeps a Wait step from being a stop button. The pool is
-	// serial and small, so a step that only sleeps used to hold one of the
-	// daemon's few slots for its whole duration, and enough of them in one
-	// flow stalled every tenant.
 	if runErr == nil {
 		if at, ok := core.ResumeAt(result); ok {
 			if rerr := w.store.Requeue(jobCtx, rec.ID, at); rerr != nil {
-				// Fenced or gone: the lease is already dropped, so leave the
-				// record for the expired-lease reclaim rather than writing
-				// over whoever owns it now.
 				w.cfg.Logger.Printf("[%s] defer %s: %v", w.cfg.ID, rec.ID, rerr)
 				return
 			}
@@ -389,21 +272,9 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		}
 	}
 
-	// Pause path: the module asked to be parked until an external resume
-	// call. Write status=awaiting and drop the lease. The steps that need the
-	// DECISION wait for the resume call (Service.Approve, or — for subgraph
-	// nodes — the dispatcher when the child terminates); but the ones fed by
-	// a port the pause already emitted go now, because an approval link is
-	// only any use while the run is still waiting. classifyEdge draws that
-	// line, and the enqueue is keyed on the node's stable record id, so
-	// re-dispatching the same dependents on resume is a no-op.
 	if runErr == nil && result.Status == core.StatusAwaiting {
 		cerr := w.completeNode(jobCtx, rec.ID, core.JobStatusAwaiting, &result)
 		if errors.Is(cerr, core.ErrConflict) {
-			// Fenced: the lease was lost, the record is already terminal, or
-			// it is already parked (this is a re-execution of a node another
-			// worker parked first). Abandoning here — before the notify hook
-			// — is what keeps one pause from mailing the approvers twice.
 			w.cfg.Logger.Printf("[%s] %s: park fenced (lease lost, already parked, or already terminal); abandoning", w.cfg.ID, rec.ID)
 			return
 		}
@@ -412,24 +283,11 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 			return
 		}
 		w.cfg.Logger.Printf("[%s] parked %s awaiting external resume", w.cfg.ID, rec.ID)
-		// Park is a real status transition — the UI wants to show
-		// "awaiting" on this node while it sits.
 		w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusAwaiting, nil)
-		// Carry it up to the RUN too, so the runs list stops calling a flow
-		// that is waiting on a person "Running". Approval pauses only — a
-		// subgraph pause still has work in flight. Best-effort by design.
 		if isApprovalPause(&result) {
 			setRunParked(jobCtx, w.store, w.cfg.Logger, rec.GraphRunID, true)
 		}
-		// Let the pause-time outputs reach whoever is wired to them — the
-		// notification carrying the approval link, above all. Graph
-		// completion can't fire off the back of this: the parked node is
-		// not terminal, so the completion check simply finds it unfinished.
 		if graph, gerr := w.fetchGraph(jobCtx, rec.GraphRunID); gerr == nil {
-			// Tell whoever is meant to decide, before dispatching the
-			// pause-time dependents. Both are best-effort notification paths;
-			// ordering them this way means the email goes out even if a wired
-			// notify step is misconfigured and blows up the dispatch.
 			if w.cfg.OnNodeAwaiting != nil {
 				w.cfg.OnNodeAwaiting(jobCtx, graph, rec.GraphRunID, rec.NodeID, result)
 			}
@@ -437,9 +295,6 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		} else {
 			w.cfg.Logger.Printf("[%s] park %s: could not load graph to notify dependents: %v", w.cfg.ID, rec.ID, gerr)
 		}
-		// If the manifest declares it submits a child graph, hand the
-		// result off to the SubGraphRunner now. The dispatcher will
-		// resume the parent when the child terminates.
 		w.maybeSubmitChild(jobCtx, rec, result)
 		return
 	}
@@ -449,12 +304,6 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		status = core.JobStatusFailed
 	}
 
-	// Per-run state ceiling. Every step stores its own copy of what it
-	// emitted, and the universal pass pin threads a payload through the whole
-	// chain, so one big value becomes payload × steps of stored run state —
-	// with the per-value ceiling alone, gigabytes at the node limit. Charge
-	// each result against the run's budget and fail the step that crosses it,
-	// so the run stops instead of filling the store.
 	if status == core.JobStatusSucceeded {
 		if total, ok := w.runState.charge(rec.GraphRunID, resultStateBytes(&result)); !ok {
 			status = core.JobStatusFailed
@@ -473,21 +322,9 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		}
 	}
 
-	// Record execution latency for any node that reached a terminal
-	// status (the awaiting/park path returned above). Failed attempts
-	// that will retry are counted too — they're real executions.
 	if w.cfg.Metrics != nil {
 		w.cfg.Metrics.ObserveNode(string(status), nodeElapsed.Seconds())
 	}
-	// Usage metering (T3): every executed attempt is a billable node
-	// execution, retries included (they consumed compute). It is gated
-	// on committing our outcome under our own lease — see the call sites
-	// below, after a successful Requeue and after a non-fenced complete.
-	// If our complete is fenced (ErrConflict: lease lost, reclaimed
-	// elsewhere) we must NOT count: the worker that owns the job now
-	// runs and meters its own attempt, so metering unconditionally here
-	// would double-bill on lease churn. Detached from the claim ctx so a
-	// shutdown can't drop the count of work already done.
 	meterExecution := func() {
 		if w.cfg.Usage == nil {
 			return
@@ -497,9 +334,6 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		}
 	}
 
-	// Timeouts are intentional caps, not transient blips — retrying
-	// would just waste the next budget too. Skip retry whenever the
-	// failure carries the synthesized timeout code so a 1s cap means 1s.
 	skipRetry := result.Error != nil && result.Error.Code == "timeout"
 
 	if status == core.JobStatusFailed && !skipRetry {
@@ -516,21 +350,12 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		}
 	}
 
-	// The outcome and the dependents it releases are one write; the rest of
-	// the advance (publish, completion check) follows once it has landed. On
-	// jobCtx, so a node finishing during a graceful shutdown still enqueues
-	// its dependents — see jobCtx.
 	plan := w.dispatcher.PlanAdvance(jobCtx, graph, rec.GraphRunID, rec.NodeID, status, &result, run.manual)
 	adv, cerr := w.completeAndEnqueue(jobCtx, rec.ID, status, &result, plan.enqueue)
 	if errors.Is(cerr, core.ErrConflict) {
-		// Fenced: we lost the lease (reclaimed elsewhere) or the record is
-		// already terminal. Abandon — don't advance dependents off our
-		// outcome; the owner that wrote the terminal state advances.
 		w.cfg.Logger.Printf("[%s] %s: complete fenced (lease lost or already terminal); abandoning", w.cfg.ID, rec.ID)
 		return
 	}
-	// Past the ownership fence: we committed this terminal outcome, so the
-	// attempt is ours to bill (even if the write hit a non-conflict error).
 	meterExecution()
 	if cerr != nil {
 		w.cfg.Logger.Printf("[%s] complete %s: %v", w.cfg.ID, rec.ID, cerr)
@@ -538,10 +363,6 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	w.dispatcher.FinishAdvance(jobCtx, graph, rec.GraphRunID, rec.NodeID, status, &result, plan, adv)
 }
 
-// completeAndEnqueue writes a node's outcome together with the dependents it
-// releases when the store can do that as one transaction
-// (core.CompleteEnqueuer), and as the separate writes they used to be
-// otherwise — including the run-status read that gates them.
 func (w *Worker) completeAndEnqueue(ctx context.Context, jobID string, status core.JobStatus, result *core.Result, deps []core.JobRecord) (core.Advance, error) {
 	if ce, ok := w.store.(core.CompleteEnqueuer); ok {
 		return ce.CompleteAndEnqueue(ctx, jobID, w.cfg.ID, status, result, deps)
@@ -570,10 +391,6 @@ func (w *Worker) completeAndEnqueue(ctx context.Context, jobID string, status co
 	return adv, nil
 }
 
-// completeNode writes a node's terminal/awaiting status, fenced on lease
-// ownership when the store supports it (core.OwnedCompleter) — so a
-// worker that lost its lease can't clobber the new owner's run. Falls
-// back to a plain Complete for stores without the extension.
 func (w *Worker) completeNode(ctx context.Context, jobID string, status core.JobStatus, result *core.Result) error {
 	if oc, ok := w.store.(core.OwnedCompleter); ok {
 		return oc.CompleteOwned(ctx, jobID, w.cfg.ID, status, result)
@@ -581,20 +398,11 @@ func (w *Worker) completeNode(ctx context.Context, jobID string, status core.Job
 	return w.store.Complete(ctx, jobID, status, result)
 }
 
-// maybeScheduleRetry returns the time at which to retry the failed node,
-// or the zero time when no retry should happen. The decision honors:
-//   - manifest.RetryPolicy (must be set; only exponential_backoff is
-//     implemented today)
-//   - at least one outgoing edge with on_error=retry (or no outgoing
-//     edges at all — leaf nodes get retry on manifest alone)
-//   - the cap from WorkerConfig.MaxRetries against rec.Attempt
 func (w *Worker) maybeScheduleRetry(graph core.Graph, rec core.JobRecord, serverRetryAfter time.Duration) (time.Time, string) {
 	node, ok := graph.Node(rec.NodeID)
 	if !ok {
 		return time.Time{}, "node missing from graph"
 	}
-	// Manifest-only lookup for the retry policy; scope to the graph's tenant so
-	// a per-tenant / pinned module resolves to the right version.
 	ctx := core.WithTenant(context.Background(), graph.Tenant)
 	transport, err := w.engine.Resolver.Resolve(ctx, node.Module)
 	if err != nil {
@@ -620,21 +428,10 @@ func (w *Worker) maybeScheduleRetry(graph core.Graph, rec core.JobRecord, server
 		return time.Time{}, "no outgoing edge requests retry"
 	}
 
-	// A non-idempotent module must never be retried on the manifest alone:
-	// the worker retries any StatusError uniformly and there is no
-	// "this error is safe to retry" signal, so an automatic retry of a
-	// write (POST a charge, send a message) can duplicate the side effect
-	// when the request actually succeeded but the response was lost. Honor
-	// the retry only when the flow author explicitly accepted that risk by
-	// wiring an on_error=retry edge. Idempotent modules retry freely
-	// (including leaf nodes, which have no outgoing edges to ask).
 	if !manifest.Idempotent && !hasRetryEdge {
 		return time.Time{}, "non-idempotent module retries only via an explicit on_error=retry edge"
 	}
 
-	// A module may override the worker-global attempt cap via its
-	// manifest (e.g. a flaky network module tolerating more retries, or a
-	// costly module limiting itself to one shot). Zero = use the default.
 	attemptCap := w.cfg.MaxRetries
 	if manifest.MaxRetries > 0 {
 		attemptCap = manifest.MaxRetries
@@ -643,11 +440,6 @@ func (w *Worker) maybeScheduleRetry(graph core.Graph, rec core.JobRecord, server
 		return time.Time{}, fmt.Sprintf("max retries (%d) reached", attemptCap)
 	}
 
-	// Honor a downstream API's Retry-After / RateLimit-Reset: when the failed
-	// attempt recorded a server-requested wait (a 429 seen by the outbound
-	// HTTP choke point), use whichever is LONGER — the server's interval or
-	// our exponential backoff. Retrying before the window resets would just
-	// earn another 429 and waste the attempt.
 	delay := w.cfg.RetryBackoff(rec.Attempt)
 	if serverRetryAfter > delay {
 		delay = serverRetryAfter
@@ -669,46 +461,16 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 			}})
 		}
 	}()
-	// Close the progress channel and wait for the forwarder to drain on every
-	// exit path — including a panic in RunNode below. A forwarding goroutine
-	// blocked on a never-closed channel would otherwise leak for the life of
-	// the process.
 	defer func() {
 		close(nodeProgress)
 		<-forwardDone
 	}()
-	// Per-node wall-time cap. The context deadline reaches every
-	// well-behaved Execute (engine.RunNode passes it through to the
-	// transport, which passes it through to http.NewRequestWithContext,
-	// sandbox exec, etc.). Modules that ignore ctx will exceed the
-	// timeout — we still surface "timeout" as the failure code below
-	// so the dispatcher's failure-propagation rules can react cleanly.
-	// Every node gets a wall-time cap: its explicit TimeoutSeconds when
-	// set, otherwise the worker's DefaultNodeTimeout backstop. The deadline
-	// reaches every cancellation-honoring Execute (engine.RunNode →
-	// transport → http.NewRequestWithContext / sandbox exec / gRPC stream),
-	// so a node blocked on a stalled backend returns instead of holding its
-	// slot indefinitely. We surface "timeout" below so the dispatcher's
-	// failure-propagation rules react cleanly.
 	timeout := w.cfg.DefaultNodeTimeout
 	if node, ok := graph.Node(rec.NodeID); ok && node.TimeoutSeconds > 0 {
-		// secondsToDuration guards the int64-ns overflow: a hostile huge
-		// TimeoutSeconds would otherwise wrap negative, fail the timeout>0
-		// check below, and run the node with NO deadline.
 		timeout = secondsToDuration(node.TimeoutSeconds)
 	}
-	// Trigger-chain depth reaches the step through the context: an HTTP step
-	// that calls one of our own trigger URLs stamps depth+1 on the request,
-	// so a flow triggering itself is refused at the endpoint instead of
-	// running forever.
 	ctx = core.WithTriggerDepth(ctx, w.runTriggerDepth(ctx, rec.GraphRunID))
-	// The anchor a deferring step measures its wait from. It survives a
-	// requeue, so a Wait that hands its slot back computes the same deadline
-	// on every re-execution — see core.WithNodeEnqueuedAt.
 	ctx = core.WithNodeEnqueuedAt(ctx, rec.EnqueuedAt)
-	// The author's own timeout, separate from the deadline below — a step that
-	// defers is not bound by a context deadline it returns before, so it has to
-	// be able to see what the author actually asked for.
 	if node, ok := graph.Node(rec.NodeID); ok {
 		ctx = core.WithNodeTimeout(ctx, secondsToDuration(node.TimeoutSeconds))
 	}
@@ -718,10 +480,6 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 		execCtx, cancelDeadline = context.WithTimeout(ctx, timeout)
 		defer cancelDeadline()
 	}
-	// Loop body: when this node is a for_each whose `body` pin is wired, hand
-	// the drop a runner that executes the body subgraph in-process once per
-	// item (the drop owns iteration; the engine owns one body pass). The body
-	// nodes are already excluded from normal dispatch (see loopBodyOwners).
 	if node, ok := graph.Node(rec.NodeID); ok && node.Module == "for_each" {
 		if body, isLoop := extractLoopBody(graph, rec.NodeID); isLoop {
 			execCtx = engine.WithBodyRunner(execCtx, w.bodyRunner(body, rec.GraphRunID))
@@ -729,9 +487,6 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 	}
 	result, err := w.engine.RunNode(execCtx, graph, rec.GraphRunID, rec.NodeID, rec.ID, prior, nodeProgress)
 
-	// Translate a deadline expiry into a structured failure. Without
-	// this, ctx.Err() bubbling up as a generic error makes per-node
-	// timeouts indistinguishable from a network blip in dashboards.
 	if execCtx != ctx && errors.Is(execCtx.Err(), context.DeadlineExceeded) {
 		return core.Result{
 			JobID:  rec.ID,
@@ -745,17 +500,6 @@ func (w *Worker) runNode(ctx context.Context, graph core.Graph, rec core.JobReco
 	return result, err
 }
 
-// bodyRunner builds the engine.BodyRunner the for_each drop calls once per
-// item. Each call runs the body subgraph fully in-process via Engine.Run
-// with the item on the context so the body nodes' ${item.…} params resolve
-// to that row.
-//
-// The drop may call the runner from several goroutines at once (concurrency
-// > 1). Engine.RunNode resolves a node's params IN PLACE, so every call gets
-// a fresh deep copy of the body graph — otherwise concurrent iterations
-// would race on (and clobber) the shared node Params, and every row would
-// see the last row's values. The clone is a JSON round-trip, which is exact
-// because the graph already round-trips through JSON as its stored payload.
 func (w *Worker) bodyRunner(body core.Graph, graphRunID string) engine.BodyRunner {
 	bodyJSON, marshalErr := json.Marshal(body)
 	var seq atomic.Int64
@@ -767,41 +511,22 @@ func (w *Worker) bodyRunner(body core.Graph, graphRunID string) engine.BodyRunne
 		if err := json.Unmarshal(bodyJSON, &g); err != nil {
 			return engine.GraphResult{}, fmt.Errorf("clone loop body: %w", err)
 		}
-		// Each iteration gets its OWN scratch namespace, nested under the
-		// parent run's scratch as "<parentRunID>/iN". The for_each drop runs
-		// iterations concurrently, so a single shared scratch dir would let two
-		// body drops that write a fixed-named file (e.g. sheets_export_pdf)
-		// clobber each other. Nesting under the parent keeps cleanup correct:
-		// reclaiming the parent run's scratch removes every item subdir with it.
 		itemRunID := fmt.Sprintf("%s/i%d", graphRunID, seq.Add(1)-1)
 		ctx = engine.WithLoopRunID(ctx, itemRunID)
-		// A body step has no job record of its own and Engine.Run has no queue
-		// to requeue into, so clear the deferral anchor: a Wait in a loop body
-		// waits inline (bounded by the for_each node's own timeout) rather than
-		// deferring into a resume that would never come.
 		ctx = core.WithNodeEnqueuedAt(ctx, time.Time{})
 		return w.engine.Run(engine.WithLoopItem(ctx, item.Inline), g, nil)
 	}
 }
 
-// fetchGraph loads the graph payload from the graph-record, reusing the
-// last few runs' parsed graphs. A run's payload is pinned at submit time, so
-// re-decoding it for every node was the single largest cost of running a
-// large flow: the whole graph JSON, once per step.
 func (w *Worker) fetchGraph(ctx context.Context, graphRunID string) (core.Graph, error) {
 	run, err := w.fetchRun(ctx, graphRunID)
 	return run.graph, err
 }
 
-// fetchRun is fetchGraph with the run's own metadata alongside.
 func (w *Worker) fetchRun(ctx context.Context, graphRunID string) (cachedRun, error) {
 	return w.graphs.runFor(ctx, w.store, graphRunID)
 }
 
-// runTriggerDepth is how deep the trigger chain that started this run was.
-// Steps that call one of our own trigger URLs stamp depth+1 on the request
-// so the endpoint can refuse a chain that has gone too far — see
-// core.TriggerDepthHeader.
 func (w *Worker) runTriggerDepth(ctx context.Context, graphRunID string) int {
 	if run, ok := w.graphs.get(graphRunID); ok {
 		return run.triggerDepth
@@ -813,16 +538,11 @@ func (w *Worker) runTriggerDepth(ctx context.Context, graphRunID string) int {
 	return rec.TriggerDepth
 }
 
-// loadGraphFromRun reads a graph-run record from the store and unmarshals
-// its embedded graph payload. Shared by Worker and Dispatcher so the
-// "get record → check payload → unmarshal" sequence lives in one place.
 func loadGraphFromRun(ctx context.Context, store core.JobStore, graphRunID string) (core.Graph, error) {
 	g, _, err := loadRunFromStore(ctx, store, graphRunID)
 	return g, err
 }
 
-// loadRunFromStore is loadGraphFromRun plus the record itself, for callers
-// that also need the run's own metadata (its trigger-chain depth).
 func loadRunFromStore(ctx context.Context, store core.JobStore, graphRunID string) (core.Graph, core.JobRecord, error) {
 	graphRec, err := loadRunRecord(ctx, store, graphRunID)
 	if err != nil {
@@ -835,9 +555,6 @@ func loadRunFromStore(ctx context.Context, store core.JobStore, graphRunID strin
 	return g, graphRec, nil
 }
 
-// loadRunRecord reads a graph-run record and checks it carries a payload,
-// leaving the decode to the caller — the worker routes it through RunCache so
-// runs of the same flow share one parse.
 func loadRunRecord(ctx context.Context, store core.JobStore, graphRunID string) (core.JobRecord, error) {
 	graphRec, err := store.Get(ctx, graphRunID)
 	if err != nil {
@@ -849,16 +566,7 @@ func loadRunRecord(ctx context.Context, store core.JobStore, graphRunID string) 
 	return graphRec, nil
 }
 
-// fetchPredecessors collects the Result of every node that feeds into rec.NodeID,
-// keyed by upstream node ID so engine.AssembleInput can look them up.
-// Predecessors that didn't produce data (failed or skipped) are silently
-// omitted — analyzeDependent has already verified those non-success
-// states are tolerated by the edge's on_error, so omission means the
-// downstream module sees no value on those input ports.
 func (w *Worker) fetchPredecessors(ctx context.Context, graph core.Graph, rec core.JobRecord) (map[string]core.Result, error) {
-	// Collect the distinct upstream nodes first so the whole set is read in
-	// one round trip: a fan-in step otherwise costs a query per incoming
-	// edge, on the hottest path there is.
 	var from []string
 	seen := make(map[string]struct{}, len(graph.Edges))
 	for _, edge := range graph.Edges {
@@ -897,8 +605,6 @@ func (w *Worker) fetchPredecessors(ctx context.Context, graph core.Graph, rec co
 	return prior, nil
 }
 
-// predecessorOutcomes reads the upstream nodes' outcomes, in one query when
-// the store offers it and one record at a time otherwise.
 func (w *Worker) predecessorOutcomes(ctx context.Context, graphRunID string, nodeIDs []string) (map[string]core.NodeOutcome, error) {
 	ids := make([]string, len(nodeIDs))
 	for i, nodeID := range nodeIDs {
@@ -921,13 +627,6 @@ func (w *Worker) predecessorOutcomes(ctx context.Context, graphRunID string, nod
 	return out, nil
 }
 
-// maybeSubmitChild checks whether the parked node was produced by a
-// subgraph-style module and, if so, parses the metadata embedded in its
-// Result and asks the runner to submit the child graph.
-//
-// We re-resolve the manifest here rather than threading it through
-// processNodeJob — the registry lookup is cheap and keeps the awaiting
-// branch self-contained.
 func (w *Worker) maybeSubmitChild(ctx context.Context, rec core.JobRecord, result core.Result) {
 	node, ok := w.lookupNode(rec)
 	if !ok {
@@ -960,12 +659,8 @@ func (w *Worker) maybeSubmitChild(ctx context.Context, rec core.JobRecord, resul
 	childRunID, err := w.SubGraphRunner.SubmitChild(ctx, rec, childGraphID, seeds)
 	if err != nil {
 		w.cfg.Logger.Printf("[%s] subgraph %s: submit child %q: %v", w.cfg.ID, rec.ID, childGraphID, err)
-		// Fail the parent — without a child, it'll hang forever.
 		jerr := &core.JobError{Code: "subgraph_submit", Message: err.Error()}
 		fail := &core.Result{Status: core.StatusError, Error: jerr}
-		// Force-complete the parent: the awaiting record is still
-		// resumable via Complete because we excluded awaiting from the
-		// terminal guard.
 		_ = w.store.Complete(context.WithoutCancel(ctx), rec.ID, core.JobStatusFailed, fail)
 		if g, gerr := w.fetchGraph(context.WithoutCancel(ctx), rec.GraphRunID); gerr == nil {
 			w.dispatcher.AdvanceAfterCompletion(context.WithoutCancel(ctx), g, rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
@@ -975,9 +670,6 @@ func (w *Worker) maybeSubmitChild(ctx context.Context, rec core.JobRecord, resul
 	w.cfg.Logger.Printf("[%s] subgraph %s submitted child %s (run=%s)", w.cfg.ID, rec.ID, childGraphID, childRunID)
 }
 
-// lookupNode finds the parent record's node definition in its graph
-// payload. Returns ok=false on any error — callers treat that as "no
-// subgraph linkage to set up."
 func (w *Worker) lookupNode(rec core.JobRecord) (core.Node, bool) {
 	g, err := w.fetchGraph(context.Background(), rec.GraphRunID)
 	if err != nil {
@@ -987,11 +679,6 @@ func (w *Worker) lookupNode(rec core.JobRecord) (core.Node, bool) {
 }
 
 func (w *Worker) failNode(ctx context.Context, rec core.JobRecord, code, msg string, graph *core.Graph) {
-	// Every write below is detached from the claim ctx. The failure has already
-	// happened, so a graceful shutdown must not be able to land between the
-	// terminal write and the dispatch of its dependents: that combination
-	// strands the run permanently (ReapStuckGraphRuns bails on a missing node
-	// record, so it can't finish a run whose dependents were never enqueued).
 	ctx = context.WithoutCancel(ctx)
 	jerr := &core.JobError{Code: code, Message: msg}
 	result := &core.Result{Status: core.StatusError, Error: jerr}
@@ -1002,9 +689,6 @@ func (w *Worker) failNode(ctx context.Context, rec core.JobRecord, code, msg str
 		w.dispatcher.AdvanceAfterCompletion(ctx, *graph, rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
 		return
 	}
-	// We never even loaded the graph, so we can't walk for completion.
-	// Publish a node-status anyway so the UI still sees the failure;
-	// mark the graph-record as failed best-effort.
 	w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
 	if cerr := w.store.Complete(ctx, rec.GraphRunID, core.JobStatusFailed, result); cerr == nil {
 		w.bus.Publish(rec.GraphRunID, BusEvent{Terminal: &TerminalEvent{
@@ -1015,11 +699,6 @@ func (w *Worker) failNode(ctx context.Context, rec core.JobRecord, code, msg str
 	}
 }
 
-// renewLease keeps the job's lease alive while it runs. A renewal that
-// fails with ErrConflict/ErrNotFound means we no longer own the job — the
-// lease expired and another worker reclaimed it — so we invoke onLost
-// (which fences the execution) and stop. Transient errors (DB blips) are
-// logged and retried on the next tick; the lease may still be valid.
 func (w *Worker) renewLease(ctx context.Context, jobID string, onLost func()) {
 	ticker := time.NewTicker(w.cfg.LeaseRenewEvery)
 	defer ticker.Stop()
@@ -1037,8 +716,6 @@ func (w *Worker) renewLease(ctx context.Context, jobID string, onLost func()) {
 				onLost()
 				return
 			}
-			// Transient (e.g. DB unreachable): keep trying — a later
-			// renew can recover before the lease actually lapses.
 			w.cfg.Logger.Printf("[%s] renew %s (transient): %v", w.cfg.ID, jobID, err)
 		}
 	}

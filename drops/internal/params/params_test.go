@@ -170,7 +170,6 @@ func TestIntSlice(t *testing.T) {
 	if got := IntSlice(map[string]any{"k": "nope"}, "k"); got != nil {
 		t.Errorf("wrong type: got %v, want nil", got)
 	}
-	// JSON arrays decode to []any of float64; mixed numerics coerce, others skip.
 	got := IntSlice(map[string]any{"k": []any{200.0, 404, int64(500), "x", 301.0}}, "k")
 	want := []int{200, 404, 500, 301}
 	if len(got) != len(want) {
@@ -181,7 +180,6 @@ func TestIntSlice(t *testing.T) {
 			t.Fatalf("got %v, want %v", got, want)
 		}
 	}
-	// native []int / []int64 pass through.
 	if got := IntSlice(map[string]any{"k": []int{1, 2}}, "k"); len(got) != 2 || got[0] != 1 {
 		t.Errorf("[]int: got %v", got)
 	}
@@ -365,8 +363,6 @@ func TestTimeoutMS(t *testing.T) {
 		{"positive is honoured", map[string]any{"timeout_ms": 250}, 5000, 250},
 		{"zero falls back", map[string]any{"timeout_ms": 0}, 5000, 5000},
 		{"negative falls back", map[string]any{"timeout_ms": -1}, 5000, 5000},
-		// JSON numbers arrive as float64, which is the shape that actually
-		// reaches a drop at runtime.
 		{"json float is honoured", map[string]any{"timeout_ms": float64(1500)}, 5000, 1500},
 		{"wrong type falls back", map[string]any{"timeout_ms": "soon"}, 5000, 5000},
 	}
@@ -389,7 +385,6 @@ func TestTruncate(t *testing.T) {
 	}{
 		{"under limit", "abc", 10, "abc"},
 		{"trims surrounding space", "  abc\n\t", 10, "abc"},
-		// Trimming happens BEFORE the cap, so padding can't eat the budget.
 		{"trims before capping", "   abcdef   ", 3, "abc"},
 		{"exactly at limit", "abcd", 4, "abcd"},
 		{"over limit", "abcdef", 3, "abc"},
@@ -415,8 +410,6 @@ func TestJSONFieldMessage(t *testing.T) {
 	}{
 		{"named field", `{"message":"bad request"}`, "message", 100, "bad request"},
 		{"other field name", `{"reason":"quota"}`, "reason", 100, "quota"},
-		// Absent, empty, or non-string → fall back to the raw body so the
-		// operator still sees what the vendor actually said.
 		{"field absent falls back", `{"other":"x"}`, "message", 100, `{"other":"x"}`},
 		{"empty field falls back", `{"message":""}`, "message", 100, `{"message":""}`},
 		{"non-string field falls back", `{"message":42}`, "message", 100, `{"message":42}`},

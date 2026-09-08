@@ -16,7 +16,6 @@ type cloudSecretsAPI struct {
 	EncryptedSecrets *EncryptedSecrets
 }
 
-// cloudSecretsAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) cloudSecretsAPI() *cloudSecretsAPI {
 	return &cloudSecretsAPI{auditor: h.auditor(), EncryptedSecrets: h.EncryptedSecrets}
 }
@@ -50,8 +49,6 @@ func (h *cloudSecretsAPI) secretManagerGate(rw http.ResponseWriter, p core.Princ
 	}
 	return true
 }
-
-// ── AWS ────────────────────────────────────────────────────────────────
 
 // awsSecretManagerView is the credential-free GET shape: the key ID is an
 // identifier (shown so the admin can tell WHICH key is wired), the secret
@@ -90,8 +87,6 @@ func (h *cloudSecretsAPI) putSecretManagerAws(rw http.ResponseWriter, r *http.Re
 func (h *cloudSecretsAPI) deleteSecretManagerAws(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	deleteSecretManagerConfig(h, rw, r, p, "AWS Secrets Manager", awsConfigSecretName, "secret_manager.aws.delete")
 }
-
-// ── GCP ────────────────────────────────────────────────────────────────
 
 // gcpSecretManagerView is the credential-free GET shape: project + the
 // service account's email (parsed from the stored key) identify the

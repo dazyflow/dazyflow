@@ -22,13 +22,7 @@ import { ErrorNotice } from "../components/ui/ErrorNotice";
 import { ICON } from "../icons";
 import { StatCard, type StatTone } from "../components/ui/StatCard";
 
-// Plan & usage (T3): the single account-billing surface, styled after the
-// Overview dashboard — a row of at-a-glance stat cards (plan, runs, step
-// executions), then the monthly history panel and the plan-comparison grid.
-// The Stripe Checkout / billing-portal redirects live in the title actions.
-// The old standalone /plans page folded in here; /plans now redirects in.
 
-// periodLabel renders the month bucket as a standard "YYYY-MM".
 function periodLabel(period: string): string {
   const [y, m] = period.split("-").map(Number);
   if (!y || !m) return period;
@@ -52,8 +46,6 @@ export function Usage() {
       const tenant = activeTenant || undefined;
       const [r, b, p] = await Promise.all([
         api.getUsage(token, { tenant, months: 12 }),
-        // Billing state and the plan comparison are optional decoration —
-        // a deployment without a plan store still renders the counters.
         api.getBilling(token, tenant).catch(() => null),
         api.getPlans(token, tenant).catch(() => null),
       ]);
@@ -77,8 +69,6 @@ export function Usage() {
     void refresh();
   }, [refresh]);
 
-  // Upgrade / manage both round-trip through the daemon for a Stripe
-  // URL, then leave the app. Errors land in the shared banner.
   const goToStripe = useCallback(
     async (kind: "checkout" | "portal") => {
       if (!token) return;
@@ -105,14 +95,8 @@ export function Usage() {
 
   const current = usage[0];
   const fmt = new Intl.NumberFormat(i18n.language);
-  // Whether this deployment runs paid billing at all. When false (a self-host
-  // without Stripe), the plan card, plan comparison, and billing framing are
-  // all hidden — the page is pure usage metering. A failed billing fetch (null)
-  // also reads as not-a-billing-deployment.
   const billingEnabled = !!billing?.billing_enabled;
 
-  // Free-tier run-cap proximity drives the runs-card tone, the way the
-  // Dashboard's success-rate / failure cards colour themselves.
   const capped =
     billing?.plan === "free" && billing.free_runs_per_month > 0
       ? billing.free_runs_per_month

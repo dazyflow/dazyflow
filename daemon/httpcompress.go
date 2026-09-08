@@ -3,12 +3,6 @@
 
 package daemon
 
-// Response compression. The API's largest bodies are catalog and list JSON
-// — the editor's palette alone is ~1 MB — and nothing in front of dzd
-// compresses them: Caddy's reverse_proxy does not encode unless told to,
-// and a k8s Ingress or a direct bind has no proxy at all. Doing it here
-// means every deployment gets it rather than the one that configured it.
-
 import (
 	"compress/gzip"
 	"net/http"
@@ -17,10 +11,6 @@ import (
 	"sync"
 )
 
-// gzipMinSize is the body size below which compressing is not worth the
-// CPU or the ~20 bytes of gzip framing. Only consulted when the handler
-// declared a Content-Length; streaming handlers (which do not) are judged
-// by content type alone.
 const gzipMinSize = 1400
 
 // gzipLevel trades ratio for CPU. BestSpeed is the right end of that curve
@@ -30,7 +20,6 @@ const gzipMinSize = 1400
 // Measured in tests/perf/README.md, "The response path".
 const gzipLevel = gzip.BestSpeed
 
-// gzipWriterPool reuses the compressor's window across requests.
 var gzipWriterPool = sync.Pool{
 	New: func() any {
 		zw, _ := gzip.NewWriterLevel(nil, gzipLevel)
@@ -104,8 +93,6 @@ func (w *gzipResponseWriter) WriteHeader(status int) {
 	}
 	w.done = true
 	h := w.Header()
-	// A body that is already encoded, or a status defined to carry none,
-	// is passed through untouched.
 	noBody := status < 200 || status == http.StatusNoContent || status == http.StatusNotModified
 	if noBody || h.Get("Content-Encoding") != "" || !compressibleType(h.Get("Content-Type")) {
 		w.ResponseWriter.WriteHeader(status)
@@ -139,9 +126,6 @@ func (w *gzipResponseWriter) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 
-// Flush pushes whatever the handler has produced all the way out. The
-// gzip flush is what keeps a long-lived compressed response (a slow list,
-// a progress trickle) from stalling in the compression window.
 func (w *gzipResponseWriter) Flush() {
 	if w.zw != nil {
 		_ = w.zw.Flush()
@@ -151,14 +135,8 @@ func (w *gzipResponseWriter) Flush() {
 	}
 }
 
-// Unwrap exposes the wrapped writer to http.ResponseController, matching
-// jsonErrorWriter — without it a per-request deadline set below this
-// wrapper fails with http.ErrNotSupported.
 func (w *gzipResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-// close finishes the gzip stream and returns the writer to the pool. It
-// runs from a defer, so it also covers a handler that panicked partway
-// through a body.
 func (w *gzipResponseWriter) close() {
 	if w.zw == nil {
 		return

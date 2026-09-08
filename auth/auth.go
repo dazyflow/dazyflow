@@ -15,13 +15,7 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Authenticator turns a bearer credential into a Principal. Implementations
-// can be chained via Chain; the engine's HTTP/gRPC middleware picks the
-// right Authenticator based on token prefix.
 type Authenticator interface {
-	// Authenticate verifies the credential (e.g. a JWT or API key) and
-	// returns the resulting principal. Returns ErrInvalidCredential when
-	// the input is malformed or unknown.
 	Authenticate(ctx context.Context, credential string) (core.Principal, error)
 }
 
@@ -51,9 +45,6 @@ func (c Chain) Authenticate(ctx context.Context, credential string) (core.Princi
 	return core.Principal{}, lastErr
 }
 
-// BearerFromHeader extracts the credential portion of an "Authorization:
-// Bearer <token>" header value. Returns ErrInvalidCredential if the header
-// is missing or malformed.
 func BearerFromHeader(header string) (string, error) {
 	const prefix = "Bearer "
 	if !strings.HasPrefix(header, prefix) {

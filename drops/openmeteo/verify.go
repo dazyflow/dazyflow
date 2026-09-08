@@ -21,15 +21,9 @@ func init() {
 	engine.RegisterConnectionVerifier("Open-Meteo", verifyOpenMeteo)
 }
 
-// verifyOpenMeteo confirms a configured key. The key is OPTIONAL — Open-Meteo's
-// free non-commercial endpoint needs none — so an empty key verifies trivially
-// (the drops will use the free host). A present key is checked against the
-// commercial host at (0,0): a 401 means it's wrong. The dial goes through the
-// same SSRF-guarded client as every other connector.
 func verifyOpenMeteo(ctx context.Context, conn map[string]string) error {
 	key := strings.TrimSpace(conn["api_key"])
 	if key == "" {
-		// No key is a valid configuration — the free endpoint is key-less.
 		return nil
 	}
 

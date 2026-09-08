@@ -15,10 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Real-DB tests for the four org-level Pg stores. Gated on
-// DAZYFLOW_TEST_DB so `go test ./auth/...` stays green without a
-// running Postgres, but CI (.github/workflows/ci.yml) wires one up and these run.
-
 func orgsPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
 	url := os.Getenv("DAZYFLOW_TEST_DB")
@@ -58,8 +54,6 @@ func TestPgMembershipStore_RoundTrip(t *testing.T) {
 		t.Fatalf("PutMembership: %v", err)
 	}
 
-	// Email is normalized to lowercase on write; Get with mixed case
-	// should still find the row.
 	got, err := store.GetMembership(ctx, "alice@acme.com", "acme")
 	if err != nil {
 		t.Fatalf("GetMembership: %v", err)
@@ -71,7 +65,6 @@ func TestPgMembershipStore_RoundTrip(t *testing.T) {
 		t.Errorf("roles round-trip mismatch: %+v", got.Roles)
 	}
 
-	// Upsert: same (email, tenant) updates instead of inserting.
 	m2 := m
 	m2.Workspace = "ws2"
 	if err := store.PutMembership(ctx, m2); err != nil {
@@ -82,8 +75,6 @@ func TestPgMembershipStore_RoundTrip(t *testing.T) {
 		t.Errorf("upsert workspace = %q, want ws2", got.Workspace)
 	}
 
-	// List by email — adding a second org for Alice and verifying both
-	// come back, sorted by tenant.
 	if err := store.PutMembership(ctx, Membership{
 		UserEmail: "alice@acme.com", Tenant: "globex", Workspace: "ws1", Roles: roles,
 	}); err != nil {
@@ -97,13 +88,11 @@ func TestPgMembershipStore_RoundTrip(t *testing.T) {
 		t.Errorf("ListByEmail = %+v", byEmail)
 	}
 
-	// List by tenant: only Alice in acme so far.
 	byTenant, _ := store.ListByTenant(ctx, "acme")
 	if len(byTenant) != 1 || byTenant[0].UserEmail != "alice@acme.com" {
 		t.Errorf("ListByTenant = %+v", byTenant)
 	}
 
-	// Delete + reread → ErrUnknownMembership.
 	if err := store.DeleteMembership(ctx, "alice@acme.com", "acme"); err != nil {
 		t.Fatalf("DeleteMembership: %v", err)
 	}
@@ -138,7 +127,6 @@ func TestPgInvitationStore_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetByToken: %v", err)
 	}
-	// Email is lowercased on write.
 	if got.Email != "bob@example.com" || got.Tenant != "acme" {
 		t.Errorf("round-trip mismatch: %+v", got)
 	}
@@ -149,7 +137,6 @@ func TestPgInvitationStore_RoundTrip(t *testing.T) {
 		t.Errorf("freshly-put invitation not pending: %+v", got)
 	}
 
-	// MarkAccepted updates the row.
 	acceptedAt := now.Add(1 * time.Hour)
 	if err := store.MarkAccepted(ctx, "inv_abc", acceptedAt); err != nil {
 		t.Fatalf("MarkAccepted: %v", err)
@@ -159,20 +146,16 @@ func TestPgInvitationStore_RoundTrip(t *testing.T) {
 		t.Errorf("accepted_at = %v, want %v", got.AcceptedAt, acceptedAt)
 	}
 
-	// MarkAccepted on a missing token returns ErrUnknownInvitation.
 	err = store.MarkAccepted(ctx, "nope", now)
 	if !errors.Is(err, ErrUnknownInvitation) {
 		t.Errorf("expected ErrUnknownInvitation, got %v", err)
 	}
 
-	// Same for MarkRevoked.
 	err = store.MarkRevoked(ctx, "nope", now)
 	if !errors.Is(err, ErrUnknownInvitation) {
 		t.Errorf("expected ErrUnknownInvitation, got %v", err)
 	}
 
-	// List by tenant: should include the accepted invitation, ordered
-	// by created_at DESC.
 	list, err := store.ListByTenant(ctx, "acme")
 	if err != nil {
 		t.Fatalf("ListByTenant: %v", err)
@@ -205,7 +188,6 @@ func TestPgOrgAuthStore_RoundTrip(t *testing.T) {
 		t.Errorf("round-trip mismatch: %+v", got)
 	}
 
-	// Upsert: new client_id replaces the old one.
 	cfg.GoogleClientID = "5678-def.apps.googleusercontent.com"
 	if err := store.PutOrgAuth(ctx, cfg); err != nil {
 		t.Fatalf("PutOrgAuth upsert: %v", err)
@@ -215,7 +197,6 @@ func TestPgOrgAuthStore_RoundTrip(t *testing.T) {
 		t.Errorf("upsert client_id = %q, want %q", got.GoogleClientID, cfg.GoogleClientID)
 	}
 
-	// Delete + reread → ErrUnknownOrgAuth.
 	if err := store.DeleteOrgAuth(ctx, "acme"); err != nil {
 		t.Fatalf("DeleteOrgAuth: %v", err)
 	}
@@ -265,7 +246,7 @@ func TestPgOrgProfileStore_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestPgOrgStores_AnonymizeSubject covers the invited_by scrub against the real
+// Covers the invited_by scrub against the real
 // DB, for both org tables.
 //
 // The match is on lower(invited_by) rather than a plain equality, because these
@@ -284,7 +265,6 @@ func TestPgOrgStores_AnonymizeSubject(t *testing.T) {
 		t.Fatalf("NewPgInvitationStore: %v", err)
 	}
 
-	// Stored in mixed case, deliberately.
 	if err := members.PutMembership(ctx, Membership{
 		UserEmail: "bob@acme.com", Tenant: "acme", InvitedBy: "Alice@ACME.com",
 	}); err != nil {
@@ -320,7 +300,6 @@ func TestPgOrgStores_AnonymizeSubject(t *testing.T) {
 	if got.InvitedBy != core.ErasedIdentity {
 		t.Errorf("memberships.invited_by = %q, want %q", got.InvitedBy, core.ErasedIdentity)
 	}
-	// An unrelated inviter is untouched.
 	other, err := members.GetMembership(ctx, "carol@acme.com", "acme")
 	if err != nil {
 		t.Fatalf("GetMembership(carol): %v", err)

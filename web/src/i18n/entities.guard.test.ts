@@ -1,23 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// No HTML entities in the UI strings.
-//
-// They do not decode. A string rendered through <Trans> is parsed for its
-// <0>…</0> component slots, not un-escaped, and one rendered through plain
-// t() is inserted as text — so `&lt;` reaches the screen as the five
-// characters `&lt;`, in every language at once.
-//
-// The trap is that escaping looks like the careful thing to do. The bearer-key
-// help wanted to show `Authorization: Bearer <a key>`, and a literal `<a …>`
-// inside a Trans string WOULD be eaten as a tag — so it was escaped, which
-// swapped a disappearing placeholder for a visibly broken one. The fix was to
-// stop needing the brackets: the sibling string a few keys away already wrote
-// `Authorization: Bearer …`, and that is the convention.
-//
-// So if a string needs a literal angle bracket, it needs a different sentence
-// — or the value interpolated in rather than written into the source, which
-// is not parsed as markup either way.
 
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";

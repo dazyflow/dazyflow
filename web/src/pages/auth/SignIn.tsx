@@ -68,26 +68,17 @@ export function SignIn({ signInRequired = false }: { signInRequired?: boolean } 
   const [email, setEmail] = useState(presetEmail);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  // Second-factor step. When the password step returns a challenge we
-  // swap the form to a code prompt rather than navigating — the
-  // challenge is short-lived and single-use, so it lives only in state.
   const [challenge, setChallenge] = useState<string | null>(ssoChallenge || null);
   const [totpCode, setTotpCode] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
   const [useRecovery, setUseRecovery] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
-  // null = still probing; true/false = the deployment's answer. Tri-state so
-  // we can show an explicit "invitation only" note when signup is off without
-  // flashing it during the probe on a signup-enabled deployment.
   const [signupEnabled, setSignupEnabled] = useState<boolean | null>(null);
   // The org whose SSO we offer. Prefer an explicit ?org=, otherwise fall
   // back to the org encoded in the host on a wildcard-subdomain deploy
   // (e.g. acme.dazyflow.app → "acme"), resolved once the public auth
   // config tells us the wildcard domain.
   const [org, setOrg] = useState(queryOrg);
-  // When the org is resolved from the host subdomain, its display name + icon
-  // brand the sign-in page ("Sign in to Klahr" with the org logo), so a member
-  // arriving at klahr.dazyflow.app sees they're in the right place.
   const [orgBrand, setOrgBrand] = useState<{ name: string; icon?: string } | null>(
     null,
   );
@@ -98,10 +89,6 @@ export function SignIn({ signInRequired = false }: { signInRequired?: boolean } 
     clearError();
   }, [clearError]);
 
-  // Whether self-serve signup is enabled, plus the wildcard domain used
-  // to derive the org from the host. Default signupEnabled false so the
-  // "Create an account" link stays hidden until the probe confirms it's
-  // allowed — matches the server's invite-only posture by default.
   useEffect(() => {
     let cancelled = false;
     api
@@ -115,11 +102,6 @@ export function SignIn({ signInRequired = false }: { signInRequired?: boolean } 
             r.wildcard_domain,
           );
           if (fromHost) {
-            // The host label is a user-chosen alias, not the tenant ID — resolve
-            // it to the real tenant so the SSO probe + Google start target the
-            // right org. If the label isn't claimed (or resolution fails), fall
-            // back to using it verbatim — back-compat for deploys where the
-            // tenant ID itself is the label.
             api
               .resolveSubdomain(fromHost)
               .then((res) => {
@@ -143,8 +125,6 @@ export function SignIn({ signInRequired = false }: { signInRequired?: boolean } 
     };
   }, [queryOrg]);
 
-  // Probe whether the resolved org has Google SSO turned on so we know
-  // whether to render the button. Public lookup, no auth required.
   useEffect(() => {
     if (!org) {
       setGoogleEnabled(false);
@@ -170,10 +150,6 @@ export function SignIn({ signInRequired = false }: { signInRequired?: boolean } 
       )}`
     : "";
 
-  // Second-factor step: shown once the password step hands back a
-  // challenge. Submitting exchanges the code (or recovery code) for a
-  // session via verifyTOTP, then follows the same post-sign-in nav as
-  // the password path.
   if (challenge) {
     // Exchange the code (or recovery code) for a session. Shared by the
     // form submit and the OTP boxes' auto-submit on the sixth digit; the
@@ -291,7 +267,6 @@ export function SignIn({ signInRequired = false }: { signInRequired?: boolean } 
           setBusy(true);
           try {
             const r = await signInWithPassword(email.trim(), password);
-            // 2FA: don't navigate — switch the form to the code step.
             if (r.totpRequired && r.challenge) {
               setChallenge(r.challenge);
               return;

@@ -19,10 +19,8 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// maxResponseBytes caps how much of an API response we buffer.
 const maxResponseBytes = 4 << 20 // 4 MiB — webhook responses are small
 
-// maxContentLen is Discord's hard limit on a message's content field.
 const maxContentLen = 2000
 
 // discordDo POSTs a JSON body to a Discord webhook URL (the URL carries the
@@ -38,10 +36,6 @@ func discordDo(ctx context.Context, job core.Job, url string, body []byte) (int,
 	return status, raw, err
 }
 
-// extractDiscordError pulls the message (plus code) out of a Discord error
-// body, so "Invalid Webhook Token" reaches the user instead of a bare status.
-// Discord's {message,code} shape is the shared one, so this is a thin wrapper
-// over params.APIErrorMessage.
 func extractDiscordError(body []byte) string {
 	return params.APIErrorMessage(body, 200)
 }

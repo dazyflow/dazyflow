@@ -36,8 +36,6 @@ import (
 // param-handling, template rendering and error-shaping now get exercised
 // with hostile input instead of being skipped.
 
-// baselineParams returns a drop's first worked example decoded into a params
-// map, or nil when it has no usable example.
 func baselineParams(m core.Manifest) map[string]any {
 	for _, ex := range m.Examples {
 		if len(ex.Params) == 0 {
@@ -86,8 +84,8 @@ func strLong(n int) string {
 	return string(b)
 }
 
-// TestAllDrops_BaselineMutation corrupts one param at a time on an otherwise
-// valid job and asserts the safety + output-port contracts hold.
+// Corrupts one param at a time on an otherwise valid job and asserts the
+// safety + output-port contracts hold.
 func TestAllDrops_BaselineMutation(t *testing.T) {
 	for _, d := range allDrops(t) {
 		d := d
@@ -106,7 +104,6 @@ func TestAllDrops_BaselineMutation(t *testing.T) {
 
 			for key := range base {
 				for vi, v := range mutationValues() {
-					// Fresh copy per run: drops resolve params in place.
 					params := make(map[string]any, len(base))
 					for k, bv := range base {
 						params[k] = bv
@@ -132,7 +129,6 @@ func TestAllDrops_BaselineMutation(t *testing.T) {
 						t.Errorf("hang with %s=<value %d>: ignored context", key, vi)
 						continue
 					case out.err != nil:
-						// A transport error is allowed — it's a clean failure.
 						continue
 					}
 					// Result contract: a FAILED status must carry an error so
@@ -151,8 +147,6 @@ func TestAllDrops_BaselineMutation(t *testing.T) {
 					if out.result.Status != core.StatusOK {
 						continue
 					}
-					// Output-port contract on a SUCCESSFUL run. This is the
-					// coverage the spray couldn't give connector drops.
 					for port := range out.result.Output {
 						if !declared[port] {
 							t.Errorf("%s=<value %d>: emitted undeclared output port %q (declared: %v)",

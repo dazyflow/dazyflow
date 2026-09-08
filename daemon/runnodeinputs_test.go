@@ -20,8 +20,6 @@ import (
 // plus the upstream nodes' outputs — through the engine's own AssembleInput, so
 // the explanation can't drift from what ran.
 
-// seedRun writes a graph run and its node records: `src` produced rows, `sink`
-// consumed them over an edge.
 func seedInputsRun(t *testing.T, h *gatewayHarness, runID string, srcResult *core.Result) core.Graph {
 	t.Helper()
 	g := core.Graph{
@@ -91,7 +89,6 @@ func TestRunNodes_InputsRebuiltFromUpstreamOutputs(t *testing.T) {
 			sink = n.Inputs
 		}
 	}
-	// The consumer received the producer's rows on the port the edge names.
 	if _, ok := sink["rows"]; !ok {
 		t.Fatalf("sink has no `rows` input: %s", rw.Body.String())
 	}
@@ -102,7 +99,6 @@ func TestRunNodes_InputsRebuiltFromUpstreamOutputs(t *testing.T) {
 
 func TestRunNode_InputsRebuiltForOneNode(t *testing.T) {
 	t.Parallel()
-	// The single-node endpoint has to read the predecessors itself.
 	h := newGatewayHarness(t)
 	seedInputsRun(t, h, "run-one", rowsResult())
 
@@ -123,8 +119,6 @@ func TestRunNode_InputsRebuiltForOneNode(t *testing.T) {
 
 func TestRunNode_NoInputsWhenUpstreamProducedNothing(t *testing.T) {
 	t.Parallel()
-	// A predecessor with no output (failed, skipped, or pruned by retention)
-	// leaves the section absent rather than inventing an empty port.
 	h := newGatewayHarness(t)
 	seedInputsRun(t, h, "run-empty", &core.Result{Status: core.StatusOK})
 
@@ -177,8 +171,6 @@ func TestRunNode_InputsSurviveAMissingGraphPayload(t *testing.T) {
 	}
 }
 
-// jsonHasKey reports whether the top-level object has the key at all — the
-// distinction that matters here is present-and-empty versus omitted.
 func jsonHasKey(t *testing.T, body, key string) bool {
 	t.Helper()
 	var m map[string]json.RawMessage

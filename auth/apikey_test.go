@@ -25,7 +25,6 @@ func TestMemKeyStore_AdminMethods(t *testing.T) {
 	put("a2", "acme", "bob")
 	put("g1", "globex", "alice")
 
-	// ListAll, sorted by ID.
 	all, err := store.ListAll(ctx)
 	if err != nil || len(all) != 3 {
 		t.Fatalf("ListAll = %v, %v", all, err)
@@ -34,7 +33,6 @@ func TestMemKeyStore_AdminMethods(t *testing.T) {
 		t.Errorf("ListAll not sorted: %v", all)
 	}
 
-	// ListByTenant.
 	if list, _ := store.ListByTenant(ctx, "acme"); len(list) != 2 {
 		t.Errorf("ListByTenant(acme) = %d, want 2", len(list))
 	}
@@ -42,12 +40,10 @@ func TestMemKeyStore_AdminMethods(t *testing.T) {
 		t.Errorf("ListByTenant(nope) = %d, want 0", len(list))
 	}
 
-	// ListBySubject (alice has keys in two tenants).
 	if list, _ := store.ListBySubject(ctx, "alice"); len(list) != 2 {
 		t.Errorf("ListBySubject(alice) = %d, want 2", len(list))
 	}
 
-	// DeleteBySubject removes alice everywhere.
 	if n, _ := store.DeleteBySubject(ctx, "alice"); n != 2 {
 		t.Errorf("DeleteBySubject(alice) = %d, want 2", n)
 	}
@@ -55,7 +51,6 @@ func TestMemKeyStore_AdminMethods(t *testing.T) {
 		t.Errorf("alice keys remain after delete: %v", list)
 	}
 
-	// DeleteByTenant removes the remaining acme key.
 	if n, _ := store.DeleteByTenant(ctx, "acme"); n != 1 {
 		t.Errorf("DeleteByTenant(acme) = %d, want 1", n)
 	}
@@ -89,7 +84,6 @@ func TestAPIKeyAuthenticate_NonHexSecret(t *testing.T) {
 		t.Fatalf("IssueAPIKey: %v", err)
 	}
 	auth := &APIKeyAuthenticator{Store: store}
-	// Real key id but a non-hex secret → hex.DecodeString fails.
 	if _, err := auth.Authenticate(ctx, "dzk_k1_zz"); !errors.Is(err, ErrInvalidCredential) {
 		t.Errorf("non-hex secret err = %v", err)
 	}
@@ -103,12 +97,10 @@ func TestAPIKeyAuthenticate_ClockExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IssueAPIKey: %v", err)
 	}
-	// Custom clock set past expiry → rejected.
 	expired := &APIKeyAuthenticator{Store: store, Clock: func() time.Time { return exp.Add(time.Hour) }}
 	if _, err := expired.Authenticate(ctx, cleartext); !errors.Is(err, ErrInvalidCredential) {
 		t.Errorf("expired-by-clock err = %v", err)
 	}
-	// Clock before expiry → accepted.
 	live := &APIKeyAuthenticator{Store: store, Clock: func() time.Time { return exp.Add(-time.Hour) }}
 	if _, err := live.Authenticate(ctx, cleartext); err != nil {
 		t.Errorf("live key rejected: %v", err)

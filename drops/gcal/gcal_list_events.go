@@ -95,9 +95,6 @@ func executeListEvents(ctx context.Context, job core.Job, _ chan<- core.Progress
 	}, nil
 }
 
-// resolveCalendarID prefers a wired 'calendar_id' input port over the param, so
-// a calendar reference can be threaded in from an upstream step. Empty input
-// falls back to the param (which defaults to "primary").
 func resolveCalendarID(job core.Job) string {
 	if in, ok := job.Input["calendar_id"]; ok && in.Inline != nil {
 		switch v := in.Inline.(type) {
@@ -114,9 +111,6 @@ func resolveCalendarID(job core.Job) string {
 	return calendarID(job)
 }
 
-// ListEvents fetches and normalizes events for the chosen calendar and window.
-// Exported so the daemon (e.g. a future poll trigger or resource provider) can
-// reuse the exact read instead of reimplementing the Google call.
 func ListEvents(ctx context.Context, job core.Job) ([]map[string]any, error) {
 	token, err := resolveToken(ctx, job)
 	if err != nil {
@@ -132,9 +126,6 @@ func ListEvents(ctx context.Context, job core.Job) ([]map[string]any, error) {
 	if single {
 		q.Set("orderBy", "startTime")
 	}
-	// The window is resolved here rather than typed as RFC3339, so a nightly
-	// flow can say "tomorrow" and mean it on every run. Either end can also be
-	// wired in from an upstream step.
 	loc := time.UTC
 	if tz := strings.TrimSpace(params.StringDefault(job.Params, "tz", "")); tz != "" {
 		l, lerr := time.LoadLocation(tz)
@@ -183,7 +174,6 @@ func ListEvents(ctx context.Context, job core.Job) ([]map[string]any, error) {
 	return out, nil
 }
 
-// rawEvent is the slice of the Calendar event resource the drop surfaces.
 type rawEvent struct {
 	ID          string     `json:"id"`
 	Status      string     `json:"status"`
@@ -205,7 +195,6 @@ type attendee struct {
 	Email string `json:"email"`
 }
 
-// when returns the timed instant if present, else the all-day date.
 func (t eventTime) when() string {
 	if t.DateTime != "" {
 		return t.DateTime
@@ -229,8 +218,7 @@ func (e rawEvent) normalize() map[string]any {
 		"html_link":   e.HTMLLink,
 		"start":       e.Start.when(),
 		"end":         e.End.when(),
-		// all_day is true when the event carries a date but no dateTime.
-		"all_day":   e.Start.Date != "" && e.Start.DateTime == "",
-		"attendees": emails,
+		"all_day":     e.Start.Date != "" && e.Start.DateTime == "",
+		"attendees":   emails,
 	}
 }

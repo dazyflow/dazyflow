@@ -28,13 +28,8 @@ const (
 	ScopeTenant SecretScope = "tenant" // organization scope (shared by every flow)
 	ScopeFlow   SecretScope = "flow"
 
-	secretFlowPrefix = "flow."
-	secretConnPrefix = "conn."
-	// secretResourcePrefix namespaces flow-resource definitions (Phase 4:
-	// ${resource.NAME}). A flow-scoped resource is stored as
-	// "flow.<flowID>.res.<name>"; an org one as "res.<name>". The values
-	// are config (a sheet pointer), not credentials, but they live in the
-	// same store and are hidden from the Credentials listing.
+	secretFlowPrefix     = "flow."
+	secretConnPrefix     = "conn."
 	secretResourcePrefix = "res."
 	// secretEmailTmplPrefix namespaces org-created email templates (the HTML
 	// layout shells the email drops wrap a body in). Stored as
@@ -44,8 +39,6 @@ const (
 	secretEmailTmplPrefix = "emailtmpl."
 )
 
-// scopedSecretName maps (scope, flow, name) to the storage name. Organization
-// (tenant) scope is the bare name; flow scope is prefixed by the flow ID.
 func scopedSecretName(scope SecretScope, flow, name string) (string, error) {
 	switch scope {
 	case ScopeTenant, "":
@@ -161,9 +154,6 @@ func (e *EncryptedSecrets) ListScoped(ctx context.Context, tenant, flow string, 
 				continue
 			}
 			name := strings.TrimPrefix(n, prefix)
-			// A flow-scoped value can itself sit in a reserved namespace —
-			// notably resource defs stored as flow.<flow>.res.<name>. Those
-			// aren't user secrets, so keep them out of the Credentials list.
 			if isReservedSecretName(name) {
 				continue
 			}

@@ -15,7 +15,6 @@ func TestBuildTopology_DedupesDependents(t *testing.T) {
 	g := core.Graph{
 		Nodes: []core.Node{{ID: "a"}, {ID: "b"}, {ID: "c"}},
 		Edges: []core.Edge{
-			// Three wires between the same two steps: one dependent.
 			{From: "a", FromPort: "x", To: "b", ToPort: "items"},
 			{From: "a", FromPort: "y", To: "b", ToPort: "items"},
 			{From: "a", FromPort: "z", To: "b", ToPort: "items"},
@@ -31,7 +30,6 @@ func TestBuildTopology_DedupesDependents(t *testing.T) {
 	}
 }
 
-// countingJobStore records how many point reads a dispatch pass issues.
 type countingJobStore struct {
 	core.JobStore
 	rec  core.JobRecord
@@ -73,8 +71,6 @@ func TestDispatchIndex_ReadsEachPredecessorOnce(t *testing.T) {
 	}
 }
 
-// The topology of a run is fixed once submitted, so it is derived once and
-// reused for the rest of the run's dispatch passes.
 func TestTopologyCache_ReusesPerRun(t *testing.T) {
 	g := core.Graph{Nodes: []core.Node{{ID: "a"}}}
 	var c topologyCache
@@ -85,7 +81,6 @@ func TestTopologyCache_ReusesPerRun(t *testing.T) {
 	if other := c.get("run-2", g); other == first {
 		t.Error("two runs shared one topology")
 	}
-	// An empty run id is a caller with nothing to key on: always fresh.
 	if a, b := c.get("", g), c.get("", g); a == b {
 		t.Error("an unkeyed topology was cached")
 	}
@@ -118,7 +113,6 @@ func TestRunCacheGraphFor_SharesOneDecodePerFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("graphFor: %v", err)
 	}
-	// A distinct byte slice with the same content is the same flow.
 	second, err := c.graphFor(append([]byte(nil), payload...))
 	if err != nil {
 		t.Fatalf("graphFor again: %v", err)

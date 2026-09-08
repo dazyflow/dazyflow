@@ -119,8 +119,6 @@ func executeRenderText(ctx context.Context, job core.Job, _ chan<- core.Progress
 		var ee *rendertext.EvalError
 		switch {
 		case errors.Is(err, rendertext.ErrNoRenderer), errors.As(err, &pe):
-			// No renderer configured, or the CEL template doesn't compile —
-			// both are author mistakes in the step's params.
 			return params.Err(job, "bad_param", err.Error()), nil
 		case errors.As(err, &ee):
 			return params.Err(job, "eval", err.Error()), nil
@@ -141,8 +139,6 @@ func renderTextResult(job core.Job, text string) core.Result {
 	}
 }
 
-// paramStringOr reads an optional string param, returning def when the
-// key is absent or not a string.
 func paramStringOr(params map[string]any, key, def string) string {
 	if raw, ok := params[key]; ok {
 		if s, ok := raw.(string); ok {

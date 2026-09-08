@@ -78,9 +78,6 @@ func TestVisibleWhenPointsAtRealSiblings(t *testing.T) {
 	}
 }
 
-// enumContains reports whether want — a single JSON value or an array of them —
-// is covered by the enum. Both spellings are accepted in x_visible_when, since
-// "show when mode is either of these two" is a natural thing to want.
 func enumContains(enum []json.RawMessage, want json.RawMessage) bool {
 	var many []json.RawMessage
 	if err := json.Unmarshal(want, &many); err != nil {

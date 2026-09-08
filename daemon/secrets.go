@@ -33,14 +33,6 @@ func NewBuiltinProvider() *BuiltinProvider {
 	return &BuiltinProvider{secrets: make(map[string]string)}
 }
 
-// NewBuiltinProviderFromFile reads a JSON map of name → value. The file
-// format is the simplest thing that works:
-//
-//	{"stripe.api-key": "sk_live_...", "smtp.password": "..."}
-//
-// For production use, the file should be encrypted at rest (sealed
-// secrets, age, vault-cli output, etc.); this loader doesn't do
-// decryption itself.
 func NewBuiltinProviderFromFile(path string) (*BuiltinProvider, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -109,13 +101,10 @@ func scopedName(ctx context.Context, name, scheme string) (string, error) {
 	return name, nil
 }
 
-// Set lets tests (and admin paths) populate the provider without going
-// through the file loader.
 func (b *BuiltinProvider) Set(name, value string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.secrets[name] = value
 }
 
-// Compile-time interface checks.
 var _ core.SecretProvider = (*BuiltinProvider)(nil)

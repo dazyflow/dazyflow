@@ -6,9 +6,6 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 
-// t() returns the key with {{interpolations}} filled in, so a test can assert on
-// the part of a label that comes from the data without pulling the real
-// catalogues in.
 vi.mock("react-i18next", () => {
   const t = (k: string, o?: Record<string, unknown>) =>
     o && typeof o === "object" ? `${k}:${JSON.stringify(o)}` : k;
@@ -34,10 +31,6 @@ vi.mock("../../api", () => ({
 
 import { AdminRunnerDetail } from "./AdminRunnerDetail";
 
-// This page exists so that clicking a machine lands somewhere its tags can be
-// changed. A tag is what decides which steps send work here, so most of these
-// tests are about the tag set being editable AND honestly reported: what the
-// server accepted, not what was typed.
 
 const box = {
   name: "invoices-box",
@@ -62,8 +55,6 @@ beforeEach(() => {
   mintRunnerToken.mockReset();
   listRunners.mockResolvedValue({ runners: [box] });
   setRunnerLabels.mockImplementation((_tok: string, name: string, labels: string[]) =>
-    // The server normalizes and returns the saved row; the page shows what came
-    // back rather than what was typed.
     Promise.resolve({
       ...box,
       name,
@@ -82,10 +73,6 @@ describe("AdminRunnerDetail", () => {
     expect(screen.getByText("linux")).toBeInTheDocument();
   });
 
-  // The name being a tag is what lets a step target ONE machine now that there
-  // is no separate "which machine" field. Invisible unless the page shows it,
-  // so it sits with the others — and has no remove button, because there is no
-  // such thing as a machine without its own name.
   it("shows the machine's name as a tag it always carries", async () => {
     const { container } = mount();
     await screen.findByRole("heading", { name: "invoices-box" });
@@ -105,13 +92,9 @@ describe("AdminRunnerDetail", () => {
     await user.type(screen.getByLabelText("runners.tagPlaceholder"), "GPU ");
     await user.click(screen.getByRole("button", { name: /runners.tagAdd/ }));
 
-    // The whole set goes up, not a diff: the set is what routes work, so two
-    // admins editing one machine each end with a set they meant.
     await waitFor(() =>
       expect(setRunnerLabels).toHaveBeenCalledWith("tok", "invoices-box", ["build", "linux", "GPU"]),
     );
-    // And the page shows the server's normalized answer, so it is visible that
-    // a step has to spell it "gpu".
     expect(await screen.findByText("gpu")).toBeInTheDocument();
   });
 
@@ -131,8 +114,6 @@ describe("AdminRunnerDetail", () => {
     mount();
     await screen.findByRole("heading", { name: "invoices-box" });
 
-    // Including its own name, which it carries by definition — the common slip
-    // now that the name is a tag.
     await user.type(screen.getByLabelText("runners.tagPlaceholder"), "LINUX{Enter}");
     await user.type(screen.getByLabelText("runners.tagPlaceholder"), "invoices-box{Enter}");
     expect(setRunnerLabels).not.toHaveBeenCalled();

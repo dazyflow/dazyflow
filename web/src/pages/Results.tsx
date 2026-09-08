@@ -36,10 +36,6 @@ import { Notice } from "../components/ui/Notice";
 // as many rows as they ever did, while making the rows past it reachable.
 const PAGE_SIZE = 1000;
 
-// Results — the in-app view of Collections. Left: the workspace's
-// boards (tables) with row counts. Right: the selected board as a friendly
-// table with client-side search, CSV download, and a Clear action. Mirrors
-// the data-fetching + layout conventions of RunList.
 export function Results() {
   const { t, i18n } = useTranslation();
   const { token, activeTenant, activeWorkspace, me } = useAuth();
@@ -57,15 +53,8 @@ export function Results() {
   const [sort, setSort] = useState<{ column: string; desc: boolean } | null>(null);
   const [clearing, setClearing] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
-  // rowPendingDelete holds the rowid a per-row delete is awaiting confirmation
-  // for (null = no dialog). Kept separate from confirmClear so a single row
-  // delete and a whole-collection clear don't share one modal.
   const [rowPendingDelete, setRowPendingDelete] = useState<number | null>(null);
   const [deletingRow, setDeletingRow] = useState(false);
-  // Which window of the collection is loaded. A collection that outgrows one
-  // page used to end at row 1000: the server capped the page, the footer said
-  // so, and there was no control that reached row 1001 — so the rows a flow
-  // had been saving for months were in the store and off the screen.
   const [offset, setOffset] = useState(0);
   // Which collections have a live public link. Loaded once per workspace so
   // the list can mark them: a member who cannot see WHICH collections are
@@ -79,7 +68,6 @@ export function Results() {
   // rowid under this reserved key (not a displayed column) as the delete handle.
   const ROWID_KEY = "_dz_rowid";
 
-  // Load the board list. Re-runs when the active workspace changes.
   const reloadBoards = () => {
     if (!token) return;
     setLoading(true);
@@ -126,18 +114,12 @@ export function Results() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, activeTenant, activeWorkspace]);
 
-  // Picking a different collection starts at its beginning: the offset that
-  // was right for the last one means nothing here, and landing on page four
-  // of a collection you just opened reads as missing rows.
   useEffect(() => {
     setOffset(0);
     setQuery("");
-    // A different collection has different columns, so the old sort column
-    // usually doesn't exist in it.
     setSort(null);
   }, [selected]);
 
-  // Load the selected board's window of rows.
   useEffect(() => {
     let cancelled = false;
     if (!token || !selected) {
@@ -189,8 +171,6 @@ export function Results() {
     return sortRowsByColumn(found, sort.column, sort.desc, i18n.language);
   }, [page, query, sort]);
 
-  // hasMore/paged drive the pager. `total` is the whole collection's count,
-  // so both are answerable without a probe request.
   const hasMore = !!page && offset + page.rows.length < page.total;
   const paged = !!page && (offset > 0 || hasMore);
 
@@ -208,9 +188,6 @@ export function Results() {
     downloadText(rowsToCSV(page.columns, visibleRows), "text/csv;charset=utf-8", `${page.name}.csv`);
   };
 
-  // doClearBoard performs the (irreversible) clear once the user has
-  // confirmed via the themed ConfirmModal — replacing the old blocking,
-  // untranslatable window.confirm().
   const doClearBoard = async () => {
     setConfirmClear(false);
     if (!token || !selected) return;
@@ -228,8 +205,6 @@ export function Results() {
     }
   };
 
-  // doDeleteRow removes one row by its rowid once confirmed, then refreshes the
-  // visible rows and the board list (so its count updates).
   const doDeleteRow = async (rowid: number) => {
     setRowPendingDelete(null);
     if (!token || !selected) return;
@@ -413,9 +388,6 @@ export function Results() {
                           {page.columns.map((c) => {
                             const on = sort?.column === c;
                             return (
-                              // aria-sort is what tells a screen reader the
-                              // table is ordered and by which column; the arrow
-                              // is the same fact for everyone else.
                               <th
                                 key={c}
                                 aria-sort={on ? (sort.desc ? "descending" : "ascending") : "none"}

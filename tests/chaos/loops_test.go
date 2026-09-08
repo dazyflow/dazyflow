@@ -60,8 +60,6 @@ func TestTriggerLoop_IsBroken(t *testing.T) {
 	defer ts.Close()
 	selfURL := ts.URL + "/trigger/acme/ws1/selfloop"
 
-	// The daemon has to know which origin is itself — dzd does this from
-	// DAZYFLOW_PUBLIC_BASE_URL.
 	hfnet.SetSelfOrigin(ts.URL)
 	t.Cleanup(func() { hfnet.SetSelfOrigin("") })
 
@@ -109,7 +107,6 @@ func TestTriggerLoop_IsBroken(t *testing.T) {
 	if counts[len(counts)-1] > counts[0] {
 		t.Errorf("one deliberate trigger is still spawning runs after 5s (%v) — the chain never breaks", counts)
 	}
-	// One kick-off plus the chain it is allowed before the cap bites.
 	if last := counts[len(counts)-1]; last > core.MaxTriggerChainDepth+1 {
 		t.Errorf("chain ran to %d runs, want at most %d", last, core.MaxTriggerChainDepth+1)
 	}
@@ -137,7 +134,6 @@ func TestDelay_RejectsAbsurdDurations(t *testing.T) {
 	}
 }
 
-// The recursion guards hold — regression cover for them.
 func TestSubgraphRecursion_IsBounded(t *testing.T) {
 	t.Run("flow calls itself", func(t *testing.T) {
 		hs := newHarness(t)

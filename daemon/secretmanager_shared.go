@@ -22,7 +22,6 @@ import (
 // must NOT drift between them: the value cache, the encrypted
 // per-tenant config storage, and the HTTP config endpoints' bodies.
 
-// ttlCacheEntry is one cached value with its expiry.
 type ttlCacheEntry[V any] struct {
 	value V
 	exp   time.Time
@@ -207,9 +206,6 @@ type providerConfig interface {
 	validate() error
 }
 
-// saveProviderConfig validates and persists one provider's per-tenant
-// config under its reserved "cfg:" key (encrypted, in the tenant's own
-// store).
 func saveProviderConfig[T providerConfig](ctx context.Context, es *EncryptedSecrets, tenant, secretName string, cfg T) error {
 	if err := cfg.validate(); err != nil {
 		return err
@@ -221,8 +217,6 @@ func saveProviderConfig[T providerConfig](ctx context.Context, es *EncryptedSecr
 	return es.Put(ctx, tenant, secretName, string(b))
 }
 
-// loadProviderConfig returns a tenant's config; ok=false when none is
-// set (a normal state, not an error).
 func loadProviderConfig[T any](ctx context.Context, es *EncryptedSecrets, tenant, secretName string) (T, bool, error) {
 	var cfg T
 	raw, err := es.Get(core.WithTenant(ctx, tenant), secretName)
@@ -242,10 +236,6 @@ func deleteProviderConfig(ctx context.Context, es *EncryptedSecrets, tenant, sec
 	return es.Delete(ctx, tenant, secretName)
 }
 
-// putSecretManagerConfig is the shared PUT body for all three providers:
-// gate → decode → validate → connection-test → save → audit → 204.
-// label names the provider in error messages ("AWS Secrets Manager");
-// audit returns the action plus the credential-free target/detail pair.
 func putSecretManagerConfig[T providerConfig](
 	h *cloudSecretsAPI, rw http.ResponseWriter, r *http.Request, p core.Principal,
 	label, secretName string,
@@ -287,10 +277,6 @@ func putSecretManagerConfig[T providerConfig](
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// getSecretManagerConfig is the shared GET body for all three providers:
-// gate → load → render the redacted view. When no config is stored it
-// returns toView's zero-value view (each provider's zero view is
-// {Configured:false}). label names the provider in the load error.
 func getSecretManagerConfig[T any](
 	h *cloudSecretsAPI, rw http.ResponseWriter, r *http.Request, p core.Principal,
 	label, secretName string,
@@ -312,8 +298,6 @@ func getSecretManagerConfig[T any](
 	writeJSON(rw, http.StatusOK, toView(cfg, true))
 }
 
-// deleteSecretManagerConfig is the shared DELETE body: gate → delete →
-// audit → 204. Deleting an absent config is a no-op success.
 func deleteSecretManagerConfig(
 	h *cloudSecretsAPI, rw http.ResponseWriter, r *http.Request, p core.Principal,
 	label, secretName, auditAction string,

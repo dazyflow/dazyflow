@@ -366,7 +366,6 @@ function useProviderSlot<S extends { configured: boolean }, C>(
     setErr(null);
     try {
       await del(token);
-      // Re-read authoritative status only after the delete confirms.
       load();
     } catch (e) {
       setErr(explainApiError(e, i18n.t));
@@ -390,8 +389,6 @@ function useProviderSlot<S extends { configured: boolean }, C>(
     startEdit,
     save,
     remove,
-    // confirmRemove drives the themed delete confirm rendered by ProviderShell
-    // (replacing the old window.confirm in `remove`).
     confirmRemove,
     requestRemove: () => setConfirmRemove(true),
     cancelRemove: () => setConfirmRemove(false),
@@ -399,10 +396,6 @@ function useProviderSlot<S extends { configured: boolean }, C>(
   };
 }
 
-// ProviderShell renders the shared chrome around a provider slot: the
-// section heading + intro, the error card, the configured status card
-// with Edit/Disconnect, and the form wrapper with Save/Cancel. The
-// provider-specific parts come in as props (summary line, form fields).
 function ProviderShell({
   canWrite,
   headKey,
@@ -509,8 +502,6 @@ function ProviderShell({
   );
 }
 
-// AwsSection: region + static access key. Only the fields and the
-// summary line are AWS-specific; the lifecycle is the shared slot.
 function AwsSection({ canWrite }: { canWrite: boolean }) {
   const { t } = useTranslation();
   const slot = useProviderSlot<AwsSecretManagerStatus, AwsSecretManagerConfig>(
@@ -592,7 +583,6 @@ function AwsSection({ canWrite }: { canWrite: boolean }) {
   );
 }
 
-// GcpSection: project + pasted service-account key file.
 function GcpSection({ canWrite }: { canWrite: boolean }) {
   const { t } = useTranslation();
   const slot = useProviderSlot<GcpSecretManagerStatus, GcpSecretManagerConfig>(

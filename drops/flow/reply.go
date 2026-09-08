@@ -105,8 +105,6 @@ func replyBody(job core.Job) (core.Ref, bool) {
 
 const replyTextMIME = "text/plain; charset=utf-8"
 
-// replyMIME types a wired value the caller has to be able to read: text stays
-// text, everything structured goes back as JSON.
 func replyMIME(v any) string {
 	switch v.(type) {
 	case string, []byte:

@@ -20,10 +20,6 @@ import (
 	"github.com/dazyflow/dazyflow/internal/smtputil"
 )
 
-// Connection verification for this package's integrations, registered so the
-// Apps page can test credentials before storing them: ntfy (server + token)
-// and Email (SMTP server + login). Each label matches its drop's
-// Manifest.Integration.
 func init() {
 	engine.RegisterConnectionVerifier("ntfy", verifyNtfy)
 	engine.RegisterConnectionVerifier("Email", verifyEmail)
@@ -78,10 +74,6 @@ func verifyEmail(ctx context.Context, conn map[string]string) error {
 
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	if err := hfnet.CheckDialHost(addr); err != nil {
-		// CheckDialHost fails for two very different reasons: the host doesn't
-		// resolve at all (a typo'd or wrong server name) vs. it resolves to a
-		// private/LAN address (the egress guard). Don't tell someone with a typo
-		// to enable private-network access — say the address looks wrong.
 		if strings.Contains(err.Error(), "cannot resolve") {
 			return fmt.Errorf("couldn't find a mail server at %q — check the address", host)
 		}
@@ -105,10 +97,6 @@ func verifyEmail(ctx context.Context, conn map[string]string) error {
 	return nil
 }
 
-// verifyNtfy confirms the configured ntfy server is reachable and, when an
-// access token is set, that the token is accepted. With a token it reads
-// /v1/account (401 on a bad token); without one it hits the public
-// /v1/health. Both are cheap GETs that send no notification.
 func verifyNtfy(ctx context.Context, conn map[string]string) error {
 	server := strings.TrimRight(strings.TrimSpace(conn["server"]), "/")
 	if server == "" {

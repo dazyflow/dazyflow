@@ -43,7 +43,6 @@ func TestBranch_FalseRoutesToElse(t *testing.T) {
 }
 
 func TestBranch_PassesThroughInput(t *testing.T) {
-	// Whichever branch the value goes down, the value itself is forwarded.
 	res, _ := executeBranch(t.Context(), core.Job{
 		Input: map[string]core.Ref{
 			"condition": {Inline: true},
@@ -90,14 +89,12 @@ func TestBranch_CoercesConditionValues(t *testing.T) {
 }
 
 func TestBranch_MissingInputs(t *testing.T) {
-	// Missing condition.
 	res, _ := executeBranch(t.Context(), core.Job{
 		Input: map[string]core.Ref{"in": {Inline: "x"}},
 	}, nil)
 	if res.Status != core.StatusError {
 		t.Errorf("missing condition: status=%q, want error", res.Status)
 	}
-	// Missing payload.
 	res, _ = executeBranch(t.Context(), core.Job{
 		Input: map[string]core.Ref{"condition": {Inline: true}},
 	}, nil)

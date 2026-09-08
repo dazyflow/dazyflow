@@ -33,8 +33,6 @@ import type { PublicCollectionData } from "../types";
 // dashboard, and a table that reshuffles under someone mid-read is worse than
 // one they refresh themselves.
 
-// PAGE_SIZE matches the daemon's boardRowLimit — the largest window the
-// endpoint returns.
 const PAGE_SIZE = 1000;
 
 export function PublicCollection() {
@@ -46,8 +44,6 @@ export function PublicCollection() {
   const [loading, setLoading] = useState(true);
   const [offset, setOffset] = useState(0);
   const [query, setQuery] = useState("");
-  // "updated 2 minutes ago" is only true at render time, and this page does
-  // not poll — so it needs a clock of its own to stop claiming "just now".
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), TICK.relative);
@@ -68,8 +64,6 @@ export function PublicCollection() {
       if (isErrorCode(e, "share_not_found")) {
         setNotFound(true);
       } else {
-        // Keep the last good table on screen and offer a retry: a network
-        // blip should not blank the data somebody was reading.
         setError(true);
       }
     } finally {
@@ -263,9 +257,6 @@ export function PublicCollection() {
   );
 }
 
-// PubBrand marks the page. Like the TV board's: this is the one surface a
-// stranger sees without signing in, and an unsigned table reads as a leaked
-// spreadsheet rather than as something published on purpose.
 function PubBrand() {
   return (
     <span className="pub-brand">

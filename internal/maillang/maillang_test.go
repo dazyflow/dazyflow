@@ -18,8 +18,6 @@ import (
 	"testing"
 )
 
-// languages is every catalogue this package ships. Add a language and add it
-// here; the guards below then hold it to the same standard as Swedish.
 var languages = map[string]Messages{"en": English, "sv": Swedish}
 
 func TestEveryLanguageHasEveryMessage(t *testing.T) {
@@ -77,13 +75,11 @@ func TestFor(t *testing.T) {
 	if For("sv").InviteSubject != Swedish.InviteSubject {
 		t.Error("sv did not resolve to Swedish")
 	}
-	// Region tags and casing resolve, the same way datenames.For does it.
 	for _, code := range []string{"sv-SE", "SV", "sv_FI", " sv "} {
 		if For(code).InviteSubject != Swedish.InviteSubject {
 			t.Errorf("%q did not resolve to Swedish", code)
 		}
 	}
-	// Unknown, and empty, read as English rather than as blanks.
 	for _, code := range []string{"", "en", "en-GB", "de", "zz"} {
 		if For(code).InviteSubject != English.InviteSubject {
 			t.Errorf("%q did not fall back to English", code)
@@ -125,8 +121,6 @@ func TestSwedishIsTranslated(t *testing.T) {
 			same = append(same, en.Type().Field(i).Name)
 		}
 	}
-	// "Support" is the same word in both languages; anything else matching
-	// English is almost certainly untranslated.
 	allowed := map[string]bool{"SupportEyebrow": true}
 	for _, name := range same {
 		if !allowed[name] {

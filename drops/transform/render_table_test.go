@@ -54,7 +54,6 @@ func TestRenderTable_HeadersAndRows(t *testing.T) {
 	if i, j := strings.Index(got, ">name<"), strings.Index(got, ">qty<"); i < 0 || j < 0 || i > j {
 		t.Errorf("headers missing or out of order: %s", got)
 	}
-	// One header row plus one row per data row.
 	if n := strings.Count(got, "<tr>"); n != 3 {
 		t.Errorf("<tr> count = %d, want 3 (header + 2 rows)", n)
 	}
@@ -79,13 +78,6 @@ func TestRenderTable_ColumnsParamSelectsAndOrders(t *testing.T) {
 	}
 }
 
-// ----- Column headers vs column keys --------------------------------
-//
-// The editor has always offered "tap a column to rename it". With only a name
-// to write, it wrote the new name into `columns` as the KEY — so the header
-// read "Customer" and the cells under it came out blank, because no row has a
-// field by that name. These pin the two facts apart.
-
 func TestRenderTable_LabelRenamesTheHeaderOnly(t *testing.T) {
 	got := renderedTable(t,
 		map[string]any{"columns": []any{
@@ -95,27 +87,16 @@ func TestRenderTable_LabelRenamesTheHeaderOnly(t *testing.T) {
 		[]map[string]any{{"customer_email": "ada@example.com", "created_at": "2026-08-01"}},
 		[]string{"customer_email", "created_at"})
 
-	// The header reads the label...
 	if !strings.Contains(got, ">Customer<") || !strings.Contains(got, ">Ordered<") {
 		t.Errorf("labels not used as headers: %s", got)
 	}
-	// ...and the cells still come from the named column. This is the assertion
-	// that was failing in production: a renamed column rendered empty.
 	if !strings.Contains(got, ">ada@example.com<") || !strings.Contains(got, ">2026-08-01<") {
 		t.Errorf("renamed column lost its cells: %s", got)
 	}
-	// The data's own names are gone from the header row.
 	if strings.Contains(got, ">customer_email<") || strings.Contains(got, ">created_at<") {
 		t.Errorf("raw column name leaked into the header: %s", got)
 	}
 }
-
-// ----- column_labels: renaming without listing every column ---------
-//
-// The reachable-from-the-GUI path. `columns` renames a heading too, but only as
-// part of stating the whole column list, and the editor that writes it can only
-// offer columns it has discovered — which for most producers is none. A plain
-// map needs no list and no discovery.
 
 func TestRenderTable_ColumnLabelsRenameHeadings(t *testing.T) {
 	got := renderedTable(t,
@@ -185,8 +166,6 @@ func TestRenderTable_ColumnLabelsComposeWithColumns(t *testing.T) {
 }
 
 func TestRenderTable_ColumnEntryLabelWinsOverTheMap(t *testing.T) {
-	// Most specific wins: a heading set on the column itself is not overruled
-	// by the map.
 	got := renderedTable(t,
 		map[string]any{
 			"columns":       []any{map[string]any{"column": "name", "label": "Who"}},
@@ -199,8 +178,6 @@ func TestRenderTable_ColumnEntryLabelWinsOverTheMap(t *testing.T) {
 }
 
 func TestRenderTable_ColumnLabelsBlankFallsBackToTheDataName(t *testing.T) {
-	// An emptied box in the editor means "stop renaming this", not "a column
-	// with no heading".
 	got := renderedTable(t,
 		map[string]any{"column_labels": map[string]any{"name": "   "}},
 		[]map[string]any{{"name": "Ada"}}, []string{"name"})
@@ -328,16 +305,12 @@ func TestRenderTable_EmptyRowsUsesEmptyParam(t *testing.T) {
 	}
 }
 
-// ----- Table name (title) -------------------------------------------
-
 func TestRenderTable_TitleRendersAsCaption(t *testing.T) {
 	got := renderedTable(t, map[string]any{"title": "Open orders"},
 		[]map[string]any{{"name": "Ada"}}, []string{"name"})
 	if !strings.Contains(got, "Open orders") {
 		t.Fatalf("table name missing: %s", got)
 	}
-	// A caption is only valid — and only stays put — as the table's first
-	// child. Anywhere else and the browser moves it.
 	openTable := strings.Index(got, "<table")
 	caption := strings.Index(got, "<caption")
 	thead := strings.Index(got, "<thead")
@@ -361,8 +334,6 @@ func TestRenderTable_NoTitleMeansNoCaption(t *testing.T) {
 }
 
 func TestRenderTable_TitleIsEscaped(t *testing.T) {
-	// The name can carry a ${upstream.…} reference, so it can hold tenant data
-	// by the time it gets here — the same reason cells are escaped.
 	got := renderedTable(t, map[string]any{"title": `<img src=x onerror="alert(1)">`},
 		[]map[string]any{{"name": "Ada"}}, []string{"name"})
 	if strings.Contains(got, "<img") {
@@ -374,8 +345,6 @@ func TestRenderTable_TitleIsEscaped(t *testing.T) {
 }
 
 func TestRenderTable_TitleIgnoredWhenThereAreNoRows(t *testing.T) {
-	// A caption over nothing is a heading for a table that isn't there; the
-	// `empty` fallback is the whole message in that case.
 	got := renderedTable(t, map[string]any{"title": "Open orders", "empty": "No orders today."},
 		[]map[string]any{}, []string{"name"})
 	if got != "No orders today." {
@@ -384,8 +353,6 @@ func TestRenderTable_TitleIgnoredWhenThereAreNoRows(t *testing.T) {
 }
 
 func TestRenderTable_TitleNotAStringIsIgnored(t *testing.T) {
-	// paramStringOr's contract: a non-string param falls back rather than
-	// rendering "42" or "<nil>" as the table's name.
 	got := renderedTable(t, map[string]any{"title": 42},
 		[]map[string]any{{"name": "Ada"}}, []string{"name"})
 	if strings.Contains(got, "<caption") {
@@ -412,7 +379,6 @@ func TestRenderTable_MissingCellIsBlank(t *testing.T) {
 	got := renderedTable(t, map[string]any{},
 		[]map[string]any{{"name": "A"}}, // no "email" key
 		[]string{"name", "email"})
-	// The email cell renders as an empty <td>, not "<nil>".
 	if strings.Contains(got, "nil") {
 		t.Errorf("nil cell rendered literally: %s", got)
 	}

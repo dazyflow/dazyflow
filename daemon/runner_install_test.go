@@ -57,7 +57,6 @@ func TestScriptFetchesOnlyPathsThisDaemonServes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read installer: %v", err)
 	}
-	// What the routes in httproutes.go register.
 	served := map[string]bool{
 		"/dzrunner.py": true,
 		"/runner.sh":   true,
@@ -74,8 +73,6 @@ func TestScriptFetchesOnlyPathsThisDaemonServes(t *testing.T) {
 			t.Errorf("the installer fetches %q, which this daemon does not serve", path)
 		}
 	}
-	// Both files the installer is supposed to bring down, so dropping one is
-	// caught too.
 	for _, want := range []string{"/dzrunner.py", "/runner.sh"} {
 		if !seen[want] {
 			t.Errorf("the installer never fetches %q", want)
@@ -83,8 +80,6 @@ func TestScriptFetchesOnlyPathsThisDaemonServes(t *testing.T) {
 	}
 }
 
-// The whole point of serving the installer is that the operator does not have
-// to know or type the server address.
 func TestServeRunnerScript_FillsInTheServerAddress(t *testing.T) {
 	t.Parallel()
 	gw := &HTTPGateway{svc: &Service{PublicBaseURL: "https://flows.acme.test/"}}
@@ -121,13 +116,8 @@ func TestServeRunnerScript_FallsBackToTheRequestHost(t *testing.T) {
 	}
 }
 
-// Behind a proxy the scheme has to come from the forwarded header, or the agent
-// is told to call back over plaintext to an HTTPS deployment.
 func TestServeRunnerScript_HonoursForwardedProto(t *testing.T) {
 	t.Parallel()
-	// TrustProxyHeaders on, which is what an operator behind a TLS-terminating
-	// proxy sets. The rest of the gateway gates the header on it and so does
-	// this — see the next test for why.
 	gw := &HTTPGateway{svc: &Service{}, TrustProxyHeaders: true}
 	req := httptest.NewRequest(http.MethodGet, "/runner.sh", nil)
 	req.Host = "flows.acme.test"
@@ -140,10 +130,6 @@ func TestServeRunnerScript_HonoursForwardedProto(t *testing.T) {
 	}
 }
 
-// GET /runner.sh is unauthenticated, and the address it bakes in is where the
-// agent then downloads code from and posts its registration token. So the
-// forwarded headers have to be gated the way requestIsHTTPS and
-// effectiveBaseURL gate them: without TrustProxyHeaders, anyone can set them.
 func TestServeRunnerScript_IgnoresForwardedHeadersWhenNotTrusted(t *testing.T) {
 	t.Parallel()
 	gw := &HTTPGateway{svc: &Service{}}
@@ -163,9 +149,6 @@ func TestServeRunnerScript_IgnoresForwardedHeadersWhenNotTrusted(t *testing.T) {
 	}
 }
 
-// The installer downloads the agent and runs it as a service, so it carries the
-// checksum of the very bytes this build embeds. Without it the only thing
-// vouching for that file is the transport.
 func TestServeRunnerScript_CarriesTheAgentChecksum(t *testing.T) {
 	t.Parallel()
 	gw := &HTTPGateway{svc: &Service{PublicBaseURL: "https://example.com"}}
@@ -187,11 +170,6 @@ func TestServeRunnerScript_CarriesTheAgentChecksum(t *testing.T) {
 	}
 }
 
-// Served as readable text, not a download: someone should be able to open the
-// agent in a browser and read it before trusting it with their machine.
-// svc.sh is the file the operator keeps and the one they will read before
-// letting it write a unit file, so it has to arrive as text and as itself —
-// there is no address to substitute in it.
 func TestServeRunnerScript_CarriesTheVerbs(t *testing.T) {
 	t.Parallel()
 	gw := &HTTPGateway{svc: &Service{PublicBaseURL: "http://example.com"}}
@@ -208,8 +186,6 @@ func TestServeRunnerScript_CarriesTheVerbs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read source: %v", err)
 	}
-	// Identical to the repository file apart from the address, which
-	// TestServeRunnerScript_FillsInTheServerAddress covers on its own.
 	want := strings.ReplaceAll(string(src), urlPlaceholder, "http://example.com")
 	want = strings.ReplaceAll(want, agentSHAPlaceholder, agentChecksum())
 	if body != want {
@@ -218,14 +194,10 @@ func TestServeRunnerScript_CarriesTheVerbs(t *testing.T) {
 	// The verbs are the interface; losing one silently is the failure worth
 	// catching, since the docs name them.
 	for _, verb := range []string{"install", "uninstall", "start", "stop", "restart", "status", "logs"} {
-		// Match the verb anywhere in a case arm, since several share one
-		// ("start | stop | restart)") and some carry an alias
-		// ("uninstall | remove)").
 		if !regexp.MustCompile(`(?m)^[a-z| ]*\b` + verb + `\b[a-z| ]*\)`).MatchString(body) {
 			t.Errorf("the served script handles no %q command", verb)
 		}
 	}
-	// Nothing to substitute means no placeholder should survive in it.
 	if strings.Contains(body, urlPlaceholder) {
 		t.Error("svc.sh carries an unsubstituted address placeholder")
 	}

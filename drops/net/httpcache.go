@@ -22,9 +22,6 @@ import (
 // "httpcache." prefix; when unwired (tests / in-process) caching is simply
 // off and every request is unconditional.
 
-// CacheReader returns the stored validators for an exact tenant/name, or
-// ("", nil) when nothing is stored. CacheWriter persists them. Shapes match
-// the cursor store so the daemon backs them with the same store.
 type (
 	CacheReader func(ctx context.Context, tenant, name string) (string, error)
 	CacheWriter func(ctx context.Context, tenant, name, value string) error
@@ -44,14 +41,12 @@ func SetHTTPCacheStore(r CacheReader, w CacheWriter) {
 	cacheReader, cacheWriter = r, w
 }
 
-// httpCacheEnabled reports whether a backing store is wired.
 func httpCacheEnabled() bool {
 	cacheMu.RLock()
 	defer cacheMu.RUnlock()
 	return cacheReader != nil && cacheWriter != nil
 }
 
-// cacheValidators are what we persist between conditional fetches.
 type cacheValidators struct {
 	ETag         string `json:"etag,omitempty"`
 	LastModified string `json:"last_modified,omitempty"`
@@ -64,8 +59,6 @@ func httpCacheName(graphID, nodeID, cacheKey string) string {
 	return "httpcache." + graphID + "." + nodeID + "." + cacheKey
 }
 
-// readCacheValidators loads a node's stored validators, or nil when caching is
-// off, nothing is stored, or the value is unparseable.
 func readCacheValidators(ctx context.Context, tenant, name string) *cacheValidators {
 	cacheMu.RLock()
 	r := cacheReader
@@ -87,8 +80,6 @@ func readCacheValidators(ctx context.Context, tenant, name string) *cacheValidat
 	return &v
 }
 
-// writeCacheValidators persists a response's validators. Best-effort: a failed
-// write just means the next fetch is unconditional (re-downloads once).
 func writeCacheValidators(ctx context.Context, tenant, name string, v cacheValidators) {
 	cacheMu.RLock()
 	w := cacheWriter
@@ -138,8 +129,6 @@ func applyConditionalHeaders(req *http.Request, v *cacheValidators) (sent bool) 
 	return sent
 }
 
-// validatorsFromResponse extracts the ETag / Last-Modified a 2xx response
-// carries so the next request can be made conditional.
 func validatorsFromResponse(h http.Header) cacheValidators {
 	return cacheValidators{
 		ETag:         h.Get("ETag"),

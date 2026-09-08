@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// node is a builder helper that keeps the test fixtures readable —
-// most lint tests care about (id, module, params) and don't want to
-// type out the rest of core.Node each time.
 func node(id, module string, params map[string]any) Node {
 	return Node{ID: id, Module: module, Params: params}
 }
@@ -101,9 +98,6 @@ func TestLintGraph_TransitivePathReaches(t *testing.T) {
 }
 
 func TestLintGraph_MultipleSinksFromOneSource(t *testing.T) {
-	// One secret-bearing source fanning out into two persistence
-	// sinks should emit two issues (one per sink) so the UI can
-	// pin a marker on each.
 	g := Graph{
 		Nodes: []Node{
 			node("call", "http_request", map[string]any{
@@ -122,8 +116,7 @@ func TestLintGraph_MultipleSinksFromOneSource(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("expected 2 issues, got %d (%+v)", len(got), got)
 	}
-	// Stable order from the lint — file_write < postgres_insert_rows
-	// alphabetically.
+	// Stable order from the lint, alphabetically by sink.
 	sinks := []string{got[0].NodeIDs[1], got[1].NodeIDs[1]}
 	want := []string{"save_db", "save_file"}
 	for i := range sinks {
@@ -212,9 +205,6 @@ func TestLintGraph_AllSecretSchemesDetected(t *testing.T) {
 }
 
 func TestLintGraph_SecretSetIsAPersistenceSink(t *testing.T) {
-	// Writing a secret-bearing upstream's output to secret_set is
-	// unusual but worth flagging — the user may have intended a
-	// hard-coded value but accidentally wired data flow.
 	g := Graph{
 		Nodes: []Node{
 			node("call", "http_request", map[string]any{
@@ -232,11 +222,6 @@ func TestLintGraph_SecretSetIsAPersistenceSink(t *testing.T) {
 }
 
 func TestLintGraph_PathStopsAtFirstSink(t *testing.T) {
-	// If a secret-bearing source feeds A → B → C where B is a
-	// persistence node and C is also a persistence node, the BFS
-	// should report only B (the closer sink). The outer loop
-	// doesn't re-issue C because B is the path's terminus from
-	// the source's perspective.
 	g := Graph{
 		Nodes: []Node{
 			node("call", "http_request", map[string]any{
@@ -282,8 +267,6 @@ func TestLintGraph_MessageMentionsBothNodes(t *testing.T) {
 		t.Errorf("message should mention secret: %q", got[0].Message)
 	}
 }
-
-// ---- hardcoded_secret rule ----
 
 func hasIssueCode(issues []LintIssue, code string) *LintIssue {
 	for i := range issues {
@@ -362,8 +345,6 @@ func TestLintGraph_WebhookSecretsListExempt(t *testing.T) {
 }
 
 func TestLintGraph_WebhookSecretProviderPatternStillFlagged(t *testing.T) {
-	// The exemption only covers the key-name heuristic: pasting a real
-	// provider credential into the trigger secrets still fires.
 	g := Graph{Nodes: []Node{
 		node("a", "webhook_input", map[string]any{
 			"secrets": []any{"ghp_abcdefghijklmnopqrstuvwxyz0123456789"},
@@ -375,8 +356,6 @@ func TestLintGraph_WebhookSecretProviderPatternStillFlagged(t *testing.T) {
 }
 
 func TestLintGraph_SecretKeyOnOtherModuleStillFlagged(t *testing.T) {
-	// The exemption is scoped to webhook_input: a `secret` param on any
-	// other module keeps the key-name heuristic.
 	g := Graph{Nodes: []Node{
 		node("a", "http_request", map[string]any{
 			"secret": "40067d9c5e798d4bc850a794c1254e85",
@@ -395,8 +374,6 @@ func TestLintGraph_HardcodedSecretInEnv(t *testing.T) {
 		t.Error("AWS key literal in env should be flagged")
 	}
 }
-
-// ---- template_placeholder rule ----
 
 func TestLintGraph_TemplatePlaceholderInParamsFlagged(t *testing.T) {
 	g := Graph{Nodes: []Node{
@@ -467,8 +444,6 @@ func TestLintGraph_NoPlaceholderNotFlagged(t *testing.T) {
 	}
 }
 
-// ---- Fields payload (UI labels findings by field, not by slug) ----
-
 func TestLintGraph_PlaceholderCarriesField(t *testing.T) {
 	g := Graph{Nodes: []Node{
 		node("call", "http_request", map[string]any{
@@ -515,8 +490,6 @@ func TestLintGraph_DanglingReferenceCarriesField(t *testing.T) {
 }
 
 func TestLintGraph_TemplatePlaceholderOneIssuePerNode(t *testing.T) {
-	// Two placeholder fields on the same node → still one issue,
-	// so the banner doesn't spam.
 	g := Graph{Nodes: []Node{
 		node("log", "sheets_append_row", map[string]any{
 			"spreadsheet_id": "REPLACE_WITH_YOUR_SHEET_ID",
@@ -563,8 +536,6 @@ func TestLintGraph_DanglingReferenceFlagged(t *testing.T) {
 	if len(iss.NodeIDs) != 1 || iss.NodeIDs[0] != "send" {
 		t.Errorf("node ids = %v, want [send]", iss.NodeIDs)
 	}
-	// "gone" is the only missing ref: "draft" exists, and the self-ref
-	// ${upstream.send.x} points at the node itself (which exists).
 	if !strings.Contains(iss.Message, `"gone"`) {
 		t.Errorf("message should name the missing node: %q", iss.Message)
 	}

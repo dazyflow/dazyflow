@@ -39,20 +39,12 @@ import (
 //     thief who still holds a live cookie, so leaving old sessions alive
 //     would defeat the point.
 
-// resetTokenTTL is deliberately short — a reset link is a high-value
-// credential, and a legitimate user acts on it within minutes. (Email
-// verification's token lives 48h; a reset token should not.)
 const resetTokenTTL = 1 * time.Hour
 
-// passwordResetActive reports whether this deployment can run the flow.
 func (h *authAPI) passwordResetActive() bool {
 	return h.svc.Mailer != nil && h.svc.PublicBaseURL != "" && h.Users != nil
 }
 
-// requestPasswordReset is POST /api/v1/auth/forgot-password {email}.
-// Unauthenticated. ALWAYS 200 (non-enumerating): the response is
-// identical whether or not the address has an account, whether or not a
-// mailer is configured, and whether or not the send succeeds.
 func (h *authAPI) requestPasswordReset(rw http.ResponseWriter, r *http.Request) {
 	body, ok := decodeRequestJSON[struct {
 		Email string `json:"email"`
@@ -115,8 +107,6 @@ func (h *authAPI) sendPasswordResetEmail(ctx context.Context, user auth.User) bo
 		url.QueryEscape(user.Email) + "&token=" + token
 	lang := h.mailLang(ctx, user.Email)
 	m := maillang.For(lang)
-	// Date AND time here: a reset link is short-lived, so the hour is the
-	// part that matters.
 	expFmt := datenames.FormatDateTime(exp, lang)
 	content := emailtheme.Content{
 		Subject:   m.ResetSubject,
@@ -158,15 +148,12 @@ func (h *authAPI) resetPassword(rw http.ResponseWriter, r *http.Request) {
 		writeJSONError(rw, http.StatusBadRequest, "email and token required")
 		return
 	}
-	// Validate the new password BEFORE touching the token, so a rejected
-	// password (too short, etc.) doesn't burn the user's one-shot link.
 	if err := validSignupPassword(body.Password); err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
 	user, err := h.Users.GetByEmail(r.Context(), email)
 	if err != nil {
-		// Same shape as a bad token — don't confirm which addresses exist.
 		writeJSONError(rw, http.StatusBadRequest, "invalid or expired reset link")
 		return
 	}

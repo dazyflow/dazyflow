@@ -18,16 +18,10 @@ import (
 // schedule that silently stops firing, which is why Service keeps a periodic
 // reconcile against the workspaces (see ReconcileSchedules).
 type ScheduleStore interface {
-	// ListSchedules returns every enrolled schedule across all tenants.
 	ListSchedules(ctx context.Context) ([]ScheduleSpec, error)
 
-	// ReplaceFlowSchedules atomically makes specs the complete set for one
-	// flow. An empty slice removes the flow from the schedule set — that is
-	// how unpublishing, disabling, and deleting a flow all take effect.
 	ReplaceFlowSchedules(ctx context.Context, tenant, workspace, graphID string, specs []ScheduleSpec) error
 
-	// DeleteByTenant removes every schedule owned by a tenant, for the GDPR
-	// erasure cascade.
 	DeleteByTenant(ctx context.Context, tenant string) (int, error)
 
 	// PruneMissingFlows removes rows for flows absent from live, keyed
@@ -41,8 +35,6 @@ type ScheduleStore interface {
 	PruneMissingFlows(ctx context.Context, live, scope map[string]struct{}) (int, error)
 }
 
-// MemScheduleStore is the in-memory ScheduleStore used by tests and by
-// single-node deployments running without Postgres.
 type MemScheduleStore struct {
 	mu sync.Mutex
 	// byFlow keys the complete spec set of one flow, so a replace is a single
@@ -58,14 +50,10 @@ func flowKey(tenant, workspace, graphID string) string {
 	return tenant + "/" + workspace + "/" + graphID
 }
 
-// wsKey is the tenant/workspace prefix of a flow key — the unit a workspace
-// enumeration either succeeds or fails at, and therefore the unit a prune is
-// scoped to.
 func wsKey(tenant, workspace string) string {
 	return tenant + "/" + workspace
 }
 
-// inScope reports whether a flow's workspace was readable this pass.
 func inScope(scope map[string]struct{}, tenant, workspace string) bool {
 	if scope == nil {
 		return true

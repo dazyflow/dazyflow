@@ -26,26 +26,15 @@ import (
 	"github.com/dazyflow/dazyflow/internal/maillang"
 )
 
-// approvalView is what the decision page renders.
 type approvalView struct {
-	// Lang is the BCP-47 primary subtag for <html lang>, M the copy in that
-	// language. Both come from the flow's own Language, exactly as the hosted
-	// form and the approval email do: the approver has no account to hold a
-	// preference, so the flow's language is the best answer available.
-	Lang string
-	M    maillang.Messages
-	// Prompt is the step's question, shown when the author wrote one.
-	Prompt string
-	// Action is the URL the buttons post to — the same signed URL, so the
-	// token rides along and the page needs no state of its own.
-	Action string
-	// Done/Decision render the confirmation instead of the buttons.
+	Lang     string
+	M        maillang.Messages
+	Prompt   string
+	Action   string
 	Done     bool
 	Decision string
-	// Gone renders "this link isn't valid"; Already renders "someone else
-	// decided". Both are dead ends with no buttons.
-	Gone    bool
-	Already bool
+	Gone     bool
+	Already  bool
 }
 
 // handleApprovalPage serves GET /approve/<run>/<node>. The token is verified
@@ -64,9 +53,6 @@ func (a *ApprovalListener) handleApprovalPage(rw http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// The token is good, so this run exists and the holder is entitled to see
-	// it. Read the parked record for the question — and to tell a live request
-	// from one somebody already settled.
 	lang, prompt, status := a.approvalPageState(r, graphRunID, nodeID)
 	m := maillang.For(lang)
 	view := approvalView{
@@ -79,7 +65,6 @@ func (a *ApprovalListener) handleApprovalPage(rw http.ResponseWriter, r *http.Re
 	case core.JobStatusAwaiting:
 		renderApproval(rw, http.StatusOK, view)
 	case "":
-		// No record at all: the run predates the pause, or was swept.
 		view.Gone = true
 		renderApproval(rw, http.StatusNotFound, view)
 	default:
@@ -104,8 +89,6 @@ func (a *ApprovalListener) approvalPageState(r *http.Request, graphRunID, nodeID
 			prompt, _ = ref.Inline.(string)
 		}
 	}
-	// The flow's language lives on the graph the run pinned at submit, the
-	// same source the approval email reads it from.
 	if graphRec, err := a.svc.Jobs.Get(r.Context(), graphRunID); err == nil && len(graphRec.GraphPayload) > 0 {
 		var g core.Graph
 		if json.Unmarshal(graphRec.GraphPayload, &g) == nil {
@@ -126,10 +109,6 @@ func wantsHTML(r *http.Request) bool {
 	return strings.Contains(r.Header.Get("Accept"), "text/html")
 }
 
-// renderApproval writes the page. It is deliberately not iframe-able (unlike
-// the hosted form, which is meant to be embedded): a decision button inside
-// somebody else's page is a clickjacking target, and nothing needs to embed
-// this.
 func renderApproval(rw http.ResponseWriter, status int, v approvalView) {
 	if v.M.ApprovalApprove == "" {
 		v.M = maillang.English
@@ -139,8 +118,6 @@ func renderApproval(rw http.ResponseWriter, status int, v approvalView) {
 	}
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 	rw.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
-	// A decision page is per-run and per-token; nothing about it may be held
-	// by a shared cache or replayed from a back button.
 	rw.Header().Set("Cache-Control", "no-store")
 	rw.Header().Set("Referrer-Policy", "no-referrer")
 	rw.WriteHeader(status)

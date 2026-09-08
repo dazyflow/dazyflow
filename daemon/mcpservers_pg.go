@@ -209,8 +209,6 @@ func (s *PgMCPServerStore) SetStatus(ctx context.Context, tenant, name string, t
 	return err
 }
 
-// ---- in-memory store --------------------------------------------------
-
 // MemMCPServerStore implements MCPServerStore in process, for tests.
 //
 // Unlike the runner store's memory twin this one is genuinely test-only: an
@@ -275,7 +273,6 @@ func (s *MemMCPServerStore) Put(_ context.Context, m MCPServer, sealedToken []by
 		m.Snapshot = old.Snapshot
 	}
 	s.rows[k] = m
-	// nil keeps, matching the Postgres COALESCE.
 	if sealedToken != nil {
 		s.toks[k] = sealedToken
 	}

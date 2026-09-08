@@ -36,13 +36,10 @@ function resolve(
   return entry.en === descriptionFingerprint(english) ? entry.sv : english;
 }
 
-// Swedish is the only translation, and a regional tag ("sv-SE", "sv-FI")
-// collapses to it — matching the i18n config's load: "languageOnly".
 function isSwedish(lang?: string): boolean {
   return primaryLanguage(lang) === "sv";
 }
 
-// templateTitle is the card's heading.
 export function templateTitle(tpl: TemplateSummary, lang?: string): string {
   return resolve(SV_TEMPLATE_PROSE, `${tpl.id}.title`, tpl.title, lang);
 }

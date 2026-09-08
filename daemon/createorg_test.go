@@ -17,8 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// recordingOrgProfiles captures the last PutOrgProfile so the create-org
-// test can assert the new org's name was seeded.
 type recordingOrgProfiles struct {
 	saved map[string]auth.OrgProfile
 }
@@ -34,8 +32,6 @@ func (r *recordingOrgProfiles) GetOrgProfile(_ context.Context, tenant string) (
 	return auth.OrgProfile{}, auth.ErrUnknownOrgProfile
 }
 func (r *recordingOrgProfiles) PutOrgProfile(_ context.Context, p auth.OrgProfile) error {
-	// Mirror the Postgres unique index on subdomain: a non-empty label held by
-	// a DIFFERENT tenant is a conflict.
 	if p.Subdomain != "" {
 		for tid, ex := range r.saved {
 			if tid != p.Tenant && strings.EqualFold(ex.Subdomain, p.Subdomain) {
@@ -68,9 +64,6 @@ func (r *recordingOrgProfiles) DeleteOrgProfile(_ context.Context, tenant string
 	return nil
 }
 
-// TestCreateOrg covers self-serve org creation: the caller gets an org_<hex>
-// tenant, an admin membership in it, and a seeded profile with the chosen
-// name. Empty names are rejected.
 func TestCreateOrg(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -98,7 +91,6 @@ func TestCreateOrg(t *testing.T) {
 		t.Fatalf("resp = %+v, want name=Acme Inc workspace=main", resp)
 	}
 
-	// The caller (harness subject "alice") is now an admin member of the org.
 	m, err := mem.GetMembership(t.Context(), "alice", resp.Tenant)
 	if err != nil {
 		t.Fatalf("expected membership for creator: %v", err)
@@ -107,23 +99,18 @@ func TestCreateOrg(t *testing.T) {
 		t.Fatalf("creator roles = %+v, want admin", m.Roles)
 	}
 
-	// The profile carries the chosen display name.
 	if p := prof.saved[resp.Tenant]; p.DisplayName != "Acme Inc" {
 		t.Fatalf("saved profile name = %q, want Acme Inc", p.DisplayName)
 	}
 
-	// Empty name is a 400.
 	if rw := h.do(t, "POST", "/api/v1/me/orgs", map[string]any{"display_name": "  "}); rw.Code != 400 {
 		t.Fatalf("empty name status = %d, want 400", rw.Code)
 	}
 }
 
-// TestExportOrg covers the export-first step: an org admin downloads the
-// org's profile, members, and every flow's full graph.
 func TestExportOrg(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// A flow in the org's workspace (harness store is tenant "t" / ws "ws").
 	if _, err := h.ws.Save(core.Graph{
 		ID: "flow1", Nodes: []core.Node{{ID: "n1", Module: "noop"}},
 	}, "root@t.example"); err != nil {
@@ -136,7 +123,6 @@ func TestExportOrg(t *testing.T) {
 	h.gw.Memberships = mem
 	h.gw.Profiles = prof
 
-	// adminDo's token is tenant "t" with organization:admin → canManageOrg("t").
 	rw := h.adminDo(t, "GET", "/api/v1/admin/orgs/t/export", nil)
 	if rw.Code != 200 {
 		t.Fatalf("export status = %d, body=%s", rw.Code, rw.Body.String())
@@ -159,9 +145,9 @@ func TestExportOrg(t *testing.T) {
 	}
 }
 
-// TestDeleteOrg_RequiresPassword covers the step-up auth: a human (session)
-// principal must re-enter the correct password to delete an org — missing or
-// wrong password is rejected before any data is touched.
+// Covers the step-up auth: a human (session) principal must re-enter the
+// correct password to delete an org — missing or wrong password is rejected
+// before any data is touched.
 func TestDeleteOrg_RequiresPassword(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -181,7 +167,6 @@ func TestDeleteOrg_RequiresPassword(t *testing.T) {
 	h.gw.Users = users
 	h.gw.Sessions = sessions
 	h.gw.Memberships = newFakeMembershipStore()
-	// Extend the API-key-only chain with session auth so the token validates.
 	h.svc.Auth = auth.Chain{
 		&auth.APIKeyAuthenticator{Store: h.ks},
 		&auth.SessionAuthenticator{Store: sessions},
@@ -218,16 +203,15 @@ func TestDeleteOrg_RequiresPassword(t *testing.T) {
 	}
 }
 
-// TestDeleteOrg_BlocksApiKey verifies an API key — even one carrying
-// organization:admin — cannot delete an org; it must go through an
-// interactive session. The org-admin key passes authorization but is
-// rejected with session_required before any data is touched.
+// Verifies an API key — even one carrying organization:admin — cannot delete
+// an org; it must go through an interactive session. The org-admin key passes
+// authorization but is rejected with session_required before any data is
+// touched.
 func TestDeleteOrg_BlocksApiKey(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.Users, _ = auth.OpenJSONUserStore("")
 	h.gw.Memberships = newFakeMembershipStore()
-	// adminDo authenticates with an organization:admin API key on tenant "t".
 	rw := h.adminDo(t, "DELETE", "/api/v1/admin/orgs/t?confirm=t",
 		map[string]any{"password": "whatever"})
 	if rw.Code != http.StatusForbidden {
@@ -247,18 +231,16 @@ func hasRole(roles []core.Role, name string) bool {
 	return false
 }
 
-// TestCollectMemberships_HomeSurvivesSwitch is the regression for the
-// "my home org disappeared after creating/switching orgs" bug: the home
-// entry must come from the user record (user.Tenant), not the session's
-// current tenant — otherwise switching into another org drops the home org
-// from the switcher (it isn't a membership row).
+// The regression for the "my home org disappeared after creating/switching
+// orgs" bug: the home entry must come from the user record (user.Tenant), not
+// the session's current tenant — otherwise switching into another org drops
+// the home org from the switcher (it isn't a membership row).
 func TestCollectMemberships_HomeSurvivesSwitch(t *testing.T) {
 	t.Parallel()
 	users, err := auth.OpenJSONUserStore("")
 	if err != nil {
 		t.Fatalf("open users: %v", err)
 	}
-	// Alice's home org is "klahr"; she also belongs to "org_new".
 	if err := users.PutUser(t.Context(), auth.User{
 		Email: "alice@klahr.se", Subject: "alice@klahr.se",
 		Tenant: "klahr", Workspace: "main", Roles: []core.Role{core.TeamRoleAdmin()},
@@ -270,7 +252,6 @@ func TestCollectMemberships_HomeSurvivesSwitch(t *testing.T) {
 
 	h := &HTTPGateway{Users: users, Memberships: mem}
 
-	// Session is currently active in the OTHER org (post-switch state).
 	p := core.Principal{Subject: "alice@klahr.se", Tenant: "org_new", Workspace: "main"}
 	got := h.authAPI().collectMemberships(t.Context(), p)
 

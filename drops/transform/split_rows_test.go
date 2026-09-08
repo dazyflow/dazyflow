@@ -63,8 +63,6 @@ func TestSplitRows_NoneMatch(t *testing.T) {
 }
 
 func TestSplitRows_ComplexPredicate(t *testing.T) {
-	// Multi-column predicate, real ETL shape: keep rows that look
-	// "complete" (active + has email + score above threshold).
 	matched, unmatched, _ := runSplit(t,
 		map[string]any{
 			"filter": "row.active == true && size(row.email) > 0 && row.score >= 50",
@@ -121,8 +119,6 @@ func TestSplitRows_OrderPreservedInEachBranch(t *testing.T) {
 }
 
 func TestSplitRows_InputNotMutated(t *testing.T) {
-	// We append rows to one of two slices but don't copy them —
-	// confirm we don't accidentally rewrite the underlying maps.
 	input := []map[string]any{
 		{"a": "1", "active": true},
 		{"a": "2", "active": false},
@@ -140,8 +136,6 @@ func TestSplitRows_EmptyInput(t *testing.T) {
 		t.Errorf("got %d/%d, want 0/0", len(matched), len(unmatched))
 	}
 }
-
-// --- Error paths -----------------------------------------------------
 
 func TestSplitRows_MissingRowsInput(t *testing.T) {
 	res, _ := executeSplitRows(t.Context(), core.Job{
@@ -189,8 +183,6 @@ func TestSplitRows_FilterMustReturnBool(t *testing.T) {
 }
 
 func TestSplitRows_RuntimeErrorFailsBatch(t *testing.T) {
-	// Field missing on a row → CEL runtime error → batch fails.
-	// Same all-or-nothing contract as compute_rows.
 	res, _ := executeSplitRows(t.Context(), core.Job{
 		Params: map[string]any{"filter": "row.missing_field == true"},
 		Input: map[string]core.Ref{
@@ -203,7 +195,6 @@ func TestSplitRows_RuntimeErrorFailsBatch(t *testing.T) {
 }
 
 func TestSplitRows_JSONRoundtripShape(t *testing.T) {
-	// gRPC/MCP path: rows arrive as []any of map[string]any.
 	res, _ := executeSplitRows(t.Context(), core.Job{
 		Params: map[string]any{"filter": "row.n > 5"},
 		Input: map[string]core.Ref{

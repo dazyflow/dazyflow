@@ -17,9 +17,6 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
 
-// The two routes under test, mounted exactly as App.tsx mounts them inside
-// the authenticated tree, next to a stand-in for the catch-all they used to
-// fall through to.
 function mountAt(entry: string) {
   render(
     <MemoryRouter initialEntries={[entry]}>

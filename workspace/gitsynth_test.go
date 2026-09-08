@@ -59,9 +59,6 @@ func refNames(refs map[string]string) []string {
 	return out
 }
 
-// seedHistory writes a workspace with the shapes that make a mirror
-// interesting: several flows, an edit, a rollback-style publish, a label, and a
-// deletion.
 func seedHistory(t *testing.T, s *Store) {
 	t.Helper()
 	v1 := mustSave(t, s, flow("shipping", "v1"), "ada@example.com")
@@ -151,7 +148,6 @@ func TestSynth_EnvironmentPointersFollowTheLog(t *testing.T) {
 	}
 	atV1 := first[tag]
 
-	// Roll forward.
 	if err := s.PromoteToEnvironment("f1", PublishedEnv, v2); err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +156,6 @@ func TestSynth_EnvironmentPointersFollowTheLog(t *testing.T) {
 		t.Fatal("published tag did not move after re-publishing")
 	}
 
-	// Unpublish.
 	if err := s.ClearEnvironment("f1", PublishedEnv); err != nil {
 		t.Fatal(err)
 	}
@@ -197,8 +192,6 @@ func TestSynth_StaleCacheRebuilds(t *testing.T) {
 	dir := t.TempDir()
 	before := synthesize(t, s, dir)
 
-	// Corrupt the cache's sync point: a repository whose HEAD names no
-	// revision the log knows.
 	g, err := openSynthRepo(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -248,7 +241,6 @@ func TestSynth_ContentIsCanonical(t *testing.T) {
 	if body == "" || body[0] != '{' {
 		t.Fatalf("committed content is not the flow's JSON: %q", body)
 	}
-	// Indented, because a mirror is read by people.
 	if !contains2(body, "\n  \"id\"") {
 		t.Fatalf("committed JSON is not indented:\n%s", body)
 	}
@@ -263,8 +255,6 @@ func contains2(s, sub string) bool {
 	return false
 }
 
-// End to end: a Postgres workspace pushes a real repository to a real remote,
-// and the remote holds the flows, the published pointer and the label.
 func TestSynth_PushesToARealRemote(t *testing.T) {
 	dsn := os.Getenv("DAZYFLOW_TEST_DB")
 	if dsn == "" {
@@ -371,7 +361,6 @@ func TestSynth_FailoverToAColdPodFastForwards(t *testing.T) {
 		t.Fatalf("pod A push: %v", err)
 	}
 
-	// Work continues while the lock is held by A.
 	mustSave(t, podA, flow("shipping", "v3"), "ada@example.com")
 	if _, err := podA.Push(context.Background(), "file://"+remote, nil); err != nil {
 		t.Fatalf("pod A second push: %v", err)
@@ -389,7 +378,6 @@ func TestSynth_FailoverToAColdPodFastForwards(t *testing.T) {
 		t.Fatalf("cold pod could not fast-forward the mirror — synthesis is not deterministic: %v", err)
 	}
 
-	// And the remote holds B's work on top of A's, with history intact.
 	clone := filepath.Join(t.TempDir(), "clone")
 	if _, err := git.PlainClone(clone, false, &git.CloneOptions{URL: "file://" + remote}); err != nil {
 		t.Fatalf("clone after failover: %v", err)
@@ -411,7 +399,6 @@ func TestSynth_FailoverToAColdPodFastForwards(t *testing.T) {
 	if err := iter.ForEach(func(*object.Commit) error { n++; return nil }); err != nil {
 		t.Fatal(err)
 	}
-	// seedHistory writes 5 revisions; v3 and v4 add two more.
 	if n != 7 {
 		t.Fatalf("mirror holds %d commits after failover, want 7 — history was rewritten", n)
 	}

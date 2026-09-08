@@ -18,7 +18,6 @@ import (
 	"github.com/dazyflow/dazyflow/daemon"
 )
 
-// callPost posts to a flow's /call address and returns the response.
 func callPost(t *testing.T, wh *daemon.WebhookListener, id, secret, query string) (int, string, string) {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -46,8 +45,6 @@ func requestNode(id string) core.Node {
 	return core.Node{ID: id, Module: "request_input", Params: map[string]any{"secrets": []any{"s3cr3t"}}}
 }
 
-// The headline contract: a Reply step's value is what the caller gets back,
-// under the status the step declares.
 func TestCall_ReplyAnswersCaller(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -73,7 +70,6 @@ func TestCall_ReplyAnswersCaller(t *testing.T) {
 	}
 }
 
-// A record wired into Body goes back as JSON — the API-shaped case.
 func TestCall_WiredValueRepliesAsJSON(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -101,8 +97,6 @@ func TestCall_WiredValueRepliesAsJSON(t *testing.T) {
 	}
 }
 
-// Reply answers and the flow carries on — the acknowledge-then-work shape a
-// caller with a short timeout needs.
 func TestCall_FlowContinuesPastReply(t *testing.T) {
 	t.Parallel()
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
@@ -182,7 +176,6 @@ func TestCall_WaitZeroReturnsImmediately(t *testing.T) {
 	}
 }
 
-// The endpoint is key-guarded, and says nothing about which flows exist.
 func TestCall_RejectsBadKey(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -196,14 +189,12 @@ func TestCall_RejectsBadKey(t *testing.T) {
 			t.Errorf("key %q: status = %d, want 401; body=%s", key, code, body)
 		}
 	}
-	// An unknown flow answers identically — no existence oracle.
 	code, _, _ := callPost(t, wh, "no-such-flow", "s3cr3t", "")
 	if code != http.StatusUnauthorized {
 		t.Errorf("unknown flow: status = %d, want 401", code)
 	}
 }
 
-// waitFor polls cond until it holds or the budget runs out.
 func waitFor(t *testing.T, budget time.Duration, cond func() bool, msg string) {
 	t.Helper()
 	deadline := time.Now().Add(budget)
@@ -216,8 +207,6 @@ func waitFor(t *testing.T, budget time.Duration, cond func() bool, msg string) {
 	t.Fatal(msg)
 }
 
-// callPostKeyed posts with an Idempotency-Key and returns the status, body and
-// the Idempotency-Replay header.
 func callPostKeyed(t *testing.T, wh *daemon.WebhookListener, id, query, key, body string) (int, string, string) {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -287,8 +276,6 @@ func TestCall_IdempotencyKeyReplaysWithoutRerunning(t *testing.T) {
 	}
 }
 
-// The case the feature exists for: the first caller gave up before the answer
-// (here, ?wait=0), and the retry JOINS that run rather than starting a second.
 func TestCall_IdempotencyKeyJoinsTheRunInFlight(t *testing.T) {
 	t.Parallel()
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
@@ -345,9 +332,6 @@ func TestCall_WithoutKeyEachCallRuns(t *testing.T) {
 	}
 }
 
-// A Reply on a Form flow becomes the page the person who submitted it sees —
-// the same step that answers an API caller, on the product's least technical
-// surface.
 func TestForm_ReplyIsNotRequiredForTheFormToWork(t *testing.T) {
 	t.Parallel()
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
@@ -396,8 +380,6 @@ func TestForm_ReplyIsNotRequiredForTheFormToWork(t *testing.T) {
 	}, "the form submission never reached the Reply step")
 }
 
-// Same story as the Webhook step: a caller that can only be given a URL has
-// nowhere to put a header, so /call reads the key from the query string too.
 func TestCall_AcceptsKeyInTheURL(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -414,7 +396,6 @@ func TestCall_AcceptsKeyInTheURL(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("key in the URL: status=%d, want 200; body=%s", code, body)
 	}
-	// A wrong key in the URL is still a stranger.
 	if code, _, _ := callPost(t, wh, "call-url-key", "", "?key=wrong"); code != http.StatusUnauthorized {
 		t.Errorf("wrong key in the URL: status=%d, want 401", code)
 	}
@@ -434,9 +415,6 @@ func TestCall_HeaderWinsOverURLKey(t *testing.T) {
 	}
 }
 
-// A caller that can carry neither. The author opens the step and the address
-// becomes the credential — a heavier decision here than on /trigger, because
-// this endpoint hands back the flow's Reply.
 func TestCall_PublicStepAnswersWithNoKey(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)

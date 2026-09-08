@@ -11,19 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestIdentifierBytes_AreCapped closed the byte ceiling against the strings
-// that NAME things (node IDs, module names, edge ports). A graph also carries
-// two repeated SUB-RECORDS — frames and triggers — and the walk charged some
-// of each one's strings but not all: a frame's Title and Color but not its ID,
-// a trigger's Cron, TZ, Secret and FormTitle but not its Type.
-//
-// Both of the missed fields are free-form and unvalidated. Nothing anywhere
-// looks at a frame ID (frames are editor-only comment boxes the engine
-// ignores), and the scheduler switches on a trigger's Type and ignores what it
-// doesn't recognize. The count ceilings beside them — MaxGraphFrames (1000)
-// and MaxGraphTriggers (32) — bound how MANY sub-records a graph carries, not
-// how big one is, which is the same confusion TestIdentifierBytes_AreCapped
-// was written about.
 func TestFrameIDBytes_AreCapped(t *testing.T) {
 	const (
 		frames = core.MaxGraphFrames // sit exactly on the count ceiling
@@ -49,8 +36,6 @@ func TestFrameIDBytes_AreCapped(t *testing.T) {
 	}
 }
 
-// The trigger array is the other repeated sub-record. Only 32 of them fit, so
-// the payload has to ride in the one field per trigger that nothing bounds.
 func TestTriggerTypeBytes_AreCapped(t *testing.T) {
 	const each = 4 << 20 // 4 MiB per trigger type -> a 128 MB graph
 

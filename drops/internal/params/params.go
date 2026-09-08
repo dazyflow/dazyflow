@@ -23,11 +23,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// String returns a required string param. Error messages follow the
-// "missing param %q" / "param %q: expected string, got %T" pattern
-// integrations have used everywhere — preserving the exact text so
-// existing tests that match on these messages keep passing after the
-// migration.
 func String(params map[string]any, key string) (string, error) {
 	v, ok := params[key]
 	if !ok {
@@ -40,9 +35,6 @@ func String(params map[string]any, key string) (string, error) {
 	return s, nil
 }
 
-// StringOpt returns (value, true) when the param is present and a
-// string. Absence and wrong-type both return ("", false) — callers
-// distinguish via the bool, not by inspecting an error.
 func StringOpt(params map[string]any, key string) (string, bool) {
 	v, ok := params[key]
 	if !ok {
@@ -55,8 +47,6 @@ func StringOpt(params map[string]any, key string) (string, bool) {
 	return s, true
 }
 
-// StringDefault returns the string at key, falling back to def when
-// the param is missing or not a string.
 func StringDefault(params map[string]any, key, def string) string {
 	if s, ok := StringOpt(params, key); ok {
 		return s
@@ -64,10 +54,6 @@ func StringDefault(params map[string]any, key, def string) string {
 	return def
 }
 
-// IntDefault returns the int at key, accepting int / int64 / float64
-// (JSON numbers come through as float64). Anything else — including
-// strings that look numeric — returns def, mirroring the per-package
-// behavior the helpers replaced.
 func IntDefault(params map[string]any, key string, def int) int {
 	v, ok := params[key]
 	if !ok {
@@ -84,11 +70,6 @@ func IntDefault(params map[string]any, key string, def int) int {
 	return def
 }
 
-// Bool returns the bool at key and whether a usable bool was present.
-// The second result lets callers tell "explicitly set to false" apart
-// from "absent" — e.g. an override that should only apply when the
-// param was actually provided. Use BoolDefault when that distinction
-// doesn't matter.
 func Bool(params map[string]any, key string) (bool, bool) {
 	v, ok := params[key]
 	if !ok {
@@ -98,8 +79,6 @@ func Bool(params map[string]any, key string) (bool, bool) {
 	return b, ok
 }
 
-// BoolDefault returns the bool at key, falling back to def for
-// missing / wrong-type values.
 func BoolDefault(params map[string]any, key string, def bool) bool {
 	v, ok := params[key]
 	if !ok {
@@ -111,11 +90,6 @@ func BoolDefault(params map[string]any, key string, def bool) bool {
 	return def
 }
 
-// IntSlice returns the param at key as []int, accepting a []any of
-// int/int64/float64 items (JSON arrays decode to []any of float64) or a
-// native []int / []int64. Missing or wrong-typed items are skipped; a
-// missing or non-array param returns nil. Supersedes the per-package
-// paramIntSlice / paramIntSliceLocal copies.
 func IntSlice(params map[string]any, key string) []int {
 	v, ok := params[key]
 	if !ok {
@@ -147,10 +121,6 @@ func IntSlice(params map[string]any, key string) []int {
 	return nil
 }
 
-// StringSlice returns the param at key as []string, accepting a native
-// []string or a []any whose string items are kept (non-strings skipped). A
-// missing or non-array param returns nil. Supersedes the per-package
-// paramStringSlice copies.
 func StringSlice(params map[string]any, key string) []string {
 	v, ok := params[key]
 	if !ok {
@@ -171,7 +141,6 @@ func StringSlice(params map[string]any, key string) []string {
 	return nil
 }
 
-// ClampInt constrains v to the inclusive [lo, hi] range.
 func ClampInt(v, lo, hi int) int {
 	if v < lo {
 		return lo
@@ -182,10 +151,6 @@ func ClampInt(v, lo, hi int) int {
 	return v
 }
 
-// Err builds a status=error Result with the given code + message.
-// The shape every integration uses to bail out of Execute when a
-// param is wrong, an HTTP call failed, or an upstream port had bad
-// data.
 func Err(job core.Job, code, msg string) core.Result {
 	return core.Result{
 		JobID:  job.ID,
@@ -194,10 +159,6 @@ func Err(job core.Job, code, msg string) core.Result {
 	}
 }
 
-// ErrDetails extends Err with a technical Details string. Use when
-// the user-facing Message is too vague to debug from alone — the
-// Details carries the type signature, library error string, or
-// other developer hint the UI tucks behind a "Details" expander.
 func ErrDetails(job core.Job, code, msg, details string) core.Result {
 	return core.Result{
 		JobID:  job.ID,
@@ -206,12 +167,6 @@ func ErrDetails(job core.Job, code, msg, details string) core.Result {
 	}
 }
 
-// TextInputOr returns the text wired into input port `port` (string or raw
-// bytes), or `fallback` when the port is unwired/empty. ok is false only when
-// the port carries a NON-text value — a wiring mistake the caller rejects.
-// This was a byte-identical ~18-line copy in every action connector (stripe,
-// twilio, discord, homeassistant, gmail send, notion, mqtt, github, slack);
-// it lives here once. Same "input overrides param" pattern across all of them.
 func TextInputOr(job core.Job, port, fallback string) (val string, ok bool) {
 	in, present := job.Input[port]
 	if !present || in.Inline == nil {
@@ -245,9 +200,6 @@ func EmitProgress(ch chan<- core.Progress, job core.Job, pct float64, msg string
 	}
 }
 
-// TimeoutMS returns the "timeout_ms" param clamped to a positive value,
-// falling back to def when it is missing or non-positive — the clamp every
-// HTTP drop applied before handing the value to net.Do.
 func TimeoutMS(job core.Job, def int) int {
 	ms := IntDefault(job.Params, "timeout_ms", def)
 	if ms <= 0 {
@@ -256,8 +208,6 @@ func TimeoutMS(job core.Job, def int) int {
 	return ms
 }
 
-// Truncate trims surrounding whitespace from s and caps it at limit bytes —
-// the raw-body fallback the error extractors share.
 func Truncate(s string, limit int) string {
 	s = strings.TrimSpace(s)
 	if len(s) > limit {
@@ -266,9 +216,6 @@ func Truncate(s string, limit int) string {
 	return s
 }
 
-// JSONFieldMessage pulls a human message out of an error body that carries it
-// under a single named string field ({"message":…}, {"reason":…}), falling
-// back to Truncate(rawBody, limit) when the field is absent or empty.
 func JSONFieldMessage(body []byte, field string, limit int) string {
 	var m map[string]any
 	if json.Unmarshal(body, &m) == nil {
@@ -279,12 +226,6 @@ func JSONFieldMessage(body []byte, field string, limit int) string {
 	return Truncate(string(body), limit)
 }
 
-// APIErrorMessage pulls a human message out of a flat {message, code} error
-// body — the shape Twilio and Discord both return — formatting it as
-// "code: message" when a non-zero code is present, else the bare message.
-// Falls back to the raw body truncated at limit bytes. Vendors whose error
-// JSON nests differently (Stripe's {error:{…}}, Google's, GitHub's) keep
-// their own extractor.
 func APIErrorMessage(body []byte, limit int) string {
 	var e struct {
 		Message string `json:"message"`
@@ -302,13 +243,6 @@ func APIErrorMessage(body []byte, limit int) string {
 	return string(body)
 }
 
-// HTTPFailure maps the transport-error / non-2xx epilogue every HTTP drop
-// shares to an error Result, returning nil when the call succeeded. err
-// non-nil is a transport failure → "<vendor>_http_error". A non-2xx status →
-// "<vendor>_error" with "<Vendor label> returned <status>: <extract(body)>";
-// the vendor-facing label and the body extractor stay per-connector so the
-// exact messages tests assert on are preserved. Pass the human label the
-// connector used (e.g. "Stripe", "Twilio") as vendorLabel.
 func HTTPFailure(job core.Job, vendor, vendorLabel string, status int, body []byte, err error, extract func([]byte) string) *core.Result {
 	if err != nil {
 		r := Err(job, vendor+"_http_error", err.Error())
@@ -321,9 +255,6 @@ func HTTPFailure(job core.Job, vendor, vendorLabel string, status int, body []by
 	return nil
 }
 
-// RequestBody returns the HTTP body for an outbound request: the
-// "request_body" input port first (a string, raw bytes, or a structured value
-// JSON-marshalled), else the "body" param. nil means no body.
 func RequestBody(job core.Job) (io.Reader, error) {
 	if input, ok := job.Input["request_body"]; ok {
 		switch v := input.Inline.(type) {
@@ -346,8 +277,6 @@ func RequestBody(job core.Job) (io.Reader, error) {
 	return nil, nil
 }
 
-// StatusAccepted reports whether got is one of expect, or any 2xx when
-// expect is empty.
 func StatusAccepted(got int, expect []int) bool {
 	if len(expect) == 0 {
 		return got >= 200 && got < 300

@@ -28,8 +28,6 @@ export function RunFilesPanel({
   tenant,
   workspace,
   token,
-  // nodeLabel resolves a step id to its friendly name, shared with the
-  // timeline so a file and its step read the same.
   nodeLabel,
 }: {
   artifacts: RunArtifact[];
@@ -78,8 +76,6 @@ export function RunFilesPanel({
               {t("runDetail.fileFrom", { label: nodeLabel(a.nodeID) })}
             </span>
             {a.ephemeral ? (
-              // Nothing to offer: the run's scratch tree is reclaimed when it
-              // finishes. Say so, rather than showing a button that 400s.
               <span className="run-file-gone">{t("runDetail.fileTemporary")}</span>
             ) : (
               <Button

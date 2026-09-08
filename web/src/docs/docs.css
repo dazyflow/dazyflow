@@ -30,20 +30,12 @@
    rather than seen. */
 
 :root {
-  /* The reading measure and the width of the "on this page" rail, named
-     because the layout grid and its media query both need them. */
   --docs-measure: 780px;
   --docs-toc-w: 15rem;
-  /* Panels — tables, the prev/next cards. A few percent off the page, which is
-     all the separation a surface needs when the border is doing the work. */
   --docs-panel: color-mix(in srgb, var(--surface) 55%, transparent);
 }
 
-/* ============================================================
-   Layout — reading column + "on this page" rail
-   ============================================================ */
 
-/* Content pane owns its own vertical scroll (the shell is a fixed frame). */
 .docs-main {
   overflow-y: auto;
   overflow-x: hidden;
@@ -53,9 +45,6 @@
   scroll-padding-top: var(--space-5);
 }
 
-/* One column until there is genuinely room for two. Below the breakpoint the
-   rail is hidden and the column re-centres, so a laptop at 1280 gets the rail
-   and a tablet gets the full measure rather than a squeezed one. */
 .docs-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -71,8 +60,6 @@
   }
 }
 
-/* min-width: 0 so a wide table's scroll container can shrink inside the grid
-   track instead of blowing the column out. */
 .docs-col {
   min-width: 0;
 }
@@ -83,9 +70,6 @@
   line-height: 1.7;
 }
 
-/* ============================================================
-   Typography
-   ============================================================ */
 
 .docs-content h1,
 .docs-content h2,
@@ -94,12 +78,8 @@
   color: var(--ink);
   font-weight: 650;
   line-height: 1.25;
-  /* Tightened as the size grows: a heading set at body tracking looks loose
-     the moment it is twice body size. */
   letter-spacing: -0.018em;
-  /* Break a heading across lines evenly rather than leaving one orphan word. */
   text-wrap: balance;
-  /* Clears the pane's top edge when an in-page anchor jumps here. */
   scroll-margin-top: var(--space-5);
 }
 .docs-content h1 {
@@ -133,7 +113,6 @@
   flex-shrink: 0;
 }
 
-/* The opening paragraph of a page reads as a standfirst, not as body text. */
 .docs-content > h1 + p {
   margin-top: 0;
   color: var(--ink-soft);
@@ -142,15 +121,11 @@
   letter-spacing: -0.008em;
 }
 
-/* One hairline above each section. On a catalog page an H2 is a whole step, so
-   the rule is doing real work separating them — a plain line, at the border
-   colour, is enough to do it without becoming a graphic element. */
 .docs-content h2 {
   font-size: var(--text-2xl);
   margin: var(--space-6) 0 var(--space-3);
   padding-top: var(--space-4);
   border-top: 1px solid var(--border);
-  /* Anchors the hover "#" self-link. */
   position: relative;
 }
 /* The generated catalog puts a `---` before every `## step`, which would draw a
@@ -196,7 +171,6 @@
 .docs-content p,
 .docs-content li {
   color: var(--ink-soft);
-  /* Avoids a single-word last line in a paragraph. */
   text-wrap: pretty;
 }
 .docs-content p {
@@ -213,10 +187,6 @@
   color: var(--faint);
 }
 
-/* Prose links keep their underline. In running text an underline is the thing
-   that says "link" — leaving it to hover means the reader has to sweep the
-   paragraph to find out what is clickable. The accent-tinted decoration keeps
-   it from reading as heavy as a browser default. */
 .docs-content a {
   color: var(--accent);
   text-decoration: underline;
@@ -230,13 +200,6 @@
   text-decoration-color: var(--accent);
 }
 
-/* Two places where the underline is wrong, both of them link DIRECTORIES
-   rather than running text.
-
-   A heading that is a link is still a heading. The catalog index makes every
-   group name ("46elks", "ChatGPT", "Claude") a link, and given prose styling
-   they turn into big underlined accent-coloured text that reads as broken
-   rather than as a section title. */
 .docs-content h1 a,
 .docs-content h2 a,
 .docs-content h3 a,
@@ -251,12 +214,6 @@
   color: var(--accent);
 }
 
-/* And a list whose every item OPENS with a link is an index, not a paragraph.
-   The catalog index is ~200 such rows; the bullet, the accent colour and the
-   leading position already say "link", so the underline only adds noise. Links
-   further into the item's text are ordinary prose links and keep theirs.
-   The generated index emits the entry bolded — `<li><strong><a>…</a></strong>
-   — description` — so the wrapped form has to be named alongside the bare one. */
 .docs-content li > a:first-child,
 .docs-content li > strong:first-child > a:first-child {
   text-decoration: none;
@@ -286,9 +243,6 @@
   font-weight: 600;
 }
 
-/* ============================================================
-   Inline code
-   ============================================================ */
 .docs-content code {
   font-family: var(--font-mono);
   font-size: 0.875em;
@@ -297,7 +251,6 @@
   color: var(--code-fg);
   padding: 0.1em 0.36em;
   border-radius: var(--r-1);
-  /* A long `${item.id}` in a narrow table cell breaks rather than widening it. */
   overflow-wrap: break-word;
 }
 .docs-content a code {
@@ -305,15 +258,11 @@
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
 
-/* ============================================================
-   Fenced code blocks (CodeBlock.tsx)
-   ============================================================ */
 .docs-code {
   margin: var(--space-4) 0;
   border: 1px solid var(--border);
   border-radius: var(--r-2);
   background: var(--code-bg);
-  /* Clips the bar's corners to the container's radius. */
   overflow: hidden;
 }
 .docs-code-bar {
@@ -356,10 +305,6 @@
   border-color: var(--border);
   color: var(--ink);
 }
-/* The type is set on the <pre>, not only on the <code> inside it. A <pre> left
-   at the content column's 17px/1.7 keeps that line strut even when its inline
-   <code> is 14px, and the taller strut adds ~10px of dead leading above the
-   first line that no padding value explains. */
 .docs-code pre {
   margin: 0;
   padding: var(--space-3) var(--space-4);
@@ -378,9 +323,6 @@
   line-height: inherit;
 }
 
-/* ============================================================
-   Notes (emoji-led blockquote → icon + body)
-   ============================================================ */
 .docs-content blockquote[data-icon] {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -399,8 +341,6 @@
   display: inline-flex;
   align-items: center;
   color: var(--accent);
-  /* Sits on the first line's optical centre without depending on the glyph's
-     own metrics. */
   height: calc(var(--text-base) * 1.6);
 }
 .docs-note-body {
@@ -415,9 +355,6 @@
   margin-bottom: 0;
 }
 
-/* A blockquote that opens with prose is a real quotation — the guide quotes a
-   user's sentence, *"When a customer pays an invoice…"* — and keeps the quieter
-   rule-in-the-margin treatment. */
 .docs-content blockquote:not([data-icon]) {
   margin: var(--space-5) 0;
   padding: var(--space-1) var(--space-4);
@@ -425,14 +362,7 @@
   color: var(--muted);
 }
 
-/* ============================================================
-   Tables — the bulk of the catalog
-   ============================================================ */
 
-/* Every table scrolls inside its own box (wrapper from Markdown.tsx). The
-   Settings tables carry a full sentence per row and are deliberately wider than
-   a phone; this is what scrolls them, instead of the page moving sideways and
-   taking the nav with it. */
 .docs-table-scroll {
   margin: var(--space-2) 0 var(--space-5);
   overflow-x: auto;
@@ -442,8 +372,6 @@
 }
 .docs-content table {
   width: 100%;
-  /* Wide enough that the description column stays readable; narrower than this
-     and the wrapper scrolls, which is the intended behaviour on a phone. */
   min-width: 460px;
   border-collapse: collapse;
   font-size: var(--text-base);
@@ -451,8 +379,6 @@
 }
 .docs-content th,
 .docs-content td {
-  /* No vertical rules. The column gap does the separating; a full grid of
-     1px lines is what made these read as exported spreadsheets. */
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
   padding: var(--space-2) var(--space-4);
@@ -472,9 +398,6 @@
 .docs-content td {
   color: var(--ink-soft);
 }
-/* The first cell is the row's subject — a setting name, an input name — and is
-   what the reader scans down. Kept on one line: the wrapper scrolls, so there
-   is no cost to it, and a wrapped name breaks the scan. */
 .docs-content td:first-child {
   color: var(--ink);
   font-weight: 500;
@@ -484,7 +407,6 @@
 .docs-content tbody tr:last-child td {
   border-bottom: 0;
 }
-/* "*(advanced)*" markers and similar asides inside a cell. */
 .docs-content td em {
   color: var(--faint);
   font-style: normal;
@@ -502,9 +424,6 @@
   border-radius: var(--r-2);
 }
 
-/* ============================================================
-   "On this page" rail (Toc.tsx)
-   ============================================================ */
 .docs-toc {
   display: none;
 }
@@ -516,7 +435,6 @@
     position: sticky;
     top: 0;
     align-self: start;
-    /* The pane's own padding is already above it, so subtract only the bar. */
     max-height: calc(100dvh - var(--topbar-h) - var(--space-7));
     overflow-y: auto;
   }
@@ -550,8 +468,6 @@
 .docs-toc-link:hover {
   color: var(--ink);
 }
-/* The active row lights its own segment of the rail's spine, so the reader's
-   position is legible from the line itself rather than from colour alone. */
 .docs-toc-link.active {
   color: var(--ink);
 }
@@ -565,9 +481,6 @@
   background: var(--accent);
 }
 
-/* ============================================================
-   Prev / next (PageNav.tsx)
-   ============================================================ */
 .docs-pagenav {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -576,7 +489,6 @@
   padding-top: var(--space-5);
   border-top: 1px solid var(--border);
 }
-/* Holds the right-hand column when there is no previous page. */
 .docs-pagenav-gap {
   display: block;
 }
@@ -622,17 +534,11 @@
   color: var(--accent);
 }
 
-/* ============================================================
-   Sidebar touches (the rest comes from app.css)
-   ============================================================ */
 
-/* Space between sidebar groups; the .group-label + nav rows come from app.css. */
 .docs-nav-group + .docs-nav-group {
   margin-top: var(--space-4);
 }
 
-/* Vendor brand mark in a sidebar row (app icon), sized like the lucide glyphs
-   it sits beside. */
 .sidebar .nav-brand-icon {
   width: 18px;
   height: 18px;
@@ -641,9 +547,6 @@
   border-radius: 3px;
 }
 
-/* The catalog runs to 40-odd rows, so the current page has to be findable at a
-   glance. app.css already tints the active row; weight is the cheapest way to
-   add to that without a second marker competing with the tint. */
 .sidebar a.active {
   font-weight: 600;
 }
@@ -657,9 +560,6 @@
    restyle the product's chrome from the docs stylesheet, which is exactly
    the coupling the shared markup is supposed to buy us out of. */
 
-/* "Docs" beside the wordmark. A sibling label rather than part of
-   .brand-title, so the app's brand rules keep owning the name itself and this
-   is free to be quieter than it. */
 .docs-topbar .docs-wordmark {
   padding: 0.1rem var(--space-1h);
   border: 1px solid var(--border);
@@ -670,13 +570,9 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  /* Off the cap-height midline: uppercase at this size sits high against the
-     wordmark's lowercase. */
   transform: translateY(-0.05em);
 }
 
-/* Off-site links, left of the CTA. Text, not buttons: three buttons in a row
-   is a toolbar, and only one of them is a call to action. */
 .docs-topbar .docs-topnav {
   display: flex;
   align-items: center;
@@ -693,12 +589,6 @@
   color: var(--ink);
 }
 
-/* ============================================================
-   Search
-   ============================================================
-   Sixty-odd pages and, until now, no input on the site at all. The trigger
-   sits in the top bar; the panel is an overlay so results can be wide without
-   the header growing. */
 .docs-search-open {
   display: flex;
   align-items: center;
@@ -813,23 +703,15 @@
   white-space: nowrap;
 }
 
-/* ============================================================
-   Site footer
-   ============================================================ */
 .docs-footer {
   margin-top: var(--space-7);
   padding-top: var(--space-6);
-  /* The rule is the page's own ending. Everything above it is content; the
-     footer is the site talking. */
   border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: var(--text-sm);
 }
 .docs-footer-main {
   display: grid;
-  /* The blurb column is wider than the link columns and gives up its width
-     first — the links are fixed-length strings and wrapping them reads as a
-     mistake, while a blurb wraps as prose is meant to. */
   grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr));
   gap: var(--space-6);
 }
@@ -861,9 +743,6 @@
   flex-direction: column;
   gap: var(--space-2);
 }
-/* An <h2> for the outline's sake — a column of links wants a real heading, not
-   a styled div. Reset hard: the content rules two sections up give h2 a page
-   heading's size, weight and margin. */
 .docs-footer-heading {
   margin: 0 0 var(--space-1);
   padding: 0;
@@ -901,13 +780,7 @@
   color: var(--accent);
 }
 
-/* ============================================================
-   Narrow screens
-   ============================================================ */
 @media (max-width: 768px) {
-  /* The invite CTA and the off-site links collapse off the top bar (the
-     hamburger owns that space). Both are in the footer, which is the whole
-     reason it can afford to take them off the header. */
   .docs-cta,
   .docs-topbar .docs-topnav {
     display: none;
@@ -936,7 +809,6 @@
   .docs-content h2 {
     font-size: var(--text-xl);
   }
-  /* Stack prev/next: side by side they are two ~150px cards of wrapped text. */
   .docs-pagenav {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -945,7 +817,6 @@
   }
 }
 
-/* Motion is decoration. Anyone who has asked for less gets none of it. */
 @media (prefers-reduced-motion: reduce) {
   .docs-pagenav-link,
   .docs-anchor,

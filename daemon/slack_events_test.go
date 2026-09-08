@@ -33,9 +33,6 @@ func signSlackRequest(t *testing.T, secret string, ts int64, body []byte) string
 	return "v0=" + hex.EncodeToString(mac.Sum(nil))
 }
 
-// slackHarness wraps a gatewayHarness with the Slack events handler
-// wired up. Tests poke ServeForTest with /api/v1/events/slack/... and
-// inspect the harness for downstream side effects.
 type slackHarness struct {
 	*gatewayHarness
 	secret string
@@ -56,7 +53,6 @@ func newSlackHarness(t *testing.T) *slackHarness {
 	return sh
 }
 
-// post fires a Slack-style POST. ts=0 → use the frozen clock.
 func (h *slackHarness) post(t *testing.T, path string, body []byte, ts int64) *httptest.ResponseRecorder {
 	t.Helper()
 	if ts == 0 {
@@ -104,7 +100,6 @@ func TestSlackEvents_MissingHeadersRejected(t *testing.T) {
 	h := newSlackHarness(t)
 	body := []byte(`{"type":"url_verification","challenge":"x"}`)
 	req := httptest.NewRequest("POST", "/api/v1/events/slack/t", bytes.NewReader(body))
-	// no headers
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, req)
 	if rw.Code != http.StatusUnauthorized {
@@ -116,7 +111,6 @@ func TestSlackEvents_StaleTimestampRejected(t *testing.T) {
 	t.Parallel()
 	h := newSlackHarness(t)
 	body := []byte(`{"type":"url_verification","challenge":"x"}`)
-	// 10 minutes old — outside Slack's 5-minute replay window.
 	stale := h.frozen.Add(-10 * time.Minute).Unix()
 	rw := h.post(t, "/api/v1/events/slack/t", body, stale)
 	if rw.Code != http.StatusUnauthorized {
@@ -138,7 +132,6 @@ func TestSlackEvents_FutureTimestampRejected(t *testing.T) {
 func TestSlackEvents_NotConfiguredReturns501(t *testing.T) {
 	t.Parallel()
 	gh := newGatewayHarness(t)
-	// gw.SlackEvents left nil.
 	body := []byte(`{"type":"url_verification","challenge":"x"}`)
 	req := httptest.NewRequest("POST", "/api/v1/events/slack/t", bytes.NewReader(body))
 	rw := httptest.NewRecorder()
@@ -148,15 +141,9 @@ func TestSlackEvents_NotConfiguredReturns501(t *testing.T) {
 	}
 }
 
-// TestSlackEvents_AppMentionFiresSubscribedGraphs is the integration
-// shape — proves the end-to-end seed flow. A graph in t/ws subscribes
-// to slack_on_mention; we POST an app_mention event; we wait briefly
-// for the (background) fanout to land; we then assert a graph-record
-// landed in the jobstore.
 func TestSlackEvents_AppMentionFiresSubscribedGraphs(t *testing.T) {
 	t.Parallel()
 	h := newSlackHarness(t)
-	// Save a graph with a slack_on_mention node.
 	g := core.Graph{
 		ID: "mention-graph", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -182,16 +169,12 @@ func TestSlackEvents_AppMentionFiresSubscribedGraphs(t *testing.T) {
 		t.Fatalf("code=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// Fanout is a goroutine — give it a moment, then assert the
-	// graph-record landed. Polling vs sleeping so the test stays
-	// fast on a happy path.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
 			Tenant: "t", Workspace: "ws", GraphID: "mention-graph",
 		})
 		if err == nil && len(runs) > 0 {
-			// Found one — verify the seed lit up the trigger node.
 			node, err := h.store.Get(t.Context(), NodeJobID(runs[0].ID, "trig"))
 			if err != nil {
 				t.Fatalf("get node record: %v", err)
@@ -221,9 +204,6 @@ func TestSlackEvents_AppMentionFiresSubscribedGraphs(t *testing.T) {
 func TestSlackEvents_ChannelFilterSkipsMismatchedGraphs(t *testing.T) {
 	t.Parallel()
 	h := newSlackHarness(t)
-	// Two graphs, both subscribed to slack_on_mention. Graph A
-	// filters on channel C111, graph B filters on C222. An event
-	// in C111 should fire ONLY graph A.
 	graphA := core.Graph{
 		ID: "graph-a", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{{
@@ -314,8 +294,6 @@ func TestSlackEvents_EmptyChannelFilterMatchesAll(t *testing.T) {
 func TestSlackEvents_NonAppMentionEventIsAcked(t *testing.T) {
 	t.Parallel()
 	h := newSlackHarness(t)
-	// reaction_added isn't subscribed — handler should 200 and not
-	// fire anything.
 	body, _ := json.Marshal(map[string]any{
 		"type":    "event_callback",
 		"team_id": "T123",
@@ -339,10 +317,6 @@ func TestSlackEvents_UnknownEnvelopeTypeIsAcked(t *testing.T) {
 
 func TestSlackOnMention_StandaloneRunErrors(t *testing.T) {
 	t.Parallel()
-	// The drop's Execute is called when the user runs the graph
-	// manually (no Slack event seeded the node). Should be a clear
-	// "no event" error, not a silent success — same shape as
-	// webhook_input's no_trigger_data.
 	trans, ok := engine.Default.Get("slack_on_mention")
 	if !ok {
 		t.Fatal("slack_on_mention not registered")
@@ -359,9 +333,8 @@ func TestSlackOnMention_StandaloneRunErrors(t *testing.T) {
 	}
 }
 
-// TestSlackEvents_NonIntegerTimestampRejected — a non-numeric
-// X-Slack-Request-Timestamp must be rejected (401), not parsed into a
-// zero/garbage time that could slip past the replay window.
+// A non-numeric X-Slack-Request-Timestamp must be rejected (401), not parsed
+// into a zero/garbage time that could slip past the replay window.
 func TestSlackEvents_NonIntegerTimestampRejected(t *testing.T) {
 	t.Parallel()
 	h := newSlackHarness(t)
@@ -377,9 +350,8 @@ func TestSlackEvents_NonIntegerTimestampRejected(t *testing.T) {
 	}
 }
 
-// TestSlackEvents_RetryHeaderTolerated — Slack re-delivers events with
-// X-Slack-Retry-Num; the handler must still ack a valid retry (200),
-// not choke on the extra header.
+// Slack re-delivers events with X-Slack-Retry-Num; the handler must still ack
+// a valid retry (200), not choke on the extra header.
 func TestSlackEvents_RetryHeaderTolerated(t *testing.T) {
 	t.Parallel()
 	h := newSlackHarness(t)

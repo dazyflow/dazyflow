@@ -10,8 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/auth"
 )
 
-// setup wires an org-admin-capable harness with a recording profile store and
-// the wildcard domain on, the precondition for the subdomain endpoints.
 func newSubdomainHarness(t *testing.T) (*gatewayHarness, *recordingOrgProfiles) {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -25,7 +23,6 @@ func TestOrgSubdomain_SetAndResolve(t *testing.T) {
 	t.Parallel()
 	h, _ := newSubdomainHarness(t)
 
-	// Claim a subdomain as the org admin (tenant "t").
 	rw := h.adminDo(t, "PUT", "/api/v1/admin/org/subdomain", map[string]any{"subdomain": "Klahr"})
 	if rw.Code != 200 {
 		t.Fatalf("PUT subdomain = %d: %s", rw.Code, rw.Body.String())
@@ -38,7 +35,6 @@ func TestOrgSubdomain_SetAndResolve(t *testing.T) {
 		t.Fatalf("stored subdomain = %q, want klahr", put.Subdomain)
 	}
 
-	// Public resolver maps the label back to the tenant.
 	rw = h.do(t, "GET", "/api/v1/auth/resolve-subdomain?label=klahr", nil)
 	if rw.Code != 200 {
 		t.Fatalf("resolve = %d: %s", rw.Code, rw.Body.String())
@@ -51,7 +47,6 @@ func TestOrgSubdomain_SetAndResolve(t *testing.T) {
 		t.Fatalf("resolved tenant = %q, want t", res.Tenant)
 	}
 
-	// An unclaimed label is a 404.
 	if rw := h.do(t, "GET", "/api/v1/auth/resolve-subdomain?label=nobody", nil); rw.Code != 404 {
 		t.Errorf("resolve unclaimed = %d, want 404", rw.Code)
 	}
@@ -88,7 +83,6 @@ func TestOrgSubdomain_RejectsInvalidAndReserved(t *testing.T) {
 func TestOrgSubdomain_TakenIsConflict(t *testing.T) {
 	t.Parallel()
 	h, prof := newSubdomainHarness(t)
-	// Another org already holds "taken".
 	_ = prof.PutOrgProfile(t.Context(), auth.OrgProfile{Tenant: "other", Subdomain: "taken"})
 
 	rw := h.adminDo(t, "PUT", "/api/v1/admin/org/subdomain", map[string]any{"subdomain": "taken"})
@@ -132,16 +126,12 @@ func TestOrgSubdomain_TLSAllow(t *testing.T) {
 	h, prof := newSubdomainHarness(t)
 	_ = prof.PutOrgProfile(t.Context(), auth.OrgProfile{Tenant: "t", Subdomain: "klahr"})
 
-	// A claimed org host → 2xx (Caddy may issue a cert).
 	if rw := h.do(t, "GET", "/api/v1/auth/tls-allow?domain=klahr.dazyflow.app", nil); rw.Code != 200 {
 		t.Errorf("tls-allow claimed = %d, want 200", rw.Code)
 	}
-	// A served infrastructure host (docs) → 2xx even though it's reserved and
-	// maps to no org: we front it, so it needs an on-demand cert.
 	if rw := h.do(t, "GET", "/api/v1/auth/tls-allow?domain=docs.dazyflow.app", nil); rw.Code != 200 {
 		t.Errorf("tls-allow docs (served infra) = %d, want 200", rw.Code)
 	}
-	// Unclaimed / reserved / off-domain hosts → 403 (no cert).
 	for _, host := range []string{
 		"nobody.dazyflow.app", // unclaimed
 		"www.dazyflow.app",    // reserved label
@@ -159,7 +149,6 @@ func TestOrgSubdomain_DisabledWithoutWildcard(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.Profiles = newRecordingOrgProfiles()
-	// WildcardDomain left empty → feature off.
 	if rw := h.adminDo(t, "PUT", "/api/v1/admin/org/subdomain", map[string]any{"subdomain": "x"}); rw.Code != 501 {
 		t.Errorf("PUT with feature off = %d, want 501", rw.Code)
 	}

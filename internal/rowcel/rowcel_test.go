@@ -49,7 +49,6 @@ func TestCompile_Error(t *testing.T) {
 func TestEvalBool(t *testing.T) {
 	env := mustEnv(t)
 
-	// True branch.
 	prog, err := Compile(env, `row.amount > 100`, "filter")
 	if err != nil {
 		t.Fatalf("compile: %v", err)
@@ -58,7 +57,6 @@ func TestEvalBool(t *testing.T) {
 	if err != nil || !ok {
 		t.Errorf("EvalBool true = %v, %v", ok, err)
 	}
-	// False branch.
 	ok, err = EvalBool(prog, map[string]any{"amount": 10})
 	if err != nil || ok {
 		t.Errorf("EvalBool false = %v, %v", ok, err)
@@ -79,7 +77,6 @@ func TestEvalBool_NonBoolResult(t *testing.T) {
 
 func TestEvalBool_EvalError(t *testing.T) {
 	env := mustEnv(t)
-	// Accessing a key absent from the row is a runtime no-such-key error.
 	prog, err := Compile(env, `row.missing > 1`, "filter")
 	if err != nil {
 		t.Fatalf("compile: %v", err)
@@ -95,9 +92,6 @@ func TestCostLimit_Constant(t *testing.T) {
 	}
 }
 
-// The string helpers are what a person reaches for the first time they write
-// a formula by hand — without them, "the first ten characters" or "upper-case
-// it" needs a second step, or can't be said at all.
 func TestEnv_StringHelpers(t *testing.T) {
 	env, err := Env()
 	if err != nil {

@@ -10,9 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// scopeCaptureProvider records the tenant + flow it saw on the resolution
-// context, so a test can assert the engine threaded both through to secret
-// resolution.
 type scopeCaptureProvider struct {
 	tenant, flow string
 }
@@ -24,9 +21,6 @@ func (p *scopeCaptureProvider) Get(ctx context.Context, _ string) (string, error
 	return "resolved", nil
 }
 
-// TestRunNode_ThreadsScopeToSecretResolver proves Engine.RunNode wraps the
-// resolution context with the graph's tenant (organization) AND flow id — the
-// plumbing the flow → organization cascade depends on.
 func TestRunNode_ThreadsScopeToSecretResolver(t *testing.T) {
 	cap := &scopeCaptureProvider{}
 	e := newEngineWith(t, sinkDrop())

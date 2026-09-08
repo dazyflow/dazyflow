@@ -44,7 +44,6 @@ func TestSubstituteString_MultiplePlaceholders(t *testing.T) {
 
 func TestSubstituteString_DotSeparator(t *testing.T) {
 	sub := makeSub(map[string]string{"secret:PASSWD": "hunter2"})
-	// Dot is the separator.
 	got, err := SubstituteString(t.Context(), "pw=${secret.PASSWD}", sub)
 	if err != nil {
 		t.Fatalf("substitute: %v", err)
@@ -55,8 +54,6 @@ func TestSubstituteString_DotSeparator(t *testing.T) {
 }
 
 func TestSubstituteString_ColonNoLongerResolves(t *testing.T) {
-	// Colon is no longer a separator — ${secret:PASSWD} is not a placeholder
-	// and is left verbatim rather than resolved.
 	sub := makeSub(map[string]string{"secret:PASSWD": "hunter2"})
 	got, err := SubstituteString(t.Context(), "pw=${secret:PASSWD}", sub)
 	if err != nil {
@@ -68,8 +65,6 @@ func TestSubstituteString_ColonNoLongerResolves(t *testing.T) {
 }
 
 func TestSubstituteString_DotSplitsOnFirstSeparator(t *testing.T) {
-	// ${secret.db.password} → scheme "secret", path "db.password" (split on
-	// the first separator, so a dotted secret name still resolves).
 	sub := makeSub(map[string]string{"secret:db.password": "pg"})
 	got, err := SubstituteString(t.Context(), "${secret.db.password}", sub)
 	if err != nil {

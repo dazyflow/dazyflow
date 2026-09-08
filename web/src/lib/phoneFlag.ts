@@ -9,9 +9,6 @@
 // actual parsing/validation — so ambiguous calling codes (+1 → US/CA) just
 // resolve to one representative region, and unknown codes fall back to a globe.
 
-// CALLING_CODE_TO_REGION maps an E.164 calling code to a representative ISO
-// region, Nordic-first. Not exhaustive — the common markets plus a globe
-// fallback are enough for a hint.
 const CALLING_CODE_TO_REGION: Record<string, string> = {
   "354": "IS", "358": "FI", "351": "PT", "353": "IE",
   "46": "SE", "47": "NO", "45": "DK", "44": "GB", "49": "DE",
@@ -20,9 +17,6 @@ const CALLING_CODE_TO_REGION: Record<string, string> = {
   "1": "US",
 };
 
-// regionFlagEmoji turns an ISO 3166 alpha-2 code ("SE") into its flag emoji by
-// mapping each letter to its Unicode regional indicator symbol. "" for a
-// non-two-letter code. Renders as a flag in modern browsers (the web UI).
 export function regionFlagEmoji(region: string): string {
   if (!/^[A-Za-z]{2}$/.test(region)) return "";
   const cc = region.toUpperCase();
@@ -45,14 +39,6 @@ export function regionDisplayName(code: string): string {
   }
 }
 
-// telFieldFlag derives the flag to show beside a phone field — but ONLY for a
-// number written in international form (a leading "+", or the "00" international
-// dialing prefix used across Europe — 0045… is +45, Denmark). The region comes
-// from the number's own calling code (best-effort map; globe when
-// unrecognised). Returns null for a local number, an empty field, or a wired
-// reference: there's no unambiguous country to show, so no flag is rendered
-// (the default region is not surfaced as a flag). A single leading "0" is a
-// national trunk digit (070… is local), so only "00" counts as international.
 export function telFieldFlag(value: unknown): { flag: string; region: string } | null {
   if (typeof value !== "string") return null;
   const v = value.trim();

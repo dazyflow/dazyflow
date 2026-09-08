@@ -49,15 +49,12 @@ import (
 // rebuild (~390 revisions/sec, measured) and nothing else, which is why it can
 // live on whichever replica currently mirrors.
 
-// synthTrailer records which revision a synthesized commit came from, so the
-// repository describes its own sync point and needs no side-file to resume.
 const synthTrailer = "Dazyflow-Revision: "
 
 // synthCommitter is the fixed committer identity. A pod's own identity here
 // would make the same history hash differently on every replica.
 var synthCommitter = object.Signature{Name: "dazyflow", Email: "dazyflow@local"}
 
-// pgMirror derives a git repository from a Postgres workspace and pushes it.
 type pgMirror struct {
 	pg  *pgBackend
 	dir string
@@ -76,15 +73,11 @@ func (m *pgMirror) push(ctx context.Context, remoteURL string, auth transport.Au
 		return PushResult{}, err
 	}
 	if g == nil {
-		// Nothing has ever been saved in this workspace; there is no history to
-		// mirror yet. A successful no-op, not a failure.
 		return PushResult{}, nil
 	}
 	return g.push(ctx, remoteURL, auth, allowUnrelated)
 }
 
-// sync brings the derived repository up to date with the revision log and
-// returns it, or nil when the workspace holds no revisions at all.
 func (m *pgMirror) sync(ctx context.Context) (*gitBackend, error) {
 	g, err := openSynthRepo(m.dir)
 	if err != nil {
@@ -95,8 +88,6 @@ func (m *pgMirror) sync(ctx context.Context) (*gitBackend, error) {
 		return nil, err
 	}
 	if from < 0 {
-		// The repository no longer agrees with the log — a revision it was
-		// built on is gone. Derived state, so the answer is to rebuild it.
 		if err := os.RemoveAll(m.dir); err != nil {
 			return nil, fmt.Errorf("discard stale mirror cache: %w", err)
 		}
@@ -122,8 +113,6 @@ func (m *pgMirror) sync(ctx context.Context) (*gitBackend, error) {
 	return g, nil
 }
 
-// resumeSeq reports the `seq` the derived repository has already synthesized:
-// 0 for an empty one, and -1 when its sync point no longer exists in the log.
 func (m *pgMirror) resumeSeq(ctx context.Context, g *gitBackend) (int64, error) {
 	head, err := g.repo.Head()
 	if errors.Is(err, plumbing.ErrReferenceNotFound) {
@@ -134,9 +123,6 @@ func (m *pgMirror) resumeSeq(ctx context.Context, g *gitBackend) (int64, error) 
 	}
 	c, err := g.repo.CommitObject(head.Hash())
 	if err != nil {
-		// HEAD names an object this repository does not hold — a half-written
-		// cache, a truncated disk. Derived state, so rebuild rather than fail
-		// every push from here on.
 		return -1, nil //nolint:nilerr // an unreadable head means "rebuild"
 	}
 	rev := revisionFromMessage(c.Message)
@@ -236,10 +222,8 @@ func (m *pgMirror) replay(ctx context.Context, g *gitBackend, from int64) (int, 
 		committer := synthCommitter
 		committer.When = when
 		if _, err := wt.Commit(r.message+"\n\n"+synthTrailer+r.revision, &git.CommitOptions{
-			Author:    &author,
-			Committer: &committer,
-			// A revision whose content leaves the tree unchanged still gets a
-			// commit: the 1:1 mapping is what lets resumeSeq find its place.
+			Author:            &author,
+			Committer:         &committer,
 			AllowEmptyCommits: true,
 		}); err != nil {
 			return 0, fmt.Errorf("commit %s@%s: %w", r.graphID, r.revision, err)
@@ -259,15 +243,11 @@ func canonicalGraphJSON(stored []byte) ([]byte, error) {
 	return json.MarshalIndent(g, "", "  ")
 }
 
-// syncRefs rewrites the environment and label tags to match the log. Tags are
-// pointers, so they are rebuilt wholesale rather than diffed: a publish, a
-// rollback and an unpublish all land as "the pointer is now here".
 func (m *pgMirror) syncRefs(ctx context.Context, g *gitBackend) error {
 	byRevision, err := m.commitIndex(g)
 	if err != nil {
 		return err
 	}
-	// Drop the tags we own, so a cleared pointer disappears from the mirror.
 	iter, err := g.repo.References()
 	if err != nil {
 		return err
@@ -349,8 +329,6 @@ func (m *pgMirror) syncRefs(ctx context.Context, g *gitBackend) error {
 		if err != nil {
 			return err
 		}
-		// The tagger timestamp comes from the commit, not the clock, for the
-		// same reason the commit's own does.
 		tagger := synthCommitter
 		tagger.When = c.Committer.When
 		if _, err := g.repo.CreateTag(labelTag(l.graphID, h.String()), h, &git.CreateTagOptions{
@@ -363,8 +341,6 @@ func (m *pgMirror) syncRefs(ctx context.Context, g *gitBackend) error {
 	return nil
 }
 
-// commitIndex maps every synthesized revision to its commit, by walking the
-// log once and reading each commit's trailer.
 func (m *pgMirror) commitIndex(g *gitBackend) (map[string]plumbing.Hash, error) {
 	out := map[string]plumbing.Hash{}
 	head, err := g.repo.Head()

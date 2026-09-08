@@ -73,15 +73,6 @@ func init() {
 	})
 }
 
-// executeParseYAML parses the 'in' value into rows.
-//
-// Deliberately built on Read JSON's normalisation — digPath and rowsFromValue,
-// unchanged. YAML and JSON describe the same value model, and yaml.v3 decodes
-// mappings to map[string]any (v2 gave map[interface{}]interface{}), so the
-// shapes coming out are the ones those helpers already handle. Two things
-// genuinely differ, and both are handled below: a YAML stream may hold several
-// documents where JSON holds one, and YAML permits non-string mapping keys
-// that no JSON-shaped consumer downstream can read.
 func executeParseYAML(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	ref, ok := job.Input["in"]
 	if !ok {
@@ -91,10 +82,6 @@ func executeParseYAML(_ context.Context, job core.Job, _ chan<- core.Progress) (
 		return params.Err(job, "bad_input", "input 'in' is empty"), nil
 	}
 
-	// An upstream drop may already have emitted a structured value — an
-	// http_request that parsed a JSON body, say. That is the same value model,
-	// so it passes straight through rather than being re-serialised to YAML
-	// and back.
 	var docs []any
 	if s, isString := ref.Inline.(string); isString {
 		parsed, err := parseYAMLDocuments(s)
@@ -109,15 +96,10 @@ func executeParseYAML(_ context.Context, job core.Job, _ chan<- core.Progress) (
 		return params.Err(job, "bad_input", "no YAML documents found in the input"), nil
 	}
 
-	// "Only the first" is for a file whose later documents are overrides the
-	// author doesn't want folded in.
 	if params.StringDefault(job.Params, "documents", "all") == "first" {
 		docs = docs[:1]
 	}
 
-	// One document behaves exactly like Read JSON — same value on 'value',
-	// same rows, same path semantics. Several become one row per document,
-	// with 'value' carrying the whole list so nothing is lost.
 	var value any = docs[0]
 	if len(docs) > 1 {
 		value = docs
@@ -141,9 +123,6 @@ func executeParseYAML(_ context.Context, job core.Job, _ chan<- core.Progress) (
 		return yamlResult(job, rows, value), nil
 	}
 
-	// Single document (or a path, which digs into the first): Read JSON's
-	// exact behaviour, including its rule that a scalar is an answer when a
-	// path asked for one and a mistake when nothing did.
 	target := docs[0]
 	if dug {
 		var err error
@@ -197,8 +176,6 @@ func parseYAMLDocuments(s string) ([]any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("couldn't read that as YAML: %w", err)
 		}
-		// A document that is only comments decodes to nil; skipping it keeps a
-		// trailing "---" from becoming an empty row.
 		if doc == nil {
 			continue
 		}
@@ -243,16 +220,11 @@ func normalizeYAML(v any) any {
 	}
 }
 
-// coerceMap normalizes a document and reports whether it is mapping-shaped.
 func coerceMap(v any) (map[string]any, bool) {
 	m, ok := normalizeYAML(v).(map[string]any)
 	return m, ok
 }
 
-// yamlKeyString renders a YAML mapping key as text. fmt's default formatting is
-// right for the scalars that occur — numbers, booleans, dates — and a
-// composite key (YAML permits a whole mapping as a key) becomes its Go
-// rendering, which is ugly but visible rather than lost.
 func yamlKeyString(k any) string {
 	if s, ok := k.(string); ok {
 		return s

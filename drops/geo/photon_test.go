@@ -13,14 +13,8 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Photon speaks GeoJSON: a FeatureCollection of Point features whose
-// coordinates are [lon, lat] (the opposite of "lat,lon") and whose address is a
-// flat properties bag with no Nominatim-style display_name.
 const samplePhoton = `{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[18.0686,59.3293]},"properties":{"name":"Stockholm","city":"Stockholm","state":"Stockholm County","country":"Sweden","countrycode":"SE","osm_id":398021,"type":"city"}}]}`
 
-// stubPhoton points photonURL at a recording httptest server, restored on
-// cleanup. Tests select the backend the way a tenant does — via the `backend`
-// connection param on the job (see photonJob).
 func stubPhoton(t *testing.T, status int, body string, gotReq **http.Request) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,8 +30,6 @@ func stubPhoton(t *testing.T, status int, body string, gotReq **http.Request) {
 	t.Cleanup(func() { photonURL = prev; srv.Close() })
 }
 
-// photonJob builds a job whose connection selects the Photon backend, merging
-// any extra params.
 func photonJob(extra map[string]any) core.Job {
 	p := map[string]any{"backend": "photon"}
 	maps.Copy(p, extra)
@@ -59,7 +51,6 @@ func TestNewGeocoder_Selection(t *testing.T) {
 	}
 }
 
-// geocoderFor honours the connection `backend` over the deployment default.
 func TestGeocoderFor_BackendParam(t *testing.T) {
 	if got := geocoderFor(core.Job{Params: map[string]any{"backend": "photon"}}).label(); got != "Photon" {
 		t.Errorf("backend=photon → %q, want Photon", got)
@@ -99,7 +90,6 @@ func TestPhoton_ReverseViaReverse(t *testing.T) {
 	if got := textPin(t, r, "place"); got != "Stockholm, Stockholm County, Sweden" {
 		t.Errorf("place = %q", got)
 	}
-	// Reverse echoes the queried coordinate, not the backend's.
 	if got := textPin(t, r, "coordinate"); got != "59.3293,18.0686" {
 		t.Errorf("coordinate echo = %q", got)
 	}
@@ -132,13 +122,9 @@ func TestPhotonDisplayName(t *testing.T) {
 		props map[string]any
 		want  string
 	}{
-		// name == city collapses; state + country append.
 		{map[string]any{"name": "Stockholm", "city": "Stockholm", "state": "Stockholm County", "country": "Sweden"}, "Stockholm, Stockholm County, Sweden"},
-		// street + housenumber join, then locality.
 		{map[string]any{"name": "Drottninggatan", "street": "Drottninggatan", "housenumber": "5", "city": "Stockholm", "country": "Sweden"}, "Drottninggatan, Drottninggatan 5, Stockholm, Sweden"},
-		// sparse properties.
 		{map[string]any{"country": "Sweden"}, "Sweden"},
-		// non-string values are ignored, not panicked on.
 		{map[string]any{"name": "X", "osm_id": 1.0, "city": nil}, "X"},
 		{map[string]any{}, ""},
 	}

@@ -10,8 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// ===== sort_rows =====================================================
-
 func runSort(t *testing.T, params map[string]any, rows []map[string]any, headers []string) []map[string]any {
 	t.Helper()
 	input := map[string]core.Ref{"rows": {Inline: rows, Headers: headers}}
@@ -26,7 +24,6 @@ func runSort(t *testing.T, params map[string]any, rows []map[string]any, headers
 }
 
 func TestSortRows_CommaStringSingle(t *testing.T) {
-	// The documented shape: a bare comma-string, one column, ascending.
 	got := runSort(t,
 		map[string]any{"by": "name"},
 		[]map[string]any{{"name": "Carol"}, {"name": "Alice"}, {"name": "Bob"}},
@@ -51,7 +48,6 @@ func TestSortRows_CommaStringMinusDescending(t *testing.T) {
 }
 
 func TestSortRows_CommaStringMultiKeyWithWhitespace(t *testing.T) {
-	// "country, -age" — primary ascending, tie-break descending, spaces trimmed.
 	got := runSort(t,
 		map[string]any{"by": "country, -age"},
 		[]map[string]any{
@@ -141,12 +137,6 @@ func TestSortRows_InputNotMutated(t *testing.T) {
 	}
 }
 
-// ----- Direction (sort_dir) -----------------------------------------
-//
-// The param the editor renders as a toggle. Every case here is about how it
-// composes with the per-column prefixes, because that is the part a user can
-// get a wrong answer from without any error to go on.
-
 func TestSortRows_DirectionDescending(t *testing.T) {
 	got := runSort(t,
 		map[string]any{"by": "name", "sort_dir": "desc"},
@@ -182,15 +172,12 @@ func TestSortRows_DirectionAppliesToEveryUnprefixedKey(t *testing.T) {
 			{"dept": "ops", "name": "Carol"},
 		},
 		nil)
-	// ops before eng, and within ops the later name first.
 	if got[0]["name"] != "Carol" || got[1]["name"] != "Bob" || got[2]["name"] != "Alice" {
 		t.Errorf("got %+v", got)
 	}
 }
 
 func TestSortRows_PrefixOverridesDirection(t *testing.T) {
-	// "descending overall, but break ties alphabetically" — the case that
-	// needs '+', since every unprefixed key follows Direction down.
 	got := runSort(t,
 		map[string]any{"by": "revenue,+name", "sort_dir": "desc"},
 		[]map[string]any{
@@ -228,8 +215,6 @@ func TestSortRows_DirectionLongSpelling(t *testing.T) {
 }
 
 func TestSortRows_BadDirectionIsAnError(t *testing.T) {
-	// Reported rather than absorbed: "dsc" quietly sorting ascending is a
-	// wrong answer with nothing pointing at it.
 	for _, dir := range []any{"dsc", "down", true} {
 		res, _ := executeSortRows(t.Context(), core.Job{
 			Params: map[string]any{"by": "name", "sort_dir": dir},
@@ -274,8 +259,6 @@ func TestSortRows_EmptyRows(t *testing.T) {
 	}
 }
 
-// ===== dedupe_rows ===================================================
-
 func runDedupe(t *testing.T, params map[string]any, rows []map[string]any, headers []string) (out []map[string]any, dropped int) {
 	t.Helper()
 	input := map[string]core.Ref{"rows": {Inline: rows, Headers: headers}}
@@ -291,7 +274,6 @@ func runDedupe(t *testing.T, params map[string]any, rows []map[string]any, heade
 }
 
 func TestDedupeRows_WholeRowKeepFirst(t *testing.T) {
-	// No 'by' set → dedupe on full row identity (every column).
 	got, dropped := runDedupe(t, nil,
 		[]map[string]any{
 			{"a": "1", "b": "x"},
@@ -324,7 +306,6 @@ func TestDedupeRows_KeepFirstByExplicitColumns(t *testing.T) {
 	if len(got) != 2 || dropped != 1 {
 		t.Fatalf("got %+v, dropped=%d", got, dropped)
 	}
-	// First wins, so the "Updated Alice" version is dropped.
 	if got[0]["name"] != "Alice" {
 		t.Errorf("first-wins broken: %+v", got)
 	}
@@ -369,8 +350,6 @@ func TestDedupeRows_MultipleByColumns(t *testing.T) {
 }
 
 func TestDedupeRows_NullsAreEqual(t *testing.T) {
-	// Two rows both nil in the dedupe column → counted as duplicates.
-	// Matches the typical "treat empty as empty" expectation.
 	got, _ := runDedupe(t,
 		map[string]any{"by": []string{"score"}},
 		[]map[string]any{
@@ -416,8 +395,6 @@ func TestDedupeRows_InvalidKeep(t *testing.T) {
 }
 
 func TestDedupeRows_DroppedCountOutput(t *testing.T) {
-	// Verify the dropped output port specifically — useful as input
-	// to a downstream webhook saying "found N duplicates."
 	_, dropped := runDedupe(t,
 		map[string]any{"by": []string{"id"}},
 		[]map[string]any{

@@ -53,8 +53,6 @@ func TestHTTP_URLFromInput(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// No url param — the target comes entirely from the wired `url` input,
-	// proving the input port can drive the request on its own.
 	res, err := executeHTTPRequest(t.Context(), core.Job{
 		Params: map[string]any{"allow_private_networks": true},
 		Input:  map[string]core.Ref{"url": {Inline: srv.URL}},
@@ -168,7 +166,6 @@ func TestHTTP_UnexpectedStatusFails(t *testing.T) {
 func TestHTTP_UnexpectedStatusIncludesBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(422)
-		// Multi-line body — the snippet should collapse it onto one line.
 		_, _ = w.Write([]byte("{\n  \"detail\": \"category is required\"\n}"))
 	}))
 	defer srv.Close()
@@ -311,8 +308,6 @@ func TestHTTP_SSRFBlocksRFC1918(t *testing.T) {
 }
 
 func TestHTTP_SSRFOptInAllowsLoopback(t *testing.T) {
-	// Sanity: with allow_private_networks=true the same loopback URL
-	// can be reached. Otherwise httptest-based tests above couldn't run.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 	}))
@@ -328,17 +323,15 @@ func TestHTTP_SSRFOptInAllowsLoopback(t *testing.T) {
 	}
 }
 
-// TestHTTP_RedirectCannotBypassEgressAllowlist guards the redirect
-// CheckRedirect hook: a 30x to a host outside the egress allowlist
-// must be refused, not silently followed. The initial host is allowed,
-// so the request gets as far as the redirect before being stopped.
+// Guards the redirect CheckRedirect hook: a 30x to a host outside the egress
+// allowlist must be refused, not silently followed. The initial host is
+// allowed, so the request gets as far as the redirect before being stopped.
 func TestHTTP_RedirectCannotBypassEgressAllowlist(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "http://blocked.example.com/secret", http.StatusFound)
 	}))
 	defer srv.Close()
 
-	// Allow only loopback (where httptest binds); the redirect target is not listed.
 	if err := SetEgressAllowlist([]string{"127.0.0.1"}); err != nil {
 		t.Fatalf("set allowlist: %v", err)
 	}

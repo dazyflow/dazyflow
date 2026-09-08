@@ -36,9 +36,6 @@ function GripIcon() {
 // alone.
 type TableColumn = { key: string; label: string };
 
-// asColumnList reads the saved param. A bare string is a column headed by its
-// own name; {column,label} is a renamed one. Anything else is ignored rather
-// than guessed at.
 function asColumnList(v: unknown): TableColumn[] {
   if (!Array.isArray(v)) return [];
   const out: TableColumn[] = [];
@@ -96,7 +93,6 @@ const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n
 
 // How far (px) a row must be swiped sideways before release deletes it.
 const SWIPE_DELETE_PX = 72;
-// Movement (px) before a row-body gesture commits to an axis.
 const AXIS_LOCK_PX = 8;
 
 // RenderTableColumns is the full column editor for a render_table step's
@@ -132,12 +128,7 @@ export function RenderTableColumns({
   onApply: (patch: Record<string, unknown>) => void;
   references?: ReferenceCtx;
   currentRunID?: string | null;
-  // The rows the producer emitted on the run this editor is showing, live from
-  // the run stream. Present right after a Run; gone after a reload, which is
-  // what the fetch below covers.
   upstreamRows?: Record<string, unknown>[];
-  // Which node+port feeds this step's `rows`. The producer is the one that
-  // knows the columns — see the note in FlowEditor's inspectorRowsSource.
   rowsSource?: { nodeId: string; port: string };
 }) {
   const { t } = useTranslation();
@@ -145,30 +136,21 @@ export function RenderTableColumns({
   const [schemaCols, setSchemaCols] = useState<string[]>([]);
   const [runCols, setRunCols] = useState<string[]>([]);
   const [order, setOrder] = useState<TableColumn[]>([]);
-  // Active reorder drag (grip) and active swipe (row body). Only one at a time.
   const [drag, setDrag] = useState<{ col: string; from: number; to: number; dy: number } | null>(
     null,
   );
   const [swipe, setSwipe] = useState<{ col: string; dx: number } | null>(null);
-  // Inline rename: the column being edited and the working text.
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [addValue, setAddValue] = useState("");
   const [addLabel, setAddLabel] = useState("");
-  // The label being typed for the row under edit, alongside editValue (its
-  // column). Two boxes, so two pieces of working text.
   const [editLabel, setEditLabel] = useState("");
-  // The add row commits on Enter, or when focus leaves the ROW — not when it
-  // leaves either box. Committing on a box blur made the second field
-  // unreachable: tabbing from the column into the custom name added the row
-  // and took the box away mid-keystroke.
   const addRowRef = useRef<HTMLDivElement | null>(null);
   // True during any live interaction (gesture or rename) — guards the resync
   // effect so an async column fetch can't yank the list mid-edit.
   const busy = useRef(false);
   const listRef = useRef<HTMLUListElement | null>(null);
 
-  // Primitives (references is a fresh object each render).
   const refToken = references?.token;
   const tenant = references?.tenant;
   const ws = references?.workspace;
@@ -236,16 +218,11 @@ export function RenderTableColumns({
     () => (paramCols.length > 0 ? paramCols : discovered.map((c) => ({ key: c, label: c }))),
     [paramCols, discovered],
   );
-  // Hidden: discovered columns not in the shown set — hidden by the user, or
-  // appeared upstream after the set was curated. Shown below, tap to restore.
-  // Matched by KEY: a renamed column is still that column.
   const hidden = useMemo(
     () => discovered.filter((c) => !shown.some((x) => x.key === c)),
     [discovered, shown],
   );
 
-  // Mirror the shown list into local state so a drag can reorder live; resync
-  // whenever the underlying set changes and no interaction is in flight.
   useEffect(() => {
     if (!busy.current) setOrder(shown);
   }, [shown]);
@@ -282,8 +259,6 @@ export function RenderTableColumns({
     persist(next);
   };
 
-  // Only commit when focus lands outside the add row — moving between its two
-  // boxes is still one unfinished entry.
   const onAddBlur = (e: React.FocusEvent) => {
     const to = e.relatedTarget as Node | null;
     if (to && addRowRef.current?.contains(to)) return;
@@ -294,8 +269,6 @@ export function RenderTableColumns({
     busy.current = true; // don't let a resync reshuffle the list while typing
     setEditing(col.key);
     setEditValue(col.key);
-    // Blank rather than the key when nothing was renamed, so the box reads as
-    // "no custom name" instead of pre-filling the value it is meant to replace.
     setEditLabel(col.label === col.key ? "" : col.label);
   };
   const cancelEdit = () => {
@@ -309,8 +282,6 @@ export function RenderTableColumns({
     busy.current = false;
     setEditing(null);
     if (!editingKey) return;
-    // Emptying the column box is not a request to delete the row (that is the
-    // swipe) — it leaves the row as it was.
     if (!key) return;
     // Re-pointing a row at a column another row already has would give the
     // table the same column twice.
@@ -322,10 +293,6 @@ export function RenderTableColumns({
     persist(next);
   };
 
-  // --- Reorder drag (grip only; vertical) ---------------------------------
-  // rowStep is the on-screen distance between adjacent rows (height + gap),
-  // measured at drag start; the dragged row tracks the finger by `dy`, its
-  // neighbours shift by one step to open the drop gap.
   const dragRef = useRef<{ col: string; from: number; startY: number } | null>(null);
   const stepRef = useRef(40);
 
@@ -373,7 +340,6 @@ export function RenderTableColumns({
     });
   };
 
-  // --- Swipe-to-hide + tap-to-rename (row body) ---------------------------
   const swipeRef = useRef<{ col: string; x: number; y: number; axis: "" | "x" | "y"; dx: number } | null>(
     null,
   );
@@ -443,8 +409,6 @@ export function RenderTableColumns({
       <ul className="rtc-list" ref={listRef}>
         {order.map((col, i) => {
           const isEditing = editing === col.key;
-          // Reorder transforms: the lifted row follows the finger; the rows
-          // between its start and target shift one step to open the gap.
           let ty = 0;
           const lifted = drag?.col === col.key;
           if (drag && !isEditing) {
@@ -455,9 +419,6 @@ export function RenderTableColumns({
           const dx = swipe?.col === col.key ? swipe.dx : 0;
           const swiping = dx !== 0;
           if (isEditing) {
-            // Enter commits from either box, Escape abandons, and a blur only
-            // commits when focus leaves the row — the same rule as the add row,
-            // for the same reason.
             const keys = (e: React.KeyboardEvent) => {
               if (e.key === "Enter") {
                 e.preventDefault();

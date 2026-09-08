@@ -94,8 +94,6 @@ func TestCall_SSRFGuardBlocksPrivate(t *testing.T) {
 	}
 }
 
-// TestCall_MessagesAndSystemPassthrough drives the pre-built Messages branch
-// plus System and Temperature forwarding into the Anthropic request body.
 func TestCall_MessagesAndSystemPassthrough(t *testing.T) {
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -199,8 +197,6 @@ func TestVerifyKey_Unreachable(t *testing.T) {
 	}
 }
 
-// TestExtractText_EdgeCases drives the no-content / non-text-block / multi-block
-// branches of extractText through a real Call.
 func TestExtractText_EdgeCases(t *testing.T) {
 	cases := []struct {
 		name string
@@ -235,8 +231,6 @@ func TestExtractText_EdgeCases(t *testing.T) {
 	}
 }
 
-// TestExtractToolInput_EdgeCases drives every nil-return / skip branch of
-// extractToolInput with a forced Tool.
 func TestExtractToolInput_EdgeCases(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -275,8 +269,6 @@ func TestExtractToolInput_EdgeCases(t *testing.T) {
 	}
 }
 
-// TestClaudeError_PlainBodyFallback drives the branch where the body is not a
-// structured error object.
 func TestClaudeError_PlainBodyFallback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(400)

@@ -31,11 +31,8 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/sandbox"
 )
 
-// integration is the label every drop here shares.
 const integration = "PDF"
 
-// brandColor is shared by every step in the app so the cards read as one
-// group on the canvas.
 const brandColor = "#dc2626"
 
 // maxBytes caps one operation's input, so a mis-wired step can't pull a
@@ -44,26 +41,13 @@ const brandColor = "#dc2626"
 const maxBytes = mailfiles.MaxBytes
 
 func init() {
-	// pdfcpu writes a configuration directory under the user's home on first
-	// use. In a daemon — and especially in a container running as a
-	// non-root user with no home — that is at best noise and at worst a
-	// startup failure, so the whole mechanism is turned off and the default
-	// configuration used instead.
 	pdfapi.DisableConfigDir()
 }
 
-// conf is the pdfcpu configuration every call uses: the defaults, with no
-// config directory behind them.
 func conf() *pdfmodel.Configuration {
 	return pdfmodel.NewDefaultConfiguration()
 }
 
-// readPDF loads one wired PDF from the workspace and sanity-checks it.
-//
-// The header check is worth its two lines: pdfcpu's own error for a
-// non-PDF is about object parsing, which reads like a corrupt document
-// rather than the far likelier truth — that a Word file or an image got
-// wired into the wrong step.
 func readPDF(job core.Job, ref core.Ref, label string) ([]byte, *core.Result) {
 	data, err := mailmsg.ReadRefBytes(job, ref)
 	if err != nil {
@@ -85,8 +69,6 @@ func readPDF(job core.Job, ref core.Ref, label string) ([]byte, *core.Result) {
 	return data, nil
 }
 
-// safePrefix renders the first few bytes of a file for an error message
-// without spraying binary at the reader.
 func safePrefix(data []byte) string {
 	const n = 8
 	if len(data) > n {
@@ -103,7 +85,6 @@ func safePrefix(data []byte) string {
 	return string(out)
 }
 
-// refName is what to call a wired file in messages.
 func refName(ref core.Ref, idx int) string {
 	if ref.Ref != "" {
 		if base := path.Base(ref.Ref); base != "." && base != "/" {
@@ -133,13 +114,8 @@ func variadicRefs(job core.Job, port string) []core.Ref {
 	return out
 }
 
-// writeOut saves a produced PDF into the workspace (or the run's scratch area
-// when no folder is set) and returns the ref a downstream step opens.
 func writeOut(job core.Job, saveInto, name string, r io.Reader) (string, *core.Result) {
 	dest := mailfiles.Dest(saveInto, "pdf", 0, name)
-	// mailfiles.Dest prefixes the message id and an index to keep two
-	// same-named attachments apart; for a produced file the author chose the
-	// name, so the prefix is stripped back off.
 	if saveInto == "" {
 		dest = sandbox.Scheme + mailfiles.SanitizeFilename(name)
 	} else {

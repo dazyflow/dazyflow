@@ -20,8 +20,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// RegisterGRPC wires the Service's RPC handlers onto srv. The caller is
-// responsible for adding the auth interceptors via AuthInterceptors.
 func RegisterGRPC(srv *grpc.Server, s *Service) {
 	h := &grpcHandlers{svc: s}
 	controlpb.RegisterGraphServiceServer(srv, h)
@@ -29,9 +27,6 @@ func RegisterGRPC(srv *grpc.Server, s *Service) {
 	controlpb.RegisterDropServiceServer(srv, h)
 }
 
-// AuthInterceptors returns unary and stream interceptors that translate
-// the "authorization" metadata into a Principal stored on the context.
-// Handlers retrieve it with PrincipalFromContext.
 func AuthInterceptors(authn auth.Authenticator) (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor) {
 	unary := func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		newCtx, err := authenticate(ctx, authn)
@@ -66,9 +61,6 @@ func PrincipalFromContext(ctx context.Context) (core.Principal, bool) {
 	return p, ok
 }
 
-// mustPrincipal extracts the authenticated principal or returns a
-// codes.Unauthenticated error. Handlers that require authentication use
-// this instead of repeating the PrincipalFromContext + status.Error dance.
 func mustPrincipal(ctx context.Context) (core.Principal, error) {
 	p, ok := PrincipalFromContext(ctx)
 	if !ok {
@@ -95,8 +87,6 @@ func authenticate(ctx context.Context, authn auth.Authenticator) (context.Contex
 	}
 	p, err := authn.Authenticate(ctx, token)
 	if err != nil {
-		// A suspended user/org has a valid credential but is locked out —
-		// PermissionDenied, not Unauthenticated.
 		if errors.Is(err, auth.ErrAccountSuspended) {
 			return ctx, status.Error(codes.PermissionDenied, "account suspended")
 		}
@@ -104,8 +94,6 @@ func authenticate(ctx context.Context, authn auth.Authenticator) (context.Contex
 	}
 	return context.WithValue(ctx, principalKey, p), nil
 }
-
-// ============================================================ handlers
 
 type grpcHandlers struct {
 	controlpb.UnimplementedGraphServiceServer
@@ -168,7 +156,6 @@ func (h *grpcHandlers) RunGraph(req *controlpb.RunGraphRequest, stream controlpb
 		return err
 	}
 
-	// Caller can either embed the graph or refer to one already in storage.
 	var g core.Graph
 	if req.Graph != nil {
 		g, err = convert.GraphFromPB(req.Graph)
@@ -244,7 +231,6 @@ func (h *grpcHandlers) CancelJob(ctx context.Context, req *controlpb.CancelJobRe
 func (h *grpcHandlers) StreamJobLogs(req *controlpb.StreamJobLogsRequest, stream controlpb.JobService_StreamJobLogsServer) error {
 	ctx := stream.Context()
 	p, _ := PrincipalFromContext(ctx)
-	// Authorize + existence + terminal check in one read.
 	rec, err := h.svc.GetJob(ctx, p, req.JobId)
 	if err != nil {
 		return toStatus(err)
@@ -253,9 +239,6 @@ func (h *grpcHandlers) StreamJobLogs(req *controlpb.StreamJobLogsRequest, stream
 		return status.Error(codes.Unimplemented, "run logs are not enabled on this deployment")
 	}
 
-	// Follow mode subscribes BEFORE replaying so no event falls between
-	// the historical read and the live tail. We don't forward bus events
-	// directly (they have no seq); they just signal "the store grew".
 	var (
 		events <-chan BusEvent
 		cancel func()
@@ -304,8 +287,6 @@ func (h *grpcHandlers) StreamJobLogs(req *controlpb.StreamJobLogsRequest, stream
 			if !ok {
 				return sendPage()
 			}
-			// Any event may mean new persisted entries — catch up from
-			// the cursor (cheap when nothing new landed).
 			if err := sendPage(); err != nil {
 				return err
 			}
@@ -361,8 +342,6 @@ func (h *grpcHandlers) ListDrops(ctx context.Context, req *controlpb.ListDropsRe
 	}
 	return &controlpb.ListDropsResponse{Drops: out}, nil
 }
-
-// ============================================================ conversion
 
 func progressToPB(p engine.GraphProgress) *controlpb.GraphProgress {
 	out := &controlpb.GraphProgress{

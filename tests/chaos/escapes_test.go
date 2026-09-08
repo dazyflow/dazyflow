@@ -36,8 +36,6 @@ func (h *harness) submitOpts(g core.Graph, opts daemon.SubmitOpts, budget time.D
 	return runID, statusHung, nil
 }
 
-// childRuns returns every graph-run record that was spawned as a subgraph
-// child (ParentNodeRecID set).
 func (h *harness) childRuns() []core.JobRecord {
 	h.t.Helper()
 	recs, err := h.jobs.ListGraphRuns(context.Background(), core.ListGraphRunsOpts{Limit: 100000})
@@ -87,8 +85,6 @@ func TestTriggerChainDepth_SurvivesASubgraphHop(t *testing.T) {
 		[]core.Edge{{From: "start", FromPort: "pass", To: "call", ToPort: "in"}})
 	hs.save(parent)
 
-	// One short of the cap: a run this deep in a trigger chain may do one
-	// more hop, and no more.
 	const parentDepth = core.MaxTriggerChainDepth - 1
 	runID, status, err := hs.submitOpts(parent, daemon.SubmitOpts{TriggerDepth: parentDepth}, 60*time.Second)
 	if err != nil {
@@ -153,20 +149,10 @@ func TestDynamicPortsStep_FanInIsBounded(t *testing.T) {
 		"199 of the values are silently dropped", wires)
 }
 
-// No variadic input port in the whole catalog declares a Max, so the only
-// ceiling on fan-in is the 5000-connection graph cap. Two steps and 4000
-// duplicate wires between them is a legal graph; every wire becomes its own
-// items[N] entry the run has to assemble, hold and store.
-//
-// The case is small enough to be typed by hand in the editor (drag the same
-// wire repeatedly) and, unlike the non-variadic fan-in, nothing anywhere
-// says it is wrong.
 func TestVariadicFanIn_IsBounded(t *testing.T) {
 	const wires = 400 // well past core.DefaultMaxVariadicFanIn
 	hs := newHarness(t)
 
-	// Distinct sources, so the fan-in ceiling is what has to refuse this and
-	// not the duplicate-wire rule.
 	nodes := []core.Node{{ID: "sink", Module: "merge"}}
 	edges := make([]core.Edge, 0, wires)
 	for i := 0; i < wires; i++ {
@@ -319,8 +305,6 @@ func TestMergeChain_HitsTheValueCeiling(t *testing.T) {
 			core.MaxValueBytes(), core.MaxRunStateBytes())
 	}
 
-	// It has to stop for the right reason: a ceiling that fired, not a step
-	// that happened to break on the way.
 	recs, err := hs.jobs.ListNodeRecords(context.Background(),
 		core.ListNodeRecordsOpts{GraphRunID: runID, Limit: 10000})
 	if err != nil {
@@ -353,7 +337,6 @@ func TestMergeChain_HitsTheValueCeiling(t *testing.T) {
 		t.Errorf("run stopped with codes %v, want value_too_large or run_state_too_large — "+
 			"the ceilings must be what refuses the doubling, not an incidental failure", codes)
 	}
-	// The measurement itself has to be honest, or the ceiling only fires by luck.
 	if biggest > 0 && biggestMeasured < biggest/2 {
 		t.Errorf("core.ApproxValueSize still under-reports a []core.Ref by %.0f× "+
 			"(%d measured vs %d real bytes)",

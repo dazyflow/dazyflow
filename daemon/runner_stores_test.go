@@ -39,8 +39,6 @@ func pgRunnerPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// ---- the runner registry ----------------------------------------------
-
 func runnerStoreContract(t *testing.T, store RunnerStore) {
 	t.Helper()
 	ctx := context.Background()
@@ -77,8 +75,6 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 		if r.CreatedBy != "admin@acme" {
 			t.Errorf("created_by = %q", r.CreatedBy)
 		}
-		// Labels are normalised on the way in, so routing compares like with
-		// like however the agent was invoked.
 		if got := strings.Join(r.Labels, ","); got != "linux,x64" {
 			t.Errorf("labels = %q, want linux,x64", got)
 		}
@@ -105,7 +101,6 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 		if stored.Tenant != "acme" {
 			t.Fatalf("tenant = %q: the caller chose its own organisation", stored.Tenant)
 		}
-		// And it landed in acme's list, not globex's.
 		if _, err := store.Get(ctx, "globex", "hostile"); !errors.Is(err, ErrRunnerNotFound) {
 			t.Errorf("the runner was written under globex (err = %v)", err)
 		}
@@ -123,7 +118,6 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 		if !errors.Is(err, ErrBadRunnerToken) {
 			t.Fatalf("err = %v, want a spent token refused", err)
 		}
-		// And the second machine was not created as a side effect.
 		if _, err := store.Get(ctx, "acme", "second"); !errors.Is(err, ErrRunnerNotFound) {
 			t.Errorf("a refused registration still created the runner (err = %v)", err)
 		}
@@ -162,8 +156,6 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 		if got.Name != "seen" || got.Tenant != "acme" {
 			t.Errorf("resolved to %+v", got)
 		}
-		// "Online" is derived from this, so it has to be persisted, not just
-		// returned.
 		back, err := store.Get(ctx, "acme", "seen")
 		if err != nil {
 			t.Fatalf("Get: %v", err)
@@ -194,15 +186,12 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 		if err != nil {
 			t.Fatalf("re-Register: %v", err)
 		}
-		// A rebuilt machine keeps the date it first appeared.
 		if !second.CreatedAt.Equal(first.CreatedAt) {
 			t.Errorf("created_at moved: %v -> %v", first.CreatedAt, second.CreatedAt)
 		}
 		if strings.Join(second.Labels, ",") != "new" || second.Version != "0.2.0" {
 			t.Errorf("replacement did not take: %+v", second)
 		}
-		// The old credential is dead, or a decommissioned agent could keep
-		// claiming work under the replacement's name.
 		if _, err := rs.Authenticate(ctx, oldCred); !errors.Is(err, ErrBadRunnerCredential) {
 			t.Errorf("the retired credential still works (err = %v)", err)
 		}
@@ -216,7 +205,6 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 		if _, _, err := rs.Register(ctx, tok, "pinned-b", nil, "0.1.0"); !errors.Is(err, ErrRunnerNameMismatch) {
 			t.Fatalf("wrong name: err = %v, want ErrRunnerNameMismatch", err)
 		}
-		// The mismatch did not spend the token — it is still good for its name.
 		if _, _, err := rs.Register(ctx, tok, "pinned-a", nil, "0.1.0"); err != nil {
 			t.Fatalf("pinned token refused its own name after a mismatch: %v", err)
 		}
@@ -245,8 +233,6 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 		if err := store.Delete(ctx, "acme", "doomed"); err != nil {
 			t.Fatalf("Delete: %v", err)
 		}
-		// Deleting is the revocation: a decommissioned machine stops being able
-		// to claim work whether or not anyone remembers to stop the agent.
 		if _, err := rs.Authenticate(ctx, cred); !errors.Is(err, ErrBadRunnerCredential) {
 			t.Errorf("a deleted runner's credential still works (err = %v)", err)
 		}
@@ -275,7 +261,6 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 				t.Fatal("one organisation's list contains another's runner")
 			}
 		}
-		// Sorted by name, so the admin table is stable between loads.
 		for i := 1; i < len(ours); i++ {
 			if ours[i-1].Name > ours[i].Name {
 				t.Fatalf("list is not sorted by name: %v", ours)
@@ -284,8 +269,6 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 	})
 
 	t.Run("labels can be replaced after registration", func(t *testing.T) {
-		// A label used to be decided on the machine and fixed there forever, so
-		// moving an existing server into a new pool meant a visit to it.
 		if _, _, err := rs.Register(ctx, mint("acme"), "retag", []string{"linux"}, "0.2.0"); err != nil {
 			t.Fatalf("Register: %v", err)
 		}
@@ -307,7 +290,6 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 			t.Errorf("stored labels = %v", back.Labels)
 		}
 
-		// Clearing them is a real state: a machine targeted only by name.
 		cleared, err := rs.SetLabels(ctx, "acme", "retag", nil)
 		if err != nil {
 			t.Fatalf("SetLabels(nil): %v", err)
@@ -337,7 +319,6 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 		if _, err := rs.SetLabels(ctx, "acme", "picky", many); err == nil {
 			t.Error("more labels than the cap were accepted")
 		}
-		// Refused before the write, so the machine keeps the set it had.
 		back, err := store.Get(ctx, "acme", "picky")
 		if err != nil {
 			t.Fatalf("Get: %v", err)
@@ -371,8 +352,6 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 			t.Error("a machine was labelled with its own name")
 		}
 
-		// Another organisation's machine names are not in the way: names are
-		// unique per organisation, and so is the tag namespace.
 		if _, _, err := rs.Register(ctx, mint("globex"), "collide-c", nil, "0.2.0"); err != nil {
 			t.Fatalf("Register: %v", err)
 		}
@@ -382,8 +361,6 @@ func runnerStoreContract(t *testing.T, store RunnerStore) {
 	})
 
 	t.Run("a machine's tags are its labels plus its name", func(t *testing.T) {
-		// The name being a tag is what lets a step pin work to one machine
-		// without a separate field for it.
 		r, _, err := rs.Register(ctx, mint("acme"), "tagged-box", []string{"Linux", "tagged-box"}, "0.2.0")
 		if err != nil {
 			t.Fatalf("Register: %v", err)
@@ -435,10 +412,6 @@ func TestPgRunnerStore_Contract(t *testing.T) {
 	runnerStoreContract(t, store)
 }
 
-// A registration has to survive the process that created it. This is the whole
-// reason the Postgres store exists: with the memory one, restarting the daemon
-// tells every agent in the fleet it is no longer registered — which the agent
-// correctly treats as terminal, because that is what deletion looks like.
 func TestPgRunnerStore_SurvivesARestart(t *testing.T) {
 	pool := pgRunnerPool(t)
 	ctx := context.Background()
@@ -462,7 +435,6 @@ func TestPgRunnerStore_SurvivesARestart(t *testing.T) {
 		t.Fatalf("Register: %v", err)
 	}
 
-	// A brand-new store over the same database is what a restart looks like.
 	restarted, err := NewPgRunnerStore(ctx, pool)
 	if err != nil {
 		t.Fatalf("re-open: %v", err)
@@ -492,8 +464,6 @@ func mustMint(t *testing.T, rs *Runners, tenant string) string {
 	}
 	return tok.Token
 }
-
-// ---- the task queue ---------------------------------------------------
 
 func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	t.Helper()
@@ -527,9 +497,6 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		if got.Script != "./x.sh" || got.Stdin != "on stdin" {
 			t.Errorf("task = %+v", got)
 		}
-		// The claim is the only place the chosen interpreter reaches the agent:
-		// dropped here, a Python script runs under sh and fails as if the flow
-		// author had written it wrong.
 		if got.Shell != "python" {
 			t.Errorf("shell = %q, want the one the step chose", got.Shell)
 		}
@@ -568,8 +535,6 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	})
 
 	t.Run("a machine's own name is one of its tags", func(t *testing.T) {
-		// This is what replaced the separate "which machine" field: pinning a
-		// step to one machine is a task whose single tag is that name.
 		enqueue(t, RunnerTask{ID: "pinned", Tenant: "acme", Tags: []string{"box"}, Script: "x"})
 		bare := Runner{Tenant: "acme", Name: "box"} // no labels at all
 		got, err := q.Claim(ctx, bare, time.Now(), TaskLease)
@@ -579,11 +544,6 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 	})
 
 	t.Run("a task with no tags is claimed by nobody", func(t *testing.T) {
-		// Fail closed. A task with no target is a bug upstream, and the wrong
-		// answer to it is to run someone's script on an arbitrary machine. Worth
-		// pinning in the contract because the two stores get it wrong in
-		// different ways: in SQL, `'{}' <@ anything` is TRUE, so the natural
-		// containment query matches EVERY machine.
 		enqueue(t, RunnerTask{ID: "untargeted", Tenant: "acme", Script: "x"})
 		if _, err := q.Claim(ctx, box, time.Now(), TaskLease); !errors.Is(err, ErrNoTask) {
 			t.Errorf("a task with no tags was claimed (err = %v)", err)
@@ -619,7 +579,6 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		if _, err := q.Claim(ctx, intruder, time.Now(), TaskLease); !errors.Is(err, ErrNoTask) {
 			t.Fatal("another organisation's runner claimed the task")
 		}
-		// Nor can it read the task by id.
 		if _, err := q.Get(ctx, "globex", "ours"); err == nil {
 			t.Fatal("another organisation read the task by id")
 		}
@@ -669,8 +628,6 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		if !got.LeaseUntil.After(now.Add(TaskLease)) {
 			t.Errorf("lease_until = %v, want it pushed out", got.LeaseUntil)
 		}
-		// The line the script printed has to reach the row: the step waiting
-		// for it may be on a different daemon, so there is no other channel.
 		if got.Progress != "halfway through" {
 			t.Errorf("progress = %q, want the reported line", got.Progress)
 		}
@@ -699,8 +656,6 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		if err != nil {
 			t.Fatalf("Get: %v", err)
 		}
-		// The step should fail the way any other step fails, not succeed with
-		// an error buried in its output.
 		if got.State != TaskFailed {
 			t.Errorf("state = %q, want failed", got.State)
 		}
@@ -720,10 +675,6 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		}
 	})
 
-	// Names are only unique per organisation — tenant_runners is keyed on
-	// (tenant, name) — so a same-named runner in another org is a DIFFERENT
-	// machine, and the ownership check has to say so. Without the tenant
-	// predicate only the task id's randomness stands between them.
 	t.Run("a same-named runner in another organisation is refused", func(t *testing.T) {
 		enqueue(t, RunnerTask{ID: "crosstenant", Tenant: "acme", Tags: []string{"box"}, Script: "x"})
 		now := time.Now()
@@ -745,7 +696,6 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		if got.State != TaskRunning || got.Result != nil {
 			t.Errorf("task = %+v, want it untouched and still running", got)
 		}
-		// The real holder is unaffected.
 		if err := q.Complete(ctx, box, "crosstenant", RunnerTaskResult{Stdout: "mine"}, now); err != nil {
 			t.Fatalf("the holder was refused its own task: %v", err)
 		}
@@ -774,8 +724,6 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 			ID: "orph-untimed", Tenant: "acme", Tags: []string{"orphbox"}, Script: "x",
 			CreatedAt: now.Add(-2 * time.Minute),
 		})
-		// Claimed with a clock three minutes ago, so its lease has lapsed by
-		// the time the sweep looks.
 		enqueue(t, RunnerTask{
 			ID: "orph-held", Tenant: "acme", Tags: []string{"orphheld"}, Script: "x",
 			CreatedAt: now.Add(-3 * time.Minute),
@@ -835,7 +783,6 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		if got.Result == nil || !strings.Contains(got.Result.Error, "box") {
 			t.Errorf("result = %+v, want an error naming the runner", got.Result)
 		}
-		// A late result is refused: the step has already failed.
 		if err := q.Complete(ctx, box, "gone", RunnerTaskResult{Stdout: "late"}, time.Now()); !errors.Is(err, ErrTaskNotClaimable) {
 			t.Errorf("a late result was accepted (err = %v)", err)
 		}
@@ -869,7 +816,6 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		if err != nil || !cancelled {
 			t.Fatalf("CancelQueued: cancelled=%v err=%v", cancelled, err)
 		}
-		// An hour later the machine comes back.
 		if _, err := q.Claim(ctx, box, now.Add(time.Hour), TaskLease); !errors.Is(err, ErrNoTask) {
 			t.Fatal("a runner claimed a script the step had already given up on")
 		}
@@ -898,7 +844,6 @@ func runnerTaskStoreContract(t *testing.T, q RunnerTaskStore) {
 		if cancelled {
 			t.Fatal("cancelled a task a runner was already holding")
 		}
-		// And the agent can still report on it.
 		if err := q.Complete(ctx, box, "taken", RunnerTaskResult{Stdout: "fine"}, now); err != nil {
 			t.Errorf("the holder could no longer finish its task: %v", err)
 		}
@@ -1000,7 +945,6 @@ func TestPgRunnerTaskStore_ConcurrentClaimsDoNotOverlap(t *testing.T) {
 			}
 		}(a)
 	}
-	// Collect exactly `tasks` claims, then stop the agents.
 	seen := map[string]string{}
 	for range tasks {
 		select {
@@ -1035,7 +979,6 @@ func TestPgRunnerTaskStore_PruneKeepsLiveWork(t *testing.T) {
 	old := time.Now().Add(-48 * time.Hour)
 	box := Runner{Tenant: "acme", Name: "box"}
 
-	// One finished long ago, one still queued, one claimed and running.
 	for _, id := range []string{"finished", "queued", "running"} {
 		if err := q.Enqueue(ctx, RunnerTask{
 			ID: id, Tenant: "acme", Tags: []string{"box"}, Script: "x",
@@ -1044,14 +987,12 @@ func TestPgRunnerTaskStore_PruneKeepsLiveWork(t *testing.T) {
 			t.Fatalf("Enqueue: %v", err)
 		}
 	}
-	// "finished" is claimed and completed, back-dated.
 	if _, err := q.Claim(ctx, box, old, TaskLease); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
 	if err := q.Complete(ctx, box, "finished", RunnerTaskResult{Stdout: "ok"}, old); err != nil {
 		t.Fatalf("Complete: %v", err)
 	}
-	// "queued" is next oldest; skip it and claim "running" by name.
 	if _, err := pool.Exec(ctx,
 		`UPDATE runner_tasks SET state='running', claimed_by='box', lease_until=$1 WHERE id='running'`,
 		old.Add(TaskLease)); err != nil {
@@ -1085,7 +1026,6 @@ func TestPgRunnerTaskStore_PruneKeepsLiveWork(t *testing.T) {
 			t.Errorf("prune deleted live work (%s): %v", id, err)
 		}
 	}
-	// A disabled retention is a no-op, not a full sweep.
 	if n, err := q.Prune(ctx, 0, 500); err != nil || n != 0 {
 		t.Errorf("Prune(0) = %d, %v; want a no-op", n, err)
 	}
@@ -1144,7 +1084,6 @@ func TestPgRunnerTaskStore_SealsTheScriptAtRest(t *testing.T) {
 		}
 	}
 
-	// And the agent still gets the real thing.
 	got, err := q.Claim(ctx, Runner{Tenant: "acme", Name: "box"}, time.Now(), TaskLease)
 	if err != nil {
 		t.Fatalf("Claim: %v", err)
@@ -1167,7 +1106,6 @@ func TestPgRunnerTaskStore_ReadsBackAnUnsealedRow(t *testing.T) {
 	if _, err := pool.Exec(ctx, "TRUNCATE runner_tasks"); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
-	// Written by a daemon with no cipher configured.
 	if err := plainStore.Enqueue(ctx, RunnerTask{
 		ID: "legacy", Tenant: "acme", Tags: []string{"box"}, Script: "./old.sh",
 		State: TaskQueued, CreatedAt: time.Now(),
@@ -1175,7 +1113,6 @@ func TestPgRunnerTaskStore_ReadsBackAnUnsealedRow(t *testing.T) {
 		t.Fatalf("Enqueue: %v", err)
 	}
 
-	// Read by one that now has one.
 	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
 	if err != nil {
 		t.Fatalf("NewEncryptedSecrets: %v", err)

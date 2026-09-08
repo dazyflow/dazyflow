@@ -1,13 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package scenarios validates the reference automation scenarios in
-// README.md against the real native catalog. Each NN-*.json is a graph
-// that implements one scenario; the test asserts every graph composes from
-// modules and ports that actually exist (ValidateWithManifests), and that
-// every for_each has its `body` pin wired to a loop body. A failure here
-// means a scenario references a capability we do not yet support — that is
-// the gap to close.
 package scenarios
 
 import (
@@ -66,10 +59,6 @@ func TestScenarioGraphsValidate(t *testing.T) {
 				t.Fatalf("graph does not compose against the catalog:\n%v", err)
 			}
 
-			// for_each runs a body subgraph wired to its `body` pin.
-			// ValidateWithManifests already verified the body nodes' modules
-			// and ports; assert each for_each actually has the pin wired (an
-			// unwired for_each has nothing to run).
 			bodyWired := map[string]bool{}
 			for _, e := range g.Edges {
 				if e.FromPort == "body" {

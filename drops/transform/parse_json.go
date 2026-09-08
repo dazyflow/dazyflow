@@ -66,13 +66,6 @@ func init() {
 	})
 }
 
-// executeParseJSON parses the 'in' value into rows. The input ref may
-// already be a parsed value (when an upstream drop emitted inline JSON)
-// or a raw string (the common case: an AI 'text' output or an HTTP
-// response body). Strings go through fence-stripping and json.Unmarshal;
-// non-strings are used as-is. After an optional dot-path descent, an
-// array becomes one row per element and a lone object becomes a single
-// row — matching every other tabular drop's rows + headers contract.
 func executeParseJSON(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	ref, ok := job.Input["in"]
 	if !ok {
@@ -124,16 +117,12 @@ func executeParseJSON(_ context.Context, job core.Job, _ chan<- core.Progress) (
 	}, nil
 }
 
-// parseJSONInput returns the parsed JSON value for the input ref. A
-// string is fence-stripped (unless fence=false) and unmarshalled; any
-// other inline value is already structured and passes through.
 func parseJSONInput(inline any, params map[string]any) (any, error) {
 	if inline == nil {
 		return nil, fmt.Errorf("input 'in' is empty")
 	}
 	s, isString := inline.(string)
 	if !isString {
-		// Upstream already handed us a parsed value (object, array, …).
 		return inline, nil
 	}
 
@@ -189,10 +178,6 @@ func isFenceLang(s string) bool {
 	return len(s) > 0
 }
 
-// bracketSpan returns the substring spanning the outermost JSON array
-// or object in s, dropping any surrounding prose. It picks whichever of
-// '[' or '{' appears first and matches it to the last corresponding
-// closing bracket. If no pair is found, s is returned unchanged.
 func bracketSpan(s string) string {
 	open := strings.IndexAny(s, "[{")
 	if open < 0 {
@@ -211,7 +196,6 @@ func bracketSpan(s string) string {
 	return strings.TrimSpace(s[open : closeIdx+1])
 }
 
-// digPath descends dot-separated object keys into a parsed value.
 func digPath(v any, path string) (any, error) {
 	for seg := range strings.SplitSeq(path, ".") {
 		if seg == "" {
@@ -230,12 +214,6 @@ func digPath(v any, path string) (any, error) {
 	return v, nil
 }
 
-// rowsFromValue turns a parsed JSON value into rows: an array becomes
-// one row per element, a single object becomes a one-row table. Scalars
-// and arrays of non-objects have no sensible row shape, so they error
-// here — the caller decides what that means. With an explicit `path` it
-// is not a failure but an answer, and executeParseJSON serves it on the
-// 'value' output with empty rows; without one it fails the step.
 func rowsFromValue(v any) ([]map[string]any, error) {
 	switch t := v.(type) {
 	case []any:

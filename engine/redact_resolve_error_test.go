@@ -33,11 +33,11 @@ func (p leakOnSecondProvider) Get(_ context.Context, path string) (string, error
 	return "", errors.New("not found: " + path)
 }
 
-// TestRunNode_RedactsSecretInResolveError pins the resolve-error redaction:
-// template resolution that fails AFTER recording a secret must not persist that
-// secret in the node's Error.Message. The buildAndExecute resolve-error early
-// return used to skip redaction entirely; it now scrubs with the partially
-// collected secret set before the Result reaches the job store / run-detail UI.
+// Pins the resolve-error redaction: template resolution that fails AFTER
+// recording a secret must not persist that secret in the node's Error.Message.
+// The buildAndExecute resolve-error early return used to skip redaction
+// entirely; it now scrubs with the partially collected secret set before the
+// Result reaches the job store / run-detail UI.
 func TestRunNode_RedactsSecretInResolveError(t *testing.T) {
 	const secret = "VALUE123-this-is-a-resolved-secret"
 
@@ -60,9 +60,6 @@ func TestRunNode_RedactsSecretInResolveError(t *testing.T) {
 		ID:     "g",
 		Tenant: "acme",
 		Nodes: []core.Node{
-			// One string, scanned left-to-right: ${secret.first} resolves and is
-			// recorded, then ${secret.second} fails with the first value in its
-			// error message.
 			{ID: "n", Module: "echo", Params: map[string]any{"p": "${secret.first}-${secret.second}"}},
 		},
 	}

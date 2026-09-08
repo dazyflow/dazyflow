@@ -36,10 +36,8 @@ type RunnerTaskSweeper struct {
 	// do carry one are closed at their own timeout plus DispatchGrace, because
 	// that is exactly when the step waiting on them gave up.
 	QueuedCeiling time.Duration
-	// DispatchGrace mirrors RunnerDispatcher's; zero means the constant.
 	DispatchGrace time.Duration
-	// Batch bounds one pass so a large backlog does not hold the pool.
-	Batch int
+	Batch         int
 }
 
 // DefaultRunnerQueuedCeiling closes a task that carries no timeout of its own.
@@ -72,14 +70,9 @@ func (s *RunnerTaskSweeper) batch() int {
 	return 500
 }
 
-// orphanedTaskReason is what a swept queued task records. It says the daemon
-// went away rather than blaming the runner, because the runner did nothing
-// wrong — and a row that says "cancelled" with no reason is the kind of thing
-// someone spends an afternoon on.
 const orphanedTaskReason = "the daemon that queued this step stopped waiting for it, " +
 	"most likely because it restarted; the script was not run"
 
-// Sweep closes one batch of orphaned tasks and reports how many it closed.
 func (s *RunnerTaskSweeper) Sweep(ctx context.Context, now time.Time) (int, error) {
 	if s == nil || s.Tasks == nil {
 		return 0, nil

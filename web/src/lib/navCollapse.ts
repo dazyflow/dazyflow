@@ -13,9 +13,6 @@ import { MOBILE, isNarrower } from "./breakpoints";
 // which is the one thing that SHOULD differ: the two sidebars are independent
 // preferences, so the key is now a parameter.
 
-// savedCollapsePref reads the persisted desktop choice. Returns false when
-// storage is unavailable (private mode, a strict-mode iframe), so the sidebar
-// defaults to expanded rather than throwing.
 export function savedCollapsePref(key: string): boolean {
   try {
     return localStorage.getItem(key) === "1";

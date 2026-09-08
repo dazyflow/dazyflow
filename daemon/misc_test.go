@@ -13,10 +13,10 @@ import (
 	"github.com/dazyflow/dazyflow/pollstate"
 )
 
-// TestPauseRegistry_Cov exercises the in-memory breakpoint pause registry:
-// addPaused (with dedup), takePaused (returns + clears), setStepping/isStepping,
-// clear, and shouldPauseAfter's legs — including that an unwatched (trigger-
-// started) run never pauses on a breakpoint.
+// Exercises the in-memory breakpoint pause registry: addPaused (with dedup),
+// takePaused (returns + clears), setStepping/isStepping, clear, and
+// shouldPauseAfter's legs — including that an unwatched (trigger- started) run
+// never pauses on a breakpoint.
 func TestPauseRegistry_Cov(t *testing.T) {
 	t.Parallel()
 	r := &pauseRegistry{paused: map[string][]string{}, stepping: map[string]bool{}}
@@ -47,14 +47,12 @@ func TestPauseRegistry_Cov(t *testing.T) {
 		t.Fatal("clear left state behind")
 	}
 
-	// shouldPauseAfter: step mode wins, watched or not.
 	breakpoints.setStepping("sp", true)
 	t.Cleanup(func() { breakpoints.clear("sp") })
 	g := core.Graph{Nodes: []core.Node{{ID: "n", Breakpoint: true}, {ID: "plain"}}}
 	if !shouldPauseAfter(g, "sp", "plain", false) {
 		t.Fatal("step mode should force a pause")
 	}
-	// No step mode: breakpoint node pauses, plain node does not, unknown node no.
 	if !shouldPauseAfter(g, "other", "n", true) {
 		t.Fatal("breakpoint node should pause")
 	}
@@ -71,13 +69,10 @@ func TestPauseRegistry_Cov(t *testing.T) {
 	}
 }
 
-// TestAutoFSWorkspaces_MemoryEnumeration covers AutoFSWorkspaces.List and All
-// in memory mode (empty base): stores opened this process are enumerated.
 func TestAutoFSWorkspaces_MemoryEnumeration(t *testing.T) {
 	t.Parallel()
 	a := NewAutoFSWorkspaces("") // memory mode
 
-	// Open two workspaces for one tenant and one for another.
 	if _, err := a.Open("acme", "main"); err != nil {
 		t.Fatalf("Open acme/main: %v", err)
 	}
@@ -104,8 +99,6 @@ func TestAutoFSWorkspaces_MemoryEnumeration(t *testing.T) {
 		t.Fatalf("All = %d entries, want 3", len(all))
 	}
 
-	// RemoveTenant evicts a tenant's cached stores (memory mode is a no-op
-	// on disk but still clears the cache).
 	if err := a.RemoveTenant("acme"); err != nil {
 		t.Fatalf("RemoveTenant: %v", err)
 	}
@@ -114,14 +107,11 @@ func TestAutoFSWorkspaces_MemoryEnumeration(t *testing.T) {
 	}
 }
 
-// TestAutoFSWorkspaces_DiskEnumeration covers List/All/RemoveTenant in
-// filesystem mode (non-empty base): the on-disk ReadDir branches.
 func TestAutoFSWorkspaces_DiskEnumeration(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	a := NewAutoFSWorkspaces(dir)
 
-	// Open provisions the on-disk tenant/workspace directories.
 	if _, err := a.Open("acme", "main"); err != nil {
 		t.Fatalf("Open acme/main: %v", err)
 	}
@@ -132,7 +122,6 @@ func TestAutoFSWorkspaces_DiskEnumeration(t *testing.T) {
 		t.Fatalf("Open other/main: %v", err)
 	}
 
-	// List reads the tenant's workspace directories from disk.
 	list, err := a.List("acme")
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -140,18 +129,15 @@ func TestAutoFSWorkspaces_DiskEnumeration(t *testing.T) {
 	if len(list) != 2 || list[0] != "main" || list[1] != "staging" {
 		t.Fatalf("List(acme) = %v, want [main staging]", list)
 	}
-	// A tenant with no directory lists empty (not an error).
 	if l, err := a.List("nobody"); err != nil || len(l) != 0 {
 		t.Fatalf("List(nobody) = %v / %v, want empty", l, err)
 	}
 
-	// All walks every tenant/workspace dir on disk.
 	all := maps.Collect(a.All())
 	if len(all) != 3 {
 		t.Fatalf("All = %d, want 3 (%v)", len(all), keys(all))
 	}
 
-	// RemoveTenant deletes the on-disk subtree.
 	if err := a.RemoveTenant("acme"); err != nil {
 		t.Fatalf("RemoveTenant: %v", err)
 	}
@@ -168,21 +154,16 @@ func keys[V any](m map[string]V) []string {
 	return out
 }
 
-// TestBufferedUsage_Cov covers BufferedUsage's passthrough AddSkippedRun, the
-// flush-on-shutdown Run loop, and Flush re-queue-on-success.
 func TestBufferedUsage_Cov(t *testing.T) {
 	t.Parallel()
 	inner := NewMemUsageStore()
 	b := NewBufferedUsage(inner)
 	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 
-	// AddSkippedRun passes straight through.
 	if err := b.AddSkippedRun(context.Background(), "acme", now); err != nil {
 		t.Fatalf("AddSkippedRun: %v", err)
 	}
-	// AddRun passes through too.
 	_ = b.AddRun(context.Background(), "acme", now)
-	// Buffered node executions flush on read.
 	_ = b.AddNodeExecutions(context.Background(), "acme", 7, now)
 
 	buckets, _ := b.Usage(context.Background(), "acme", 1)
@@ -190,7 +171,6 @@ func TestBufferedUsage_Cov(t *testing.T) {
 		t.Fatalf("node executions = %+v, want 7", buckets)
 	}
 
-	// Run flushes on ctx cancel.
 	ctx, cancel := context.WithCancel(context.Background())
 	_ = b.AddNodeExecutions(ctx, "acme", 3, now)
 	done := make(chan struct{})
@@ -208,15 +188,11 @@ func TestBufferedUsage_Cov(t *testing.T) {
 	}
 }
 
-// TestSchedulerSetters_Cov covers SetLeader and SetPollStateReader (nil-guarded
-// installs).
 func TestSchedulerSetters_Cov(t *testing.T) {
 	t.Parallel()
 	s := NewScheduler(&Service{})
 
-	// Nil leader is ignored (default stays).
 	s.SetLeader(nil)
-	// A real predicate installs.
 	called := false
 	s.SetLeader(func() bool { called = true; return false })
 	if s.leader == nil || s.leader() || !called {
@@ -238,8 +214,6 @@ func TestSchedulerSetters_Cov(t *testing.T) {
 	}
 }
 
-// TestProviderSchemes_Cov covers the trivial Scheme() identity methods on the
-// resource + builtin secret providers.
 func TestProviderSchemes_Cov(t *testing.T) {
 	t.Parallel()
 	if (&ResourceProvider{}).Scheme() != "resource" {
@@ -308,13 +282,11 @@ func TestRunViewHelpers(t *testing.T) {
 		t.Error("resultError did not return the embedded error")
 	}
 
-	// newSSETerminalView maps the terminal event fields.
 	v := newSSETerminalView(&TerminalEvent{JobID: "r1", Status: core.JobStatusFailed, Error: je})
 	if v.RunID != "r1" || v.Status != core.JobStatusFailed || v.Error != je {
 		t.Errorf("sse view = %+v", v)
 	}
 
-	// newRunView falls back to EnqueuedAt for duration when StartedAt is nil.
 	enq := time.Unix(100, 0)
 	fin := enq.Add(2 * time.Second)
 	rv := newRunView(core.RunSummary{

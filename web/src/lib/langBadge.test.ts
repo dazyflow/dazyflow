@@ -4,9 +4,6 @@
 import { describe, expect, it } from "vitest";
 import { glyphFor, languageOf } from "./langBadge";
 
-// A Text node holding a SQL query and one holding an email body used to look
-// identical on the canvas. These pin the rule that tells them apart — and, more
-// importantly, the rule that keeps a chip OFF the ordinary case.
 
 describe("languageOf", () => {
   it("reads the language a node has chosen", () => {
@@ -20,7 +17,6 @@ describe("languageOf", () => {
     // updated for every time a step joined in.
     expect(languageOf({ language: "plain" }, "language", "plain")).toBe("");
     expect(languageOf({ shell: "default" }, "shell", "default")).toBe("");
-    // And the runner step with a real interpreter does get one.
     expect(languageOf({ shell: "python" }, "shell", "default")).toBe("python");
   });
 
@@ -29,7 +25,6 @@ describe("languageOf", () => {
     expect(languageOf({}, "language", "plain")).toBe("");
     expect(languageOf({ language: "" }, "language", "plain")).toBe("");
     expect(languageOf({ language: 3 }, "language", "plain")).toBe("");
-    // No field on this node points at a language param.
     expect(languageOf({ language: "sql" }, undefined, "plain")).toBe("");
   });
 });
@@ -50,8 +45,6 @@ describe("glyphFor", () => {
   });
 
   it("gives an unknown language the generic code glyph, not nothing", () => {
-    // A flow built by the API can carry anything here, and a chip with a label
-    // and no icon looks like a rendering bug.
     expect(glyphFor("klingon")).toBe("code");
     expect(glyphFor("")).toBe("code");
   });

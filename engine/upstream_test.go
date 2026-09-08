@@ -10,12 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// ----------------------------------------------------------------------
-// Unit tests for the upstream-path walker + substituter directly.
-// Kept separate from the full resolveTemplates path so failures
-// point at the specific component (path parsing vs job-wide walk).
-// ----------------------------------------------------------------------
-
 func TestUpstream_PortRoot(t *testing.T) {
 	prior := map[string]core.Result{
 		"loader": {Output: map[string]core.Ref{
@@ -65,7 +59,6 @@ func TestUpstream_ArrayIndex(t *testing.T) {
 }
 
 func TestUpstream_ArrayThenField(t *testing.T) {
-	// Mixed: index into a list of objects, then read a field.
 	prior := map[string]core.Result{
 		"q": {Output: map[string]core.Ref{
 			"rows": {Inline: []map[string]any{
@@ -81,7 +74,6 @@ func TestUpstream_ArrayThenField(t *testing.T) {
 }
 
 func TestUpstream_PortWithBracketImmediately(t *testing.T) {
-	// rows[0] — index applied directly to the port value.
 	prior := map[string]core.Result{
 		"q": {Output: map[string]core.Ref{
 			"rows": {Inline: []any{"first", "second"}},
@@ -135,10 +127,6 @@ func contains(s, sub string) bool {
 	return false
 }
 
-// ----------------------------------------------------------------------
-// stringifyForTemplate — value → string conversion for substitution.
-// ----------------------------------------------------------------------
-
 func TestStringifyForTemplate(t *testing.T) {
 	cases := []struct {
 		name string
@@ -167,12 +155,6 @@ func TestStringifyForTemplate(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// End-to-end: resolveTemplates applies upstream substitution to
-// job.Params just like it does for secrets. These are the contract
-// tests for the user-facing feature.
-// ----------------------------------------------------------------------
-
 func TestResolveTemplates_UpstreamInlineSubstitution(t *testing.T) {
 	prior := map[string]core.Result{
 		"reader": {Output: map[string]core.Ref{
@@ -195,8 +177,6 @@ func TestResolveTemplates_UpstreamInlineSubstitution(t *testing.T) {
 }
 
 func TestResolveTemplates_UpstreamInNestedParams(t *testing.T) {
-	// The walker recurses into nested maps/slices — confirm
-	// upstream refs deep inside still resolve.
 	prior := map[string]core.Result{
 		"reader": {Output: map[string]core.Ref{
 			"headers": {Inline: []string{"id", "name"}},
@@ -223,9 +203,6 @@ func TestResolveTemplates_UpstreamInNestedParams(t *testing.T) {
 }
 
 func TestResolveTemplates_UpstreamMixedWithSecrets(t *testing.T) {
-	// A param can use both schemes in one string. The chain runs
-	// upstream first, then secrets — both should resolve in a single
-	// pass.
 	prior := map[string]core.Result{
 		"q": {Output: map[string]core.Ref{
 			"meta": {Inline: map[string]any{"id": "run-42"}},
@@ -281,8 +258,6 @@ func TestResolveTemplates_NoPriorMeansUnknownScheme(t *testing.T) {
 }
 
 func TestResolveTemplates_UpstreamInComplexJSON(t *testing.T) {
-	// A common ETL pattern: webhook_send body templated with
-	// upstream metadata.
 	prior := map[string]core.Result{
 		"loader": {Output: map[string]core.Ref{
 			"meta": {Inline: map[string]any{"processed": int64(245), "table": "customers"}},
@@ -307,9 +282,6 @@ func TestResolveTemplates_UpstreamInComplexJSON(t *testing.T) {
 }
 
 func TestResolveTemplates_UpstreamObjectStringifiesAsJSON(t *testing.T) {
-	// Referencing a whole map should yield a JSON string — useful for
-	// passing whole objects through to downstream drops that parse
-	// JSON from a string param.
 	prior := map[string]core.Result{
 		"q": {Output: map[string]core.Ref{
 			"meta": {Inline: map[string]any{"a": "1", "b": "2"}},
@@ -330,8 +302,6 @@ func TestResolveTemplates_UpstreamObjectStringifiesAsJSON(t *testing.T) {
 	}
 }
 
-// stubSecretProvider is a minimal SecretProvider for tests that mix
-// upstream and secret resolution.
 type stubSecretProvider struct {
 	vals map[string]string
 }

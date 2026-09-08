@@ -42,9 +42,9 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-// TestValidate_MatchesDropEnv guards the drift the shared env exists to
-// prevent: `now` and cross-type numeric comparison must both be part of the
-// env the linter uses, exactly as the drop relies on them.
+// Guards the drift the shared env exists to prevent: `now` and cross-type
+// numeric comparison must both be part of the env the linter uses, exactly as
+// the drop relies on them.
 func TestValidate_MatchesDropEnv(t *testing.T) {
 	// cross-type numeric comparison: int input vs double literal.
 	if issue, _ := Validate("input > 1.5"); issue != nil {
@@ -52,19 +52,17 @@ func TestValidate_MatchesDropEnv(t *testing.T) {
 	}
 }
 
-// The Expression drop shares the row formulas' string helpers, so one grammar
-// is learned once and works in both places.
 func TestNewEnv_StringHelpers(t *testing.T) {
 	if issue, _ := Validate(`input.substring(0, 3).upperAscii() + input.split(" ")[1].trim()`); issue != nil {
 		t.Errorf("string helpers should compile: %+v", issue)
 	}
 }
 
-// TestValidate_LengthGate covers the cap that exists so an unbounded
-// expression never reaches the parser at all. The gate is checked BEFORE
-// Compile, so an over-long formula costs nothing to reject — and it is
-// reported as an Issue rather than a Go error so the editor renders it inline
-// beside any other problem with the formula.
+// Covers the cap that exists so an unbounded expression never reaches the
+// parser at all. The gate is checked BEFORE Compile, so an over-long formula
+// costs nothing to reject — and it is reported as an Issue rather than a Go
+// error so the editor renders it inline beside any other problem with the
+// formula.
 func TestValidate_LengthGate(t *testing.T) {
 	// Valid CEL, just too much of it: the gate must fire on length, not on
 	// the expression being malformed.
@@ -82,7 +80,6 @@ func TestValidate_LengthGate(t *testing.T) {
 	if !strings.Contains(issue.Message, "too long") {
 		t.Errorf("message = %q, want it to say the formula is too long", issue.Message)
 	}
-	// No location: there is no position to point at when nothing was parsed.
 	if issue.Line != 0 || issue.Column != 0 {
 		t.Errorf("issue carries a location %d:%d, want none", issue.Line, issue.Column)
 	}
@@ -98,9 +95,6 @@ func TestValidate_LengthGate(t *testing.T) {
 	}
 }
 
-// TestValidate_IssueLocation pins the 1-based column translation. CEL reports
-// columns 0-based; the editor's gutter is 1-based, so an off-by-one here puts
-// the caret on the wrong character.
 func TestValidate_IssueLocation(t *testing.T) {
 	issue, err := Validate("input + ")
 	if err != nil {

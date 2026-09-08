@@ -17,16 +17,11 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// TestMain enables the operator private-egress opt-in so httptest servers
-// on loopback aren't blocked by the SSRF guard (mirrors drops/sheets).
 func TestMain(m *testing.M) {
 	hfnet.SetAllowPrivateEgress(true)
 	os.Exit(m.Run())
 }
 
-// formServer stands in for the Forms API: GET /forms/{id} returns the
-// structure (question titles); GET /forms/{id}/responses returns a fixed
-// (optionally paged) response list. pages lets a test exercise paging.
 type formServer struct {
 	titles map[string]string  // questionId -> title
 	pages  [][]map[string]any // each element is one page's "responses" array
@@ -37,7 +32,6 @@ func (fs formServer) handler(t *testing.T) http.HandlerFunc {
 		if strings.HasSuffix(r.URL.Path, "/responses") {
 			page := 0
 			if tok := r.URL.Query().Get("pageToken"); tok != "" {
-				// pageToken is "p<N>" pointing at the page to serve.
 				_, _ = jsonScan(tok[1:], &page)
 			}
 			body := map[string]any{}
@@ -50,7 +44,6 @@ func (fs formServer) handler(t *testing.T) http.HandlerFunc {
 			_ = json.NewEncoder(w).Encode(body)
 			return
 		}
-		// form structure
 		items := make([]map[string]any, 0, len(fs.titles))
 		for qid, title := range fs.titles {
 			items = append(items, map[string]any{
@@ -65,7 +58,6 @@ func (fs formServer) handler(t *testing.T) http.HandlerFunc {
 	}
 }
 
-// resp builds one response object for the fixtures.
 func resp(id, submitted string, answers map[string]string) map[string]any {
 	a := map[string]any{}
 	for qid, val := range answers {
@@ -81,8 +73,6 @@ func resp(id, submitted string, answers map[string]string) map[string]any {
 	}
 }
 
-// withEnv points the package at the test server, a fake token, and an
-// in-memory cursor store; returns the cursor map for assertions.
 func withEnv(t *testing.T, base string) map[string]string {
 	t.Helper()
 	store := map[string]string{}
@@ -166,7 +156,6 @@ func TestFirstFire_BaselinesSilently(t *testing.T) {
 	if _, ok := res.Output["responses"]; ok {
 		t.Error("the first fire emitted responses; it must baseline silently")
 	}
-	// It still records the position, so the NEXT response is picked up.
 	if got := store["acme/cursor.gform.flowA.trigger1"]; got != "2026-06-02T10:00:00Z" {
 		t.Errorf("baseline cursor = %q, want the newest existing response", got)
 	}
@@ -188,8 +177,6 @@ func TestFirstFire_ThenEmitsWhatArrivesNext(t *testing.T) {
 		t.Fatal("the baseline fire emitted responses")
 	}
 
-	// A new response arrives. The fixture handler takes its pages by value, so
-	// the second state is a second server pointed at the same cursor store.
 	after := formServer{
 		titles: map[string]string{"q1": "Name"},
 		pages: [][]map[string]any{{
@@ -219,7 +206,6 @@ func TestSecondFire_OnlyNewer(t *testing.T) {
 	srv := httptest.NewServer(fs.handler(t))
 	defer srv.Close()
 	store := withEnv(t, srv.URL)
-	// Pretend r1 was already seen.
 	store["acme/cursor.gform.flowA.trigger1"] = "2026-06-01T10:00:00Z"
 
 	out := responsesOf(t, runTrigger(t, "acme"))
@@ -242,9 +228,6 @@ func TestNoNewResponses_EmptyNoCursorChange(t *testing.T) {
 	store["acme/cursor.gform.flowA.trigger1"] = "2026-06-01T10:00:00Z" // same as the only response
 
 	res := runTrigger(t, "acme")
-	// An empty poll emits NO outputs at all — ports without values make
-	// their edges dormant, so the dispatcher skips the rest of the flow
-	// (an empty check is a non-event, not a run).
 	if len(res.Output) != 0 {
 		t.Fatalf("empty poll must emit no outputs, got %v", res.Output)
 	}
@@ -390,8 +373,6 @@ func TestFormsAPIError_Surfaced(t *testing.T) {
 }
 
 func TestTitleCache_AvoidsRepeatFetch(t *testing.T) {
-	// Two FieldNames calls for the same form within the TTL should hit
-	// forms.get (the structure endpoint) only once.
 	var structCalls int
 	fs := formServer{titles: map[string]string{"q1": "Name", "q2": "Email"}}
 	inner := fs.handler(t)
@@ -428,8 +409,6 @@ func TestExtractFormID(t *testing.T) {
 	}
 }
 
-// --- tiny test helpers (avoid extra imports) -------------------------------
-
 func itoa(n int) string {
 	if n == 0 {
 		return "0"
@@ -454,8 +433,6 @@ func jsonScan(s string, out *int) (int, error) {
 	return n, nil
 }
 
-// --- pure helper coverage ---------------------------------------------------
-
 func TestSanitizeTitle_Cov(t *testing.T) {
 	cases := map[string]string{
 		"  hello   world ": "hello world",
@@ -471,33 +448,27 @@ func TestSanitizeTitle_Cov(t *testing.T) {
 }
 
 func TestParseTime_Cov(t *testing.T) {
-	// RFC3339Nano path.
 	if _, err := parseTime("2026-06-01T10:00:00.5Z"); err != nil {
 		t.Errorf("nano parse: %v", err)
 	}
-	// RFC3339 (non-nano) fallback path.
 	if _, err := parseTime("2026-06-01T10:00:00Z"); err != nil {
 		t.Errorf("rfc3339 parse: %v", err)
 	}
-	// Unparseable → error from the fallback.
 	if _, err := parseTime("not-a-time"); err == nil {
 		t.Errorf("expected error for bad time")
 	}
 }
 
 func TestNewerThan_Cov(t *testing.T) {
-	// Empty cursor → always newer.
 	if !newerThan("2026-06-01T10:00:00Z", "") {
 		t.Error("empty cursor should make everything newer")
 	}
-	// Both parseable, ts after cursor.
 	if !newerThan("2026-06-02T10:00:00Z", "2026-06-01T10:00:00Z") {
 		t.Error("later ts should be newer")
 	}
 	if newerThan("2026-06-01T10:00:00Z", "2026-06-02T10:00:00Z") {
 		t.Error("earlier ts should not be newer")
 	}
-	// Unparseable ts falls back to lexical compare.
 	if !newerThan("zzz", "aaa") {
 		t.Error("lexical fallback: zzz > aaa")
 	}
@@ -528,14 +499,7 @@ func TestFormsBaseURL_ParamWins(t *testing.T) {
 	}
 }
 
-// --- cursor store guards ----------------------------------------------------
-
-// --- mapAnswers collision ---------------------------------------------------
-
 func TestMapAnswers_TitleCollisionDisambiguated(t *testing.T) {
-	// Two questions resolve to the same title → the second is suffixed with
-	// its questionId. Build the formResponse via JSON to avoid restating its
-	// anonymous-struct shape.
 	raw := resp("r1", "2026-06-01T10:00:00Z", map[string]string{"qa": "first", "qb": "second"})
 	blob, _ := json.Marshal(raw)
 	var r formResponse
@@ -557,8 +521,6 @@ func TestMapAnswers_TitleCollisionDisambiguated(t *testing.T) {
 	_ = suffixedA
 	_ = suffixedB
 }
-
-// --- FieldNames error/dedup paths -------------------------------------------
 
 func TestFieldNames_MissingFormID(t *testing.T) {
 	_, err := FieldNames(context.Background(), core.Job{Params: map[string]any{}})
@@ -591,8 +553,6 @@ func TestFieldNames_FetchTitlesError(t *testing.T) {
 }
 
 func TestFieldNames_DedupesAndSorts(t *testing.T) {
-	// Two questions with the same sanitized title collapse to one field; the
-	// result is sorted and carries the structural keys.
 	fs := formServer{titles: map[string]string{"q1": "Name", "q2": "Name", "q3": "Age"}}
 	srv := httptest.NewServer(fs.handler(t))
 	defer srv.Close()
@@ -602,7 +562,6 @@ func TestFieldNames_DedupesAndSorts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FieldNames: %v", err)
 	}
-	// Expect: Age, Name (deduped, sorted), then email, responseId, submittedTime.
 	want := []string{"Age", "Name", "email", "responseId", "submittedTime"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)
@@ -613,8 +572,6 @@ func TestFieldNames_DedupesAndSorts(t *testing.T) {
 		}
 	}
 }
-
-// --- fetchTitles / fetchNewResponses decode + status errors -----------------
 
 func TestFetchTitles_DecodeError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -632,7 +589,6 @@ func TestFetchTitles_DecodeError(t *testing.T) {
 }
 
 func TestFetchNewResponses_StatusError(t *testing.T) {
-	// forms.get OK, but responses.list returns a non-2xx.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/responses") {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -670,8 +626,6 @@ func TestFetchNewResponses_DecodeError(t *testing.T) {
 		t.Errorf("message = %q", res.Error.Message)
 	}
 }
-
-// --- cursor-write failure ---------------------------------------------------
 
 // Once responses have been emitted, a failed cursor write is safe to carry on
 // past: the trigger is at-least-once, so the next fire re-emits this batch.
@@ -720,7 +674,6 @@ func TestExecute_CursorWriteFailure_FirstFireRefusesToEmit(t *testing.T) {
 	clearTitleCache()
 	SetHTTPBase(srv.URL)
 	SetTokenLookup(func(_ context.Context, account string) (string, error) { return "ya29-" + account, nil })
-	// Nothing stored (first fire) and the writer always fails.
 	cursor.SetStore(
 		func(_ context.Context, _, _ string) (string, error) { return "", nil },
 		func(_ context.Context, _, _, _ string) error { return context.Canceled },
@@ -743,8 +696,6 @@ func TestExecute_CursorWriteFailure_FirstFireRefusesToEmit(t *testing.T) {
 	}
 }
 
-// clearTitleCache drops every cached form structure. Used by tests to keep
-// fixtures (which all reuse one form_id) isolated.
 func clearTitleCache() {
 	titleCacheMu.Lock()
 	defer titleCacheMu.Unlock()

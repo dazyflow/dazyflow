@@ -35,10 +35,6 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// The Forecast endpoint on both hosts: the key-less free host and the
-// commercial host that an `apikey` unlocks. Both current and forecast drops
-// hit /v1/forecast and select fields with the query. They're vars, not
-// consts, so tests can point them at a local httptest server.
 var (
 	freeURL       = "https://api.open-meteo.com/v1/forecast"
 	commercialURL = "https://customer-api.open-meteo.com/v1/forecast"
@@ -56,9 +52,6 @@ func resolveKey(job core.Job) string {
 	return strings.TrimSpace(params.StringDefault(job.Params, "api_key", ""))
 }
 
-// normalizeUnits maps the units param to metric or imperial, defaulting to
-// metric. Open-Meteo has no Kelvin ("standard") option, so anything other than
-// "imperial" falls back to metric rather than forwarding garbage.
 func normalizeUnits(u string) string {
 	if strings.ToLower(strings.TrimSpace(u)) == "imperial" {
 		return "imperial"
@@ -66,8 +59,6 @@ func normalizeUnits(u string) string {
 	return "metric"
 }
 
-// tempParam / windParam map a normalized units value to the query values
-// Open-Meteo expects (temperature_unit, wind_speed_unit).
 func tempParam(units string) string {
 	if units == "imperial" {
 		return "fahrenheit"
@@ -82,7 +73,6 @@ func windParam(units string) string {
 	return "ms"
 }
 
-// baseQuery builds the latitude/longitude/unit query shared by both drops.
 func baseQuery(lat, lon float64, units string) url.Values {
 	q := url.Values{}
 	q.Set("latitude", strconv.FormatFloat(lat, 'f', -1, 64))
@@ -101,10 +91,6 @@ func endpointFor(job core.Job) (base, key string) {
 	return freeURL, ""
 }
 
-// omGet performs one GET against the chosen Open-Meteo host with the given
-// query. When a key is configured it is appended as `apikey` and the request
-// goes to the commercial host. Transport and non-2xx handling is the shared
-// httpFailure epilogue.
 func omGet(ctx context.Context, job core.Job, q url.Values) (int, []byte, error) {
 	base, key := endpointFor(job)
 	if key != "" {
@@ -141,10 +127,6 @@ func httpFailure(job core.Job, status int, body []byte, err error) *core.Result 
 	return params.HTTPFailure(job, "openmeteo", "Open-Meteo", status, body, nil, extractOMError)
 }
 
-// --- WMO weather codes -------------------------------------------------------
-
-// wmo maps WMO weather-interpretation codes (the integer weather_code
-// Open-Meteo returns) to a human phrase.
 var wmo = map[int]string{
 	0:  "Clear sky",
 	1:  "Mainly clear",
@@ -164,7 +146,6 @@ var wmo = map[int]string{
 	96: "Thunderstorm with slight hail", 99: "Thunderstorm with heavy hail",
 }
 
-// classFor reduces a WMO code to a short, branchable class word.
 func classFor(code int) string {
 	switch {
 	case code <= 1:

@@ -27,23 +27,15 @@ func TestPollTrigger_EmitsRFC3339Timestamp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fired_at %q is not RFC3339: %v", ts, err)
 	}
-	// Sanity: should be within the last few seconds.
 	if time.Since(parsed) > 5*time.Second {
 		t.Errorf("fired_at %v is older than 5s — clock weirdness?", parsed)
 	}
-	// The pass pin (the primary sequencing output) carries the same fire
-	// moment, so wiring it downstream both orders the flow and forwards the
-	// timestamp.
 	if got := res.Output[core.PassPort].Inline; got != ts {
 		t.Errorf("pass = %v, want it to mirror fired_at %q", got, ts)
 	}
 }
 
 func TestPollTrigger_ManualRunSucceedsWithoutTrigger(t *testing.T) {
-	// Unlike webhook_input (which errors when run without a trigger
-	// because there's no body), poll_trigger has no input data —
-	// "the time" is intrinsic. A manual run is just a one-off fire,
-	// which is the right UX for "test this poll workflow now."
 	res, _ := executePollTrigger(t.Context(), core.Job{ID: "manual"}, nil)
 	if res.Status != core.StatusOK {
 		t.Errorf("manual run should succeed; got %q (%+v)", res.Status, res.Error)

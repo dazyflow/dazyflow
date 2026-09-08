@@ -33,7 +33,6 @@ Hard rules:
 - Inline ALL CSS as style="" attributes (email clients drop <style>/<head>). Keep it clean, modern, single-column, max-width about 600px.
 - Do NOT include <html>, <head>, or <body> — return just the body fragment.`
 
-// connectedProvider pairs a registered provider with the tenant's saved key.
 type connectedProvider struct {
 	info llm.ProviderInfo
 	key  string
@@ -57,9 +56,6 @@ func (h *flowAPI) connectedProviders(ctx context.Context) []connectedProvider {
 	return out
 }
 
-// renderTemplateLLMProviders is GET /api/v1/tools/llm-providers — the AI
-// providers this tenant has connected, so the editor can show a picker (and
-// nudge to the Apps page when the list is empty).
 func (h *flowAPI) renderTemplateLLMProviders(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	ctx := core.WithTenant(r.Context(), p.Tenant)
 	type dto struct {
@@ -73,7 +69,6 @@ func (h *flowAPI) renderTemplateLLMProviders(rw http.ResponseWriter, r *http.Req
 	writeJSON(rw, http.StatusOK, map[string]any{"providers": out})
 }
 
-// renderTemplateAssist is POST /api/v1/tools/render-template/assist.
 func (h *flowAPI) renderTemplateAssist(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	body, ok := decodeRequestJSON[struct {
 		Description string   `json:"description"`
@@ -120,7 +115,6 @@ func (h *flowAPI) renderTemplateAssist(rw http.ResponseWriter, r *http.Request, 
 		TimeoutMS: assistTimeoutMS,
 	})
 	if err != nil {
-		// LLM hiccups are inline errors in the editor, not HTTP failures.
 		writeJSON(rw, http.StatusOK, map[string]any{"error": err.Error()})
 		return
 	}
@@ -132,8 +126,6 @@ func (h *flowAPI) renderTemplateAssist(rw http.ResponseWriter, r *http.Request, 
 	writeJSON(rw, http.StatusOK, map[string]any{"template": tmpl, "provider": chosen.info.Name})
 }
 
-// stripCodeFences removes a wrapping ```…``` block (with optional language
-// tag) that models often add despite instructions, returning the inner text.
 func stripCodeFences(s string) string {
 	s = strings.TrimSpace(s)
 	if !strings.HasPrefix(s, "```") {

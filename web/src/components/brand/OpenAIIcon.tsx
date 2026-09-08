@@ -3,9 +3,6 @@
 
 import type { SVGProps } from "react";
 
-// OpenAIIcon renders the ChatGPT logomark (OpenAI / Wikimedia Commons,
-// ChatGPT-Logo.svg). Shaped like a LucideIcon so it slots into the iconFor()
-// registry. Uses OpenAI's signature teal unless overridden.
 type Props = SVGProps<SVGSVGElement> & {
   size?: number | string;
   color?: string;

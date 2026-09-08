@@ -52,23 +52,13 @@ func init() {
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
 				{
-					// Named after its param so the card shows an inline editable
-					// box; a wired value overrides the typed one.
 					Port:  "url",
 					Label: "URL",
 					MIME:  []string{"text/plain"},
 				},
-				// Optional POST body, pipeable from an upstream node (e.g. a
-				// JSON step's output). Untyped so it accepts text, bytes, or a
-				// structured value (JSON-marshalled); a wired value overrides
-				// the 'body' param. Mirrors http_request's request_body port.
 				{Port: "request_body", Label: "Body"},
 			},
 			Outputs: []core.Port{
-				// Only the file is a pin; the structured result (status, bytes,
-				// content_type) is still EMITTED under "meta" (see the Execute
-				// result) so run records keep it for debugging — it's just not
-				// a pin (same as gmail send / sheets append).
 				{Port: "out", Label: "Downloaded file"},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"status":200,"bytes":48213,"content_type":"application/pdf"}`)},
 			},
@@ -126,7 +116,6 @@ func executeHTTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 	// operator opted in (DAZYFLOW_ALLOW_PRIVATE_EGRESS), else ignored.
 	allowPrivate := params.BoolDefault(job.Params, "allow_private_networks", false) && hfnet.PrivateEgressAllowed()
 
-	// Resolve the destination (workspace or scratch://) and open its root.
 	root, rel, err := openSandboxRoot(job, dest)
 	if err != nil {
 		return params.Err(job, "no_sandbox", err.Error()), nil
@@ -175,8 +164,6 @@ func executeHTTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 			return params.Err(job, "sandbox_escape", fmt.Sprintf("dest %q escapes its sandbox root", dest)), nil
 		}
 		if errors.Is(err, fs.ErrNotExist) {
-			// The parent folder doesn't exist and mkdirs is off — point the
-			// user at the fix instead of surfacing a raw ENOENT.
 			return params.Err(job, "io", fmt.Sprintf("can't save to %q — its folder doesn't exist yet. Turn on 'Create missing folders', or pick an existing folder.", dest)), nil
 		}
 		return params.Err(job, "io", fmt.Sprintf("create %q: %v", dest, err)), nil
@@ -196,7 +183,6 @@ func executeHTTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			// Ref preserves the scheme so a downstream node resolves it the same.
 			"out": {MIME: contentType, Ref: dest},
 			"meta": {MIME: "application/json", Inline: map[string]any{
 				"status":       resp.StatusCode,
@@ -235,8 +221,6 @@ func streamToFile(job core.Job, src io.Reader, dst io.Writer, root sandboxRoot, 
 				return 0, &r
 			}
 			if job.QuotaLimit > 0 {
-				// Snapshot check (the only enforcement without a live
-				// reserver, e.g. unit tests) ...
 				if job.QuotaUsed+written+int64(n) > job.QuotaLimit {
 					r := params.Err(job, "quota_exceeded", fmt.Sprintf("download would push tenant past %d", job.QuotaLimit))
 					return 0, &r
@@ -271,8 +255,6 @@ func streamToFile(job core.Job, src io.Reader, dst io.Writer, root sandboxRoot, 
 	return written, nil
 }
 
-// sandboxRoot is the subset of *os.Root streamToFile needs (Remove for
-// partial-file cleanup), kept small so the function is easy to test.
 type sandboxRoot interface {
 	Remove(name string) error
 }

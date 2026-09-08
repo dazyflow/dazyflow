@@ -44,10 +44,6 @@ func TestRequireWorkspace_TenantAdminBypassesWorkspace(t *testing.T) {
 	}
 }
 
-// Workspace is no longer an authorization dimension (one workspace per
-// org), so RequireWorkspace decides purely on the tenant: a differing
-// workspace within the same tenant passes, while a cross-tenant request
-// still fails.
 func TestRequireWorkspace_WorkspaceNotAnAuthzDimension(t *testing.T) {
 	p := Principal{Tenant: "acme", Workspace: "ws1", Roles: []Role{roleRunner}}
 	if err := RequireWorkspace(p, "acme", "ws2"); err != nil {
@@ -110,12 +106,10 @@ func TestCanAdminOrg_Cov(t *testing.T) {
 }
 
 func TestRequireTenant_PlatformAdminCrosses(t *testing.T) {
-	// Platform admin with no tenant of its own may still address any tenant.
 	p := Principal{Roles: []Role{{Permissions: []Permission{PermPlatformAdmin}}}}
 	if err := RequireTenant(p, "any-tenant"); err != nil {
 		t.Errorf("platform admin should cross tenant boundaries: %v", err)
 	}
-	// Empty requested tenant with a tenant-bearing principal passes.
 	if err := RequireTenant(Principal{Tenant: "acme"}, ""); err != nil {
 		t.Errorf("empty requested tenant should pass: %v", err)
 	}
@@ -142,12 +136,10 @@ func TestAuthorizeGraphView_Cov(t *testing.T) {
 		t.Errorf("stranger should not view private flow: %v", err)
 	}
 
-	// Cross-tenant fails before visibility.
 	if err := AuthorizeGraphView(stranger, Graph{Tenant: "other"}); !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("cross-tenant view should fail: %v", err)
 	}
 
-	// Legacy private flow with empty Owner reads as org-visible.
 	legacy := Graph{Tenant: "acme", Visibility: VisibilityPrivate}
 	if err := AuthorizeGraphView(stranger, legacy); err != nil {
 		t.Errorf("legacy ownerless private flow should be viewable: %v", err)
@@ -161,15 +153,12 @@ func TestAuthorizeGraphEdit_Cov(t *testing.T) {
 	admin := Principal{Subject: "u3", Tenant: "acme", Roles: []Role{{Permissions: []Permission{PermGraphEdit, PermGraphAdmin}}}}
 	viewer := Principal{Subject: "u4", Tenant: "acme", Roles: []Role{{Permissions: []Permission{PermGraphRun}}}}
 
-	// New flow (no owner): any editor may save.
 	if err := AuthorizeGraphEdit(owner, Graph{Tenant: "acme"}); err != nil {
 		t.Errorf("editor should save a new, ownerless flow: %v", err)
 	}
-	// Lacking graph:edit fails.
 	if err := AuthorizeGraphEdit(viewer, Graph{Tenant: "acme"}); !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("viewer without graph:edit should fail: %v", err)
 	}
-	// Owned flow: owner and admin may edit, stranger may not.
 	owned := Graph{ID: "g9", Tenant: "acme", Owner: "u1"}
 	if err := AuthorizeGraphEdit(owner, owned); err != nil {
 		t.Errorf("owner should edit own flow: %v", err)
@@ -180,7 +169,6 @@ func TestAuthorizeGraphEdit_Cov(t *testing.T) {
 	if err := AuthorizeGraphEdit(stranger, owned); !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("non-owner editor should not edit owned flow: %v", err)
 	}
-	// Cross-tenant fails first.
 	if err := AuthorizeGraphEdit(owner, Graph{Tenant: "other"}); !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("cross-tenant edit should fail: %v", err)
 	}

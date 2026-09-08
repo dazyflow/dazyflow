@@ -12,8 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// unboundToken issues an API key with no tenant/workspace binding so the
-// /me listings hit their missing_scope branch.
 func unboundToken(t *testing.T, h *gatewayHarness) string {
 	t.Helper()
 	role := core.Role{Name: "free", Permissions: []core.Permission{core.PermGraphRun}}
@@ -70,14 +68,14 @@ func TestSuggestionsMe_OK(t *testing.T) {
 	}
 }
 
-// TestResolveTenantWorkspaceScope_ForbiddenScope pins the cross-scope guard on
-// every surface that resolves ?tenant=/?workspace= through
-// resolveTenantWorkspaceScope. The harness principal is bound to t/ws, so
-// naming any other tenant or workspace must be refused at the handler with a
-// 403 — not passed down for the service layer to reject. The service methods
-// behind these routes do re-check with core.RequireWorkspace; this test is what
-// keeps the boundary guard from being deleted as redundant, so a future handler
-// reaching a store directly can't silently inherit a cross-tenant read.
+// Pins the cross-scope guard on every surface that resolves
+// ?tenant=/?workspace= through resolveTenantWorkspaceScope. The harness
+// principal is bound to t/ws, so naming any other tenant or workspace must be
+// refused at the handler with a 403 — not passed down for the service layer to
+// reject. The service methods behind these routes do re-check with
+// core.RequireWorkspace; this test is what keeps the boundary guard from being
+// deleted as redundant, so a future handler reaching a store directly can't
+// silently inherit a cross-tenant read.
 func TestResolveTenantWorkspaceScope_ForbiddenScope(t *testing.T) {
 	t.Parallel()
 	paths := []string{
@@ -128,7 +126,6 @@ func TestHistoryFlowMe_BadLimitFallsBack(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
-	// Non-numeric limit is ignored (falls back to default), still 200.
 	rw := h.do(t, "GET", "/api/v1/me/flows/"+cov3FlowID+"/history?limit=abc", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("history bad limit = %d (%s), want 200", rw.Code, rw.Body.String())

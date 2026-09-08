@@ -17,9 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// newSecretsHarness extends the default gateway harness with an
-// encrypted-secrets provider wired in. Most tests need both the
-// HTTP scaffolding and the store ready to go.
 func newSecretsHarness(t *testing.T) *gatewayHarness {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -32,8 +29,6 @@ func newSecretsHarness(t *testing.T) *gatewayHarness {
 		t.Fatalf("NewEncryptedSecrets: %v", err)
 	}
 	h.gw.EncryptedSecrets = es
-	// Add secret:read/write perms to the default editor role so the
-	// existing token can drive the CRUD endpoints.
 	role := core.Role{Name: "secret-admin", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
 		core.PermSecretRead, core.PermSecretWrite,
@@ -46,7 +41,6 @@ func newSecretsHarness(t *testing.T) *gatewayHarness {
 	return h
 }
 
-// putBody builds the JSON body for PUT /secrets.
 func putBody(value string) []byte {
 	b, _ := json.Marshal(map[string]any{"value": value})
 	return b
@@ -86,11 +80,6 @@ func TestHTTPSecrets_ValueNotInListResponse(t *testing.T) {
 
 func TestHTTPSecrets_IncludeConn(t *testing.T) {
 	t.Parallel()
-	// The org listing hides the conn.<slug>.<key> namespace so the
-	// Credentials page stays clean, but ?include=conn opts it back in so
-	// the Apps page can tell which integrations are connected. Regression
-	// for the "Connect button clears with no effect" bug: the secret saved
-	// fine but was invisible to the page checking connection state.
 	h := newSecretsHarness(t)
 	h.do(t, "PUT", "/api/v1/secrets/regular_key", json.RawMessage(putBody("v1")))
 	h.do(t, "PUT", "/api/v1/secrets/conn.ntfy.server", json.RawMessage(putBody("https://ntfy.sh")))
@@ -126,8 +115,6 @@ func TestHTTPSecrets_IncludeConn(t *testing.T) {
 
 func TestHTTPSecrets_NoGetByName(t *testing.T) {
 	t.Parallel()
-	// We intentionally don't expose GET /secrets/{name}. Probing it
-	// should 404 (no matching route).
 	h := newSecretsHarness(t)
 	h.do(t, "PUT", "/api/v1/secrets/k", json.RawMessage(putBody("v")))
 	rw := h.do(t, "GET", "/api/v1/secrets/k", nil)
@@ -185,8 +172,6 @@ func TestHTTPSecrets_BadName(t *testing.T) {
 		"with/slash",
 	} {
 		t.Run(bad, func(t *testing.T) {
-			// URL-encode so the request parses; the server-side
-			// validSecretName check is what we're actually testing.
 			rw := h.do(t, "PUT", "/api/v1/secrets/"+url.PathEscape(bad),
 				json.RawMessage(putBody("v")))
 			// Some bad names break URL routing entirely (404); others
@@ -211,7 +196,6 @@ func TestHTTPSecrets_OversizeValueRejected(t *testing.T) {
 
 func TestHTTPSecrets_RequiresWritePermission(t *testing.T) {
 	t.Parallel()
-	// Runner-only role (graph:run, no secret:write) → PUT 403.
 	h := newSecretsHarness(t)
 	role := core.Role{Name: "runner", Permissions: []core.Permission{core.PermGraphRun}}
 	_, tok, _ := auth.IssueAPIKey(h.ks, t.Context(), "runner-key", "t", "ws", "bob", []core.Role{role}, nil)
@@ -228,7 +212,6 @@ func TestHTTPSecrets_RequiresWritePermission(t *testing.T) {
 
 func TestHTTPSecrets_RequiresReadPermissionForList(t *testing.T) {
 	t.Parallel()
-	// Same as above but for GET.
 	h := newSecretsHarness(t)
 	role := core.Role{Name: "runner", Permissions: []core.Permission{core.PermGraphRun}}
 	_, tok, _ := auth.IssueAPIKey(h.ks, t.Context(), "runner-key", "t", "ws", "bob", []core.Role{role}, nil)
@@ -265,17 +248,10 @@ func TestHTTPSecrets_NotConfiguredIs501(t *testing.T) {
 	}
 }
 
-// ---- End-to-end via the engine path -----------------------------------------
-
-// TestEncryptedSecrets_ResolvedInJobParams confirms that a secret
-// PUT via the API can be resolved as `${secret.NAME}` inside a job's
-// params at execution time. This is the contract that makes the
-// store usable by graphs.
 func TestEncryptedSecrets_ResolvedInJobParams(t *testing.T) {
 	t.Parallel()
 	h := newSecretsHarness(t)
 
-	// PUT a value through the API.
 	if rw := h.do(t, "PUT", "/api/v1/secrets/api_token",
 		json.RawMessage(putBody("xoxb-from-api"))); rw.Code != http.StatusNoContent {
 		t.Fatalf("PUT failed: %d", rw.Code)
@@ -292,8 +268,6 @@ func TestEncryptedSecrets_ResolvedInJobParams(t *testing.T) {
 		t.Errorf("got %q, want xoxb-from-api", got)
 	}
 }
-
-// secretScopeFromRequest + authorizeFlowSecretScope branches.
 
 func TestSecrets_UnknownScope(t *testing.T) {
 	t.Parallel()
@@ -316,7 +290,6 @@ func TestSecrets_FlowScopeMissingFlow(t *testing.T) {
 func TestSecrets_FlowScopeNonexistentFlowForbidden(t *testing.T) {
 	t.Parallel()
 	h := newSecretsHarness(t)
-	// No such flow -> authorizeFlowSecretScope reports forbidden (probe-proof).
 	rw := h.do(t, "PUT", "/api/v1/secrets/MY_KEY?scope=flow&flow=ghost",
 		json.RawMessage(putBody("v")))
 	if rw.Code != http.StatusForbidden {

@@ -68,7 +68,6 @@ func TestWithModelEnum_ReplacesTheOfferedList(t *testing.T) {
 	if got := strList(t, m["enumNames"]); got[1] != "Gemini 3.7 Flash" {
 		t.Errorf("enumNames = %v", got)
 	}
-	// The withdrawn model is gone — that is the whole point.
 	for _, id := range strList(t, m["enum"]) {
 		if id == "gemini-2.5-pro" {
 			t.Error("a model the credential cannot call is still offered")
@@ -90,8 +89,6 @@ func TestWithModelEnum_KeepsAValidDefault(t *testing.T) {
 
 func TestWithModelEnum_RepairsADefaultNobodyCanCall(t *testing.T) {
 	t.Parallel()
-	// How the Ollama steps failed: llama3.1 is a guess at what is pulled, and
-	// it reached the model field of every step nobody had configured.
 	in := schemaWith(map[string]any{"type": "string", "default": "llama3.1"})
 	out, ok := withModelEnum(in, []llm.ModelOption{
 		{ID: "gemma4:latest", Label: "gemma4:latest"},

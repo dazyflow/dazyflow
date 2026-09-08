@@ -53,8 +53,6 @@ type Mailer struct {
 	timeout    time.Duration
 }
 
-// NewMailerFromURL parses the operator's SMTP URL. Empty rawURL returns
-// (nil, nil) — "not configured" is a normal state, not an error.
 func NewMailerFromURL(rawURL, from string) (*Mailer, error) {
 	if rawURL == "" {
 		return nil, nil
@@ -106,16 +104,11 @@ func NewMailerFromURL(rawURL, from string) (*Mailer, error) {
 		}
 	}
 	if from == "" {
-		// The login is usually the sender address — same fallback the
-		// Email drop makes.
 		m.From = m.username
 	}
 	if m.From == "" {
 		return nil, fmt.Errorf("DAZYFLOW_SMTP_FROM is required (or put the sender as the URL's username)")
 	}
-	// Split the bare address out of From so the envelope and Message-ID
-	// stay valid even when From carries a display name ("Dazyflow
-	// <hi@dazyflow.app>"). Shared with the tenant-facing send paths.
 	m.From, m.addr = smtputil.SplitSender(m.From)
 	return m, nil
 }
@@ -128,10 +121,6 @@ func (m *Mailer) prepare(ctx context.Context) (context.Context, context.CancelFu
 	if _, ok := ctx.Deadline(); !ok {
 		ctx, cancel = context.WithTimeout(ctx, m.timeout)
 	}
-	// NewMailerFromURL already rejected the one ambiguous case (a password
-	// with no username), so a blank username here really does mean "this relay
-	// takes mail without a login" — unlike the tenant-facing paths, which go
-	// through smtputil.Auth to rule on that.
 	var auth smtp.Auth
 	if m.username != "" {
 		auth = smtp.PlainAuth("", m.username, m.password, m.host)
@@ -149,10 +138,6 @@ func (m *Mailer) Send(ctx context.Context, to, subject, body string) error {
 		auth, m.addr, []string{to}, mailerMessage(m.From, m.addr, to, subject, body))
 }
 
-// emailLogoURL returns the absolute URL of the hosted brand mark for the
-// email header ({PublicBaseURL}/logo.png), or "" when the deployment's public
-// base URL is unknown — the theme then falls back to the inline SVG mark.
-// Email clients require absolute image URLs, so a relative path is useless.
 func emailLogoURL(publicBaseURL string) string {
 	base := strings.TrimRight(publicBaseURL, "/")
 	if base == "" {
@@ -161,11 +146,6 @@ func emailLogoURL(publicBaseURL string) string {
 	return base + "/logo.png"
 }
 
-// SendThemed renders c through the shared transactional theme and sends it as
-// a multipart text+HTML message, using textBody as the plain-text
-// alternative. The subject comes from c so the HTML <title> and the real
-// Subject header stay in sync. Same best-effort contract as Send: callers
-// log and move on.
 func (m *Mailer) SendThemed(ctx context.Context, to, textBody string, c emailtheme.Content) error {
 	htmlBody, err := emailtheme.Render(c)
 	if err != nil {
@@ -174,9 +154,6 @@ func (m *Mailer) SendThemed(ctx context.Context, to, textBody string, c emailthe
 	return m.sendHTML(ctx, to, c.Subject, textBody, htmlBody)
 }
 
-// sendHTML delivers one multipart/alternative message: a text/plain part (for
-// text-only clients and better deliverability) followed by a text/html part.
-// Same transport + best-effort contract as Send.
 func (m *Mailer) sendHTML(ctx context.Context, to, subject, text, htmlBody string) error {
 	ctx, cancel, auth := m.prepare(ctx)
 	defer cancel()
@@ -229,8 +206,6 @@ func multipartMessage(fromHeader, fromAddr, to, subject, text, htmlBody string) 
 	return sb.Bytes(), nil
 }
 
-// writeQuotedPrintable QP-encodes s into w. The encoder wraps lines with soft
-// breaks (=CRLF) at 76 columns, keeping every line well under the SMTP limit.
 func writeQuotedPrintable(w io.Writer, s string) error {
 	qp := quotedprintable.NewWriter(w)
 	if _, err := qp.Write([]byte(s)); err != nil {

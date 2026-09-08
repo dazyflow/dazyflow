@@ -30,43 +30,18 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// gitBackend is the git-backed store: a working tree owned by the customer,
-// where every save is a commit carrying the author's identity, and an
-// environment (published, staging) is a tag pointing at a frozen revision.
-// Graphs live under graphs/<id>.json; environments under
-// refs/tags/graphs/<id>/<env>.
-//
-// mu serializes every repo access. go-git's repository/storer types are
-// not safe for concurrent use, and reads (ListGraphs/Load) run on tickers
-// concurrently with the HTTP gateway's Save path — so an unguarded Store
-// data-races on the storage map. It's a full Mutex rather than an RWMutex on
-// purpose: the filesystem backend's object LRU cache is mutated *during
-// reads*, so even two concurrent readers would race on it.
-//
-// For a disk store the mutex is shared by DIRECTORY, not owned by the Store —
-// see dirMutex. Graph save/load/list are infrequent next to job execution, so
-// full mutual exclusion per workspace is a fine trade for correctness.
+// A working tree the customer owns, so every change is a commit they can read
+// with ordinary git tooling. Flows live at graphs/<id>.json.
 type gitBackend struct {
 	mu   *sync.Mutex
 	repo *git.Repository
 	fs   billy.Filesystem
-	// dir is the working tree on disk, empty for the in-memory backend. Kept
-	// so listGraphs can tell "no flows yet" from "this workspace is gone".
-	dir string
+	dir  string
 }
 
-// dirLocks maps an absolute workspace directory to the mutex that serializes
-// access to it, for the lifetime of the process.
-//
-// The lock cannot live on the Store, because a caller that caches Stores may
-// evict one and open a second for the same directory while the first is still
-// in use. Two Stores over one working tree share a single `.git/index` file,
-// and two concurrent worktree Adds against it corrupt the repository. Sharing
-// the mutex by directory makes that overlap harmless.
-//
-// Entries are never removed: an eviction that also dropped the mutex would
-// reintroduce exactly the race it exists to prevent. One pointer per workspace
-// ever opened is a rounding error next to the repository it guards.
+// One mutex per absolute workspace DIRECTORY, not per store: two stores opened
+// on the same path must serialize against each other, or concurrent commits
+// corrupt the index.
 var dirLocks sync.Map // absolute dir → *sync.Mutex
 
 func dirMutex(dir string) *sync.Mutex {
@@ -77,20 +52,9 @@ func dirMutex(dir string) *sync.Mutex {
 	return v.(*sync.Mutex)
 }
 
-// objectCacheBytes bounds one repository's decompressed-object cache.
-//
-// go-git defaults it to 96 MiB per repository, which is sized for a source
-// tree, not for a workspace holding a few dozen small JSON documents — and a
-// process that keeps a Store per tenant open would carry that ceiling per
-// tenant. A whole 10-flow workspace is tens of kilobytes on disk, so this is
-// still far more than one needs; it only stops a pathological workspace from
-// pinning two orders of magnitude more. A miss re-reads from disk, where the
-// OS page cache is the real backstop.
+// Bounds one repository's decompressed-object cache.
 const objectCacheBytes = 2 * 1024 * 1024
 
-// OpenFS opens (or initializes) a Store rooted at dir on the local
-// filesystem. If dir is empty an in-memory Store is created — useful for
-// tests and ephemeral workspaces.
 func openBackend(dir string) (*gitBackend, error) {
 	if dir == "" {
 		return openMemory()
@@ -105,8 +69,6 @@ func openMemory() (*gitBackend, error) {
 	if err != nil {
 		return nil, fmt.Errorf("init memory repo: %w", err)
 	}
-	// A memory store's content lives only here, so it gets its own lock: there
-	// is no directory for a second Store to collide over.
 	return &gitBackend{mu: new(sync.Mutex), repo: repo, fs: fs}, nil
 }
 
@@ -114,7 +76,6 @@ func openDisk(dir string) (*gitBackend, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir %q: %w", dir, err)
 	}
-	// Absolute + cleaned so two spellings of one directory take the same lock.
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %q: %w", dir, err)
@@ -145,10 +106,6 @@ func openOrInit(storer storage.Storer, wt billy.Filesystem) (*git.Repository, er
 	if err != nil {
 		return nil, fmt.Errorf("init repo: %w", err)
 	}
-	// Seed an initial commit with a .gitkeep so HEAD resolves to a
-	// real tree from the moment the store opens. Without this,
-	// ListGraphs walks a HEAD whose hash has no reachable object and
-	// go-git nil-derefs inside the filesystem object store.
 	tree, err := repo.Worktree()
 	if err != nil {
 		return nil, fmt.Errorf("seed worktree: %w", err)
@@ -175,17 +132,9 @@ func openOrInit(storer storage.Storer, wt billy.Filesystem) (*git.Repository, er
 	return repo, nil
 }
 
-// autosaveCoalesceWindow bounds how long a run of editor autosaves of the
-// same graph by the same author collapses into a single commit. Each
-// coalescing autosave amends the previous one as long as it landed within
-// this window, so a continuous editing session is one commit and every
-// pause longer than the window starts a fresh one. Explicit saves never
-// coalesce, so the user can still drop intentional checkpoints.
+// Consecutive autosaves inside the window amend one commit.
 const autosaveCoalesceWindow = 90 * time.Second
 
-// autosaveMessage / explicitMessage are the commit subjects. They differ so
-// a later autosave can recognise (and amend) a previous autosave commit
-// without ever amending an explicit checkpoint.
 func autosaveMessage(graphID, author string) string {
 	return fmt.Sprintf("autosave: update %s [user:%s]", graphID, author)
 }
@@ -193,10 +142,6 @@ func explicitMessage(graphID, author string) string {
 	return fmt.Sprintf("graph: update %s [user:%s]", graphID, author)
 }
 
-// headIsRecentAutosave reports whether HEAD is an autosave commit for this
-// exact (graph, author) that landed within the coalesce window — i.e. the
-// next autosave should amend it rather than stack a new commit. Caller holds
-// s.mu.
 func (s *gitBackend) headIsRecentAutosave(graphID, author string) bool {
 	ref, err := s.repo.Head()
 	if err != nil {
@@ -213,9 +158,7 @@ func (s *gitBackend) headIsRecentAutosave(graphID, author string) bool {
 }
 
 func (s *gitBackend) save(graph core.Graph, author string, coalesce bool) (string, error) {
-	// The ID becomes a path here and a git ref name at publish time, so it is
-	// checked at the store boundary: every writer (the API, dzctl, MCP, the
-	// flow generator, git sync) reaches the repository through this method.
+	// The id becomes a path here and a git ref name at publish, so validate both.
 	if err := core.ValidGraphID(graph.ID); err != nil {
 		return "", err
 	}
@@ -251,8 +194,6 @@ func (s *gitBackend) save(graph core.Graph, author string, coalesce bool) (strin
 		return "", fmt.Errorf("git add: %w", err)
 	}
 
-	// Coalesce a run of autosaves into one commit by amending the previous
-	// autosave when it's recent and for the same graph+author.
 	amend := coalesce && s.headIsRecentAutosave(graph.ID, author)
 	msg := explicitMessage(graph.ID, author)
 	if coalesce {
@@ -269,24 +210,8 @@ func (s *gitBackend) save(graph core.Graph, author string, coalesce bool) (strin
 	})
 	if err != nil {
 		if errors.Is(err, git.ErrEmptyCommit) {
-			// ErrEmptyCommit means the staged tree equals the new commit's
-			// parent tree — but which parent that is depends on whether we
-			// amended, and the two cases need opposite handling:
-			//
-			//   - Plain commit: go-git's parent is HEAD, so identical content
-			//     is a true no-op. Re-saving unchanged content (e.g. the AI
-			//     chat's "apply" after the agent already saved via MCP) hits
-			//     this; surface the existing HEAD as the commit.
-			//
-			//   - Amend: go-git sets the new commit's parent to HEAD's *parent*
-			//     and compares against THAT (worktree_commit.go). So this fires
-			//     when an editing burst nets back to the pre-autosave state —
-			//     add a node then delete it, drag a wire then undo it. Here HEAD
-			//     (the autosave we're amending) still carries the change the user
-			//     reverted. Returning it would silently drop the revert: the node
-			//     reappears on the next load and stale graph runs. Instead drop
-			//     the now-empty autosave by moving the branch back to its parent,
-			//     so HEAD, index, and worktree all agree on the reverted state.
+			// The staged tree equals its parent's, so there is nothing to commit. Callers
+			// treat it as success: an autosave of an unchanged flow is not an error.
 			if amend {
 				return s.dropAmendedHead()
 			}
@@ -301,13 +226,7 @@ func (s *gitBackend) save(graph core.Graph, author string, coalesce bool) (strin
 	return hash.String(), nil
 }
 
-// dropAmendedHead rewinds the current branch to HEAD's first parent. It's the
-// recovery path when amending an autosave produced an empty commit: the editing
-// burst netted back to the pre-autosave content, so the autosave commit we were
-// amending is now redundant and must be discarded — otherwise HEAD keeps the
-// change the user undid. The staged index and worktree already match the parent
-// (that's exactly why go-git reported the commit empty), so moving the ref
-// leaves a clean tree with no further index/worktree work. Caller holds s.mu.
+// Rewinds to HEAD's first parent, which is how an amend is undone.
 func (s *gitBackend) dropAmendedHead() (string, error) {
 	head, err := s.repo.Head()
 	if err != nil {
@@ -317,9 +236,7 @@ func (s *gitBackend) dropAmendedHead() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("amend-empty: head commit: %w", err)
 	}
-	// No parent means we'd be amending the root commit — there's nothing to
-	// rewind to. This can't happen in practice (the seed "init" commit is
-	// always the root), but guard rather than index out of range.
+	// Amending the root commit has nothing to rewind to.
 	if len(c.ParentHashes) == 0 {
 		return head.Hash().String(), nil
 	}
@@ -330,11 +247,7 @@ func (s *gitBackend) dropAmendedHead() (string, error) {
 	return parent.String(), nil
 }
 
-// History returns the commits that touched graphs/<id>.json, newest first,
-// capped at limit (limit <= 0 applies a default). It's the backing data for
-// the editor's version-history panel; restoring a revision is a normal Save
-// of that revision's content (a new commit at the top), so history is never
-// rewritten.
+// Only the commits that touched this flow's own path.
 func (s *gitBackend) history(id string, limit int) ([]Revision, error) {
 	if id == "" {
 		return nil, errors.New("graphID required")
@@ -371,11 +284,6 @@ func (s *gitBackend) history(id string, limit int) ([]Revision, error) {
 	return revs, nil
 }
 
-// Delete removes graphs/<id>.json from the worktree and commits the
-// removal. Returns the resulting commit hash on success. Idempotent
-// in the "file doesn't exist" sense: a missing path returns
-// (commit="", nil) so the caller can surface "deleted or already
-// gone" as the same outcome.
 func (s *gitBackend) delete(graphID, author string) (string, error) {
 	if graphID == "" {
 		return "", errors.New("graphID required")
@@ -388,9 +296,6 @@ func (s *gitBackend) delete(graphID, author string) (string, error) {
 	}
 	relPath := graphPath(graphID)
 	if _, statErr := s.fs.Stat(relPath); statErr != nil {
-		// Not present in the worktree. Treat as already-deleted —
-		// keeps the caller's semantics simple (HTTP 204 whether the
-		// resource was there or not, matching REST conventions).
 		return "", nil
 	}
 	if err := s.fs.Remove(relPath); err != nil {
@@ -421,18 +326,9 @@ func (s *gitBackend) delete(graphID, author string) (string, error) {
 	return hash.String(), nil
 }
 
-// ErrGraphNotFound is returned by Load/LoadAt when the commit resolves but
-// holds no graphs/<id>.json — i.e. the flow genuinely does not exist yet.
-// It exists to be distinguishable: callers that branch on "new flow" vs
-// "existing flow" (saveGraph most importantly, where the two paths run
-// different authorization) must fail closed on every OTHER error rather
-// than treating a corrupt object, an I/O fault or an unreadable commit as
-// an invitation to take the create path.
+// The commit resolves but carries no such flow.
 var ErrGraphNotFound = errors.New("graph not found")
 
-// Load reads graphs/<id>.json from HEAD. Returns ErrGraphNotFound when the
-// flow does not exist; any other error means the store could not be read
-// and says nothing about whether the flow exists.
 func (s *gitBackend) load(id string) (core.Graph, error) {
 	data, err := s.readFlowAtHead(id)
 	if err != nil {
@@ -441,19 +337,13 @@ func (s *gitBackend) load(id string) (core.Graph, error) {
 	return decodeGraphBytes(data, graphPath(id))
 }
 
-// readFlowAtHead is the locked half of load. Decoding a flow is the larger
-// half and touches no repository state, so it happens after the unlock — s.mu
-// serializes every reader of the workspace, and a flow opened in the editor
-// would otherwise hold it through a full json.Unmarshal.
+// The locked half: decoding happens outside the lock, being the larger cost.
 func (s *gitBackend) readFlowAtHead(id string) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	head, err := s.repo.Head()
 	if err != nil {
-		// An unborn HEAD is a repo with no commits — openMemory (and any
-		// freshly created workspace before its first save) starts there. No
-		// commits means no graphs, so this is a genuine not-found and not a
-		// store fault: the caller's create path is the correct branch.
+		// An unborn HEAD is a repo with no commits, not an error.
 		if errors.Is(err, plumbing.ErrReferenceNotFound) {
 			return nil, fmt.Errorf("graph %q: %w", id, ErrGraphNotFound)
 		}
@@ -462,8 +352,6 @@ func (s *gitBackend) readFlowAtHead(id string) ([]byte, error) {
 	return s.readAtHash(head.Hash(), id)
 }
 
-// LoadAt reads graphs/<id>.json from the commit identified by ref (a
-// branch, tag, or hex hash).
 func (s *gitBackend) loadAt(ref, id string) (core.Graph, error) {
 	data, err := s.readFlowAt(ref, id)
 	if err != nil {
@@ -472,7 +360,6 @@ func (s *gitBackend) loadAt(ref, id string) (core.Graph, error) {
 	return decodeGraphBytes(data, graphPath(id))
 }
 
-// readFlowAt is the locked half of loadAt, split for the reason readFlowAtHead is.
 func (s *gitBackend) readFlowAt(ref, id string) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -483,7 +370,6 @@ func (s *gitBackend) readFlowAt(ref, id string) ([]byte, error) {
 	return s.readAtHash(hash, id)
 }
 
-// readAtHash returns graphs/<id>.json as stored at hash. Caller holds s.mu.
 func (s *gitBackend) readAtHash(hash plumbing.Hash, id string) ([]byte, error) {
 	commit, err := s.repo.CommitObject(hash)
 	if err != nil {
@@ -495,10 +381,7 @@ func (s *gitBackend) readAtHash(hash plumbing.Hash, id string) ([]byte, error) {
 	}
 	file, err := tree.File(graphPath(id))
 	if err != nil {
-		// Distinguish "this flow has never been saved" from "the store is
-		// broken". Callers authorize differently on the two — see
-		// ErrGraphNotFound — so collapsing them into one opaque error is a
-		// security-relevant loss of information, not just poor ergonomics.
+		// "Never saved" and "store is broken" must not read the same to a caller.
 		if errors.Is(err, object.ErrFileNotFound) ||
 			errors.Is(err, object.ErrDirectoryNotFound) ||
 			errors.Is(err, object.ErrEntryNotFound) {
@@ -509,7 +392,6 @@ func (s *gitBackend) readAtHash(hash plumbing.Hash, id string) ([]byte, error) {
 	return readBlob(file)
 }
 
-// decodeGraphBytes is the unlocked half of every single-flow read.
 func decodeGraphBytes(data []byte, name string) (core.Graph, error) {
 	var g core.Graph
 	if err := json.Unmarshal(data, &g); err != nil {
@@ -518,8 +400,6 @@ func decodeGraphBytes(data []byte, name string) (core.Graph, error) {
 	return g, nil
 }
 
-// PromoteToEnvironment moves the environment tag (refs/tags/graphs/<id>/<env>)
-// to the supplied commit. Common envs: staging, production.
 func (s *gitBackend) setEnv(graphID, env, commit string) error {
 	if env == "" {
 		return errors.New("env required")
@@ -531,7 +411,6 @@ func (s *gitBackend) setEnv(graphID, env, commit string) error {
 		return err
 	}
 	name := plumbing.NewTagReferenceName(envTag(graphID, env))
-	// Force update — env tags are intentionally movable.
 	ref := plumbing.NewHashReference(name, hash)
 	if err := s.repo.Storer.SetReference(ref); err != nil {
 		return fmt.Errorf("set tag: %w", err)
@@ -539,13 +418,6 @@ func (s *gitBackend) setEnv(graphID, env, commit string) error {
 	return nil
 }
 
-// ClearEnvironment removes the environment tag (refs/tags/graphs/<id>/<env>),
-// reverting the flow to having no revision pinned for that env. Unpublishing a
-// flow clears the PublishedEnv tag, which takes it fully offline: the
-// scheduler treats it as "not live" (PublishedCommit returns "") and the
-// webhook/form/event endpoints reject it (LoadPublished returns
-// ErrNotPublished). Idempotent — clearing an env that was never set is a
-// no-op, not an error.
 func (s *gitBackend) clearEnv(graphID, env string) error {
 	if env == "" {
 		return errors.New("env required")
@@ -560,17 +432,8 @@ func (s *gitBackend) clearEnv(graphID, env string) error {
 	return nil
 }
 
-// PublishedEnv is the environment name for the "live" published version
-// of a flow — the revision automatic triggers (cron/poll/webhook) run.
-// Publishing moves this tag to a commit via PromoteToEnvironment; rollback
-// re-publishes an older commit. HEAD remains the editable draft.
 const PublishedEnv = "published"
 
-// PublishedCommit returns the commit hash the flow's published tag points
-// at, or "" when the flow has never been published. "" is not an error: it is
-// the normal state of a draft. Callers that decide whether something FIRES
-// should prefer LoadPublished, which turns it into ErrNotPublished rather
-// than leaving each caller to remember the check.
 func (s *gitBackend) envCommit(id, env string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -589,30 +452,17 @@ func (s *gitBackend) envCommitLocked(id, env string) (string, error) {
 	return ref.Hash().String(), nil
 }
 
-// listAtHead walks HEAD's tree once and decodes every flow in it, then reads
-// the env tags in one pass over the references. Done per flow instead, each
-// load re-reads .git/HEAD and its branch ref from disk and re-decodes the same
-// commit and tree, and each env lookup opens another ref file.
-//
-// It is split in two because s.mu serializes every reader of a workspace, so
-// what bounds concurrent throughput is not how long this read takes but how
-// much of it happens under the lock. Decoding the flows is the majority of the
-// work and touches no repository state, so only the git half — resolving HEAD,
-// reading the env refs and inflating the blobs — is held.
+// One tree walk rather than a load per flow, and the published tags are read in
+// the same pass.
 func (s *gitBackend) listAtHead(env string, headersOnly bool) ([]FlowAtHead, error) {
 	raw, envAt, err := s.readAtHead(env)
 	if err != nil || raw == nil {
 		return nil, err
 	}
-	// Left nil when empty rather than an empty slice: the pre-split read
-	// returned nil for a workspace with no flows, and nil and [] are
-	// different documents once a caller marshals the list.
 	var out []FlowAtHead
 	for _, f := range raw {
 		g, err := decodeFlow(f.data, headersOnly)
 		if err != nil {
-			// One unreadable flow must not hide the rest of the list; the
-			// per-flow load path reports it when that flow is opened.
 			continue
 		}
 		out = append(out, FlowAtHead{ID: f.id, Graph: g, EnvCommit: envAt[f.id]})
@@ -620,15 +470,11 @@ func (s *gitBackend) listAtHead(env string, headersOnly bool) ([]FlowAtHead, err
 	return out, nil
 }
 
-// rawFlow is one flow's stored bytes, carried out of the lock to be decoded.
 type rawFlow struct {
 	id   string
 	data []byte
 }
 
-// readAtHead is the locked half of listAtHead: everything that touches the
-// repository, and nothing that does not. A nil slice with a nil error means
-// the workspace has no commits yet.
 func (s *gitBackend) readAtHead(env string) ([]rawFlow, map[string]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -647,8 +493,6 @@ func (s *gitBackend) readAtHead(env string) ([]rawFlow, map[string]string, error
 	if err != nil {
 		return nil, nil, err
 	}
-	// One pass over the refs, keyed by the flow id its env tag names. An
-	// empty env means the caller wants content only, so the pass is skipped.
 	envAt := map[string]string{}
 	if env != "" {
 		refs, err := s.repo.References()
@@ -662,8 +506,6 @@ func (s *gitBackend) readAtHead(env string) ([]rawFlow, map[string]string, error
 				return nil
 			}
 			id := strings.TrimSuffix(name, suffix)
-			// A label tag is graphs/<id>/labels/<commit>; only a flow id with
-			// no separator left in it is an env pointer.
 			if id == "" || strings.Contains(id, "/") {
 				return nil
 			}
@@ -692,21 +534,14 @@ func (s *gitBackend) readAtHead(env string) ([]rawFlow, map[string]string, error
 	return out, envAt, nil
 }
 
-// ErrNotPublished is returned by LoadPublished for a flow that has never been
-// published. Every automatic-firing path treats it as "this flow does not run
-// yet" rather than an error worth surfacing.
 var ErrNotPublished = errors.New("flow is not published")
 
-// ListGraphs returns the IDs of every graph currently committed at HEAD.
 func (s *gitBackend) listGraphs() ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	head, err := s.repo.Head()
 	if errors.Is(err, plumbing.ErrReferenceNotFound) {
-		// A repo with no commits and a workspace whose directory has gone both
-		// resolve no HEAD. Only the first is "no flows yet": callers that
-		// delete on absence — the schedule reconcile prunes rows for flows it
-		// did not see — must not be told a missing volume holds nothing.
+		// A repo with no commits and a missing directory both read as empty.
 		if err := s.rootPresent(); err != nil {
 			return nil, err
 		}
@@ -733,8 +568,6 @@ func (s *gitBackend) listGraphs() ([]string, error) {
 	return ids, err
 }
 
-// rootPresent reports whether the workspace's working tree is still on disk.
-// The in-memory backend has none and is always present.
 func (s *gitBackend) rootPresent() error {
 	if s.dir == "" {
 		return nil
@@ -745,11 +578,6 @@ func (s *gitBackend) rootPresent() error {
 	return nil
 }
 
-// Head returns the current HEAD commit hash as a hex string, or "" when
-// the repo has no commits yet. A cheap cache key for callers that
-// memoize views derived from the whole graph set (e.g. the drop-suggestion
-// adjacency) — when HEAD is unchanged, nothing the derived view depends on
-// has changed either.
 func (s *gitBackend) head() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -763,9 +591,6 @@ func (s *gitBackend) head() (string, error) {
 	return head.Hash().String(), nil
 }
 
-// Resolve turns a ref (branch, tag, "HEAD", or raw hash) into its commit
-// hash as a hex string. Used by callers that need to record the exact
-// revision a ref pointed at (e.g. which commit a label was attached to).
 func (s *gitBackend) resolve(ref string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -776,15 +601,12 @@ func (s *gitBackend) resolve(ref string) (string, error) {
 	return h.String(), nil
 }
 
-// resolveGraph ignores graphID: one commit history covers every flow here, so
-// a ref names a revision of all of them at once.
 func (s *gitBackend) resolveGraph(_, ref string) (string, error) { return s.resolve(ref) }
 
 func (s *gitBackend) resolveHash(ref string) (plumbing.Hash, error) {
 	if h, err := s.repo.ResolveRevision(plumbing.Revision(ref)); err == nil {
 		return *h, nil
 	}
-	// Treat ref as raw hash.
 	if len(ref) == 40 {
 		return plumbing.NewHash(ref), nil
 	}
@@ -794,19 +616,11 @@ func (s *gitBackend) resolveHash(ref string) (plumbing.Hash, error) {
 func graphPath(id string) string        { return "graphs/" + id + ".json" }
 func envTag(graphID, env string) string { return "graphs/" + graphID + "/" + env }
 
-// labelTag names the annotated tag that carries a revision's human label:
-// refs/tags/graphs/<id>/labels/<commit>. Distinct namespace from the env
-// tags (graphs/<id>/<env>) so labels never collide with a published/staging
-// pointer and the scheduler's resolve path is untouched.
+// An annotated tag, so the label travels with a push.
 func labelTag(graphID, commit string) string {
 	return "graphs/" + graphID + "/labels/" + commit
 }
 
-// SetRevisionLabel attaches a human label to a specific commit, stored as an
-// annotated Git tag at labelTag(id, commit). Labels are keyed by commit, not
-// by environment: republishing an older revision (rollback) brings back the
-// label it was given, and the version-history panel shows each revision's
-// name. Re-labeling replaces the previous label; an empty label clears it.
 func (s *gitBackend) setLabel(graphID, commit, label string) error {
 	if graphID == "" {
 		return errors.New("graphID required")
@@ -818,8 +632,6 @@ func (s *gitBackend) setLabel(graphID, commit, label string) error {
 		return err
 	}
 	name := plumbing.NewTagReferenceName(labelTag(graphID, hash.String()))
-	// Force-replace: drop any existing label tag for this commit first
-	// (CreateTag errors if the tag already exists).
 	if err := s.repo.Storer.RemoveReference(name); err != nil &&
 		!errors.Is(err, plumbing.ErrReferenceNotFound) {
 		return fmt.Errorf("clear label: %w", err)
@@ -841,8 +653,6 @@ func (s *gitBackend) setLabel(graphID, commit, label string) error {
 	return nil
 }
 
-// RevisionLabel returns the human label attached to graphID@commit, or ""
-// when the revision is unlabeled.
 func (s *gitBackend) label(graphID, commit string) (string, error) {
 	if graphID == "" {
 		return "", errors.New("graphID required")
@@ -856,8 +666,6 @@ func (s *gitBackend) label(graphID, commit string) (string, error) {
 	return s.revisionLabel(graphID, hash.String()), nil
 }
 
-// revisionLabel reads a commit's label tag, returning "" when absent or
-// unreadable. commit must be a full hash string. Caller holds s.mu.
 func (s *gitBackend) revisionLabel(graphID, commit string) string {
 	name := plumbing.NewTagReferenceName(labelTag(graphID, commit))
 	ref, err := s.repo.Reference(name, false)
@@ -871,16 +679,12 @@ func (s *gitBackend) revisionLabel(graphID, commit string) string {
 	return strings.TrimSpace(tag.Message)
 }
 
-// Branches/Tags surface the underlying refs for callers that want to do
-// their own listing/diff.
 func (s *gitBackend) refs(prefix string) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return listRefs(s.repo, prefix)
 }
 
-// mirror: a git backend IS its own mirrorer — the repository it keeps is
-// exactly what gets pushed.
 func (s *gitBackend) mirror() (gitMirrorer, bool) { return s, true }
 
 func listRefs(repo *git.Repository, prefix string) ([]string, error) {
@@ -899,23 +703,7 @@ func listRefs(repo *git.Repository, prefix string) ([]string, error) {
 	return out, err
 }
 
-// readBlob returns a file's stored bytes. It reads into a blob-sized buffer
-// rather than going through File.Contents, which inflates into a bytes.Buffer
-// and then copies that to a string for the caller to copy back to bytes —
-// three copies of every flow's JSON where one will do, and every one of them
-// under s.mu.
-//
-// Sizing the buffer from f.Size is exact rather than optimistic: go-git sets
-// Blob.Size and returns Blob.Reader from the same EncodedObject, so the two
-// cannot disagree about the object's length. A short blob would therefore be a
-// go-git bug, and io.ReadFull reports it as ErrUnexpectedEOF rather than
-// handing back a truncated flow.
-//
-// MEASURED, do not add back: confirming the reader is exhausted with one
-// trailing 1-byte Read costs more than everything else here put together —
-// 437µs to 1080µs on the single-flow read — because that Read makes go-git
-// go back to the object store. It guards a state the paragraph above rules
-// out, at 2.5x the price of the whole operation.
+// Reads into a blob-sized buffer, so a large flow is one allocation.
 func readBlob(f *object.File) (data []byte, err error) {
 	r, err := f.Reader()
 	if err != nil {

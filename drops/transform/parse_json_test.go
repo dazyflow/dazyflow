@@ -102,9 +102,6 @@ func TestParseJSON_DerivesHeaders(t *testing.T) {
 	}
 }
 
-// A path pointing at one value is a question with a scalar answer, and the
-// answer arrives on 'value'. Rows come out empty because a single value is
-// not a table — not because anything went wrong.
 func TestParseJSON_PathToOneFieldAnswersOnValue(t *testing.T) {
 	res := runParseJSON(t, `{"version":"0.27.0"}`, map[string]any{"path": "version"})
 	if res.Status != core.StatusOK {

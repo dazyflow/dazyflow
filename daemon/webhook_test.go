@@ -62,22 +62,12 @@ func TestWebhook_FiresWithValidSecret(t *testing.T) {
 	}
 	savePublished(t, wsStore, g)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Wrap the handler so we can dispatch into the listener via
-		// its public handle method through the same mux pattern.
 		http.NewServeMux().ServeHTTP(w, r) // placeholder; we go through the real listener below
 	}))
 	srv.Close()
 
-	// Stand the listener up on a fresh httptest server using a thin
-	// adapter. The simplest: use httptest.NewServer with a wrap that
-	// routes /trigger/* to wh's handler via the same mux it builds.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger/", func(rw http.ResponseWriter, r *http.Request) {
-		// Reach into the listener through a tiny inline handler that
-		// shares its logic. We do this via the exposed Serve method on
-		// the listener — but Serve binds a real port. So instead we
-		// reach the handler indirectly by serving the listener's mux
-		// once a request comes in.
 		callPrivateHandler(t, wh, rw, r)
 	})
 	ts := httptest.NewServer(mux)
@@ -103,7 +93,6 @@ func TestWebhook_FiresWithValidSecret(t *testing.T) {
 		t.Fatal("response missing job_id")
 	}
 
-	// Wait for the graph to actually run.
 	terminal := waitForTerminalEvent(t, bus, jobs, out.JobID, 5*time.Second)
 	if terminal.Status != core.JobStatusSucceeded {
 		t.Errorf("graph status = %q", terminal.Status)
@@ -144,9 +133,6 @@ func TestWebhook_RejectsBadSecret(t *testing.T) {
 	}
 }
 
-// Zero-downtime rotation: a webhook_input with a `secrets` list accepts
-// ANY listed key (so an operator can add a new key, migrate callers,
-// then revoke the old one).
 func TestWebhook_AcceptsAnyOfMultipleKeys(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -205,9 +191,6 @@ func TestWebhook_UnknownGraph(t *testing.T) {
 		t.Fatalf("do: %v", err)
 	}
 	defer resp.Body.Close()
-	// An unknown graph returns the same generic 401 as a bad secret, so an
-	// unauthenticated caller can't tell "graph doesn't exist" from "wrong
-	// key" — no enumeration oracle.
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("status=%d, want 401", resp.StatusCode)
 	}
@@ -216,7 +199,6 @@ func TestWebhook_UnknownGraph(t *testing.T) {
 func TestWebhook_GraphWithoutWebhookTriggerRejected(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
-	// Graph exists but has no webhook trigger.
 	savePublished(t, wsStore, core.Graph{
 		ID: "no-trigger", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "a", Module: "delay", Params: map[string]any{"ms": 1}}},
@@ -236,8 +218,6 @@ func TestWebhook_GraphWithoutWebhookTriggerRejected(t *testing.T) {
 		t.Fatalf("do: %v", err)
 	}
 	defer resp.Body.Close()
-	// A graph with no webhook trigger is indistinguishable from a bad secret
-	// to an unauthenticated caller: generic 401, not a revealing 404.
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("status=%d, want 401", resp.StatusCode)
 	}
@@ -289,10 +269,6 @@ func TestWebhook_MalformedPath(t *testing.T) {
 	}
 }
 
-// TestWebhook_BodyParsingByContentType pins the Content-Type-driven
-// decoding: JSON and form-urlencoded both become a field-addressable
-// map (so ${trigger.body.email} works), text stays a string, and an
-// unknown MIME passes through as raw bytes.
 func TestWebhook_BodyParsingByContentType(t *testing.T) {
 	t.Parallel()
 	newReq := func(ct string) *http.Request {
@@ -351,10 +327,6 @@ func TestWebhook_BodyParsingByContentType(t *testing.T) {
 	})
 }
 
-// TestWebhook_BodyParsing_EdgeCases covers the awkward inputs real
-// senders produce: case-variant Content-Type (HTTP media types are
-// case-insensitive — RFC 9110 §8.3.1), charset params on a cased type,
-// malformed url-encoding, and multi-value headers.
 func TestWebhook_BodyParsing_EdgeCases(t *testing.T) {
 	t.Parallel()
 	newReq := func(ct string) *http.Request {
@@ -404,8 +376,6 @@ func TestWebhook_BodyParsing_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("malformed urlencoding falls back to string", func(t *testing.T) {
-		// %ZZ is not valid percent-encoding; url.ParseQuery errors and we
-		// hand the graph the raw text rather than failing the trigger.
 		seed := daemon.BuildWebhookSeedForTest([]byte("a=%ZZ"), newReq("application/x-www-form-urlencoded"))
 		if seed.Output["body"].Inline != "a=%ZZ" {
 			t.Errorf("malformed urlencoded body = %#v, want raw string fallback", seed.Output["body"].Inline)
@@ -446,9 +416,9 @@ func TestWebhook_BodyParsing_EdgeCases(t *testing.T) {
 	})
 }
 
-// FuzzBuildWebhookSeed asserts the seed builder's invariants on
-// arbitrary bodies + Content-Types: it never panics, always emits both
-// the body and headers ports, and headers are always a JSON object.
+// Asserts the seed builder's invariants on arbitrary bodies + Content-Types:
+// it never panics, always emits both the body and headers ports, and headers
+// are always a JSON object.
 func FuzzBuildWebhookSeed(f *testing.F) {
 	f.Add("application/json", []byte(`{"a":1}`))
 	f.Add("application/json", []byte(`{not json`))
@@ -481,8 +451,6 @@ func FuzzBuildWebhookSeed(f *testing.F) {
 	})
 }
 
-// TestWebhook_BodyLimit asserts the MaxBodyBytes cap: a body exactly at
-// the limit is accepted, one byte over is rejected with 413.
 func TestWebhook_BodyLimit(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -520,9 +488,6 @@ func TestWebhook_BodyLimit(t *testing.T) {
 	}
 }
 
-// TestWebhook_DisabledGraphRejected — a paused flow's webhook returns
-// 403 flow_disabled (not 404), so a caller like Stripe sees "endpoint
-// known but off" and doesn't treat it as an unknown-URL retry.
 func TestWebhook_DisabledGraphRejected(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -549,8 +514,6 @@ func TestWebhook_DisabledGraphRejected(t *testing.T) {
 	}
 }
 
-// TestWebhook_MissingAuthRejected — a request with no Authorization
-// header at all (not just a wrong one) is rejected with 401.
 func TestWebhook_MissingAuthRejected(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -566,7 +529,6 @@ func TestWebhook_MissingAuthRejected(t *testing.T) {
 	defer ts.Close()
 
 	req, _ := http.NewRequest("POST", ts.URL+"/trigger/acme/ws1/needauth", strings.NewReader("x"))
-	// No Authorization header set at all.
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("do: %v", err)
@@ -586,12 +548,8 @@ func callPrivateHandler(t *testing.T, wh *daemon.WebhookListener, rw http.Respon
 	daemon.ServeWebhookForTest(wh, rw, r)
 }
 
-// silence unused import lint when this file is compiled in isolation
 var _ = strings.HasPrefix
 
-// webhookPost stands the listener up and posts to a flow's trigger URL,
-// returning the status and body. Factored out of the older tests' inline
-// scaffolding so the disabled-trigger cases below stay readable.
 func webhookPost(t *testing.T, wh *daemon.WebhookListener, tenant, ws, id, secret string) (int, string) {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -612,14 +570,6 @@ func webhookPost(t *testing.T, wh *daemon.WebhookListener, tenant, ws, id, secre
 	return resp.StatusCode, string(body)
 }
 
-// TestWebhook_DisabledTriggerNodeRejects is the regression for a trigger whose
-// node is switched off still accepting deliveries. It used to fire the flow,
-// the worker then skipped the very node meant to receive the payload, and the
-// caller got a 202 for a run that did nothing.
-//
-// Both switches are exercised because both mean "this trigger is paused" and
-// they arrive from different places: Node.Disabled is the editor's step toggle,
-// Params["disabled"] is the per-trigger pause the schedules API writes.
 func TestWebhook_DisabledTriggerNodeRejects(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -654,8 +604,6 @@ func TestWebhook_DisabledTriggerNodeRejects(t *testing.T) {
 	}
 }
 
-// A flow with SEVERAL webhook steps, only some paused, still accepts — the
-// active ones have work to do. Only "every one is off" is a refusal.
 func TestWebhook_PartiallyDisabledTriggersStillFire(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -743,8 +691,6 @@ func TestWebhook_RefusesDeepTriggerChain(t *testing.T) {
 		t.Errorf("unparseable depth: status=%d, want 202", code)
 	}
 
-	// The depth is persisted on the run so the steps it executes can carry
-	// it onward.
 	recs, _ := jobs.ListGraphRuns(context.Background(), core.ListGraphRunsOpts{GraphID: "wh-loop", Limit: 10})
 	var depths []int
 	for _, r := range recs {
@@ -756,9 +702,6 @@ func TestWebhook_RefusesDeepTriggerChain(t *testing.T) {
 	}
 }
 
-// webhookStatus posts to a published graph's /trigger address and returns the
-// status, so the key-placement cases below read as a table rather than five
-// copies of the same eight lines.
 func webhookStatus(t *testing.T, wh *daemon.WebhookListener, path string, setAuth func(*http.Request)) int {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -799,9 +742,6 @@ func TestWebhook_AcceptsKeyInTheURL(t *testing.T) {
 	if got := webhookStatus(t, wh, "/trigger/acme/ws1/wh-url-key?key=s3cr3t", nil); got != http.StatusAccepted {
 		t.Errorf("key in the URL: status=%d, want 202", got)
 	}
-	// The same key still works in the header, and a wrong one in the URL is
-	// still a stranger — the query parameter is another place to put the key,
-	// not a way around it.
 	if got := webhookStatus(t, wh, "/trigger/acme/ws1/wh-url-key?key=wrong", nil); got != http.StatusUnauthorized {
 		t.Errorf("wrong key in the URL: status=%d, want 401", got)
 	}
@@ -832,8 +772,6 @@ func TestWebhook_HeaderWinsOverURLKey(t *testing.T) {
 	}
 }
 
-// The last-resort case: a sender that can carry neither a header nor a key in
-// the URL. The author turns the step public and the address is the credential.
 func TestWebhook_PublicStepAcceptsNoKey(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -867,7 +805,7 @@ func TestWebhook_KeylessStepIsInertUnlessPublic(t *testing.T) {
 	}
 }
 
-// TestWebhook_RefusedDeliveryIsKeptAndNotRetried covers the sender-facing side
+// Covers the sender-facing side
 // of a refusal the owner has to fix. A 500 used to be the answer, which is the
 // worst of both worlds: Stripe (or whoever) retries for a while, gives up, and
 // the event is gone with nothing on our side recording that it ever arrived.
@@ -877,8 +815,6 @@ func TestWebhook_KeylessStepIsInertUnlessPublic(t *testing.T) {
 // duplicate it.
 func TestWebhook_RefusedDeliveryIsKeptAndNotRetried(t *testing.T) {
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
-	// Published, secret-protected, and invalid at submit time (the second step
-	// names a module that does not exist), so the submission gate refuses it.
 	g := core.Graph{
 		ID: "wh-refused", Name: "Stripe payments", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
@@ -905,8 +841,6 @@ func TestWebhook_RefusedDeliveryIsKeptAndNotRetried(t *testing.T) {
 		t.Fatalf("POST: %v", err)
 	}
 	defer resp.Body.Close()
-	// 403 for this class (not the plan cap, which answers 402); either way a
-	// 4xx, so the sender stops rather than burning its retry budget.
 	if resp.StatusCode != http.StatusForbidden {
 		body, _ := io.ReadAll(resp.Body)
 		t.Errorf("status = %d, want 403; body=%s", resp.StatusCode, body)
@@ -929,7 +863,6 @@ func TestWebhook_RefusedDeliveryIsKeptAndNotRetried(t *testing.T) {
 		t.Errorf("message = %q; a kept delivery must tell the sender not to resend", out.Error.Message)
 	}
 
-	// And the event body itself is recoverable.
 	rec, err := jobs.Get(context.Background(), out.Run+":in")
 	if err != nil {
 		t.Fatalf("delivery not stored: %v", err)

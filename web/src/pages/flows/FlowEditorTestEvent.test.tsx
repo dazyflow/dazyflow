@@ -179,8 +179,6 @@ describe("the test-event control", () => {
   it("appears for a webhook flow whose trigger lives on the node", async () => {
     loadGraph.mockResolvedValue(webhookGraph());
     mount();
-    // The regression: this graph has no `triggers` array at all, which is what
-    // every webhook flow built since the Triggers menu was removed looks like.
     await waitFor(() =>
       expect(screen.getByText("editor.testEvent")).toBeTruthy(),
     );
@@ -220,7 +218,6 @@ describe("the test-event payload", () => {
   });
   afterEach(() => localStorage.clear());
 
-  // openDialog clicks the test-event control and waits for the JSON box.
   async function openDialog() {
     await waitFor(() =>
       expect(screen.getByText("editor.testEvent")).toBeTruthy(),
@@ -239,7 +236,6 @@ describe("the test-event payload", () => {
     const typed = box.value;
     await userEvent.click(screen.getByText("common.dismiss"));
 
-    // Reopening in the same session.
     box = await openDialog();
     expect(box.value).toBe(typed);
 
@@ -252,8 +248,6 @@ describe("the test-event payload", () => {
   });
 
   it("is kept per flow, not shared between them", async () => {
-    // Seeded directly, so this fails if the key isn't per-flow rather than
-    // passing because nothing was remembered in the first place.
     localStorage.setItem("dazyflow.testEvent.coffee-reorder", EDITED);
     loadGraph.mockResolvedValue({ ...webhookGraph(), id: "other-flow" });
     mount("other-flow");

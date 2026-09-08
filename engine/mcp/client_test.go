@@ -14,8 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/mcp/mcptest"
 )
 
-// inProcessPair wires a FakeServer to a Client via two io.Pipes,
-// returning the client and a cancel function that tears everything down.
 func inProcessPair(t *testing.T, server *mcptest.FakeServer) (*mcp.Client, func()) {
 	t.Helper()
 
@@ -121,7 +119,6 @@ func TestClient_ToolErrorResult(t *testing.T) {
 }
 
 func TestClient_UnknownMethodReturnsRPCError(t *testing.T) {
-	// FakeServer responds with JSON-RPC error -32601 for unknown methods.
 	srv := &mcptest.FakeServer{}
 	client, close := inProcessPair(t, srv)
 	defer close()
@@ -164,8 +161,6 @@ func TestClient_ConnectionClosedFailsPending(t *testing.T) {
 		errCh <- client.Call(t.Context(), "anything", nil, nil)
 	}()
 
-	// Close the server's writer end so the client's read returns EOF
-	// and the reader goroutine fails all pending calls.
 	_ = rw.Close()
 
 	select {

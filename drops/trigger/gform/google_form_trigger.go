@@ -78,13 +78,6 @@ func init() {
 	})
 }
 
-// executeGoogleFormTrigger fetches Form responses newer than this node's
-// stored cursor, keys each by question title, advances the cursor to the
-// newest response seen, and emits the batch. An EMPTY batch emits no
-// outputs, which skips everything downstream (see emitOutput) — an empty
-// poll is a non-event, not a run of the flow. The node runs in-band like
-// poll_trigger: the daemon scheduler only fires the graph on the interval;
-// all Google I/O and cursor bookkeeping happen here.
 func executeGoogleFormTrigger(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	formID := extractFormID(params.StringDefault(job.Params, "form_id", ""))
 	if formID == "" {
@@ -101,9 +94,6 @@ func executeGoogleFormTrigger(ctx context.Context, job core.Job, progress chan<-
 		return params.Err(job, "forms_error", err.Error()), nil
 	}
 
-	// cursor.gform.<graph>.<node>: per-(flow,node) watermark = the newest
-	// lastSubmittedTime we've already emitted. The store hides the
-	// "cursor." prefix from the Credentials UI.
 	cursorName := fmt.Sprintf("cursor.gform.%s.%s", job.GraphID, job.NodeID)
 	last, rerr := cursor.Read(ctx, job.Tenant, cursorName)
 	if rerr != nil {
@@ -152,9 +142,6 @@ func executeGoogleFormTrigger(ctx context.Context, job core.Job, progress chan<-
 		out = append(out, mapAnswers(r, titles))
 	}
 
-	// Tell the scheduler whether this fire found new data so it can adapt the
-	// poll cadence — widening a form that's quiet for a stretch, snapping back
-	// the moment a response arrives. Keyed by the flow (graph), see pollstate.
 	pollstate.Report(ctx, job, len(out) > 0)
 
 	// Advance the cursor only when it actually moved. Best-effort from here on:
@@ -174,11 +161,6 @@ func executeGoogleFormTrigger(ctx context.Context, job core.Job, progress chan<-
 }
 
 func emitOutput(out []map[string]any) map[string]core.Ref {
-	// No new responses → emit NOTHING. Ports without a value make their
-	// edges dormant, so the dispatcher skips everything downstream — the
-	// flow doesn't churn (append 0 rows, send empty notifications) on every
-	// empty poll. The trigger only "fires" in a meaningful sense when a
-	// response actually arrived.
 	if len(out) == 0 {
 		return map[string]core.Ref{}
 	}
@@ -227,11 +209,6 @@ func FieldNames(ctx context.Context, job core.Job) ([]string, error) {
 	return append(out, "email", "responseId", "submittedTime"), nil
 }
 
-// fetchTitles returns questionId → title for a form, served from a short
-// per-form_id TTL cache (see titleCache). The form structure changes rarely,
-// so caching it spares a forms.get on every trigger fire and on every
-// mapping-editor open (live field hints) within the TTL window — while the
-// short TTL still picks up question edits promptly.
 func fetchTitles(ctx context.Context, job core.Job, formID, token string, timeoutMS int) (map[string]string, error) {
 	if titles, ok := cachedTitles(formID); ok {
 		return titles, nil
@@ -253,10 +230,6 @@ func fetchTitles(ctx context.Context, job core.Job, formID, token string, timeou
 	return titles, nil
 }
 
-// fetchNewResponses pages through forms.responses.list (server-filtered by
-// the cursor when present), client-filters to strictly-newer responses for
-// precision, and returns them along with the new cursor (max
-// lastSubmittedTime seen across the batch).
 func fetchNewResponses(ctx context.Context, job core.Job, formID, token string, timeoutMS int, cursor string) ([]formResponse, string, error) {
 	base := formsBaseURL(job) + "/forms/" + url.PathEscape(formID) + "/responses"
 	newCursor := cursor

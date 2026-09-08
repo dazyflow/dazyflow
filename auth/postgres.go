@@ -127,9 +127,6 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at      TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS suspend_reason    TEXT NOT NULL DEFAULT '';
 `
 
-// EnsurePgAuthSchema creates the api_keys / sessions / users tables if
-// they don't exist. Each Pg*Store constructor calls it, so opening any
-// one of them is enough to provision all three (idempotent).
 func EnsurePgAuthSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	if pool == nil {
 		return fmt.Errorf("nil pool")
@@ -145,8 +142,6 @@ func marshalRoles(roles []core.Role) ([]byte, error) {
 	return json.Marshal(roles)
 }
 
-// jsonOrZero unmarshals a JSONB column into T, returning T's zero value
-// for an empty/unset column rather than an error.
 func jsonOrZero[T any](b []byte) (T, error) {
 	var v T
 	if len(b) == 0 {
@@ -156,9 +151,6 @@ func jsonOrZero[T any](b []byte) (T, error) {
 	return v, err
 }
 
-// ---- API keys -------------------------------------------------------
-
-// PgKeyStore is the Postgres AdminKeyStore (and therefore APIKeyStore).
 type PgKeyStore struct {
 	pool *pgxpool.Pool
 }
@@ -230,8 +222,6 @@ func (s *PgKeyStore) ListAll(ctx context.Context) ([]APIKey, error) {
 	return queryRows(ctx, s.pool, scanKey, q)
 }
 
-// ListBySubject returns every key issued to a principal subject, across
-// tenants — used by the data-export path (GDPR Art. 15/20).
 func (s *PgKeyStore) ListBySubject(ctx context.Context, subject string) ([]APIKey, error) {
 	const q = `
 		SELECT id, tenant, workspace, subject, roles, salt, hash, expires_at, revoked_at
@@ -240,26 +230,18 @@ func (s *PgKeyStore) ListBySubject(ctx context.Context, subject string) ([]APIKe
 	return queryRows(ctx, s.pool, scanKey, q, subject)
 }
 
-// DeleteBySubject hard-deletes every key for a subject (erasure, Art. 17).
-// Returns the number removed.
 func (s *PgKeyStore) DeleteBySubject(ctx context.Context, subject string) (int, error) {
 	return deleteWhere(ctx, s.pool, "api_keys", "subject", subject)
 }
 
-// DeleteByTenant hard-deletes every key in a tenant — for org deletion.
 func (s *PgKeyStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	return deleteWhere(ctx, s.pool, "api_keys", "tenant", tenant)
 }
 
-// rowScanner unifies pgx.Row (QueryRow) and pgx.Rows (Query) so one
-// scan helper serves both the single-get and list paths.
 type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-// queryRows runs a list query and scans every row through scan, returning
-// the collected slice. It centralizes the open / defer-Close / loop-scan /
-// rows.Err() boilerplate every Pg*Store list helper used to repeat.
 func queryRows[T any](ctx context.Context, pool *pgxpool.Pool, scan func(rowScanner) (T, error), query string, args ...any) ([]T, error) {
 	rows, err := pool.Query(ctx, query, args...)
 	if err != nil {
@@ -304,8 +286,6 @@ func scanKey(row rowScanner) (APIKey, error) {
 	k.Roles = roles
 	return k, nil
 }
-
-// ---- Sessions -------------------------------------------------------
 
 type PgSessionStore struct {
 	pool *pgxpool.Pool
@@ -370,8 +350,6 @@ func (s *PgSessionStore) RevokeSubjectSessions(ctx context.Context, subject stri
 	}
 	return int(tag.RowsAffected()), nil
 }
-
-// ---- Users ----------------------------------------------------------
 
 type PgUserStore struct {
 	pool *pgxpool.Pool
@@ -517,8 +495,6 @@ func (s *PgUserStore) ListUsers(ctx context.Context) ([]User, error) {
 	return queryRows(ctx, s.pool, scanUser, q)
 }
 
-// DeleteUser hard-deletes the user row (erasure, Art. 17). Idempotent:
-// a missing row is not an error, so the cascade can run repeatedly.
 func (s *PgUserStore) DeleteUser(ctx context.Context, email string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
 	_, err := s.pool.Exec(ctx, `DELETE FROM users WHERE email=$1`, email)

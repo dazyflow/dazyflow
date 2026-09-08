@@ -12,9 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// runGroup wraps executeGroupAggregate the way runJoin wraps
-// executeJoinRows in the sibling test file — keeps per-test
-// boilerplate minimal while letting the intent stay readable.
 func runGroup(t *testing.T, params map[string]any, rows []map[string]any, headers []string) core.Result {
 	t.Helper()
 	in := map[string]core.Ref{"rows": {Inline: rows, Headers: headers}}
@@ -37,7 +34,6 @@ func groupRows(t *testing.T, res core.Result) []map[string]any {
 	return rows
 }
 
-// rowBy finds the first output row whose group-by column matches.
 func rowBy(rows []map[string]any, col string, value any) map[string]any {
 	for _, r := range rows {
 		if r[col] == value {
@@ -46,8 +42,6 @@ func rowBy(rows []map[string]any, col string, value any) map[string]any {
 	}
 	return nil
 }
-
-// ---- Counts --------------------------------------------------------
 
 func TestGroupAggregate_CountByOneColumn(t *testing.T) {
 	rows := []map[string]any{
@@ -73,8 +67,6 @@ func TestGroupAggregate_CountByOneColumn(t *testing.T) {
 		t.Errorf("NO n=%v want 1", rowBy(out, "country", "NO")["n"])
 	}
 }
-
-// ---- Sum / avg / type coercion ------------------------------------
 
 func TestGroupAggregate_SumAvgCoerceStringNumeric(t *testing.T) {
 	// Excel-stringy values must sum the same as native floats.
@@ -102,7 +94,6 @@ func TestGroupAggregate_SumAvgCoerceStringNumeric(t *testing.T) {
 		t.Errorf("SE avg=%v want 15.25", se["per_row"])
 	}
 	no := rowBy(out, "country", "NO")
-	// Integral float sums down-cast to int for tidy display.
 	if no["total"] != int64(7) {
 		t.Errorf("NO total=%v (%T) want int64(7)", no["total"], no["total"])
 	}
@@ -130,8 +121,6 @@ func TestGroupAggregate_SumOnNonNumericFails(t *testing.T) {
 }
 
 func TestGroupAggregate_AvgOfEmptyGroupIsNil(t *testing.T) {
-	// Group has rows but the aggregated column is all nil → avg
-	// returns nil rather than 0/0=NaN.
 	rows := []map[string]any{
 		{"country": "SE", "amount": nil},
 		{"country": "SE", "amount": nil},
@@ -150,8 +139,6 @@ func TestGroupAggregate_AvgOfEmptyGroupIsNil(t *testing.T) {
 		t.Errorf("avg of all-nil should be nil, got %v", out[0]["a"])
 	}
 }
-
-// ---- Min / max ----------------------------------------------------
 
 func TestGroupAggregate_MinMaxNumeric(t *testing.T) {
 	rows := []map[string]any{
@@ -179,7 +166,6 @@ func TestGroupAggregate_MinMaxNumeric(t *testing.T) {
 }
 
 func TestGroupAggregate_MinMaxLexicalFallback(t *testing.T) {
-	// Non-numeric values → lexical comparison.
 	rows := []map[string]any{
 		{"country": "SE", "name": "carol"},
 		{"country": "SE", "name": "alice"},
@@ -203,8 +189,6 @@ func TestGroupAggregate_MinMaxLexicalFallback(t *testing.T) {
 		t.Errorf("max=%v want carol", out[0]["last_name_alpha"])
 	}
 }
-
-// ---- First / last / collect ---------------------------------------
 
 func TestGroupAggregate_FirstLastCollectPreserveInputOrder(t *testing.T) {
 	rows := []map[string]any{
@@ -237,8 +221,6 @@ func TestGroupAggregate_FirstLastCollectPreserveInputOrder(t *testing.T) {
 	}
 }
 
-// ---- Multi-column by ----------------------------------------------
-
 func TestGroupAggregate_MultiColumnBy(t *testing.T) {
 	rows := []map[string]any{
 		{"country": "SE", "tier": "gold", "amount": 100},
@@ -259,15 +241,12 @@ func TestGroupAggregate_MultiColumnBy(t *testing.T) {
 	if len(out) != 3 {
 		t.Fatalf("expected 3 groups (SE/gold, SE/silver, NO/gold); got %d (%+v)", len(out), out)
 	}
-	// (SE, gold) totals 300.
 	for _, r := range out {
 		if r["country"] == "SE" && r["tier"] == "gold" && r["total"] != int64(300) {
 			t.Errorf("SE/gold total=%v want 300", r["total"])
 		}
 	}
 }
-
-// ---- Empty by = total ---------------------------------------------
 
 func TestGroupAggregate_EmptyByIsSingleTotalGroup(t *testing.T) {
 	rows := []map[string]any{
@@ -297,8 +276,6 @@ func TestGroupAggregate_EmptyByIsSingleTotalGroup(t *testing.T) {
 	}
 }
 
-// ---- Empty rows ---------------------------------------------------
-
 func TestGroupAggregate_EmptyRowsEmptyOutput(t *testing.T) {
 	res := runGroup(t,
 		map[string]any{
@@ -312,7 +289,7 @@ func TestGroupAggregate_EmptyRowsEmptyOutput(t *testing.T) {
 	}
 }
 
-// ---- Group order is first-seen ------------------------------------
+// Group order is first-seen
 
 func TestGroupAggregate_GroupsEmittedInFirstSeenOrder(t *testing.T) {
 	rows := []map[string]any{
@@ -333,8 +310,6 @@ func TestGroupAggregate_GroupsEmittedInFirstSeenOrder(t *testing.T) {
 		}
 	}
 }
-
-// ---- Headers contract ---------------------------------------------
 
 func TestGroupAggregate_HeadersAreByThenAlphaAggregates(t *testing.T) {
 	rows := []map[string]any{{"a": 1, "x": 5}}
@@ -358,8 +333,6 @@ func TestGroupAggregate_HeadersAreByThenAlphaAggregates(t *testing.T) {
 		t.Errorf("headers=%v want %v", h, want)
 	}
 }
-
-// ---- Error paths --------------------------------------------------
 
 func TestGroupAggregate_MissingByParamFails(t *testing.T) {
 	res := runGroup(t,
@@ -443,8 +416,6 @@ func TestGroupAggregate_UnknownAggregateColumnFails(t *testing.T) {
 	}
 }
 
-// ---- Stable headers sort ------------------------------------------
-
 func TestGroupAggregate_HeadersSortedRegardlessOfMapOrder(t *testing.T) {
 	// Map iteration in Go is intentionally randomized — run the same
 	// input twice and assert the header order is identical so we
@@ -471,7 +442,6 @@ func TestGroupAggregate_HeadersSortedRegardlessOfMapOrder(t *testing.T) {
 			t.Errorf("header order not stable across runs: %v vs %v", h1, h2)
 		}
 	}
-	// And alphabetized after the by-cols.
 	tail := h1[1:]
 	tailCopy := append([]string(nil), tail...)
 	sort.Strings(tailCopy)
@@ -480,9 +450,6 @@ func TestGroupAggregate_HeadersSortedRegardlessOfMapOrder(t *testing.T) {
 	}
 }
 
-// The short form is what people reach for by hand — {"amount":"sum"} rather
-// than {"amount":{"op":"sum","column":"amount"}} — and sort_rows' friendly
-// string syntax trains them to expect it.
 func TestGroupAggregate_ShortOpForm(t *testing.T) {
 	res, err := executeGroupAggregate(t.Context(), core.Job{
 		ID: "test",

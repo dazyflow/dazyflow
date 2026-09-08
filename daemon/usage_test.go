@@ -20,19 +20,15 @@ func TestUsagePeriod(t *testing.T) {
 	if got := usagePeriod(usageNow); got != "2026-06" {
 		t.Errorf("got %q, want 2026-06", got)
 	}
-	// Local-zone timestamps bucket by their UTC month, so replicas in
-	// different zones agree on the bucket.
 	nyc := time.FixedZone("EST", -5*3600)
 	if got := usagePeriod(time.Date(2026, 6, 30, 23, 0, 0, 0, nyc)); got != "2026-07" {
 		t.Errorf("got %q, want 2026-07 (23:00 EST on the 30th is July UTC)", got)
 	}
 }
 
-// usageStoreContract runs the behavior shared by both backends.
 func usageStoreContract(t *testing.T, store UsageStore) {
 	ctx := context.Background()
 
-	// Counts accumulate per tenant per month.
 	for i := 0; i < 3; i++ {
 		if err := store.AddRun(ctx, "acme", usageNow); err != nil {
 			t.Fatalf("AddRun: %v", err)
@@ -46,7 +42,6 @@ func usageStoreContract(t *testing.T, store UsageStore) {
 			t.Fatalf("AddSkippedRun: %v", err)
 		}
 	}
-	// A different month gets its own bucket…
 	prev := usageNow.AddDate(0, -1, 0)
 	if err := store.AddRun(ctx, "acme", prev); err != nil {
 		t.Fatalf("AddRun prev month: %v", err)
@@ -70,7 +65,6 @@ func usageStoreContract(t *testing.T, store UsageStore) {
 		t.Errorf("previous bucket = %+v, want 2026-05/1/0", got[1])
 	}
 
-	// The months cap limits history, newest kept.
 	capped, err := store.Usage(ctx, "acme", 1)
 	if err != nil {
 		t.Fatalf("Usage capped: %v", err)
@@ -79,7 +73,6 @@ func usageStoreContract(t *testing.T, store UsageStore) {
 		t.Errorf("capped = %+v, want just 2026-06", capped)
 	}
 
-	// Unknown tenant: empty, not an error.
 	none, err := store.Usage(ctx, "nobody", 12)
 	if err != nil || len(none) != 0 {
 		t.Errorf("unknown tenant = %v/%v, want empty/nil", none, err)
@@ -108,10 +101,9 @@ func TestMemUsageStore_Concurrent(t *testing.T) {
 	}
 }
 
-// TestMemUsageStore_AddRunIfUnderAtomic is the regression test for the run-cap
-// bypass race: N concurrent reserve attempts against a cap of K must admit
-// EXACTLY K, never more. The old read-then-add gate let many concurrent
-// submissions at the boundary all pass.
+// The regression test for the run-cap bypass race: N concurrent reserve
+// attempts against a cap of K must admit EXACTLY K, never more. The old read-
+// then-add gate let many concurrent submissions at the boundary all pass.
 func TestMemUsageStore_AddRunIfUnderAtomic(t *testing.T) {
 	store := NewMemUsageStore()
 	const limit = 10
@@ -138,8 +130,6 @@ func TestMemUsageStore_AddRunIfUnderAtomic(t *testing.T) {
 	}
 }
 
-// Gated on DAZYFLOW_TEST_DB (a real Postgres), like the jobstore/auth
-// integration tests.
 func TestPgUsageStore(t *testing.T) {
 	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
@@ -161,7 +151,6 @@ func TestPgUsageStore(t *testing.T) {
 	usageStoreContract(t, store)
 }
 
-// countingUsage wraps MemUsageStore and counts inner write calls.
 type countingUsage struct {
 	*MemUsageStore
 	nodeWrites int
@@ -177,7 +166,6 @@ func TestBufferedUsage(t *testing.T) {
 	b := NewBufferedUsage(inner)
 	ctx := context.Background()
 
-	// 50 node executions accumulate without touching the store…
 	for i := 0; i < 50; i++ {
 		if err := b.AddNodeExecutions(ctx, "acme", 1, usageNow); err != nil {
 			t.Fatalf("add: %v", err)
@@ -186,11 +174,9 @@ func TestBufferedUsage(t *testing.T) {
 	if inner.nodeWrites != 0 {
 		t.Fatalf("inner writes before flush = %d", inner.nodeWrites)
 	}
-	// …runs pass straight through (the run gate reads them)…
 	if err := b.AddRun(ctx, "acme", usageNow); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	// …and a read flushes first, so the caller sees everything.
 	got, err := b.Usage(ctx, "acme", 1)
 	if err != nil {
 		t.Fatalf("usage: %v", err)
@@ -201,7 +187,6 @@ func TestBufferedUsage(t *testing.T) {
 	if len(got) != 1 || got[0].NodeExecutions != 50 || got[0].GraphRuns != 1 {
 		t.Errorf("buckets = %+v, want 50 executions / 1 run", got)
 	}
-	// A flush with nothing pending writes nothing.
 	if err := b.Flush(ctx); err != nil || inner.nodeWrites != 1 {
 		t.Errorf("idle flush: err=%v writes=%d", err, inner.nodeWrites)
 	}
@@ -212,8 +197,6 @@ func TestCachedPlanStore(t *testing.T) {
 	c := NewCachedPlanStore(inner, time.Minute)
 	ctx := context.Background()
 
-	// First read goes through; the second is served from cache even if
-	// the inner store changes underneath (TTL staleness by design).
 	p, err := c.GetPlan(ctx, "acme")
 	if err != nil || p.Plan != PlanFree {
 		t.Fatalf("first read = %+v/%v", p, err)
@@ -223,7 +206,6 @@ func TestCachedPlanStore(t *testing.T) {
 	if p.Plan != PlanFree {
 		t.Errorf("cached read = %q, want the cached free plan", p.Plan)
 	}
-	// SetPlan through the cache writes through AND refreshes it.
 	if err := c.SetPlan(ctx, TenantPlan{Tenant: "acme", Plan: PlanPro}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
@@ -231,7 +213,6 @@ func TestCachedPlanStore(t *testing.T) {
 	if p.Plan != PlanPro {
 		t.Errorf("after write-through = %q, want pro", p.Plan)
 	}
-	// The dedupe extension passes through to the inner store.
 	first, err := c.MarkStripeEvent(ctx, "evt_x")
 	if err != nil || !first {
 		t.Errorf("dedupe first = %v/%v", first, err)

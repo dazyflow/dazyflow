@@ -79,10 +79,10 @@ func TestRegisterMCPServers_Errors(t *testing.T) {
 	}
 }
 
-// TestProductionConfigProblems_DevKeyGuard covers the DAZYFLOW_DEV_KEY
-// fail-closed rule: the flag mints a publicly-known admin bearer token, so it
-// must be refused wherever the deployment doesn't look like somebody's
-// laptop. Previously it was guarded only by a line in the docs.
+// Covers the DAZYFLOW_DEV_KEY fail-closed rule: the flag mints a publicly-
+// known admin bearer token, so it must be refused wherever the deployment
+// doesn't look like somebody's laptop. Previously it was guarded only by a
+// line in the docs.
 func TestProductionConfigProblems_DevKeyGuard(t *testing.T) {
 	const strongKey = "c3Ryb25nLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9rIQ=="
 	localDSN := "postgres://dazyflow:s3cret@localhost:5432/dazyflow?sslmode=require"

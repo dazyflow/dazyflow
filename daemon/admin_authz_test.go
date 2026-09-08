@@ -41,8 +41,6 @@ func TestIssueAPIKey_RejectsForeignTenantKeyID(t *testing.T) {
 		t.Fatalf("victim key was clobbered: tenant=%q subject=%q", got.Tenant, got.Subject)
 	}
 
-	// Reusing an id within the caller's own tenant is still allowed (it's a
-	// legitimate re-issue/rotation within their administrative scope).
 	if _, _, err := auth.IssueAPIKey(ks, t.Context(), "own-id", "t", "ws", "u@t", []core.Role{editor}, nil); err != nil {
 		t.Fatalf("seed own key: %v", err)
 	}
@@ -75,7 +73,6 @@ func TestRevokeAPIKey_TenantScoped(t *testing.T) {
 		t.Fatal("foreign key was revoked despite cross-tenant denial")
 	}
 
-	// A platform admin legitimately crosses tenant boundaries.
 	pa := core.Principal{Subject: "op",
 		Roles: []core.Role{{Name: "pa", Permissions: []core.Permission{core.PermPlatformAdmin}}}}
 	if err := svc.RevokeAPIKey(t.Context(), pa, "victim"); err != nil {
@@ -101,9 +98,6 @@ func TestCreateInvitation_RejectsOverScopedRoles(t *testing.T) {
 	}
 	h.gw.Invitations = inv
 
-	// adminDo authenticates as an organization:admin token bound to "t".
-
-	// 1) platform:admin is refused outright.
 	rw := h.adminDo(t, "POST", "/api/v1/admin/invitations", map[string]any{
 		"email": "newcomer@example.com",
 		"roles": []map[string]any{{"name": "x", "permissions": []string{"platform:admin"}}},
@@ -112,7 +106,6 @@ func TestCreateInvitation_RejectsOverScopedRoles(t *testing.T) {
 		t.Fatalf("platform:admin invite: code=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// 2) a permission the inviter doesn't hold (it only has organization:admin).
 	rw = h.adminDo(t, "POST", "/api/v1/admin/invitations", map[string]any{
 		"email": "newcomer@example.com",
 		"roles": []map[string]any{{"name": "x", "permissions": []string{"secret:write"}}},
@@ -121,7 +114,6 @@ func TestCreateInvitation_RejectsOverScopedRoles(t *testing.T) {
 		t.Fatalf("over-scoped invite: code=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// 3) the default-role invite (no roles) still succeeds.
 	rw = h.adminDo(t, "POST", "/api/v1/admin/invitations", map[string]any{"email": "newcomer@example.com"})
 	if rw.Code != http.StatusCreated {
 		t.Fatalf("default invite should succeed: code=%d body=%s", rw.Code, rw.Body.String())

@@ -34,7 +34,6 @@ export function CredentialsManager({
   loading: boolean;
   canWrite: boolean;
   onChanged: () => void;
-  // scope/flow default to tenant. flow is required for scope==="flow".
   scope?: SecretScope;
   flow?: string;
   // focus is a credential name the user was pointed at from a template

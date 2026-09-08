@@ -16,9 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// seedFile writes content into the (tenant, workspace) sandbox at rel,
-// creating parent dirs. It writes straight to disk so the file-manager
-// endpoints are exercised against real on-disk state.
 func seedFile(t *testing.T, root, tenant, workspace, rel, content string) {
 	t.Helper()
 	full := filepath.Join(root, tenant, workspace, filepath.FromSlash(rel))
@@ -51,7 +48,6 @@ func TestFiles_ListAndDownload(t *testing.T) {
 	seedFile(t, root, "t", "ws", "report.txt", "hello")
 	seedFile(t, root, "t", "ws", "src/main.go", "package main")
 
-	// List the root: one file + one dir, dirs first.
 	rw := fileReq(t, h, h.token, "GET", "/api/v1/workspaces/t/ws/files/list", "")
 	if rw.Code != http.StatusOK {
 		t.Fatalf("list status=%d body=%s", rw.Code, rw.Body.String())
@@ -73,7 +69,6 @@ func TestFiles_ListAndDownload(t *testing.T) {
 		t.Errorf("file entry = %+v, want report.txt size 5", listed.Entries[1])
 	}
 
-	// Download the file: bytes + attachment headers.
 	rw = fileReq(t, h, h.token, "GET", "/api/v1/workspaces/t/ws/files/download?path=report.txt", "")
 	if rw.Code != http.StatusOK {
 		t.Fatalf("download status=%d", rw.Code)
@@ -118,7 +113,6 @@ func TestFiles_MkdirRenameDelete(t *testing.T) {
 	h, root := newUploadHarness(t)
 	seedFile(t, root, "t", "ws", "draft.txt", "v1")
 
-	// mkdir
 	if rw := fileReq(t, h, h.token, "POST", "/api/v1/workspaces/t/ws/files/mkdir", `{"path":"archive/2026"}`); rw.Code != http.StatusOK {
 		t.Fatalf("mkdir status=%d body=%s", rw.Code, rw.Body.String())
 	}
@@ -126,7 +120,6 @@ func TestFiles_MkdirRenameDelete(t *testing.T) {
 		t.Fatalf("archive/2026 not created: %v", err)
 	}
 
-	// rename (moves into the new folder, creating parents as needed)
 	if rw := fileReq(t, h, h.token, "POST", "/api/v1/workspaces/t/ws/files/rename", `{"from":"draft.txt","to":"archive/2026/final.txt"}`); rw.Code != http.StatusOK {
 		t.Fatalf("rename status=%d body=%s", rw.Code, rw.Body.String())
 	}
@@ -137,7 +130,6 @@ func TestFiles_MkdirRenameDelete(t *testing.T) {
 		t.Errorf("moved file = %q err=%v", b, err)
 	}
 
-	// delete the whole archive folder
 	if rw := fileReq(t, h, h.token, "DELETE", "/api/v1/workspaces/t/ws/files?path=archive", ""); rw.Code != http.StatusOK {
 		t.Fatalf("delete status=%d body=%s", rw.Code, rw.Body.String())
 	}
@@ -146,8 +138,8 @@ func TestFiles_MkdirRenameDelete(t *testing.T) {
 	}
 }
 
-// TestFiles_RenameRefusesOverwrite locks in the data-loss guard: a move/rename
-// onto an existing path must be rejected, not silently clobber the target.
+// Locks in the data-loss guard: a move/rename onto an existing path must be
+// rejected, not silently clobber the target.
 func TestFiles_RenameRefusesOverwrite(t *testing.T) {
 	t.Parallel()
 	h, root := newUploadHarness(t)
@@ -198,10 +190,6 @@ func TestFiles_TraversalRejected(t *testing.T) {
 	}
 }
 
-// TestFiles_RequireEdit pins the editor-gated file-manager model: the whole
-// surface — reads included — needs graph:edit. A viewer (graph:run only) is
-// forbidden across the board; the UI hides Files from them and the server
-// enforces it (mutations doubly so). See httpfiles.go's endpoint table.
 func TestFiles_RequireEdit(t *testing.T) {
 	t.Parallel()
 	h, root := newUploadHarness(t)
@@ -212,7 +200,6 @@ func TestFiles_RequireEdit(t *testing.T) {
 		t.Fatalf("issue: %v", err)
 	}
 
-	// graph:run alone is forbidden from every file endpoint — read and mutate.
 	cases := []struct {
 		name, method, path, body string
 	}{
@@ -242,15 +229,10 @@ func TestFiles_Usage(t *testing.T) {
 	if err := json.Unmarshal(rw.Body.Bytes(), &u); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	// No quota provider wired in the harness ⇒ unlimited (0/0); the point
-	// is the endpoint authorizes and returns the shape.
 	if u.Limit != 0 {
 		t.Errorf("limit = %d, want 0 (no quota provider)", u.Limit)
 	}
 }
-
-// renameWorkspaceFile validation branches not covered by the happy-path /
-// overwrite tests.
 
 func TestRenameFile_DecodeError(t *testing.T) {
 	t.Parallel()
@@ -285,7 +267,6 @@ func TestRenameFile_BadTo(t *testing.T) {
 func TestRenameFile_RootRefused(t *testing.T) {
 	t.Parallel()
 	h, _ := newUploadHarness(t)
-	// Empty from/to clean to "." (workspace root) — refused.
 	rw := fileReq(t, h, h.token, "POST", "/api/v1/workspaces/t/ws/files/rename",
 		`{"from":"","to":"x.txt"}`)
 	if rw.Code != http.StatusBadRequest {

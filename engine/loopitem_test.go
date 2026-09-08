@@ -83,7 +83,6 @@ func TestStringifyItemValue_Cov(t *testing.T) {
 }
 
 func TestItemSubstituter_Cov(t *testing.T) {
-	// No item on ctx: ${item.…} is an unknown scheme, ok=false.
 	sub := itemSubstituter(context.Background())
 	if _, ok, _ := sub(context.Background(), "item", "name"); ok {
 		t.Error("no item on ctx should report ok=false")
@@ -98,18 +97,15 @@ func TestItemSubstituter_Cov(t *testing.T) {
 	if v, ok, err := sub(ctx, "item", "n"); err != nil || !ok || v != "3" {
 		t.Errorf("item.n = %q ok=%v err=%v", v, ok, err)
 	}
-	// Non-item scheme falls through.
 	if _, ok, _ := sub(ctx, "secret", "x"); ok {
 		t.Error("non-item scheme should report ok=false")
 	}
-	// Bad path resolves but errors (ok=true, err!=nil).
 	if _, ok, err := sub(ctx, "item", "missing"); !ok || err == nil {
 		t.Errorf("missing path want ok=true err!=nil, got ok=%v err=%v", ok, err)
 	}
 }
 
 func TestWithLoopRunID_Cov(t *testing.T) {
-	// Empty run ID is a no-op: same context back, nothing stored.
 	base := context.Background()
 	if WithLoopRunID(base, "") != base {
 		t.Error("empty run ID should return ctx unchanged")
@@ -125,7 +121,6 @@ func TestWithLoopRunID_Cov(t *testing.T) {
 
 func TestWithBodyRunner_Cov(t *testing.T) {
 	base := context.Background()
-	// Nil runner is a no-op.
 	if WithBodyRunner(base, nil) != base {
 		t.Error("nil runner should return ctx unchanged")
 	}
@@ -182,7 +177,6 @@ func TestItemWholeValue_KeepsStructure(t *testing.T) {
 		t.Fatalf("address = %#v, want a map", v)
 	}
 
-	// The whole item.
 	if v, ok, _ = itemWholeValue(ctx, "${item.}"); !ok {
 		t.Fatal("${item.} should resolve to the whole item")
 	} else if m, isMap := v.(map[string]any); !isMap || m["customer"] != "Ida" {
@@ -190,8 +184,6 @@ func TestItemWholeValue_KeepsStructure(t *testing.T) {
 	}
 }
 
-// Scalars keep going through the ordinary string path, so a text setting
-// still gets text and an inline reference inside a sentence is untouched.
 func TestItemWholeValue_ScalarsAndInlineFallThrough(t *testing.T) {
 	ctx := WithLoopItem(context.Background(), map[string]any{
 		"customer": "Ida", "count": float64(2),
@@ -210,9 +202,6 @@ func TestItemWholeValue_NoItemOnContext(t *testing.T) {
 	}
 }
 
-// End-to-end through the param resolver the worker actually uses: a body
-// step's structured setting comes out structured, while text settings keep
-// splicing as text.
 func TestResolveParams_StructuredItemValue(t *testing.T) {
 	job := core.Job{Params: map[string]any{
 		"shipment": "${item.address}",

@@ -39,21 +39,9 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Editable on the card (inline pin editor — the port name
-				// matches the string param) and wireable, so the target
-				// database can be threaded from an upstream step; a wired
-				// value overrides the param.
 				{Port: "database_id", Label: "Database ID", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				// Rows is a list of friendly records — {column name: plain
-				// value, id, url} — flattened from Notion's page objects, the
-				// same shape sheets_read_range emits. The raw page objects
-				// ("pages"), pagination fields ("next_cursor", "has_more")
-				// and the full list response ("meta") are still EMITTED for
-				// run records and API callers that paginate by hand, but not
-				// declared: raw Notion JSON and hand-rolled pagination are
-				// dev plumbing.
 				{Port: "rows", Label: "Rows", MIME: []string{"application/json"}},
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
@@ -78,7 +66,6 @@ func init() {
 }
 
 func executeNotionQueryDatabase(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	// The Database ID input pin overrides the param when wired.
 	dbID, ok := params.TextInputOr(job, "database_id", params.StringDefault(job.Params, "database_id", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Database ID' input must be text"), nil
@@ -134,9 +121,7 @@ func executeNotionQueryDatabase(ctx context.Context, job core.Job, _ chan<- core
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			"rows": {MIME: "application/json", Inline: rows},
-			// Raw page objects, pagination and the full list response —
-			// emitted for run records/API callers, not pins.
+			"rows":        {MIME: "application/json", Inline: rows},
 			"pages":       {MIME: "application/json", Inline: r.Results},
 			"next_cursor": {MIME: "text/plain", Inline: r.NextCursor},
 			"has_more":    {MIME: core.MIMEBool, Inline: r.HasMore},
@@ -165,9 +150,6 @@ func flattenNotionPage(p any) any {
 	if u, ok := page["url"].(string); ok && u != "" {
 		row["url"] = u
 	}
-	// Page-level timestamps ride along too — sync/mirror flows key on them
-	// (e.g. the Notion→Postgres mirror template selects created_time and
-	// last_edited_time for its upsert).
 	if ct, ok := page["created_time"].(string); ok && ct != "" {
 		row["created_time"] = ct
 	}
@@ -177,9 +159,6 @@ func flattenNotionPage(p any) any {
 	return row
 }
 
-// propertyPlain reduces one Notion property value to the plain text /
-// number / name a person sees in Notion, not the API envelope. Unknown
-// types fall back to their raw typed payload.
 func propertyPlain(v any) any {
 	m, ok := v.(map[string]any)
 	if !ok {
@@ -198,18 +177,13 @@ func propertyPlain(v any) any {
 	case "created_by", "last_edited_by":
 		return optionName(m[t])
 	case "formula", "rollup":
-		// Nested one level deep with the same {type, <type>: value} shape.
 		return propertyPlain(m[t])
 	case "":
 		return v
 	}
-	// number, checkbox, url, email, phone_number, created_time, string,
-	// boolean, … — the typed payload is already a plain value.
 	return m[t]
 }
 
-// optionName pulls the human label off a select/status/person object —
-// its name, falling back to its id.
 func optionName(v any) any {
 	m, ok := v.(map[string]any)
 	if !ok {
@@ -224,8 +198,6 @@ func optionName(v any) any {
 	return nil
 }
 
-// joinPlain renders a list property (multi-select tags, people,
-// relations) as "A, B, C".
 func joinPlain(v any) any {
 	l, ok := v.([]any)
 	if !ok {
@@ -240,8 +212,6 @@ func joinPlain(v any) any {
 	return strings.Join(parts, ", ")
 }
 
-// datePlain renders a Notion date as its start, or "start → end" for a
-// range.
 func datePlain(v any) any {
 	m, ok := v.(map[string]any)
 	if !ok {
@@ -254,7 +224,6 @@ func datePlain(v any) any {
 	return start
 }
 
-// richTextPlain concatenates a rich-text array's plain text.
 func richTextPlain(v any) string {
 	l, _ := v.([]any)
 	var b strings.Builder

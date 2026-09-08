@@ -60,9 +60,6 @@ export function AdminRunners() {
     load();
   }, [load]);
 
-  // Poll while the page is open, so a machine that has just been set up appears
-  // without anyone reloading. The wait between pasting the command and seeing
-  // the runner arrive is the moment someone is most likely to think it failed.
   useEffect(() => {
     if (!token) return;
     const id = setInterval(() => {
@@ -267,12 +264,6 @@ export function InstallCommand({
   );
 }
 
-// RunnerOnlineChip reuses the run-status vocabulary, so "online" reads the way
-// "succeeded" does elsewhere in the app.
-//
-// It shows the last check-in for an offline machine and not for an online one:
-// "online" needs no qualification, while "offline since Tuesday" is the whole
-// story of what went wrong.
 function RunnerOnlineChip({ runner }: { runner: Runner }) {
   const { t } = useTranslation();
   const tone = runner.online ? "succeeded" : "failed";

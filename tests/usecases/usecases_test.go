@@ -28,9 +28,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// catalog is the shipped drop catalog with the universal `pass` pin applied
-// exactly as the engine's resolver does at run time, so a graph that
-// legitimately sequences through a pass pin isn't flagged for a missing port.
 func catalog() map[string]core.Manifest {
 	out := map[string]core.Manifest{}
 	for id, m := range engine.Default.Manifests() {
@@ -39,7 +36,6 @@ func catalog() map[string]core.Manifest {
 	return out
 }
 
-// paramSchema is the slice of JSON Schema the drops actually use.
 type paramSchema struct {
 	Type       string                  `json:"type"`
 	Enum       []any                   `json:"enum"`
@@ -48,20 +44,12 @@ type paramSchema struct {
 	Items      *paramSchema            `json:"items"`
 }
 
-// wholeReference matches a setting that is exactly one ${scheme.path}
-// reference — an item field inside a loop body, a secret, a resource.
 var wholeReference = regexp.MustCompile(`^\s*\$\{[a-z0-9_-]+\.[^}]*\}\s*$`)
 
-// checkValue reports type/enum/required violations of v against s.
-// Best-effort: an absent or unmodelled type is not an error.
 func checkValue(path string, s *paramSchema, v any) []string {
 	if s == nil {
 		return nil
 	}
-	// A setting whose whole value is a ${…} reference is a string in the
-	// graph JSON no matter what the field's declared type is — the engine
-	// resolves it at run time, and a whole-value reference keeps the real
-	// shape (a list stays a list). So it satisfies any type.
 	if str, isStr := v.(string); isStr && wholeReference.MatchString(str) {
 		return nil
 	}
@@ -140,7 +128,6 @@ func TestUseCaseGraphsValidate(t *testing.T) {
 			// Validate the graph as it would actually run — after the same
 			// data-model migration the daemon applies on load.
 
-			// The authoring gate: everything the app itself refuses to save.
 			for _, is := range core.ValidateGraphFull(g, manifests) {
 				if is.Severity == core.LintWarn {
 					t.Logf("warn [%s] %s %v", is.Code, is.Message, is.NodeIDs)
@@ -173,7 +160,6 @@ func TestUseCaseGraphsValidate(t *testing.T) {
 				for _, k := range unknown {
 					t.Errorf("node %q (%s): no such setting %q", n.ID, n.Module, k)
 				}
-				// A required setting may instead be satisfied by a wired input.
 				wired := map[string]bool{}
 				for _, e := range g.Edges {
 					if e.To == n.ID {
@@ -187,7 +173,6 @@ func TestUseCaseGraphsValidate(t *testing.T) {
 				}
 			}
 
-			// A for_each with no body wired has nothing to run.
 			bodyWired := map[string]bool{}
 			for _, e := range g.Edges {
 				if e.FromPort == "body" {

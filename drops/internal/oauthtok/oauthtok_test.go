@@ -16,7 +16,6 @@ func jobParams(p map[string]any) core.Job { return core.Job{Params: p} }
 
 func TestResolve_ExplicitToken(t *testing.T) {
 	h := New("Slack", "slack", "Slack")
-	// An explicit token short-circuits before any lookup is needed.
 	tok, err := h.Resolve(context.Background(), jobParams(map[string]any{"token": "xoxb-123"}))
 	if err != nil || tok != "xoxb-123" {
 		t.Fatalf("Resolve = %q, %v", tok, err)
@@ -29,7 +28,6 @@ func TestResolve_NoLookupConfigured(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "no Slack token") {
 		t.Fatalf("Resolve = %v, want no-token guidance", err)
 	}
-	// The guidance names the provider slug for the authorize URL.
 	if !strings.Contains(err.Error(), "/oauth/slack/authorize") {
 		t.Errorf("error missing authorize URL: %v", err)
 	}

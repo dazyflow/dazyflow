@@ -20,21 +20,15 @@ type pauseRegistry struct {
 	mu sync.Mutex
 	// paused maps a graph-run ID to the node IDs the run is currently
 	// paused *after* — their dependents were held rather than dispatched.
-	paused map[string][]string
-	// stepping maps a graph-run ID to step mode: while on, the run pauses
-	// after every node (not just breakpoint nodes), until Continue clears it.
+	paused   map[string][]string
 	stepping map[string]bool
 }
 
-// breakpoints is the process-wide registry. Dispatcher and Service are
-// constructed in several places (worker, approval/cancel/resume), so the
-// shared pause state lives at package scope rather than on either struct.
 var breakpoints = &pauseRegistry{
 	paused:   map[string][]string{},
 	stepping: map[string]bool{},
 }
 
-// addPaused records that runID paused after nodeID (dedup).
 func (r *pauseRegistry) addPaused(runID, nodeID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -46,7 +40,6 @@ func (r *pauseRegistry) addPaused(runID, nodeID string) {
 	r.paused[runID] = append(r.paused[runID], nodeID)
 }
 
-// takePaused returns and clears the nodes runID is paused after.
 func (r *pauseRegistry) takePaused(runID string) []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -71,7 +64,6 @@ func (r *pauseRegistry) isStepping(runID string) bool {
 	return r.stepping[runID]
 }
 
-// clear drops all pause state for a run (called when it terminates).
 func (r *pauseRegistry) clear(runID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

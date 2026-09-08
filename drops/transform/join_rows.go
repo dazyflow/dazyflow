@@ -15,10 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// joinKindInner et al. are the named JOIN flavors. Matches SQL
-// semantics modulo the cartesian-within-key-group behavior, which is
-// the standard SQL outcome anyway when multiple right rows share a
-// key.
 const (
 	joinKindInner = "inner"
 	joinKindLeft  = "left"
@@ -33,10 +29,6 @@ const (
 	joinKindAnti = "anti"
 )
 
-// rightSuffixDefault is appended to right-side column names when they
-// collide with a left-side column on a non-key column. Configurable
-// via params so a graph that already uses "_right" for something else
-// can disambiguate.
 const rightSuffixDefault = "_right"
 
 func init() {
@@ -95,12 +87,6 @@ func init() {
 	})
 }
 
-// executeJoinRows implements a hash join over the right side: O(L+R)
-// time, O(R) extra memory. Cartesian-within-group when multiple right
-// rows share a key. Equality on key values uses string coercion (same
-// rule map_rows.filter_eq uses) so a row with id=30 (int) matches a
-// row with user_id="30" (string) without forcing the upstream to
-// pre-cast.
 func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	on, kind, rightSuffix, err := parseJoinParams(job.Params)
 	if err != nil {
@@ -116,10 +102,6 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
-	// Validate the join key columns exist on each side. We allow
-	// empty sides as long as the key columns are PROMISED by the
-	// headers — an empty rows slice with declared headers is a
-	// legitimate "no matches" outcome, not a configuration error.
 	leftKeys := make([]string, 0, len(on))
 	for lk := range on {
 		leftKeys = append(leftKeys, lk)
@@ -139,10 +121,6 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
 
-	// Resolve output headers: every left header verbatim, then each
-	// right header that ISN'T a right key column (those equal the
-	// left key by construction). Collisions on non-key columns get
-	// the right one suffixed.
 	rightKeySet := make(map[string]struct{}, len(rightKeysInLeftOrder))
 	for _, k := range rightKeysInLeftOrder {
 		rightKeySet[k] = struct{}{}
@@ -152,14 +130,9 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		leftHeaderSet[h] = struct{}{}
 	}
 	outHeaders := append([]string(nil), leftHeaders...)
-	// An anti join emits left rows untouched — no right columns at all, so
-	// "did it match?" is answered by the row being here, not by a null.
 	if kind == joinKindAnti {
 		rightHeaders = nil
 	}
-	// rightOut maps right-side column → output-side column (possibly
-	// suffixed). Built once so each row emit can rename without a
-	// second collision scan.
 	rightOut := make(map[string]string, len(rightHeaders))
 	for _, h := range rightHeaders {
 		if _, isKey := rightKeySet[h]; isKey {
@@ -173,8 +146,6 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		outHeaders = append(outHeaders, outName)
 	}
 
-	// Build the right-side index. Cartesian-within-group is implicit:
-	// the slice value holds every right row sharing this key.
 	rightIndex := make(map[string][]map[string]any, len(rightRows))
 	rightOrder := make([]string, 0, len(rightIndex)) // first-seen key order, for deterministic right/outer output
 	for _, r := range rightRows {
@@ -195,8 +166,6 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		k := keyString(lr, leftKeys)
 		matches := rightIndex[k]
 		if len(matches) == 0 {
-			// No right rows for this key. Inner skips; left/outer
-			// emit the left with nil right-side columns.
 			if kind == joinKindLeft || kind == joinKindOuter || kind == joinKindAnti {
 				if len(out) >= maxOut {
 					return joinTooLarge(job, maxOut), nil
@@ -254,9 +223,6 @@ func joinTooLarge(job core.Job, max int) core.Result {
 		fmt.Sprintf("join output exceeds the %d-row limit (a many-to-many key multiplies the inputs); raise DAZYFLOW_MAX_ROWS or join on a more selective key", max))
 }
 
-// parseJoinParams pulls (on, kind, right_suffix) off Job.Params with
-// defaults applied. Stays separate from Execute so the test suite can
-// hit the param-parsing edge cases directly.
 func parseJoinParams(params map[string]any) (map[string]string, string, string, error) {
 	onRaw, ok := params["on"]
 	if !ok {
@@ -293,9 +259,6 @@ func parseJoinParams(params map[string]any) (map[string]string, string, string, 
 	return on, kind, rightSuffix, nil
 }
 
-// loadSide pulls the (rows, headers) for one side off the Job inputs.
-// `name` is "left" or "right" — used in error messages and to look
-// up the matching input port names.
 func loadSide(job core.Job, name string) ([]map[string]any, []string, error) {
 	rowsRef, ok := job.Input[name+"_rows"]
 	if !ok {
@@ -315,19 +278,12 @@ func loadSide(job core.Job, name string) ([]map[string]any, []string, error) {
 	return rows, headers, nil
 }
 
-// requireColumns errors out when a join key column isn't present in
-// either the declared headers or any of the rows. Both conditions
-// have to fail to error — an empty rows slice with the column in
-// declared headers is fine ("no matches" not "misconfigured").
 func requireColumns(side string, headers []string, rows []map[string]any, needed []string) error {
 	have := make(map[string]struct{}, len(headers))
 	for _, h := range headers {
 		have[h] = struct{}{}
 	}
 	if len(have) == 0 {
-		// No headers were derived because rows is empty AND no
-		// headers input — skip the check; an empty side with no
-		// columns is harmless.
 		if len(rows) == 0 {
 			return nil
 		}
@@ -336,8 +292,6 @@ func requireColumns(side string, headers []string, rows []map[string]any, needed
 		if _, ok := have[col]; ok {
 			continue
 		}
-		// Headers don't list it; sample a few rows for a friendlier
-		// "did you mean…" — but for V1 just fail fast.
 		return fmt.Errorf("%s side has no column %q (declared headers: %v)", side, col, headers)
 	}
 	return nil
@@ -362,11 +316,6 @@ func mergeRow(left, right map[string]any, leftHeaders []string, rightOut map[str
 			out[k] = v
 		}
 	} else {
-		// Fill every left header with nil, then overwrite the join
-		// keys from the right side. Headers came from either the
-		// declared input or deriveHeaders(rows), so a column the
-		// user mentioned by name is preserved even on unmatched
-		// rights.
 		for _, h := range leftHeaders {
 			out[h] = nil
 		}
@@ -383,8 +332,6 @@ func mergeRow(left, right map[string]any, leftHeaders []string, rightOut map[str
 			out[outName] = right[rk]
 		}
 	} else {
-		// Symmetric: right is absent — every right-side output
-		// column lands as nil so headers stay aligned.
 		for _, outName := range rightOut {
 			out[outName] = nil
 		}

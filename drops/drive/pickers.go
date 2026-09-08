@@ -15,23 +15,14 @@ import (
 
 const folderMIME = "application/vnd.google-apps.folder"
 
-// ListFolders lists the connected account's Drive folders (most-recent first)
-// as {id, name} options — the backend for the folder pickers on
-// drive_list_files ('In folder') and drive_upload ('Into folder'). Reads
-// account/timeout_ms from job.Params.
 func ListFolders(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
 	return listForPicker(ctx, job, "mimeType = '"+folderMIME+"' and trashed = false")
 }
 
-// ListFilesForPicker lists the account's non-folder Drive files (most-recent
-// first) as {id, name} options — the backend for the drive_download 'File'
-// picker. Folders are excluded so the file picker shows actual files.
 func ListFilesForPicker(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
 	return listForPicker(ctx, job, "mimeType != '"+folderMIME+"' and trashed = false")
 }
 
-// listForPicker runs a Drive files.list with the given query and projects the
-// results to {id, name} account resources for a dropdown.
 func listForPicker(ctx context.Context, job core.Job, q string) ([]core.AccountResource, error) {
 	token, err := resolveToken(ctx, job)
 	if err != nil {

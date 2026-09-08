@@ -172,9 +172,7 @@ import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
 import { layerNodes } from "../../lib/autoLayout";
 
-// Custom node-types registry. React Flow caches by reference, so this
-// is declared at module scope rather than inline in the component to
-// avoid unnecessary remounts on each render.
+// React Flow caches by reference: this must stay module-level, not rebuilt.
 const nodeTypes = { dazy: DazyNode, comment: CommentNode };
 const edgeTypes = { reroute: RerouteEdge };
 
@@ -184,38 +182,17 @@ const edgeTypes = { reroute: RerouteEdge };
 
 
 
-// Resource-picker id→name resolution lives in useResourceResolver (extracted
-// from this file); RESOURCE_PICKER_KINDS / pickerFormat moved there with it.
 
-// Shared empty array for the "no connected ports" fallback, so the per-node
-// data memo in displayNodes compares it by reference (a fresh `[]` would never
-// be equal and would defeat the cache).
 const EMPTY_PORTS: string[] = [];
 
-// Backoff for the live flow-watch when its SSE stream drops. The floor is a
-// whole second rather than something eager because a reconnect storm helps
-// nobody: the reason the stream ended is usually that the network or the tab
-// went away, and neither is fixed by asking again immediately.
+// Floor is a second so a flapping stream cannot spin.
 const WATCH_RETRY_MIN_MS = 1000;
 const WATCH_RETRY_MAX_MS = 30000;
 
 
 function EditorInner() {
   const { t } = useTranslation();
-  // i18n.language read reactively, so the effect that (re-)derives node names
-  // re-runs on a language switch. Everything else reads i18n.language at call
-  // time — see the note below.
   const i18nLanguage = i18n.language;
-  // A node's display name defaults to its drop's name (dropLabel below), so it
-  // follows the reader's language. It is display-only state — buildGraph never
-  // writes it back — so localizing here cannot leak a Swedish label into a
-  // saved flow. The language comes off the imported i18n singleton at CALL
-  // time, as it already does for i18n.t further down: the insert callbacks are
-  // deliberately []-dependency and a captured value would keep naming new
-  // nodes in whatever language was active when the editor mounted. Cards
-  // already on the canvas keep their names until the flow is reloaded.
-  // Binds the active translator to lintMessage so the badge effect and the
-  // warning banner share one Inspector-style formatter.
   const describeLint = useCallback(
     (issue: LintIssue, manifest: Manifest | undefined) =>
       lintMessage(issue, manifest, t),
@@ -230,23 +207,13 @@ function EditorInner() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
-  // animateBuild is set by CreateFlow when it opens a freshly AI-generated
-  // flow — the editor plays the build animation on first load. Consumed once
-  // (the ref) so a later re-render or revisit can't replay it; the history
-  // entry's state is also cleared below so a refresh won't re-trigger it.
   const animateBuildRef = useRef(
     !!(location.state as { animateBuild?: boolean } | null)?.animateBuild,
   );
   const { token, me, hasPerm, activeTenant, activeWorkspace } = useAuth();
-  // Connecting an app writes conn.<slug>.api_key — needs secret:write. Viewers
-  // (graph:run only) can't, and the Apps connection card is hidden for them, so
-  // the "Connect" CTAs become a non-actionable "ask an admin" note instead.
   const canConnect = hasPerm("secret:write");
   const themeMode = useThemeMode();
   const [manifests, setManifests] = useState<Manifest[]>([]);
-  // Module co-occurrence mined from this workspace's own flows. Best-effort:
-  // empty until it loads (and stays empty on error or for a brand-new org),
-  // which simply means no "Suggested" group — the palette behaves as before.
   const [adjacency, setAdjacency] = useState<DropAdjacency[]>([]);
   const manifestByID = useMemo(() => {
     const m = new Map<string, Manifest>();
@@ -254,11 +221,6 @@ function EditorInner() {
     return m;
   }, [manifests]);
 
-  // What a step is called: the name its author gave it, else the drop's own
-  // (localized) label, else the module id for a drop whose manifest hasn't
-  // arrived. The fallback chain lives here because three paths need the same
-  // answer — the mount load, the reconcile that undo/redo and the flow-watch
-  // run through, and the save that decides whether the name is worth storing.
   const labelFor = useCallback(
     (n: { module: string; label?: string }) => {
       if (n.label) return n.label;
@@ -268,21 +230,13 @@ function EditorInner() {
     [manifestByID],
   );
 
-  // customNodeLabel reports whether a node's on-canvas name is one the author
-  // chose, rather than the name its drop came with.
-  //
-  // dropLabelIsDefault does the comparing, and it has to: the default is
-  // localized, so a step named "Gör en tabell" by a Swedish author is still
-  // unnamed, and comparing against the CURRENT language's default alone would
-  // store it as a custom name for everyone else to read.
+  // Only a name the author actually chose: the default is the drop's own, which
+  // must not be persisted or it freezes in one language.
   const customNodeLabel = useCallback(
     (n: FlowNode<DazyNodeData>) => {
       const label = (n.data.label ?? "").trim();
       if (label === "") return false;
       const m = manifestByID.get(n.data.moduleID);
-      // No manifest (a drop that hasn't loaded, or a tenant runner's own): the
-      // name it falls back to is the module id, so that is what "unnamed"
-      // looks like — storing it would write the id into every such node.
       if (!m) return label !== n.data.moduleID;
       return !dropLabelIsDefault(m, label);
     },
@@ -291,80 +245,20 @@ function EditorInner() {
 
   const [nodes, setNodes] = useState<FlowNode<DazyNodeData>[]>([]);
   const [edges, setEdges] = useState<FlowEdge[]>([]);
-  // Transient animation state for an AI/MCP build or edit landing on the
-  // canvas (see applyGraphAnimated): per-node entrance delays + per-edge
-  // draw-in delays, both in seconds. Non-null marks a build in progress —
-  // the canvas wears .rf-animating so moved drops glide. Cleared by a timer
-  // once the staggered animation has played out. animEpochRef guards that
-  // timer so a second build supersedes the first's cleanup.
   const [animApply, setAnimApply] = useState<{
     enter: Map<string, number>;
     draw: Map<string, number>;
   } | null>(null);
   const animEpochRef = useRef(0);
-  // Commit hashes this editor produced. The live flow-watch fires for every
-  // save — including our own — so we suppress the echo of a commit we just
-  // wrote (otherwise the canvas would re-animate the user's own edit). One-
-  // shot: the hash is removed when its echo arrives.
   const ownCommitsRef = useRef<Set<string>>(new Set());
-  // Comment frames (#3) live in their own state as React Flow nodes of
-  // type "comment" — kept separate from `nodes` so node logic (align,
-  // copy/paste, params) ignores them, and so they serialize to the
-  // graph's engine-ignored `frames` metadata, not `nodes`.
   const [frameNodes, setFrameNodes] = useState<FlowNode[]>([]);
-  // Per-node output values from the current run (#10) — nodeId → port → Ref.
-  // Populated as nodes finish; surfaced as a hover-peek on output ports.
-  // runDone reports a SUCCESSFUL run on the canvas. A failure already raises
-  // the error banner, but success used to change nothing except each node's
-  // border tint — so pressing Run and getting a working flow looked identical
-  // to pressing Run and nothing happening, and the result itself was only
-  // reachable by leaving for the run list. This carries the last step's output
-  // so "what did it produce?" is answered where the user is standing.
-  // failedRun is the run behind the error banner, when that error came from a
-  // run failing (rather than a save, a permission or a config problem). It's
-  // what makes Retry offerable here: the runs list and the run-detail page both
-  // let you resume a failed run from its failed step, and the editor — where
-  // you are standing when you watch it fail — was the one surface that made you
-  // navigate away to do it. Cleared by subscribeToRun, so starting any new run
-  // drops a stale offer.
-  // Breakpoints (#12): node IDs flagged to pause the run after they finish.
-  // Saved with the graph (node.breakpoint). pausedAt is the node the live
-  // run is currently holding after; stepping mirrors the run's step mode.
   const [breakpoints, setBreakpoints] = useState<Set<string>>(() => new Set());
-  // Data view: every card folds its header down to show what the step emits.
-  // A canvas-wide mode rather than per-card state, so one toggle answers
-  // "what is actually flowing through here?" for the whole graph.
   const [dataView, setDataView] = useState(false);
-  // Disabled steps: node IDs switched off. Saved with the graph
-  // (node.disabled); at run time the engine skips them and everything
-  // downstream (the skip cascade) — a setup-time aid.
   const [disabledNodes, setDisabledNodes] = useState<Set<string>>(() => new Set());
-  // Steps whose failure must not fail the run. The companion to a connection's
-  // on_error: those live on EDGES, so a step at the end of a branch has nowhere
-  // to hang one — which is exactly the "announce it everywhere" shape this is
-  // for.
   const [continueOnError, setContinueOnError] = useState<Set<string>>(() => new Set());
-  // Folded cards (node.collapsed): the card shows its icon and name only, with
-  // one pin standing in for all of them. Saved with the graph rather than in
-  // this browser — see core.Node.Collapsed. A long flow is readable only if
-  // the boring middle is folded, and that has to hold for the next reader.
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(() => new Set());
-  // Locked steps (node.locked): fields read-only, card won't drag. A guard
-  // against the slip, not a permission — the server honours writes either way.
   const [lockedNodes, setLockedNodes] = useState<Set<string>>(() => new Set());
 
-  // hydrateNodeFlags replaces every per-node flag set from one node list, and
-  // clears them all when handed none.
-  //
-  // It is a function because the list had been enumerated in three places and
-  // had drifted in two: a revision restore rebuilt breakpoints and disabled but
-  // dropped continue_on_error, so restoring silently made a non-critical step
-  // critical again and the next save persisted that. Worse, the not-found reset
-  // cleared only breakpoints and disabled, leaving the others holding the
-  // PREVIOUS flow's node ids — and since node ids repeat across flows ("n1"),
-  // the serializer would then write a stale flag onto an unrelated step in the
-  // new flow. Both are the same bug: a list of flags maintained by hand in more
-  // than one place. Add a flag here and every path gets it.
   const hydrateNodeFlags = useCallback((graphNodes: NonNullable<Graph["nodes"]>) => {
     const idsWhere = (pick: (n: NonNullable<Graph["nodes"]>[number]) => unknown) =>
       new Set(graphNodes.filter((n) => !!pick(n)).map((n) => n.id));
@@ -374,28 +268,12 @@ function EditorInner() {
     setCollapsedNodes(idsWhere((n) => n.collapsed));
     setLockedNodes(idsWhere((n) => n.locked));
   }, []);
-  // Triggers live at graph-level (not per-node). Carried through so a
-  // save doesn't accidentally drop the webhook secret / cron expression
-  // a user configured in the settings modal.
   const [triggers, setTriggers] = useState<GraphTrigger[]>([]);
   const [visibility, setVisibility] = useState<Visibility | undefined>(undefined);
   const [owner, setOwner] = useState<string | undefined>(undefined);
-  // The flow's OUTPUT language (Settings → General). Held here like every
-  // other graph-level field because the saved document is rebuilt from this
-  // state rather than from the loaded graph — a field missing from this list
-  // is silently dropped on the next save, whatever the settings modal set.
   const [language, setLanguage] = useState<string | undefined>(undefined);
-  // Failure notification (Settings → Notifications). Same reason as language:
-  // the settings modal wrote it and the next autosave, rebuilding the document
-  // without it, quietly wiped it — so a flow that mailed you on failure
-  // stopped after the next canvas edit.
   const [failureNotify, setFailureNotify] = useState<Graph["failure_notify"]>(undefined);
-  // Display metadata. Edited via the settings modal; doesn't affect
-  // engine behaviour but must round-trip through save() so the user's
-  // chosen name/icon/description survive reloads.
   const [name, setName] = useState<string | undefined>(undefined);
-  // Browser tab title mirrors the flow: "<FLOW NAME> | Dazyflow". Reset on
-  // unmount so list pages go back to the plain app title.
   useEffect(() => {
     document.title = name ? `${name} | Dazyflow` : "Dazyflow";
     return () => {
@@ -405,167 +283,63 @@ function EditorInner() {
   const [icon, setIcon] = useState<string | undefined>(undefined);
   const [description, setDescription] = useState<string | undefined>(undefined);
   const [timeoutSeconds, setTimeoutSeconds] = useState<number | undefined>(undefined);
-  // disabled pauses automatic firing (scheduler + webhook/form). Carried in
-  // state so a full save preserves it (buildGraph includes it), and toggled
-  // instantly via the dedicated enable/disable endpoint.
   const [disabled, setDisabled] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Per-node params kept outside React Flow's node-data so the inspector
-  // can mutate them without forcing canvas re-layout. They're merged
-  // back into the graph payload on save.
   const [paramsByID, setParamsByID] = useState<Record<string, Record<string, unknown>>>({});
-  // Per-node memo cache backing displayNodes: id → (deps snapshot, built node).
-  // Lets an unchanged node reuse its previous data object so only edited cards
-  // re-render. Pruned of deleted nodes on each rebuild.
   const nodeDataCacheRef = useRef<
     Map<string, { deps: unknown[]; node: FlowNode<DazyNodeData> }>
   >(new Map());
-  // Per-edge memo cache backing coloredEdges, for the same reason and pruned
-  // the same way. It is what lets the memoised RerouteEdge actually skip: memo
-  // compares props shallowly, and this memo rebuilds each wire's `style` and
-  // `data` objects, so without a cache every wire gets fresh ones on every
-  // frame of a drag and re-renders however well it is memoised.
   const edgeCacheRef = useRef<Map<string, { deps: unknown[]; edge: FlowEdge }>>(new Map());
   const [selectedID, setSelectedID] = useState<string | null>(null);
-  // Opens the "N to configure" modal — a click-to-jump checklist of every
-  // node still missing required values (ConfigChecklistModal handles its own
-  // ESC/backdrop dismissal).
   const [showConfigList, setShowConfigList] = useState(false);
-  // Undo/redo. Whole-document snapshots rather than a command stack — see
-  // lib/graphHistory.ts for why, and for why the server's version snapshots
-  // can't back this. Kept in state (not a ref) because the toolbar buttons
-  // need canUndo/canRedo at render time; `record` returns the same object
-  // when nothing changed, so the constant stream of selection-only updates
-  // doesn't re-render.
   const [history, setHistory] = useState<HistoryState>(emptyHistory);
-  // fenceHistory asks the observer to REBASE rather than record on its next
-  // run: the document changed underneath the editor and the existing stack no
-  // longer describes states the user can return to. Set on load, flow switch,
-  // restore, history preview, and an external edit arriving over the flow-
-  // watch — undoing past someone else's change would silently clobber it.
   const fenceHistoryRef = useRef(true);
-  // The document the last undo/redo asked for. Belt-and-braces: `undo` already
-  // moves its own `present`, so a spurious observation classifies as "none"
-  // and no-ops anyway. This just stops a near-miss apply from being recorded
-  // as if the user had made it.
   const pendingHistoryApplyRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // connHint is a transient explanation shown when the editor refuses an
-  // incompatible wire ("Items can't plug into a Text input — add a …"). Set in
-  // onConnectEnd, auto-cleared after a few seconds.
   const [connHint, setConnHint] = useState<string | null>(null);
   useEffect(() => {
     if (!connHint) return;
     const t = setTimeout(() => setConnHint(null), 6000);
     return () => clearTimeout(t);
   }, [connHint]);
-  // graphLoading gates the empty-state CTA so a populated flow doesn't flash
-  // "Add your first step" during the initial graph fetch. true from mount
-  // (and on every flow switch) until the load settles (success / 404 /
-  // error). Starts true so the very first render shows nothing, not the CTA.
   const [graphLoading, setGraphLoading] = useState(true);
-  // OAuth providers + which accounts the tenant has connected. Drives
-  // the pre-run connection check. null = not loaded / OAuth disabled,
-  // in which case the check is skipped (never blocks a run).
   const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(null);
-  // Tenant secret NAMES (never values). Drives the ${secret.NAME}
-  // credential check. null = store disabled / no permission → no gating.
   const [secrets, setSecrets] = useState<string[] | null>(null);
-  // gateOpen shows the "set up first" modal that a blocked Run attempt
-  // raises. The specifics come from the live missing* memos below.
   const [gateOpen, setGateOpen] = useState(false);
-  // orphanWarnOpen shows the "some steps aren't connected" confirm a Run
-  // attempt raises when the flow has orphaned nodes. Soft gate: the user can
-  // run anyway (the orphans simply won't participate).
   const [orphanWarnOpen, setOrphanWarnOpen] = useState(false);
-  // deletePending holds a queued node/edge deletion awaiting confirmation, so
-  // a single Delete keypress can't silently wipe work. React Flow's
-  // onBeforeDelete returns a Promise we park here; the ConfirmModal resolves
-  // it true (proceed with the deletion) or false (cancel).
   const [deletePending, setDeletePending] = useState<{
     nodes: number;
     edges: number;
     resolve: (ok: boolean) => void;
   } | null>(null);
-  // Reset-node-state confirm: holds the node whose persisted state (dedupe
-  // cursor / watermark) a "Reset state" click is about to clear, so the app's
-  // ConfirmModal can explain it before we call the endpoint.
   const [resetStatePending, setResetStatePending] = useState<{
     nodeId: string;
     label: string;
     hint: string;
   } | null>(null);
-  // Test-run sample editor: lets the user tweak the JSON payload fed to a
-  // webhook flow before firing, so they can exercise edge cases instead of
-  // the one auto-generated shape. Pre-filled from buildTestEventSample.
   const [testEventOpen, setTestEventOpen] = useState(false);
   const [testEventJSON, setTestEventJSON] = useState("");
   const [testEventErr, setTestEventErr] = useState<string | null>(null);
-  // issuePanel is which of the two toolbar issue panels is open, if either.
-  // Controlled here rather than inside the buttons because opening is not
-  // always the user's doing: a refused wire opens the Warnings panel by
-  // itself, and both panels close when their last row goes away.
   const [issuePanel, setIssuePanel] = useState<"error" | "warning" | null>(null);
-  // lintIssues holds the most recent save's advisory findings. Cleared
-  // when the user makes a new edit (so resolving a finding by editing
-  // dismisses the warning visually until the next save confirms) or
-  // when the user explicitly dismisses.
   const [lintIssues, setLintIssues] = useState<LintIssue[]>([]);
-  // reporting opens the support ticket dialog from the error banner. The
-  // banner's "contact support" used to be the operator-configured mailto/URL
-  // only — a channel outside the product, where the user retypes an error the
-  // app already knows and support starts with nothing. When the deployment has
-  // tickets on, the same words now file one, with the flow and (if a run
-  // failed) that run attached, so a redacted diagnostic bundle rides along.
   const [reporting, setReporting] = useState(false);
-  // publishConfirm gates the Live switch behind a confirm dialog (going live
-  // is "a thing" — automatic triggers run it; pausing stops them all).
-  // justPublished drives the one-shot launch animation on going live.
-  //   "live"   — flip on (publish if needed + enable)
-  //   "pause"  — flip off (disable: the universal kill switch)
-  //   "update" — push the current draft to the live version
   const [publishConfirm, setPublishConfirm] =
     useState<"live" | "pause" | "update" | null>(null);
-  // On a phone the inspector is a fullscreen sheet opened from the Inspect FAB,
-  // so a tap on a step does not slam it over the canvas (see inspectorExpanded);
-  // elsewhere it is a side panel that opens on selection, in pure CSS
-  // (`data-has-selection`). isSheet tracks MOBILE, the width where the CSS
-  // switches, and gates the FAB and the close-X's clear-selection behaviour.
-  // EDITOR_NARROW is a different threshold: where the canvas starts reserving
-  // room beside the panel.
   const [isSheet, setIsSheet] = useState<boolean>(() => isNarrower(MOBILE));
   useEffect(() => {
     const onResize = () => setIsSheet(isNarrower(MOBILE));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
-  // paletteOpen drives the Ctrl/Cmd+K quick-drop search popup.
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // When the palette was opened by a right-click on empty canvas, this holds
-  // the cursor point so the picked drop lands there (Blueprint "add node
-  // here"), rather than the auto-placement used for the toolbar/Ctrl+K path.
   const [paletteScreen, setPaletteScreen] = useState<{ x: number; y: number } | null>(null);
-  // The right-click actions menu over a node or edge (null = closed).
   const [ctxMenu, setCtxMenu] = useState<
     | { kind: "node"; id: string; x: number; y: number }
     | { kind: "edge"; id: string; x: number; y: number }
     | null
   >(null);
-  // On a fresh (empty) flow the palette is seeded with just the entry points
-  // (trigger drops) — every flow starts with one. paletteShowAll lets the user
-  // escape that filter to the full catalog (e.g. a manual-only flow with no
-  // trigger). Reset whenever the palette closes.
   const [paletteShowAll, setPaletteShowAll] = useState(false);
-  // inspectorExpanded drives the narrow-screen fullscreen inspector overlay:
-  // false keeps it slid off-screen (the canvas shows the Inspect FAB instead),
-  // true slides it in over the canvas. Desktop ignores this (the panel is
-  // always in the grid).
   const [inspectorExpanded, setInspectorExpanded] = useState(false);
-  // First-timers don't realise that "how the flow starts" (a daily schedule,
-  // a form, a webhook) lives behind the Triggers button — separate from the
-  // steps they just built. So a flow with steps but no trigger gets a one-
-  // time nudge. Dismissal is remembered globally: once they've learned the
-  // concept we stop showing it on every new flow.
   const [triggerHintDismissed, setTriggerHintDismissed] = useState(
     () => localStorage.getItem("dazyflow.triggerHintSeen") === "1",
   );
@@ -573,19 +347,12 @@ function EditorInner() {
     localStorage.setItem("dazyflow.triggerHintSeen", "1");
     setTriggerHintDismissed(true);
   };
-  // Every genuine change of the selected node rests the narrow-screen
-  // inspector in its collapsed state, so a tap on a drop doesn't slam the
-  // full sheet over the canvas. Keyed on selectedID so it runs ONLY when the
-  // selection actually changes — not on React Flow's spurious re-fires, which
-  // would otherwise instantly undo the Inspect FAB opening the overlay.
   useEffect(() => {
     setInspectorExpanded(false);
   }, [selectedID]);
 
   const rfRef = useRef<ReactFlowInstance<FlowNode<DazyNodeData>, FlowEdge> | null>(null);
 
-  // The run to attach to on open, resolved once: a ?run= deep link from the runs
-  // page wins, else the sticky last-run for this flow.
   const initialRunIDRef = useRef<string | null>(null);
   if (initialRunIDRef.current === null) {
     const fromURL = searchParams.get("run");
@@ -593,10 +360,6 @@ function EditorInner() {
       fromURL || (id ? localStorage.getItem(`dazyflow.lastRun.${id}`) : null);
   }
 
-  // Everything about "a run is happening" lives in useRunStream: the SSE
-  // subscription, the per-node statuses it paints onto this component's graph,
-  // the live logs, the success and failure banners, the edit lock, and the four
-  // ways a run starts. This component keeps the graph and the gating.
   const run = useRunStream({
     token,
     graphID: id,
@@ -625,22 +388,12 @@ function EditorInner() {
     resumeRun,
     refreshLock,
   } = run;
-  // What each step last produced, as every editor surface should read it:
-  // this session's live run values over the historical ones the samples fetch
-  // brought back. Per node, not per port — a run writes a node's whole output
-  // map at once, so a live entry supersedes its historical twin wholesale.
   const nodeOutputs = useMemo(
     () => ({ ...samples, ...runOutputs }),
     [samples, runOutputs],
   );
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
-  // The toolbar's scrolling half holds the secondary tools and gets whatever
-  // width the pinned actions leave it — on a narrow window, or any width with
-  // the Inspector open, not enough for all of them. Track which side still
-  // has content off-screen so the edge fade and a nudge arrow appear per side:
-  // the scrollbar is hidden by design, and without a visible cue the tools out
-  // of view were reachable only by guessing that the bar swipes sideways.
   const toolbarScrollRef = useRef<HTMLDivElement | null>(null);
   const [toolbarOverflow, setToolbarOverflow] = useState({
     left: false,
@@ -649,9 +402,6 @@ function EditorInner() {
   const measureToolbarOverflow = useCallback(() => {
     const el = toolbarScrollRef.current;
     if (!el) return;
-    // A pixel of slack: fractional flex widths leave scrollWidth a hair above
-    // clientWidth on a region that actually fits, which would pin an arrow on
-    // screen forever with nothing to scroll to.
     const SLACK = 1;
     const left = el.scrollLeft > SLACK;
     const right = el.scrollWidth - el.clientWidth - el.scrollLeft > SLACK;
@@ -659,13 +409,6 @@ function EditorInner() {
       prev.left === left && prev.right === right ? prev : { left, right },
     );
   }, []);
-  // Two observers rather than a measurement per render: reading scrollWidth
-  // flushes layout, and this component re-renders on every mousemove of a node
-  // drag. The resize side catches the region being squeezed by the pinned
-  // actions (and the label collapse that rides on the canvas width); the
-  // mutation side catches controls arriving and leaving with the selection —
-  // align, distribute, breakpoint — and the save indicator's text, none of
-  // which resize anything an observer is watching.
   useEffect(() => {
     const el = toolbarScrollRef.current;
     if (!el) return;
@@ -681,30 +424,14 @@ function EditorInner() {
       mo.disconnect();
     };
   }, [measureToolbarOverflow]);
-  // Nudge by most of a screenful rather than all of it, so a sliver of the
-  // controls you were looking at stays on screen to orient by.
   const nudgeToolbar = useCallback((dir: -1 | 1) => {
     const el = toolbarScrollRef.current;
     el?.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: "smooth" });
   }, []);
-  // streamAbortRef holds the AbortController for the one SSE run-stream
-  // that's currently active. subscribeToRun aborts the previous stream
-  // before opening a new one, and a mount-cleanup effect aborts it on
-  // unmount — so starting a run, sending a test event, or picking a
-  // historical run can never leave concurrent readers writing state (and
-  // nothing keeps streaming after the editor is gone).
-  // lastPointer tracks the most recent mouse position over the canvas so
-  // Ctrl+K can spawn the chosen drop where the user is looking. Falls
-  // back to viewport centre when nothing has moved yet.
+  // One SSE run-stream at a time; the previous is aborted before a new one opens.
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
 
-  // hydrateGraph loads a Graph payload into editor state. Shared by the
-  // mount load, the history preview (a past ref), and the post-restore
-  // reload, so all three stay in sync. Manifests are resolved against the
-  // current state because the drops fetch is independent and may arrive
-  // after a graph load. Always clears dirty — a freshly-loaded graph is, by
-  // definition, in sync with the server.
   const hydrateGraph = useCallback((g: Graph) => {
     setManifests((current) => {
       const mm = new Map<string, Manifest>();
@@ -735,8 +462,6 @@ function EditorInner() {
         sourceHandle: e.from_port,
         targetHandle: e.to_port,
         data: { waypoints: e.waypoints ?? [], onError: asEdgeErrorMode(e.on_error) },
-        // Drawn from the mode, so a flow's error handling is visible on the
-        // canvas rather than hidden in its JSON. The default is unchanged.
         style: edgeErrorStyle(asEdgeErrorMode(e.on_error)),
       })),
     );
@@ -765,20 +490,11 @@ function EditorInner() {
     setTimeoutSeconds(g.timeout_seconds);
     setDisabled(g.disabled ?? false);
     setDirty(false);
-    // Fence the undo stack. Every path that replaces the document from
-    // outside the user's own editing lands here — the initial load, a flow
-    // switch, a restore, a history-revision preview, and an external edit
-    // arriving over the MCP flow-watch (applyGraphAnimated calls this) — and
-    // in each case the existing stack describes states that are no longer
-    // reachable. The assistant case is the one that matters: undoing past
-    // someone else's edit would silently discard it.
+    // Every path that replaces the document from outside a user edit must fence, or
+    // the replacement lands on the undo stack as if the user had typed it.
     fenceHistoryRef.current = true;
   }, []);
 
-  // Version history. useRevisions owns the commit list and the read-only preview
-  // of an older revision; `previewRef` is read back out because three other
-  // clusters gate on it (autosave refuses to write, the publish switch goes
-  // away, and the canvas becomes uneditable while a preview is up).
   const versionHistory = useRevisions({
     token,
     graphID: id,
@@ -808,9 +524,6 @@ function EditorInner() {
     saveLabel,
   } = versionHistory;
 
-  // Going live, pausing, and the draft-vs-live status. Publishing changes which
-  // revision is live, so it tells the history panel to re-read rather than
-  // reaching into that cluster itself.
   const publish = usePublish({
     token,
     ready: !!me,
@@ -841,13 +554,6 @@ function EditorInner() {
 
 
 
-  // applyGraphAnimated hydrates a graph the way hydrateGraph does, but plays
-  // a build animation as it lands: drops that are NEW scale/fade in left→
-  // right, drops that MOVED glide to their new spots (the .rf-animating
-  // transition), and wires that are NEW draw in after the drops they join.
-  // Used when an AI/MCP build or edit reaches the canvas — see the freshly-
-  // built load path and the live flow-watch subscription. Falls back to a
-  // plain hydrate (no visible deltas → nothing to animate).
   const applyGraphAnimated = useCallback(
     (g: Graph) => {
       const prevNodeIds = new Set(nodes.map((n) => n.id));
@@ -856,8 +562,6 @@ function EditorInner() {
       const xOf = (n: { position?: { x: number } }, i: number) =>
         n.position?.x ?? 80 + i * 240;
 
-      // Added drops, ordered left→right so the build sweeps across the canvas
-      // in reading order rather than popping in arbitrary graph order.
       const NODE_STEP = 0.08; // s between successive drop entrances
       const NODE_DUR = 0.42; // matches dz-node-enter
       const enter = new Map<string, number>();
@@ -868,9 +572,6 @@ function EditorInner() {
         .forEach((o, k) => enter.set(o.id, +(k * NODE_STEP).toFixed(3)));
       const nodesEnd = enter.size ? (enter.size - 1) * NODE_STEP + NODE_DUR : 0;
 
-      // New wires draw after the drops settle, ordered by their source's x so
-      // connections also sweep left→right. A small overlap with the tail of
-      // the drop entrances reads livelier than a hard handoff.
       const EDGE_STEP = 0.06;
       const EDGE_DUR = 0.4; // matches dz-edge-draw
       const xById = new Map(targetNodes.map((n, i) => [n.id, xOf(n, i)]));
@@ -894,10 +595,7 @@ function EditorInner() {
         300;
 
       const epoch = ++animEpochRef.current;
-      // Arm the transition window FIRST, then change positions on the next
-      // frame: a CSS transition added in the same commit as the value change
-      // doesn't animate (the FLIP gotcha), so a moved drop would snap. New
-      // drops mount after hydrate and pick up their entrance via dz-enter.
+      // Arm the transition window FIRST, or the positions jump instead of animating.
       setAnimApply({ enter, draw });
       requestAnimationFrame(() => {
         if (animEpochRef.current !== epoch) return;
@@ -909,48 +607,21 @@ function EditorInner() {
     },
     [nodes, edges, hydrateGraph],
   );
-  // applyGraphAnimated closes over nodes/edges, so its identity changes on
-  // every edit. Effects that trigger a build (the freshly-built load, the
-  // live flow-watch) call it through this ref so they needn't list it as a
-  // dependency — which would otherwise re-run them on every keystroke.
   const applyGraphAnimatedRef = useRef(applyGraphAnimated);
   applyGraphAnimatedRef.current = applyGraphAnimated;
 
-  // Load modules + graph on mount. The two fetches are kept independent
-  // — Promise.all would reject the whole batch if loadGraph 404s for a
-  // never-saved flow, leaving the catalog empty (so Ctrl+K had no
-  // drops). Drops should be available even when the graph fetch fails.
-  //
-  // hasPerm is read via a ref and `me` gates on presence (not identity):
-  // both get fresh identities whenever the auth provider re-renders
-  // (whoami → workspaces → tenants all land just after a cold load), and
-  // having them as deps made this effect re-fetch + re-hydrate the graph
-  // — silently wiping any step the user had inserted in that window.
   const hasPermRef = useRef(hasPerm);
   hasPermRef.current = hasPerm;
   const meReady = !!me;
-  // loadedIDRef names the flow the in-memory editor state belongs to.
-  // It scopes two safety checks: the dirty-guard below (don't hydrate
-  // over the user's in-flight edits — but ONLY when those edits are for
-  // this same flow) and the autosave effect (never PUT one flow's nodes
-  // under another flow's id). Without the id check, switching flows in
-  // the sidebar while dirty skipped the hydrate and let autosave write
-  // flow A's state into flow B — silent cross-flow data loss.
+  // Names the flow the in-memory state belongs to, so a fetch that resolves after
+  // the user navigated away cannot overwrite the new flow.
   const loadedIDRef = useRef<string | null>(null);
   useEffect(() => {
-    // Wait for activeWorkspace too: it resolves on a separate async path
-    // (whoami → workspaces) after `me`, so on a hard refresh it's briefly
-    // "". Loading the graph then builds a flow_id of "tenant//id" (empty
-    // workspace), which the API rejects. activeTenant/activeWorkspace are
-    // in the dep array below, so this re-runs and loads once they land.
     if (!token || !me || !id || !activeTenant || !activeWorkspace) return;
     let cancelled = false;
     setError(null);
     setLoadFailed(false);
     setGraphLoading(true);
-    // A flow switch makes the current state (and its dirty flag) moot —
-    // it describes the PREVIOUS flow. Drop the flag immediately so
-    // neither the dirty-guard nor a pending autosave can act on it.
     if (loadedIDRef.current !== null && loadedIDRef.current !== id) {
       setDirty(false);
       dirtyRef.current = false;
@@ -958,9 +629,6 @@ function EditorInner() {
     const requestedID = id;
 
     api
-      // include_disabled: keep platform-disabled drops in the catalog so the
-      // palette can show them greyed-out (and placed nodes still resolve their
-      // manifest) instead of having them silently disappear.
       .listDrops(token, undefined, true)
       .then((dropRes) => {
         if (cancelled) return;
@@ -970,8 +638,6 @@ function EditorInner() {
         if (!cancelled) setError(explainApiError(e, t));
       });
 
-    // Drop suggestions are advisory — a failure must never block the editor,
-    // so it's a silent best-effort fetch (no setError on the catch).
     if (activeTenant && activeWorkspace) {
       api
         .dropSuggestions(token, activeTenant, activeWorkspace)
@@ -987,14 +653,7 @@ function EditorInner() {
       .loadGraph(token, activeTenant, activeWorkspace, id)
       .then((g) => {
         if (cancelled) return;
-        // The user edited THIS flow while the fetch was in flight (e.g.
-        // inserted a step the moment the empty canvas appeared).
-        // Hydrating now would silently wipe that work — keep their
-        // local state. "This flow" = the loaded id matches, or nothing
-        // was loaded yet (a direct open). Edits belonging to a
-        // PREVIOUSLY open flow must never block hydrating the new one —
-        // that skip let autosave write one flow's nodes under another
-        // flow's id.
+        // Edited while the fetch was in flight: the fetched copy is already stale.
         if (
           dirtyRef.current &&
           (loadedIDRef.current === requestedID || loadedIDRef.current === null)
@@ -1002,15 +661,9 @@ function EditorInner() {
           loadedIDRef.current = requestedID;
           return;
         }
-        // One-time fix on open, persisted because Run executes the SAVED
-        // graph by id (an in-memory-only fix would never reach the run or the
-        // scheduler): stamp the viewer's zone on a Schedule node that lacks a tz.
         const tzM = stampScheduleTimezones(g.nodes);
         const changed = tzM.changed;
         const migrated = changed ? { ...g, nodes: tzM.nodes } : g;
-        // A freshly AI-built flow (opened from CreateFlow) animates onto the
-        // canvas; every other open snaps in instantly. Consume the one-shot
-        // flag and scrub it from history so a refresh won't replay the build.
         if (animateBuildRef.current && (migrated.nodes?.length ?? 0) > 0) {
           animateBuildRef.current = false;
           window.history.replaceState({}, "");
@@ -1019,19 +672,7 @@ function EditorInner() {
           hydrateGraph(migrated);
         }
         loadedIDRef.current = requestedID;
-        // The zone stamp is an edit the editor made on the user's behalf, so it
-        // goes out through the same write path as any other edit: mark the graph
-        // dirty and let useAutosave decide when.
-        //
-        // It used to PUT straight from here, which meant it was the one write
-        // that ignored the edit lock — while useAutosave refuses to write during
-        // a run for the very reason this heal exists ("Run executes the SAVED
-        // graph"). Checking lockedRunID here would not have fixed it either:
-        // this load runs in parallel with the first refreshLock(), so the check
-        // would usually read an unresolved null and write anyway. Handing it to
-        // autosave gets every guard for free — it waits out an active run and
-        // writes once the lock releases, and equally respects a history preview,
-        // a failed load, and a mid-flight flow switch.
+        // An edit the editor made on the user's behalf, so it must not mark the flow dirty.
         if (changed && hasPermRef.current("graph:edit")) {
           setDirty(true);
         }
@@ -1039,17 +680,11 @@ function EditorInner() {
       .catch((e) => {
         if (cancelled) return;
         const msg = (e as Error).message;
-        // 404 is the normal "this graph hasn't been saved yet" state for
-        // a freshly-created flow — the user opened the editor before
-        // dropping any nodes. Treat it as an empty canvas, not an error.
         if (
           isHTTPStatus(e, 404) ||
           isErrorCode(e, "not_found") ||
           msg.toLowerCase().includes("not found")
         ) {
-          // Same in-flight-edits guard as the success path: a fresh
-          // flow 404s here, and the user may already have inserted a
-          // step while the request was out — don't wipe it.
           if (
             dirtyRef.current &&
             (loadedIDRef.current === requestedID || loadedIDRef.current === null)
@@ -1067,10 +702,7 @@ function EditorInner() {
           loadedIDRef.current = requestedID;
           return;
         }
-        // Non-404 failure (500/network): the empty canvas does NOT reflect
-        // the server graph. Surface the error AND latch loadFailed so the
-        // autosave/save path can't PUT an empty graph over the real one
-        // until a successful reload clears the flag.
+        // The empty canvas does NOT reflect the flow, so saving over it would destroy it.
         setError(explainApiError(e, t));
         setLoadFailed(true);
       })
@@ -1084,15 +716,10 @@ function EditorInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, meReady, id, activeTenant, activeWorkspace, hydrateGraph]);
 
-  // A panel belongs to the flow it was opened over; switching flows shuts it.
   useEffect(() => {
     setIssuePanel(null);
   }, [id]);
 
-  // Load the tenant's connected OAuth accounts so Run can warn before a
-  // flow that needs Slack/Gmail/etc. fails for a missing token. Any
-  // error (OAuth disabled = 501, or no permission) leaves providers
-  // null, which the check treats as "can't tell" and never blocks.
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
@@ -1104,19 +731,6 @@ function EditorInner() {
       .catch(() => {
         if (!cancelled) setProviders(null);
       });
-    // Secret NAMES drive the ${secret.NAME} credential check AND the per-node
-    // connection check (nodeSetupNeeded case 2 / missingConnectionApps), which
-    // look for conn.<slug>.<field> keys — so include the conn. namespace here,
-    // the way the Apps page does. Without it a connected ConnectionFields app
-    // with required fields (e.g. Home Assistant) always reads as "needs setup".
-    //
-    // Resolve the engine's flow → tenant cascade: ${secret.NAME} matches a
-    // flow-scoped secret too, so fetch both and union the names — otherwise a
-    // secret saved at flow scope reads as missing and the run gate nags. Tenant
-    // scope carries the conn.* namespace; flow scope is fetched only once the
-    // flow has an id (a new, unsaved flow has none — nothing flow-scoped can
-    // exist yet). Same can't-tell-so-don't-block semantics on error (disabled
-    // / 403).
     Promise.all([
       api.listSecrets(token, undefined, undefined, true),
       id ? api.listSecrets(token, "flow", id) : Promise.resolve({ secrets: [] }),
@@ -1134,17 +748,6 @@ function EditorInner() {
     };
   }, [token, id]);
 
-  // Re-attach manifests to nodes whenever the drops catalog arrives or
-  // changes. The graph load and drops fetch race; if the graph wins,
-  // its nodes carry manifest:undefined and NodeCard falls back to bare
-  // in/out handles — so edges wired to real ports (rows, body,
-  // messages, …) find no matching handle and silently don't render.
-  // This patches the manifest in once drops land, which makes the real
-  // handles appear and React Flow draws the edges. We also (re-)derive the
-  // display name in the reader's language — from the bare module-ID fallback
-  // set at graph-load time when manifests hadn't arrived yet, and again when
-  // the language changes. dropLabelIsDefault keeps that to names the user
-  // never edited: a hand-typed label is theirs and survives untouched.
   useEffect(() => {
     if (manifests.length === 0) return;
     const mm = new Map(manifests.map((m) => [m.id, m]));
@@ -1164,15 +767,8 @@ function EditorInner() {
       });
       return changed ? next : nds;
     });
-    // i18nLanguage is in the deps so a language switch renames the cards.
   }, [manifests, i18nLanguage]);
 
-  // Prune edges pointing at ports their steps haven't got. Deliberately after
-  // the back-fill above rather than in hydrateGraph: at graph-load time the
-  // drop catalog usually hasn't arrived, so every manifest is undefined and
-  // there is nothing to check against. Such an edge draws nothing, carries
-  // nothing, and makes the daemon refuse EVERY save — so a flow holding one
-  // cannot be saved and shows its author nothing to fix. See lib/strayEdges.
   useEffect(() => {
     if (manifests.length === 0 || nodes.length === 0) return;
     const ports = new Map(
@@ -1185,8 +781,6 @@ function EditorInner() {
     if (stray.length === 0) return;
     const dead = new Set(stray.map((s) => s.edge));
     setEdges((eds) => eds.filter((e) => !dead.has(e)));
-    // The prune is a real change to the document, so it has to be saveable —
-    // otherwise the flow looks fixed and comes back broken on reload.
     setDirty(true);
     setConnHint(
       t("editor.strayEdgesDropped", {
@@ -1196,10 +790,6 @@ function EditorInner() {
     );
   }, [manifests, nodes, edges, disabledNodes, t]);
 
-  // Publish the open flow's label to the top bar. Falls back to the
-  // route id until the graph's display name loads. A dedicated
-  // unmount-only cleanup clears it so the wordmark returns when the
-  // user leaves the editor (without flashing null on every rename).
   useEffect(() => {
     setActiveFlowName(name || id || null);
   }, [name, id, setActiveFlowName]);
@@ -1210,10 +800,6 @@ function EditorInner() {
     return () => setActiveFlowName(null);
   }, [setActiveFlowName]);
 
-  // Mirror the latest save's lint findings onto the canvas nodes as a
-  // per-node warning badge (NodeCard reads data.lintMessage). Rebuilds
-  // the node→message map whenever lintIssues changes; clears the badge
-  // on nodes no longer flagged.
   useEffect(() => {
     const byNode = new Map<string, LintIssue[]>();
     for (const iss of lintIssues) {
@@ -1227,8 +813,6 @@ function EditorInner() {
       let changed = false;
       const next = nds.map((n) => {
         const issues = byNode.get(n.id);
-        // Build each node's badge text from that node's own manifest so the
-        // flagged field is named the way its Inspector form names it.
         const lintMessage = issues
           ? issues.map((iss) => describeLint(iss, n.data.manifest)).join("\n\n")
           : undefined;
@@ -1240,18 +824,11 @@ function EditorInner() {
     });
   }, [lintIssues, describeLint]);
 
-  // Register the flow-settings opener so the top-bar three-dots menu
-  // can open this editor's settings modal. setSettingsOpen is stable
-  // (useState setter), so registering once on mount is enough.
   useEffect(() => {
     setOpenSettings(() => () => setSettingsOpen(true));
     return () => setOpenSettings(null);
   }, [setOpenSettings]);
 
-  // Remember this as the most-recently-opened flow so the start screen
-  // can offer a "continue working" link. Falls back to the id until
-  // the display name loads. Scoped per (account, active org) so the
-  // welcome page never offers another user's — or another org's — flow.
   useEffect(() => {
     if (id)
       saveRecentFlow(userScope(activeTenant || me?.tenant, me?.subject), {
@@ -1263,9 +840,6 @@ function EditorInner() {
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      // React Flow emits changes for real nodes AND comment frames in one
-      // batch; route each to its own state so resize/move/select/delete of
-      // a frame updates frameNodes (and frames serialize separately).
       const frameIds = new Set(frameNodes.map((f) => f.id));
       const frameChanges = changes.filter((c) => "id" in c && frameIds.has(c.id));
       const nodeChanges = changes.filter((c) => !("id" in c) || !frameIds.has(c.id));
@@ -1275,10 +849,7 @@ function EditorInner() {
       if (frameChanges.length) {
         setFrameNodes((fns) => applyNodeChanges(frameChanges, fns));
       }
-      // Selection-only changes don't dirty the graph; position/add/remove
-      // do, and a dimensions change only when it's an active resize (not
-      // React Flow's initial measurement, which would falsely dirty on
-      // load and trigger an autosave).
+      // Selection-only changes must not dirty the graph.
       const meaningful = changes.some(
         (c) =>
           c.type === "position" ||
@@ -1298,17 +869,8 @@ function EditorInner() {
     },
     [],
   );
-  // Wires are colored by their source (output) port's data type — the
-  // Blueprint convention — so a connection's type is readable along its
-  // whole length and matches the port dots. Derived from the live nodes
-  // (not baked into edge state) so colors settle in as manifests load
-  // async. Selected edges thicken; color stays full-strength.
   const coloredEdges = useMemo<FlowEdge[]>(() => {
     const byId = new Map(nodes.map((n) => [n.id, n]));
-    // Granular per-edge memoisation, mirroring displayNodes below. This memo
-    // depends on `nodes`, so it re-runs on every frame of a node drag — but
-    // what a wire reads off a node is its manifest (port colour) and its run
-    // status (flow pulse), neither of which dragging changes.
     const cache = edgeCacheRef.current;
     const seen = new Set<string>();
     const result = edges.map((e) => {
@@ -1316,17 +878,10 @@ function EditorInner() {
       const srcNode = byId.get(e.source);
       const manifest = srcNode?.data.manifest;
       const out = manifest?.outputs?.find((p) => p.port === (e.sourceHandle ?? "out"));
-      // Animate the wire while either end is running — data is flowing into
-      // the wire (source running) or out of it (target running). Lighting
-      // both ends keeps the pulse continuous as the run walks the graph, and
-      // means fast in-process nodes still show flow via their slower
-      // neighbour. Node status is set live from the run's SSE stream.
       const active =
         srcNode?.data.status === "running" ||
         byId.get(e.target)?.data.status === "running";
       const drawDelay = animApply?.draw.get(e.id);
-      // The exact set the built wire below reads. setEdges and setDirty are
-      // stable, so they are not listed.
       const deps: unknown[] = [e, manifest, active, drawDelay];
       const hit = cache.get(e.id);
       if (hit && hit.deps.length === deps.length && hit.deps.every((v, i) => v === deps[i])) {
@@ -1340,13 +895,9 @@ function EditorInner() {
           stroke: portColor(out?.mime),
           strokeWidth: e.selected ? 3 : active ? 2.5 : 2,
         },
-        // RerouteEdge mutates routing through this callback so the change
-        // lands in the controlled edge state (and marks the graph dirty).
         data: {
           ...e.data,
           active,
-          // Set only while a build animation plays — drives the wire's
-          // draw-in (see applyGraphAnimated). undefined the rest of the time.
           drawDelay,
           updateWaypoints: (wps: { x: number; y: number }[]) => {
             setEdges((eds) =>
@@ -1361,7 +912,6 @@ function EditorInner() {
       cache.set(e.id, { deps, edge: built });
       return built;
     });
-    // Drop cache entries for wires that no longer exist.
     for (const id of cache.keys()) if (!seen.has(id)) cache.delete(id);
     return result;
   }, [edges, nodes, animApply]);
@@ -1383,15 +933,7 @@ function EditorInner() {
     [],
   );
 
-  // Gate connections by data type while dragging — React Flow renders the
-  // wire as invalid and refuses to attach it when this returns false. We
-  // mirror the backend rule (core.mimeCompatible): reject only when BOTH
-  // ends declare MIME sets that don't overlap (e.g. text/plain →
-  // application/json). Untyped pins — the passthrough pin, exec pins like
-  // for_each's `body`, the default in/out handles, comment nodes — carry no
-  // MIME and stay universally connectable. This turns a confusing save-time
-  // "MIME mismatch" error into "the wire won't stick", and never blocks
-  // anything the validator would accept on submit.
+  // React Flow renders the target handle from this, so it must be synchronous.
   const isValidConnection = useCallback(
     (c: Connection | FlowEdge): boolean => {
       const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -1407,14 +949,7 @@ function EditorInner() {
       ) {
         return false;
       }
-      // Second rule, same reason: a single-value input takes ONE wire. The
-      // engine keeps the last edge it reads when several feed one input, so
-      // a second wire silently replaces the first — and the server now
-      // refuses to save such a flow, which would surface as a failed
-      // autosave rather than a wire that won't stick.
-      // Third rule: the same wire twice carries the same value from the same
-      // port, so the server refuses it outright — including on a variadic pin,
-      // where it used to be the one place duplicates accumulated.
+      // A single-value input takes ONE wire.
       const selfID = "id" in c ? c.id : undefined;
       const sameWire = (e: FlowEdge) =>
         e.source === c.source &&
@@ -1440,12 +975,6 @@ function EditorInner() {
     [nodes, edges],
   );
 
-  // Drag-off-pin creation. Dragging a wire from a port and dropping it on
-  // empty canvas opens the quick palette, pre-filtered to drops with a
-  // port whose data type is compatible with the one you dragged from, and
-  // auto-wires the chosen drop to that port. connectStartRef remembers the
-  // source; connectMadeRef (set in onConnect) tells us a real connection
-  // was made so we don't also pop the palette.
   const connectStartRef = useRef<{
     nodeId: string;
     handleId: string | null;
@@ -1479,9 +1008,6 @@ function EditorInner() {
       const start = connectStartRef.current;
       connectStartRef.current = null;
       if (connectMadeRef.current || !start) return;
-      // Dropped onto a real port that the validator REFUSED → explain why,
-      // instead of the wire silently snapping back. Resolve which end is the
-      // output and which the input, then ask connectionHint.
       if (conn.toHandle && conn.isValid === false) {
         const byId = new Map(nodes.map((n) => [n.id, n]));
         const portAt = (h: { nodeId: string; id?: string | null } | null, side: "out" | "in") => {
@@ -1507,8 +1033,6 @@ function EditorInner() {
     [nodes],
   );
 
-  // The MIME of the port the user dragged from (its outputs if they grabbed
-  // a source handle, its inputs for a target handle).
   const connectSourceMime = useMemo(() => {
     if (!connectFrom) return undefined;
     const src = nodes.find((n) => n.id === connectFrom.nodeId);
@@ -1519,51 +1043,25 @@ function EditorInner() {
     return ports?.find((p) => p.port === connectFrom.handleId)?.mime;
   }, [connectFrom, nodes]);
 
-  // Palette list filtered to drops that have a compatible port to wire to.
-  // Dragging from an output wants drops with a matching input, and vice
-  // versa. Falls back to every wireable drop if nothing matches on type, so
-  // the user is never stuck with an empty palette.
   const connectDrops = useMemo(() => {
     if (!connectFrom) return manifests;
     const wantInput = connectFrom.handleType === "source";
     const matches = manifests.filter((m) => {
       const ports = wantInput ? m.inputs : m.outputs;
-      // Nothing declared on the side the wire needs means there is no port to
-      // land on — a value source (Text, Number) has no inputs at all. It used
-      // to be offered here against a synthesised "in"/"out", and picking it
-      // wired the drag to a port that does not exist: React Flow draws no edge
-      // for an unknown handle, so the wire was invisible and undeletable,
-      // while the daemon refused the graph ("has no input port") and the flow
-      // stopped saving. Drops whose ports are named by their own params
-      // (dynamic_ports) declare placeholder pins, so they still match above.
+      // Nothing declared on the side the wire needs means there is nothing to offer.
       if (!ports?.length) return false;
       return ports.some((p) => mimeCompatible(p.mime, connectSourceMime));
     });
-    // Fall back to everything that CAN be wired on this side rather than to
-    // the whole catalog: an empty palette is bad, but one offering steps that
-    // cannot take the wire is what produced the phantom port.
     if (matches.length) return matches;
     return manifests.filter((m) => (wantInput ? m.inputs : m.outputs)?.length);
   }, [connectFrom, connectSourceMime, manifests]);
 
-  // Entry points (trigger drops) — what a brand-new flow's palette is seeded
-  // with, since every flow starts by deciding when it runs.
   const entryPointDrops = useMemo(
     () => manifests.filter((m) => m.category === "trigger"),
     [manifests],
   );
-  // A fresh flow (no nodes, not a drag-off-pin add) shows only entry points,
-  // unless the user has explicitly widened to the full catalog.
   const paletteEntryMode = !connectFrom && nodes.length === 0 && !paletteShowAll;
 
-  // "Suggested" group for the quick palette, drawn from this workspace's own
-  // flow history. Drag-off-pin: drops historically wired in that position —
-  // downstream when dragging an output (this module → X), upstream from an
-  // input (X → this module), keyed by the exact port so multi-output drops
-  // suggest the right next step per pin. Cmd/Ctrl+K (no drag, existing flow):
-  // the most-used drops overall. Fresh-flow entry mode shows none (the seed
-  // is trigger drops). Always intersected with the wireable set, so a
-  // suggestion can always connect.
   const connectSuggestions = useMemo<Manifest[]>(() => {
     if (connectFrom) {
       const srcModule = nodes.find((n) => n.id === connectFrom.nodeId)?.data
@@ -1596,7 +1094,6 @@ function EditorInner() {
     paletteEntryMode,
   ]);
 
-  // Spawn a drop and immediately wire it to the port the drag came from.
   const spawnDropConnected = useCallback(
     (
       m: Manifest,
@@ -1616,9 +1113,6 @@ function EditorInner() {
       setParamsByID((p) => ({ ...p, [newID]: {} }));
       const isSource = from.handleType === "source";
       const fromPass = from.handleId === PASS_PORT;
-      // The pin on the SPAWNED drop that the wire lands on — null when it has
-      // none on that side, in which case the drop is placed unwired rather than
-      // wired to an invented port that is not on the node. See spawnPort.
       const newPort = isSource
         ? spawnPort(m.inputs, connectSourceMime, fromPass, "in")
         : spawnPort(m.outputs, connectSourceMime, fromPass, "out");
@@ -1640,9 +1134,6 @@ function EditorInner() {
     [nodes, screenToFlowPosition, connectSourceMime],
   );
 
-  // Multi-select node alignment. React Flow stores selection (.selected)
-  // and measured size on the node objects, so we derive the count for the
-  // toolbar's enable state and recompute geometry on the live nodes.
   const selectedCount = useMemo(
     () => nodes.reduce((n, node) => n + (node.selected ? 1 : 0), 0),
     [nodes],
@@ -1683,8 +1174,6 @@ function EditorInner() {
     });
     setDirty(true);
   }, []);
-  // Distribute: keep the two extreme nodes put and space the rest so their
-  // centers are evenly spaced along the axis. Needs 3+ to be meaningful.
   const distributeNodes = useCallback((axis: "h" | "v") => {
     setNodes((nds) => {
       const sel = nds.filter((n) => n.selected);
@@ -1717,12 +1206,6 @@ function EditorInner() {
     setDirty(true);
   }, []);
 
-  // autoLayout ("Tidy") arranges the whole graph into clean left-to-right
-  // columns by dependency depth — the one-click cleanup pro node editors
-  // have. Column assignment lives in lib/autoLayout (and is tested there);
-  // this callback owns only the geometry. Within a column nodes keep their
-  // current top-to-bottom order; columns are centered on a shared mid-line
-  // for a balanced look.
   const autoLayout = useCallback(() => {
     const HGAP = 80;
     const VGAP = 36;
@@ -1743,8 +1226,6 @@ function EditorInner() {
         w: n.measured?.width ?? n.width ?? 240,
         h: n.measured?.height ?? n.height ?? 120,
       });
-      // Bucket by column, preserving current vertical order so a tidy doesn't
-      // scramble an arrangement the user already finds readable.
       const cols = new Map<number, FlowNode<DazyNodeData>[]>();
       for (const n of nds) {
         const c = layer.get(n.id) ?? 0;
@@ -1783,7 +1264,6 @@ function EditorInner() {
       );
     });
     setDirty(true);
-    // Re-frame once the DOM settles on the new positions.
     window.setTimeout(() => fitView({ padding: 0.3, duration: 400 }), 50);
   }, [edges, fitView]);
 
@@ -1791,9 +1271,6 @@ function EditorInner() {
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
   };
-  // spawnDrop creates a node from a manifest at the supplied screen
-  // coordinates. Shared between the drag-from-catalog flow and the
-  // Ctrl+K quick palette so both produce identical state.
   const spawnDropFlow = useCallback(
     (m: Manifest, position: { x: number; y: number }) => {
       setNodes((nds) => {
@@ -1808,11 +1285,7 @@ function EditorInner() {
           },
         ];
       });
-      // newID is recomputed inside setNodes (to avoid stale-state
-      // collisions when two spawns race); mirror that here so paramsByID
-      // gets the same key. Reading nodes via the closure is safe because
-      // setNodes' updater above is the source of truth — the worst case
-      // is a transient extra param entry that's harmless.
+      // Recomputed inside setNodes to avoid a stale-state collision.
       const newID = nextID(nodes, m.id);
       setParamsByID((p) => ({ ...p, [newID]: {} }));
       setDirty(true);
@@ -1826,13 +1299,6 @@ function EditorInner() {
     [spawnDropFlow, screenToFlowPosition],
   );
 
-  // approveFromCard resolves an await_approval step straight from its canvas
-  // card — the editor's only decision control. Same endpoint ApprovalPanel
-  // (run page) and the Approvals inbox call; the decision flips the node
-  // status over SSE and dispatches
-  // downstream, so there is nothing to refresh here. Errors surface on the
-  // editor's existing error bar rather than on the card, which is about to be
-  // replaced by the resumed state anyway.
   const approveFromCard = useCallback(
     async (nodeID: string, decision: "approve" | "reject") => {
       const runID = lockedRunID || currentRunID;
@@ -1846,13 +1312,6 @@ function EditorInner() {
     [token, lockedRunID, currentRunID, t],
   );
 
-  // spawnDropAuto places a palette-inserted step predictably: to the
-  // RIGHT of the rightmost existing step (data flows left→right, so the
-  // new step lands where its wires will point), vertically aligned with
-  // it. Dropping at the last pointer position instead scattered steps
-  // above-left of the trigger and under the inspector panel. An empty
-  // canvas gets the viewport centre. Pointer-aimed inserts (drag-drop
-  // from the catalog, drag-off-pin) keep their explicit position.
   const spawnDropAuto = useCallback(
     (m: Manifest) => {
       let rightmost: (typeof nodes)[number] | null = null;
@@ -1885,17 +1344,11 @@ function EditorInner() {
     spawnDrop(m, { x: e.clientX, y: e.clientY });
   };
 
-  // onCanvasMouseMove keeps a live pointer position so Ctrl+K can drop
-  // the chosen node where the cursor sits, without forcing a re-render
-  // on every move.
   const onCanvasMouseMove = (e: ReactMouseEvent<HTMLDivElement>) => {
     lastPointer.current = { x: e.clientX, y: e.clientY };
   };
 
-  // Global Ctrl/Cmd+K opens the quick palette. The check skips the
-  // shortcut when focus is in a text field so the user can still type
-  // "K" in node param inputs; the palette's own search input is the
-  // exception by way of being mounted after the shortcut fires.
+  // Skipped while a text field has focus, or it steals the browser shortcut.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const cmd = e.metaKey || e.ctrlKey;
@@ -1908,13 +1361,6 @@ function EditorInner() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Copy / paste selected nodes as text. We hook the native copy/paste
-  // events (not keydown) so clipboardData is available synchronously —
-  // no async-clipboard permission prompt — and a tagged JSON envelope
-  // rides the OS clipboard, so a selection round-trips within a graph,
-  // across graphs/tabs, or pasted from chat. Both handlers stand down
-  // when focus is in a text field (or text is selected) so normal
-  // copy/paste of text still works.
   useEffect(() => {
     const inTextField = () => {
       const el = document.activeElement as HTMLElement | null;
@@ -1971,9 +1417,6 @@ function EditorInner() {
       if (!payload || payload.__dazyflow_clipboard !== 1 || !payload.nodes?.length) return;
       e.preventDefault();
 
-      // New IDs, derived against the live graph; a placeholder array keeps
-      // nextID incrementing across the batch so two pasted copies of the
-      // same drop don't collide.
       const idMap = new Map<string, string>();
       const working = [...nodes];
       for (const cn of payload.nodes) {
@@ -1994,11 +1437,6 @@ function EditorInner() {
           data: { label: cn.data?.label ?? moduleID, moduleID, manifest },
         };
       });
-      // Ports are checked, not trusted: a payload can come from an older graph
-      // or another deployment where the drop had a port it no longer has, and
-      // pasting that edge would reintroduce an invisible wire that blocks
-      // every save (see lib/strayEdges). Only judged when a manifest is known
-      // and its ports are its own — same conditions the daemon applies.
       const pasteHasPort = (
         m: Manifest | undefined,
         side: "inputs" | "outputs",
@@ -2009,8 +1447,6 @@ function EditorInner() {
         if (!ports) return true;
         return ports.some((p) => p.port === (port ?? (side === "inputs" ? "in" : "out")));
       };
-      // Built once, off the nodes already mapped above, rather than searching
-      // the payload per edge.
       const manifestOfClipNode = new Map(
         newNodes.map((n) => [n.id, n.data.manifest]),
       );
@@ -2039,8 +1475,6 @@ function EditorInner() {
         payload.nodes.map((cn) => [idMap.get(cn.id)!, payload.params?.[cn.id] ?? {}]),
       );
 
-      // Deselect everything, drop the clones in selected so they can be
-      // moved/aligned immediately.
       setNodes((nds) => [...nds.map((n) => ({ ...n, selected: false })), ...newNodes]);
       setEdges((eds) => [...eds, ...newEdges]);
       setParamsByID((p) => ({ ...p, ...newParams }));
@@ -2060,14 +1494,6 @@ function EditorInner() {
     [nodes, selectedID],
   );
 
-  // inspectorRowsSource: which node+port feeds the selected step's `rows`
-  // input. The two editors that need to know their input's columns — Make text
-  // and Make a table — both have to read them off the UPSTREAM node's output,
-  // because the resolved node INPUT is never persisted: the dispatcher enqueues
-  // a record whose Job carries only the graph and node id, the engine assembles
-  // the inputs in memory at execution time, and nothing writes them back. So
-  // "run it once and I'll know your columns" is only true of the producer's
-  // side of the wire.
   const inspectorRowsSource = useMemo(() => {
     if (!inspectorSelected) return undefined;
     const e = edges.find(
@@ -2076,10 +1502,6 @@ function EditorInner() {
     return e ? { nodeId: e.source, port: e.sourceHandle ?? "out" } : undefined;
   }, [inspectorSelected, edges]);
 
-  // The rows that producer emitted on the run this editor is showing. Live from
-  // the run stream, so it covers the run you just pressed; a reload has no
-  // stream to read and falls back to fetching the producer's record (see
-  // RenderTableColumns / RenderTextPreview).
   const inspectorUpstreamRows = useMemo(() => {
     if (!inspectorRowsSource) return undefined;
     const data = nodeOutputs[inspectorRowsSource.nodeId]?.[inspectorRowsSource.port]?.data;
@@ -2093,9 +1515,6 @@ function EditorInner() {
     setDirty(true);
   };
 
-  // Per-key param setter for inline editing on the card (#7). Mirrors the
-  // Inspector's onParamsChange but merges a single key so the two views
-  // stay in sync on the same paramsByID store.
   const setNodeParam = useCallback(
     (id: string, key: string, value: unknown) => {
       setParamsByID((p) => ({ ...p, [id]: { ...(p[id] ?? {}), [key]: value } }));
@@ -2103,10 +1522,6 @@ function EditorInner() {
     },
     [],
   );
-  // Fold a card down, or open it back up. Takes the target state rather than
-  // toggling, because the card's own minimize/maximize buttons each know which
-  // way they go — and a fold-all over a mixed selection must not flip halves
-  // of it in opposite directions.
   const setNodeCollapsed = useCallback((nodeID: string, collapsed: boolean) => {
     setCollapsedNodes((prev) => {
       if (prev.has(nodeID) === collapsed) return prev;
@@ -2117,12 +1532,6 @@ function EditorInner() {
     });
     setDirty(true);
   }, []);
-  // Inject live params + the per-key setter into each node's data so the
-  // selected card can render inline fields. Derived (like coloredEdges) so
-  // it recomputes when params change; base `nodes` stays the source of
-  // truth for selection/position via onNodesChange.
-  // Which input ports are wired, per node — drives hiding an inline field
-  // once its port has a connection.
   const connectedInputsByNode = useMemo(() => {
     const m = new Map<string, string[]>();
     for (const e of edges) {
@@ -2133,8 +1542,6 @@ function EditorInner() {
     }
     return m;
   }, [edges]);
-  // Output ports that have a wire leaving them — drives the connection-state
-  // pin fill (#11): a port is solid when wired, a faint ring when free.
   const connectedOutputsByNode = useMemo(() => {
     const m = new Map<string, string[]>();
     for (const e of edges) {
@@ -2146,16 +1553,6 @@ function EditorInner() {
     return m;
   }, [edges]);
 
-  // Per-node configuration verification (#13): flag drops whose required
-  // values aren't set — a required param with no value (and no wired input
-  // of the same name supplying it), or a required input port that's neither
-  // wired nor given an inline default. Distinct from server lint (security
-  // advisories) and connection/secret checks.
-  // loopOwnerByNode mirrors the daemon's loopBodyOwners (daemon/loopbody.go):
-  // a node is "loop-owned" when it's reachable from a for_each's `body` output
-  // pin. Maps owned nodeID → the for_each node that owns it. Drives the dashed
-  // card style, the ${item.…} reference menu for body nodes, and the
-  // nested-loop config check below.
   const loopOwnerByNode = useMemo(() => {
     const moduleOf = (id: string) =>
       (nodes.find((n) => n.id === id)?.data as DazyNodeData | undefined)?.moduleID;
@@ -2186,7 +1583,6 @@ function EditorInner() {
     for (const n of nodes) {
       const man = n.data.manifest;
       if (!man) continue;
-      // A switched-off step never runs, so don't nag about its config.
       if (disabledNodes.has(n.id)) continue;
       const params = paramsByID[n.id] ?? {};
       const wired = new Set(connectedInputsByNode.get(n.id) ?? []);
@@ -2195,16 +1591,11 @@ function EditorInner() {
         if (v != null && v !== "" && !(Array.isArray(v) && v.length === 0)) {
           return true;
         }
-        // A required param that ships a default is never "missing" — the
-        // default applies at run time (e.g. Compare's op defaults to equals).
         return man.params_schema?.properties?.[k]?.default !== undefined;
       };
       const missing = new Map<string, string>(); // dedup by key
       for (const key of man.params_schema?.required ?? []) {
         if (!hasValue(key) && !wired.has(key)) {
-          // Localize the same way the surface that NAMES the thing does: the
-          // banner sits directly under a pin reading "Värde", and a Swedish
-          // sentence ending in the English "Value" reads as a bug in the app.
           const title = man.params_schema?.properties?.[key]?.title;
           const name = title ? fieldTitle(title, i18n.language) : key;
           missing.set(key, i18n.t("nodeCard.missingValue", { name }));
@@ -2215,10 +1606,6 @@ function EditorInner() {
         const name = p.label ? portLabel(p.label, i18n.language) : p.port;
         missing.set(p.port, i18n.t("nodeCard.unwiredRequired", { name }));
       }
-      // for_each is configured by wiring its `body` pin (the loop-body
-      // feature), not by a required param — flag an unwired body so a loop
-      // that would silently do nothing reads as "needs configuration".
-      // Legacy step_module flows are still valid (they set step_module).
       if (man.id === "for_each") {
         const hasBody = edges.some((e) => e.source === n.id && e.sourceHandle === "body");
         const hasStep =
@@ -2226,9 +1613,6 @@ function EditorInner() {
         if (!hasBody && !hasStep) {
           missing.set("__body", i18n.t("nodeCard.loopBodyUnwired"));
         }
-        // A loop inside another loop's body isn't supported yet (the inner
-        // body would run once, not per inner-item). Flag the nested loop so
-        // it's caught at edit time, not as silent wrong output.
         if (loopOwnerByNode.has(n.id)) {
           missing.set("__nested", i18n.t("nodeCard.loopNested"));
         }
@@ -2243,11 +1627,6 @@ function EditorInner() {
     return errs;
   }, [nodes, paramsByID, connectedInputsByNode, edges, loopOwnerByNode]);
 
-  // setupNeededByNode flags nodes whose drop needs a connection (OAuth
-  // account, API key, or service connection) that isn't configured yet —
-  // driving the per-node "Needs setup" chip. This is the edit-time surface
-  // for the gap where a drop like Claude previously only failed at run time.
-  // A switched-off step never runs, so it's never nagged.
   const setupNeededByNode = useMemo(() => {
     const out = new Map<string, SetupNeed>();
     for (const n of nodes) {
@@ -2259,12 +1638,6 @@ function EditorInner() {
     return out;
   }, [nodes, paramsByID, providers, secrets, disabledNodes]);
 
-  // orphanedNodeIDs are nodes that, in a multi-node flow, touch NO edge at
-  // all (no incoming and no outgoing wire). They'll never run as part of the
-  // flow — almost always a forgotten connection — so the Run path warns
-  // before launching (a soft "Run anyway" gate, not a hard block: a lone
-  // trigger/action might be intentional during building). A single-node flow
-  // is never flagged; a disabled node is skipped (it never runs anyway).
   const orphanedNodeIDs = useMemo(() => {
     if (nodes.length < 2) return [] as string[];
     const wired = new Set<string>();
@@ -2277,12 +1650,6 @@ function EditorInner() {
       .map((n) => n.id);
   }, [nodes, edges, disabledNodes]);
 
-  // loopHintByNode flags a node that has a LIST wired into a one-at-a-time
-  // input — e.g. a Google Form's "responses" list straight into an AI/email
-  // step. That step would run once on the whole batch; the fix is a For each
-  // loop. Detected from port cardinality (Port.list): a list output → a
-  // non-list input (ignoring the pass pin). Nodes inside a loop body already
-  // run per-item, and for_each itself is the fix, so both are skipped.
   const loopHintByNode = useMemo(() => {
     const out = new Map<string, string>();
     const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -2309,8 +1676,6 @@ function EditorInner() {
     return out;
   }, [edges, nodes, manifestByID, disabledNodes, loopOwnerByNode, t]);
 
-  // Resource-picker id→name resolution (the ResourceResolver concern) lives
-  // in useResourceResolver, extracted from this file.
   const resourceLabelsByNode = useResourceResolver({
     nodes,
     edges,
@@ -2319,11 +1684,6 @@ function EditorInner() {
     token,
   });
 
-  // offByCascade: nodes that WILL be skipped at run time because a step
-  // upstream of them is switched off (the engine's skip cascade) — shown
-  // greyed so the canvas honestly previews what a run would do. The
-  // disabled node itself is not in this set (it gets the stronger
-  // dz-node-off style + chip).
   const offByCascade = useMemo(() => {
     if (disabledNodes.size === 0) return new Set<string>();
     const outEdges = new Map<string, string[]>();
@@ -2346,23 +1706,6 @@ function EditorInner() {
     return off;
   }, [disabledNodes, edges]);
 
-  // tokenLabels: "nodeId.port" → "Gmail · Matching emails" — lets fields
-  // whose value is one ${upstream.…} token render the friendly chip the
-  // {} menu words it with.
-  //
-  // The result is IDENTITY-STABLE while its content is unchanged, and that is
-  // load-bearing rather than tidiness. It depends on `nodes`, so it rebuilds on
-  // every frame of a node drag — but nothing it reads (id, label, module,
-  // manifest) is affected by dragging, so every rebuild during a drag produced
-  // an identical object with a fresh identity. That identity is one of the
-  // deps of the per-node data cache in displayNodes, so a new one invalidated
-  // EVERY card, and the whole canvas re-rendered on every pointermove.
-  // Measured in a real browser at 60 steps: 57 node re-renders per move.
-  //
-  // Recomputed every time and then compared, rather than memoised on a
-  // signature of its inputs: a signature that missed a field would go stale
-  // and word a token chip wrongly, where this can only ever return content it
-  // just derived — which also makes it safe if React discards the render.
   const tokenLabelsRef = useRef<Record<string, string>>({});
   const tokenLabels = useMemo(() => {
     const m: Record<string, string> = {};
@@ -2370,9 +1713,6 @@ function EditorInner() {
       const d = n.data as DazyNodeData;
       const man = d.manifest ?? manifestByID.get(d.moduleID);
       if (!man) continue;
-      // d.label is the name on the canvas — the author's if they set one, the
-      // drop's otherwise — so a renamed step is named the same way in a
-      // reference as it is on the card.
       const nodeLabel = d.label || man.label || d.moduleID;
       for (const p of man.outputs ?? []) {
         m[`${n.id}.${p.port}`] = `${nodeLabel} · ${p.label ?? p.port}`;
@@ -2387,10 +1727,6 @@ function EditorInner() {
     return m;
   }, [nodes, manifestByID]);
 
-  // wiredSourcesByNode: target nodeId → { targetPort → friendly source label }.
-  // Lets a wired, non-picker param say what's flowing in ("New responses ·
-  // Email") instead of rendering a greyed, blank box. Reuses tokenLabels for
-  // the source step·port name; falls back to the raw "node.port" handle.
   const wiredSourcesByNode = useMemo(() => {
     const m = new Map<string, Record<string, string>>();
     for (const e of edges) {
@@ -2403,10 +1739,6 @@ function EditorInner() {
     return m;
   }, [edges, tokenLabels]);
 
-  // wiredPlaceByNode: for a node whose "place" input is wired FROM a literal
-  // Text drop, the upstream text value — so the Location map can show the wired
-  // place at design time (geocode it) rather than a bare "set at run time".
-  // Only one-hop literals are resolvable; a dynamic source leaves it unset.
   const wiredPlaceByNode = useMemo(() => {
     const m = new Map<string, string>();
     const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -2422,17 +1754,8 @@ function EditorInner() {
   }, [edges, nodes, paramsByID]);
 
   const displayNodes = useMemo<FlowNode<DazyNodeData>[]>(() => {
-    // Inline fields show only for a single selection, so a multi-select
-    // (e.g. for align/distribute) keeps every card collapsed.
     const sel = nodes.filter((n) => n.selected);
     const soleId = sel.length === 1 ? sel[0].id : null;
-    // Granular per-node memoisation: rebuild a node's `data` object only when
-    // one of its own inputs changed. Editing a field updates paramsByID for a
-    // single node, so without this every card would get a fresh data object
-    // (and re-render) on each keystroke. The deps array below is the exact set
-    // the data object reads, so reuse is correctness-preserving — any change
-    // rebuilds. Cached node objects keep a stable reference, so the memoised
-    // DazyNode (and React Flow) skips unchanged cards.
     const cache = nodeDataCacheRef.current;
     const seen = new Set<string>();
     const result = nodes.map((n) => {
@@ -2455,9 +1778,6 @@ function EditorInner() {
       const collapsed = collapsedNodes.has(n.id);
       const locked = lockedNodes.has(n.id);
       const paused = pausedAt === n.id;
-      // Entrance delay while a build animation plays (see applyGraphAnimated);
-      // undefined otherwise, so a node only rebuilds for it when it's actually
-      // entering or when the animation clears.
       const enterDelay = animApply?.enter.get(n.id);
       const deps: unknown[] = [
         n,
@@ -2482,9 +1802,6 @@ function EditorInner() {
         canConnect,
         tokenLabels,
         setNodeParam,
-        // Status is already part of `n`, but the cache compares `n` by
-        // reference — list it so a node flipping into (or out of) `awaiting`
-        // rebuilds its data and the approve bar appears/disappears.
         n.data.status,
         approveFromCard,
         enterDelay,
@@ -2495,9 +1812,6 @@ function EditorInner() {
       }
       const node: FlowNode<DazyNodeData> = {
         ...n,
-        // React Flow's own drag guard — cheaper and more reliable than
-        // fighting the drag in a handler, and it also stops the keyboard
-        // nudge, which a pointer-only guard would miss.
         draggable: !locked,
         data: {
           ...n.data,
@@ -2513,8 +1827,6 @@ function EditorInner() {
           setupNeeded,
           loopHint,
           canConnect,
-          // Only for the step the run is actually parked on: an await_approval
-          // node in `awaiting`. Absent otherwise, so the card renders no bar.
           onApprove:
             n.data.moduleID === "await_approval" && n.data.status === "awaiting"
               ? (decision: "approve" | "reject") => approveFromCard(n.id, decision)
@@ -2536,7 +1848,6 @@ function EditorInner() {
       cache.set(n.id, { deps, node });
       return node;
     });
-    // Drop cache entries for nodes that no longer exist.
     for (const id of cache.keys()) if (!seen.has(id)) cache.delete(id);
     return result;
   }, [
@@ -2565,11 +1876,6 @@ function EditorInner() {
     animApply,
   ]);
 
-  // Switch a step on/off (saved with the graph as node.disabled). Off = the
-  // engine skips it and everything downstream at run time.
-  // setEdgeErrorMode is the editor's half of core.Edge.OnError: what this
-  // connection does when the step it comes from fails. Restyles the wire in the
-  // same breath, because the drawing IS the feedback that it took.
   const setEdgeErrorMode = useCallback((edgeID: string, mode: EdgeErrorMode) => {
     setEdges((prev) =>
       prev.map((e) =>
@@ -2612,8 +1918,6 @@ function EditorInner() {
     setDirty(true);
   }, []);
 
-  // Toggle a breakpoint on the sole selected node (#12). Saved with the
-  // graph so it survives reloads.
   const toggleBreakpoint = useCallback(() => {
     const sel = nodes.filter((n) => n.selected);
     if (sel.length !== 1) return;
@@ -2627,8 +1931,6 @@ function EditorInner() {
     setDirty(true);
   }, [nodes]);
 
-  // Toggle a breakpoint on a specific node (the right-click target), rather
-  // than the sole selected node — the context-menu counterpart of toggleBreakpoint.
   const toggleBreakpointFor = useCallback((id: string) => {
     setBreakpoints((prev) => {
       const next = new Set(prev);
@@ -2639,9 +1941,6 @@ function EditorInner() {
     setDirty(true);
   }, []);
 
-  // Duplicate one node: a fresh id, its params carried over, offset a touch so
-  // the clone doesn't sit exactly on the original. Mirrors the copy/paste clone
-  // (single node, no edges) and leaves the copy selected for immediate nudging.
   const duplicateNode = useCallback(
     (id: string) => {
       const src = nodes.find((n) => n.id === id);
@@ -2664,26 +1963,16 @@ function EditorInner() {
     [nodes, paramsByID],
   );
 
-  // Reset one node's persisted per-node state (a dedupe cursor / poll
-  // watermark) — the context-menu action for stateful drops. Confirms with the
-  // manifest's reset_hint so the user knows exactly what clearing does, then
-  // calls the reset endpoint. Only offered when the node's manifest declares
-  // node_state. Reads the saved graph server-side, so it targets the flow as
-  // last saved (autosave keeps that current).
   const resetNodeStateAction = useCallback(
     (nodeId: string) => {
       const node = nodes.find((n) => n.id === nodeId);
       const ns = node?.data.manifest?.node_state;
       if (!ns) return;
-      // Open the app's ConfirmModal; the actual reset runs on confirm below.
       setResetStatePending({ nodeId, label: ns.label, hint: ns.reset_hint || ns.label });
     },
     [nodes],
   );
 
-  // performResetNodeState is the confirmed side of resetNodeStateAction — the
-  // ConfirmModal's onConfirm calls it. Kept separate so the modal owns the
-  // yes/no and this owns the effect.
   const performResetNodeState = useCallback(
     (nodeId: string) => {
       if (!token || !activeTenant || !activeWorkspace || !id) return;
@@ -2695,27 +1984,13 @@ function EditorInner() {
     [token, activeTenant, activeWorkspace, id, t],
   );
 
-  // The graph is mutable only with edit permission, off a live-run lock, and
-  // on the live graph (not a history preview). Right-click add/edit actions
-  // are gated on this, matching the Save button.
   const canEdit = hasPerm("graph:edit") && !lockedRunID && !previewRef;
 
-  // Continue / Step a paused run (#12).
-  // Stop the active (possibly paused) run. Cancels lockedRunID if known,
-  // else the run this editor started (currentRunID) — covers the brief
-  // window before refreshLock detects the lock. The cancel publishes a
-  // Terminal event over SSE, which subscribeToRun handles (clears pause
-  // state + refreshes the lock), so we don't refreshLock here.
-  // Clear every breakpoint in the graph.
   const clearBreakpoints = useCallback(() => {
     setBreakpoints((prev) => (prev.size === 0 ? prev : new Set()));
     setDirty(true);
   }, []);
 
-  // gdb-style debugging shortcuts (#12): c=continue, s/n=step, k=kill (stop),
-  // d=delete breakpoints, b=toggle breakpoint on the selected node. Plain
-  // keys only — we bail on any modifier (so Ctrl/Cmd+C copy still works) and
-  // when focus is in a text field. Each action no-ops unless it applies.
   useEffect(() => {
     const inText = () => {
       const el = document.activeElement as HTMLElement | null;
@@ -2778,8 +2053,6 @@ function EditorInner() {
     toggleBreakpoint,
   ]);
 
-  // Frames rendered as comment nodes, with a fresh title-edit callback
-  // that writes back into frameNodes state and dirties the graph.
   const displayFrames = useMemo<FlowNode[]>(
     () =>
       frameNodes.map((f) => ({
@@ -2798,8 +2071,6 @@ function EditorInner() {
             );
             setDirty(true);
           },
-          // Touch-device delete: frames aren't reachable from the Inspector,
-          // so the comment's own trash button removes it from frame state.
           onRequestDelete: () => {
             setFrameNodes((fns) => fns.filter((x) => x.id !== f.id));
             setSelectedID((cur) => (cur === f.id ? null : cur));
@@ -2810,10 +2081,6 @@ function EditorInner() {
     [frameNodes],
   );
 
-  // Move-with-contents: when a frame is dragged, the nodes it encloses move
-  // with it. We capture the enclosed nodes (and everyone's start position)
-  // at drag start, then apply the frame's delta — no reparenting, so the
-  // flat node model is untouched.
   const frameDragRef = useRef<{
     start: { x: number; y: number };
     nodes: { id: string; x: number; y: number }[];
@@ -2857,7 +2124,6 @@ function EditorInner() {
     frameDragRef.current = null;
   }, []);
 
-  // Add a comment frame at the centre of the current viewport.
   const addFrame = useCallback(() => {
     const r = wrapperRef.current?.getBoundingClientRect();
     const c = r
@@ -2880,12 +2146,6 @@ function EditorInner() {
     setDirty(true);
   }, [screenToFlowPosition]);
 
-  // Collapse the selected nodes into a subgraph (#8): save a new child flow
-  // containing the selection + its internal edges, replace the selection in
-  // the parent with one `subgraph` node, and rewire the boundary edges via
-  // input_map/output_map. Boundary inputs use a seed-carrier node (module
-  // delay, never runs) whose seeded `in` port feeds the real consumer — the
-  // pattern the engine's seed mechanism requires (verified end-to-end).
   const collapseSelection = useCallback(async () => {
     if (!token || !id) return;
     const sel = nodes.filter((n) => n.selected);
@@ -2920,12 +2180,9 @@ function EditorInner() {
       from_port: e.sourceHandle ?? "out",
       to: e.target,
       to_port: e.targetHandle ?? "in",
-      // An extracted sub-flow keeps its internal error handling; dropping it
-      // here would quietly turn every handler branch into an ordinary one.
       ...(asEdgeErrorMode(e.data?.onError) ? { on_error: asEdgeErrorMode(e.data?.onError) } : {}),
     }));
 
-    // One seed-carrier per incoming boundary edge → input_map.
     const inputMap: Record<string, string> = {};
     const inRewire: { e: FlowEdge; parentPort: string }[] = [];
     incoming.forEach((e, i) => {
@@ -2947,8 +2204,6 @@ function EditorInner() {
       inRewire.push({ e, parentPort });
     });
 
-    // Outgoing boundary edges → output_map, deduped by source node+port so
-    // one parent output port can fan out to several external consumers.
     const outputMap: Record<string, { node: string; port: string }> = {};
     const outRewire: { e: FlowEdge; parentPort: string }[] = [];
     const outKey = new Map<string, string>();
@@ -2965,8 +2220,6 @@ function EditorInner() {
       outRewire.push({ e, parentPort });
     });
 
-    // Persist the child flow first; bail (leaving the parent untouched) if
-    // it fails so we never strand a subgraph node pointing at nothing.
     const childId = `${id}-grp-${Date.now().toString(36)}`;
     try {
       await api.saveGraph(token, {
@@ -3036,11 +2289,6 @@ function EditorInner() {
     setDirty(true);
   };
 
-  // buildGraph constructs the wire payload from current React state.
-  // Overrides let callers (e.g. the settings modal save) substitute the
-  // freshly-edited fields without first having to round-trip through
-  // setState — useState is async, so reading state straight after a
-  // setter wouldn't see the new values.
   const buildGraph = (overrides: Partial<Graph> = {}): Graph => ({
     id: id ?? "",
     tenant: activeTenant,
@@ -3049,10 +2297,6 @@ function EditorInner() {
       id: n.id,
       module: n.data.moduleID,
       params: paramsByID[n.id] ?? {},
-      // Only a name the author actually chose. The default is the drop's own
-      // label, which is LOCALIZED — writing that would bake one language into
-      // the flow, so a Swedish author's graph would show Swedish step names to
-      // an English reader. Absent means "call it after the drop".
       ...(customNodeLabel(n) ? { label: n.data.label } : {}),
       position: n.position,
       ...(breakpoints.has(n.id) ? { breakpoint: true } : {}),
@@ -3066,8 +2310,6 @@ function EditorInner() {
       from_port: e.sourceHandle ?? "out",
       to: e.target,
       to_port: e.targetHandle ?? "in",
-      // Omitted when it is the default, so turning the setting on and off again
-      // leaves the flow byte-identical rather than growing an `"on_error": ""`.
       ...(asEdgeErrorMode(e.data?.onError) ? { on_error: asEdgeErrorMode(e.data?.onError) } : {}),
       ...((e.data?.waypoints as { x: number; y: number }[] | undefined)?.length
         ? { waypoints: e.data!.waypoints as { x: number; y: number }[] }
@@ -3094,16 +2336,10 @@ function EditorInner() {
     icon,
     description,
     timeout_seconds: timeoutSeconds,
-    // Preserve the paused state across saves — omitting it would re-enable a
-    // disabled flow on the next node edit. omitempty on the Go side drops false.
     ...(disabled ? { disabled: true } : {}),
     ...overrides,
   });
 
-  // When and whether the editor writes. useAutosave owns the dirty/saving flags,
-  // the debounced timer, the unload flush, and the five guards that stop a save
-  // clobbering something — see its header. The graph itself stays here, so
-  // buildGraph is handed in rather than reconstructed there.
   const autosave = useAutosave({
     token,
     ready: !!me,
@@ -3117,26 +2353,10 @@ function EditorInner() {
     onError: setError,
     onConflict: refreshLock,
     onSaved: (res) => {
-      // Remember our own commit so the flow-watch can ignore its echo.
       if (res.commit) ownCommitsRef.current.add(res.commit);
-      // Lint findings are advisory — the save already succeeded. Show them; the
-      // user can fix-and-resave or dismiss.
       setLintIssues(res.lint ?? []);
-      // The draft moved, so re-read the draft-vs-live status the toolbar pill
-      // and the live-state banner render.
-      //
-      // Autosaves used to flip the pill optimistically instead, on the
-      // reasoning that a successful save means HEAD differs from the published
-      // revision. It does — but "differs" is not the question the pill asks.
-      // Dragging a step or dropping a note on the canvas saves, and neither
-      // changes what the live version does, so the pill lit up over changes
-      // the diff view then reported as none. A save is already debounced, so
-      // the probe this replaces it with is one small GET per editing burst,
-      // not one per keystroke — and the server answers honestly (see
-      // core.BehaviorEqual).
       void publish.loadPublishInfo();
     },
-    // Any content change restarts the idle timer.
     reArmOn: [
       nodes,
       edges,
@@ -3165,19 +2385,6 @@ function EditorInner() {
   } = autosave;
 
 
-  // --- Undo / redo -----------------------------------------------------
-  //
-  // The document is snapshotted from buildGraph, with two adjustments:
-  //
-  //   `disabled` is dropped. Enabling/disabling a flow goes through its own
-  //   endpoint, so letting undo flip it locally would desync the editor from
-  //   the server with nothing to reconcile it.
-  //
-  //   Positions are rounded. React Flow writes fractional coordinates and a
-  //   snapshot round-trips through JSON, so without rounding a re-applied
-  //   snapshot could differ from the live state by a fraction of a pixel —
-  //   which the observer would then dutifully record as an edit the user never
-  //   made, on every undo.
   const buildHistoryDoc = (): Graph => {
     const g = buildGraph();
     const { disabled: _ignoredLifecycleFlag, ...doc } = g;
@@ -3195,19 +2402,6 @@ function EditorInner() {
   const buildHistoryDocRef = useRef(buildHistoryDoc);
   buildHistoryDocRef.current = buildHistoryDoc;
 
-  // applyHistoryDoc restores a snapshot.
-  //
-  // It reconciles rather than rebuilding (unlike hydrateGraph, which is the
-  // right thing on load where everything is new anyway). displayNodes
-  // memoises each card on the node object BY REFERENCE, so handing it fresh
-  // objects would rebuild and re-render every card on the canvas — an undo
-  // that visibly flashes the whole graph. Reconciling keeps the object for
-  // everything that didn't change, so undoing one node's drag re-renders one
-  // card.
-  //
-  // It also sets dirty, which hydrateGraph deliberately clears. Without that
-  // an undo would leave the server holding the state the user just undid, and
-  // autosave would never fire to correct it.
   const applyHistoryDoc = useCallback(
     (g: Graph) => {
       const targetNodes = g.nodes ?? [];
@@ -3287,25 +2481,12 @@ function EditorInner() {
       setIcon(g.icon);
       setDescription(g.description);
       setTimeoutSeconds(g.timeout_seconds);
-      // An undo IS an edit as far as persistence is concerned.
       setDirty(true);
     },
     [manifestByID],
   );
 
-  // Observer. Records the document whenever it changes, instead of asking each
-  // of the ~24 mutation sites to remember to snapshot. That's the property
-  // that keeps this from rotting: a new feature that edits the graph is
-  // undoable the moment buildGraph serializes it, with no history code to
-  // update. The deps are the editable state — the same list autosave watches,
-  // plus the ones it omits (frames, and every per-node flag).
-  //
-  // Every flag buildGraph serializes has to be in this list. Three were not:
-  // toggling continue_on_error, a fold or a lock recorded no snapshot, so the
-  // change was not undoable AND the next unrelated edit recorded a document
-  // that already carried it — making a single Ctrl+Z quietly revert both.
   useEffect(() => {
-    // Don't record while the canvas doesn't represent the user's document.
     if (graphLoading || loadFailed || previewRef) return;
     if (loadedIDRef.current !== null && loadedIDRef.current !== id) return;
 
@@ -3368,13 +2549,6 @@ function EditorInner() {
     applyHistoryDoc(step.doc);
   }, [history, applyHistoryDoc, lockedRunID, hasPerm]);
 
-  // Shift+P replays the publish confirmation, in dev builds only.
-  //
-  // Judging an animation means watching it a dozen times, and the real path
-  // needs a live flow and a fresh draft to promote for each one. Gated on
-  // import.meta.env.DEV so it is compiled out of a production bundle rather
-  // than shipped as an undocumented key that fires a "published" overlay at
-  // someone who has published nothing.
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     const onKey = (e: KeyboardEvent) => {
@@ -3391,10 +2565,6 @@ function EditorInner() {
     return () => window.removeEventListener("keydown", onKey);
   }, [celebrate]);
 
-  // Cmd/Ctrl+Z undoes, Cmd/Ctrl+Shift+Z and Ctrl+Y redo (Shift+Z is the
-  // Mac/Adobe convention, Ctrl+Y the Windows one — both are muscle memory for
-  // somebody). Skipped while focus is in a text field so the browser's own
-  // per-field undo keeps working while typing a param.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
@@ -3417,52 +2587,22 @@ function EditorInner() {
   }, [doUndo, doRedo]);
 
 
-  // Mirror of previewRef for the flow-watch (below): a history preview shows
-  // an old revision, intentionally diverged from HEAD, so an external HEAD
-  // edit must not animate over it.
   const previewRefRef = useRef(previewRef);
   previewRefRef.current = previewRef;
 
-  // Live flow-watch (#mcp): subscribe to server-side saves of this flow so an
-  // external edit — most importantly an AI assistant restructuring the flow
-  // through MCP — animates onto the open canvas in real time. The daemon
-  // emits one `flow_updated` frame per save; we ignore the echo of our own
-  // commits and never clobber unsaved local work or a history preview.
-  //
-  // Gated like the load effect (meReady, not `me`, to avoid identity churn);
-  // the graph fetch + apply go through refs so this resubscribes only on a
-  // real flow/auth change, not on every edit.
-  //
-  // The subscription RECONNECTS. It used to be one-shot: watchFlow resolves
-  // when the response body ends, nothing retried, and the effect's deps only
-  // cover flow/auth changes — so a dropped stream left the window permanently
-  // deaf while the canvas went on looking live. A laptop sleeping, a network
-  // change, or a phone backgrounding the tab was enough, and the 25s server
-  // ping only defends against idle proxy timeouts, not those.
-  //
-  // Silence is the failure mode here, which is why every path that ends the
-  // stream schedules a retry: a canvas that has quietly stopped updating is
-  // indistinguishable from a flow nobody is editing.
   useEffect(() => {
     if (!token || !meReady || !id || !activeTenant || !activeWorkspace) return;
     const ctrl = new AbortController();
     const watchedID = id;
     let retryMS = WATCH_RETRY_MIN_MS;
-    // Set only while we are waiting to reconnect, so it doubles as the
-    // "disconnected" flag the visibility/online handlers test.
     let timer: ReturnType<typeof setTimeout> | undefined;
 
-    // Pull HEAD onto the canvas, under the same guards a live frame obeys:
-    // never over unsaved local work, a failed-load fallback, or a history
-    // preview — all of which intentionally differ from server HEAD.
     const resync = () => {
       if (ctrl.signal.aborted) return;
       if (dirtyRef.current || loadFailedRef.current || previewRefRef.current) return;
       api
         .loadGraph(token, activeTenant, activeWorkspace, watchedID)
         .then((g) => {
-          // Bail if the flow switched, this watch was torn down, or the user
-          // started editing while the fetch was in flight.
           if (
             ctrl.signal.aborted ||
             loadedIDRef.current !== watchedID ||
@@ -3480,9 +2620,6 @@ function EditorInner() {
 
     const connect = (catchUp: boolean) => {
       if (ctrl.signal.aborted) return;
-      // A reconnect has to re-read HEAD. The frame carries no graph, so edits
-      // that landed while the stream was down were not merely delayed — they
-      // were never delivered to anyone, and nothing will resend them.
       if (catchUp) resync();
       api
         .watchFlow(
@@ -3491,11 +2628,7 @@ function EditorInner() {
           activeWorkspace,
           watchedID,
           (ev) => {
-            // A frame proves the stream is healthy, so a drop after a long
-            // healthy spell retries promptly instead of inheriting the
-            // backoff from whatever went wrong hours ago.
             retryMS = WATCH_RETRY_MIN_MS;
-            // Our own save echoing back — consume the marker and ignore.
             if (ownCommitsRef.current.has(ev.commit)) {
               ownCommitsRef.current.delete(ev.commit);
               return;
@@ -3508,9 +2641,6 @@ function EditorInner() {
           /* teardown, or the stream dropped — the retry below handles it */
         })
         .then(() => {
-          // Resolving (the server closed the stream) and rejecting (the
-          // network went away) both mean this window has stopped receiving.
-          // Only teardown is a real stop, and that aborts the signal.
           if (ctrl.signal.aborted) return;
           timer = setTimeout(() => {
             timer = undefined;
@@ -3520,10 +2650,6 @@ function EditorInner() {
         });
     };
 
-    // A tab coming back to the foreground, or a machine regaining its
-    // network, is the moment to try again rather than sit out the backoff —
-    // this is the case that made the bug: a phone's backgrounded tab has its
-    // connection dropped, and the canvas went on looking live indefinitely.
     const kick = () => {
       if (ctrl.signal.aborted || timer === undefined) return; // connected already
       clearTimeout(timer);
@@ -3558,65 +2684,23 @@ function EditorInner() {
 
 
 
-  // refreshLock asks the daemon whether any run of this flow is still
-  // active. The server is the source of truth — another tab or a
-  // scheduled trigger can have started a run this editor doesn't know
-  // about. Called on mount, after Run, and after every SSE terminal.
 
-  // Self-heal the edit lock. lockedRunID is set when a run is active, but
-  // scheduler-driven runs (a poll/cron trigger firing) never reach this
-  // editor's SSE terminal, so nothing would otherwise clear the lock — and a
-  // flow that polls (e.g. every 60s) would catch a run at mount or on an
-  // autosave 409, then stay "locked" forever, silently blocking all saves.
-  // While locked, re-poll so the lock releases once the run finishes and the
-  // pending autosave (re-armed on the lockedRunID change) can write. Only
-  // runs while locked, so there's no idle polling cost.
+  // A run can end without the editor hearing, so the lock must expire itself.
 
-  // summarizeSuccess builds the "it worked, here's what came out" banner for
-  // a run that finished cleanly. "What came out" means the leaf steps — the
-  // ones no edge leaves — since that's what a person means by the result;
-  // it walks them in order and shows the first that produced anything. Read
-  // off the live React Flow instance rather than the `nodes` closure, which
-  // is stale by the time a terminal frame lands. Any lookup failure just
-  // yields the plain "run finished" form: never let a preview fetch turn a
-  // successful run back into silence.
 
-  // subscribeToRun opens the SSE stream for runID and applies per-node
-  // status frames to the canvas. Shared by Run (new run just started)
-  // and by the history picker (load an old run). Returns a cancel
-  // function that aborts the stream.
 
-  // enabledNodes: nodes that will actually run — everything except the ones
-  // switched off AND the ones the engine skips downstream of an off step
-  // (offByCascade). A step that never runs needs no connection/secret/setup,
-  // so the flow-level gates below reason over this set, not every node. This
-  // is why toggling a node off clears its "Connect to run" prompt (matching
-  // the per-node chip in setupNeededByNode, which already skips off steps).
   const enabledNodes = useMemo(
     () => nodes.filter((n) => !disabledNodes.has(n.id) && !offByCascade.has(n.id)),
     [nodes, disabledNodes, offByCascade],
   );
-  // missingConnections: OAuth accounts this graph references but the
-  // tenant hasn't connected. Recomputed as nodes/params/providers
-  // change so the Run gate always reflects the current canvas.
   const missingConnections = useMemo(
     () => requiredConnections(enabledNodes, manifestByID, paramsByID, providers),
     [enabledNodes, manifestByID, paramsByID, providers],
   );
-  // missingSecrets: ${secret.NAME} credentials this graph references but
-  // that aren't stored yet (excluding ones it writes itself).
   const missingSecrets = useMemo(
     () => requiredSecrets(enabledNodes, paramsByID, secrets),
     [enabledNodes, paramsByID, secrets],
   );
-  // adminBlockedProviders / adminBlockedSecretRefs: when OAuth or the
-  // encrypted secret store are off entirely on this install, the
-  // regular checks above return [] — "we can't know what's missing."
-  // These two parallel calls surface "the graph WOULD need these but
-  // your admin hasn't enabled the feature yet" so the banner + gate
-  // can warn the user instead of dispatching a doomed run. End user
-  // can't fix these themselves — separate UI affordance (no
-  // set-up CTA on these rows).
   const adminBlockedProviders = useMemo(
     () => unavailableProviders(enabledNodes, manifestByID, paramsByID, providers),
     [enabledNodes, manifestByID, paramsByID, providers],
@@ -3625,23 +2709,14 @@ function EditorInner() {
     () => unavailableSecretRefs(enabledNodes, paramsByID, secrets),
     [enabledNodes, paramsByID, secrets],
   );
-  // Same, for the conn.<slug>.<key> shape: with the secret store off, Stripe /
-  // Claude / SMTP steps would otherwise warn about nothing at all.
   const adminBlockedConnectionApps = useMemo(
     () => unavailableConnectionApps(enabledNodes, manifestByID, paramsByID, secrets),
     [enabledNodes, manifestByID, paramsByID, secrets],
   );
-  // slackTargets: channels this graph posts to. Drives a pre-run
-  // reminder to invite the Slack app — orthogonal to needsSetup (Slack
-  // can be connected yet the app still absent from the channel).
   const slackTargets = useMemo(
     () => slackChannels(enabledNodes, paramsByID),
     [enabledNodes, paramsByID],
   );
-  // missingSetups: apps with a "connect once" service connection (Claude,
-  // ntfy, SMTP) that isn't configured. OAuth and ${secret.…} are covered by
-  // the two checks above; this closes the ConnectionFields gap so the gate
-  // catches them too instead of letting the run fail mid-flight.
   const missingSetups = useMemo(
     () => missingConnectionApps(enabledNodes, manifestByID, paramsByID, secrets),
     [enabledNodes, manifestByID, paramsByID, secrets],
@@ -3655,20 +2730,6 @@ function EditorInner() {
     adminBlockedSecretRefs.length > 0 ||
     adminBlockedConnectionApps.length > 0;
   const needsSetup = userFixableSetup || adminBlockedSetup;
-  // setupTarget deep-links the banner's "Set up" button straight to the one
-  // app that needs connecting when there's exactly one (each node's SetupNeed
-  // carries its integration slug). With several apps, fall back to the Apps
-  // list.
-  //
-  // A ${secret} ref has no app page, so when secrets are ALL that's missing the
-  // destination is the org's secret store instead — following the same
-  // /admin/secrets?focus=NAME convention SchemaForm's inline "Set up" link
-  // uses, which lands on the Values tab with that secret highlighted. Sending
-  // those to /apps was a dead end: nothing on the Apps page adds a secret.
-  //
-  // setupLabelKey travels with it so the button can NAME where it goes. It said
-  // "Go to Connections" for every case, which is not a page this product has —
-  // the sidebar calls it Apps, and the secret store is Admin → Secrets.
   const { to: setupTarget, labelKey: setupLabelKey } = useMemo(
     () =>
       setupDestination(
@@ -3678,41 +2739,20 @@ function EditorInner() {
       ),
     [setupNeededByNode, userFixableSetup, missingSecrets],
   );
-  // --- the two toolbar issue panels -------------------------------------
-  //
-  // Every message these count used to be a banner in a column over the canvas.
-  // The counts are what stands in the toolbar; the prose lives in the panels
-  // (IssuesPopover).
-  //
-  // A row is worth what it is worth: one lint pass finds several things and
-  // several steps can need setup, so those count their items, while the error
-  // and the missing-apps row are one each.
   const errorCount = error ? 1 : 0;
   const warningCount =
     (connHint ? 1 : 0) +
     lintIssues.length +
     (needsSetup ? 1 : 0) +
     configErrorsByNode.size;
-  // A refused wire explains something the author just tried, so it cannot wait
-  // to be asked for: the panel opens itself. The hint still self-clears after a
-  // few seconds, and the effect below closes the panel with it when there is
-  // nothing else left in the list.
   useEffect(() => {
     if (connHint) setIssuePanel("warning");
   }, [connHint]);
-  // Close a panel the moment it would be empty — the last warning fixed, the
-  // error dismissed — rather than leave an empty box anchored to a button that
-  // is no longer rendered.
   useEffect(() => {
     if (issuePanel === "error" && errorCount === 0) setIssuePanel(null);
     if (issuePanel === "warning" && warningCount === 0) setIssuePanel(null);
   }, [issuePanel, errorCount, warningCount]);
 
-  // setupBlockerNames lists what's unconfigured in the words the user sees
-  // elsewhere (app display names, ${secret} refs). Feeds the publish gate's
-  // warning so it names the actual gap instead of saying "something is
-  // missing" — same set the Run gate reasons over, admin-blocked included,
-  // because a publish is doomed either way.
   const setupBlockerNames = useMemo(
     () => [
       ...missingConnections.map((m) => oauthProviderDisplay(m.provider).name),
@@ -3730,14 +2770,9 @@ function EditorInner() {
     ],
   );
 
-  // doRun submits the graph and wires up live status. Separated from
-  // the gate check so "Run anyway" in the setup modal can bypass the
-  // warning and run directly.
 
   const doRun = async () => {
     if (!token || !me || !id) return;
-    // Acknowledge the Slack-channel reminder so subsequent runs of this
-    // flow don't re-open the gate just for it.
     if (slackTargets.length > 0) {
       localStorage.setItem(`dazyflow.slackAck.${id}`, "1");
     }
@@ -3745,50 +2780,14 @@ function EditorInner() {
     await run.startRun();
   };
 
-  // retryFailedRun resumes the run behind the error banner from the step that
-  // failed, reusing the outputs of everything that already succeeded — the same
-  // api.retryRun the runs list and the run-detail page call.
-  //
-  // It deliberately does NOT navigate to the new run the way those two do: the
-  // point of retrying from here is to watch the resumed run light up the canvas
-  // you are already looking at, so it hands the new job to subscribeToRun and
-  // stays put. Otherwise this is doRun's shape exactly.
 
-  // An inbound-delivery flow waits for something from outside — clicking
-  // "Run" gives its trigger step no body, which confuses non-technical users.
-  // For a Webhook, Form or Request step we offer "Send test event" instead: it
-  // fires the flow with a synthetic sample payload so the canvas lights
-  // up exactly as a real delivery would.
-  //
-  // Keyed off the NODE, not g.triggers. This used to require a graph-level
-  // webhook trigger as well, and trigger config moved onto the nodes when the
-  // Triggers menu went away (see daemon/me_routes.go: the webhook_input node
-  // carries the secret and the hosted-form opt-in). Every webhook flow built
-  // since then has `triggers: null`, so the condition was never true and the
-  // button was unreachable — the affordance existed, the endpoint worked, and
-  // nothing rendered. hasAnyTrigger below was updated for node-based config;
-  // this was missed.
-  //
-  // The node alone is the right test: a secret gates the PUBLIC /trigger
-  // endpoint, while test-trigger runs under the user's own token, so an
-  // unconfigured webhook node is still worth firing a sample at.
   const webhookNode = nodes.find((n) => {
     const m = (n.data as DazyNodeData | undefined)?.moduleID;
     return m === "webhook_input" || m === "request_input" || m === "form_input";
   });
   const hasWebhookTrigger = webhookNode !== undefined;
 
-  // openTestEvent pre-fills the sample editor with a payload shaped to the
-  // configured form_fields (so a {phone, company} form gets a matching
-  // sample, not the legacy {name, email, message} shape), then opens the
-  // dialog so the user can edit it before firing.
-  // freshTestEventSample builds the generated payload for this flow: shaped to
-  // the configured form_fields (so a {phone, company} form gets a matching
-  // sample, not the legacy {name, email, message} shape).
   const freshTestEventSample = () => {
-    // Node params live in paramsByID, not n.data — the same trap that kept
-    // the run-status chip reading "Manual only" over a configured webhook.
-    // Fall back to the graph-level trigger for flows predating the move.
     const nodeFields = webhookNode
       ? (paramsByID[webhookNode.id]?.form_fields as string[] | undefined)
       : undefined;
@@ -3801,37 +2800,23 @@ function EditorInner() {
   };
 
   const openTestEvent = () => {
-    // The payload from last time wins over a fresh sample. Regenerating
-    // unconditionally meant a body you had shaped to reproduce something
-    // survived exactly one firing — testing the same edge case twice meant
-    // preparing it twice. "Reset to sample" in the dialog gets the generated
-    // shape back.
+    // Last time's payload wins: regenerating would discard what the user typed.
     setTestEventJSON(loadTestEvent(id) ?? freshTestEventSample());
     setTestEventErr(null);
     setTestEventOpen(true);
   };
 
-  // closeTestEvent is every way out of the dialog — the X, the backdrop,
-  // Escape, Dismiss — and each of them keeps the payload. Saving on the way
-  // out rather than on each keystroke means no work on the typing path, and
-  // it still holds an edit someone closed the dialog on without firing.
   const closeTestEvent = () => {
     saveTestEvent(id, testEventJSON);
     setTestEventOpen(false);
   };
 
-  // resetTestEvent throws the remembered payload away and regenerates. Needed
-  // because a saved body outlives the shape it was written for: change the
-  // form's fields and the dialog would otherwise keep offering the old one.
   const resetTestEvent = () => {
     clearTestEvent(id);
     setTestEventJSON(freshTestEventSample());
     setTestEventErr(null);
   };
 
-  // submitTestEvent parses the edited JSON and fires it. A parse error
-  // keeps the dialog open with an inline message rather than firing a
-  // malformed payload.
   const submitTestEvent = async () => {
     let parsed: unknown;
     try {
@@ -3840,29 +2825,12 @@ function EditorInner() {
       setTestEventErr((e as Error).message);
       return;
     }
-    // Fired payloads are the ones most worth keeping.
     saveTestEvent(id, testEventJSON);
     setTestEventOpen(false);
     await run.fireTestEvent(parsed);
   };
 
-  // fireTestEvent runs the (draft / HEAD) flow with the given sample
-  // payload via the test-trigger path — webhook_input nodes light up
-  // exactly as a real /trigger hit would, but it runs under the caller's
-  // token and shows in the run list like any other run.
 
-  // confirmDelete gates React Flow's delete (Backspace/Delete on a selection,
-  // or the inspector's remove). It opens the ConfirmModal and resolves the
-  // promise React Flow awaits: true proceeds, false cancels. A single confirm
-  // covers a multi-select delete. Empty selections (nothing to remove) pass
-  // through without a prompt.
-  //
-  // The confirm guards only real work: deleting a drop that's been configured.
-  // Everything cheap to redo skips it — a connection (edge), on its own or
-  // riding along with a node deletion, is a single re-drag to restore, and an
-  // untouched drop (freshly added, empty params) carries nothing worth a
-  // prompt. So the gate fires solely when a node with configured params is
-  // among the deletion; edge-only deletions and unconfigured drops pass through.
   const confirmDelete = useCallback(
     (params: { nodes: FlowNode[]; edges: FlowEdge[] }): Promise<boolean> => {
       const anyModified = params.nodes.some(
@@ -3882,11 +2850,6 @@ function EditorInner() {
 
   const runWithLiveStatus = async () => {
     if (!token || !me || !id) return;
-    // Hard-block a run that's missing a required value (e.g. ntfy with no
-    // topic). These guarantee a mid-run failure, so naming the field up
-    // front beats a cryptic daemon error. Unlike the connection gate there
-    // is no "Run anyway" — a required value really is required. Select the
-    // offending step so the Inspector opens on the field to fix.
     if (configErrorsByNode.size > 0) {
       const [nodeID, msgs] = [...configErrorsByNode.entries()][0];
       const node = nodes.find((n) => n.id === nodeID);
@@ -3895,10 +2858,6 @@ function EditorInner() {
       setError(t("editor.configBlock", { label, detail: msgs[0].message }));
       return;
     }
-    // Warn before a run that's missing a connected account or a
-    // credential the graph needs — clearer than letting the daemon fail
-    // mid-run with a "no token" / "secret not found" error. The modal
-    // still offers "Run anyway" since this is a heuristic, not a rule.
     const slackReminderPending =
       slackTargets.length > 0 &&
       !!id &&
@@ -3907,8 +2866,6 @@ function EditorInner() {
       setGateOpen(true);
       return;
     }
-    // Soft warning: orphaned (unconnected) steps won't run. Confirm before
-    // launching so a forgotten wire doesn't read as a silently-skipped step.
     if (orphanedNodeIDs.length > 0) {
       setOrphanWarnOpen(true);
       return;
@@ -3916,23 +2873,9 @@ function EditorInner() {
     await doRun();
   };
 
-  // When the editor opens with a stashed last-run ID, pull its status
-  // into the canvas. The SSE handler emits initial node-snapshots for
-  // terminal runs too, so this populates the dots for a graph the user
-  // last viewed (or last ran from a different tab) without making them
-  // hit Run again.
-  // Pull the lock state on first paint so the Save button reflects an
-  // already-active run from another tab without waiting for SSE.
 
 
-  // Abort the live run-stream when the editor unmounts. subscribeToRun
-  // keeps streamAbortRef pointed at the current stream, whereas the [id]
-  // effect's own cleanup only captures the controller from when it ran —
-  // which a later run() / test-event / history pick may have superseded.
 
-  // settingsGraph + persistSettings are shared by the Settings and
-  // Triggers modals — both edit graph-level fields and persist
-  // immediately on their own Save button (no extra toolbar Save trip).
   const settingsGraph: Graph = {
     id: id ?? "",
     tenant: activeTenant,
@@ -3951,14 +2894,6 @@ function EditorInner() {
     ...(disabled ? { disabled: true } : {}),
   };
 
-  // A flow can start on its own via a graph-level trigger (webhook/poll/
-  // cron in g.triggers, on flows predating the move) OR a trigger NODE.
-  // Presence is all this asks: it drives the "add a trigger" nudge, so a
-  // bare node counts — the nudge would be wrong on a canvas that already
-  // has the node the user is midway through configuring. Whether a trigger
-  // is actually configured to FIRE is runStatus's question, just below, and
-  // it reads the params (a blank cron or an unset secret reads "Manual
-  // only" there rather than a false "Live").
   const hasAnyTrigger =
     triggers.length > 0 ||
     nodes.some((n) => {
@@ -3973,45 +2908,19 @@ function EditorInner() {
         m === "form_input"
       );
     });
-  // runStatus drives the header chip: unlike hasAnyTrigger (presence of a
-  // trigger node), this reflects whether a trigger is actually *configured*
-  // to fire — the same rule the scheduler enrolls on. So a poll/form node
-  // with a blank interval reads "Manual only", not a false "Live".
   const runStatus = useMemo(
     () =>
       flowRunStatusPublished(
         disabled,
         triggers,
-        // Node params live in paramsByID, NOT in n.data — reading
-        // n.data.params here kept the chip stuck on "Manual only" even
-        // after the user configured a webhook secret or cron string.
         nodes.map((n) => ({
           module: (n.data as DazyNodeData | undefined)?.moduleID ?? "",
           params: paramsByID[n.id] ?? {},
         })),
-        // A scheduler-triggered flow that hasn't been published yet reads
-        // "Needs publish" — the scheduler only runs published flows. While
-        // publishInfo is still loading (null) we pass undefined, which the
-        // classifier treats as published so the chip doesn't flicker.
         publishInfo === null ? undefined : publishInfo.published,
       ),
     [disabled, triggers, nodes, paramsByID, publishInfo],
   );
-  // chipAddsInfo: whether the run-status chip is worth rendering next to the
-  // control that sits beside it.
-  //
-  // The Live switch (graph:admin) shows the publish/paused state in its own
-  // label — "Live" / "Off" / "Publish" — so beside it the chip repeats itself
-  // in three of its four states. The exception is "Manual only": nothing is
-  // configured to fire the flow, which no switch position can say and which a
-  // switch reading "Live" actively hides. The plain On/Off button that
-  // graph:edit-only users get instead speaks only to enabled/disabled, so
-  // there the chip keeps everything except "Off". With neither control on
-  // screen (read-only) the chip is the whole status display.
-  //
-  // Plain const, not a useMemo: three boolean tests are cheaper than the
-  // dependency array, and hasPerm gets a fresh identity on every auth
-  // re-render, so memoising it would recompute anyway.
   const chipAddsInfo = (() => {
     if (me && id && hasPerm("graph:admin") && publishInfo) {
       return runStatus === "manual";
@@ -4028,33 +2937,19 @@ function EditorInner() {
     setIcon(next.icon);
     setDescription(next.description);
     setTimeoutSeconds(next.timeout_seconds);
-    // Owner stays as-is — UI doesn't expose transfer; only the daemon
-    // (on admin save) can change it.
     if (!token) return;
     setSaving(true);
     setError(null);
     try {
       const res = await api.saveGraph(
         token,
-        // From `next`, not from state: the setState calls above have not
-        // applied yet in this tick, so reading state here would save the
-        // values the modal just replaced. pickGraphSettings is the single
-        // list of what a flow's settings are (lib/graphMeta.ts) — the two
-        // hand-written copies of it are how language and failure_notify went
-        // missing.
         buildGraph({
           triggers: (next.triggers ?? []).length > 0 ? next.triggers : undefined,
           ...pickGraphSettings(next),
         }),
       );
       setDirty(false);
-      // Surface lint warnings from this save too — the Triggers modal is
-      // where bad trigger config (never-firing cron, bad poll interval,
-      // secret-less webhook) is entered, so its save is exactly where the
-      // trigger lint needs to reach the banner.
       setLintIssues(res.lint ?? []);
-      // Name/icon/visibility may have changed — tell the sidebar list to
-      // refetch so it reflects the new icon/name without a navigation.
       window.dispatchEvent(new Event(FLOWS_CHANGED_EVENT));
     } catch (e) {
       setError(explainApiError(e, t));
@@ -4063,19 +2958,9 @@ function EditorInner() {
     }
   };
 
-  // deleteFlow permanently removes the flow, then leaves the now-gone editor
-  // for the flow list. It lets the API error propagate so the SettingsModal
-  // can show "stop the run first" on a 409 lock; the editor's own
-  // beforeunload/dirty guard is irrelevant once the flow no longer exists, so
-  // we navigate straight out on success.
   const deleteFlow = async (password: string) => {
     if (!token || !id) return;
     await api.deleteGraph(token, activeTenant, activeWorkspace, id, password);
-    // Clear dirty BEFORE navigating: the route change tears down the
-    // autosave effect, whose cleanup flushes a keepalive PUT when
-    // dirtyRef.current is true. With unsaved edits that flush would
-    // re-create the flow we just deleted — so silence it via the ref
-    // (setDirty's re-render won't land before the synchronous navigate).
     dirtyRef.current = false;
     setDirty(false);
     window.dispatchEvent(new Event(FLOWS_CHANGED_EVENT));
@@ -4269,9 +3154,6 @@ function EditorInner() {
           {/* Document state — save status and run history. */}
           <div className="toolbar-group">
             {lockedRunID || previewRef || !hasPerm("graph:edit") ? (
-              // Can't edit right now (a run holds the lock, we're peeking at an
-              // old version, or read-only). Autosave won't fire, so keep a
-              // disabled Save button whose title explains why.
               <Button
                 className="editor-save"
                 disabled
@@ -4289,16 +3171,11 @@ function EditorInner() {
                 </span>
               </Button>
             ) : dirty || saving ? (
-              // Edits are pending or a save is in flight — autosave
-              // (AUTOSAVE_DEBOUNCE_MS) persists them on its own, so show a
-              // non-clickable spinner rather than a clickable floppy.
               <span className="editor-saving" title={t("common.saving")}>
                 <Loader2 size={ICON.sm} className="spin" />
                 <span className="toolbar-label">{t("common.saving")}</span>
               </span>
             ) : (
-              // Everything's saved and we're on the live graph — a calm
-              // confirmation.
               <span className="editor-saved" title={t("common.saved")}>
                 <Check size={ICON.sm} />
                 <span className="toolbar-label">{t("common.saved")}</span>
@@ -4483,9 +3360,6 @@ function EditorInner() {
                   title={issue.code}
                   text={describeLint(issue, manifest)}
                   actions={
-                    // One Dismiss for the whole pass, on its first row: they
-                    // arrive together from one save and go together on the
-                    // next edit.
                     i === 0 ? (
                       <Button
                         variant="ghost"
@@ -5095,9 +3969,6 @@ function EditorInner() {
           />
         )}
         <ReactFlow
-          // Frames first so they paint behind the real nodes. Cast: comment
-          // nodes carry CommentData, not DazyNodeData — the array is mixed,
-          // but each renderer reads its own data shape.
           nodes={[...displayFrames, ...displayNodes] as FlowNode<DazyNodeData>[]}
           edges={coloredEdges}
           nodeTypes={nodeTypes}
@@ -5107,9 +3978,6 @@ function EditorInner() {
           onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
           onEdgesChange={onEdgesChange}
-          // Both Delete and Backspace remove the selection (React Flow
-          // defaults to Backspace alone). Either way deletion is routed
-          // through onBeforeDelete below, so the confirm gate still applies.
           deleteKeyCode={["Delete", "Backspace"]}
           onBeforeDelete={confirmDelete}
           onConnect={onConnect}
@@ -5117,19 +3985,11 @@ function EditorInner() {
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
           onInit={(inst) => (rfRef.current = inst)}
-          // Open the inspector only on a click WITHOUT a drag. Grabbing a node
-          // to move it also selects it, so opening on selection (below) would
-          // pop the inspector open every time you reposition a card. onNodeClick
-          // fires on mouse-release only when there was no drag — exactly the
-          // gesture we want.
           onNodeClick={(_e, node) => setSelectedID(node.id)}
           onPaneClick={() => {
             setSelectedID(null);
             setCtxMenu(null);
           }}
-          // Right-click on empty canvas → add-node palette placed at the cursor
-          // (Blueprint "add node here"). paletteShowAll bypasses the empty-flow
-          // entry-point filter so the full catalog is offered.
           onPaneContextMenu={(e) => {
             e.preventDefault();
             setCtxMenu(null);
@@ -5139,7 +3999,6 @@ function EditorInner() {
             setPaletteScreen({ x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY });
             setPaletteOpen(true);
           }}
-          // Right-click a node/edge → its actions menu.
           onNodeContextMenu={(e, node) => {
             e.preventDefault();
             setSelectedID(node.id);
@@ -5150,18 +4009,10 @@ function EditorInner() {
             setCtxMenu({ kind: "edge", id: edge.id, x: e.clientX, y: e.clientY });
           }}
           onSelectionChange={(s) => {
-            // Only collapse on a MULTI-select (no single node to inspect).
-            // Don't clear on the empty selection: React Flow fires a transient
-            // empty onSelectionChange during a node click, which would undo the
-            // selectedID that onNodeClick just set (the "needs two clicks" bug).
-            // Closing on an empty-canvas click is handled by onPaneClick.
             if (s.nodes.length > 1) setSelectedID(null);
           }}
           fitView
           fitViewOptions={{ padding: 0.3 }}
-          // minZoom below React Flow's 0.5 default so large graphs fit on
-          // screen. The logic-operator chips counter-scale their glyph to
-          // stay legible this far out (see OperatorChip in NodeCard.tsx).
           minZoom={0.2}
           proOptions={{ hideAttribution: true }}
           colorMode={themeMode}
@@ -5363,18 +4214,12 @@ function EditorInner() {
             id ? { id, tenant: activeTenant, workspace: activeWorkspace, name } : undefined
           }
           triggerLive={
-            // Left undefined while publishInfo is still loading, so the webhook
-            // developer panel says nothing rather than guessing wrong about
-            // whether the printed curl would actually be accepted.
             publishInfo
               ? { published: publishInfo.published, dirty: publishInfo.dirty }
               : undefined
           }
           currentRunID={currentRunID}
           onDelete={(nodeID) => {
-            // Remove the node and any edge touching it, drop its stashed
-            // params, and clear selection. This is the touch-device
-            // delete path (no Delete/Backspace key).
             setNodes((nds) => nds.filter((n) => n.id !== nodeID));
             setEdges((eds) =>
               eds.filter((e) => e.source !== nodeID && e.target !== nodeID),
@@ -5394,10 +4239,6 @@ function EditorInner() {
           onClose={
             isSheet
               ? () => {
-                  // Closing the fullscreen overlay returns to a clean canvas:
-                  // drop the selection so the Inspect FAB hides too. setNodes
-                  // flips React Flow's internal `selected` flag so the node
-                  // isn't left highlighted underneath; tap it again to inspect.
                   setSelectedID(null);
                   setInspectorExpanded(false);
                   setNodes((nds) =>
@@ -5411,24 +4252,12 @@ function EditorInner() {
           onSample={
             token && id
               ? async (nodeID) => {
-                  // Save the in-flight graph first — sample fires
-                  // against the persisted version, so an unsaved edit
-                  // to params/wiring would otherwise be invisible to
-                  // the partial run. If the save didn't land (error, or a
-                  // failed-load block), bail: sampling the stale/empty
-                  // persisted graph would be misleading. save() already
-                  // surfaced the error.
                   const ok = await save();
                   if (!ok) return undefined;
                   const job_id = await run.begin(() =>
                     api.sampleNode(token, activeTenant, activeWorkspace, id, nodeID),
                   );
                   if (!job_id) return undefined;
-                  // Reuse the same SSE plumbing the regular Run uses: begin()
-                  // adopts the job as current + locking, remembers it, and
-                  // subscribes — so a partial run drives node statuses and live
-                  // logs exactly like a full one, and the "Run this step" button
-                  // flips to Stop for its lifetime.
                   return job_id;
                 }
               : undefined
@@ -5459,14 +4288,10 @@ function EditorInner() {
           }}
           onPick={(m) => {
             if (connectFrom) {
-              // Drag-off-pin: place at the drop point and auto-wire.
               spawnDropConnected(m, connectFrom);
             } else if (paletteScreen) {
-              // Right-click add: place exactly where the cursor was.
               spawnDrop(m, paletteScreen);
             } else {
-              // Predictable placement: right of the rightmost step (or
-              // viewport centre on an empty canvas) — see spawnDropAuto.
               spawnDropAuto(m);
             }
             setPaletteOpen(false);
@@ -5519,9 +4344,6 @@ function EditorInner() {
                     disabled: !canEdit,
                     onClick: () => toggleBreakpointFor(menu.id),
                   },
-                  // Stateful drops (RSS dedupe, poll watermarks) offer a reset
-                  // that clears their hidden per-node memory — shown only when
-                  // the manifest declares node_state.
                   ...(nodes.find((n) => n.id === menu.id)?.data.manifest?.node_state
                     ? [
                         {
@@ -5541,9 +4363,6 @@ function EditorInner() {
                   const canRetry = retryAvailable(sourceManifest?.retry_policy);
                   return [
                     { header: t("editor.edgeError.head") },
-                    // A radio group: three answers to one question. The wire is
-                    // redrawn per mode so the choice is visible after the menu
-                    // closes.
                     ...ROUTING_MODES.map((m) => ({
                       label: t(edgeErrorLabelKey(m)),
                       checked: mode === m,
@@ -5554,10 +4373,6 @@ function EditorInner() {
                     {
                       label: t(edgeErrorLabelKey("retry")),
                       checked: mode === "retry",
-                      // Offered only where it would do something: the worker
-                      // refuses to retry a step whose drop declares no retry
-                      // policy, and a setting that silently does nothing is
-                      // worse than one that is visibly unavailable.
                       disabled: !canEdit || !canRetry,
                       title: canRetry ? undefined : t("editor.edgeError.noRetry"),
                       onClick: () => setEdgeErrorMode(menu.id, "retry"),
@@ -5669,12 +4484,6 @@ function EditorInner() {
           confirmLabel={
             publishConfirm === "update" ? t("editor.publishChanges") : t("editor.publish")
           }
-          // Going live arms the automatic triggers, so an unconnected app
-          // means every scheduled run fails silently — and nobody watches the
-          // run list for a flow they believe is done. Name the gap here and
-          // make connecting the emphasised action; publishing stays possible
-          // (the detection is the same heuristic the Run gate uses) but only
-          // as a deliberate choice.
           warning={
             needsSetup
               ? t("editor.publishNeedsSetup", {
@@ -5752,8 +4561,6 @@ function EditorInner() {
 }
 
 
-// nextID generates a unique node ID for a freshly-dropped module by
-// counting existing nodes with the same module prefix.
 function nextID(existing: FlowNode<DazyNodeData>[], moduleID: string): string {
   let i = existing.filter((n) => n.id.startsWith(moduleID)).length + 1;
   while (existing.some((n) => n.id === `${moduleID}_${i}`)) i++;

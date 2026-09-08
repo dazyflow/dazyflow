@@ -19,21 +19,15 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/internal/pgstore"
 )
 
-// pgScanner is the shared Scan surface of pgx.Row and pgx.Rows, so one
-// scanGrant/scanBundle helper serves both single-row and iteration paths.
 type pgScanner interface {
 	Scan(dest ...any) error
 }
 
-// grants.go is the in-memory core.GrantStore for the Support
-// feature (tests + single-node setups). The Postgres implementation mirrors it
-// for production, the same way JobStore / AuditLog have both. All lifecycle
-// transitions go through the pure core guards (CanDecide / CanRevoke), so the
-// store never invents a state the core model disallows.
+// grants.go is the in-memory core.GrantStore, mirrored by the Postgres one for
+// production the way JobStore and AuditLog are. Every lifecycle transition goes
+// through the pure core guards, so the store never invents a state the core model
+// disallows.
 
-// errGrantExists / errGrantNotDecidable / errGrantNotRevocable are the
-// store-level transition errors. A missing grant reports core.ErrNotFound so
-// callers can errors.Is it the same way they do for jobs.
 var (
 	errGrantExists       = errors.New("grant already exists")
 	errGrantNotDecidable = errors.New("grant is not in the requested state")
@@ -41,21 +35,19 @@ var (
 	errBadDecision       = errors.New("decision must be approved or denied")
 )
 
-// MemGrantStore is a mutex-guarded in-memory GrantStore.
 type MemGrantStore struct {
 	mu   sync.Mutex
 	byID map[string]core.AccessGrant
 }
 
-// NewMemGrantStore returns an empty in-memory grant store.
 func NewMemGrantStore() *MemGrantStore {
 	return &MemGrantStore{byID: map[string]core.AccessGrant{}}
 }
 
 var _ core.GrantStore = (*MemGrantStore)(nil)
 
-// Create records a new grant. ID is required and must be unique; the grant is
-// normalized into the requested state (Create is the request entry point).
+// Create requires a unique ID and normalizes the grant into the requested
+// state, being the request entry point.
 func (s *MemGrantStore) Create(_ context.Context, g core.AccessGrant) error {
 	if g.ID == "" {
 		return fmt.Errorf("grant id is required")
@@ -70,8 +62,6 @@ func (s *MemGrantStore) Create(_ context.Context, g core.AccessGrant) error {
 	return nil
 }
 
-// Decide approves or denies a requested grant. On approval it stamps the time
-// box (expiresAt); a denial ignores it.
 func (s *MemGrantStore) Decide(_ context.Context, id string, status core.GrantStatus, by string, at, expiresAt time.Time) error {
 	if status != core.GrantApproved && status != core.GrantDenied {
 		return fmt.Errorf("%w: got %q", errBadDecision, status)
@@ -96,7 +86,6 @@ func (s *MemGrantStore) Decide(_ context.Context, id string, status core.GrantSt
 	return nil
 }
 
-// Revoke ends an approved grant early.
 func (s *MemGrantStore) Revoke(_ context.Context, id, by string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -115,7 +104,6 @@ func (s *MemGrantStore) Revoke(_ context.Context, id, by string, at time.Time) e
 	return nil
 }
 
-// Get returns the grant, or core.ErrNotFound.
 func (s *MemGrantStore) Get(_ context.Context, id string) (core.AccessGrant, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -126,10 +114,8 @@ func (s *MemGrantStore) Get(_ context.Context, id string) (core.AccessGrant, err
 	return g, nil
 }
 
-// ActiveGrant returns the active grant authorizing (agent, tenant, flowID) at
-// now, if any. When several match (unusual — a fresh request supersedes an old
-// one), the latest-expiring wins so a re-grant extends access rather than
-// tripping over a stale entry.
+// ActiveGrant lets the latest-expiring of several matches win, so a re-grant
+// extends access rather than tripping over a stale entry.
 func (s *MemGrantStore) ActiveGrant(_ context.Context, agent, tenant, flowID string, now time.Time) (core.AccessGrant, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -149,7 +135,6 @@ func (s *MemGrantStore) ActiveGrant(_ context.Context, agent, tenant, flowID str
 	return best, found, nil
 }
 
-// ListForTenant returns every grant in tenant, newest request first.
 func (s *MemGrantStore) ListForTenant(_ context.Context, tenant string) ([]core.AccessGrant, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -163,7 +148,6 @@ func (s *MemGrantStore) ListForTenant(_ context.Context, tenant string) ([]core.
 	return out, nil
 }
 
-// ListForAgent returns every grant requested by agent, newest request first.
 func (s *MemGrantStore) ListForAgent(_ context.Context, agent string) ([]core.AccessGrant, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -177,8 +161,6 @@ func (s *MemGrantStore) ListForAgent(_ context.Context, agent string) ([]core.Ac
 	return out, nil
 }
 
-// AnonymizeSubject is the in-memory twin of PgGrantStore.AnonymizeSubject —
-// same contract and reasoning (see there).
 func (s *MemGrantStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
 	ident = strings.TrimSpace(ident)
 	if ident == "" {
@@ -203,8 +185,6 @@ func (s *MemGrantStore) AnonymizeSubject(_ context.Context, ident string) (int, 
 	return n, nil
 }
 
-// ---- Postgres --------------------------------------------------------------
-
 const pgGrantSchema = `
 CREATE TABLE IF NOT EXISTS access_grants (
     id            TEXT PRIMARY KEY,
@@ -226,19 +206,16 @@ CREATE INDEX IF NOT EXISTS access_grants_active_idx
 CREATE INDEX IF NOT EXISTS access_grants_tenant_idx ON access_grants (tenant);
 `
 
-// EnsurePgGrantSchema creates the access_grants table. Idempotent.
 func EnsurePgGrantSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return pgstore.ApplySchema(ctx, pool, pgGrantSchema)
 }
 
-// PgGrantStore is the Postgres core.GrantStore. No cached snapshot: grants are
-// low-volume and every read is authoritative (an expiry/revoke must be seen
-// immediately across nodes), so it queries the table directly.
+// PgGrantStore keeps no cached snapshot: grants are low-volume and an expiry or
+// revoke must be seen immediately across nodes.
 type PgGrantStore struct {
 	pool *pgxpool.Pool
 }
 
-// NewPgGrantStore creates the schema and returns the store.
 func NewPgGrantStore(ctx context.Context, pool *pgxpool.Pool) (*PgGrantStore, error) {
 	if err := EnsurePgGrantSchema(ctx, pool); err != nil {
 		return nil, err
@@ -293,8 +270,6 @@ func (s *PgGrantStore) Decide(ctx context.Context, id string, status core.GrantS
 	if status != core.GrantApproved && status != core.GrantDenied {
 		return fmt.Errorf("%w: got %q", errBadDecision, status)
 	}
-	// Set expires_at only on approval; the conditional UPDATE also enforces the
-	// requested→decided transition (CanDecide) atomically.
 	ct, err := s.pool.Exec(ctx,
 		`UPDATE access_grants
 		 SET status=$2, decided_by=$3, decided_at=$4,
@@ -324,8 +299,6 @@ func (s *PgGrantStore) Revoke(ctx context.Context, id, by string, at time.Time) 
 	return nil
 }
 
-// transitionError disambiguates a no-op conditional UPDATE: a missing grant is
-// ErrNotFound, otherwise the wrong-state transition error.
 func (s *PgGrantStore) transitionError(ctx context.Context, id string, stateErr error) error {
 	g, err := s.Get(ctx, id)
 	if err != nil {
@@ -394,30 +367,18 @@ func (s *PgGrantStore) ListForAgent(ctx context.Context, agent string) ([]core.A
 	return out, rows.Err()
 }
 
-// AnonymizeSubject scrubs one person's identifier out of the access-grant trail:
-// every column that can hold it (the agent it was issued to, and whoever
-// requested, decided or revoked it) is replaced by '[erased]'. The grant rows
-// themselves stay, because they are the record that someone looked at a tenant's
-// flow and when — the same reason PgAuditLog.AnonymizeActor keeps its events.
-//
-// Returns the number of ROWS changed, counting a grant once however many of
-// its columns named the person. MemGrantStore counts the same way.
 func (s *PgGrantStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
 	ident = strings.TrimSpace(ident)
 	if ident == "" {
 		return 0, nil
 	}
-	// All four columns move in ONE statement, so a grant counts once however
-	// many of them named the person — and no transaction is needed to make the
-	// four consistent. As separate UPDATEs their RowsAffected were summed, and
-	// since an agent is normally both the subject and the requester of their own
-	// grant, the commonest row counted twice: the erase report then claimed more
-	// grants than exist. Returns rows changed, as documented.
+	// All four columns move in ONE statement, so a grant counts once and no
+	// transaction is needed to keep them consistent. As separate UPDATEs their
+	// RowsAffected were summed, and an agent is normally both subject and
+	// requester of their own grant, so the commonest row counted twice.
 	//
-	// erasedIdentity is bound as $2 rather than concatenated, matching
-	// PgTicketStore.AnonymizeSubject — the constant was not injectable, but a
-	// concatenated literal next to a properly bound $1 is the pattern that
-	// eventually gets copied to a value that ISN'T a constant.
+	// erasedIdentity is bound rather than concatenated, matching
+	// PgTicketStore.AnonymizeSubject.
 	ct, err := s.pool.Exec(ctx,
 		`UPDATE access_grants
 		    SET agent_subject = CASE WHEN agent_subject = $1 THEN $2 ELSE agent_subject END,
@@ -432,10 +393,9 @@ func (s *PgGrantStore) AnonymizeSubject(ctx context.Context, ident string) (int,
 	return int(ct.RowsAffected()), nil
 }
 
-// DeleteByTenant removes every access grant naming one org — requested,
-// approved, denied or revoked alike. A grant is a record of consent to read
-// that org's data; with the org gone it has nothing left to authorize, and
-// leaving it behind would let a stale row outlive the tenant it points at.
+// DeleteByTenant removes every grant naming one org, whatever its state. A grant
+// is consent to read that org's data, so with the org gone it has nothing left to
+// authorize and would only outlive the tenant it points at.
 func (s *MemGrantStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -449,7 +409,6 @@ func (s *MemGrantStore) DeleteByTenant(ctx context.Context, tenant string) (int,
 	return n, nil
 }
 
-// DeleteByTenant removes an org's access grants.
 func (s *PgGrantStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	ct, err := s.pool.Exec(ctx, `DELETE FROM access_grants WHERE tenant = $1`, tenant)
 	if err != nil {

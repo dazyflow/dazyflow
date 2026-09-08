@@ -14,7 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// updateServer answers the header read and captures the batchUpdate body.
 func updateServer(t *testing.T, headers []any, got *map[string]any) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -27,8 +26,6 @@ func updateServer(t *testing.T, headers []any, got *map[string]any) *httptest.Se
 	}))
 }
 
-// The round trip that makes "mark it done" work: rows carrying _row are
-// written back to the rows they came from, under their named columns.
 func TestUpdateCells_WritesBackToTheRowItCameFrom(t *testing.T) {
 	var got map[string]any
 	srv := updateServer(t, []any{"job", "customer", "status"}, &got)
@@ -103,8 +100,6 @@ func TestUpdateCells_AddsMissingColumnWithItsHeader(t *testing.T) {
 	}
 }
 
-// Rows without a row number can't be written back — say so plainly rather
-// than writing to the wrong place.
 func TestUpdateCells_MissingRowNumber(t *testing.T) {
 	var got map[string]any
 	srv := updateServer(t, []any{"job", "status"}, &got)
@@ -124,7 +119,6 @@ func TestUpdateCells_MissingRowNumber(t *testing.T) {
 	}
 }
 
-// Nothing to mark is a normal outcome, not a failure.
 func TestUpdateCells_NoRowsIsFine(t *testing.T) {
 	withSheetsEnv(t, "http://127.0.0.1:1")
 	res, err := executeUpdateCells(context.Background(), core.Job{
@@ -140,7 +134,6 @@ func TestUpdateCells_NoRowsIsFine(t *testing.T) {
 	}
 }
 
-// Read with row numbers on, and the rows know where they live.
 func TestReadRange_RowNumbers(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"values": [][]any{
@@ -160,7 +153,6 @@ func TestReadRange_RowNumbers(t *testing.T) {
 		t.Fatalf("row numbers = %v, want 2 and 3 (row 1 is the header)", rows)
 	}
 
-	// An offset read reports where the rows really are.
 	_, rows, err = ReadRange(context.Background(), core.Job{Params: map[string]any{
 		"account": "default", "spreadsheet_id": "SHEET", "range": "Jobs",
 		"cells": "A10:B12", "row_numbers": true,

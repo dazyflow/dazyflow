@@ -16,8 +16,6 @@ vi.mock("@xyflow/react", () => ({
 
 import { DazyNode } from "./NodeCard";
 
-// Loose by design: each case overrides a slice of the card's data, and the
-// whole object is handed to React Flow's NodeProps as `unknown` anyway.
 function renderCard(data: Record<string, unknown>) {
   return render(
     <DazyNode
@@ -64,7 +62,6 @@ describe("the card's data face", () => {
     // them where it could not show a row of values.
     expect(screen.getByText("from, subject")).toBeInTheDocument();
     expect(screen.getByText("2 items")).toBeInTheDocument();
-    // The values themselves are the dialog's job, not the canvas's.
     expect(screen.queryByText("faktura@fortnox.se")).toBeNull();
   });
 
@@ -75,32 +72,22 @@ describe("the card's data face", () => {
     await user.click(screen.getByRole("button", { name: "Show all data" }));
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("aria-modal", "true");
-    // Every row, not the card's sampled three, and cells that are not clipped
-    // to a card's width.
     expect(screen.getByText("faktura@fortnox.se")).toBeInTheDocument();
     expect(screen.getByText("billing@stripe.com")).toBeInTheDocument();
     expect(screen.getByText("Faktura 4471")).toBeInTheDocument();
   });
 
   it("keeps Show all data in the card's corner, out of the wrapping head", async () => {
-    // The button was easy to miss: it trailed the port tabs inside the head,
-    // which wraps — so on a step with several output ports it moved to a
-    // second row, and its position differed from card to card. It is pinned to
-    // the well's top-right corner now, which only holds if it stays OUT of the
-    // head element the tabs wrap inside.
     const user = userEvent.setup();
     renderCard({ dataView: true, outputs: { messages: { data: rows } } });
     const expand = screen.getByRole("button", { name: "Show all data" });
     expect(expand.closest(".dz-face-head")).toBeNull();
     expect(expand.closest(".dz-face")).not.toBeNull();
-    // Still the same button, wherever it sits.
     await user.click(expand);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   it("offers no way to expand a step that has produced nothing", () => {
-    // Nothing to open onto, so no button — and no reserved gap in the head
-    // for one that is not there.
     renderCard({ dataView: true });
     expect(screen.queryByRole("button", { name: "Show all data" })).toBeNull();
     expect(document.querySelector(".dz-face-head-inset")).toBeNull();
@@ -138,8 +125,6 @@ describe("the card's data face", () => {
       },
       outputs: { matched: { data: [{ id: "kept" }] } },
     });
-    // Opens on the branch that actually produced something, not on the first
-    // declared port.
     expect(screen.getByText("id")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Unmatched" }));
     expect(screen.queryByText("id")).toBeNull();

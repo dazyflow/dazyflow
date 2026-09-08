@@ -13,7 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// memWatchStore wires the cache store the watch state rides on, per test.
 func memWatchStore(t *testing.T) map[string]string {
 	t.Helper()
 	var mu sync.Mutex
@@ -43,9 +42,6 @@ func watchJob(url string, extra map[string]any) core.Job {
 	return core.Job{ID: "j", GraphID: "flow1", NodeID: "watch", Tenant: "acme", Params: p}
 }
 
-// The whole point: the first check is silent, an unchanged page stays silent,
-// and only a real change lights up the On change pin (which is what keeps
-// downstream steps dormant).
 func TestWebWatch_BaselineThenChange(t *testing.T) {
 	SetAllowPrivateEgress(true)
 	defer SetAllowPrivateEgress(false)
@@ -57,7 +53,6 @@ func TestWebWatch_BaselineThenChange(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// 1: baseline — records, fires nothing.
 	res, err := executeWebWatch(context.Background(), watchJob(srv.URL, nil), nil)
 	if err != nil || res.Status != core.StatusOK {
 		t.Fatalf("status=%q error=%+v", res.Status, res.Error)
@@ -69,13 +64,11 @@ func TestWebWatch_BaselineThenChange(t *testing.T) {
 		t.Errorf("changed = %v on the first check", res.Output["changed"].Inline)
 	}
 
-	// 2: same page — still quiet.
 	res, _ = executeWebWatch(context.Background(), watchJob(srv.URL, nil), nil)
 	if _, fired := res.Output["on_change"]; fired {
 		t.Error("an unchanged page must not fire")
 	}
 
-	// 3: the page changes.
 	page = "<html><body><h1>Tenders</h1><p>New: roof replacement</p></body></html>"
 	res, _ = executeWebWatch(context.Background(), watchJob(srv.URL, nil), nil)
 	fired, ok := res.Output["on_change"]
@@ -117,7 +110,6 @@ func TestWebWatch_IgnoresInvisibleMarkup(t *testing.T) {
 	}
 }
 
-// Watching one number rather than the whole page.
 func TestWebWatch_Pattern(t *testing.T) {
 	SetAllowPrivateEgress(true)
 	defer SetAllowPrivateEgress(false)

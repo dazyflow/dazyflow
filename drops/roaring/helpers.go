@@ -45,8 +45,6 @@ import (
 // buggy upstream (reachable via the base_url override) can't OOM the daemon.
 const maxResponseBytes = 8 << 20 // 8 MiB — company reports carry rich records
 
-// defaultBase is Roaring's production API root. Overridable per job via base_url
-// (the test seam; also lets an advanced deployment repoint the host).
 const defaultBase = "https://api.roaring.io"
 
 // baseURL resolves the API root for one job: an explicit base_url param wins
@@ -58,10 +56,6 @@ func baseURL(job core.Job) string {
 	return defaultBase
 }
 
-// roaringConnectionFields is the per-tenant Roaring connection: the OAuth2
-// client-credentials Consumer Key + Secret (Development → Access keys in the
-// Roaring portal), entered once on the Apps page and injected into each action's
-// job at run time. Shared by every action drop.
 func roaringConnectionFields() []core.ConnectionField {
 	return []core.ConnectionField{
 		{Key: "client_key", Label: "Consumer Key", Required: true, Help: "From the Roaring portal under Development → Access keys."},
@@ -81,10 +75,6 @@ func resolveCreds(job core.Job) (key, secret string, err error) {
 	return key, secret, nil
 }
 
-// --- client-credentials token cache -----------------------------------------
-
-// cachedToken is one memoised bearer token with the instant it should be
-// considered stale (the real expiry minus a safety margin).
 type cachedToken struct {
 	token   string
 	expires time.Time
@@ -99,12 +89,8 @@ var (
 	tokenCache = map[string]cachedToken{}
 )
 
-// tokenSafetyMargin is subtracted from the reported lifetime so a token isn't
-// used right as it expires (clock skew + in-flight latency).
 const tokenSafetyMargin = 60 * time.Second
 
-// resolveToken returns a valid bearer token for the job's connection, exchanging
-// the Consumer Key/Secret at /token when the cache is empty or stale.
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
 	key, secret, err := resolveCreds(job)
 	if err != nil {
@@ -167,8 +153,6 @@ func fetchToken(ctx context.Context, job core.Job, base, key, secret string) (st
 	return tr.AccessToken, ttl, nil
 }
 
-// --- data calls --------------------------------------------------------------
-
 // roaringGet runs one authenticated GET against a Roaring data endpoint, minting
 // or reusing a bearer token first. Returns status + body; the caller maps non-2xx
 // via roaringFailure.
@@ -185,9 +169,6 @@ func roaringGet(ctx context.Context, job core.Job, endpoint string) (int, []byte
 	return status, body, err
 }
 
-// extractRoaringError pulls a human message out of a Roaring error body. Roaring
-// returns {message} or {error,error_description} shapes; APIErrorMessage handles
-// the flat {message} and falls back to the truncated raw body for the rest.
 func extractRoaringError(body []byte) string {
 	var e struct {
 		Message          string `json:"message"`
@@ -207,10 +188,6 @@ func extractRoaringError(body []byte) string {
 	return params.APIErrorMessage(body, 300)
 }
 
-// roaringFailure maps a transport error or a non-2xx Roaring response to an error
-// Result, or nil on success — the shared epilogue of every drop's roaringGet
-// call. A credential/token failure surfaced by resolveToken arrives here as a
-// transport-style error too.
 func roaringFailure(job core.Job, status int, body []byte, err error) *core.Result {
 	return params.HTTPFailure(job, "roaring", "Roaring", status, body, err, extractRoaringError)
 }

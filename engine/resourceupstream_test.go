@@ -26,7 +26,6 @@ func TestResourceError_Unwrap_Cov(t *testing.T) {
 }
 
 func TestResourceResolver_Value_SubPathError_Cov(t *testing.T) {
-	// A bad sub-path is wrapped as a ResourceError tagged to the name.
 	res, _ := newFakeResources(map[string]any{
 		"leads": map[string]any{"rows": []any{}},
 	})
@@ -51,12 +50,10 @@ func TestResourceResolver_Substituter_Inline_Cov(t *testing.T) {
 	rr := newResourceResolver(res)
 	sub := rr.substituter()
 
-	// Non-resource scheme falls through (ok=false).
 	if _, ok, _ := sub(context.Background(), "secret", "x"); ok {
 		t.Error("non-resource scheme should report ok=false")
 	}
 
-	// Inline resource resolves to stringified JSON.
 	v, ok, err := sub(context.Background(), "resource", "leads.headers")
 	if err != nil || !ok {
 		t.Fatalf("ok=%v err=%v", ok, err)
@@ -65,15 +62,12 @@ func TestResourceResolver_Substituter_Inline_Cov(t *testing.T) {
 		t.Errorf("inline value = %q", v)
 	}
 
-	// A resolve error surfaces with ok=true.
 	if _, ok, err := sub(context.Background(), "resource", "missing"); !ok || err == nil {
 		t.Errorf("missing resource want ok=true err!=nil, got ok=%v err=%v", ok, err)
 	}
 }
 
 func TestResourceResolver_NilProvider_Cov(t *testing.T) {
-	// No "resource" provider configured -> substituter and wholeValue both
-	// report not-mine.
 	rr := newResourceResolver(nil)
 	if _, ok, _ := rr.substituter()(context.Background(), "resource", "x"); ok {
 		t.Error("nil provider substituter should report ok=false")
@@ -177,24 +171,20 @@ func TestResolveUpstreamPath_Success_Cov(t *testing.T) {
 			"meta": {Inline: map[string]any{"status": "ok"}},
 		}},
 	}
-	// Port only (no tail).
 	if v, err := resolveUpstreamPath(prior, "q.rows"); err != nil {
 		t.Fatalf("port-only: %v", err)
 	} else if _, ok := v.([]any); !ok {
 		t.Errorf("port-only value = %T", v)
 	}
-	// Bracket immediately after port: rows[0].name.
 	if v, err := resolveUpstreamPath(prior, "q.rows[0].name"); err != nil || v != "Ada" {
 		t.Errorf("rows[0].name = %v err=%v", v, err)
 	}
-	// Dotted descend into map.
 	if v, err := resolveUpstreamPath(prior, "q.meta.status"); err != nil || v != "ok" {
 		t.Errorf("meta.status = %v err=%v", v, err)
 	}
 }
 
 func TestUpstreamSubstituter_Cov(t *testing.T) {
-	// Non-upstream scheme and nil prior both report ok=false.
 	if _, ok, _ := upstreamSubstituter(nil)(context.Background(), "upstream", "x"); ok {
 		t.Error("nil prior should report ok=false")
 	}
@@ -208,7 +198,6 @@ func TestUpstreamSubstituter_Cov(t *testing.T) {
 	if v, ok, err := sub(context.Background(), "upstream", "q.out"); err != nil || !ok || v != "hello" {
 		t.Errorf("q.out = %q ok=%v err=%v", v, ok, err)
 	}
-	// Resolve error surfaces with ok=true.
 	if _, ok, err := sub(context.Background(), "upstream", "missing.out"); !ok || err == nil {
 		t.Errorf("missing want ok=true err!=nil, got ok=%v err=%v", ok, err)
 	}

@@ -46,9 +46,6 @@ func scanWebAPI(row pgx.Row) (WebAPI, error) {
 	}
 	parsed, err := unmarshalOperations(ops)
 	if err != nil {
-		// A row whose JSON will not parse is reported rather than skipped: the
-		// alternative is an org's steps quietly missing from the palette with
-		// nothing anywhere saying why.
 		return WebAPI{}, err
 	}
 	w.Operations = parsed
@@ -184,8 +181,6 @@ func (s *PgWebAPIStore) SetError(ctx context.Context, tenant, name, lastErr stri
 		tenant, name, lastErr)
 	return err
 }
-
-// ---- in-memory store --------------------------------------------------
 
 // MemWebAPIStore implements WebAPIStore in process, for tests.
 //

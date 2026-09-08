@@ -34,17 +34,11 @@ export const POLL = {
   background: 30_000,
 } as const;
 
-// Render-only tickers. No network — these exist because a timestamp rendered
-// once keeps claiming "just now" an hour later, so the component re-renders
-// itself to keep a relative label or a clock honest.
 export const TICK = {
-  // A clock showing seconds has to tick every second to not look broken.
   second: 1_000,
-  // Coarse "5m ago" labels; anything finer than a half-minute is wasted work.
   relative: 30_000,
 } as const;
 
-// How long transient confirmation stays visible before reverting.
 export const FEEDBACK = {
   // The "Copied" tick on a copy-to-clipboard button. One affordance, and it
   // used to revert after 1500ms in six places and 2000ms in three, depending

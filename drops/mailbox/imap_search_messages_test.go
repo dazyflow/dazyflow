@@ -26,14 +26,10 @@ const (
 	testPass = "app-password"
 )
 
-// literal adapts a byte slice to the LiteralReader an APPEND wants.
 type literal struct{ *bytes.Reader }
 
 func (l literal) Size() int64 { return l.Reader.Size() }
 
-// rawMessage builds one RFC 5322 message. CRLF line endings throughout: a mail
-// server and a MIME parser both treat a bare LF as part of the line, so a
-// fixture written with "\n" tests a message no real mailbox contains.
 func rawMessage(from, subject, body string) []byte {
 	return []byte(strings.Join([]string{
 		"From: " + from,
@@ -71,12 +67,7 @@ func startIMAP(t *testing.T, msgs ...[]byte) (host string, port int, add func(*t
 		NewSession: func(*imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
 			return mem.NewSession(), nil, nil
 		},
-		Caps: imap.CapSet{imap.CapIMAP4rev1: {}, imap.CapIMAP4rev2: {}},
-		// The tests speak plaintext to 127.0.0.1, and a server refuses LOGIN
-		// over an unencrypted connection by default — the same policy the
-		// client enforces in imaputil.Dial, which exempts loopback for the
-		// reason net/smtp's PlainAuth does. Both ends need the exemption for a
-		// test to reach the protocol at all.
+		Caps:         imap.CapSet{imap.CapIMAP4rev1: {}, imap.CapIMAP4rev2: {}},
 		InsecureAuth: true,
 		// The server logs every client disconnect; a test that closes its
 		// connection mid-command would otherwise print protocol noise that
@@ -103,9 +94,6 @@ type discardLogger struct{}
 
 func (discardLogger) Printf(string, ...any) {}
 
-// searchJob is a job wired to the test server the way the engine wires a real
-// one: the connection fields arrive as params (injectConnectionDefaults), with
-// the per-search fields alongside them.
 func searchJob(host string, port int, p map[string]any) core.Job {
 	full := map[string]any{
 		"host":     host,
@@ -124,7 +112,6 @@ func searchJob(host string, port int, p map[string]any) core.Job {
 	}
 }
 
-// runSearch executes the drop and fails the test on a non-OK result.
 func runSearch(t *testing.T, job core.Job) core.Result {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -139,7 +126,6 @@ func runSearch(t *testing.T, job core.Job) core.Result {
 	return res
 }
 
-// messages pulls the emitted match list out of a result.
 func messages(t *testing.T, res core.Result) []map[string]any {
 	t.Helper()
 	ref, ok := res.Output["messages"]
@@ -245,8 +231,6 @@ func TestIMAPSearch_DoesNotMarkMailRead(t *testing.T) {
 		t.Fatalf("want one unread match, got %+v", first)
 	}
 
-	// Same search again: still unread, and still found by an unread-only
-	// search — the observable form of "the first run changed nothing".
 	again := messages(t, runSearch(t, searchJob(host, port, map[string]any{"unread_only": true})))
 	if len(again) != 1 {
 		t.Fatalf("searching marked the mail read: unread-only now returns %d matches", len(again))
@@ -289,7 +273,6 @@ func TestIMAPSearch_OnlyNew_LimitDrainsOldestFirst(t *testing.T) {
 	store := memCursors(t)
 	host, port, add := startIMAP(t, rawMessage("a@x.test", "Baseline", "b"))
 
-	// Baseline run: records where the folder is up to, emits nothing.
 	if got := messages(t, runSearch(t, searchJob(host, port, map[string]any{"only_new": true, "limit": 2}))); len(got) != 0 {
 		t.Fatalf("baseline emitted %d message(s)", len(got))
 	}
@@ -297,7 +280,6 @@ func TestIMAPSearch_OnlyNew_LimitDrainsOldestFirst(t *testing.T) {
 		t.Fatal("baseline recorded no watermark")
 	}
 
-	// Three arrive between polls, with a limit of 2.
 	add(t, rawMessage("a@x.test", "New 1", "one"))
 	add(t, rawMessage("a@x.test", "New 2", "two"))
 	add(t, rawMessage("a@x.test", "New 3", "three"))
@@ -311,14 +293,11 @@ func TestIMAPSearch_OnlyNew_LimitDrainsOldestFirst(t *testing.T) {
 			got[0]["subject"], got[1]["subject"])
 	}
 
-	// The next poll picks up the one that was held back, rather than it being
-	// lost behind an advanced watermark.
 	got = messages(t, runSearch(t, searchJob(host, port, map[string]any{"only_new": true, "limit": 2})))
 	if len(got) != 1 || got[0]["subject"] != "New 3" {
 		t.Fatalf("second poll got %+v, want just New 3", got)
 	}
 
-	// And then it is genuinely done.
 	if got := messages(t, runSearch(t, searchJob(host, port, map[string]any{"only_new": true, "limit": 2}))); len(got) != 0 {
 		t.Fatalf("third poll re-emitted %+v", got)
 	}
@@ -336,9 +315,6 @@ func TestIMAPSearch_FiltersOnFromAndUnread(t *testing.T) {
 	}
 }
 
-// only_new, first run: record where the folder is up to and emit NOTHING, so a
-// flow published against a full mailbox starts watching from "now" instead of
-// replaying the backlog into a step that acts on each email.
 func TestIMAPSearch_OnlyNew_FirstRunBaselinesSilently(t *testing.T) {
 	store := memCursors(t)
 	host, port, _ := startIMAP(t,
@@ -370,7 +346,6 @@ func TestIMAPSearch_OnlyNew_EmitsOnlyWhatArrivedSince(t *testing.T) {
 		t.Fatalf("first run should emit nothing, emitted %v", res.Output)
 	}
 
-	// A new message lands in the same folder — a higher UID than the baseline.
 	addMail(t, rawMessage("a@x.test", "Fresh", "fresh"))
 
 	got := messages(t, runSearch(t, searchJob(host, port, map[string]any{"only_new": true})))
@@ -381,7 +356,6 @@ func TestIMAPSearch_OnlyNew_EmitsOnlyWhatArrivedSince(t *testing.T) {
 		t.Errorf("emitted %q, want the message that arrived after the baseline", got[0]["subject"])
 	}
 
-	// And a third run with nothing new is a non-event again.
 	if res := runSearch(t, searchJob(host, port, map[string]any{"only_new": true})); len(res.Output) != 0 {
 		t.Fatalf("a nothing-new run emitted %v", res.Output)
 	}
@@ -433,7 +407,6 @@ func TestIMAPSearch_OnlyNew_RebaselinesWhenTheFolderIsRenumbered(t *testing.T) {
 		t.Fatal("stale UID was left in place — the next run would skip the whole folder")
 	}
 
-	// Resume: mail arriving after the re-baseline comes through normally.
 	addMail(t, rawMessage("a@x.test", "After", "after"))
 	got := messages(t, runSearch(t, job))
 	if len(got) != 1 || got[0]["subject"] != "After" {
@@ -491,7 +464,6 @@ func TestIMAPSearch_RejectsABadFolder(t *testing.T) {
 func TestSafeAdvance_StopsAtTheFirstMissingUID(t *testing.T) {
 	requested := []imap.UID{10, 11, 12, 13}
 
-	// Everything arrived: advance over all of it.
 	if got := safeAdvance(requested, requested); len(got) != 4 {
 		t.Errorf("all fetched → advanced over %d, want 4", len(got))
 	}
@@ -505,7 +477,6 @@ func TestSafeAdvance_StopsAtTheFirstMissingUID(t *testing.T) {
 	if got := safeAdvance(requested, nil); len(got) != 0 {
 		t.Errorf("nothing fetched → advanced over %v, want nothing", got)
 	}
-	// The oldest one missing blocks the rest, which is the point.
 	if got := safeAdvance(requested, []imap.UID{11, 12, 13}); len(got) != 0 {
 		t.Errorf("oldest missing → advanced over %v, want nothing", got)
 	}

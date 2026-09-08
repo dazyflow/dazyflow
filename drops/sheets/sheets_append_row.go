@@ -87,9 +87,7 @@ func init() {
 			// Sheets values.append has no idempotency header, so a retried
 			// POST appends the row twice. This drop is a terminal leaf the
 			// engine auto-retries on backoff, so retries must be off here.
-			RetryPolicy: core.RetryNever,
-			// …and the engine dedupes a same-job re-execution (expired-lease
-			// reclaim / crash recovery) so a recovered run doesn't re-append.
+			RetryPolicy:  core.RetryNever,
 			DedupeWrites: true,
 		},
 		Execute: executeSheetsAppend,
@@ -188,9 +186,6 @@ func executeSheetsAppend(ctx context.Context, job core.Job, _ chan<- core.Progre
 		}, nil
 	}
 
-	// Create any new mapped columns by (re)writing the header row first, so the
-	// appended values line up with their named columns. RAW so the header text
-	// is stored verbatim (no formula/date parsing).
 	if len(writeHeaderCols) > 0 {
 		hdr := make([]any, len(writeHeaderCols))
 		for i, c := range writeHeaderCols {

@@ -109,9 +109,6 @@ func (c *Client) readLoop() {
 func (c *Client) dispatch(line []byte) {
 	var resp rawResponse
 	if err := json.Unmarshal(line, &resp); err != nil {
-		// Server-initiated notifications (no id) and malformed lines
-		// both land here. Ignore — we don't model server→client
-		// notifications yet.
 		return
 	}
 	if resp.ID == 0 {
@@ -139,10 +136,6 @@ func (c *Client) failAllPending() {
 	c.closed = true
 }
 
-// Call sends a JSON-RPC request and blocks until the matching response
-// arrives, the context is cancelled, or the connection closes. result
-// is JSON-unmarshalled from the response's result field; pass nil to
-// ignore it.
 func (c *Client) Call(ctx context.Context, method string, params, result any) error {
 	id := c.nextID.Add(1)
 	ch := make(chan rawResponse, 1)
@@ -189,8 +182,6 @@ func (c *Client) Call(ctx context.Context, method string, params, result any) er
 	}
 }
 
-// Notify sends a fire-and-forget notification (no response expected).
-// Used for initialized/cancellation/progress messages.
 func (c *Client) Notify(method string, params any) error {
 	n := notification{JSONRPC: "2.0", Method: method, Params: params}
 	data, err := json.Marshal(n)

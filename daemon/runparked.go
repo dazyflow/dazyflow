@@ -28,8 +28,6 @@ import (
 // to update it must never fail the park that already committed, nor the
 // decision that resumed it.
 
-// isApprovalPause reports whether a parked Result is one a person has to
-// resolve, as opposed to a subgraph waiting on its child.
 func isApprovalPause(result *core.Result) bool {
 	if result == nil || result.Output == nil {
 		return false
@@ -38,9 +36,6 @@ func isApprovalPause(result *core.Result) bool {
 	return ok
 }
 
-// setRunParked flips the graph record between running and awaiting. Stores
-// that don't implement core.GraphRunParker simply keep the old behaviour
-// (the run stays Running), which is why the type assertion is not an error.
 func setRunParked(ctx context.Context, store core.JobStore, logger *log.Logger, graphRunID string, parked bool) {
 	parker, ok := store.(core.GraphRunParker)
 	if !ok {

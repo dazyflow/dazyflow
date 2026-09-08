@@ -19,14 +19,12 @@ import (
 // hang / break the Result contract): this is the *correctness* side — the
 // declared examples line up with the declared param schema.
 
-// paramSchema is the slice of a drop's ParamsSchema we assert on: the
-// author-settable property names and which of them are required.
 type paramSchema struct {
 	Properties map[string]json.RawMessage `json:"properties"`
 	Required   []string                   `json:"required"`
 }
 
-// TestAllDrops_ExamplesMatchSchema asserts, for every registered drop and
+// Asserts, for every registered drop and
 // every worked example it ships:
 //
 //   - the example has a non-empty Title (the catalog renders it verbatim),
@@ -43,8 +41,6 @@ func TestAllDrops_ExamplesMatchSchema(t *testing.T) {
 		d := d
 		t.Run(d.id, func(t *testing.T) {
 			m := d.manifest
-			// Params come (partly) from a configured connection — a worked
-			// example omits those credentials by design.
 			connectionInjected := len(m.RequiresConnections) > 0 || len(m.ConnectionFields) > 0
 
 			var schema paramSchema
@@ -67,8 +63,6 @@ func TestAllDrops_ExamplesMatchSchema(t *testing.T) {
 					t.Errorf("example #%d: empty Title", i)
 				}
 				if len(ex.Params) == 0 {
-					// An example with no params is only sensible for a drop
-					// whose params are all optional.
 					if haveSchema && len(schema.Required) > 0 && !connectionInjected {
 						t.Errorf("example #%d %q: no params, but schema requires %v", i, ex.Title, schema.Required)
 					}

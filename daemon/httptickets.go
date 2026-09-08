@@ -16,47 +16,19 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
-// httptickets.go wires the Support ticket + chat surface. Two audiences
-// share one TicketStore:
-//
-//   - The END USER (own tenant, PermGraphRun) files a ticket about a flow and
-//     chats on it: POST/GET /api/v1/me/support/tickets[…]. On filing, a redacted
-//     SupportBundle for the referenced flow/run is auto-built and attached — so
-//     support can diagnose the common case WITHOUT a live read-only grant.
-//   - The SUPPORT AGENT (PermSupportAgent) works the cross-tenant queue and
-//     replies: GET/POST /api/v1/support/tickets[…].
-//
-// Trust rules enforced here: every chat body is secret-scrubbed on ingest
-// (core.ScrubSecrets); a user only ever sees tickets in their own tenant; and
-// the bundle attached is the redaction-by-construction one, never raw flow data.
-//
-// Role separation (Phase 3) runs in BOTH directions. Support can't reach a
-// tenant's data without a grant, and the customer can't see the support
-// organisation's internals: who a ticket is assigned to and which individual
-// staff member replied are stripped from every user-facing response
-// (ticketForUser / messagesForUser), because the customer's channel for "what
-// did support do" is their own audit log, not the support team's rota. Status
-// changes are split too: only support can declare a ticket resolved.
+// Two audiences on one store: an org sees only its own tickets, an agent sees the
+// cross-org queue. Every handler has to say which it is serving, because the same
+// row means different things to the two.
 
-// ticketsEnabled reports whether the ticket store is wired; endpoints 501 when
-// not (a deployment with no support surface).
 func (h *supportAPI) ticketsEnabled() bool { return h.Tickets != nil }
 
-// maxTicketBodyLen bounds a single subject/message so a paste can't balloon the
-// store. Generous — a stack trace or a paragraph fits.
 const maxTicketBodyLen = 16 * 1024
 
-// ticketView is the wire shape for a single ticket plus its thread.
 type ticketView struct {
 	Ticket   core.Ticket          `json:"ticket"`
 	Messages []core.TicketMessage `json:"messages"`
 }
 
-// ---- End-user surface ------------------------------------------------------
-
-// createTicket: an org member files a support ticket, optionally about a flow /
-// failed run. POST /api/v1/me/support/tickets
-// Body: {subject, flow_id?, run_id?, message?}
 func (h *supportAPI) createTicket(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.ticketsEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
@@ -70,7 +42,6 @@ func (h *supportAPI) createTicket(rw http.ResponseWriter, r *http.Request, p cor
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "no tenant in context")
 		return
 	}
-	// Before decoding: filing is the endpoint that persists a bundle per call.
 	if !h.allowSupportWrite(rw, p) {
 		return
 	}
@@ -98,8 +69,6 @@ func (h *supportAPI) createTicket(rw http.ResponseWriter, r *http.Request, p cor
 	}
 	now := h.supportTime()
 
-	// Auto-attach a redacted diagnostic bundle for the referenced flow. Best
-	// effort: a bad/foreign flow id just means no bundle, never a failed filing.
 	bundleID := ""
 	if body.FlowID != "" {
 		bundleID = h.buildAndStoreBundle(r.Context(), p, body.FlowID, body.RunID, now)
@@ -122,7 +91,6 @@ func (h *supportAPI) createTicket(rw http.ResponseWriter, r *http.Request, p cor
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	// The opening message (optional) rides along as the first user post.
 	if msg := strings.TrimSpace(body.Message); msg != "" {
 		_ = h.appendTicketMessage(r.Context(), t.ID, p.Subject, core.AuthorUser, msg, "", now)
 	}
@@ -132,14 +100,11 @@ func (h *supportAPI) createTicket(rw http.ResponseWriter, r *http.Request, p cor
 	writeJSON(rw, http.StatusCreated, ticketForUser(t))
 }
 
-// listMyTickets: the org member's own ticket list. GET /api/v1/me/support/tickets
 func (h *supportAPI) listMyTickets(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.ticketsEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
 	}
-	// Ownership filters are support-side only — assignment isn't part of the
-	// customer's view — so the user list takes status + limit and nothing else.
 	tickets, err := h.Tickets.ListForTenant(r.Context(), p.Tenant, core.TicketListOpts{
 		Status: core.TicketStatus(r.URL.Query().Get("status")),
 		Limit:  ticketQueryLimit(r),
@@ -154,8 +119,6 @@ func (h *supportAPI) listMyTickets(rw http.ResponseWriter, r *http.Request, p co
 	writeJSON(rw, http.StatusOK, map[string]any{"tickets": tickets})
 }
 
-// getMyTicket: one ticket + thread, scoped to the caller's tenant.
-// GET /api/v1/me/support/tickets/{id}
 func (h *supportAPI) getMyTicket(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForTenant(rw, r, p.Tenant)
 	if !ok {
@@ -164,8 +127,6 @@ func (h *supportAPI) getMyTicket(rw http.ResponseWriter, r *http.Request, p core
 	h.writeUserTicketView(rw, r, t)
 }
 
-// postMyTicketMessage: an org member replies on their own ticket.
-// POST /api/v1/me/support/tickets/{id}/messages  {message}
 func (h *supportAPI) postMyTicketMessage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForTenant(rw, r, p.Tenant)
 	if !ok {
@@ -183,7 +144,6 @@ func (h *supportAPI) postMyTicketMessage(rw http.ResponseWriter, r *http.Request
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	// A user reply hands the ball back to support (and reopens a resolved ticket).
 	t.Status = core.TicketAwaitingSupport
 	t.UpdatedAt = now
 	_ = h.Tickets.Update(r.Context(), t)
@@ -191,14 +151,7 @@ func (h *supportAPI) postMyTicketMessage(rw http.ResponseWriter, r *http.Request
 	h.writeUserTicketView(rw, r, t)
 }
 
-// setMyTicketStatus: the requester closes their own ticket (they sorted it out,
-// or it no longer matters) or reopens a finished one.
-// POST /api/v1/me/support/tickets/{id}/status  {status}
-//
-// The split with the support-side handler is deliberate role separation: the
-// requester may withdraw ("closed") or reopen their ticket, but cannot declare
-// it "resolved" — that is support's verdict on the problem, and a customer
-// stamping it would corrupt the queue's own resolution record.
+// The REQUESTER's own close, distinct from an agent resolving it.
 func (h *supportAPI) setMyTicketStatus(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForTenant(rw, r, p.Tenant)
 	if !ok {
@@ -217,8 +170,6 @@ func (h *supportAPI) setMyTicketStatus(rw http.ResponseWriter, r *http.Request, 
 		h.writeUserTicketView(rw, r, t)
 		return
 	}
-	// Narrate only what actually happened. Handing a live ticket back to support
-	// isn't a "reopen" and needs no note — the reply beside it says everything.
 	note, code := "The customer closed this ticket.", core.NoteCustomerClosed
 	if status != core.TicketClosed {
 		note, code = "", core.SystemNote("")
@@ -233,20 +184,12 @@ func (h *supportAPI) setMyTicketStatus(rw http.ResponseWriter, r *http.Request, 
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	// appendSystemNote skips an empty body, so the no-note case is a no-op.
 	_ = h.appendSystemNote(r.Context(), t.ID, code, note, now)
 	h.audit(r.Context(), core.Principal{Tenant: t.Tenant, Subject: p.Subject},
 		"support.ticket.status", t.FlowID, "ticket="+t.ID+" status="+string(status))
 	h.writeUserTicketView(rw, r, t)
 }
 
-// markMyTicketRead records that the customer has opened this thread.
-// POST /api/v1/me/support/tickets/{id}/read
-//
-// An explicit call rather than a side effect of GET. The thread polls while it
-// is open and other surfaces prefetch, so "we fetched it" is not "a person
-// looked at it" — and the read receipt is what decides whether they get a
-// reminder, so a false positive here means silence when someone is waiting.
 func (h *supportAPI) markMyTicketRead(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForTenant(rw, r, p.Tenant)
 	if !ok {
@@ -256,8 +199,6 @@ func (h *supportAPI) markMyTicketRead(rw http.ResponseWriter, r *http.Request, p
 	h.writeUserTicketView(rw, r, t)
 }
 
-// markSupportTicketRead is the agent-side counterpart.
-// POST /api/v1/support/tickets/{id}/read
 func (h *supportAPI) markSupportTicketRead(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForAgent(rw, r, p)
 	if !ok {
@@ -267,14 +208,7 @@ func (h *supportAPI) markSupportTicketRead(rw http.ResponseWriter, r *http.Reque
 	h.writeTicketView(rw, r, t)
 }
 
-// markTicketRead stamps one side's read receipt. Deliberately does NOT touch
-// UpdatedAt: that field orders the queue by activity, and reading is not
-// activity — letting it bump would float every ticket an agent merely glanced
-// at to the top of the list, above ones actually waiting.
-//
-// Best-effort. Failing to record a read costs at worst one extra reminder,
-// which is a far better outcome than failing the request that renders the
-// thread the person is trying to read.
+// Deliberately does NOT touch updated_at: reading is not activity.
 func (h *supportAPI) markTicketRead(ctx context.Context, t core.Ticket, side NudgeSide) {
 	now := h.supportTime()
 	if side == NudgeUser {
@@ -285,9 +219,6 @@ func (h *supportAPI) markTicketRead(ctx context.Context, t core.Ticket, side Nud
 	_ = h.Tickets.Update(ctx, t)
 }
 
-// ---- Support surface -------------------------------------------------------
-
-// listTicketQueue: the cross-tenant support queue. GET /api/v1/support/tickets
 func (h *supportAPI) listTicketQueue(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.ticketsEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
@@ -305,12 +236,6 @@ func (h *supportAPI) listTicketQueue(rw http.ResponseWriter, r *http.Request, p 
 	writeJSON(rw, http.StatusOK, map[string]any{"tickets": tickets})
 }
 
-// ticketQueueSummary: the support dashboard's headline counts over the whole
-// cross-org queue. GET /api/v1/support/tickets/summary
-//
-// Separate from the listing because it must NOT be bounded by the list limit — a
-// tile reading "12 unassigned" because page one happens to hold 12 would be a lie
-// on a queue of 300.
 func (h *supportAPI) ticketQueueSummary(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.ticketsEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
@@ -325,22 +250,13 @@ func (h *supportAPI) ticketQueueSummary(rw http.ResponseWriter, r *http.Request,
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	// "mine" saves the dashboard from having to know its own subject.
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"summary": sum,
 		"mine":    sum.ByAssignee[p.Subject],
 	})
 }
 
-// assignSupportTicket: an agent claims a ticket, hands it to a colleague, or
-// releases it back to the unassigned pool.
-// POST /api/v1/support/tickets/{id}/assign  {assignee}
-//
-// assignee: "me" (or the caller's own subject) claims it, "" releases it, and any
-// other value must be a PROVISIONED support agent — assignment is not a way to
-// name an arbitrary principal as support staff. Reassignment away from another
-// agent is allowed (teams hand work over) and audited into the org's log like
-// every other support action.
+// Claim, hand over, or release.
 func (h *supportAPI) assignSupportTicket(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForAgent(rw, r, p)
 	if !ok {
@@ -373,9 +289,7 @@ func (h *supportAPI) assignSupportTicket(rw http.ResponseWriter, r *http.Request
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	// Deliberately NO system note in the thread: who on the support side owns a
-	// ticket is internal, and a note would leak staff identities to the customer
-	// (see ticketForUser). The org still sees the action in its audit log.
+	// No system note: who on the support side owns a ticket is not the org's business.
 	detail := "ticket=" + t.ID + " assignee=" + assignee
 	if assignee == "" {
 		detail = "ticket=" + t.ID + " unassigned"
@@ -385,11 +299,6 @@ func (h *supportAPI) assignSupportTicket(rw http.ResponseWriter, r *http.Request
 	h.writeTicketView(rw, r, t)
 }
 
-// isProvisionedSupportAgent reports whether subject currently holds a runtime
-// support-agent grant. Session subjects are the user's email (see signup / SSO),
-// which is exactly what support.AgentStore is keyed on. With no store wired
-// (single-node / tests) there is nothing to check against, so any subject is
-// accepted — the caller already had to hold PermSupportAgent to get here.
 func (h *supportAPI) isProvisionedSupportAgent(subject string) bool {
 	if h.SupportAgents == nil {
 		return true
@@ -397,8 +306,6 @@ func (h *supportAPI) isProvisionedSupportAgent(subject string) bool {
 	return h.SupportAgents.Granted(subject)
 }
 
-// getSupportTicket: a support agent reads any ticket + thread.
-// GET /api/v1/support/tickets/{id}
 func (h *supportAPI) getSupportTicket(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForAgent(rw, r, p)
 	if !ok {
@@ -407,8 +314,6 @@ func (h *supportAPI) getSupportTicket(rw http.ResponseWriter, r *http.Request, p
 	h.writeTicketView(rw, r, t)
 }
 
-// postSupportTicketMessage: a support agent replies (and self-assigns).
-// POST /api/v1/support/tickets/{id}/messages  {message}
 func (h *supportAPI) postSupportTicketMessage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForAgent(rw, r, p)
 	if !ok {
@@ -426,7 +331,6 @@ func (h *supportAPI) postSupportTicketMessage(rw http.ResponseWriter, r *http.Re
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	// First responder claims the ticket; a support reply awaits the user.
 	if t.AssignedTo == "" {
 		t.AssignedTo = p.Subject
 	}
@@ -439,8 +343,6 @@ func (h *supportAPI) postSupportTicketMessage(rw http.ResponseWriter, r *http.Re
 	h.writeTicketView(rw, r, t)
 }
 
-// setSupportTicketStatus: a support agent resolves/closes/reopens a ticket.
-// POST /api/v1/support/tickets/{id}/status  {status}
 func (h *supportAPI) setSupportTicketStatus(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForAgent(rw, r, p)
 	if !ok {
@@ -450,9 +352,7 @@ func (h *supportAPI) setSupportTicketStatus(rw http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	// No-op guard, mirroring setMyTicketStatus: a double-clicked button or a
-	// retried request must not re-narrate the change, re-bump activity, or
-	// (worse) re-email the customer that their ticket was resolved.
+	// A double-clicked button must not append a second note.
 	if status == t.Status {
 		h.writeTicketView(rw, r, t)
 		return
@@ -467,23 +367,16 @@ func (h *supportAPI) setSupportTicketStatus(rw http.ResponseWriter, r *http.Requ
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
-	// Leave a system note in the thread so the user sees the state change.
 	_ = h.appendSystemNote(r.Context(), t.ID, core.MarkedNote(status),
 		"Ticket marked "+string(status)+".", now)
 	h.audit(r.Context(), core.Principal{Tenant: t.Tenant, Subject: p.Subject},
 		"support.ticket.status", t.FlowID, "ticket="+t.ID+" status="+string(status))
-	// Only the resolved edge is worth an email — "closed" is the customer's own
-	// action, and awaiting_* flips constantly as the thread goes back and forth.
 	if status == core.TicketResolved {
 		h.notifyTicketResolved(t)
 	}
 	h.writeTicketView(rw, r, t)
 }
 
-// ---- Shared helpers --------------------------------------------------------
-
-// loadTicketForTenant loads {id} and enforces it belongs to `tenant`. A
-// cross-tenant id 404s (never reveal another org's ticket exists).
 func (h *supportAPI) loadTicketForTenant(rw http.ResponseWriter, r *http.Request, tenant string) (core.Ticket, bool) {
 	if !h.ticketsEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
@@ -497,7 +390,6 @@ func (h *supportAPI) loadTicketForTenant(rw http.ResponseWriter, r *http.Request
 	return t, true
 }
 
-// loadTicketForAgent loads {id} and enforces PermSupportAgent (cross-tenant).
 func (h *supportAPI) loadTicketForAgent(rw http.ResponseWriter, r *http.Request, p core.Principal) (core.Ticket, bool) {
 	if !h.ticketsEnabled() {
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
@@ -515,8 +407,6 @@ func (h *supportAPI) loadTicketForAgent(rw http.ResponseWriter, r *http.Request,
 	return t, true
 }
 
-// getMyTicketBundle returns the redacted diagnostic bundle attached to one of
-// the caller's own tickets. GET /api/v1/me/support/tickets/{id}/bundle
 func (h *supportAPI) getMyTicketBundle(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForTenant(rw, r, p.Tenant)
 	if !ok {
@@ -525,8 +415,6 @@ func (h *supportAPI) getMyTicketBundle(rw http.ResponseWriter, r *http.Request, 
 	h.writeTicketBundle(rw, r, t)
 }
 
-// getSupportTicketBundle returns the redacted diagnostic bundle for any ticket
-// (support agents). GET /api/v1/support/tickets/{id}/bundle
 func (h *supportAPI) getSupportTicketBundle(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	t, ok := h.loadTicketForAgent(rw, r, p)
 	if !ok {
@@ -535,10 +423,6 @@ func (h *supportAPI) getSupportTicketBundle(rw http.ResponseWriter, r *http.Requ
 	h.writeTicketBundle(rw, r, t)
 }
 
-// writeTicketBundle streams the attached SupportBundleRecord's payload verbatim.
-// The payload is a redacted-by-construction SupportBundle (no secrets, no run
-// data) so it is safe to serve to both the ticket owner and support. 404 when no
-// bundle is attached or bundles aren't wired.
 func (h *supportAPI) writeTicketBundle(rw http.ResponseWriter, r *http.Request, t core.Ticket) {
 	if h.Bundles == nil || t.BundleID == "" {
 		writeAPIError(rw, http.StatusNotFound, "no_bundle", "no diagnostic bundle attached to this ticket")
@@ -549,15 +433,12 @@ func (h *supportAPI) writeTicketBundle(rw http.ResponseWriter, r *http.Request, 
 		writeAPIError(rw, http.StatusNotFound, "no_bundle", "no diagnostic bundle attached to this ticket")
 		return
 	}
-	// Payload is stored JSON of a redacted SupportBundle — write it byte-for-byte
-	// rather than re-marshalling, so what support reads is exactly what was
-	// persisted.
+	// Byte-for-byte: re-serializing would risk re-introducing what redaction removed.
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(http.StatusOK)
 	_, _ = rw.Write(rec.Payload)
 }
 
-// writeTicketView returns a ticket plus its (chronological) thread.
 func (h *supportAPI) writeTicketView(rw http.ResponseWriter, r *http.Request, t core.Ticket) {
 	msgs, err := h.Tickets.ListMessages(r.Context(), t.ID)
 	if err != nil {
@@ -567,9 +448,6 @@ func (h *supportAPI) writeTicketView(rw http.ResponseWriter, r *http.Request, t 
 	writeJSON(rw, http.StatusOK, ticketView{Ticket: t, Messages: msgs})
 }
 
-// queueListOpts parses the support queue's filters: ?status=, ?assignee= (with
-// "me" resolving to the caller so the dashboard needn't know its own subject),
-// ?unassigned=true, and ?limit=.
 func queueListOpts(r *http.Request, p core.Principal) core.TicketListOpts {
 	q := r.URL.Query()
 	assignee := strings.TrimSpace(q.Get("assignee"))
@@ -584,9 +462,6 @@ func queueListOpts(r *http.Request, p core.Principal) core.TicketListOpts {
 	}
 }
 
-// ticketQueryLimit reads ?limit=, clamped to the store default. A junk or absent
-// value means "store default" rather than an error — a listing is not the place
-// to fail a request over a query string.
 func ticketQueryLimit(r *http.Request) int {
 	n, err := strconv.Atoi(r.URL.Query().Get("limit"))
 	if err != nil || n <= 0 || n > support.DefaultTicketListLimit {
@@ -595,9 +470,6 @@ func ticketQueryLimit(r *http.Request) int {
 	return n
 }
 
-// decodeTicketStatusBody reads + validates a {status} body against the core
-// status set, writing the error on failure. Per-role restrictions on WHICH status
-// may be set are the caller's business (see setMyTicketStatus).
 func decodeTicketStatusBody(rw http.ResponseWriter, r *http.Request) (core.TicketStatus, bool) {
 	var body struct {
 		Status string `json:"status"`
@@ -614,26 +486,14 @@ func decodeTicketStatusBody(rw http.ResponseWriter, r *http.Request) (core.Ticke
 	return status, true
 }
 
-// ticketForUser strips the support organisation's internals from a ticket before
-// it is served to the customer. Today that is AssignedTo: which staff member owns
-// a ticket is the support team's rota, not the customer's business, and the field
-// carries a support agent's email. Returns a copy — callers must never persist
-// the result.
+// Strips the support org's internals before the requester sees it.
 func ticketForUser(t core.Ticket) core.Ticket {
 	t.AssignedTo = ""
-	// The support side's read receipt and reminder clock are its own business.
-	// "Support opened your ticket 3 days ago and said nothing" is a true and
-	// unhelpful thing to hand a customer, and the reminder timestamps say more
-	// about the desk's staffing than about the ticket.
 	t.SupportReadAt = time.Time{}
 	t.SupportNudgedAt = time.Time{}
 	return t
 }
 
-// messagesForUser blanks the author of support-written messages: the customer
-// sees "Support", not the individual who happened to pick the ticket up. User and
-// system messages are untouched (the user's own name is theirs to see, and system
-// notes have no author). Returns a copy of the slice.
 func messagesForUser(msgs []core.TicketMessage) []core.TicketMessage {
 	out := make([]core.TicketMessage, len(msgs))
 	copy(out, msgs)
@@ -645,9 +505,6 @@ func messagesForUser(msgs []core.TicketMessage) []core.TicketMessage {
 	return out
 }
 
-// writeUserTicketView returns a ticket + thread with the support organisation's
-// internals stripped (the end-user surface). The support surface uses
-// writeTicketView, which serves the record as stored.
 func (h *supportAPI) writeUserTicketView(rw http.ResponseWriter, r *http.Request, t core.Ticket) {
 	msgs, err := h.Tickets.ListMessages(r.Context(), t.ID)
 	if err != nil {
@@ -660,8 +517,6 @@ func (h *supportAPI) writeUserTicketView(rw http.ResponseWriter, r *http.Request
 	})
 }
 
-// decodeTicketMessageBody reads + validates a {message} body, writing the error
-// on failure.
 func decodeTicketMessageBody(rw http.ResponseWriter, r *http.Request) (string, bool) {
 	var body struct {
 		Message string `json:"message"`
@@ -678,9 +533,7 @@ func decodeTicketMessageBody(rw http.ResponseWriter, r *http.Request) (string, b
 	return msg, true
 }
 
-// appendTicketMessage scrubs the body for pasted secrets, clamps its length, and
-// persists it. Callers pass "" for author on system messages. It never appends
-// an empty (post-scrub/clamp) body.
+// Scrubs pasted secrets before anything is persisted.
 func (h *supportAPI) appendTicketMessage(ctx context.Context, ticketID, author string, kind core.AuthorKind, body, bundleID string, now time.Time) error {
 	scrubbed := clampTicketText(core.ScrubSecrets(body))
 	if strings.TrimSpace(scrubbed) == "" {
@@ -701,11 +554,6 @@ func (h *supportAPI) appendTicketMessage(ctx context.Context, ticketID, author s
 	})
 }
 
-// appendSystemNote records a machine-generated thread note: the English prose
-// in Body for API readers and email digests, and the code the web needs to say
-// the same thing in the reader's language. Kept separate from
-// appendTicketMessage because a code only ever belongs to a system note — a
-// person's message has an author instead.
 func (h *supportAPI) appendSystemNote(ctx context.Context, ticketID string, code core.SystemNote, body string, now time.Time) error {
 	scrubbed := clampTicketText(core.ScrubSecrets(body))
 	if strings.TrimSpace(scrubbed) == "" {
@@ -725,10 +573,7 @@ func (h *supportAPI) appendSystemNote(ctx context.Context, ticketID string, code
 	})
 }
 
-// buildAndStoreBundle builds a redacted SupportBundle for one of the caller's own
-// flows (+ optional run) and persists it, returning the new bundle id. Returns ""
-// (no attachment) when bundles are disabled, the flow can't be loaded, or storing
-// fails — filing a ticket must never hinge on the diagnostic attachment.
+// Only for the caller's OWN flow.
 func (h *supportAPI) buildAndStoreBundle(ctx context.Context, p core.Principal, flowID, runID string, now time.Time) string {
 	if h.Bundles == nil {
 		return ""
@@ -744,9 +589,6 @@ func (h *supportAPI) buildAndStoreBundle(ctx context.Context, p core.Principal, 
 		}
 	}
 	manifests := h.svc.manifestsSnapshot(p.Tenant)
-	// ValidateGraphFull already includes LintGraph's findings (see
-	// core/validate.go), so it's the complete set — appending LintGraph again
-	// double-counts every lint issue.
 	issues := core.ValidateGraphFull(graph, manifests)
 	bundle := core.BuildSupportBundle(graph, runPtr, issues, core.RedactStructureOnly)
 	id, err := newID()
@@ -763,8 +605,6 @@ func (h *supportAPI) buildAndStoreBundle(ctx context.Context, p core.Principal, 
 	return id
 }
 
-// clampTicketText trims a subject/message to maxTicketBodyLen so a runaway paste
-// can't bloat the store. It cuts on a rune boundary to avoid splitting UTF-8.
 func clampTicketText(s string) string {
 	if len(s) <= maxTicketBodyLen {
 		return s

@@ -4,15 +4,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
-// StatCard is the icon + number + label tile used on the dashboard, the
-// plan/usage page and the TV overview's siblings. `tone` colours it by what the
-// number means, not by which page it's on.
-//
-// Dashboard and Usage each had their own copy of this, rendering the identical
-// markup and the identical `card dash-stat dash-stat-{tone}` classes. Usage's
-// was the strict superset — it allowed a tile with no destination — so that is
-// the one that survived; the Dashboard version only ever differed by requiring
-// `to` and narrowing `sub` to a string.
 export type StatTone = "neutral" | "good" | "warn" | "bad";
 
 export function StatCard({
@@ -28,8 +19,6 @@ export function StatCard({
   value: string;
   sub?: ReactNode;
   tone?: StatTone;
-  // Omit for a tile that only reports — it renders a plain div rather than a
-  // link, so there's no affordance suggesting a destination that isn't there.
   to?: string;
 }) {
   const className = "card dash-stat dash-stat-" + tone;

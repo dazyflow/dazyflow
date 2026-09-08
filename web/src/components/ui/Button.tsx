@@ -44,22 +44,13 @@ type ButtonSize = "md" | "sm" | "icon";
 interface ButtonBaseProps {
   variant?: ButtonVariant;
   size?: ButtonSize;
-  // Leading icon, rendered before the label. Pass an icon element from icons.tsx.
   icon?: ReactNode;
-  // Drop the text label on narrow screens, keeping the icon (old .icon-text-btn).
-  // Wraps children in a .btn-label span so the media query can hide it.
   collapseLabel?: boolean;
-  // Full-width: stretches to the container (CTA under a description, etc.).
   block?: boolean;
-  // Busy state: visually disabled and non-interactive while an action runs.
   loading?: boolean;
-  // Solid red instead of the outlined default. Only meaningful with
-  // variant="danger" — see the note at the top of this file.
   filled?: boolean;
 }
 
-// Compose the class list from the semantic props. `secondary`/`md` emit no
-// class — they are the bare base look — so the common case stays clean.
 function buttonClasses(
   {
     variant = "secondary",
@@ -103,8 +94,6 @@ function ButtonContent({
 
 type ButtonProps = ButtonBaseProps &
   Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> & {
-    // Escape hatch for the rare layout/positioning class (e.g. floating).
-    // Variant/size belong in the typed props, not here.
     className?: string;
   };
 
@@ -139,8 +128,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         ref={ref}
-        // Default to type="button" so a button inside a <form> doesn't submit
-        // it by accident; callers opt into "submit" explicitly.
         type={type ?? "button"}
         className={
           buttonClasses(
@@ -188,8 +175,6 @@ export const ButtonLink = forwardRef<HTMLAnchorElement, ButtonLinkProps>(
     return (
       <a
         ref={ref}
-        // withBase: anchors aren't <button> elements, so they need the `.btn`
-        // base skin the element selector gives native buttons for free.
         className={buttonClasses(
           { variant, size, collapseLabel, block, filled },
           className,

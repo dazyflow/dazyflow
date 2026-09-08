@@ -45,14 +45,9 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Wireable so a paging loop can thread the previous run's
-				// cursor back in; a wired value overrides the param.
 				{Port: "after_id", Label: "After ID", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
-				// "artists" isn't one of core's conventional list-port names,
-				// so the cardinality is declared here — without it a whole
-				// list wired into a one-at-a-time step reads as legal.
 				{Port: "artists", Label: "Artists", MIME: []string{"application/json"}, List: true, Example: json.RawMessage(`[{"id":"0TnOYISbd1XYRBk9myaseg","name":"Pitbull","genres":["dance pop","miami hip hop"],"url":"https://open.spotify.com/artist/0TnOYISbd1XYRBk9myaseg"}]`)},
 				{Port: "next_cursor", Label: "Next cursor", MIME: []string{"text/plain"}, Example: json.RawMessage(`"0TnOYISbd1XYRBk9myaseg"`)},
 				{Port: "has_more", Label: "Has more", MIME: []string{"text/plain"}, Example: json.RawMessage(`"false"`)},
@@ -90,8 +85,6 @@ func executeFollowedArtists(ctx context.Context, job core.Job, _ chan<- core.Pro
 	if r := spotifyFailure(job, status, body, err); r != nil {
 		return *r, nil
 	}
-	// Spotify wraps the cursor page in an "artists" key, so the pagination
-	// fields sit a level down from the items.
 	var parsed struct {
 		Artists struct {
 			Items []struct {

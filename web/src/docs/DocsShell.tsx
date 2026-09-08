@@ -1,11 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The docs shell REUSES the app's chrome: it renders the exact same markup and
-// class names as web/src/components/AppShell.tsx (.app-shell / .topbar /
-// .body / .sidebar / .sidebar-scrim / .main + the burger), so app.css styles it
-// identically — same top bar, same collapsible sidebar + icon rail, same
-// mobile hamburger drawer. Only the contents differ (docs nav, no auth).
 import { ReactNode, useCallback, useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -16,8 +11,6 @@ import { ICON } from "../icons";
 import { savedCollapsePref, initialNavCollapsed } from "../lib/navCollapse";
 import { DocsSearch } from "./Search";
 
-// Mirrors AppShell's rail behaviour: a persisted desktop collapse choice; small
-// viewports default to the icons-only rail / slide-over drawer.
 const COLLAPSE_KEY = "dazyflow.docs.sidebar.collapsed";
 
 
@@ -25,8 +18,6 @@ export function DocsShell({ children }: { children: ReactNode }) {
   const [navCollapsed, setNavCollapsed] = useState<boolean>(() => initialNavCollapsed(COLLAPSE_KEY));
   const location = useLocation();
 
-  // Track the viewport: collapse into the rail below the breakpoint, restore
-  // the saved desktop choice above it (matches AppShell).
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const mq = window.matchMedia(mediaQuery(MOBILE));
@@ -35,7 +26,6 @@ export function DocsShell({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  // Close the mobile drawer after navigating.
   useEffect(() => {
     if (isNarrower(MOBILE)) {
       setNavCollapsed(true);
@@ -123,7 +113,6 @@ export function DocsShell({ children }: { children: ReactNode }) {
                     title={item.text}
                   >
                     {item.brand ? (
-                      // The app's vendor mark (e.g. /brands/gmail.svg).
                       <img
                         className="nav-brand-icon"
                         src={item.brand}

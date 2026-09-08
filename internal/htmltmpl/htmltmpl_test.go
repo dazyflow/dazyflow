@@ -14,7 +14,6 @@ func TestRender_MergeAndEscape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
-	// Merge happened; the value's markup is auto-escaped.
 	if strings.Contains(got, "<b>Acme</b>") || !strings.Contains(got, "&lt;b&gt;Acme&lt;/b&gt;") {
 		t.Fatalf("value not escaped: %q", got)
 	}
@@ -41,7 +40,6 @@ func TestRender_RecursionErrorsNotHang(t *testing.T) {
 	if err == nil {
 		t.Fatal("infinite recursion should error (template depth cap), got nil")
 	}
-	// It's an execution error, not a parse error.
 	var pe *ParseError
 	if errors.As(err, &pe) {
 		t.Fatalf("recursion should be an exec error, got ParseError: %v", err)
@@ -76,9 +74,6 @@ func TestLimitedWriter(t *testing.T) {
 	}
 }
 
-// TestParseError_ErrorAndUnwrap covers the two trivial methods on
-// *ParseError: Error() returns the wrapped message, and Unwrap() returns
-// the underlying error so errors.Is/As can see through it.
 func TestParseError_ErrorAndUnwrap(t *testing.T) {
 	sentinel := errors.New("bad action {{")
 	pe := &ParseError{Err: sentinel}
@@ -94,9 +89,6 @@ func TestParseError_ErrorAndUnwrap(t *testing.T) {
 	}
 }
 
-// TestFuncs_Default exercises every branch of the default helper: nil →
-// fallback, empty string → fallback, non-empty string → value, and a
-// non-string non-nil value → value.
 func TestFuncs_Default(t *testing.T) {
 	cases := []struct {
 		name string
@@ -123,7 +115,6 @@ func TestFuncs_Default(t *testing.T) {
 	}
 }
 
-// TestFuncs_UpperLower covers the upper/lower aliases to strings funcs.
 func TestFuncs_UpperLower(t *testing.T) {
 	got, err := Render(`{{upper "aB"}}-{{lower "Cd"}}`, nil, 0)
 	if err != nil {
@@ -134,8 +125,6 @@ func TestFuncs_UpperLower(t *testing.T) {
 	}
 }
 
-// TestFuncs_Join covers all three branches of join: []string, []any, and
-// the fallback for a value that is neither slice type.
 func TestFuncs_Join(t *testing.T) {
 	cases := []struct {
 		name string
@@ -159,10 +148,6 @@ func TestFuncs_Join(t *testing.T) {
 	}
 }
 
-// TestRender_ExecErrorNotTooLarge covers the non-tripped execution error
-// path of Render: a template that errors at exec time (calling a method
-// that doesn't exist) should surface the raw error, not ErrTooLarge and
-// not a ParseError.
 func TestRender_ExecErrorNotTooLarge(t *testing.T) {
 	// Calling a method that doesn't exist on the data value is an
 	// execution error (not a parse error, not a size overflow).
@@ -179,8 +164,6 @@ func TestRender_ExecErrorNotTooLarge(t *testing.T) {
 	}
 }
 
-// TestRender_DefaultMaxBytesAllowsLargeOutput confirms maxBytes<=0 falls
-// back to DefaultMaxBytes (8 MiB) rather than rejecting ordinary output.
 func TestRender_DefaultMaxBytesAllowsLargeOutput(t *testing.T) {
 	big := strings.Repeat("x", 1<<20) // 1 MiB, well under the 8 MiB default
 	got, err := Render("{{.s}}", map[string]any{"s": big}, -1)

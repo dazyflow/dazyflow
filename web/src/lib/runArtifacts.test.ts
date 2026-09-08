@@ -5,8 +5,6 @@ import { describe, expect, it } from "vitest";
 import { artifactName, collectArtifacts, type RunArtifact } from "./runArtifacts";
 import type { JobRecord, Ref } from "../types";
 
-// node builds the shape RunDetail hands collectArtifacts: a step record whose
-// Result.output is the port → ref map the worker returned.
 function node(nodeID: string, output: Record<string, Ref>): JobRecord {
   return {
     ID: "job-" + nodeID,
@@ -41,7 +39,6 @@ describe("collectArtifacts", () => {
       node("save", { out: { ref: "workspace://reports/summary.csv" } }),
     ]);
     expect(a.path).toBe("reports/summary.csv");
-    // The row still shows what the step emitted.
     expect(a.raw).toBe("workspace://reports/summary.csv");
   });
 
@@ -87,7 +84,6 @@ describe("collectArtifacts", () => {
       node("read", { out: { ref: "./reports/x.pdf" } }),
     ]);
     expect(got).toHaveLength(1);
-    // First writer wins — the step that produced it.
     expect(got[0].nodeID).toBe("write");
   });
 

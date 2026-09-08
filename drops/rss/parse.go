@@ -12,10 +12,6 @@ import (
 	"time"
 )
 
-// feedItem is one normalized entry, dialect-agnostic: whether it came from
-// RSS 2.0 <item> or Atom <entry>, downstream sees the same fields. All values
-// are strings (like CSV/XML rows); Published is normalized to RFC3339 when the
-// source date parses, else passed through verbatim.
 type feedItem struct {
 	ID        string // stable identity for dedupe: guid / atom id, else link, else title
 	Title     string
@@ -40,8 +36,6 @@ func (it feedItem) row() map[string]any {
 		"content":   it.Content,
 	}
 }
-
-// --- raw XML shapes (namespaces are matched by local name) ---
 
 type rssRoot struct {
 	XMLName xml.Name `xml:"rss"`
@@ -81,9 +75,6 @@ type atomRoot struct {
 	} `xml:"entry"`
 }
 
-// newDecoder builds a lenient decoder: non-strict (tolerates the wild HTML-ish
-// content real feeds carry) and a pass-through CharsetReader so a declared
-// non-UTF-8 encoding doesn't hard-fail the parse.
 func newDecoder(data []byte) *xml.Decoder {
 	dec := xml.NewDecoder(bytes.NewReader(data))
 	dec.Strict = false
@@ -91,9 +82,6 @@ func newDecoder(data []byte) *xml.Decoder {
 	return dec
 }
 
-// parseFeed detects RSS 2.0 or Atom and returns its normalized items. A
-// recognizable-but-empty feed yields an empty slice (not an error); only
-// input that is neither dialect errors.
 func parseFeed(data []byte) ([]feedItem, error) {
 	var rr rssRoot
 	if err := newDecoder(data).Decode(&rr); err == nil && rr.XMLName.Local == "rss" {
@@ -143,8 +131,6 @@ func atomItems(ar atomRoot) []feedItem {
 	return out
 }
 
-// atomLink prefers the rel="alternate" link (the human page), falling back to
-// the first link with no rel (also "alternate" by spec), then any href.
 func atomLink(links []struct {
 	Href string `xml:"href,attr"`
 	Rel  string `xml:"rel,attr"`

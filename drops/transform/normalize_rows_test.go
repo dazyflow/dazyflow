@@ -51,7 +51,6 @@ func TestNormalizeRows_EmptyStringIsNoRows(t *testing.T) {
 	}
 }
 
-// End-to-end through render_text: a single-object webhook body renders.
 func TestRenderText_AcceptsSingleObjectBody(t *testing.T) {
 	res, _ := executeRenderText(t.Context(), core.Job{
 		Params: map[string]any{"template": "'issue: ' + row.title"},

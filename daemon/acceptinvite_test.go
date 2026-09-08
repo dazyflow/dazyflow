@@ -18,8 +18,6 @@ import (
 
 var emailKeyCounter atomic.Int64
 
-// emailTokenDo runs an authed request under an API key whose Subject is an
-// email (acceptInvitation requires an @-bearing identity).
 func emailTokenDo(t *testing.T, h *gatewayHarness, email, method, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	role := core.Role{Name: "ed", Permissions: []core.Permission{core.PermGraphRun}}
@@ -34,13 +32,10 @@ func emailTokenDo(t *testing.T, h *gatewayHarness, email, method, path string) *
 	return rw
 }
 
-// TestAcceptInvitation_Cov covers acceptInvitation: no-store (501), unknown
-// token (404), wrong-email (403), expired (410), and the happy path (200).
 func TestAcceptInvitation_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 
-	// No invitation/membership stores -> 501.
 	if rw := emailTokenDo(t, h, "u1@t.test", "POST", "/api/v1/invitations/tok/accept"); rw.Code != http.StatusNotImplemented {
 		t.Fatalf("no store = %d, want 501; body=%s", rw.Code, rw.Body.String())
 	}
@@ -49,12 +44,10 @@ func TestAcceptInvitation_Cov(t *testing.T) {
 	h.gw.Invitations = invites
 	h.gw.Memberships = newFakeMembershipStore()
 
-	// Unknown token -> 404.
 	if rw := emailTokenDo(t, h, "u2@t.test", "POST", "/api/v1/invitations/ghost/accept"); rw.Code != http.StatusNotFound {
 		t.Fatalf("unknown token = %d, want 404; body=%s", rw.Code, rw.Body.String())
 	}
 
-	// An expired invitation -> 410 Gone.
 	_ = invites.PutInvitation(t.Context(), auth.Invitation{
 		Token: "expired", Email: "u3@t.test", Tenant: "acme", Workspace: "main",
 		Roles: []core.Role{core.TeamRoleEditor()}, ExpiresAt: time.Now().Add(-time.Hour),
@@ -63,7 +56,6 @@ func TestAcceptInvitation_Cov(t *testing.T) {
 		t.Fatalf("expired = %d, want 410; body=%s", rw.Code, rw.Body.String())
 	}
 
-	// A pending invitation accepted by the WRONG email -> 403.
 	_ = invites.PutInvitation(t.Context(), auth.Invitation{
 		Token: "pending", Email: "right@t.test", Tenant: "acme", Workspace: "main",
 		Roles: []core.Role{core.TeamRoleEditor()}, ExpiresAt: time.Now().Add(time.Hour),
@@ -72,7 +64,6 @@ func TestAcceptInvitation_Cov(t *testing.T) {
 		t.Fatalf("wrong email = %d, want 403; body=%s", rw.Code, rw.Body.String())
 	}
 
-	// Happy path: the right email accepts -> 200 and a membership is created.
 	rw := emailTokenDo(t, h, "right@t.test", "POST", "/api/v1/invitations/pending/accept")
 	if rw.Code != http.StatusOK {
 		t.Fatalf("accept = %d, want 200; body=%s", rw.Code, rw.Body.String())
@@ -82,10 +73,6 @@ func TestAcceptInvitation_Cov(t *testing.T) {
 	}
 }
 
-// TestAcceptInvitation_VerifiesEmail confirms accepting an invite stamps the
-// accepting account as email-verified: the invite was issued by a verified
-// admin who vouched for the address, so the new member skips the redundant
-// verification nag.
 func TestAcceptInvitation_VerifiesEmail(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -98,7 +85,6 @@ func TestAcceptInvitation_VerifiesEmail(t *testing.T) {
 	}
 	h.gw.Users = users
 
-	// An unverified account that matches the invited address.
 	if err := users.PutUser(t.Context(), auth.User{
 		Email: "newbie@t.test", Subject: "newbie@t.test", Tenant: "acme",
 	}); err != nil {
@@ -124,8 +110,6 @@ func TestAcceptInvitation_VerifiesEmail(t *testing.T) {
 	}
 }
 
-// TestPlatformVerifyUser covers the admin support hatch: a platform admin can
-// mark an account verified directly, and it's idempotent.
 func TestPlatformVerifyUser(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -150,7 +134,6 @@ func TestPlatformVerifyUser(t *testing.T) {
 	if !u.EmailVerified() {
 		t.Fatalf("verify should set VerifiedAt, got %+v", u)
 	}
-	// Idempotent: verifying again still 200s.
 	if rw := do(); rw.Code != http.StatusOK {
 		t.Fatalf("re-verify = %d, want 200; body=%s", rw.Code, rw.Body.String())
 	}

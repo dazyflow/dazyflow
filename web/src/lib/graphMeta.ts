@@ -44,7 +44,6 @@ type NotSettings =
 
 export type GraphSettingKey = Exclude<keyof Graph, NotSettings>;
 
-// GRAPH_SETTING_KEYS is every graph-level setting the editor round-trips.
 export const GRAPH_SETTING_KEYS = [
   "visibility",
   "language",
@@ -73,8 +72,6 @@ export function pickGraphSettings(g: Partial<Graph>): Partial<Graph> {
   const out: Partial<Graph> = {};
   for (const key of GRAPH_SETTING_KEYS) {
     if (g[key] !== undefined) {
-      // Each key's value type is its own; the loop erases that, and a mapped
-      // assignment is the one place a cast is honest about what it is.
       (out as Record<string, unknown>)[key] = g[key];
     }
   }

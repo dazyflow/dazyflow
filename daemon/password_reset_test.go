@@ -20,8 +20,6 @@ import (
 
 var resetLinkRE = regexp.MustCompile(`https://app\.example/reset-password\?email=([^&\s]+)&token=([a-f0-9]{64})`)
 
-// requestResetAndExtract drives forgot-password and pulls the reset link
-// out of the captured email.
 func requestResetAndExtract(t *testing.T, h *gatewayHarness, srv *fakeSMTP, email string) (string, string) {
 	t.Helper()
 	rw := h.do(t, "POST", "/api/v1/auth/forgot-password", map[string]string{"email": email})
@@ -30,8 +28,6 @@ func requestResetAndExtract(t *testing.T, h *gatewayHarness, srv *fakeSMTP, emai
 	}
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		// Most recent reset link (the account may also have a verification
-		// + welcome mail in the captured stream).
 		_, _, data, _ := srv.snapshot()
 		ms := resetLinkRE.FindAllStringSubmatch(qpDecode(data), -1)
 		if len(ms) > 0 {
@@ -49,13 +45,10 @@ func requestResetAndExtract(t *testing.T, h *gatewayHarness, srv *fakeSMTP, emai
 	}
 }
 
-// TestPasswordReset_HappyPath: request → reset → old password dead, new
-// password works, and all prior sessions are revoked.
 func TestPasswordReset_HappyPath(t *testing.T) {
 	t.Parallel()
 	h, _, srv := verificationHarness(t)
 
-	// Create the account and keep its auto-issued session token.
 	rw := h.do(t, "POST", "/api/v1/auth/signup", map[string]string{
 		"email": "reset@example.com", "password": "OldPassw0rd!23",
 	})
@@ -69,26 +62,22 @@ func TestPasswordReset_HappyPath(t *testing.T) {
 		t.Fatalf("decode signup resp: %v", err)
 	}
 
-	// The session works before the reset.
 	if code := whoamiCode(t, h, signupResp.Token); code != http.StatusOK {
 		t.Fatalf("pre-reset whoami: want 200, got %d", code)
 	}
 
 	_, token := requestResetAndExtract(t, h, srv, "reset@example.com")
 
-	// Reset with the emailed token.
 	if rw := h.do(t, "POST", "/api/v1/auth/reset-password", map[string]string{
 		"email": "reset@example.com", "token": token, "password": "NewPassw0rd!99",
 	}); rw.Code != http.StatusOK {
 		t.Fatalf("reset-password: %d %s", rw.Code, rw.Body.String())
 	}
 
-	// Sign out everywhere: the old session is revoked.
 	if code := whoamiCode(t, h, signupResp.Token); code == http.StatusOK {
 		t.Fatalf("old session should be revoked after reset, got 200")
 	}
 
-	// Old password no longer works; new one does.
 	if rw := h.do(t, "POST", "/api/v1/auth/signin", map[string]string{
 		"email": "reset@example.com", "password": "OldPassw0rd!23",
 	}); rw.Code == http.StatusOK {
@@ -100,7 +89,6 @@ func TestPasswordReset_HappyPath(t *testing.T) {
 		t.Fatalf("new password sign-in: want 200, got %d %s", rw.Code, rw.Body.String())
 	}
 
-	// Single-use: the consumed token is dead.
 	if rw := h.do(t, "POST", "/api/v1/auth/reset-password", map[string]string{
 		"email": "reset@example.com", "token": token, "password": "Another!2345",
 	}); rw.Code != http.StatusBadRequest {
@@ -119,15 +107,12 @@ func TestPasswordReset_NonEnumerating(t *testing.T) {
 	if rw.Code != http.StatusOK {
 		t.Fatalf("forgot unknown email: want 200 (non-enumerating), got %d", rw.Code)
 	}
-	// Give a stray send a moment, then confirm nothing was mailed.
 	time.Sleep(150 * time.Millisecond)
 	if _, _, data, _ := srv.snapshot(); resetLinkRE.MatchString(qpDecode(data)) {
 		t.Fatalf("a reset link was emailed for a non-existent account:\n%s", data)
 	}
 }
 
-// TestPasswordReset_BadInputs: wrong email, garbage token, and a
-// too-short new password are all rejected uniformly.
 func TestPasswordReset_BadInputs(t *testing.T) {
 	t.Parallel()
 	h, _, srv := verificationHarness(t)
@@ -138,13 +123,11 @@ func TestPasswordReset_BadInputs(t *testing.T) {
 	}
 	_, token := requestResetAndExtract(t, h, srv, "bad@example.com")
 
-	// Garbage token.
 	if rw := h.do(t, "POST", "/api/v1/auth/reset-password", map[string]string{
 		"email": "bad@example.com", "token": "deadbeef", "password": "NewPassw0rd!99",
 	}); rw.Code != http.StatusBadRequest {
 		t.Fatalf("garbage token: want 400, got %d", rw.Code)
 	}
-	// Valid token, unknown email.
 	if rw := h.do(t, "POST", "/api/v1/auth/reset-password", map[string]string{
 		"email": "nobody@example.com", "token": token, "password": "NewPassw0rd!99",
 	}); rw.Code != http.StatusBadRequest {
@@ -164,9 +147,6 @@ func TestPasswordReset_BadInputs(t *testing.T) {
 	}
 }
 
-// TestWelcomeEmail_SentOnSignup: a welcome email goes out on signup. Use
-// a mailer WITHOUT a public base URL so email verification is inactive —
-// the welcome is then the only message, easy to assert.
 func TestWelcomeEmail_SentOnSignup(t *testing.T) {
 	t.Parallel()
 	h, _, srv := verificationHarness(t)
@@ -190,8 +170,6 @@ func TestWelcomeEmail_SentOnSignup(t *testing.T) {
 	}
 }
 
-// TestPasswordReset_ExpiredToken: a token whose expiry has passed is
-// rejected even though the hash matches.
 func TestPasswordReset_ExpiredToken(t *testing.T) {
 	t.Parallel()
 	h, users, _ := verificationHarness(t)
@@ -212,14 +190,11 @@ func TestPasswordReset_ExpiredToken(t *testing.T) {
 	}
 }
 
-// TestPasswordReset_SSOAccountNoEmail: an account with no password (e.g.
-// SSO-only) gets no reset email — reset is for password accounts.
 func TestPasswordReset_SSOAccountNoEmail(t *testing.T) {
 	t.Parallel()
 	h, users, srv := verificationHarness(t)
 	if err := users.PutUser(t.Context(), auth.User{
 		Email: "sso@example.com", Subject: "sso@example.com", Tenant: "t",
-		// no PasswordHash
 	}); err != nil {
 		t.Fatalf("seed sso user: %v", err)
 	}
@@ -234,7 +209,6 @@ func TestPasswordReset_SSOAccountNoEmail(t *testing.T) {
 	}
 }
 
-// TestPasswordReset_MalformedBody: garbage JSON is a clean 400, not a panic.
 func TestPasswordReset_MalformedBody(t *testing.T) {
 	t.Parallel()
 	h, _, _ := verificationHarness(t)
@@ -248,8 +222,6 @@ func TestPasswordReset_MalformedBody(t *testing.T) {
 		}
 	}
 }
-
-// --- small test helpers ---
 
 func whoamiCode(t *testing.T, h *gatewayHarness, token string) int {
 	t.Helper()

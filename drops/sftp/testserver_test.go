@@ -38,8 +38,6 @@ type testServer struct {
 	fingerprint string // SHA256:… of its host key
 }
 
-// startSFTP brings one up and returns it. The host key is generated per
-// test, so the fingerprint assertions are about this server and nothing else.
 func startSFTP(t *testing.T) *testServer {
 	t.Helper()
 
@@ -88,10 +86,6 @@ func startSFTP(t *testing.T) *testServer {
 	}
 }
 
-// serveSSH handles one connection: handshake, then an "sftp" subsystem
-// request on a session channel. Errors are dropped rather than reported —
-// a test that closes its connection mid-transfer is a case we want, and the
-// assertions live on the client side.
 func serveSSH(conn net.Conn, cfg *ssh.ServerConfig, root string) {
 	defer conn.Close()
 	sshConn, chans, reqs, err := ssh.NewServerConn(conn, cfg)
@@ -133,8 +127,6 @@ func serveSSH(conn net.Conn, cfg *ssh.ServerConfig, root string) {
 	}
 }
 
-// writeFile plants a file on the server, optionally back-dating it so the
-// watermark tests have an ordering to reason about.
 func (s *testServer) writeFile(t *testing.T, name, body string) {
 	t.Helper()
 	full := filepath.Join(s.root, name)
@@ -146,9 +138,6 @@ func (s *testServer) writeFile(t *testing.T, name, body string) {
 	}
 }
 
-// touch sets a file's modification time, which is what the watermark keys on.
-// Whole seconds, because that is all SFTP reports — and the reason the
-// watermark has to remember names as well as a timestamp.
 func (s *testServer) touch(t *testing.T, name string, unixSeconds int64) {
 	t.Helper()
 	full := filepath.Join(s.root, name)
@@ -158,9 +147,6 @@ func (s *testServer) touch(t *testing.T, name string, unixSeconds int64) {
 	}
 }
 
-// job is a job wired to the test server the way the engine wires a real one:
-// the connection fields arrive as params (injectConnectionDefaults), with the
-// per-transfer fields alongside them, plus somewhere to write.
 func (s *testServer) job(t *testing.T, p map[string]any) core.Job {
 	t.Helper()
 	full := map[string]any{
@@ -189,7 +175,6 @@ func (s *testServer) job(t *testing.T, p map[string]any) core.Job {
 	return job
 }
 
-// readLocal reads a file the drops saved into the run's scratch area.
 func readLocal(t *testing.T, job core.Job, ref core.Ref) string {
 	t.Helper()
 	rel := strings.TrimPrefix(ref.Ref, sandbox.Scheme)

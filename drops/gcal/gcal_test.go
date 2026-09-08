@@ -70,7 +70,6 @@ func TestListEvents_NormalizesItems(t *testing.T) {
 	if gotAuth != "Bearer ya29-default" {
 		t.Errorf("auth = %q", gotAuth)
 	}
-	// singleEvents=true → orderBy=startTime present; time_min/q forwarded.
 	for _, want := range []string{"singleEvents=true", "orderBy=startTime", "timeMin=", "q=x"} {
 		if !strings.Contains(gotQuery, want) {
 			t.Errorf("query %q missing %q", gotQuery, want)
@@ -87,11 +86,9 @@ func TestListEvents_NormalizesItems(t *testing.T) {
 	if events[0]["all_day"] != false {
 		t.Errorf("event0 all_day = %v, want false", events[0]["all_day"])
 	}
-	// Blank attendee email is dropped.
 	if got := events[0]["attendees"].([]string); len(got) != 2 || got[0] != "a@x" {
 		t.Errorf("attendees = %v", got)
 	}
-	// All-day event: date populates start, all_day true.
 	if events[1]["start"] != "2026-06-17" || events[1]["all_day"] != true {
 		t.Errorf("event1 = %+v", events[1])
 	}
@@ -257,7 +254,6 @@ func TestListCalendars_PrependsPrimaryAndSkipsDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListCalendars: %v", err)
 	}
-	// Synthetic "primary" first; the primary item (me@x) is skipped; override wins.
 	if len(got) != 3 {
 		t.Fatalf("options = %+v", got)
 	}
@@ -278,7 +274,6 @@ func TestListCalendars_PrependsPrimaryAndSkipsDuplicate(t *testing.T) {
 }
 
 func TestResolveCalendarID_InputWinsThenParamThenPrimary(t *testing.T) {
-	// Wired input port wins.
 	job := core.Job{
 		Params: map[string]any{"calendar_id": "from-param"},
 		Input:  map[string]core.Ref{"calendar_id": {Inline: "from-input"}},
@@ -286,11 +281,9 @@ func TestResolveCalendarID_InputWinsThenParamThenPrimary(t *testing.T) {
 	if got := resolveCalendarID(job); got != "from-input" {
 		t.Errorf("got %q, want from-input", got)
 	}
-	// Param used when no input.
 	if got := resolveCalendarID(core.Job{Params: map[string]any{"calendar_id": "from-param"}}); got != "from-param" {
 		t.Errorf("got %q, want from-param", got)
 	}
-	// Defaults to primary.
 	if got := resolveCalendarID(core.Job{Params: map[string]any{}}); got != "primary" {
 		t.Errorf("got %q, want primary", got)
 	}
@@ -301,22 +294,18 @@ func TestCovCalBaseURLOverride(t *testing.T) {
 	if got := calBaseURL(job); got != "http://override.example" {
 		t.Fatalf("base_url param should win, got %q", got)
 	}
-	// Empty base_url falls back to the configured root.
 	if got := calBaseURL(core.Job{Params: map[string]any{}}); got != calBase.Get() {
 		t.Fatalf("blank base_url should fall back, got %q", got)
 	}
 }
 
 func TestCovResolveSummary(t *testing.T) {
-	// String input wins.
 	if got := resolveSummary(core.Job{Input: map[string]core.Ref{"summary": {Inline: "  Hello  "}}}); got != "Hello" {
 		t.Fatalf("string input = %q", got)
 	}
-	// []byte input wins.
 	if got := resolveSummary(core.Job{Input: map[string]core.Ref{"summary": {Inline: []byte("Bytes")}}}); got != "Bytes" {
 		t.Fatalf("byte input = %q", got)
 	}
-	// Blank string input falls through to param.
 	job := core.Job{
 		Input:  map[string]core.Ref{"summary": {Inline: "   "}},
 		Params: map[string]any{"summary": "Param"},
@@ -324,7 +313,6 @@ func TestCovResolveSummary(t *testing.T) {
 	if got := resolveSummary(job); got != "Param" {
 		t.Fatalf("blank input should fall back to param, got %q", got)
 	}
-	// Non-string/byte input ignored → param.
 	job2 := core.Job{
 		Input:  map[string]core.Ref{"summary": {Inline: 42}},
 		Params: map[string]any{"summary": "Fallback"},
@@ -341,11 +329,9 @@ func TestCovResolveCalendarID(t *testing.T) {
 	if got := resolveCalendarID(core.Job{Input: map[string]core.Ref{"calendar_id": {Inline: []byte("cal2")}}}); got != "cal2" {
 		t.Fatalf("byte input = %q", got)
 	}
-	// Blank input → param default "primary".
 	if got := resolveCalendarID(core.Job{Input: map[string]core.Ref{"calendar_id": {Inline: ""}}}); got != "primary" {
 		t.Fatalf("blank input should default to primary, got %q", got)
 	}
-	// Non-text input ignored → configured calendar_id.
 	job := core.Job{Input: map[string]core.Ref{"calendar_id": {Inline: 9}}, Params: map[string]any{"calendar_id": "c3"}}
 	if got := resolveCalendarID(job); got != "c3" {
 		t.Fatalf("non-text input should fall back, got %q", got)
@@ -353,12 +339,10 @@ func TestCovResolveCalendarID(t *testing.T) {
 }
 
 func TestCovCreateEventBadParams(t *testing.T) {
-	// Missing summary.
 	r, _ := executeCreateEvent(context.Background(), core.Job{Params: map[string]any{}}, nil)
 	if r.Error == nil || r.Error.Code != "bad_param" {
 		t.Fatalf("missing summary → bad_param, got %+v", r.Error)
 	}
-	// Missing start/end.
 	r, _ = executeCreateEvent(context.Background(), core.Job{Params: map[string]any{"summary": "S"}}, nil)
 	if r.Error == nil || r.Error.Code != "bad_param" {
 		t.Fatalf("missing start/end → bad_param, got %+v", r.Error)
@@ -455,8 +439,6 @@ func TestCovListEventsBadJSON(t *testing.T) {
 }
 
 func TestCovListEventsNonSingle(t *testing.T) {
-	// single_events=false drops orderBy=startTime; also exercises the
-	// time_max branch.
 	var gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotQuery = r.URL.RawQuery
@@ -493,8 +475,6 @@ func TestCovListCalendars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Synthetic "primary" first; the real primary skipped; override and
-	// id-fallback names applied.
 	if len(out) != 4 || out[0].ID != "primary" || out[0].Name != "Primary calendar" {
 		t.Fatalf("calendars = %+v", out)
 	}
@@ -540,9 +520,6 @@ func TestCovListCalendarsErrors(t *testing.T) {
 	}
 }
 
-// A nightly reminder flow has to be able to say "tomorrow" and mean it on
-// every run — an RFC3339-only field can't express a window that moves with
-// the schedule. Day boundaries are taken in the step's timezone.
 func TestListEvents_RelativeWindow(t *testing.T) {
 	var gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -588,8 +565,6 @@ func TestListEvents_RelativeWindow(t *testing.T) {
 	}
 }
 
-// Either end can be computed upstream, so both take a wire that overrides
-// the typed setting.
 func TestListEvents_WindowInputOverridesParam(t *testing.T) {
 	var gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -621,9 +596,6 @@ func TestListEvents_BadWindowValue(t *testing.T) {
 	}
 }
 
-// Creating an event from a flow means the when/who/where came from whatever
-// started it — a form, a row, a message — so those fields have to take a wire,
-// not just a typed value.
 func TestCreateEvent_WiredFields(t *testing.T) {
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -660,8 +632,6 @@ func TestCreateEvent_WiredFields(t *testing.T) {
 	}
 }
 
-// A relative start/end becomes a concrete timestamp; an absolute one is left
-// exactly as written so a plain date still means an all-day event.
 func TestCreateEvent_RelativeAndAllDay(t *testing.T) {
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -746,7 +716,6 @@ func TestGcalDeleteEvent(t *testing.T) {
 		t.Errorf("meta.removed = %v, want false so a flow can tell the two apart", meta["removed"])
 	}
 
-	// A real failure still fails.
 	status = 500
 	res, _ = executeGcalDeleteEvent(context.Background(), job, nil)
 	if res.Status == core.StatusOK {
@@ -754,7 +723,6 @@ func TestGcalDeleteEvent(t *testing.T) {
 	}
 }
 
-// The obvious drag — List events' whole list into Event — takes the first.
 func TestGcalDeleteEvent_AcceptsAnEventList(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

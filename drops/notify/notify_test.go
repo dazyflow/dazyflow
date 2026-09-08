@@ -17,21 +17,11 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// scriptedSMTP starts a minimal one-shot plaintext SMTP server that walks a
-// client through the MAIL/RCPT/DATA/QUIT dance and records the bytes of the
-// DATA payload. It serves a single connection then stops. Mirrors the helper
-// in internal/smtputil's tests so executeEmail's real smtputil.Send path can be
-// exercised without a live mail server.
 func scriptedSMTP(t *testing.T, captured *string) string {
 	t.Helper()
 	return scriptedSMTPRecording(t, captured, nil)
 }
 
-// scriptedSMTPRecording is scriptedSMTP plus the command transcript: cmds
-// receives every command line the client sent up to the end of DATA, so a test
-// can assert on the SMTP envelope (MAIL FROM / RCPT TO) and not only on the
-// message headers. Both out-params are written before the DATA terminator is
-// acknowledged, so they're settled by the time Send returns.
 func scriptedSMTPRecording(t *testing.T, captured, cmds *string) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -100,10 +90,10 @@ func scriptedSMTPRecording(t *testing.T, captured, cmds *string) string {
 	return ln.Addr().String()
 }
 
-// TestExecuteEmail_HappyPath drives the full send through a scripted SMTP
-// server: a plain-text body (so the HTML template wrap is skipped), CC and BCC
-// recipients, and a progress channel. It asserts the OK result, the meta the
-// drop emits, and that BCC rides the envelope but never appears in the headers.
+// Drives the full send through a scripted SMTP server: a plain-text body (so
+// the HTML template wrap is skipped), CC and BCC recipients, and a progress
+// channel. It asserts the OK result, the meta the drop emits, and that BCC
+// rides the envelope but never appears in the headers.
 func TestExecuteEmail_HappyPath(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -146,7 +136,6 @@ func TestExecuteEmail_HappyPath(t *testing.T) {
 	if strings.Contains(sent, "secret@x.test") {
 		t.Errorf("BCC address leaked into the message body/headers:\n%s", sent)
 	}
-	// The progress channel should have carried at least the "delivered" tick.
 	close(prog)
 	var delivered bool
 	for p := range prog {
@@ -159,8 +148,6 @@ func TestExecuteEmail_HappyPath(t *testing.T) {
 	}
 }
 
-// TestExecuteEmail_BodyFromInput covers the body input branches: a string wire,
-// a []byte wire, and a structured value that gets JSON-marshalled into the body.
 func TestExecuteEmail_BodyFromInput(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -196,10 +183,6 @@ func TestExecuteEmail_BodyFromInput(t *testing.T) {
 	}
 }
 
-// TestExecuteEmail_ToAsArrayIsRejected: 'to' is one comma-separated string. An
-// array is named as the wrong shape rather than read as a list — and rather
-// than reported as a missing recipient, which is what the string read alone
-// makes it look like.
 func TestExecuteEmail_ToAsArrayIsRejected(t *testing.T) {
 	res, err := executeEmail(context.Background(), core.Job{
 		ID: "j",
@@ -216,7 +199,6 @@ func TestExecuteEmail_ToAsArrayIsRejected(t *testing.T) {
 	}
 }
 
-// TestExecuteEmail_ToInputOverridesParam covers the wired-To override branch.
 func TestExecuteEmail_ToInputOverridesParam(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -239,8 +221,6 @@ func TestExecuteEmail_ToInputOverridesParam(t *testing.T) {
 	}
 }
 
-// TestExecuteEmail_TemplateUnavailable hits the email_template error path: an
-// HTML send referencing a template with no provider in context fails the node.
 func TestExecuteEmail_TemplateUnavailable(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -261,8 +241,6 @@ func TestExecuteEmail_TemplateUnavailable(t *testing.T) {
 	}
 }
 
-// TestExecuteEmail_SendFailed covers the send_failed branch: the SMTP server
-// rejects MAIL FROM, so smtputil.Send returns an error the drop maps.
 func TestExecuteEmail_SendFailed(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -286,7 +264,6 @@ func TestExecuteEmail_SendFailed(t *testing.T) {
 	}
 }
 
-// TestExecuteEmail_AuthSetsCredentials covers the username→PlainAuth branch.
 func TestExecuteEmail_AuthSetsCredentials(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -305,18 +282,13 @@ func TestExecuteEmail_AuthSetsCredentials(t *testing.T) {
 	}
 }
 
-// --- emitProgress ---
-
-// TestEmitProgress covers the nil-channel guard and the full-buffer default arm.
 func TestEmitProgress(t *testing.T) {
 	// nil channel: must not panic.
 	params.EmitProgress(nil, core.Job{ID: "j"}, 0.5, "x")
 
-	// full (unbuffered, no reader) channel: the select default arm drops it.
 	ch := make(chan core.Progress)
 	params.EmitProgress(ch, core.Job{ID: "j"}, 0.5, "dropped")
 
-	// a buffered channel with room receives the message.
 	ch2 := make(chan core.Progress, 1)
 	params.EmitProgress(ch2, core.Job{ID: "j", NodeID: "n"}, 0.7, "kept")
 	got := <-ch2
@@ -325,8 +297,6 @@ func TestEmitProgress(t *testing.T) {
 	}
 }
 
-// TestEmailTextInputOr_EmptyAndNonText covers the empty-string, empty-bytes,
-// and non-text (ok=false) arms not exercised by the existing test.
 func TestEmailTextInputOr_EmptyAndNonText(t *testing.T) {
 	job := core.Job{Input: map[string]core.Ref{
 		"emptyStr":   {Inline: ""},
@@ -351,8 +321,6 @@ func TestEmailTextInputOr_EmptyAndNonText(t *testing.T) {
 	}
 }
 
-// --- paramTags ---
-
 func TestParamTags(t *testing.T) {
 	cases := []struct {
 		name string
@@ -374,10 +342,6 @@ func TestParamTags(t *testing.T) {
 	}
 }
 
-// --- ntfy extra coverage ---
-
-// TestNtfy_AllHeadersAndToken covers the priority/click/token header branches
-// plus the title input override, none of which the existing tests touch.
 func TestNtfy_AllHeadersAndToken(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -411,7 +375,6 @@ func TestNtfy_AllHeadersAndToken(t *testing.T) {
 	}
 }
 
-// TestNtfy_MessageBytesInput covers the []byte and structured message-input arms.
 func TestNtfy_MessageBytesInput(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -448,9 +411,6 @@ func TestNtfy_MessageBytesInput(t *testing.T) {
 	}
 }
 
-// TestNtfy_EgressBlocked covers the egress_blocked branch: a global allowlist
-// that doesn't include the target host makes EgressAllowedFor reject the URL
-// before any request is built.
 func TestNtfy_EgressBlocked(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)

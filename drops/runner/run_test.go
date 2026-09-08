@@ -21,8 +21,6 @@ import (
 // someone else's machine can fail in more ways than a built-in step and each
 // one needs to arrive as a sentence, not a number.
 
-// errNoMachine stands in for the dispatcher giving up — no machine carries the
-// tags, or none is switched on.
 var errNoMachine = errors.New("no machine tagged box has checked in recently")
 
 type fakeDispatcher struct {
@@ -92,8 +90,6 @@ func TestExecute_DefaultsTheTimeout(t *testing.T) {
 	}
 }
 
-// A value wired in arrives on standard input, because that is the one interface
-// every language and every shell tool already agrees on.
 func TestExecute_WiresTheInputToStdin(t *testing.T) {
 	f := install(t, &fakeDispatcher{})
 	run(t, map[string]any{"tags": []any{"box"}, "script": "x"},
@@ -132,8 +128,6 @@ func TestExecute_NonZeroExitFailsWithTheScriptsMessage(t *testing.T) {
 	}
 }
 
-// The agent refusing to run something (not on its allow-list, binary missing,
-// timed out) is a different failure from a script that ran and exited badly.
 func TestExecute_AgentRefusalIsItsOwnFailure(t *testing.T) {
 	install(t, &fakeDispatcher{res: Result{Error: "command not permitted by this runner"}})
 	res := run(t, map[string]any{"tags": []any{"box"}, "script": "rm -rf /"}, nil)
@@ -171,7 +165,6 @@ func TestExecute_ConfigurationMistakes(t *testing.T) {
 	}
 }
 
-// A deployment without runners should say so, not fail obscurely.
 func TestExecute_WithoutADispatcher(t *testing.T) {
 	install(t, nil)
 	SetDispatcher(nil)
@@ -212,8 +205,6 @@ func TestManifest_IsNotIdempotent(t *testing.T) {
 	}
 }
 
-// manifestsUnderTest pulls this package's registered manifest back out, so the
-// test reads what the palette will.
 func manifestsUnderTest(t *testing.T) []core.Manifest {
 	t.Helper()
 	var out []core.Manifest
@@ -228,17 +219,9 @@ func manifestsUnderTest(t *testing.T) []core.Manifest {
 	return out
 }
 
-// Registration normalizes labels — lower-cased, trimmed, de-duplicated — and
-// the admin page shows them that way. A step targeting the label as the
-// operator TYPED it therefore has to be normalized too, or a flow author sees
-// 'no runner is labelled "Linux"' next to a page plainly showing linux.
 func TestExecute_NormalizesTheTarget(t *testing.T) {
 	f := install(t, &fakeDispatcher{})
 
-	// Registration normalizes labels — lower-cased, trimmed, de-duplicated — and
-	// the admin page shows them that way. A tag has to get the same treatment, or
-	// a step reads 'no machine carries the tag "Linux"' next to a page plainly
-	// showing linux. Names too: validRunnerName only ever allows lower-case.
 	run(t, map[string]any{"tags": []any{"  Linux ", "Build-Box "}, "script": "x"}, nil)
 	if strings.Join(f.got.Tags, ",") != "linux,build-box" {
 		t.Errorf("tags = %v, want them normalized the way registration stores them", f.got.Tags)
@@ -251,17 +234,12 @@ func TestExecute_NormalizesTheTarget(t *testing.T) {
 		t.Errorf("tags = %v, want duplicates and blanks dropped", f.got.Tags)
 	}
 
-	// Whitespace alone is no target, not a target of "".
 	res := run(t, map[string]any{"tags": []any{"   "}, "script": "x"}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "no_target" {
 		t.Errorf("result = %+v, want a no_target failure", res)
 	}
 }
 
-// `runner` and `label` were the two fields tags replaced. They are not read
-// any more: a step still carrying one has no target, which is a no_target
-// failure naming the empty field rather than a script dispatched to a machine
-// nobody named in the step as it stands.
 func TestExecute_PreTagsParamsAreNotATarget(t *testing.T) {
 	install(t, &fakeDispatcher{})
 
@@ -276,11 +254,6 @@ func TestExecute_PreTagsParamsAreNotATarget(t *testing.T) {
 	}
 }
 
-// ---- the script, and what starts it -----------------------------------
-
-// The 'script' input exists so an earlier step can build the script — a
-// template, a table cell, the AI step. Wired, it decides; the box on the step
-// is the fallback, which is how nearly every flow uses this.
 func TestExecute_TheScriptInputOverridesTheTypedOne(t *testing.T) {
 	f := install(t, &fakeDispatcher{})
 
@@ -298,8 +271,6 @@ func TestExecute_TheScriptInputOverridesTheTypedOne(t *testing.T) {
 	}
 }
 
-// A script's insides are significant — a Python one stops working if its
-// indentation is rearranged — so only the surrounding blank space goes.
 func TestExecute_KeepsTheShapeOfTheScript(t *testing.T) {
 	f := install(t, &fakeDispatcher{})
 	run(t, map[string]any{
@@ -329,7 +300,6 @@ func TestExecute_PassesTheChosenShellThrough(t *testing.T) {
 		t.Errorf("shell = %q, want it normalized and passed on", f.got.Shell)
 	}
 
-	// Nothing chosen stays nothing, so the agent does what it always did.
 	run(t, map[string]any{"tags": []any{"box"}, "script": "x"}, nil)
 	if f.got.Shell != "" {
 		t.Errorf("shell = %q, want it left empty", f.got.Shell)
@@ -349,8 +319,6 @@ func TestExecute_RefusesAShellItDoesNotKnow(t *testing.T) {
 	}
 }
 
-// The step's enum and the Shells list are the same list seen from two sides: a
-// value the form offers and the drop then refuses is a dead field.
 func TestManifest_OffersExactlyTheShellsTheStepAccepts(t *testing.T) {
 	for _, m := range manifestsUnderTest(t) {
 		var schema struct {
@@ -384,7 +352,6 @@ func TestManifest_OffersExactlyTheShellsTheStepAccepts(t *testing.T) {
 	}
 }
 
-// The script can arrive on a port now, so the port has to exist.
 func TestManifest_HasAScriptInput(t *testing.T) {
 	for _, m := range manifestsUnderTest(t) {
 		var found bool
@@ -398,8 +365,6 @@ func TestManifest_HasAScriptInput(t *testing.T) {
 		}
 	}
 }
-
-// ---- the environment the script runs with ------------------------------
 
 // The point of the field: a credential reaches the machine without being
 // written into the flow. The engine has already expanded ${secret.…} by the
@@ -442,8 +407,6 @@ func TestExecute_TheStepsEnvLayersOverTheNodes(t *testing.T) {
 	}
 }
 
-// Nothing set means nothing sent, so the queued task's env column stays NULL
-// and there is nothing to seal.
 func TestExecute_NoEnvSendsNone(t *testing.T) {
 	f := install(t, &fakeDispatcher{})
 	run(t, map[string]any{"tags": []any{"box"}, "script": "x"}, nil)
@@ -490,7 +453,6 @@ func TestExecute_StringifiesANonStringEnvValue(t *testing.T) {
 	}
 }
 
-// The field has to be in the schema for the editor to render its dict box.
 func TestManifest_DeclaresTheEnvField(t *testing.T) {
 	for _, m := range manifestsUnderTest(t) {
 		var schema struct {
@@ -509,33 +471,23 @@ func TestManifest_DeclaresTheEnvField(t *testing.T) {
 			t.Errorf("env is not a string-keyed map, so the editor renders no dict box: %+v",
 				schema.Properties.Env)
 		}
-		// The whole reason the field is safe to use for a credential, so the
-		// help has to say it.
 		if !strings.Contains(schema.Properties.Env.Description, "${secret.") {
 			t.Error("the env help does not mention ${secret.…}, which is how a credential gets in safely")
 		}
 	}
 }
 
-// ---- letting the flow handle the exit code -----------------------------
-
-// The default is unchanged and has to stay that way: a non-zero exit is a
-// failure, and every flow written before this param relies on it.
 func TestExecute_NonZeroExitStillFailsByDefault(t *testing.T) {
 	install(t, &fakeDispatcher{res: Result{ExitCode: 3, Stderr: "no such invoice"}})
 	res := run(t, map[string]any{"tags": []any{"box"}, "script": "x"}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "nonzero_exit" {
 		t.Fatalf("result = %+v, want a nonzero_exit failure", res)
 	}
-	// The script's own message is the useful part; a bare number leaves the
-	// author guessing.
 	if !strings.Contains(res.Error.Message, "no such invoice") {
 		t.Errorf("message = %q, want the script's stderr attached", res.Error.Message)
 	}
 }
 
-// The point of the param: a script's exit codes become a flow signal, so 2 can
-// mean "nothing to do today" rather than "broken".
 func TestExecute_CarriesOnAndHandsTheExitCodeToTheFlow(t *testing.T) {
 	install(t, &fakeDispatcher{res: Result{ExitCode: 2, Stdout: "partial", Stderr: "warned"}})
 	res := run(t, map[string]any{
@@ -563,8 +515,6 @@ func TestExecute_EmitsTheExitCodeOnSuccessToo(t *testing.T) {
 	if got := res.Output["exit_code"].Inline; got != "0" {
 		t.Errorf("exit_code = %v, want \"0\" on a success", got)
 	}
-	// A script that succeeded can still have written warnings, and a flow may
-	// want them.
 	if got := res.Output["stderr"].Inline; got != "a warning" {
 		t.Errorf("stderr = %v, want it emitted on success as well", got)
 	}
@@ -613,8 +563,6 @@ func TestExecute_RefusesAnUnknownExitMode(t *testing.T) {
 	}
 }
 
-// The outputs have to exist in the manifest, or there is nothing to wire the
-// branch from.
 func TestManifest_DeclaresTheExitCodeOutputs(t *testing.T) {
 	for _, m := range manifestsUnderTest(t) {
 		have := map[string]bool{}
@@ -641,8 +589,6 @@ func TestManifest_DeclaresTheExitCodeOutputs(t *testing.T) {
 			t.Errorf("enum = %v, want exactly the two the step accepts",
 				schema.Properties.OnNonzeroExit.Enum)
 		}
-		// The default has to be the old behaviour, or every existing flow
-		// changes meaning on upgrade.
 		if schema.Properties.OnNonzeroExit.Default != ExitFail {
 			t.Errorf("default = %q, want %q", schema.Properties.OnNonzeroExit.Default, ExitFail)
 		}

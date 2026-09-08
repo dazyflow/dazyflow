@@ -59,9 +59,6 @@ func rowsJob(rows []map[string]any, headers []string, p map[string]any) core.Job
 	}}
 }
 
-// A mapping is one row and a list of mappings is one row each — the same
-// contract Read JSON has, which is the point: a flow shouldn't care which
-// format the config arrived in.
 func TestParseYAML_MatchesReadJSONsShape(t *testing.T) {
 	one := runT(t, executeParseYAML, yamlJob("name: web\nport: 8080\n", nil))
 	rows := rowsOut(t, one)
@@ -78,8 +75,6 @@ func TestParseYAML_MatchesReadJSONsShape(t *testing.T) {
 	}
 }
 
-// The path semantics are Read JSON's, including the rule that a scalar is an
-// answer when a path asked for one.
 func TestParseYAML_Path(t *testing.T) {
 	doc := "spec:\n  containers:\n    - name: app\n      image: app:1\n    - name: sidecar\n      image: proxy:2\n"
 	res := runT(t, executeParseYAML, yamlJob(doc, map[string]any{"path": "spec.containers"}))
@@ -88,7 +83,6 @@ func TestParseYAML_Path(t *testing.T) {
 		t.Fatalf("path should dig to the list, got %+v", rows)
 	}
 
-	// A scalar at the path: rows empty, value carries it.
 	scalar := runT(t, executeParseYAML, yamlJob("version: 1.4.0\n", map[string]any{"path": "version"}))
 	if got := rowsOut(t, scalar); len(got) != 0 {
 		t.Errorf("a scalar isn't a table, rows should be empty: %+v", got)
@@ -98,8 +92,6 @@ func TestParseYAML_Path(t *testing.T) {
 	}
 }
 
-// Without a path, being handed something that isn't row-shaped is a mistake,
-// not an answer — same asymmetry Read JSON draws.
 func TestParseYAML_ScalarWithoutAPathFails(t *testing.T) {
 	res, err := executeParseYAML(t.Context(), yamlJob("just a string\n", nil), nil)
 	if err != nil {
@@ -113,8 +105,6 @@ func TestParseYAML_ScalarWithoutAPathFails(t *testing.T) {
 	}
 }
 
-// The first thing that genuinely differs from JSON: a stream may hold several
-// documents. Each becomes a row, which is how a manifest bundle is shaped.
 func TestParseYAML_MultiDocumentStream(t *testing.T) {
 	stream := "kind: Deployment\nname: web\n---\nkind: Service\nname: web-svc\n---\nkind: Ingress\nname: web-ing\n"
 
@@ -141,9 +131,6 @@ func TestParseYAML_EmptyDocumentsAreSkipped(t *testing.T) {
 	}
 }
 
-// The second real difference: YAML permits non-string mapping keys, which
-// decode to map[interface{}]interface{} — a shape no downstream step here can
-// read. Keys are rendered as text rather than the row arriving empty.
 func TestParseYAML_NonStringKeysBecomeText(t *testing.T) {
 	res := runT(t, executeParseYAML, yamlJob("ports:\n  8080: http\n  8443: https\n", map[string]any{"path": "ports"}))
 	v, ok := res.Output["value"].Inline.(map[string]any)
@@ -155,9 +142,6 @@ func TestParseYAML_NonStringKeysBecomeText(t *testing.T) {
 	}
 }
 
-// yaml.v3 refuses an alias bomb itself, which matters because this text can
-// arrive from an http_request. Asserted so a library change that removes the
-// protection is noticed here rather than in production.
 func TestParseYAML_AliasBombIsRefused(t *testing.T) {
 	bomb := "a: &a [\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\"]\n" +
 		"b: &b [*a,*a,*a,*a,*a,*a,*a,*a,*a]\n" +
@@ -256,7 +240,6 @@ func TestBuildYAML_SingleAndDocuments(t *testing.T) {
 	if strings.Count(docs, "---") != 2 {
 		t.Errorf("want a document separator per row:\n%s", docs)
 	}
-	// And the result is a real stream Read YAML can read back.
 	if got := rowsOut(t, runT(t, executeParseYAML, yamlJob(docs, nil))); len(got) != 2 {
 		t.Errorf("the document stream didn't round trip: %+v", got)
 	}
@@ -304,8 +287,6 @@ func TestBuildJSON_SingleObject(t *testing.T) {
 	}
 }
 
-// A column the rows lack becomes null rather than being omitted: an API
-// validating a schema wants the key present.
 func TestBuildJSON_MissingColumnIsNull(t *testing.T) {
 	out := outText(t, runT(t, executeBuildJSON, rowsJob([]map[string]any{{"a": 1}}, nil, map[string]any{"columns": []any{"a", "b"}})))
 	var back []map[string]any

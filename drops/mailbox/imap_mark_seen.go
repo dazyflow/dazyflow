@@ -44,10 +44,6 @@ func init() {
 			Inputs: []core.Port{
 				{Port: "id", Label: "Email", MIME: []string{"text/plain", "application/json"}},
 			},
-			// No declared outputs beyond the details: marking an email read is
-			// a "do" step — "after it's marked, do X" chains through the
-			// pass-through pin, which fires on success. Same shape as the send
-			// steps (email_send, gmail_send_email, ntfy).
 			Outputs: []core.Port{
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"id":"4471","folder":"INBOX","flags":["\\Seen"]}`)},
 			},
@@ -80,8 +76,6 @@ func executeIMAPMarkSeen(ctx context.Context, job core.Job, _ chan<- core.Progre
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(params.TimeoutMS(job, 30000))*time.Millisecond)
 	defer cancel()
 
-	// The one step here that opens the folder for WRITING. Everything else in
-	// this package passes true and gets EXAMINE.
 	client, _, fail := openMailbox(ctx, job, false)
 	if fail != nil {
 		return *fail, nil

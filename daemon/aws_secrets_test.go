@@ -17,9 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Golden SigV4 vector: the expected signature was computed by an
-// independent implementation (Python hashlib/hmac) over the same inputs,
-// so an encoding mistake in the Go signer can't self-confirm.
 func TestSignSigV4_GoldenVector(t *testing.T) {
 	t.Parallel()
 	cfg := AwsSecretsConfig{
@@ -46,8 +43,6 @@ func TestSignSigV4_GoldenVector(t *testing.T) {
 	}
 }
 
-// fakeSecretsManager serves the two shapes the client sends, asserting a
-// well-formed SigV4 Authorization header on every call.
 func fakeSecretsManager(t *testing.T, secrets map[string]string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
@@ -100,23 +95,18 @@ func TestAwsSecretsProvider_Get(t *testing.T) {
 	p := awsTestProvider(t, srv, true)
 	ctx := core.WithTenant(context.Background(), "acme")
 
-	// Plain string secret.
 	if v, err := p.Get(ctx, "apikey"); err != nil || v != "sk_plain" {
 		t.Errorf("apikey = %q/%v", v, err)
 	}
-	// JSON field pluck.
 	if v, err := p.Get(ctx, "db#password"); err != nil || v != "hunter2" {
 		t.Errorf("db#password = %q/%v", v, err)
 	}
-	// Missing field in a JSON secret.
 	if _, err := p.Get(ctx, "db#nope"); err == nil || !strings.Contains(err.Error(), `no field "nope"`) {
 		t.Errorf("missing field err = %v", err)
 	}
-	// Field pluck on a non-JSON secret.
 	if _, err := p.Get(ctx, "apikey#x"); err == nil || !strings.Contains(err.Error(), "not a JSON object") {
 		t.Errorf("non-json pluck err = %v", err)
 	}
-	// Unknown secret surfaces AWS's error type.
 	if _, err := p.Get(ctx, "ghost"); err == nil || !strings.Contains(err.Error(), "ResourceNotFoundException") {
 		t.Errorf("ghost err = %v", err)
 	}
@@ -128,12 +118,10 @@ func TestAwsSecretsProvider_TenantScoping(t *testing.T) {
 	defer srv.Close()
 	p := awsTestProvider(t, srv, true)
 
-	// No tenant in context.
 	if _, err := p.Get(context.Background(), "apikey"); err == nil ||
 		!strings.Contains(err.Error(), "no tenant in context") {
 		t.Errorf("no-tenant err = %v", err)
 	}
-	// Tenant without a configured manager.
 	other := core.WithTenant(context.Background(), "globex")
 	if _, err := p.Get(other, "apikey"); err == nil ||
 		!strings.Contains(err.Error(), "no AWS Secrets Manager configured") {
@@ -170,7 +158,6 @@ func TestVerifyAwsConfig(t *testing.T) {
 		t.Errorf("verify with valid-but-empty account: %v", err)
 	}
 
-	// A signature rejection fails verification.
 	badSrv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
 		rw.WriteHeader(403)
 		fmt.Fprint(rw, `{"__type":"UnrecognizedClientException","message":"The security token included in the request is invalid."}`)
@@ -182,7 +169,6 @@ func TestVerifyAwsConfig(t *testing.T) {
 		t.Errorf("bad creds verify err = %v", err)
 	}
 
-	// Config validation fires before any network call.
 	if err := VerifyAwsConfig(t.Context(), AwsSecretsConfig{}, time.Second); err == nil ||
 		!strings.Contains(err.Error(), "region is required") {
 		t.Errorf("empty config err = %v", err)
@@ -204,11 +190,9 @@ func TestAwsConfig_StorageRoundTrip(t *testing.T) {
 	if err != nil || !ok || got != cfg {
 		t.Fatalf("load = %+v/%v/%v, want %+v", got, ok, err, cfg)
 	}
-	// Other tenant: not configured.
 	if _, ok, err := loadProviderConfig[AwsSecretsConfig](ctx, es, "globex", awsConfigSecretName); err != nil || ok {
 		t.Errorf("other tenant = %v/%v, want not-configured", ok, err)
 	}
-	// The reserved cfg: key stays out of user-facing listings.
 	names, _ := es.List(ctx, "acme")
 	for _, n := range names {
 		if !isReservedSecretName(n) && strings.HasPrefix(n, "cfg:") {

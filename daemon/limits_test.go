@@ -44,17 +44,12 @@ func TestSubmitGraph_RejectsTooManyNodes(t *testing.T) {
 	}
 }
 
-// A node ceiling alone does not bound the work: readiness is re-evaluated
-// per dependent per completion, so cost scales with WIRES, and a graph well
-// inside the node limit can carry hundreds of thousands of them.
 func TestSubmitGraph_RejectsTooManyEdges(t *testing.T) {
 	t.Parallel()
 	h := newVisibilityHarness(t)
 	h.svc.MaxGraphEdges = 3
 	ctx := context.Background()
 
-	// One distinct wire per pair: identical wires are refused as duplicates
-	// before the count cap is reached, and the count cap is what's under test.
 	g := func(n int) core.Graph {
 		out := core.Graph{
 			ID: "wires", Tenant: "t", Workspace: "ws", Visibility: core.VisibilityOrg,

@@ -44,9 +44,6 @@ func TestValidateColumnType_RejectsInjection(t *testing.T) {
 		"TEXT; SELECT 1",
 		`TEXT" `,
 		"int/*comment*/",
-		// The character-class allowlist used to let these through: a
-		// comma+parens smuggles an extra column / constraint definition
-		// even though every character is "safe".
 		"int, evil text",
 		"text, PRIMARY KEY (id)",
 		"text NOT NULL",
@@ -64,19 +61,16 @@ func TestValidateColumnType_RejectsInjection(t *testing.T) {
 }
 
 func TestParseColumnTypes(t *testing.T) {
-	// Absent parameter → nil map, no error.
 	m, err := parseColumnTypes(map[string]any{})
 	if err != nil || m != nil {
 		t.Fatalf("absent: got (%v, %v), want (nil, nil)", m, err)
 	}
-	// A malicious value is rejected and names the offending column.
 	_, err = parseColumnTypes(map[string]any{
 		"column_types": map[string]any{"age": "INT); DROP TABLE t; --"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "age") {
 		t.Fatalf("malicious: got err %v, want error naming column \"age\"", err)
 	}
-	// A valid map round-trips.
 	m, err = parseColumnTypes(map[string]any{
 		"column_types": map[string]any{"age": "integer"},
 	})
@@ -86,9 +80,6 @@ func TestParseColumnTypes(t *testing.T) {
 }
 
 func TestValidateIdent_AcceptsRealisticHeaders(t *testing.T) {
-	// Every one of these used to be rejected by the old
-	// [A-Za-z0-9_] check — they're the kinds of names that turn up
-	// in real spreadsheets from non-English-speaking customers.
 	for _, name := range []string{
 		"FÖRETAG",
 		"MOMS%",
@@ -128,7 +119,6 @@ func TestValidateIdent_RejectsUnsafe(t *testing.T) {
 
 func TestQuoteIdent_DoublesEmbeddedQuotes(t *testing.T) {
 	cases := map[string]string{
-		// Common cases — round-trip cleanly.
 		"FÖRETAG":    `"FÖRETAG"`,
 		"normal":     `"normal"`,
 		"MOMS%":      `"MOMS%"`,
@@ -139,8 +129,7 @@ func TestQuoteIdent_DoublesEmbeddedQuotes(t *testing.T) {
 		// `"weird\"col"` (C-escape) which SQL parsers misread.
 		// quoteIdent must double the quote: `"weird""col"`.
 		`weird"col`: `"weird""col"`,
-		// And the doubled-quote nested case.
-		`a""b`: `"a""""b"`,
+		`a""b`:      `"a""""b"`,
 	}
 	for in, want := range cases {
 		if got := quoteIdent(in); got != want {
@@ -161,11 +150,10 @@ func TestQuoteIdentBacktick_DoublesEmbeddedBackticks(t *testing.T) {
 	}
 }
 
-// TestQuoteIdent_InjectionCannotBreakOut is a property test over a corpus of
-// SQL-injection payloads: whatever a (validated) identifier contains, the
-// quoted form must remain a single well-formed quoted identifier — i.e. every
-// interior delimiter is doubled, so the payload can never terminate the quote
-// and inject trailing SQL.
+// A property test over a corpus of SQL-injection payloads: whatever a
+// (validated) identifier contains, the quoted form must remain a single well-
+// formed quoted identifier — i.e. every interior delimiter is doubled, so the
+// payload can never terminate the quote and inject trailing SQL.
 func TestQuoteIdent_InjectionCannotBreakOut(t *testing.T) {
 	payloads := []string{
 		`x"; DROP TABLE users; --`,
@@ -179,7 +167,6 @@ newline`,
 		"normal_col",
 	}
 	for _, p := range payloads {
-		// Double-quote style (Postgres / SQLite).
 		q := quoteIdent(p)
 		if len(q) < 2 || q[0] != '"' || q[len(q)-1] != '"' {
 			t.Errorf("quoteIdent(%q) not wrapped in double quotes: %q", p, q)
@@ -191,7 +178,6 @@ newline`,
 			t.Errorf("quoteIdent(%q) leaves an unescaped quote — breakout possible: %q", p, q)
 		}
 
-		// Backtick style (MySQL): same property with backticks.
 		b := quoteIdentBacktick(p)
 		if len(b) < 2 || b[0] != '`' || b[len(b)-1] != '`' {
 			t.Errorf("quoteIdentBacktick(%q) not wrapped in backticks: %q", p, b)

@@ -12,9 +12,9 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestSuggestionsRoute confirms GET /me/flows/suggestions resolves to the
-// suggestions handler (the literal segment must outrank the {flow_id}
-// wildcard) and returns the mined adjacency for the caller's workspace.
+// Confirms GET /me/flows/suggestions resolves to the suggestions handler (the
+// literal segment must outrank the {flow_id} wildcard) and returns the mined
+// adjacency for the caller's workspace.
 func TestSuggestionsRoute(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)

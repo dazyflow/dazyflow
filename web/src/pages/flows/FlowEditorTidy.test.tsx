@@ -101,8 +101,6 @@ function mount(id = "coffee-reorder") {
   );
 }
 
-// Two controls now carry the same action, so each is addressed by its own
-// hook rather than by accessible name.
 const canvasTidy = async () => {
   await screen.findAllByRole("button", { name: "editor.tidy" });
   const el = document.querySelector(".dz-tidy-control");
@@ -146,9 +144,6 @@ describe("Tidy control", () => {
     expect(await pinnedTidy()).toBeEnabled();
   });
 
-  // It belongs to the pinned cluster, not the scrolling toolbar. That is the
-  // whole reason it is reachable at any width, so if it ever moves back the
-  // first report comes true again.
   it("lives in the pinned Controls cluster, not the scrolling toolbar", async () => {
     loadGraph.mockResolvedValue(twoStepGraph());
     mount();
@@ -157,8 +152,6 @@ describe("Tidy control", () => {
     expect(btn.closest(".toolbar-scroll")).toBeNull();
   });
 
-  // The third report. A glyph among the zoom buttons is not something you find
-  // when you are looking for "tidy up", so the action is named in the toolbar.
   it("is also in the toolbar, carrying a visible label", async () => {
     loadGraph.mockResolvedValue(twoStepGraph());
     mount();
@@ -169,8 +162,6 @@ describe("Tidy control", () => {
     expect(label?.textContent).toBe("editor.tidy");
   });
 
-  // And it is pinned. Putting it back in the scrolling half is precisely the
-  // bug the first report was about.
   it("the toolbar copy is pinned, never in the scrolling region", async () => {
     loadGraph.mockResolvedValue(twoStepGraph());
     mount();

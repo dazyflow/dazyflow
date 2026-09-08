@@ -20,8 +20,6 @@ func TestMigrate_GitToPostgresPreservesEverything(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	// A flow with several revisions, a label on an older one, published at
-	// that older one (a rollback that is currently live).
 	v1 := mustSave(t, src, flow("shipping", "v1"), "ada@example.com")
 	mustSave(t, src, flow("shipping", "v2"), "ada@example.com")
 	v3 := mustSave(t, src, flow("shipping", "v3"), "grace@example.com")
@@ -31,12 +29,10 @@ func TestMigrate_GitToPostgresPreservesEverything(t *testing.T) {
 	if err := src.PromoteToEnvironment("shipping", PublishedEnv, v1); err != nil {
 		t.Fatal(err)
 	}
-	// A second flow, published at its newest revision.
 	billing := mustSave(t, src, flow("billing", "current"), "ada@example.com")
 	if err := src.PromoteToEnvironment("billing", PublishedEnv, billing); err != nil {
 		t.Fatal(err)
 	}
-	// A third that is only a draft.
 	mustSave(t, src, flow("draft", "wip"), "ada@example.com")
 
 	res, err := Migrate(ctx, dst, src)
@@ -53,7 +49,6 @@ func TestMigrate_GitToPostgresPreservesEverything(t *testing.T) {
 		t.Fatalf("unexpected truncation: %v", res.Truncated)
 	}
 
-	// Every flow is there and reads as its draft did.
 	ids, err := dst.ListGraphs()
 	if err != nil || len(ids) != 3 {
 		t.Fatalf("ListGraphs = %v / %v, want 3 flows", ids, err)
@@ -63,7 +58,6 @@ func TestMigrate_GitToPostgresPreservesEverything(t *testing.T) {
 		t.Fatalf("draft after migration = %+v / %v, want v3", got, err)
 	}
 
-	// The published pointer survived AND still names the rolled-back revision.
 	pub, err := dst.PublishedCommit("shipping")
 	if err != nil {
 		t.Fatal(err)
@@ -76,7 +70,6 @@ func TestMigrate_GitToPostgresPreservesEverything(t *testing.T) {
 		t.Fatalf("published content = %+v / %v, want v1", live, err)
 	}
 
-	// History came across, oldest to newest, with authors intact.
 	revs, err := dst.History("shipping", 100)
 	if err != nil {
 		t.Fatal(err)
@@ -91,24 +84,20 @@ func TestMigrate_GitToPostgresPreservesEverything(t *testing.T) {
 		t.Fatalf("oldest history entry = %q, want %q", revs[2].Commit, v1)
 	}
 
-	// The label followed its revision.
 	label, err := dst.RevisionLabel("shipping", v1)
 	if err != nil || label != "Black Friday config" {
 		t.Fatalf("label = %q / %v, want the original", label, err)
 	}
 
-	// An old revision is still loadable by id, so rollback still works.
 	old, err := dst.LoadAt(v1, "shipping")
 	if err != nil || old.Name != "v1" {
 		t.Fatalf("LoadAt(v1) = %+v / %v", old, err)
 	}
 
-	// The draft-only flow did not gain a published pointer.
 	if p, _ := dst.PublishedCommit("draft"); p != "" {
 		t.Fatalf("draft flow came across published at %q", p)
 	}
 
-	// Re-running converges rather than colliding.
 	if _, err := Migrate(ctx, dst, src); err != nil {
 		t.Fatalf("second migration: %v", err)
 	}
@@ -118,7 +107,6 @@ func TestMigrate_GitToPostgresPreservesEverything(t *testing.T) {
 	}
 }
 
-// A flow deleted before the migration is not resurrected by it.
 func TestMigrate_DeletedFlowDoesNotComeAcross(t *testing.T) {
 	dst, _ := pgTestWorkspace(t)
 	src, err := OpenFS(t.TempDir())
@@ -143,7 +131,6 @@ func TestMigrate_DeletedFlowDoesNotComeAcross(t *testing.T) {
 	}
 }
 
-// Migrating into a git workspace is refused rather than half-done.
 func TestMigrate_RefusesANonPostgresDestination(t *testing.T) {
 	a, err := OpenFS(t.TempDir())
 	if err != nil {
@@ -158,9 +145,6 @@ func TestMigrate_RefusesANonPostgresDestination(t *testing.T) {
 	}
 }
 
-// The verifier is what turns "is it safe to delete the git workspaces?" into a
-// checkable question, so it has to actually catch a bad migration — not just
-// agree with a good one.
 func TestVerifyMigration(t *testing.T) {
 	dst, _ := pgTestWorkspace(t)
 	src, err := OpenFS(t.TempDir())
@@ -193,7 +177,6 @@ func TestVerifyMigration(t *testing.T) {
 		t.Fatalf("verified %d flows / %d revisions, want 2 / 3", res.Flows, res.Revisions)
 	}
 
-	// Now break it in each of the ways that matter and confirm each is caught.
 	t.Run("catches a missing flow", func(t *testing.T) {
 		d2, _ := pgTestWorkspace(t)
 		if _, err := Migrate(ctx, d2, src); err != nil {

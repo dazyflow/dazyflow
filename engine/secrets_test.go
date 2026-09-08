@@ -135,8 +135,6 @@ func TestResolveSecrets_ProviderError(t *testing.T) {
 }
 
 func TestResolveSecrets_NilProviders(t *testing.T) {
-	// No providers configured → resolver is a no-op, even if Params
-	// contains scheme-like strings.
 	job := &core.Job{Params: map[string]any{"x": "secret://NAME"}}
 	if err := resolveSecrets(t.Context(), nil, job); err != nil {
 		t.Errorf("resolve with nil providers: %v", err)
@@ -279,15 +277,12 @@ func TestParamFilled_Cov(t *testing.T) {
 }
 
 func TestDeclaredParamKeys_Cov(t *testing.T) {
-	// Empty schema -> no keys.
 	if got := declaredParamKeys(nil); got != nil {
 		t.Errorf("empty schema = %v, want nil", got)
 	}
-	// Malformed JSON -> no keys.
 	if got := declaredParamKeys(json.RawMessage("not json")); got != nil {
 		t.Errorf("bad schema = %v, want nil", got)
 	}
-	// Valid schema -> property names.
 	schema := json.RawMessage(`{"properties":{"a":{},"b":{}}}`)
 	got := declaredParamKeys(schema)
 	if !got["a"] || !got["b"] || len(got) != 2 {
@@ -296,14 +291,12 @@ func TestDeclaredParamKeys_Cov(t *testing.T) {
 }
 
 func TestInjectConnectionDefaults_NoFieldsOrNoProvider_Cov(t *testing.T) {
-	// No ConnectionFields -> early return, params untouched.
 	job := &core.Job{Params: map[string]any{"a": "x"}}
 	injectConnectionDefaults(context.Background(), nil, core.Manifest{}, job)
 	if job.Params["a"] != "x" {
 		t.Error("no fields should leave params untouched")
 	}
 
-	// Fields present but no secret provider -> early return.
 	m := core.Manifest{
 		Integration:      "CovInj",
 		ConnectionFields: []core.ConnectionField{{Key: "host"}},
@@ -347,8 +340,6 @@ func TestResolveSlice_NestedShapes_Cov(t *testing.T) {
 }
 
 func TestResolveSlice_WholeResourceElement_Cov(t *testing.T) {
-	// A whole-string ${resource.…} as a slice element resolves to the
-	// structured value (not stringified) via rr.wholeValue in resolveSlice.
 	res, _ := newFakeResources(map[string]any{
 		"leads": map[string]any{"rows": []any{map[string]any{"name": "Ada"}}},
 	})
@@ -367,9 +358,6 @@ func TestResolveSlice_WholeResourceElement_Cov(t *testing.T) {
 	}
 }
 
-// resolveSecrets is the secret-only convenience wrapper around
-// resolveTemplates. Kept for code paths and tests that only care
-// about secret resolution; equivalent to passing prior=nil.
 func resolveSecrets(ctx context.Context, providers map[string]core.SecretProvider, job *core.Job) error {
 	return resolveTemplates(ctx, providers, core.Graph{}, nil, job)
 }

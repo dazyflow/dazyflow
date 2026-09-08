@@ -26,14 +26,6 @@ var placeholderPattern = regexp.MustCompile(`\$\{([a-z0-9_-]+)\.([^}]*)\}`)
 // in for_each.
 type Substituter func(ctx context.Context, scheme, path string) (string, bool, error)
 
-// SubstituteString replaces every ${scheme.path} occurrence in s using
-// substituter. Unknown schemes are left as-is so unrelated text (JSON
-// templates, shell snippets) survives unchanged.
-//
-// Expansion is capped at core.MaxValueBytes: a template may reference a
-// large upstream value several times, and each reference multiplies it, so
-// an uncapped expansion is how a flow compounds a kilobyte into an
-// out-of-memory throw. Passing the cap fails the node instead.
 func SubstituteString(ctx context.Context, s string, substituter Substituter) (string, error) {
 	if !strings.Contains(s, "${") {
 		return s, nil

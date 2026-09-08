@@ -3,10 +3,6 @@
 
 package daemon
 
-// Sign-in, sign-out and identity: exchanging credentials for a session, the
-// role elevations a session picks up (platform admin, support agent), and
-// the whoami payload the app reads its user and org memberships from.
-
 import (
 	"context"
 	"fmt"
@@ -20,8 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
-// authAPI serves sign-in, sign-up, single sign-on, two-factor and
-// account-recovery. Its fields are the whole of what those handlers touch.
 type authAPI struct {
 	auditor
 	adminCheck
@@ -46,25 +40,17 @@ type authAPI struct {
 	EnableSignup   bool
 	PlatformAdmins []string
 
-	// Process-scoped once-per-email audit caches. Held by pointer because the
-	// gateway outlives this struct, which is rebuilt on every route mount.
 	platformAdminGranted *sync.Map
 	supportAgentGranted  *sync.Map
 
-	// Injected from sibling domains so this one does not reach for their
-	// handlers: the sign-in lockout check and whether support is wired.
 	signInLockout  func(ctx context.Context, u auth.User) (string, bool)
 	ticketsEnabled func() bool
 }
 
-// authAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) authAPI() *authAPI {
 	return &authAPI{auditor: h.auditor(), adminCheck: h.admins(), urlBuilder: h.urls(), langPicker: h.lang(), sessionCookies: h.cookies(), seatQuota: h.seats(), svc: h.svc, logger: h.logger, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, OrgAuth: h.OrgAuth, SupportAgents: h.SupportAgents, TOTPChallenges: h.TOTPChallenges, Ephemeral: h.Ephemeral, TOTPKey: h.TOTPKey, WildcardDomain: h.WildcardDomain, EnableSignup: h.EnableSignup, PlatformAdmins: h.PlatformAdmins, platformAdminGranted: &h.platformAdminGranted, supportAgentGranted: &h.supportAgentGranted, signInLockout: h.platformAdminAPI().signInLockout, ticketsEnabled: h.supportAPI().ticketsEnabled}
 }
 
-// signIn validates an email+password pair, mints a session, and sets
-// the session cookie. The session token is also returned in the body so
-// non-browser clients can hand it back via Authorization: Bearer.
 func (h *authAPI) signIn(rw http.ResponseWriter, r *http.Request) {
 	if h.Sessions == nil || h.Users == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "password sign-in not configured")
@@ -79,28 +65,18 @@ func (h *authAPI) signIn(rw http.ResponseWriter, r *http.Request) {
 	}
 	user, err := auth.VerifyPassword(r.Context(), h.Users, body.Email, body.Password)
 	if err != nil {
-		// Tenant is left empty: resolving it would reveal whether the
-		// email maps to an account, which the uniform error above
-		// deliberately hides.
+		// Resolving it would reveal whether the address belongs to a real org.
 		h.auditAuth(r.Context(), r, "", strings.ToLower(strings.TrimSpace(body.Email)), "auth.signin_failed", "method=password")
 		writeJSONError(rw, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
-	// Locked out? A suspended user — or a member of a suspended org — has a
-	// valid password but no access. Refuse at sign-in with a clear reason
-	// rather than issuing a session (or a TOTP challenge) the auth
-	// ModerationGate would just reject on the next request.
+	// A suspended user, or a member of a suspended org, must not get a session.
 	if msg, locked := h.signInLockout(r.Context(), user); locked {
 		h.auditAuth(r.Context(), r, user.Tenant, user.Email, "auth.signin_suspended", "method=password")
 		writeJSONError(rw, http.StatusForbidden, msg)
 		return
 	}
-	// Second factor: if this user has TOTP enabled (and the install has
-	// 2FA configured), the password alone is not enough. Mint a
-	// short-lived challenge and return it instead of a session; the
-	// client posts it back to /auth/totp with a code to finish. We fail
-	// closed — an enrolled user can't downgrade to password-only just
-	// because the challenge store is missing.
+	// A verified password is NOT sufficient once TOTP is enrolled.
 	if user.TOTPEnabled && h.totpConfigured() {
 		challenge, cerr := auth.IssueTOTPChallenge(r.Context(), h.TOTPChallenges, user.Email)
 		if cerr != nil {
@@ -130,12 +106,7 @@ func (h *authAPI) signIn(rw http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// elevatePlatformAdmin grants the platform:admin role to a user whose
-// email is in the PlatformAdmins allowlist. Called at every session-issue
-// site (sign-in, signup, SSO) so the allowlist is the single source of
-// truth — roles are baked into the session at issue time, so an existing
-// session must re-authenticate to pick up an allowlist change. No-op when
-// the email isn't listed or the role is already present.
+// At session-issue time: a grant takes effect on the target's NEXT sign-in.
 func (h *authAPI) elevatePlatformAdmin(ctx context.Context, u auth.User) auth.User {
 	env := h.isPlatformAdminEmail(u.Email)
 	if !env && !h.isPlatformAdminGranted(u.Email) {
@@ -146,13 +117,7 @@ func (h *authAPI) elevatePlatformAdmin(ctx context.Context, u auth.User) auth.Us
 			return u
 		}
 	}
-	// Copy before appending: u.Roles may alias a slice held by the user
-	// store, and we must not mutate that shared backing array.
 	u.Roles = append(append([]core.Role(nil), u.Roles...), core.PlatformAdminRole())
-	// Record the escalation on first apply (per email, per process): a
-	// platform-admin grant is a privileged-access event worth a durable audit
-	// record (ISO 27001 A.5.16/A.8.2). Emitting only once avoids a per-sign-in
-	// flood, since elevation runs at every session issue.
 	source := "runtime_grant"
 	if env {
 		source = "DAZYFLOW_PLATFORM_ADMINS"
@@ -165,19 +130,10 @@ func (h *authAPI) elevatePlatformAdmin(ctx context.Context, u auth.User) auth.Us
 	return u
 }
 
-// elevateSessionRoles applies every session-issue role elevation in one place,
-// so the ~5 issue sites (sign-in, signup, SSO, TOTP) call a single chokepoint.
 func (h *authAPI) elevateSessionRoles(ctx context.Context, u auth.User) auth.User {
 	return h.elevateSupportAgent(ctx, h.elevatePlatformAdmin(ctx, u))
 }
 
-// elevateSupportAgent stamps core.SupportAgentRole onto a session whose email
-// holds a runtime support-agent grant (there is no env-allowlist layer for
-// support). Mirrors elevatePlatformAdmin: baked in at issue time, so a grant
-// takes effect on the next session issue and a revoke once live sessions drop.
-// No-op when unset or already present. The role itself grants no ambient
-// access — it only unlocks requesting an AccessGrant and the support-view
-// capability (AuthorizeGraphSupportView).
 func (h *authAPI) elevateSupportAgent(ctx context.Context, u auth.User) auth.User {
 	if h.SupportAgents == nil || !h.SupportAgents.Granted(u.Email) {
 		return u
@@ -188,7 +144,6 @@ func (h *authAPI) elevateSupportAgent(ctx context.Context, u auth.User) auth.Use
 		}
 	}
 	u.Roles = append(append([]core.Role(nil), u.Roles...), core.SupportAgentRole())
-	// Record the escalation once per email per process (privileged-access event).
 	key := strings.ToLower(strings.TrimSpace(u.Email))
 	if _, seen := h.supportAgentGranted.LoadOrStore(key, struct{}{}); !seen {
 		h.audit(ctx, core.Principal{Tenant: u.Tenant, Subject: u.Email},
@@ -197,28 +152,13 @@ func (h *authAPI) elevateSupportAgent(ctx context.Context, u auth.User) auth.Use
 	return u
 }
 
-// adminBootstrapAvailable reports whether at least one platform-admin
-// email in the allowlist has not yet claimed an account. It's the
-// signal the sign-up page uses to keep itself reachable on a
-// signup-disabled deployment: the backend already lets a listed email
-// through signUp (see httpsignup.go), but the page would otherwise
-// bounce to /signin because EnableSignup is false, leaving the
-// bootstrap hatch with no door. The check is self-limiting in lockstep
-// with that hatch — once every listed admin has signed up, GetByEmail
-// finds them all and this returns false, so the form disappears again
-// and a locked-down instance doesn't expose public signup forever.
-//
-// Unauthenticated callers reach this via getPublicAuthConfig; it leaks
-// only a single boolean, never which emails are listed. The allowlist
-// is tiny (typically 1-3), so the per-email lookups are cheap.
+// Whether a deployment can still bootstrap its first platform admin — once one
+// exists this must close, or anyone could claim the role.
 func (h *authAPI) adminBootstrapAvailable(ctx context.Context) bool {
 	if h.Users == nil || len(h.PlatformAdmins) == 0 {
 		return false
 	}
 	for _, email := range h.PlatformAdmins {
-		// Mirror signUp's existence test: a non-nil error or an empty
-		// email both mean "not claimed yet". Any unclaimed admin keeps
-		// the bootstrap door open.
 		if u, err := h.Users.GetByEmail(ctx, email); err != nil || u.Email == "" {
 			return true
 		}
@@ -226,9 +166,7 @@ func (h *authAPI) adminBootstrapAvailable(ctx context.Context) bool {
 	return false
 }
 
-// signOut deletes the server-side session and clears the cookie. It
-// silently no-ops when no session is attached so the browser can hit
-// this on logout without inspecting state first.
+// Deletes server-side first: clearing the cookie alone leaves the session live.
 func (h *authAPI) signOut(rw http.ResponseWriter, r *http.Request) {
 	if h.Sessions == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "sessions not configured")
@@ -236,9 +174,7 @@ func (h *authAPI) signOut(rw http.ResponseWriter, r *http.Request) {
 	}
 	if token := credentialFromRequest(r); strings.HasPrefix(token, auth.SessionTokenPrefix) {
 		key := auth.SessionLookupKey(token)
-		// Resolve before deleting so the audit event carries the identity
-		// that signed out. Best-effort — an already-gone session just
-		// skips the record.
+		// Resolve BEFORE deleting, or the audit event has no identity to record.
 		if sess, err := h.Sessions.GetSession(r.Context(), key); err == nil {
 			h.auditAuth(r.Context(), r, sess.Tenant, sess.Subject, "auth.signout", "")
 		}
@@ -248,10 +184,6 @@ func (h *authAPI) signOut(rw http.ResponseWriter, r *http.Request) {
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// whoami returns the authenticated principal's identity AND the flat
-// set of permissions any of their roles grant. The UI uses this for
-// role gating (whether to show the Admin link, the Edit button, etc.)
-// without re-implementing role unrolling client-side.
 func (h *authAPI) whoami(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	permSet := map[core.Permission]struct{}{}
 	for _, role := range p.Roles {
@@ -263,11 +195,6 @@ func (h *authAPI) whoami(rw http.ResponseWriter, r *http.Request, p core.Princip
 	for perm := range permSet {
 		perms = append(perms, perm)
 	}
-	// Memberships lets the UI surface an org switcher even for non-
-	// platform-admin users. The list always includes the principal's
-	// current org (Home=true) so a fresh signup with no extra
-	// memberships still sees a single entry and the switcher gracefully
-	// hides itself.
 	memberships := h.collectMemberships(r.Context(), p)
 	emailVerified, verificationPending := h.verificationStatus(r, p)
 	writeJSON(rw, http.StatusOK, meResponse{
@@ -285,52 +212,22 @@ func (h *authAPI) whoami(rw http.ResponseWriter, r *http.Request, p core.Princip
 	})
 }
 
-// meResponse is the wire shape of GET /api/v1/me and /api/v1/whoami.
-//
-// It is a struct rather than the map[string]any it was built as, because this
-// is the most repeated authenticated request the product makes and marshalling
-// a map is the expensive way to write eleven known fields: every key is
-// hashed, every value is boxed into an interface and dispatched through
-// reflection, and the key set is sorted on each call. A CPU profile of the
-// endpoint put 39% of it in the map marshaller.
-//
-// FIELD ORDER IS LOAD-BEARING. encoding/json emits a map's keys sorted and a
-// struct's fields in declaration order, so these are declared in the order the
-// map's keys sorted into and the bytes on the wire are unchanged.
-// TestWhoamiWireShapeUnchanged pins that against the original map, and will
-// fail if a field is added anywhere but its alphabetical place.
+// The wire shape of /me and /whoami.
 type meResponse struct {
-	// EmailVerified and VerificationPending drive the "confirm your email"
-	// banner. Pending is false on deployments without a mailer (nothing to
-	// verify against) and for API-key callers.
-	EmailVerified bool               `json:"email_verified"`
-	Memberships   []orgMembershipDTO `json:"memberships"`
-	Permissions   []core.Permission  `json:"permissions"`
-	// PublicBaseURL lets the UI build externally-correct webhook / hosted-form
-	// URLs instead of guessing the host. Empty when the operator hasn't set
-	// --public-base-url; the UI falls back to a localhost hint in that case.
-	PublicBaseURL string      `json:"public_base_url"`
-	Roles         []core.Role `json:"roles"`
-	Subject       string      `json:"subject"`
-	// SupportContact surfaces an operator-set email/URL on UI surfaces that
-	// depend on server-side setup the end user can't fix themselves (e.g.
-	// OAuth/secret-store not configured on the Connections page). Empty = the
-	// UI shows a generic "contact your administrator" message with no link.
-	SupportContact string `json:"support_contact"`
-	// SupportTicketsEnabled tells the UI whether the native ticket surface is
-	// wired (DAZYFLOW_SUPPORT_ENABLED). The UI hides "Report a problem" / the
-	// Support page when off, rather than letting the user hit a 501.
-	SupportTicketsEnabled bool   `json:"support_tickets_enabled"`
-	Tenant                string `json:"tenant"`
-	VerificationPending   bool   `json:"verification_pending"`
-	Workspace             string `json:"workspace"`
+	EmailVerified         bool               `json:"email_verified"`
+	Memberships           []orgMembershipDTO `json:"memberships"`
+	Permissions           []core.Permission  `json:"permissions"`
+	PublicBaseURL         string             `json:"public_base_url"`
+	Roles                 []core.Role        `json:"roles"`
+	Subject               string             `json:"subject"`
+	SupportContact        string             `json:"support_contact"`
+	SupportTicketsEnabled bool               `json:"support_tickets_enabled"`
+	Tenant                string             `json:"tenant"`
+	VerificationPending   bool               `json:"verification_pending"`
+	Workspace             string             `json:"workspace"`
 }
 
-// orgMembershipDTO is the wire shape whoami emits per membership. The
-// home org always appears with home=true; the others come from the
-// MembershipStore. DisplayName is the org's human-facing name (from
-// OrgProfile) — empty when the org has no profile yet, in which case
-// the UI falls back to the raw Tenant ID.
+// Per membership, as whoami emits it.
 type orgMembershipDTO struct {
 	Tenant      string      `json:"tenant"`
 	DisplayName string      `json:"display_name,omitempty"`
@@ -341,11 +238,7 @@ type orgMembershipDTO struct {
 }
 
 func (h *authAPI) collectMemberships(ctx context.Context, p core.Principal) []orgMembershipDTO {
-	// The home entry is the user's OWN tenant (from the user record), not the
-	// session's current tenant — otherwise switching into another org would
-	// make the home org follow p.Tenant and drop out of the list (it isn't a
-	// membership row). Fall back to p.Tenant for API-key principals, which
-	// have no user record and are bound to one tenant.
+	// The user's OWN tenant, not whichever org the session is currently scoped to.
 	homeTenant, homeWorkspace, homeRoles := p.Tenant, p.Workspace, p.Roles
 	if h.Users != nil && strings.Contains(p.Subject, "@") {
 		if u, err := h.Users.GetByEmail(ctx, p.Subject); err == nil {
@@ -359,15 +252,11 @@ func (h *authAPI) collectMemberships(ctx context.Context, p core.Principal) []or
 		Home:      true,
 	}}
 	if h.Memberships != nil && p.Subject != "" && strings.Contains(p.Subject, "@") {
-		// Only password-auth subjects (email-shaped) have Memberships;
-		// API-key principals are bound to one tenant by their key. A
-		// silent skip on a non-email subject avoids accidentally exposing
-		// memberships keyed by a coincidental UUID match.
+		// Only password-auth subjects have memberships; an API key has none.
 		rows, err := h.Memberships.ListByEmail(ctx, p.Subject)
 		if err == nil {
 			for _, m := range rows {
 				if m.Tenant == homeTenant {
-					// Already in `out` as the home entry — skip the duplicate.
 					continue
 				}
 				out = append(out, orgMembershipDTO{
@@ -379,9 +268,6 @@ func (h *authAPI) collectMemberships(ctx context.Context, p core.Principal) []or
 			}
 		}
 	}
-	// Bulk-resolve display names so the switcher can render pretty
-	// labels without an extra round-trip per membership. A missing
-	// profile leaves DisplayName empty; the UI falls back to Tenant.
 	if h.Profiles != nil && len(out) > 0 {
 		tenants := make([]string, 0, len(out))
 		for _, m := range out {

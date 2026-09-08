@@ -12,10 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/support"
 )
 
-// The sweep around the rule: who it walks, what it records, and the two ways a
-// reminder system fails in production — sending N copies because N nodes swept,
-// and sending the same reminder every tick forever.
-
 type sentNudge struct {
 	ticket  string
 	side    NudgeSide
@@ -70,8 +66,6 @@ func TestNudgeSweep_RemindsTheSideThatIsWaiting(t *testing.T) {
 
 func TestNudgeSweep_IsSilentOnASecondPass(t *testing.T) {
 	t.Parallel()
-	// The failure that makes people filter the mailbox: nothing changed, so
-	// nothing more should be sent — the first pass has to have recorded itself.
 	s, sent, _ := nudgeFixture(t, fromUser(30))
 	ctx := context.Background()
 	if _, err := s.Sweep(ctx); err != nil {
@@ -110,7 +104,6 @@ func TestNudgeSweep_RecordsTheReminderOnTheTicket(t *testing.T) {
 
 func TestNudgeSweep_DoesNothingWhenNotTheLeader(t *testing.T) {
 	t.Parallel()
-	// Every node running this means every recipient gets one copy per node.
 	s, sent, _ := nudgeFixture(t, fromUser(30))
 	s.Leader = func() bool { return false }
 	n, err := s.Sweep(context.Background())

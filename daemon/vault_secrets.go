@@ -43,13 +43,10 @@ type VaultProvider struct {
 // flow doesn't round-trip the manager every run. Shared by all BYO providers.
 const defaultVaultCacheTTL = 60 * time.Second
 
-// NewVaultProvider builds the provider. ttl <= 0 uses defaultVaultCacheTTL.
 func NewVaultProvider(client vaultClient, loadConfig func(context.Context, string) (VaultConfig, bool, error), ttl time.Duration) *VaultProvider {
 	return &VaultProvider{client: client, loadConfig: loadConfig, cache: newTenantSecretCache(ttl)}
 }
 
-// NewVaultProviderForStore builds the production provider: a real OpenBao/Vault
-// HTTP client, with each tenant's config loaded from the encrypted store.
 func NewVaultProviderForStore(es *EncryptedSecrets, httpTimeout time.Duration) *VaultProvider {
 	return NewVaultProvider(
 		newVaultAPIClient(httpTimeout),
@@ -99,7 +96,6 @@ func (p *VaultProvider) Get(ctx context.Context, ref string) (string, error) {
 		})
 }
 
-// nowFunc is a clock seam for the cache-expiry tests.
 var nowFunc = time.Now
 
 // splitVaultRef parses "PATH#FIELD". The field is required: a KV-v2 secret is a
@@ -122,7 +118,6 @@ type VaultConfig struct {
 	Auth      VaultAuth `json:"auth"`
 }
 
-// VaultAuth selects how the daemon authenticates to the tenant's manager.
 type VaultAuth struct {
 	Method   string `json:"method"`              // "token" or "approle"
 	Token    string `json:"token,omitempty"`     // method=token: a (long-lived) token
@@ -193,7 +188,6 @@ func newVaultAPIClient(timeout time.Duration) *vaultAPIClient {
 	return &vaultAPIClient{timeout: timeout, tokens: map[string]appRoleToken{}}
 }
 
-// newClient builds an unauthenticated SDK client for cfg's address/namespace.
 func (c *vaultAPIClient) newClient(cfg VaultConfig) (*openbao.Client, error) {
 	conf := openbao.DefaultConfig()
 	conf.Address = cfg.Address
@@ -272,8 +266,6 @@ func (c *vaultAPIClient) verify(ctx context.Context, cfg VaultConfig) error {
 	return err
 }
 
-// token returns a usable client token for cfg: the static token as-is, or an
-// AppRole login result (cached until near lease expiry).
 func (c *vaultAPIClient) token(ctx context.Context, cfg VaultConfig) (string, error) {
 	if cfg.Auth.Method == "token" {
 		return cfg.Auth.Token, nil
@@ -319,9 +311,6 @@ func (c *vaultAPIClient) appRoleLogin(ctx context.Context, cfg VaultConfig) (tok
 	return sec.Auth.ClientToken, time.Duration(sec.Auth.LeaseDuration) * time.Second, nil
 }
 
-// stringifyVaultValue renders a KV field value as a string: strings pass
-// through; everything else is JSON-encoded so a structured value still resolves
-// to something usable rather than a Go-fmt blob.
 func stringifyVaultValue(v any) string {
 	if s, ok := v.(string); ok {
 		return s

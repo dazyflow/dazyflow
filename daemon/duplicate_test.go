@@ -24,9 +24,6 @@ func dupTestService(t *testing.T) (*Service, core.Principal) {
 	return svc, p
 }
 
-// TestDuplicateGraph_CopiesAsDisabledDraft verifies the core contract: the
-// copy gets a fresh ID, starts disabled, is owned by the duplicator, carries
-// the source's nodes + metadata, and leaves the source untouched.
 func TestDuplicateGraph_CopiesAsDisabledDraft(t *testing.T) {
 	t.Parallel()
 	svc, p := dupTestService(t)
@@ -67,7 +64,6 @@ func TestDuplicateGraph_CopiesAsDisabledDraft(t *testing.T) {
 		t.Errorf("display metadata not carried over: desc=%q icon=%q", g.Description, g.Icon)
 	}
 
-	// The copy is persisted and loadable under its new ID.
 	stored, err := ws.Load("flow1-copy")
 	if err != nil {
 		t.Fatalf("load copy: %v", err)
@@ -76,7 +72,6 @@ func TestDuplicateGraph_CopiesAsDisabledDraft(t *testing.T) {
 		t.Errorf("stored copy: disabled=%v owner=%q", stored.Disabled, stored.Owner)
 	}
 
-	// Source is untouched: still enabled, still owned by its original author.
 	orig, err := ws.Load("flow1")
 	if err != nil {
 		t.Fatalf("load source: %v", err)
@@ -89,8 +84,6 @@ func TestDuplicateGraph_CopiesAsDisabledDraft(t *testing.T) {
 	}
 }
 
-// TestDuplicateGraph_UniqueIDs verifies a second copy of the same source
-// doesn't collide with the first.
 func TestDuplicateGraph_UniqueIDs(t *testing.T) {
 	t.Parallel()
 	svc, p := dupTestService(t)
@@ -115,7 +108,6 @@ func TestDuplicateGraph_UniqueIDs(t *testing.T) {
 	}
 }
 
-// TestDuplicateGraph_CustomName honors a caller-supplied name.
 func TestDuplicateGraph_CustomName(t *testing.T) {
 	t.Parallel()
 	svc, p := dupTestService(t)
@@ -132,8 +124,6 @@ func TestDuplicateGraph_CustomName(t *testing.T) {
 	}
 }
 
-// TestDuplicateGraph_MissingSource returns ErrNotFound (which the handler maps
-// to a 404) rather than creating an empty flow.
 func TestDuplicateGraph_MissingSource(t *testing.T) {
 	t.Parallel()
 	svc, p := dupTestService(t)

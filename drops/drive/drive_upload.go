@@ -47,8 +47,6 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// A wired file (e.g. from drive_download / file_write) overrides
-				// the 'path' param.
 				{Port: "in", Label: "File"},
 				// The name is usually computed — a dated backup, a customer's
 				// own reference — so it takes a wire as well as a typed value.
@@ -97,7 +95,6 @@ func executeUpload(ctx context.Context, job core.Job, _ chan<- core.Progress) (c
 		return params.Err(job, "auth", err.Error()), nil
 	}
 
-	// Read the source file from the sandbox (workspace or scratch://).
 	root, rel, err := sandbox.OpenRoot(job, srcPath)
 	if err != nil {
 		if sandbox.IsEscape(err) {
@@ -175,9 +172,6 @@ func executeUpload(ctx context.Context, job core.Job, _ chan<- core.Progress) (c
 	}, nil
 }
 
-// uploadSrcPath takes the file path from the 'in' input ref (so an upstream
-// drive_download / file_write can feed it) or params.path. Mirrors
-// http_upload's resolver.
 func uploadSrcPath(job core.Job) string {
 	if in, ok := job.Input["in"]; ok && in.Ref != "" {
 		return in.Ref

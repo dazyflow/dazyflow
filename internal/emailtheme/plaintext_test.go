@@ -28,8 +28,6 @@ func TestPlainText(t *testing.T) {
 		"A flow run needs your attention",
 		"Your flow failed on its last run.",
 		"Here's what happened:",
-		// Labels align on the longest one, so a long value can't push the
-		// column out from under the reader.
 		"Flow:         Nightly",
 		"Failed step:  send_email",
 		"View run details:\nhttps://example.test/runs/1",
@@ -40,8 +38,6 @@ func TestPlainText(t *testing.T) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}
 	}
-	// The preheader is the inbox snippet for the HTML part; a text body IS
-	// that snippet, and the eyebrow is a kicker the heading already says.
 	if strings.Contains(out, "A run of your flow failed.") || strings.Contains(out, "Run failed") {
 		t.Errorf("preheader/eyebrow leaked into the text body:\n%s", out)
 	}

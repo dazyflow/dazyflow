@@ -66,7 +66,6 @@ func TestNtfy_TruncatesLongMessage(t *testing.T) {
 	// 5000 bytes of "å" (2 bytes each) — over the 4000-byte cap, with the cut
 	// landing mid-rune unless the truncation backs up to a rune boundary.
 	long := strings.Repeat("å", 2500)
-	// Buffered so the non-blocking emitProgress always lands; assert we warned.
 	prog := make(chan core.Progress, 4)
 	res, err := executeNtfy(context.Background(), core.Job{
 		Params: map[string]any{"server": srv.URL, "topic": "alerts"},
@@ -95,7 +94,6 @@ func TestNtfy_TruncatesLongMessage(t *testing.T) {
 	if !warned {
 		t.Error("expected a progress warning about the shortened message")
 	}
-	// …and a flag in the result meta.
 	meta, _ := res.Output["meta"].Inline.(map[string]any)
 	if meta["truncated"] != true {
 		t.Errorf("meta.truncated = %v, want true", meta["truncated"])
@@ -128,8 +126,6 @@ func TestNtfy_ServerError(t *testing.T) {
 	}
 }
 
-// The tap link normally comes from upstream — an approval step's link — so
-// the Click input has to override the typed param, like Title and Message do.
 func TestNtfy_ClickInputOverridesParam(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)

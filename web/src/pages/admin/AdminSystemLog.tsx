@@ -24,11 +24,6 @@ import { ICON } from "../../icons";
 // separate; this bounds the buffer we re-render from when the filter changes.
 const MAX_BUFFER = 5000;
 
-// AdminSystemLog tails the daemon's real log stream over SSE and renders it
-// in an xterm.js terminal — the platform-admin "System log" viewer. The
-// backend tees the standard logger (see daemon.LogTail), so this shows
-// exactly what dzd emits, live. A regex box filters lines client-side;
-// follow/pause and clear control the view without dropping the stream.
 export function AdminSystemLog() {
   const { t } = useTranslation();
   const { token, hasPerm } = useAuth();
@@ -36,11 +31,7 @@ export function AdminSystemLog() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
-  // The full received-line buffer (ring-trimmed to MAX_BUFFER). Held in a
-  // ref so high-frequency log lines don't trigger a React re-render each.
   const linesRef = useRef<string[]>([]);
-  // The compiled filter + follow flag live in refs too, so the streaming
-  // callback always sees the current values without being re-created.
   const regexRef = useRef<RegExp | null>(null);
   const followRef = useRef(true);
 
@@ -53,8 +44,6 @@ export function AdminSystemLog() {
 
   const isAdmin = hasPerm("platform:admin");
 
-  // Re-render the terminal from the buffer applying the current filter.
-  // Called on filter change, on resume, and on clear.
   const rerender = useCallback(() => {
     const term = termRef.current;
     if (!term) return;
@@ -109,8 +98,6 @@ export function AdminSystemLog() {
     };
   }, []);
 
-  // Open the live tail. Reconnects with a short backoff if the stream drops
-  // (proxy timeout, daemon restart) until the page unmounts or auth changes.
   useEffect(() => {
     if (!token || !isAdmin) return;
     let stopped = false;
@@ -132,7 +119,6 @@ export function AdminSystemLog() {
       api
         .streamSystemLog(token, onLine, ctrl.signal)
         .then(() => {
-          // Clean EOF — the server closed the stream. Reconnect.
           if (!stopped) {
             setConnected(false);
             retry = setTimeout(run, 1500);
@@ -165,7 +151,6 @@ export function AdminSystemLog() {
     };
   }, [token, isAdmin, t]);
 
-  // Recompile the filter whenever it changes and re-render the view.
   useEffect(() => {
     const trimmed = filter.trim();
     if (!trimmed) {
@@ -179,7 +164,6 @@ export function AdminSystemLog() {
       setFilterError(null);
       rerender();
     } catch (e) {
-      // Keep the previous valid filter applied; just flag the bad pattern.
       setFilterError((e as Error).message);
     }
   }, [filter, rerender]);
@@ -188,8 +172,6 @@ export function AdminSystemLog() {
     setFollowing((f) => {
       const next = !f;
       followRef.current = next;
-      // Resuming follow: catch the terminal up to everything buffered since
-      // it was paused, then xterm pins to the bottom on the next write.
       if (next) rerender();
       return next;
     });

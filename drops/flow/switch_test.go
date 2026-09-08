@@ -10,9 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// runSwitch fetches the switch drop from the registry and runs it with the
-// given payload on `in` and the given params, returning the Result. Going
-// through the registry proves the drop is registered and routes end to end.
 func runSwitch(t *testing.T, payload any, params map[string]any) core.Result {
 	t.Helper()
 	tr, ok := engine.Default.Get("switch")
@@ -65,7 +62,6 @@ func TestSwitch_FieldMatch(t *testing.T) {
 		if port := routedPort(t, res); port != c.wantPort {
 			t.Errorf("status %q routed to %q, want %q", c.status, port, c.wantPort)
 		}
-		// The WHOLE payload rides out, not just the matched field.
 		if got := res.Output[c.wantPort].Inline; got == nil {
 			t.Errorf("status %q: payload missing on %q", c.status, c.wantPort)
 		}
@@ -85,7 +81,6 @@ func TestSwitch_FirstMatchWins(t *testing.T) {
 }
 
 func TestSwitch_ListEqualsMatchesAny(t *testing.T) {
-	// A list 'equals' matches if the key is any element (one_of semantics).
 	cases := []any{
 		map[string]any{"slot": "case_1", "equals": []any{200.0, 201.0, 204.0}},
 		map[string]any{"slot": "case_2", "equals": []any{400.0, 404.0, 422.0}},
@@ -106,7 +101,6 @@ func TestSwitch_ListEqualsMatchesAny(t *testing.T) {
 	}
 }
 
-// TestSwitch_WholeValueNoField: with no field param the whole input is the key.
 func TestSwitch_WholeValueNoField(t *testing.T) {
 	cases := []any{map[string]any{"slot": "case_1", "equals": "vip"}}
 	res := runSwitch(t, "vip", map[string]any{"cases": cases})
@@ -115,8 +109,6 @@ func TestSwitch_WholeValueNoField(t *testing.T) {
 	}
 }
 
-// TestSwitch_NumericLeniency: a typed-in "200" string coerces to a number and
-// matches a numeric key, the same leniency Compare's literals get.
 func TestSwitch_NumericLeniency(t *testing.T) {
 	cases := []any{map[string]any{"slot": "case_1", "equals": "200"}}
 	res := runSwitch(t, 200.0, map[string]any{"cases": cases})
@@ -152,7 +144,6 @@ func TestSwitch_BadParams(t *testing.T) {
 	}
 }
 
-// TestSwitch_MissingInput: 'in' is required.
 func TestSwitch_MissingInput(t *testing.T) {
 	tr, _ := engine.Default.Get("switch")
 	res, err := tr.Execute(t.Context(), core.Job{
@@ -166,9 +157,9 @@ func TestSwitch_MissingInput(t *testing.T) {
 	}
 }
 
-// TestSwitch_Manifest locks in the routing metadata: flow_control category
-// (blue router tint, like Branch) and NoPassthrough (a pass pin would fire on
-// every case and defeat the routing).
+// Locks in the routing metadata: flow_control category (blue router tint, like
+// Branch) and NoPassthrough (a pass pin would fire on every case and defeat
+// the routing).
 func TestSwitch_Manifest(t *testing.T) {
 	m, ok := engine.Default.Manifests()["switch"]
 	if !ok {
@@ -180,7 +171,6 @@ func TestSwitch_Manifest(t *testing.T) {
 	if !m.NoPassthrough {
 		t.Error("switch must set NoPassthrough — a pass pin defeats routing")
 	}
-	// case_1..case_8 + default = 9 output ports.
 	if len(m.Outputs) != switchSlotCount+1 {
 		t.Errorf("got %d outputs, want %d", len(m.Outputs), switchSlotCount+1)
 	}

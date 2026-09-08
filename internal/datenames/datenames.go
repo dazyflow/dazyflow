@@ -59,10 +59,6 @@ var English = Names{
 	},
 }
 
-// swedishNames: lowercase throughout, which is how Swedish writes them. The
-// short forms are the three-letter ones CLDR gives (with "maj" unabbreviated
-// because it is already three letters).
-// Swedish: lowercase throughout, which is how Swedish writes them.
 var Swedish = Names{
 	Days:      [7]string{"söndag", "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag"},
 	DaysShort: [7]string{"sön", "mån", "tis", "ons", "tors", "fre", "lör"},
@@ -94,19 +90,11 @@ func For(locale string) Names {
 	}
 }
 
-// FormatDate writes a human date the way each language does: "27 August 2026",
-// "27 augusti 2026". Day-month-year in both — which is what Swedish uses and
-// what the English emails already wrote ("2 January 2006"), so no caller
-// changes shape as languages are added.
 func FormatDate(t time.Time, locale string) string {
 	n := For(locale)
 	return fmt.Sprintf("%d %s %d", t.Day(), n.Months[int(t.Month())-1], t.Year())
 }
 
-// FormatDateTime is FormatDate plus a clock and the zone abbreviation — for a
-// deadline where the hour matters (a password-reset link that expires the same
-// day). The clock is 24-hour in both languages: Swedish has no 12-hour
-// convention, and an English reader is not confused by one.
 func FormatDateTime(t time.Time, locale string) string {
 	return FormatDate(t, locale) + t.Format(", 15:04 MST")
 }

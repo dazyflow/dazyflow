@@ -78,17 +78,10 @@ func haDo(ctx context.Context, job core.Job, method, path string, body []byte) (
 	return status, raw, err
 }
 
-// extractError pulls a human message out of a Home Assistant error body
-// ({"message":"..."}), so "Entity not found." reaches the user instead of a
-// bare HTTP status. Falls back to a truncated raw body.
 func extractError(body []byte) string {
 	return params.JSONFieldMessage(body, "message", 300)
 }
 
-// httpFailure maps a transport error or a non-2xx response to an error
-// Result, with a friendly code per HTTP class. Returns nil on success — the
-// shared epilogue of every drop's haDo call. A 401 is the connected token
-// being wrong/expired; a 404 from /api/states is an unknown entity_id.
 func httpFailure(job core.Job, status int, body []byte, err error) *core.Result {
 	if err != nil {
 		if hfnet.IsSSRFError(err) {
@@ -104,17 +97,9 @@ func httpFailure(job core.Job, status int, body []byte, err error) *core.Result 
 		r := params.Err(job, "auth", "Home Assistant rejected the access token (401). Re-create a long-lived access token and reconnect.")
 		return &r
 	}
-	// Generic non-2xx → the shared "ha_error: Home Assistant returned %d: %s"
-	// epilogue (transport-error path already handled above with HA's friendlier
-	// wording, so err is nil here).
 	return params.HTTPFailure(job, "ha", "Home Assistant", status, body, nil, extractError)
 }
 
-// entityState is the shape Home Assistant returns from GET /api/states/<id>.
-// State is the value people care about ("on", "23.5", "home"); Attributes
-// carries everything else (brightness, friendly_name, unit_of_measurement);
-// LastChanged advances only when State changes (LastUpdated also moves on
-// attribute-only updates), which is what the state-changed trigger watermarks.
 type entityState struct {
 	EntityID    string         `json:"entity_id"`
 	State       string         `json:"state"`
@@ -123,8 +108,6 @@ type entityState struct {
 	LastUpdated string         `json:"last_updated"`
 }
 
-// friendlyName returns the entity's friendly_name attribute, falling back to
-// the entity_id when unset — so result metadata and progress read naturally.
 func (e entityState) friendlyName() string {
 	if n, ok := e.Attributes["friendly_name"].(string); ok && n != "" {
 		return n

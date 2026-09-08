@@ -106,7 +106,6 @@ func (h *secretsAPI) listResources(rw http.ResponseWriter, r *http.Request, p co
 	writeJSON(rw, http.StatusOK, map[string]any{"resources": out, "scope": string(scope)})
 }
 
-// deleteResource removes a resource definition. Idempotent.
 func (h *secretsAPI) deleteResource(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	name, scope, flow, ok := h.secretCRUDGate(rw, r, p, validResourceName, true)
 	if !ok {
@@ -142,8 +141,6 @@ func (h *secretsAPI) resourceStorageNames(ctx context.Context, tenant, flow stri
 		}
 	default: // tenant
 		for _, n := range all {
-			// Organization resources are exactly "res.<name>" — exclude the
-			// flow-scoped "flow.….res.…" entries.
 			if strings.HasPrefix(n, secretResourcePrefix) && !strings.HasPrefix(n, secretFlowPrefix) {
 				out[strings.TrimPrefix(n, secretResourcePrefix)] = n
 			}

@@ -13,10 +13,6 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// TestMySQLSSRFDial_BlocksAtDial proves the MySQL egress guard runs at the
-// actual dial on the resolved address — not just as a pre-flight hostname
-// check — so it resists DNS rebinding. We exercise the exact dialer the
-// driver invokes (ssrfMySQLDial) against private/metadata destinations.
 func TestMySQLSSRFDial_BlocksAtDial(t *testing.T) {
 	// This package's TestMain turns private egress ON (so integration tests
 	// can reach a local DB), which disables the guard. Turn it OFF for this
@@ -40,18 +36,14 @@ func TestMySQLSSRFDial_BlocksAtDial(t *testing.T) {
 	}
 }
 
-// TestRegisterMySQLSSRFDialer_Idempotent: the once-guarded registration is
-// safe to call repeatedly (it runs on every MySQL connect).
 func TestRegisterMySQLSSRFDialer_Idempotent(t *testing.T) {
 	registerMySQLSSRFDialer()
 	registerMySQLSSRFDialer() // must not panic on the global driver map
 }
 
-// ---------------------------------------------------------------------
 // Unit tests — no real Postgres needed. We test the registry's
 // bookkeeping by stubbing the pool field directly; the connection
 // itself is never used.
-// ---------------------------------------------------------------------
 
 func TestPGRegistry_CachesPerKey(t *testing.T) {
 	r := newPGPoolRegistry(time.Hour, time.Hour)
@@ -76,7 +68,6 @@ func TestPGRegistry_CachesPerKey(t *testing.T) {
 }
 
 func TestPGRegistry_SweepEvictsIdle(t *testing.T) {
-	// Idle = 100ms; entry with lastUse=now-200ms should be evicted.
 	r := newPGPoolRegistry(100*time.Millisecond, 0)
 	now := time.Now()
 	r.pools[dbConnKey{"t", "fresh"}] = &pgEntry{pool: nil, lastUse: now}
@@ -128,12 +119,6 @@ func TestPGRegistry_BadDSNDoesNotPoison(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------
-// Integration test — gated on DAZYFLOW_TEST_DB. Confirms that two
-// consecutive pgPool calls for the same key return the same pool
-// pointer (i.e., we actually reuse rather than creating a fresh one).
-// ---------------------------------------------------------------------
-
 func TestPGRegistry_ReusesPoolAcrossCalls(t *testing.T) {
 	dsn := os.Getenv("DAZYFLOW_TEST_DB")
 	if dsn == "" {
@@ -163,8 +148,6 @@ func TestPGRegistry_ReusesPoolAcrossCalls(t *testing.T) {
 	}
 }
 
-// TestSQLDBRegistry_CachesPerKey mirrors the pg registry's per-(tenant,dsn)
-// keying using injected entries (no real connections opened).
 func TestSQLDBRegistry_CachesPerKey(t *testing.T) {
 	r := newSQLDBRegistry("mysql", time.Hour, time.Hour)
 	r.dbs[dbConnKey{"acmeA", "dsn1"}] = &sqlDBEntry{db: nil, lastUse: time.Now()}
@@ -179,8 +162,7 @@ func TestSQLDBRegistry_CachesPerKey(t *testing.T) {
 	}
 }
 
-// TestSQLDBRegistry_SweepRespectsBoundary covers the strictly-greater-than
-// idle check at the exact boundary.
+// Covers the strictly-greater-than idle check at the exact boundary.
 func TestSQLDBRegistry_SweepRespectsBoundary(t *testing.T) {
 	r := newSQLDBRegistry("mysql", time.Second, 0)
 	now := time.Now()
@@ -199,9 +181,9 @@ func TestSQLDBRegistry_SweepRespectsBoundary(t *testing.T) {
 	}
 }
 
-// TestSQLDBRegistry_OpportunisticSweepOnGet covers the sweep-on-access branch:
-// a get after the sweep gap evicts a stale entry before the lookup. A bad DSN
-// is used so no real connection is attempted.
+// Covers the sweep-on-access branch: a get after the sweep gap evicts a stale
+// entry before the lookup. A bad DSN is used so no real connection is
+// attempted.
 func TestSQLDBRegistry_OpportunisticSweepOnGet(t *testing.T) {
 	r := newSQLDBRegistry("mysql", 10*time.Millisecond, 0)
 	// Pre-load a stale entry and force lastSweep into the past so the next
@@ -216,8 +198,6 @@ func TestSQLDBRegistry_OpportunisticSweepOnGet(t *testing.T) {
 	}
 }
 
-// TestPGRegistry_OpportunisticSweepOnGet mirrors the above for the pg pool
-// registry's sweep-on-access branch.
 func TestPGRegistry_OpportunisticSweepOnGet(t *testing.T) {
 	r := newPGPoolRegistry(10*time.Millisecond, 0)
 	r.pools[dbConnKey{"t", "stale"}] = &pgEntry{pool: nil, lastUse: time.Now().Add(-time.Hour)}
@@ -229,8 +209,6 @@ func TestPGRegistry_OpportunisticSweepOnGet(t *testing.T) {
 	}
 }
 
-// TestSQLDBRegistry_CloseAllNilTolerant confirms closeAll-equivalent cleanup
-// via sweep handles nil db handles without panicking.
 func TestSQLDBRegistry_SweepNilTolerant(t *testing.T) {
 	r := newSQLDBRegistry("mysql", 0, 0)
 	r.dbs[dbConnKey{"t", "x"}] = &sqlDBEntry{db: nil, lastUse: time.Now().Add(-time.Hour)}

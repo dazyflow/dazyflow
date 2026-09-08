@@ -27,7 +27,6 @@ func ImportUsers(ctx context.Context, src, dst UserStore) (imported, skipped int
 			skipped++ // already in dst — don't clobber
 			continue
 		case errors.Is(gerr, ErrUnknownUser):
-			// absent — import below
 		default:
 			return imported, skipped, fmt.Errorf("check %q in destination: %w", u.Email, gerr)
 		}

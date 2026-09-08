@@ -22,16 +22,12 @@ export function Loading({
   style,
   className,
 }: {
-  // Drops the card chrome for a centred line — inside a dialog, panel or list.
   inline?: boolean;
   style?: CSSProperties;
   className?: string;
 }) {
   const { t } = useTranslation();
   return (
-    // role="status" so a screen reader says "Loading…" when this appears. The
-    // 51 hand-written versions said nothing at all, which left a non-sighted
-    // user with a page that had simply gone quiet.
     <Notice inline={inline} style={style} className={className} role="status">
       {t("common.loading")}
     </Notice>

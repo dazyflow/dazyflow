@@ -23,8 +23,6 @@ func TestSMTPTest_RequiresPlatformAdmin(t *testing.T) {
 	}
 }
 
-// With no mailer wired, a platform admin gets a clear 501 rather than a
-// 500 — "not configured" is a normal state the UI surfaces as guidance.
 func TestSMTPTest_NotConfigured(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -34,7 +32,6 @@ func TestSMTPTest_NotConfigured(t *testing.T) {
 	}
 }
 
-// A bad recipient is rejected as client input (400), before any dial.
 func TestSMTPTest_InvalidRecipient(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -50,8 +47,6 @@ func TestSMTPTest_InvalidRecipient(t *testing.T) {
 	}
 }
 
-// Happy path: the message actually reaches the (fake) SMTP server with
-// the requested recipient and the configured From.
 func TestSMTPTest_Sends(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)

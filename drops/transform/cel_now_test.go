@@ -9,11 +9,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// The filtering/computing drops expose `now` so flows can express
-// time-windows ("overdue", "last week") without precomputing a date
-// column. These guard that contract; without `now` in the CEL env the
-// expressions fail to compile (the bug the connected journey caught).
-
 func TestComputeRows_NowIsAvailable(t *testing.T) {
 	res, err := executeComputeRows(t.Context(), core.Job{
 		ID: "t",

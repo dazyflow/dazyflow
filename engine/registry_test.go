@@ -10,8 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// drop builds a minimal valid NativeDrop (Register requires Summary +
-// Examples) with the given ID.
 func drop(id string) NativeDrop {
 	return NativeDrop{
 		Manifest: core.Manifest{
@@ -25,7 +23,6 @@ func drop(id string) NativeDrop {
 	}
 }
 
-// A registered drop resolves by its ID; unknown IDs miss.
 func TestRegistry_RegisterAndGet(t *testing.T) {
 	r := NewRegistry()
 	if err := r.Register(drop("delay")); err != nil {

@@ -51,25 +51,16 @@ type Session struct {
 	ExpiresAt time.Time
 }
 
-// SessionStore is the session lookup boundary used by both the
-// authenticator (read) and the signin/signout handlers (write).
 type SessionStore interface {
 	GetSession(ctx context.Context, id string) (Session, error)
 	PutSession(ctx context.Context, s Session) error
 	DeleteSession(ctx context.Context, id string) error
 }
 
-// SessionRevoker is an optional SessionStore extension: revoke every
-// session a subject holds, forcing re-sign-in. Used when an admin
-// changes or removes a member's roles — without it the member's live
-// sessions keep the old roles until they happen to sign in again.
 type SessionRevoker interface {
 	RevokeSubjectSessions(ctx context.Context, subject string) (int, error)
 }
 
-// MemSessionStore keeps sessions in process memory. They die on daemon
-// restart — users re-sign-in, which matches the dev-deployment
-// expectation (and matches the API-key keystore's behavior).
 type MemSessionStore struct {
 	mu       sync.RWMutex
 	sessions map[string]Session
@@ -122,9 +113,6 @@ func (s *MemSessionStore) deleteSessions(pred func(Session) bool) int {
 	return n
 }
 
-// SessionAuthenticator slots into the auth Chain alongside
-// APIKeyAuthenticator. It recognizes tokens with SessionTokenPrefix;
-// anything else falls through to the next provider.
 type SessionAuthenticator struct {
 	Store SessionStore
 	Clock func() time.Time
@@ -180,8 +168,6 @@ func NextSessionExpiry(sess Session, idle, maxAge time.Duration, now time.Time) 
 	if idle <= 0 {
 		return sess.ExpiresAt, false
 	}
-	// Only renew in the second half of the idle window — cheap debounce
-	// so a busy session isn't rewritten on every call.
 	if now.Before(sess.ExpiresAt.Add(-idle / 2)) {
 		return sess.ExpiresAt, false
 	}

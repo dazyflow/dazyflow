@@ -21,8 +21,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// countingSMTP accepts every message and counts it, with an optional per-message
-// delay so a serial send loop shows up as wall-clock rather than instant.
 type countingSMTP struct {
 	addr  string
 	delay time.Duration
@@ -155,16 +153,6 @@ func newMailHarness(t *testing.T, smtp *countingSMTP) *harness {
 	return &harness{svc: svc, jobs: jobs, ws: wsStore, p: p, t: t}
 }
 
-// The approval notifier mails ONE MESSAGE PER ADDRESS, in a serial loop, on the
-// worker goroutine that parked the run — and it does it through the OPERATOR'S
-// transactional mailer, not a connected account the author had to authorize. So
-// unlike an Email step, this is the deployment's own sending domain, aimed by
-// whoever can save a flow.
-//
-// The per-step list is capped (core.MaxApprovalRecipients). This is the same
-// attack spread across STEPS instead: parallel approval gates, each with a full
-// list, all parking in one run. Nothing throttles approval mail the way
-// FailureEmailWindow throttles failure mail.
 func TestApprovalFanOut_IsBounded(t *testing.T) {
 	const gates = 40
 
@@ -190,7 +178,6 @@ func TestApprovalFanOut_IsBounded(t *testing.T) {
 	status, err := h.submit(graph("approvalfan", nodes, edges), 60*time.Second)
 	t.Logf("status=%v err=%v", status, firstLine(err))
 
-	// The run parks rather than terminating, so give the sends a moment to land.
 	deadline := time.Now().Add(20 * time.Second)
 	last := -1
 	for time.Now().Before(deadline) {

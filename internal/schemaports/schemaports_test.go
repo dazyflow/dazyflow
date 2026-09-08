@@ -76,7 +76,6 @@ func TestBuild_Max(t *testing.T) {
 	}
 }
 
-// Only scalars earn a pin; objects, arrays and untyped arguments stay params.
 func TestBuild_ScalarsOnly(t *testing.T) {
 	ports := schemaports.Build([]schemaports.Candidate{
 		{Name: "text", Type: "string"},

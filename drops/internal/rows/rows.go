@@ -28,20 +28,12 @@ import (
 	"sort"
 )
 
-// Options tunes Normalize for its two callers without changing the
-// coercion logic. The zero value is the drops/db behavior: no row cap
-// and single objects rejected as an unsupported type.
 type Options struct {
 	// Cap, when non-nil, is called with the candidate row count before
 	// the list is materialized; a non-nil error from it aborts the
 	// normalization. drops/transform passes a limits.MaxRows check here
 	// so an oversized input is refused rather than first allocated.
-	Cap func(n int) error
-	// AllowSingleObject makes a lone map (or a JSON object string) parse
-	// as a one-row list. This is the shape a webhook or hosted-form
-	// trigger emits for a JSON object body, so drops/transform wiring
-	// webhook_input.body straight into a rows port just works. drops/db
-	// leaves this false and rejects a bare object.
+	Cap               func(n int) error
 	AllowSingleObject bool
 }
 
@@ -52,11 +44,6 @@ func (o Options) cap(n int) error {
 	return o.Cap(n)
 }
 
-// Normalize coerces the supported input shapes into []map[string]any.
-//
-// nil and the empty string both mean "no rows" (a webhook fired with no
-// body), returning a nil slice so the caller's "len(rows)==0 → do
-// nothing" branch handles the rest.
 func Normalize(inline any, opt Options) ([]map[string]any, error) {
 	if inline == nil {
 		return nil, nil
@@ -97,11 +84,6 @@ func Normalize(inline any, opt Options) ([]map[string]any, error) {
 		if !opt.AllowSingleObject {
 			break
 		}
-		// A single object is one row. This is the shape a webhook or
-		// hosted-form trigger emits for a JSON object body, so wiring
-		// webhook_input.body straight into a transform's rows port — the
-		// most common starter shape — just works instead of failing with
-		// "unsupported input type".
 		return []map[string]any{v}, nil
 	case map[string]string:
 		if !opt.AllowSingleObject {
@@ -113,17 +95,10 @@ func Normalize(inline any, opt Options) ([]map[string]any, error) {
 		}
 		return []map[string]any{m}, nil
 	case string:
-		// An empty string is "no rows" rather than malformed JSON. This
-		// shows up when a webhook trigger fires with no request body and
-		// the graph wires that body straight into a rows port. Returning
-		// a nil slice keeps the empty-payload path quiet.
 		if v == "" {
 			return nil, nil
 		}
 		if opt.AllowSingleObject {
-			// Parse leniently, accepting either an array of objects or a
-			// single object, then re-run normalization on the decoded
-			// value so the cap and shape handling apply uniformly.
 			var parsed any
 			if err := json.Unmarshal([]byte(v), &parsed); err != nil {
 				return nil, fmt.Errorf("rows JSON: %w", err)
@@ -139,9 +114,6 @@ func Normalize(inline any, opt Options) ([]map[string]any, error) {
 	return nil, fmt.Errorf("rows: unsupported input type %T", inline)
 }
 
-// CoerceRowMap widens a single decoded list element into map[string]any,
-// accepting the native map[string]string shape produced by typed
-// callers as well as the post-JSON map[string]any.
 func CoerceRowMap(item any) (map[string]any, error) {
 	switch m := item.(type) {
 	case map[string]any:
@@ -156,8 +128,6 @@ func CoerceRowMap(item any) (map[string]any, error) {
 	return nil, fmt.Errorf("expected object, got %T", item)
 }
 
-// DeriveHeaders gives a stable column ordering when the rows value carries
-// none — the union of row keys, sorted alphabetically.
 func DeriveHeaders(rows []map[string]any) []string {
 	seen := map[string]struct{}{}
 	for _, r := range rows {
@@ -173,7 +143,6 @@ func DeriveHeaders(rows []map[string]any) []string {
 	return headers
 }
 
-// Cell renders a scalar cell value as text; nil becomes the empty string.
 func Cell(v any) string {
 	if v == nil {
 		return ""

@@ -107,9 +107,6 @@ func ReadRange(ctx context.Context, job core.Job) (headers []string, rows []map[
 		return nil, nil, err
 	}
 	rng := params.StringDefault(job.Params, "range", "Sheet1")
-	// An optional cell range narrows the read to a block within the tab
-	// (A1 notation). Quote the tab so names with spaces parse, e.g.
-	// 'Inbox Log'!A1:D5. Blank → read the whole tab/named range as before.
 	if cells := strings.TrimSpace(params.StringDefault(job.Params, "cells", "")); cells != "" {
 		rng = quoteSheetTab(rng) + "!" + cells
 	}
@@ -133,10 +130,6 @@ func ReadRange(ctx context.Context, job core.Job) (headers []string, rows []map[
 	_ = json.Unmarshal(body, &parsed)
 	useHeaders := params.BoolDefault(job.Params, "headers", true)
 	headers, rows = flattenValues(parsed.Values, useHeaders)
-	// Row numbers make the read round-trippable: the rows can be handed to
-	// Update cells, which writes back to the row each one came from. Counted
-	// in the sheet's own numbering, so an offset read (cells: A5:D20) still
-	// reports where the row really is.
 	if params.BoolDefault(job.Params, "row_numbers", false) {
 		first := firstDataRow(params.StringDefault(job.Params, "cells", ""), useHeaders)
 		for i := range rows {

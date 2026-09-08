@@ -5,8 +5,6 @@ import { describe, it, expect } from "vitest";
 import { explainApiError } from "./explainApiError";
 import { APIError } from "../api";
 
-// The test t() echoes the key so we can assert which message was chosen
-// without coupling to the actual translations.
 const t = (k: string) => k;
 
 describe("explainApiError", () => {
@@ -35,7 +33,6 @@ describe("explainApiError", () => {
     ).toBe("apiError.signinInvalid");
   });
 
-  // Regression: a csrf_origin 403 used to render as "wrong password".
   it("reports a sign-in csrf_origin as a server setting, not a bad password", () => {
     expect(
       explainApiError(
@@ -199,17 +196,11 @@ describe("approval conflicts", () => {
     );
   });
 
-  // A 403 comes in two flavours. One names the permission the caller lacks —
-  // written for whoever wired the API call. The other names the thing the
-  // reader can go and do. Only the second beats the generic headline.
   describe("403 refusals", () => {
     it("shows a refusal that tells the user how to unblock themselves", () => {
-      // The invite gate. Swallowing this told the ORGANIZATION OWNER to "ask
-      // an admin", and hid the only way forward.
       const msg =
         "verify your email before inviting others — check your inbox or resend from the banner";
       expect(explainApiError(new APIError(403, msg, "forbidden"), t)).toBe(msg);
-      // Same sentence on a legacy route that sets no structured code.
       expect(explainApiError(new APIError(403, msg), t)).toBe(msg);
     });
 

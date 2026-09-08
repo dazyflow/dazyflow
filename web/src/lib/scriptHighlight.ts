@@ -16,7 +16,6 @@
 // Python one share a comment character and nothing else, so guessing from the
 // content would colour half of either one wrongly.
 
-// ScriptLang is what the highlighter is told to read the text as.
 export type ScriptLang = "shell" | "python" | "powershell" | "js" | "sql" | "yaml" | "json";
 
 // scriptLangFor maps a step's language param onto a highlighter.
@@ -50,42 +49,23 @@ export function scriptLangFor(lang: string | undefined): ScriptLang {
   }
 }
 
-// TokenKind names the classes the editor styles. Deliberately few: five colours
-// is what a reader can tell apart at a glance, and a scheme with twelve is a
-// scheme nobody reads.
 type TokenKind = "comment" | "string" | "keyword" | "number" | "var";
 
 export type ScriptToken = { kind: TokenKind; text: string } | string;
 
 type LangSpec = {
-  // Line comments, as the literal prefix. Every language here has exactly one.
   lineComment: string;
-  // Block comments, when the language has them — as [open, close].
   blockComment?: [string, string];
   // The quote characters that open a string, and whether a backslash escapes
   // inside them. Shell single quotes take no escapes at all, which is the one
   // place getting this wrong is visible: '\' would otherwise swallow the quote.
   quotes: { q: string; escapes: boolean; multiline?: boolean }[];
   keywords: Set<string>;
-  // SQL is written in both cases and means the same thing either way, so its
-  // keywords match however they were typed. Everywhere else case is meaning.
   caseInsensitiveKeywords?: boolean;
-  // Mark a name that is followed by a colon as a key — `"total":` in JSON,
-  // `retries:` in YAML. Keys are the shape of those two formats, so colouring
-  // them is most of the value of highlighting them at all. They reuse the
-  // keyword colour, which is the same purple the JSON editor already gives a
-  // key.
   keysBeforeColon?: boolean;
-  // A sigil that starts a variable — $ in shell and PowerShell. Python and
-  // JavaScript have none, but a ${…} Dazyflow reference still gets marked
-  // there, because it is not part of the language and should not read as if it
-  // were (see VAR_REF).
   sigil?: string;
 };
 
-// Keyword lists are the words that carry a script's shape, not exhaustive
-// language vocabularies. A longer list colours more of the text and separates
-// less of it.
 const LANGS: Record<ScriptLang, LangSpec> = {
   shell: {
     lineComment: "#",
@@ -197,17 +177,8 @@ const VAR_REF = /^\$\{[^}]*\}?/;
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*/;
 const NUMBER = /^(?:0[xX][0-9a-fA-F]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/;
-// A PowerShell/shell variable after the sigil: a name, or a braced expression.
 const SIGIL_NAME = /^(?:\{[^}]*\}?|[A-Za-z_][A-Za-z0-9_]*|[0-9?@*#$!-])/;
 
-// tokenizeScript splits `src` into coloured tokens and the plain runs between
-// them. Total: every character of the input comes back exactly once, so the
-// highlight layer stays the same length as the text it sits under — the
-// property the overlay editor depends on for the caret to line up.
-//
-// Tolerant on purpose: an unterminated string or comment (which is most of what
-// half-typed code is) simply runs to the end of the input rather than
-// abandoning the rest of the file uncoloured.
 export function tokenizeScript(src: string, lang: ScriptLang): ScriptToken[] {
   const spec = LANGS[lang];
   const out: ScriptToken[] = [];
@@ -227,8 +198,6 @@ export function tokenizeScript(src: string, lang: ScriptLang): ScriptToken[] {
   while (i < src.length) {
     const rest = src.slice(i);
 
-    // A Dazyflow reference wins over a shell variable of the same shape: both
-    // start "${", and the reference is the more specific reading.
     const ref = VAR_REF.exec(rest);
     if (ref) {
       push("var", ref[0]);
@@ -247,21 +216,15 @@ export function tokenizeScript(src: string, lang: ScriptLang): ScriptToken[] {
       continue;
     }
 
-    // Longest quote first (Python's """ before "), which LANGS orders.
     const quote = spec.quotes.find((q) => rest.startsWith(q.q));
     if (quote) {
       const literal = readString(src, i, quote);
-      // `"total":` in JSON is a key, not a string. Marked with the keyword
-      // colour, which is the same purple the JSON editor gives a key — so the
-      // two editors do not disagree about what a key looks like.
       push(spec.keysBeforeColon && followedByColon(src, i + literal.length) ? "keyword" : "string", literal);
       continue;
     }
 
     if (spec.sigil && rest.startsWith(spec.sigil)) {
       const name = SIGIL_NAME.exec(rest.slice(spec.sigil.length));
-      // A lone sigil is not a variable — in shell it is a literal, and in
-      // PowerShell it is a typo. Either way, leave it plain.
       if (name) {
         push("var", spec.sigil + name[0]);
         continue;
@@ -269,8 +232,6 @@ export function tokenizeScript(src: string, lang: ScriptLang): ScriptToken[] {
     }
 
     const num = NUMBER.exec(rest);
-    // Guarded on the preceding character so the 8 in `utf8` or `$1` is part of
-    // the word, not a number sitting inside it.
     if (num && !/[A-Za-z0-9_]/.test(src[i - 1] ?? "")) {
       push("number", num[0]);
       continue;
@@ -282,7 +243,6 @@ export function tokenizeScript(src: string, lang: ScriptLang): ScriptToken[] {
       // they were typed. Everywhere else case is meaning, and folding it would
       // colour a Python variable named `If`.
       const word = spec.caseInsensitiveKeywords ? ident[0].toLowerCase() : ident[0];
-      // `retries:` in YAML — a bare key, the shape of the format.
       if (spec.keysBeforeColon && followedByColon(src, i + ident[0].length)) {
         push("keyword", ident[0]);
       } else if (spec.keywords.has(word)) {
@@ -315,9 +275,6 @@ function followedByColon(src: string, at: number): boolean {
   return src[i] === ":";
 }
 
-// readString returns the whole literal starting at `from`, including its
-// quotes, stopping at the end of the line for a single-line quote so one stray
-// apostrophe does not colour the rest of the script.
 function readString(
   src: string,
   from: number,

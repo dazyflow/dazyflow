@@ -54,11 +54,6 @@ func TestMarkTicketRead(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 
-	// --- The customer's side ---------------------------------------------------
-	// Advance the clock first. Marking read at the same instant the ticket was
-	// created makes "did UpdatedAt move?" unanswerable — the assertion below
-	// passed against a version that DID bump it, which is how this test earned
-	// its own note.
 	readAt := now.Add(30 * time.Minute)
 	h.gw.supportNow = func() time.Time { return readAt }
 	if rw := do(h.token, "POST", "/api/v1/me/support/tickets/"+created.ID+"/read", nil); rw.Code != 200 {
@@ -81,7 +76,6 @@ func TestMarkTicketRead(t *testing.T) {
 		t.Errorf("UpdatedAt moved on read: %v, want %v", got.UpdatedAt, created.UpdatedAt)
 	}
 
-	// --- The agent's side ------------------------------------------------------
 	_, agentTok, err := auth.IssueAPIKey(h.ks, ctx, "k-agent", "", "", "agent-a",
 		[]core.Role{core.SupportAgentRole()}, nil)
 	if err != nil {
@@ -100,10 +94,6 @@ func TestMarkTicketRead(t *testing.T) {
 		t.Errorf("the agent's read moved the customer's: %v", got.UserReadAt)
 	}
 
-	// --- What the customer is allowed to see -----------------------------------
-	// The support side's read receipt is not the customer's business: "support
-	// opened your ticket three days ago and said nothing" is true, unhelpful,
-	// and not something to hand over by accident.
 	rw = do(h.token, "GET", "/api/v1/me/support/tickets/"+created.ID, nil)
 	if rw.Code != 200 {
 		t.Fatalf("get own ticket = %d", rw.Code)
@@ -121,7 +111,6 @@ func TestMarkTicketRead(t *testing.T) {
 		t.Errorf("customer view lost their OWN read receipt: %v", view.Ticket.UserReadAt)
 	}
 
-	// --- Authorization ---------------------------------------------------------
 	if rw := do(h.token, "POST", "/api/v1/support/tickets/"+created.ID+"/read", nil); rw.Code != 403 {
 		t.Errorf("non-agent on the queue read endpoint = %d, want 403", rw.Code)
 	}

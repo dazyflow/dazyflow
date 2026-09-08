@@ -13,10 +13,9 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestRedactResult_ScrubsHeaders guards the third payload field on core.Ref.
-// Headers holds a row-list's column order — strings the Ref/Inline walk never
-// visits, so a secret echoed as a COLUMN NAME used to survive into durable
-// storage and the run-detail UI.
+// Guards the third payload field on core.Ref. Headers holds a row-list's
+// column order — strings the Ref/Inline walk never visits, so a secret echoed
+// as a COLUMN NAME used to survive into durable storage and the run-detail UI.
 func TestRedactResult_ScrubsHeaders(t *testing.T) {
 	set := newSecretSet()
 	set.add("sk_live_supersecret")
@@ -105,8 +104,6 @@ func TestRedactResult_ShortSecretNotRedacted(t *testing.T) {
 	}}
 	redactResult(&result, set)
 
-	// Nothing recorded (both too short), so the output is untouched —
-	// short secrets fall back to the save-time lint.
 	if got := result.Output["out"].Inline.(map[string]any)["v"]; got != "ab123 and a number 123" {
 		t.Errorf("short-secret over-redaction: %v", got)
 	}
@@ -226,12 +223,10 @@ func TestRedactReflect_Cov(t *testing.T) {
 	set := newCovSecretSet()
 	marker := redactionMarker
 
-	// Reflective slice (a concrete []int won't match the fast path's []any).
 	if got := redactValue([]int{1, 2}, set); !reflect.DeepEqual(got, []any{1, 2}) {
 		t.Errorf("reflective int slice = %#v", got)
 	}
 
-	// Reflective map with non-string keys -> stringified keys, redacted values.
 	gotMap, ok := redactValue(map[int]string{7: covSecret}, set).(map[string]any)
 	if !ok {
 		t.Fatalf("reflective map type = %T", redactValue(map[int]string{7: covSecret}, set))
@@ -240,26 +235,22 @@ func TestRedactReflect_Cov(t *testing.T) {
 		t.Errorf("reflective map[7] = %v, want marker", gotMap["7"])
 	}
 
-	// Pointer to a string secret -> dereferenced and redacted.
 	s := covSecret
 	if got := redactValue(&s, set); got != marker {
 		t.Errorf("pointer deref = %v, want marker", got)
 	}
 
-	// Nil pointer -> returned unchanged.
 	var np *string
 	if got := redactValue(np, set); got != any(np) {
 		t.Errorf("nil pointer = %#v, want unchanged", got)
 	}
 
-	// Scalar default branch (int) -> returned unchanged.
 	if got := redactReflect(42, set); got != 42 {
 		t.Errorf("scalar = %v, want 42", got)
 	}
 }
 
 func TestRedactProgressEvent_Cov(t *testing.T) {
-	// Empty set: event returned untouched.
 	empty := newSecretSet()
 	p := core.Progress{Message: covSecret}
 	if got := redactProgressEvent(p, empty); got.Message != covSecret {
@@ -282,7 +273,6 @@ func TestRedactProgressEvent_Cov(t *testing.T) {
 		t.Errorf("data.ok mutated = %v", out.Data["ok"])
 	}
 
-	// Nil Data is left alone.
 	out = redactProgressEvent(core.Progress{Message: covSecret}, set)
 	if out.Data != nil {
 		t.Errorf("nil data should stay nil, got %v", out.Data)
@@ -290,7 +280,6 @@ func TestRedactProgressEvent_Cov(t *testing.T) {
 }
 
 func TestRedactProgress_NilDst_Cov(t *testing.T) {
-	// dst == nil: returns nil channel and an already-closed done.
 	ch, done := redactProgress(context.Background(), nil, newCovSecretSet())
 	if ch != nil {
 		t.Error("nil dst should yield nil channel")
@@ -336,7 +325,7 @@ func TestRedactProgress_ConsumerGone_Cov(t *testing.T) {
 	<-done // must complete without deadlock
 }
 
-// TestRedactString_OverlappingSecrets is the regression for a leak that map
+// The regression for a leak that map
 // iteration order made intermittent: when one secret contains another,
 // replacing the shorter one first cut it out of the middle of the longer one,
 // so the longer secret's remaining tail stopped matching and survived into
@@ -365,9 +354,6 @@ func TestRedactString_OverlappingSecrets(t *testing.T) {
 	}
 }
 
-// TestRedactString_PrefixAndSuffixOverlap covers the other two overlap
-// shapes: the shared value sitting at the end of the longer secret, and one
-// secret embedded in the middle of another.
 func TestRedactString_PrefixAndSuffixOverlap(t *testing.T) {
 	for _, tc := range []struct{ name, a, b, in string }{
 		{"suffix overlap", "secret_tail_value", "tail_value", "x secret_tail_value y"},

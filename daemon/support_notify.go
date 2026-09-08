@@ -61,14 +61,10 @@ func (h *supportAPI) ticketURLFor(t core.Ticket, agent bool) string {
 	return withOrg(base+"/support/"+t.ID, t.Tenant)
 }
 
-// supportMailReady reports whether this deployment can send support mail at all.
 func (h *supportAPI) supportMailReady() bool {
 	return h.svc != nil && h.svc.Mailer != nil
 }
 
-// notifySupportReplied mails the customer that support answered. Honours the
-// per-user opt-out; skipped entirely for subjects that aren't password accounts
-// (an API-key or SSO subject won't resolve in the user store).
 func (h *supportAPI) notifySupportReplied(t core.Ticket) {
 	if !h.supportMailReady() || t.CreatedBy == "" {
 		return
@@ -79,8 +75,6 @@ func (h *supportAPI) notifySupportReplied(t core.Ticket) {
 			return
 		}
 		url := h.ticketURLFor(t, false)
-		// Goes to the customer, who has an account here, so it is written in
-		// THEIR language.
 		m := h.svc.mailMsgs(ctx, to)
 		c := emailtheme.Content{
 			Subject:   fmt.Sprintf(m.SupportRepliedSubject, t.Subject),
@@ -104,7 +98,6 @@ func (h *supportAPI) notifySupportReplied(t core.Ticket) {
 	})
 }
 
-// notifyTicketResolved mails the customer that support closed the loop.
 func (h *supportAPI) notifyTicketResolved(t core.Ticket) {
 	if !h.supportMailReady() || t.CreatedBy == "" {
 		return
@@ -115,8 +108,6 @@ func (h *supportAPI) notifyTicketResolved(t core.Ticket) {
 			return
 		}
 		url := h.ticketURLFor(t, false)
-		// Goes to the customer, who has an account here, so it is written in
-		// THEIR language.
 		m := h.svc.mailMsgs(ctx, to)
 		c := emailtheme.Content{
 			Subject:   fmt.Sprintf(m.SupportResolvedSubject, t.Subject),
@@ -186,8 +177,6 @@ func (h *supportAPI) notifyWaitingOnUser(t core.Ticket) {
 			return
 		}
 		url := h.ticketURLFor(t, false)
-		// Goes to the customer, who has an account here, so it is written in
-		// THEIR language.
 		m := h.svc.mailMsgs(ctx, to)
 		c := emailtheme.Content{
 			Subject:   fmt.Sprintf(m.SupportWaitingSubject, t.Subject),
@@ -206,11 +195,6 @@ func (h *supportAPI) notifyWaitingOnUser(t core.Ticket) {
 	})
 }
 
-// notifyWaitingOnSupport reminds the support side that a customer is waiting and
-// nobody has opened the ticket since they wrote.
-//
-// English, like the other queue-side mail: it goes to the operator's own staff,
-// and a shared inbox from configuration carries no language preference.
 func (h *supportAPI) notifyWaitingOnSupport(t core.Ticket, waiting time.Duration) {
 	to := supportQueueRecipient(t, h.SupportInbox)
 	if !h.supportMailReady() || to == "" {
@@ -274,10 +258,6 @@ func formatWaited(d time.Duration) string {
 	return fmt.Sprintf("%d hours", hours)
 }
 
-// supportQueueRecipient picks who on the support side hears about activity on a
-// ticket: the agent who owns it, or the shared inbox when it's unclaimed.
-// Returns "" when neither exists, which the callers treat as "send nothing"
-// rather than fanning out to every provisioned agent.
 func supportQueueRecipient(t core.Ticket, inbox string) string {
 	if t.AssignedTo != "" {
 		return t.AssignedTo
@@ -285,8 +265,6 @@ func supportQueueRecipient(t core.Ticket, inbox string) string {
 	return inbox
 }
 
-// notifyTicketFiled mails the shared support inbox that a new ticket landed.
-// No-op when the operator hasn't configured one.
 func (h *supportAPI) notifyTicketFiled(t core.Ticket) {
 	if !h.supportMailReady() || h.SupportInbox == "" {
 		return
@@ -321,8 +299,6 @@ func (h *supportAPI) notifyTicketFiled(t core.Ticket) {
 	})
 }
 
-// supportOptInAddress resolves a ticket subject to a mailable address, applying
-// the user's opt-out. Returns ok=false when there's nothing to send to.
 func (h *supportAPI) supportOptInAddress(ctx context.Context, subject string) (string, bool) {
 	if h.svc.Users == nil {
 		return "", false
@@ -353,8 +329,6 @@ func (h *supportAPI) sendSupportMail(ctx context.Context, to, text string, c ema
 	}
 }
 
-// NotifyTicketWaiting is the nudge sweeper's entry point (see cmd/dzd), kept on
-// the gateway because that is what the daemon wiring holds.
 func (h *HTTPGateway) NotifyTicketWaiting(t core.Ticket, side NudgeSide, waiting time.Duration) {
 	h.supportAPI().NotifyTicketWaiting(t, side, waiting)
 }

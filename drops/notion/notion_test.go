@@ -98,8 +98,6 @@ func TestNotionQuery_FlattensRowsAndKeepsRawKeys(t *testing.T) {
 		}
 	}
 
-	// Raw page objects, pagination and the full list response stay EMITTED
-	// (run records / API callers) even though they're no longer pins.
 	if len(res.Output["pages"].Inline.([]any)) != 2 {
 		t.Errorf("pages = %+v", res.Output["pages"].Inline)
 	}
@@ -185,8 +183,6 @@ func TestNotionCreatePage_TitleParamBuildsTitleProperty(t *testing.T) {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
 	}
 
-	// The friendly Title param becomes the title property under Notion's
-	// fixed "title" property ID.
 	props, _ := srv.lastBody["properties"].(map[string]any)
 	tp, _ := props["title"].(map[string]any)
 	rt, _ := tp["title"].([]any)
@@ -198,7 +194,6 @@ func TestNotionCreatePage_TitleParamBuildsTitleProperty(t *testing.T) {
 		t.Errorf("title content = %v", txt)
 	}
 
-	// Friendly pins + the full page object still emitted under meta.
 	if res.Output["title"].Inline != "Follow up with Ada" {
 		t.Errorf("title out = %v", res.Output["title"].Inline)
 	}
@@ -325,8 +320,6 @@ func TestRichTextChunks_SplitsAtLimit(t *testing.T) {
 	}
 }
 
-// withNotionAuthErr points the token lookup at a failing resolver so the
-// auth branches in both connectors can be exercised.
 func withNotionAuthErr(t *testing.T) {
 	t.Helper()
 	SetTokenLookup(func(_ context.Context, _ string) (string, error) {
@@ -360,12 +353,9 @@ func TestCovNotionError_Variants(t *testing.T) {
 }
 
 func TestCovNotionDo_HTTPErrorAndDefaults(t *testing.T) {
-	// Non-2xx is still returned as (status, body, nil) — the caller maps it.
 	srv := newNotionServer(t, 418, map[string]any{"code": "teapot", "message": "no coffee"})
 	withNotionEnv(t, srv.URL)
 
-	// timeoutMS <= 0 takes the default-timeout branch; nil body skips the
-	// Content-Type header.
 	status, body, err := notionDo(context.Background(), "GET", srv.URL+"/anything", "tok", nil, 0)
 	if err != nil {
 		t.Fatalf("unexpected transport error: %v", err)
@@ -487,7 +477,6 @@ func TestCovPropertyPlain_AllTypes(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			got := propertyPlain(c.in)
 			if c.name == "empty type passthrough" {
-				// Returns the same map value; just assert it's a map.
 				if _, ok := got.(map[string]any); !ok {
 					t.Errorf("empty type: got %T, want map", got)
 				}
@@ -634,8 +623,7 @@ func TestCovNotionCreatePage_BadTitleInput(t *testing.T) {
 	withNotionEnv(t, "http://unused")
 	res, _ := executeNotionCreatePage(context.Background(), core.Job{
 		Params: map[string]any{"parent_database_id": "db", "title": "x"},
-		// Non-text inline (a number) makes TextInputOr report not-ok.
-		Input: map[string]core.Ref{"title": {Inline: 123}},
+		Input:  map[string]core.Ref{"title": {Inline: 123}},
 	}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_input" {
 		t.Errorf("status=%q code=%v", res.Status, res.Error)
@@ -666,8 +654,6 @@ func TestCovNotionCreatePage_APIError(t *testing.T) {
 }
 
 func TestCovNotionCreatePage_HTTPTransportError(t *testing.T) {
-	// Point the base at a closed port so the dial fails (transport error
-	// branch, not a non-2xx).
 	SetHTTPBase("http://127.0.0.1:1")
 	SetTokenLookup(func(_ context.Context, account string) (string, error) { return "tok", nil })
 	t.Cleanup(func() {
@@ -697,7 +683,6 @@ func TestCovNotionCreatePage_ChildrenParamMerged(t *testing.T) {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
 	}
 	children, _ := srv.lastBody["children"].([]any)
-	// One from the children param + one from the content param.
 	if len(children) != 2 {
 		t.Errorf("children = %+v", srv.lastBody["children"])
 	}
@@ -706,9 +691,6 @@ func TestCovNotionCreatePage_ChildrenParamMerged(t *testing.T) {
 func TestCovNotionCreatePage_NonObjectProperties(t *testing.T) {
 	srv := newNotionServer(t, 200, map[string]any{"id": "new-id"})
 	withNotionEnv(t, srv.URL)
-	// A non-object 'properties' passes through verbatim (mergedProperties
-	// early-return branch); title is required-by-content so this still
-	// succeeds because properties is non-empty.
 	res, _ := executeNotionCreatePage(context.Background(), core.Job{
 		Params: map[string]any{
 			"parent_database_id": "db",
@@ -788,7 +770,6 @@ func TestCovNotionQuery_FilterSortsCursorForwarded(t *testing.T) {
 }
 
 func TestCovNotionQuery_NullResultsBecomesEmpty(t *testing.T) {
-	// A response with no results field leaves rows as an empty slice.
 	srv := newNotionServer(t, 200, map[string]any{"has_more": false})
 	withNotionEnv(t, srv.URL)
 	res, _ := executeNotionQueryDatabase(context.Background(), core.Job{

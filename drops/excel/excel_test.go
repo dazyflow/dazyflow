@@ -18,7 +18,6 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// makeXLSX writes a small workbook into dir/name and returns the bare name.
 func makeXLSX(t *testing.T, dir, name string, rows [][]any) {
 	t.Helper()
 	f := excelize.NewFile()
@@ -62,7 +61,6 @@ func TestExcelRead_HeadersAndRows(t *testing.T) {
 	if rows[0].(map[string]any)["name"] != "Ada" || rows[1].(map[string]any)["amount"] != "250" {
 		t.Errorf("rows = %+v", rows)
 	}
-	// The file path is re-emitted so downstream Excel steps can wire it.
 	if res.Output["path"].Inline != "data.xlsx" {
 		t.Errorf("path = %+v", res.Output["path"].Inline)
 	}
@@ -130,8 +128,6 @@ func TestExcelWrite_RoundTrip(t *testing.T) {
 	if res.Output["out"].Ref != "out.xlsx" {
 		t.Errorf("out ref = %q", res.Output["out"].Ref)
 	}
-	// The file path is also emitted as text so it can feed another Excel
-	// step's 'path' input.
 	if res.Output["path"].Inline != "out.xlsx" {
 		t.Errorf("path = %+v", res.Output["path"].Inline)
 	}
@@ -162,11 +158,9 @@ func TestExcelWrite_Append(t *testing.T) {
 			},
 		}
 	}
-	// First write creates header + 1 row.
 	if res, _ := executeExcelWrite(context.Background(), job(), nil); res.Status != core.StatusOK {
 		t.Fatalf("first write: %+v", res.Error)
 	}
-	// Second append adds 1 row, no extra header.
 	if res, _ := executeExcelWrite(context.Background(), job(), nil); res.Status != core.StatusOK {
 		t.Fatalf("append: %+v", res.Error)
 	}
@@ -208,10 +202,10 @@ func TestExcelWrite_MissingRowsInput(t *testing.T) {
 	}
 }
 
-// TestApplyRange covers the cell-range slicer's edge cases directly: normal
-// ranges, reversed coordinates (the parser must normalise), out-of-bounds
-// columns (padded with ""), rows past the grid (clamped), a single cell, and
-// malformed ranges (error).
+// Covers the cell-range slicer's edge cases directly: normal ranges, reversed
+// coordinates (the parser must normalise), out-of-bounds columns (padded with
+// ""), rows past the grid (clamped), a single cell, and malformed ranges
+// (error).
 func TestApplyRange(t *testing.T) {
 	grid := [][]string{
 		{"a1", "b1", "c1"},
@@ -295,10 +289,6 @@ func equalGrid(a, b [][]string) bool {
 	return true
 }
 
-// TestCoerce covers the typed-coercion edges: integers, floats, the bool
-// spellings, the typed=false passthrough, the empty-string passthrough, and
-// the data-loss cases that are easy to forget (a zero-padded "id" becomes an
-// int, dropping the padding; a value too big for int64 falls through to float).
 func TestCoerce(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -329,8 +319,6 @@ func TestCoerce(t *testing.T) {
 	}
 }
 
-// TestExcelRead_SkipBeyondData: skipping more rows than exist yields an empty
-// read, not an error or panic.
 func TestExcelRead_SkipBeyondData(t *testing.T) {
 	ws := t.TempDir()
 	makeXLSX(t, ws, "s.xlsx", [][]any{{"h"}, {"x"}})
@@ -346,9 +334,6 @@ func TestExcelRead_SkipBeyondData(t *testing.T) {
 	}
 }
 
-// xlsxBytes_Cov builds an in-memory .xlsx and returns its raw bytes, so a
-// test can write it through the sandbox or hand corrupt/edge inputs to the
-// readers without touching disk via the makeXLSX disk helper.
 func xlsxBytes_Cov(t *testing.T, sheet string, rows [][]any) []byte {
 	t.Helper()
 	f := excelize.NewFile()
@@ -369,8 +354,6 @@ func xlsxBytes_Cov(t *testing.T, sheet string, rows [][]any) []byte {
 	_ = f.Close()
 	return buf.Bytes()
 }
-
-// --- normalizeRows ---------------------------------------------------------
 
 func TestNormalizeRows_Cov(t *testing.T) {
 	mapsEqual := func(a, b []map[string]any) bool { return reflect.DeepEqual(a, b) }
@@ -418,8 +401,6 @@ func TestNormalizeRows_Cov(t *testing.T) {
 	})
 }
 
-// --- cellStr ---------------------------------------------------------------
-
 func TestCellStr_Cov(t *testing.T) {
 	cases := []struct {
 		name string
@@ -441,16 +422,12 @@ func TestCellStr_Cov(t *testing.T) {
 	}
 }
 
-// --- rangeError.Error (Error 0.0%) -----------------------------------------
-
 func TestRangeError_Error_Cov(t *testing.T) {
 	err := errBadRange("Q9")
 	if got := err.Error(); !strings.Contains(got, "invalid range") || !strings.Contains(got, "Q9") {
 		t.Errorf("Error() = %q", got)
 	}
 }
-
-// --- executeExcelRead extra paths ------------------------------------------
 
 func TestExcelRead_NoHeaders_Cov(t *testing.T) {
 	ws := t.TempDir()
@@ -491,7 +468,6 @@ func TestExcelRead_NoHeaders_Typed_Cov(t *testing.T) {
 
 func TestExcelRead_EmptySheetWithHeaders_Cov(t *testing.T) {
 	ws := t.TempDir()
-	// An empty sheet → grid is empty → the headers branch returns empty rows.
 	makeXLSX(t, ws, "empty.xlsx", [][]any{})
 	res, _ := executeExcelRead(context.Background(), core.Job{
 		Params:        map[string]any{"path": "empty.xlsx"},
@@ -607,10 +583,7 @@ func TestExcelRead_SandboxEscape_Cov(t *testing.T) {
 	}
 }
 
-// --- executeExcelWrite extra paths -----------------------------------------
-
 func TestExcelWrite_HeadersFromInputRef_Cov(t *testing.T) {
-	// in.Headers populated → headers taken from the Ref, deriveHeaders skipped.
 	ws := t.TempDir()
 	res, _ := executeExcelWrite(context.Background(), core.Job{
 		Params:        map[string]any{"path": "h.xlsx"},
@@ -631,7 +604,6 @@ func TestExcelWrite_HeadersFromInputRef_Cov(t *testing.T) {
 }
 
 func TestExcelWrite_DerivedHeaders_Cov(t *testing.T) {
-	// No Ref headers → deriveHeaders sorts the union of keys.
 	ws := t.TempDir()
 	res, _ := executeExcelWrite(context.Background(), core.Job{
 		Params:        map[string]any{"path": "d.xlsx"},
@@ -674,8 +646,6 @@ func TestExcelWrite_MissingPath_Cov(t *testing.T) {
 }
 
 func TestExcelWrite_SandboxError_Cov(t *testing.T) {
-	// No WorkspaceRoot configured → sandbox.OpenRoot fails at write time,
-	// surfacing the "sandbox" error code from writeSandboxFile.
 	res, _ := executeExcelWrite(context.Background(), core.Job{
 		Params: map[string]any{"path": "x.xlsx"},
 		Input:  map[string]core.Ref{"rows": {Inline: []map[string]any{{"a": "1"}}}},
@@ -685,11 +655,8 @@ func TestExcelWrite_SandboxError_Cov(t *testing.T) {
 	}
 }
 
-// TestExcelWrite_AppendNewSheet_Cov: append mode, file exists, but the target
-// sheet is absent → f.NewSheet(sheet) branch + header written.
 func TestExcelWrite_AppendNewSheet_Cov(t *testing.T) {
 	ws := t.TempDir()
-	// Seed a file that has only "Sheet1".
 	data := xlsxBytes_Cov(t, "Sheet1", [][]any{{"x"}, {"1"}})
 	if err := os.WriteFile(filepath.Join(ws, "a.xlsx"), data, 0o600); err != nil {
 		t.Fatal(err)
@@ -712,8 +679,6 @@ func TestExcelWrite_AppendNewSheet_Cov(t *testing.T) {
 	}
 }
 
-// TestExcelWrite_AppendMissingFile_Cov: append mode set but the file does not
-// yet exist → falls through to the fresh-file branch.
 func TestExcelWrite_AppendMissingFile_Cov(t *testing.T) {
 	ws := t.TempDir()
 	res, _ := executeExcelWrite(context.Background(), core.Job{
@@ -729,11 +694,8 @@ func TestExcelWrite_AppendMissingFile_Cov(t *testing.T) {
 	}
 }
 
-// --- helpers: readSandboxFile / writeSandboxFile / sandboxFileExists -------
-
 func TestReadSandboxFile_TooLarge_Cov(t *testing.T) {
 	ws := t.TempDir()
-	// Write a file one byte over the cap so the size guard trips.
 	big := bytes.Repeat([]byte("x"), maxSandboxFileBytes+1)
 	if err := os.WriteFile(filepath.Join(ws, "big.bin"), big, 0o600); err != nil {
 		t.Fatal(err)
@@ -752,7 +714,6 @@ func TestReadSandboxFile_Escape_Cov(t *testing.T) {
 }
 
 func TestReadSandboxFile_NoRoot_Cov(t *testing.T) {
-	// No WorkspaceRoot → OpenRoot returns an error before any file access.
 	_, err := readSandboxFile(core.Job{}, "x.xlsx")
 	if err == nil {
 		t.Error("want error when no workspace root configured")

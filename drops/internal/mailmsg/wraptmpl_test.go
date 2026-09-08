@@ -13,8 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// fakeProvider is a test EmailTemplateProvider: it serves one template and
-// reports a miss for anything else.
 type fakeProvider struct {
 	id   string
 	html string
@@ -86,7 +84,6 @@ func TestWrapWithTemplate_ProviderErrorPropagates(t *testing.T) {
 }
 
 func TestWrapWithTemplate_RenderErrorPropagates(t *testing.T) {
-	// A shell with a broken template action fails at render time.
 	ctx := ctxWith(fakeProvider{id: "welcome", html: `<main>{{.Nope</main>`})
 	_, err := WrapWithTemplate(ctx, jobWithTemplate("welcome"), "<p>hi</p>", "s")
 	if err == nil || !strings.Contains(err.Error(), "render email template") {

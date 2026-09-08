@@ -14,8 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// ---- Ask -------------------------------------------------------------------
-
 func askDrop(cfg Config) engine.NativeDrop {
 	props := baseProps(cfg)
 	props["prompt"] = map[string]any{"type": "string", "format": "multiline", "title": "Prompt", "description": "Single user message (used when no Prompt input and no messages)."}
@@ -45,12 +43,10 @@ func askDrop(cfg Config) engine.NativeDrop {
 			ExecutionModel:   core.ExecutionBatch,
 			ProcessModel:     core.ProcessLongLived,
 			Inputs:           inputsWithFiles(cfg, core.Port{Port: "prompt", Label: "Prompt"}),
-			// Port id stays "text" (existing wires reference it); the label is
-			// the role, "Response", matching the task drops' Summary/Reply.
-			Outputs:      []core.Port{{Port: "text", Label: "Response", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Fortnox skickade faktura 4471 på 249,00 SEK; den betalades 12 februari."`)}},
-			ParamsSchema: schemaJSON(props, nil),
-			Idempotent:   true,
-			RetryPolicy:  core.RetryExponentialBackoff,
+			Outputs:          []core.Port{{Port: "text", Label: "Response", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Fortnox skickade faktura 4471 på 249,00 SEK; den betalades 12 februari."`)}},
+			ParamsSchema:     schemaJSON(props, nil),
+			Idempotent:       true,
+			RetryPolicy:      core.RetryExponentialBackoff,
 		},
 		Execute: func(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 			apiKey, jerr := resolveKey(job, cfg)
@@ -107,8 +103,6 @@ func askDrop(cfg Config) engine.NativeDrop {
 		},
 	}
 }
-
-// ---- Summarize -------------------------------------------------------------
 
 func summarizeDrop(cfg Config) engine.NativeDrop {
 	props := baseProps(cfg)
@@ -190,8 +184,6 @@ func summarizeSystem(style string, maxWords int, language string) string {
 	return b.String()
 }
 
-// ---- Extract fields --------------------------------------------------------
-
 func extractDrop(cfg Config) engine.NativeDrop {
 	props := baseProps(cfg)
 	props["text"] = map[string]any{"type": "string", "format": "multiline", "title": "Text to read", "description": "Or connect it into the Text input."}
@@ -247,11 +239,7 @@ func extractDrop(cfg Config) engine.NativeDrop {
 			}
 			temp := 0.0
 			out, jerr := cfg.Provider.Call(ctx, apiKey, withFiles(Request{
-				Model: model(job, cfg),
-				// "text or attached files" rather than "text": with a PDF on
-				// the Files input the text may be empty, and a system prompt
-				// that only mentions text invites the model to say it was
-				// given nothing.
+				Model:    model(job, cfg),
 				System:   "Extract the requested fields from the user's text and any attached files, and return them via the tool. Do not invent values. If a value is genuinely not present, return null for that field.",
 				UserText: text, Tool: tool, Temperature: &temp, TimeoutMS: timeoutMS(job), BaseURL: baseURL(job),
 			}, files))
@@ -310,8 +298,6 @@ func buildExtractTool(fields []map[string]any, onMissing string) *Tool {
 	}
 	return &Tool{Name: "extract", Description: "Return the requested fields extracted from the text.", Schema: schema}
 }
-
-// ---- Classify --------------------------------------------------------------
 
 func classifyDrop(cfg Config) engine.NativeDrop {
 	props := baseProps(cfg)
@@ -428,8 +414,6 @@ func categoryNames(cats []map[string]any) (names []string, descLines string) {
 	return names, b.String()
 }
 
-// ---- Draft reply -----------------------------------------------------------
-
 func draftReplyDrop(cfg Config) engine.NativeDrop {
 	props := baseProps(cfg)
 	props["text"] = map[string]any{"type": "string", "format": "multiline", "title": "Message to reply to", "description": "Or connect it into the Message input."}
@@ -509,9 +493,6 @@ func draftReplySystem(tone, guidance, language string) string {
 	return b.String()
 }
 
-// inputsWithFiles appends the Files input to a task's ports when the provider
-// can actually carry one, so a step backed by a text-only provider doesn't
-// advertise a pin that always errors.
 func inputsWithFiles(cfg Config, ports ...core.Port) []core.Port {
 	if cfg.FileSupport == FilesNone {
 		return ports

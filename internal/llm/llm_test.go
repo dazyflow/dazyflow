@@ -78,12 +78,11 @@ func TestRegisterIsIdempotentOnName(t *testing.T) {
 	}
 }
 
-// TestRegistered_OrderAndContents exercises Registered(), which lists
-// providers in registration order (distinct from RegisteredNames, which
-// sorts). We register two fresh names and assert the slice preserves the
-// order they were added and carries the full ProviderInfo.
+// Exercises Registered(), which lists providers in registration order
+// (distinct from RegisteredNames, which sorts). We register two fresh names
+// and assert the slice preserves the order they were added and carries the
+// full ProviderInfo.
 func TestRegistered_OrderAndContents(t *testing.T) {
-	// Capture the baseline so other tests' registrations don't break us.
 	baseline := indexByName(Registered())
 
 	Register(ProviderInfo{Name: "covzeta", Integration: "CovZeta", DefaultModel: "z1", Provider: &fakeProvider{}})
@@ -91,7 +90,6 @@ func TestRegistered_OrderAndContents(t *testing.T) {
 
 	got := Registered()
 
-	// Both new providers present, with their info intact.
 	idx := indexByName(got)
 	for _, name := range []string{"covzeta", "covalpha"} {
 		p, ok := idx[name]
@@ -106,7 +104,6 @@ func TestRegistered_OrderAndContents(t *testing.T) {
 		t.Errorf("integration fields not carried: %+v", idx)
 	}
 
-	// covzeta was registered before covalpha; Registered() preserves that.
 	posZeta := positionInOrder(got, "covzeta")
 	posAlpha := positionInOrder(got, "covalpha")
 	if posZeta < 0 || posAlpha < 0 {
@@ -116,7 +113,6 @@ func TestRegistered_OrderAndContents(t *testing.T) {
 		t.Errorf("registration order not preserved: zeta at %d should precede alpha at %d", posZeta, posAlpha)
 	}
 
-	// The new registrations only added entries (no shrink).
 	if len(got) < len(baseline)+2 {
 		t.Errorf("Registered() len=%d, want at least %d", len(got), len(baseline)+2)
 	}
@@ -171,17 +167,12 @@ func countName(ps []ProviderInfo, name string) int {
 	return n
 }
 
-// TestByIntegration covers the lookup the daemon's catalog layer uses: it
-// starts from a drop manifest, which names the INTEGRATION ("Gemini") rather
-// than the provider id. The manifest and the registration are written by hand
-// in two different files, which is why the match is case-insensitive.
 func TestByIntegration(t *testing.T) {
 	Register(ProviderInfo{
 		Name: "byint-a", Integration: "ByIntAcme", DefaultModel: "m-a",
 		Provider: &fakeProvider{reply: "a"},
 	})
 
-	// Exact, and in every casing the two hand-written files might disagree on.
 	for _, in := range []string{"ByIntAcme", "byintacme", "BYINTACME", "bYiNtAcMe"} {
 		p, ok := ByIntegration(in)
 		if !ok {
@@ -193,8 +184,6 @@ func TestByIntegration(t *testing.T) {
 		}
 	}
 
-	// Unknown integration reports not-found with a zero value, rather than a
-	// half-populated provider the caller might use anyway.
 	p, ok := ByIntegration("no-such-integration")
 	if ok {
 		t.Errorf("unknown integration returned %+v", p)
@@ -230,7 +219,6 @@ func TestByIntegration(t *testing.T) {
 	}
 }
 
-// RegisteredNames returns provider ids, sorted, for stable test/debug output.
 func RegisteredNames() []string {
 	mu.RLock()
 	defer mu.RUnlock()

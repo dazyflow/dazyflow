@@ -31,7 +31,6 @@ function fieldsManifest(
   };
 }
 
-// Minimal manifest factory — only the fields requiredConnections reads.
 function manifest(
   id: string,
   integration: string | undefined,
@@ -98,7 +97,6 @@ describe("requiredConnections", () => {
       manifest("sheets_append_row", "Google Sheets", true),
     );
     const providers: OAuthProviderStatus[] = [{ name: "google", accounts: [] }];
-    // Both need google/default — deduped to a single entry.
     expect(requiredConnections(nodes, mm, {}, providers)).toEqual([
       { provider: "google", account: "default" },
     ]);
@@ -178,7 +176,6 @@ describe("requiredSecrets", () => {
       read: { query: "after:${secret.gmail_cursor}" },
       save: { name: "gmail_cursor", value: "123" },
     };
-    // gmail_cursor is written by the secret_set node, so it's not "missing".
     expect(requiredSecrets(nodes, params, [])).toEqual([]);
   });
 
@@ -351,11 +348,9 @@ describe("missingConnectionApps", () => {
       fieldsManifest("ai_classify", "Claude", [apiKeyField]),
       fieldsManifest("ai_extract", "Claude", [apiKeyField]),
     );
-    // None configured → one deduped Claude entry.
     expect(missingConnectionApps(nodes, mm, {}, [])).toEqual([
       { integration: "Claude", slug: "claude" },
     ]);
-    // Connection present → nothing missing.
     expect(missingConnectionApps(nodes, mm, {}, ["conn.claude.api_key"])).toEqual([]);
   });
 });
@@ -370,7 +365,6 @@ describe("setupDestination", () => {
       to: "/apps/fortnox",
       labelKey: "connGate.connect",
     });
-    // Repeats of the same app are still one app.
     expect(setupDestination(["slack", "slack"], [], true).to).toBe("/apps/slack");
   });
 
@@ -386,7 +380,6 @@ describe("setupDestination", () => {
       to: "/admin/secrets?focus=FORTNOX_TOKEN",
       labelKey: "connGate.connectSecrets",
     });
-    // Several secrets: the store, unfocused — there's no one row to highlight.
     expect(setupDestination([], ["A", "B"], true)).toEqual({
       to: "/admin/secrets",
       labelKey: "connGate.connectSecrets",
@@ -409,8 +402,6 @@ describe("setupDestination", () => {
   });
 
   it("defaults to the Apps list when nothing is user-fixable", () => {
-    // Everything is admin-blocked: the button isn't the way out, so don't
-    // promise a deep link that fixes it.
     expect(setupDestination(["slack"], [], false)).toEqual({
       to: "/apps",
       labelKey: "connGate.connect",

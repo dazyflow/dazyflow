@@ -81,8 +81,6 @@ func executeCreatePaymentLink(ctx context.Context, job core.Job, _ chan<- core.P
 	if !ok {
 		return params.Err(job, "bad_input", "'Quantity' input must be a whole number"), nil
 	}
-	// Bound both ends: the UI clamps, but a wired 'Quantity' input bypasses
-	// the form, so the run path enforces Stripe's 1–999999 line-item range.
 	if quantity < 1 || quantity > 999999 {
 		return params.Err(job, "bad_param", "quantity must be between 1 and 999999"), nil
 	}

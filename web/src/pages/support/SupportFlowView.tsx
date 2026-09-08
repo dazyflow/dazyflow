@@ -38,8 +38,6 @@ import type { JobStatus, Manifest, SupportBundle } from "../../types";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { Notice } from "../../components/ui/Notice";
 
-// Reuse the editor's exact node/edge renderers so the read-only canvas looks
-// identical to what the customer sees — just inert.
 const nodeTypes = { dazy: DazyNode, comment: CommentNode };
 const edgeTypes = { reroute: RerouteEdge };
 
@@ -60,8 +58,6 @@ export function SupportFlowView() {
   const [bundle, setBundle] = useState<SupportBundle | null>(null);
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [loading, setLoading] = useState(true);
-  // gate distinguishes the states that aren't "here's the flow": whether the
-  // agent needs to request access, isn't a support agent, or support is off.
   const [gate, setGate] = useState<"none" | "no_access" | "forbidden" | "disabled">("none");
   const [error, setError] = useState<string | null>(null);
 
@@ -70,8 +66,6 @@ export function SupportFlowView() {
     setLoading(true);
     setError(null);
     try {
-      // Manifests are instance-global; fetch them so node cards get the same
-      // icons/labels/port colours as the catalog. Best-effort.
       const [b, drops] = await Promise.all([
         api.viewSupportFlow(token, tenant, workspace, flowId, { runId }),
         api.listDrops(token).catch(() => ({ drops: [] as Manifest[] })),
@@ -141,8 +135,6 @@ export function SupportFlowView() {
   return <SupportCanvas bundle={bundle} manifests={manifests} runId={runId} />;
 }
 
-// CenterCard is the shared shell for the non-canvas states (loading, gated,
-// error) — a single centred card in the full-bleed area.
 function CenterCard({
   children,
   tone,
@@ -162,9 +154,6 @@ function CenterCard({
   );
 }
 
-// RequestAccessCard is shown when the agent has no active grant for this flow.
-// It posts a grant request (optionally tied to a ticket) and then waits for the
-// org to approve — the agent re-checks with "Check again".
 function RequestAccessCard({
   tenant,
   workspace,
@@ -255,7 +244,6 @@ function RequestAccessCard({
   );
 }
 
-// statusTone maps a JobStatus to one of our status CSS colour vars for the chip.
 function statusColor(status?: JobStatus): string {
   switch (status) {
     case "running":
@@ -272,9 +260,6 @@ function statusColor(status?: JobStatus): string {
   }
 }
 
-// SupportCanvas turns a bundle into the inert ReactFlow canvas plus the header
-// and the issues panel. Kept separate so the ReactFlowProvider only mounts once
-// we actually have a graph to draw.
 function SupportCanvas({
   bundle,
   manifests,
@@ -293,8 +278,6 @@ function SupportCanvas({
     return m;
   }, [manifests]);
 
-  // node_id → run status, and node_id → joined lint messages. Both overlay onto
-  // DazyNodeData exactly like the editor does.
   const runStatusById = useMemo(() => {
     const m = new Map<string, JobStatus>();
     for (const nr of bundle.run?.nodes ?? []) m.set(nr.node_id, nr.status);
@@ -411,7 +394,6 @@ function SupportCanvas({
               edges={edges}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
-              // Hard read-only: nothing on this canvas moves, connects, or selects.
               nodesDraggable={false}
               nodesConnectable={false}
               elementsSelectable={false}

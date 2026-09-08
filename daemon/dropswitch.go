@@ -15,10 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// DropSwitch is one platform-admin killswitch entry: a drop turned off
-// either globally (Tenant == "") or for a single misbehaving org
-// (Tenant == "org_..."). Drops are on by default — a row exists only for
-// a drop that's been switched off, so the absence of a row means enabled.
 type DropSwitch struct {
 	DropID     string    `json:"drop_id"`
 	Tenant     string    `json:"tenant"` // "" = global
@@ -36,11 +32,8 @@ type DropSwitchStore interface {
 	// global switch is set for the drop, or a per-tenant switch matching
 	// tenant. Must be cheap and lock-free-ish — called per node execute.
 	Disabled(dropID, tenant string) bool
-	// Disable turns a drop off, globally (tenant="") or for one tenant.
 	Disable(ctx context.Context, sw DropSwitch) error
-	// Enable clears a switch. Idempotent.
 	Enable(ctx context.Context, dropID, tenant string) error
-	// List returns every active switch, for the platform-admin UI.
 	List(ctx context.Context) ([]DropSwitch, error)
 	// DeleteByTenant clears every per-tenant switch set against a tenant,
 	// returning the count. The erasure-cascade entry point (GDPR Art. 17): a
@@ -73,7 +66,6 @@ CREATE TABLE IF NOT EXISTS drop_switches (
 );
 `
 
-// EnsurePgDropSwitchSchema creates the drop_switches table.
 func EnsurePgDropSwitchSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return pgstore.ApplySchema(ctx, pool, pgDropSwitchSchema)
 }
@@ -94,8 +86,6 @@ type PgDropSwitchStore struct {
 	cache map[string]bool // dropSwitchKey -> present(disabled)
 }
 
-// NewPgDropSwitchStore provisions the table, loads the initial snapshot,
-// and starts a background refresh bound to ctx (the daemon lifetime).
 func NewPgDropSwitchStore(ctx context.Context, pool *pgxpool.Pool) (*PgDropSwitchStore, error) {
 	if err := EnsurePgDropSwitchSchema(ctx, pool); err != nil {
 		return nil, err
@@ -173,7 +163,6 @@ func (s *PgDropSwitchStore) AnonymizeSubject(ctx context.Context, ident string) 
 	if err != nil {
 		return 0, err
 	}
-	// disabled_by does not feed the Disabled() snapshot, so no reload here.
 	return int(tag.RowsAffected()), nil
 }
 

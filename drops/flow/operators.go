@@ -28,9 +28,6 @@ import (
 // Category "logic" (distinct from flow_control) buckets these pure
 // predicates; the UI tints the whole category one color, Blueprint-style.
 
-// operandSchema is the trimmed params schema: just the A/B literal defaults
-// for unwired pins. No op enum (the node IS the op) and none of Compare's
-// advanced field/range knobs — keeping these "super basic" is the point.
 var operandSchema = json.RawMessage(`{
 	"type":"object",
 	"properties":{
@@ -39,8 +36,6 @@ var operandSchema = json.RawMessage(`{
 	}
 }`)
 
-// operatorSpec is the per-drop variation; everything else is identical and
-// supplied by registerOperator.
 type operatorSpec struct {
 	id      string
 	label   string
@@ -70,14 +65,12 @@ func operandPorts(numeric bool) []core.Port {
 func registerOperator(o operatorSpec) {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:       o.id,
-			Version:  "1.0",
-			Label:    o.label,
-			Icon:     o.icon,
-			Category: "logic",
-			Provider: "internal",
-			// Color is intentionally unset: the UI tints "logic" drops from
-			// the category palette, the way Blueprint colors pure nodes.
+			ID:             o.id,
+			Version:        "1.0",
+			Label:          o.label,
+			Icon:           o.icon,
+			Category:       "logic",
+			Provider:       "internal",
 			Tags:           []string{"condition", "predicate", "boolean", "compare", "logic", o.op},
 			Description:    o.desc,
 			Summary:        o.summary,

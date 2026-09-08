@@ -9,8 +9,6 @@ import {
 
 describe("approvalContextView", () => {
   it("shows a form submission as named fields, in the order they were declared", () => {
-    // The case that started this: an approver was shown a step id instead of
-    // the person and what they wrote.
     const view = approvalContextView({
       "Your name": "Marina Alvarez",
       "Your email": "marina@example.com",
@@ -28,7 +26,6 @@ describe("approvalContextView", () => {
   });
 
   it("unwraps a one-row list", () => {
-    // How a form submission reaches a row-writing step.
     expect(approvalContextView([{ name: "Ada" }])).toEqual({
       kind: "fields",
       more: 0,
@@ -77,7 +74,6 @@ describe("approvalContextView", () => {
     if (view?.kind !== "fields") throw new Error("expected fields");
     expect(view.fields[0].value.endsWith("…")).toBe(true);
     expect(view.fields[0].value.length).toBeLessThanOrEqual(301);
-    // The later field survives.
     expect(view.fields[1]).toEqual({ key: "who", value: "Ada" });
   });
 
@@ -141,8 +137,6 @@ describe("approvalContextView", () => {
   });
 });
 
-// The one-line form the history rows use. The inbox card can afford a field
-// list; a settled decision is scanned, and gets a sentence.
 describe("approvalContextSummary", () => {
   it("flattens named fields onto one line, in view order", () => {
     const view = approvalContextView({ order: "4471", amount: "SEK 400" }, [

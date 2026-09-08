@@ -70,9 +70,7 @@ func init() {
 			// a retried POST sends a second SMS — and double-bills. This
 			// drop is a terminal leaf the engine auto-retries on backoff,
 			// so retries must be off here.
-			RetryPolicy: core.RetryNever,
-			// …and the engine dedupes a same-job re-execution (expired-lease
-			// reclaim / crash recovery) so a recovered run doesn't re-send.
+			RetryPolicy:  core.RetryNever,
 			DedupeWrites: true,
 		},
 		Execute: executeSendSMS,
@@ -109,7 +107,6 @@ func executeSendSMS(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 	form := url.Values{}
 	form.Set("To", to)
 	form.Set("Body", body)
-	// A Messaging Service takes precedence over a bare From when both are set.
 	if msgService != "" {
 		form.Set("MessagingServiceSid", msgService)
 	} else {

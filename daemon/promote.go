@@ -59,14 +59,6 @@ func (s *Service) promotePendingRuns(ctx context.Context, tenant string) {
 		if !won {
 			continue // another promoter took this one; try the next
 		}
-		// Only the promoter that WON needs the run's flow payload, so it is
-		// fetched here rather than by the scan above: this loop runs up to
-		// maxPerCall times per tenant per sweep, and the scan is a page of 50.
-		//
-		// The record is already marked running at this point, and nothing
-		// re-dispatches a run — the stuck-run reaper only re-checks
-		// COMPLETION. So a failed read has to end the run here, or it sits
-		// running with no work queued for as long as the install lives.
 		run, err := s.Jobs.Get(ctx, runID)
 		if err != nil {
 			jobErr := &core.JobError{Code: "promote_failed", Message: err.Error()}
@@ -82,9 +74,6 @@ func (s *Service) promotePendingRuns(ctx context.Context, tenant string) {
 	}
 }
 
-// oldestPendingRun returns the id of the tenant's earliest-enqueued pending
-// (queued) graph run. The list sorts newest-first, so we scan a batch and pick
-// the minimum enqueue time for FIFO fairness.
 func (s *Service) oldestPendingRun(ctx context.Context, tenant string) (string, bool) {
 	recs, err := core.ListRunSummaries(ctx, s.Jobs, core.ListGraphRunsOpts{
 		Tenant: tenant, Status: core.JobStatusQueued, Limit: 50,
@@ -101,16 +90,9 @@ func (s *Service) oldestPendingRun(ctx context.Context, tenant string) (string, 
 	return oldest.ID, true
 }
 
-// startPendingRun dispatches a run that was just flipped from pending to
-// running (by MarkGraphRunning in the caller): it reconstructs the seed set
-// from the pre-completed node-records, enqueues the runnable roots, and arms
-// the per-run watchdogs — the work SubmitGraphWithSeed does for an admitted
-// run, minus the seed-persist (already done at submit).
 func (s *Service) startPendingRun(ctx context.Context, run core.JobRecord) {
 	var g core.Graph
 	if len(run.GraphPayload) == 0 || json.Unmarshal(run.GraphPayload, &g) != nil {
-		// No usable payload — finalize as failed rather than leaving it running
-		// forever. Shouldn't happen (submit always stores the payload).
 		_ = s.Jobs.Complete(ctx, run.ID, core.JobStatusFailed, &core.Result{
 			Status: core.StatusError,
 			Error:  &core.JobError{Code: "no_payload", Message: "pending run had no graph payload"},
@@ -168,9 +150,6 @@ func (s *Service) startPendingRun(ctx context.Context, run core.JobRecord) {
 	// after the person pressed Run, in a goroutine that never saw them.
 }
 
-// seededNodes returns the set of node IDs that already hold a succeeded
-// node-record for a run — i.e. its seeds, when called before any real work has
-// run.
 func (s *Service) seededNodes(ctx context.Context, graphRunID string, graphSize int) map[string]struct{} {
 	out := map[string]struct{}{}
 	recs, err := s.Jobs.ListNodeRecords(ctx, core.ListNodeRecordsOpts{
@@ -192,9 +171,6 @@ func (s *Service) SweepPromotePending(ctx context.Context) {
 	if _, ok := s.Jobs.(core.GraphRunStarter); !ok {
 		return
 	}
-	// Only the tenant column is read here, so this takes the summary list:
-	// the sweep runs every couple of seconds on every replica, and a page of
-	// 200 whole records is 200 flow payloads fetched to build a set of names.
 	recs, err := core.ListRunSummaries(ctx, s.Jobs, core.ListGraphRunsOpts{
 		Status: core.JobStatusQueued, Limit: 200,
 	})

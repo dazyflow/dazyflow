@@ -45,8 +45,6 @@ func NewPgRunnerStore(ctx context.Context, pool *pgxpool.Pool) (*PgRunnerStore, 
 // runnerColumns is the select list every read shares, in Runner field order.
 const runnerColumns = `tenant, name, labels, version, last_seen, created_by, created_at`
 
-// scanRunner reads runnerColumns. last_seen is nullable — a runner exists
-// between being registered and first checking in.
 func scanRunner(row pgx.Row) (Runner, error) {
 	var r Runner
 	var lastSeen *time.Time
@@ -256,9 +254,6 @@ func (s *PgRunnerStore) SetLabels(ctx context.Context, tenant, name string, labe
 	return r, nil
 }
 
-// Delete removes the runner, which is also the revocation: the credential is
-// stored on the row, so deleting the row is what stops the agent — whether or
-// not anyone remembers to shut it down.
 func (s *PgRunnerStore) Delete(ctx context.Context, tenant, name string) error {
 	tag, err := s.pool.Exec(ctx,
 		`DELETE FROM tenant_runners WHERE tenant = $1 AND name = $2`, tenant, name)
@@ -296,7 +291,6 @@ func (s *PgRunnerStore) DeleteByTenant(ctx context.Context, tenant string) (int,
 	return int(tag.RowsAffected()), nil
 }
 
-// AnonymizeSubject scrubs an erased person from both of this store's tables.
 func (s *PgRunnerStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
 	if ident == "" {
 		return 0, nil
@@ -323,9 +317,6 @@ func (s *PgRunnerStore) AnonymizeSubject(ctx context.Context, ident string) (int
 	return total, nil
 }
 
-// nullTime keeps a zero time out of the database as NULL. "Never checked in"
-// and "checked in at the zero instant" read the same in Go but not in SQL, and
-// only NULL sorts and displays correctly.
 func nullTime(t time.Time) *time.Time {
 	if t.IsZero() {
 		return nil

@@ -25,9 +25,6 @@ func tagsServer(t *testing.T, body any, status int) *httptest.Server {
 }
 
 func TestListModels_ReturnsWhatIsPulled(t *testing.T) {
-	// The point of asking: this machine has three models and none of them is
-	// llama3.1, the compiled-in default. A picker built from the server can
-	// only offer models that run; a guess offers a 404.
 	srv := tagsServer(t, map[string]any{"models": []any{
 		map[string]any{"name": "qwen3-coder:30b"},
 		map[string]any{"name": "gemma4:latest"},

@@ -50,7 +50,6 @@ func newRunOnlyHarness(t *testing.T) *runOnlyHarness {
 
 func runOnlyDo(t *testing.T, h *runOnlyHarness, method, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()
-	// Temporarily swap the token so h.do uses the run-only credential.
 	saved := h.gatewayHarness.token
 	h.gatewayHarness.token = h.runToken
 	defer func() { h.gatewayHarness.token = saved }()

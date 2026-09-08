@@ -15,9 +15,6 @@ import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { Notice } from "../ui/Notice";
 
-// The three team roles, with the label keys that already name them elsewhere
-// (the invite form, the API-key wizard). The VALUE stays the role's own name —
-// it is what the API takes — while the option shows the word a reader knows.
 const ROLE_NAMES = ["viewer", "editor", "admin"] as const;
 const ROLE_LABEL_KEYS: Record<(typeof ROLE_NAMES)[number], string> = {
   viewer: "admin.users.roleViewer",
@@ -25,8 +22,6 @@ const ROLE_LABEL_KEYS: Record<(typeof ROLE_NAMES)[number], string> = {
   admin: "admin.users.roleAdmin",
 };
 
-// teamRoleOf collapses a member's role set to the single catalog name the
-// dropdown shows (admin > editor > viewer).
 function teamRoleOf(roles: { name: string; permissions: string[] }[]): string {
   const names = roles.map((r) => r.name);
   if (names.includes("admin") || roles.some((r) => r.permissions.includes("organization:admin")))
@@ -35,8 +30,6 @@ function teamRoleOf(roles: { name: string; permissions: string[] }[]): string {
   return "viewer";
 }
 
-// MembersSection lists an org's members and lets a platform admin change
-// roles, remove members, and invite new ones — cross-tenant. Self-fetching.
 export function MembersSection({ tenant }: { tenant: string }) {
   const { t } = useTranslation();
   const { token } = useAuth();

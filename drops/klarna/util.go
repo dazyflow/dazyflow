@@ -17,7 +17,6 @@ import (
 // characters (or a hostile "../") can't reshape the request path.
 func escapePathSeg(s string) string { return url.PathEscape(s) }
 
-// itoa64 renders an int64 amount for a text output pin.
 func itoa64(n int64) string { return strconv.FormatInt(n, 10) }
 
 // wholeNumberInputOr returns the whole number wired into input port `port` (a
@@ -57,10 +56,6 @@ func wholeNumberInputOr(job core.Job, port string, fallback int) (int, bool) {
 	return 0, false
 }
 
-// idFromHeaderOrLocation reads a resource id Klarna returns for a created
-// capture/refund: the dedicated header (e.g. "Capture-ID") if present, else the
-// last path segment of the Location header ("/…/captures/{id}"). Klarna sends
-// both; either alone identifies the new resource.
 func idFromHeaderOrLocation(h http.Header, idHeader string) string {
 	if h == nil {
 		return ""

@@ -46,8 +46,6 @@ import {
 } from "../i18n/drops/fields.sv";
 import { integrationMeta } from "../integrationMeta";
 
-// One drop as `make drop-catalog` records it: the English every Swedish entry
-// was made from, for each surface that shows one.
 type Drop = {
   description: string;
   ports: string[];
@@ -62,7 +60,6 @@ type Drop = {
   secret_notes?: string[];
 };
 
-// Generated from the live drop registry by `make drop-catalog`.
 const DROPS = catalog as unknown as Record<string, Drop>;
 
 describe("Swedish drop descriptions", () => {
@@ -80,8 +77,6 @@ describe("Swedish drop descriptions", () => {
     expect(stale, "retranslate these and refresh their `en` fingerprint").toEqual([]);
   });
 
-  // A drop that was renamed or removed leaves its translation behind, where it
-  // reads as coverage that no longer exists.
   it("have no entries for drops that no longer exist", () => {
     expect(Object.keys(SV_DESCRIPTIONS).filter((id) => !(id in DROPS))).toEqual([]);
   });
@@ -105,7 +100,6 @@ describe("Swedish port labels", () => {
     "YAML",
   ]);
 
-  // label -> the drops that show it, so a failure names somewhere to look.
   const labels = new Map<string, string[]>();
   for (const [id, drop] of Object.entries(DROPS)) {
     for (const label of drop.ports) {
@@ -128,8 +122,6 @@ describe("Swedish port labels", () => {
   });
 
   it("carry no stale allowances", () => {
-    // Two ways an entry rots: the drop that used the label is gone, or someone
-    // translated it anyway and the allowance now contradicts the map.
     const gone = [...SAME_IN_SWEDISH].filter((l) => !labels.has(l));
     expect(gone, "no drop shows these labels any more").toEqual([]);
     const translated = [...SAME_IN_SWEDISH].filter((l) => portLabel(l, "sv") !== l);
@@ -150,8 +142,6 @@ describe("Swedish port labels", () => {
   });
 });
 
-// Same mechanism, same silent failure — but both sides live in the frontend,
-// so this needs no generated catalog: integrationMeta.ts IS the English.
 describe("Swedish integration prose", () => {
   const fields = ["description", "technical_notes"] as const;
   const english = (slug: string, field: (typeof fields)[number]) =>
@@ -182,7 +172,6 @@ describe("Swedish integration prose", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // The rest of the drop vocabulary: the step's own name and action line, the
 // app it belongs to, every string its params_schema puts in the Inspector, the
 // connection card on its app page, and the "keeps state" copy on the card.
@@ -332,8 +321,6 @@ const SURFACES: Surface[] = [
   },
 ];
 
-// english -> the surfaces it appears on, with the drops that show it. Built
-// once: the coverage tests read it per surface, the honesty tests read it whole.
 const seen = new Map<string, Map<string, string[]>>();
 for (const [id, drop] of Object.entries(DROPS)) {
   for (const surface of SURFACES) {
@@ -433,9 +420,6 @@ describe("Swedish drop vocabulary", () => {
     ).toEqual([]);
   });
 
-  // App names come from two places, so this one map is checked against both:
-  // the Integration a manifest carries ("Calendar") and the curated display
-  // name on the Apps page ("Calendar (CalDAV)").
   it("has no app-name entry for an app that no longer exists", () => {
     const live = new Set<string>([
       ...[...seen.entries()]

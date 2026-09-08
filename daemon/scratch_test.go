@@ -30,10 +30,8 @@ func TestFSSandbox_ScratchLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ScratchRoot: %v", err)
 	}
-	// Lives under the (tenant, workspace) subtree so it's quota-counted.
 	wantPrefix := filepath.Join(base, "acme", "ws", ".scratch", "run123")
 	if scratch != wantPrefix {
-		// EvalSymlinks may canonicalize; compare suffix instead of exact.
 		if filepath.Base(scratch) != "run123" {
 			t.Errorf("scratch = %q, want under %q", scratch, wantPrefix)
 		}
@@ -42,7 +40,6 @@ func TestFSSandbox_ScratchLifecycle(t *testing.T) {
 		t.Fatalf("scratch dir not created: %v", err)
 	}
 
-	// Quota counts scratch contents (walkUsage walks the tenant subtree).
 	if err := os.WriteFile(filepath.Join(scratch, "blob"), make([]byte, 500), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +49,6 @@ func TestFSSandbox_ScratchLifecycle(t *testing.T) {
 		t.Errorf("Used = %d, want 500 (scratch counts against quota)", used)
 	}
 
-	// RemoveScratch reclaims it and frees the quota.
 	if err := sp.RemoveScratch("acme", "ws", "run123"); err != nil {
 		t.Fatalf("RemoveScratch: %v", err)
 	}
@@ -86,9 +82,6 @@ func TestFSSandbox_ScratchRejectsUnsafeRunID(t *testing.T) {
 	}
 }
 
-// TestFSSandbox_ScratchNestedRunID covers the loop-body case: a per-item
-// scratch path "<parentRunID>/iN" is accepted and nests under the parent
-// run's scratch, so reclaiming the parent removes every item subdir.
 func TestFSSandbox_ScratchNestedRunID(t *testing.T) {
 	t.Parallel()
 	sb, _ := daemon.NewFSSandbox(t.TempDir())
@@ -107,7 +100,6 @@ func TestFSSandbox_ScratchNestedRunID(t *testing.T) {
 	if _, err := os.Stat(a); err != nil {
 		t.Errorf("item scratch i0 missing: %v", err)
 	}
-	// Reclaiming the parent run removes both item subdirs.
 	if err := sp.RemoveScratch("acme", "ws", "run123"); err != nil {
 		t.Fatalf("RemoveScratch parent: %v", err)
 	}
@@ -116,10 +108,6 @@ func TestFSSandbox_ScratchNestedRunID(t *testing.T) {
 	}
 }
 
-// TestScratch_ReclaimedOnGraphCompletion runs a real graph end to end
-// (read a seeded workspace file, write it to scratch://) and asserts the
-// run's scratch directory is gone once the run reaches terminal — the
-// dispatcher's reclamation path.
 func TestScratch_ReclaimedOnGraphCompletion(t *testing.T) {
 	t.Parallel()
 	h := newQuotaHarness(t, nil) // no quota limits needed here

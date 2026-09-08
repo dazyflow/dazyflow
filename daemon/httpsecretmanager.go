@@ -24,9 +24,6 @@ import (
 
 const vaultVerifyTimeout = 10 * time.Second
 
-// secretManagerView is the credential-free shape returned by GET — enough for
-// the UI to show "configured, pointing at X via Y auth" without ever handing
-// back the token or secret_id.
 type secretManagerView struct {
 	Configured bool   `json:"configured"`
 	Address    string `json:"address,omitempty"`

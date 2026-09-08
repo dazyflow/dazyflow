@@ -70,7 +70,6 @@ export function CelInput({
           ref={preRef}
           className="cel-highlight"
           aria-hidden="true"
-          // Trailing newline keeps the last line visible when it ends in \n.
           dangerouslySetInnerHTML={{ __html: highlightCEL(value) + "\n" }}
         />
         <textarea

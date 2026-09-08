@@ -33,9 +33,6 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// Connection security modes, spelled as the tenant picks them on the
-// integration page. Same vocabulary as the Email drop's `tls` field so
-// someone configuring both halves of one mail account meets one set of words.
 const (
 	ModeSTARTTLS = "starttls"
 	ModeImplicit = "implicit"
@@ -52,8 +49,6 @@ const (
 	defaultDeadline = 30 * time.Second
 )
 
-// Config is one tenant's mailbox connection. It is the ConnectionFields
-// bundle from the Mailbox integration page, parsed and defaulted.
 type Config struct {
 	Host     string
 	Port     int
@@ -63,7 +58,6 @@ type Config struct {
 	Folder   string
 }
 
-// Addr is the host:port to dial.
 func (c Config) Addr() string { return net.JoinHostPort(c.Host, strconv.Itoa(c.Port)) }
 
 // defaultPort is the port a security mode implies: 993 for implicit TLS, 143
@@ -77,9 +71,6 @@ func defaultPort(mode string) int {
 	return 143
 }
 
-// ParseMode validates a security mode and supplies the default. STARTTLS is
-// the default rather than implicit TLS to match the Email drop's `tls` field,
-// so the two halves of one account don't disagree about what blank means.
 func ParseMode(s string) (string, error) {
 	switch mode := strings.TrimSpace(s); mode {
 	case "":
@@ -91,9 +82,6 @@ func ParseMode(s string) (string, error) {
 	}
 }
 
-// ParsePort turns the configured port into a number, falling back to the
-// mode's default when blank. ConnectionFields store every value as a string,
-// so this is the one place that decides what "" and a non-number mean.
 func ParsePort(s, mode string) (int, error) {
 	if s = strings.TrimSpace(s); s != "" {
 		n, err := strconv.Atoi(s)
@@ -173,10 +161,6 @@ func (c *Client) Close() {
 	}
 }
 
-// isLoopbackHost reports whether host names this machine. It carries the same
-// exemption net/smtp's PlainAuth makes for localhost (and therefore
-// smtputil.dial), so the cleartext-login refusal below doesn't turn away a
-// local mail bridge on 127.0.0.1 — which has no network to sniff.
 func isLoopbackHost(host string) bool {
 	if host == "localhost" {
 		return true
@@ -215,9 +199,6 @@ func Dial(ctx context.Context, cfg Config) (*Client, error) {
 		return nil, err
 	}
 
-	// Implicit TLS is negotiated by the dialer (port 993 speaks TLS from the
-	// first byte); STARTTLS and none dial plaintext and upgrade — or don't —
-	// in newClient. Mirrors smtputil.dial.
 	var conn net.Conn
 	var err error
 	dialer := &net.Dialer{Control: hfnet.SSRFDialControl()}
@@ -272,14 +253,10 @@ func Dial(ctx context.Context, cfg Config) (*Client, error) {
 	return c, nil
 }
 
-// newClient wraps a dialed connection in the protocol client, doing the TLS
-// upgrade the mode calls for.
 func newClient(conn net.Conn, cfg Config) (*imapclient.Client, error) {
 	opts := &imapclient.Options{}
 	switch cfg.TLS {
 	case ModeImplicit:
-		// The dialer already negotiated TLS, so the socket carries no
-		// plaintext and the client just wraps it.
 		client := imapclient.New(conn, opts)
 		if err := client.WaitGreeting(); err != nil {
 			_ = client.Close()
@@ -326,10 +303,6 @@ func (c *Client) Select(folder string, readOnly bool) (*imap.SelectData, error) 
 	return data, nil
 }
 
-// Verify is the "Test connection" probe: connect, log in, open the folder,
-// and hang up without reading a single message. It exercises every part of
-// the configuration a run depends on — host, port, security mode, login, and
-// the folder name, which is the field most likely to be quietly wrong.
 func Verify(ctx context.Context, cfg Config) error {
 	c, err := Dial(ctx, cfg)
 	if err != nil {
@@ -340,10 +313,6 @@ func Verify(ctx context.Context, cfg Config) error {
 	return err
 }
 
-// tlsConfigFor is the TLS configuration every encrypted path uses. ServerName
-// is set explicitly so certificate verification is pinned to the configured
-// hostname rather than whatever the connection resolved to — the other half
-// of the rebinding guard on the dialer.
 func tlsConfigFor(host string) *tls.Config {
 	return &tls.Config{ServerName: host}
 }

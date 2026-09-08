@@ -11,37 +11,14 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Who is using a tenant-configured step source, for the admin about to delete
-// one.
-//
-// Deleting is allowed and stays allowed — the same bargain deleting a runner
-// makes. What was missing is the fact an admin needs to make that call: the
-// page warned that flows "will stop running" whether or not any flow used the
-// source, which is a warning nobody can act on. This answers the actual
-// question.
-//
-// Shared by MCP servers and web APIs, like the rest of stepsources.go. The two
-// differ only in the id prefix their steps carry — mcp:<name>: and api:<name>:
-// — so one scan serves both rather than the second catalog growing its own
-// copy with its own visibility bugs.
-
-// StepSourceUse is one flow that references a step source's steps.
 type StepSourceUse struct {
-	Workspace string `json:"workspace"`
-	FlowID    string `json:"flow_id"`
-	// Name is the flow's title when it has one; the UI falls back to FlowID.
-	Name string `json:"name,omitempty"`
-	// Steps are the ids of the referencing nodes' modules, deduplicated —
-	// "mcp:mcp-test:search", "api:billing:create_invoice". WHICH operation is
-	// used is what tells an admin whether the flow is doing something they can
-	// replace.
-	Steps []string `json:"steps"`
-	// Published matters more than the rest: an unpublished draft breaking is
-	// an inconvenience, a published flow breaking is an outage.
-	Published bool `json:"published"`
+	Workspace string   `json:"workspace"`
+	FlowID    string   `json:"flow_id"`
+	Name      string   `json:"name,omitempty"`
+	Steps     []string `json:"steps"`
+	Published bool     `json:"published"`
 }
 
-// StepSourceUsage is the whole answer for one source.
 type StepSourceUsage struct {
 	Flows []StepSourceUse `json:"flows"`
 	// Hidden counts flows that use the server but that this principal may not
@@ -53,12 +30,10 @@ type StepSourceUsage struct {
 // InUse reports whether anything at all would break.
 func (u StepSourceUsage) InUse() bool { return len(u.Flows) > 0 || u.Hidden > 0 }
 
-// FlowsUsingMCPServer scans for flows referencing mcp:<name>:<tool>.
 func (s *Service) FlowsUsingMCPServer(ctx context.Context, p core.Principal, tenant, name string) (StepSourceUsage, error) {
 	return s.flowsUsingStepSource(ctx, p, tenant, "mcp", name)
 }
 
-// FlowsUsingWebAPI scans for flows referencing api:<name>:<operation>.
 func (s *Service) FlowsUsingWebAPI(ctx context.Context, p core.Principal, tenant, name string) (StepSourceUsage, error) {
 	return s.flowsUsingStepSource(ctx, p, tenant, "api", name)
 }
@@ -131,8 +106,6 @@ func (s *Service) flowsUsingStepSource(ctx context.Context, p core.Principal, te
 			})
 		}
 	}
-	// Published first, then by name: the flows whose breakage an admin most
-	// needs to weigh are the ones at the top of the list.
 	sort.SliceStable(usage.Flows, func(i, j int) bool {
 		a, b := usage.Flows[i], usage.Flows[j]
 		if a.Published != b.Published {
@@ -146,8 +119,6 @@ func (s *Service) flowsUsingStepSource(ctx context.Context, p core.Principal, te
 	return usage, nil
 }
 
-// stepsIn returns the distinct module ids in g that belong to the source,
-// sorted. Empty when the flow does not touch it.
 func stepsIn(g core.Graph, prefix string) []string {
 	var steps []string
 	seen := map[string]bool{}

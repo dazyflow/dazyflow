@@ -26,8 +26,6 @@ func replayPrincipal() core.Principal {
 	}
 }
 
-// fireWebhook posts a body to a flow's trigger URL through the real listener
-// and returns the run it started.
 func fireWebhook(t *testing.T, wh *daemon.WebhookListener, flowID, secret, body string) string {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -57,11 +55,10 @@ func fireWebhook(t *testing.T, wh *daemon.WebhookListener, flowID, secret, body 
 	return out.JobID
 }
 
-// TestReplayRun_ResendsWebhookBody is the bug this endpoint exists for:
-// re-running a webhook-triggered run used to submit the flow afresh, which
-// left the webhook step with nothing and killed the whole re-run on its first
-// step ("nothing was sent to this flow"). The replay must hand the new run the
-// body the original delivery carried.
+// The bug this endpoint exists for: re-running a webhook-triggered run used to
+// submit the flow afresh, which left the webhook step with nothing and killed
+// the whole re-run on its first step ("nothing was sent to this flow"). The
+// replay must hand the new run the body the original delivery carried.
 func TestReplayRun_ResendsWebhookBody(t *testing.T) {
 	t.Parallel()
 	svc, wh, jobs, bus, wsStore := startWebhookHarness(t)
@@ -117,10 +114,6 @@ func TestReplayRun_ResendsWebhookBody(t *testing.T) {
 	}
 }
 
-// TestReplayRun_RefusesRunWithNoDelivery: a webhook flow someone ran by hand
-// received nothing, so there is nothing to replay. Refuse with the sentinel
-// the gateway turns into an actionable message rather than starting a run that
-// is certain to die on its first step.
 func TestReplayRun_RefusesRunWithNoDelivery(t *testing.T) {
 	t.Parallel()
 	svc, _, jobs, bus, wsStore := startWebhookHarness(t)
@@ -196,7 +189,6 @@ func TestReplayRun_RefusesWhenTriggerStepIsOff(t *testing.T) {
 		t.Fatalf("run1 status = %q, want succeeded", term.Status)
 	}
 
-	// The owner pauses the webhook step after the delivery landed.
 	off := g
 	off.Nodes = []core.Node{{ID: "in", Module: "webhook_input", Disabled: true,
 		Params: map[string]any{"secrets": []any{"s3cr3t"}}}}

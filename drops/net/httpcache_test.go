@@ -52,7 +52,6 @@ func TestApplyConditionalHeaders(t *testing.T) {
 		t.Fatalf("caller's If-None-Match overwritten: %q", got)
 	}
 
-	// nil validators → no headers.
 	req3, _ := http.NewRequest("GET", "https://example.com", nil)
 	applyConditionalHeaders(req3, nil)
 	if req3.Header.Get("If-None-Match") != "" || req3.Header.Get("If-Modified-Since") != "" {
@@ -80,9 +79,6 @@ func TestValidatorsFromResponse(t *testing.T) {
 	}
 }
 
-// TestApplyConditionalHeaders_SentFlag covers the sent-validator signal used to
-// gate the 304 fast-path: it's true only when a validator was actually
-// attached, so an unsolicited 304 (nothing stored) isn't read as "not modified".
 func TestApplyConditionalHeaders_SentFlag(t *testing.T) {
 	req, _ := http.NewRequest("GET", "https://example.com", nil)
 	if applyConditionalHeaders(req, nil) {
@@ -97,8 +93,8 @@ func TestApplyConditionalHeaders_SentFlag(t *testing.T) {
 	}
 }
 
-// TestClearCacheValidators verifies a stored validator is cleared (reads back
-// nil) so a fresh 2xx that dropped its ETag stops us sending a stale one.
+// Verifies a stored validator is cleared (reads back nil) so a fresh 2xx that
+// dropped its ETag stops us sending a stale one.
 func TestClearCacheValidators(t *testing.T) {
 	_, cleanup := memCacheStore()
 	defer cleanup()

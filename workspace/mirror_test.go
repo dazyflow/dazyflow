@@ -16,10 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// bareRemote creates an empty bare repository to push into and returns its
-// path. Pushing to a local path exercises go-git's file transport, which
-// shells out to git-receive-pack — so the test skips where git is absent
-// rather than failing on a missing binary.
 func bareRemote(t *testing.T) string {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
@@ -32,8 +28,6 @@ func bareRemote(t *testing.T) string {
 	return dir
 }
 
-// remoteRefs lists the refs the bare remote holds, so assertions read as
-// "the mirror carries this" rather than poking at git internals inline.
 func remoteRefs(t *testing.T, dir string) map[string]string {
 	t.Helper()
 	repo, err := git.PlainOpen(dir)
@@ -56,11 +50,10 @@ func remoteRefs(t *testing.T, dir string) map[string]string {
 	return out
 }
 
-// TestStore_PushMirrorsGraphsAndTags is the end-to-end contract of the
-// mirror: after a push the remote holds the same commit, the flow's JSON is
-// readable from it, and the published-environment tag came along (a mirror
-// that carried flows but not the published tag would lose which revision is
-// live).
+// The end-to-end contract of the mirror: after a push the remote holds the
+// same commit, the flow's JSON is readable from it, and the published-
+// environment tag came along (a mirror that carried flows but not the
+// published tag would lose which revision is live).
 func TestStore_PushMirrorsGraphsAndTags(t *testing.T) {
 	remote := bareRemote(t)
 	s, err := OpenFS(t.TempDir())
@@ -124,10 +117,10 @@ func TestStore_PushMirrorsGraphsAndTags(t *testing.T) {
 	}
 }
 
-// TestStore_PushIsIdempotent covers the no-op path: a second push with
-// nothing new must report success with Changed=false, not an error. go-git
-// signals up-to-date with a non-nil error value, so getting this wrong turns
-// every quiet mirror into a red "mirror failed" in the UI.
+// Covers the no-op path: a second push with nothing new must report success
+// with Changed=false, not an error. go-git signals up-to-date with a non-nil
+// error value, so getting this wrong turns every quiet mirror into a red
+// "mirror failed" in the UI.
 func TestStore_PushIsIdempotent(t *testing.T) {
 	remote := bareRemote(t)
 	s, err := OpenFS(t.TempDir())
@@ -149,9 +142,9 @@ func TestStore_PushIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestStore_PushPrunesDeletedTags is why Prune is on. Unpublishing a flow
-// removes its published tag locally; without prune the mirror would keep
-// advertising a revision as live after it was taken offline.
+// Why Prune is on. Unpublishing a flow removes its published tag locally;
+// without prune the mirror would keep advertising a revision as live after it
+// was taken offline.
 func TestStore_PushPrunesDeletedTags(t *testing.T) {
 	remote := bareRemote(t)
 	s, err := OpenFS(t.TempDir())
@@ -173,7 +166,6 @@ func TestStore_PushPrunesDeletedTags(t *testing.T) {
 		t.Fatalf("setup: expected %q on the mirror", tag)
 	}
 
-	// Unpublish, then re-mirror.
 	if err := s.ClearEnvironment("flow1", PublishedEnv); err != nil {
 		t.Fatalf("unpublish: %v", err)
 	}
@@ -185,11 +177,10 @@ func TestStore_PushPrunesDeletedTags(t *testing.T) {
 	}
 }
 
-// TestStore_PushSurvivesAmendedHistory is the reason the mirror forces.
-// SaveCoalescing amends the previous autosave inside its window, so a
-// workspace's history is legitimately rewritten during ordinary editing. A
-// non-forced mirror would start rejecting pushes the first time a user typed
-// two params half a minute apart.
+// The reason the mirror forces. SaveCoalescing amends the previous autosave
+// inside its window, so a workspace's history is legitimately rewritten during
+// ordinary editing. A non-forced mirror would start rejecting pushes the first
+// time a user typed two params half a minute apart.
 func TestStore_PushSurvivesAmendedHistory(t *testing.T) {
 	remote := bareRemote(t)
 	s, err := OpenFS(t.TempDir())
@@ -207,9 +198,6 @@ func TestStore_PushSurvivesAmendedHistory(t *testing.T) {
 		t.Fatalf("push after first autosave: %v", err)
 	}
 
-	// A second coalescing save inside the window amends, so HEAD's hash
-	// changes without a new commit on top — exactly the shape a plain push
-	// rejects as non-fast-forward.
 	second, err := s.SaveCoalescing(mk("b"), "anna@acme.com")
 	if err != nil {
 		t.Fatalf("second autosave: %v", err)
@@ -235,8 +223,8 @@ func TestStore_PushSurvivesAmendedHistory(t *testing.T) {
 	}
 }
 
-// TestStore_PushRejectsEmptyURL guards the argument check — a misconfigured
-// mirror must fail fast with a clear message rather than reaching go-git.
+// Guards the argument check — a misconfigured mirror must fail fast with a
+// clear message rather than reaching go-git.
 func TestStore_PushRejectsEmptyURL(t *testing.T) {
 	s, err := OpenFS("")
 	if err != nil {

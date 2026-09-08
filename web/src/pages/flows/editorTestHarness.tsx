@@ -26,13 +26,9 @@
 
 import { vi } from "vitest";
 
-// ---------------------------------------------------------------------------
-// Run stream
 
 export type StreamFrame = [kind: string, data: unknown];
 
-// A captured streamJob subscription: the callback the editor handed us, plus
-// the run it was opened for and whether it has since been aborted.
 interface Subscription {
   runID: string;
   emit: (kind: string, data: unknown) => void;
@@ -67,7 +63,6 @@ export function makeStreamJob() {
   return {
     streamJob,
     subs,
-    // The stream the editor is currently reading.
     latest: () => subs[subs.length - 1],
   };
 }
@@ -93,8 +88,6 @@ export const frame = {
   ): StreamFrame => ["terminal", { status, ...(error ? { error } : {}) }],
 };
 
-// ---------------------------------------------------------------------------
-// jsdom gaps React Flow trips over
 
 const RECT = {
   x: 0,
@@ -142,11 +135,7 @@ export function installLayoutStubs() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Graph fixtures
 
-// A two-step flow: one manual trigger feeding one notify step. Small enough to
-// assert over, real enough to exercise wiring, statuses and the result banner.
 export function twoStepGraph(id = "coffee-reorder") {
   return {
     id,

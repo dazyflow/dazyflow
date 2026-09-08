@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-// TestSanitizeAuditField_StripsLogForging is the regression: the failed
-// sign-in path records the email the caller typed, unvalidated. A newline in
-// it would forge an extra line in a compliance-relevant log.
+// The regression: the failed sign-in path records the email the caller typed,
+// unvalidated. A newline in it would forge an extra line in a compliance-
+// relevant log.
 func TestSanitizeAuditField_StripsLogForging(t *testing.T) {
 	t.Parallel()
 	forged := "victim@acme.test\nauth.signin OK actor=admin@acme.test"

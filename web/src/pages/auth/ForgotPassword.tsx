@@ -45,8 +45,6 @@ export function ForgotPassword() {
           try {
             await api.requestPasswordReset(email.trim());
           } catch {
-            // Non-enumerating + best-effort: even a network error
-            // shouldn't reveal anything, so we show the same confirmation.
           } finally {
             setBusy(false);
             setSent(true);

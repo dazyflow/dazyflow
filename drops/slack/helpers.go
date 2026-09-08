@@ -34,13 +34,8 @@ import (
 // real Slack response.
 const maxResponseBytes = 64 << 20 // 64 MiB
 
-// tokenHook holds the daemon's per-account Slack OAuth lookup plus the
-// resolve sequence shared with the other OAuth connectors (drops/internal/
-// oauthtok): explicit `token` param first, else the connected account's token.
 var tokenHook = oauthtok.New("Slack", "slack", "slack")
 
-// SetTokenLookup wires the daemon's OAuth registry to the Slack drops. Called
-// once at dzd startup. nil clears the lookup (drops then require a `token`).
 func SetTokenLookup(fn oauthtok.Lookup) { tokenHook.Set(fn) }
 
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
@@ -66,17 +61,6 @@ func resolveBlocks(job core.Job) (any, *core.JobError) {
 	return nil, nil
 }
 
-// normalizeBlocks coerces a Block Kit value into the array Slack's
-// chat.postMessage wants. Accepts:
-//   - []any                         — the canonical decoded array, as-is.
-//   - string / []byte               — JSON; parsed, then re-normalised.
-//   - map with a "blocks" array     — the Block Kit Builder export / a full
-//     message payload {"blocks":[…]} — unwrap to the inner array.
-//   - any other map                 — a lone block object; wrap as a 1-element
-//     array so a single section/divider "just works".
-//
-// A malformed string or a non-object scalar (number, bool) is a genuine
-// mistake and returns a friendly JobError.
 func normalizeBlocks(v any) (any, *core.JobError) {
 	switch b := v.(type) {
 	case []any:
@@ -99,9 +83,6 @@ func normalizeBlocks(v any) (any, *core.JobError) {
 	}
 }
 
-// parseBlocksJSON parses JSON text into a value, then re-runs normalizeBlocks
-// so a string carrying any accepted shape (array, {"blocks":[…]}, or a lone
-// object) is handled the same as the already-decoded form.
 func parseBlocksJSON(data []byte) (any, *core.JobError) {
 	var parsed any
 	if err := json.Unmarshal(data, &parsed); err != nil {
@@ -114,17 +95,10 @@ func parseBlocksJSON(data []byte) (any, *core.JobError) {
 	return normalizeBlocks(parsed)
 }
 
-// httpBase is the Slack API root. Tests override via SetHTTPBase to
-// point at an httptest server.
 var httpBase = apibase.New("https://slack.com/api")
 
-// SetHTTPBase swaps the API base URL — tests use this to redirect
-// all Slack calls to a local httptest server.
 func SetHTTPBase(base string) { httpBase.Set(base) }
 
-// decodeSlackResponse reads + parses a Slack API JSON response.
-// Every Slack API call follows the same {ok, error, ...} envelope,
-// so the decoder is shared across drops.
 type slackEnvelope struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
@@ -140,9 +114,6 @@ func decodeSlackJSON(body []byte) (slackEnvelope, map[string]any, error) {
 	return env, raw, nil
 }
 
-// slackBaseURL resolves the API root for a job: an explicit base_url param
-// (proxy / self-hosted / tests) wins, else the package default (which
-// tests can swap via SetHTTPBase).
 func slackBaseURL(job core.Job) string { return httpBase.For(job) }
 
 // slackDo runs one authenticated Slack Web API call and returns the

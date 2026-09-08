@@ -91,8 +91,6 @@ func NewStripeEventsHandler(svc *Service) *StripeEventsHandler {
 	}
 }
 
-// ServeHTTP routes a single Stripe webhook POST. Mounted at
-// `/api/v1/events/stripe/{tenant}` by HTTPGateway.
 func (h *StripeEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
@@ -154,11 +152,6 @@ func (h *StripeEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request)
 	}
 }
 
-// stripeTriggerEvent is the decoded envelope of a Stripe event. The
-// object stays raw here — each dispatcher decodes the shape its event
-// type carries (PaymentIntent, Subscription, …). The named ports are
-// extracted up front; the raw event also goes through to the `event`
-// output for graphs that need fields we didn't pull out.
 type stripeTriggerEvent struct {
 	ID   string `json:"id"`
 	Type string `json:"type"`
@@ -168,9 +161,7 @@ type stripeTriggerEvent struct {
 }
 
 type stripePaymentIntent struct {
-	ID string `json:"id"`
-	// AmountReceived is what was actually captured; Amount is what was
-	// requested. They differ on partial captures, so prefer received.
+	ID               string `json:"id"`
 	Amount           int64  `json:"amount"`
 	AmountReceived   int64  `json:"amount_received"`
 	Currency         string `json:"currency"`
@@ -181,9 +172,6 @@ type stripePaymentIntent struct {
 	} `json:"last_payment_error"`
 }
 
-// paymentPorts builds the output set the two payment triggers share.
-// The `payment` port carries the FULL PaymentIntent object (untyped),
-// not the typed subset; `event` carries the whole webhook envelope.
 func paymentPorts(ev stripeTriggerEvent, body []byte) (stripePaymentIntent, map[string]core.Ref) {
 	var pi stripePaymentIntent
 	_ = json.Unmarshal(ev.Data.Object, &pi)
@@ -283,9 +271,6 @@ func (h *StripeEventsHandler) dispatchSubscriptionCanceled(tenant string, ev str
 	_, _ = rw.Write([]byte("ok"))
 }
 
-// stripeZeroDecimalCurrencies are the currencies Stripe represents in
-// whole units rather than hundredths — per
-// https://docs.stripe.com/currencies#zero-decimal.
 var stripeZeroDecimalCurrencies = map[string]bool{
 	"bif": true, "clp": true, "djf": true, "gnf": true, "jpy": true,
 	"kmf": true, "krw": true, "mga": true, "pyg": true, "rwf": true,
@@ -293,8 +278,6 @@ var stripeZeroDecimalCurrencies = map[string]bool{
 	"xpf": true,
 }
 
-// formatStripeAmount renders a minor-unit amount as the human form a
-// notification wants: "49.99 USD", "5000 JPY".
 func formatStripeAmount(minor int64, currency string) string {
 	code := strings.ToUpper(currency)
 	if stripeZeroDecimalCurrencies[strings.ToLower(currency)] {
@@ -303,11 +286,6 @@ func formatStripeAmount(minor int64, currency string) string {
 	return fmt.Sprintf("%d.%02d %s", minor/100, minor%100, code)
 }
 
-// fanoutSeed walks every workspace under the tenant, loads each
-// graph, and submits a run for any that declares a node with the
-// matching trigger module. Mirrors github_events.fanoutSeed.
-// runFanout is fanoutSeed plus the completion signal. Every dispatch goes
-// through it so no call site can forget to fire the hook.
 func (h *StripeEventsHandler) runFanout(ctx context.Context, tenant, moduleID string, seed core.Result) {
 	defer func() {
 		if h.fanoutDone != nil {

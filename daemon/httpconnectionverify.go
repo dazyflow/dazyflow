@@ -28,10 +28,6 @@ type putConnectionBody struct {
 	Values map[string]string `json:"values"`
 }
 
-// connectionFieldsForSlug finds the integration whose connection slug matches
-// `slug` and returns its label and declared ConnectionFields. All drops in an
-// integration declare the same fields, so the first match wins. Empty fields
-// (with a nil error) means "no such connectable integration".
 func (h *secretsAPI) connectionFieldsForSlug(ctx context.Context, p core.Principal, slug string) (integration string, fields []core.ConnectionField, err error) {
 	manifests, err := h.svc.ListDrops(ctx, p)
 	if err != nil {
@@ -45,10 +41,6 @@ func (h *secretsAPI) connectionFieldsForSlug(ctx context.Context, p core.Princip
 	return "", nil, nil
 }
 
-// candidateConnection builds the connection map a verifier sees: every
-// declared field's stored value, overlaid with the (trimmed, non-empty)
-// values submitted in this request. The returned `changed` map is just the
-// submitted fields — what gets persisted once verification passes.
 func (h *secretsAPI) candidateConnection(ctx context.Context, tenant, integration string, fields []core.ConnectionField, submitted map[string]string) (conn, changed map[string]string) {
 	declared := make(map[string]bool, len(fields))
 	conn = make(map[string]string, len(fields))
@@ -72,8 +64,6 @@ func (h *secretsAPI) candidateConnection(ctx context.Context, tenant, integratio
 	return conn, changed
 }
 
-// missingRequired returns the label of the first required field left empty in
-// the merged connection, or "" when all required fields are satisfied.
 func missingRequired(fields []core.ConnectionField, conn map[string]string) string {
 	for _, f := range fields {
 		if f.Required && strings.TrimSpace(conn[f.Key]) == "" {
@@ -148,13 +138,6 @@ func (h *secretsAPI) putIntegrationConnection(rw http.ResponseWriter, r *http.Re
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// verifyIntegrationConnection handles POST /api/v1/catalog/integrations/{id}/verify.
-// It re-tests the connection already stored for the tenant — the "Test
-// connection" button on an established connection. Returns 200 with
-// {"ok":true} on success or {"ok":false,"error":"…"} on a reachable failure,
-// so the UI can render the outcome inline without treating it as a request
-// error. 501 when the integration has no verifier; 409 when nothing is stored
-// yet to test.
 func (h *secretsAPI) verifyIntegrationConnection(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.EncryptedSecrets == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "encrypted secret store is not configured")

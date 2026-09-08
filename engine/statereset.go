@@ -29,11 +29,6 @@ func RegisterStateReset(moduleID string, keys func(flow, node string) []string) 
 	stateResetters[moduleID] = keys
 }
 
-// StateResetKeys returns the reserved store keys to delete to reset node
-// `node` (running module `moduleID`) in flow `flow`. Returns nil when the
-// module declares no resettable state — the daemon treats that as "nothing to
-// reset". `flow` is the graph ID and `node` the node ID, matching how the
-// drops key their cursors at run time.
 func StateResetKeys(moduleID, flow, node string) []string {
 	stateResetMu.RLock()
 	defer stateResetMu.RUnlock()

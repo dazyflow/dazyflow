@@ -24,7 +24,6 @@ describe("tokenizeScript", () => {
       ["python", 'import sys\n\ndef go(n=3):\n    """docs"""\n    return [i for i in range(n)]\n'],
       ["powershell", "<# header #>\nparam($Name)\nif ($Name -eq 'x') { Write-Output 1 }\n"],
       ["js", "// go\nconst x = `a${1}b`; /* done */\n"],
-      // Half-typed code is the normal state of a box someone is typing in.
       ["shell", 'echo "unterminated'],
       ["python", "s = '''open"],
       ["js", "/* never closed"],
@@ -47,7 +46,6 @@ describe("tokenizeScript", () => {
   });
 
   it("does not read a keyword out of the middle of a word", () => {
-    // "iffy" is not `if` + "fy", and "done_at" is not `done` + "_at".
     expect(kinds("iffy done_at", "shell")).toEqual([]);
   });
 
@@ -116,8 +114,6 @@ describe("the languages the Text step adds", () => {
     expect(kinds("-- note\nselect 'a''b'", "sql")).toEqual([
       ["comment", "-- note"],
       ["keyword", "select"],
-      // A SQL string doubles its quote rather than escaping it, so this is two
-      // literals, not one runaway string swallowing the rest of the file.
       ["string", "'a'"],
       ["string", "'b'"],
     ]);
@@ -129,8 +125,6 @@ describe("the languages the Text step adds", () => {
       ["keyword", '"total"'],
       ["number", "3"],
       ["keyword", '"note"'],
-      // The same word as a VALUE stays a string — it is the colon that makes a
-      // key, not the spelling.
       ["string", '"total"'],
     ]);
   });

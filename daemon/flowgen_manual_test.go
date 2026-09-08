@@ -37,7 +37,6 @@ import (
 	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
-// errNeedsReply stops the agent loop when the next turn has no answer yet.
 type errNeedsReply struct{ path string }
 
 func (e *errNeedsReply) Error() string {
@@ -54,7 +53,6 @@ func (p *manualProvider) Call(_ context.Context, _ string, req llm.Request) (llm
 	p.turn++
 	base := filepath.Join(p.dir, fmt.Sprintf("turn-%02d", p.turn))
 
-	// Write what the model is shown, verbatim, so it can be read and answered.
 	if err := os.WriteFile(base+"-request.txt", []byte(renderTurn(req)), 0o644); err != nil {
 		return llm.Result{}, &core.JobError{Code: "io", Message: err.Error()}
 	}
@@ -72,8 +70,6 @@ func (p *manualProvider) Call(_ context.Context, _ string, req llm.Request) (llm
 	return llm.Result{Tool: tool}, nil
 }
 
-// renderTurn flattens a request into the text a reader needs: the system
-// prompt and catalog on turn one, then the running conversation.
 func renderTurn(req llm.Request) string {
 	var b strings.Builder
 	if req.System != "" {
@@ -90,9 +86,6 @@ func renderTurn(req llm.Request) string {
 	return b.String()
 }
 
-// TestFlowGenManual walks the generator for the scenarios named in
-// FLOWGEN_MANUAL_ONLY (default: all of them), stopping at the first turn that
-// has no reply yet. Re-run after writing the reply to continue.
 func TestFlowGenManual(t *testing.T) {
 	t.Parallel()
 	dir := os.Getenv("FLOWGEN_MANUAL_DIR")
@@ -136,8 +129,6 @@ func TestFlowGenManual(t *testing.T) {
 			if err := os.MkdirAll(sub, 0o755); err != nil {
 				t.Fatalf("mkdir: %v", err)
 			}
-			// Record the ask alongside the turns, so the folder is
-			// self-contained for whoever answers it.
 			_ = os.WriteFile(filepath.Join(sub, "ask.txt"), []byte(a.Prompt()+"\n"), 0o644)
 
 			mp := &manualProvider{dir: sub}

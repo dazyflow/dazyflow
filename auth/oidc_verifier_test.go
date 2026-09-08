@@ -21,10 +21,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fakeIdP is a minimal OIDC issuer: a discovery document, a JWKS with
-// one RSA key, and a token mint that signs RS256 JWTs with it. Real
-// crypto end to end — the verifier under test fetches the JWKS over
-// HTTP and checks real signatures.
 type fakeIdP struct {
 	srv  *httptest.Server
 	priv *rsa.PrivateKey
@@ -62,8 +58,6 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 	return f
 }
 
-// mint signs an RS256 JWT with the IdP's key. extra overlays/overrides
-// the standard claims, so tests can vary iss/aud/exp/roles freely.
 func (f *fakeIdP) mint(t *testing.T, extra map[string]any) string {
 	t.Helper()
 	claims := map[string]any{
@@ -148,7 +142,6 @@ func TestOIDCVerifier_Rejections(t *testing.T) {
 func TestOIDCVerifier_ClaimShapes(t *testing.T) {
 	idp := newFakeIdP(t)
 
-	// Entra-style: tenant in "tid", roles as a space-separated string.
 	v := newTestOIDCVerifier(t, idp, OIDCConfig{TenantClaim: "tid", RolesClaim: "scp"})
 	claims, err := v.Verify(context.Background(), idp.mint(t, map[string]any{
 		"tid": "11111111-2222", "scp": "viewer editor",
@@ -163,16 +156,12 @@ func TestOIDCVerifier_ClaimShapes(t *testing.T) {
 		t.Errorf("roles = %v", claims.Roles)
 	}
 
-	// Missing optional claims: empty tenant/roles, not an error.
 	claims, err = v.Verify(context.Background(), idp.mint(t, nil))
 	if err != nil || claims.Tenant != "" || len(claims.Roles) != 0 {
 		t.Errorf("bare token = %+v / %v", claims, err)
 	}
 }
 
-// End to end through the Chain: an IdP token authenticates a principal
-// whose catalog role names carry catalog permissions, and unknown IdP
-// groups grant nothing.
 func TestOIDCAuthenticator_ThroughChain(t *testing.T) {
 	idp := newFakeIdP(t)
 	v := newTestOIDCVerifier(t, idp, OIDCConfig{})
@@ -210,8 +199,6 @@ func TestOIDCAuthenticator_ThroughChain(t *testing.T) {
 		t.Errorf("unknown IdP group must grant nothing: %+v", unknown)
 	}
 
-	// Non-JWT credentials fall through the OIDC authenticator to the
-	// chain's normal invalid-credential error (not an OIDC error).
 	if _, err := chain.Authenticate(context.Background(), "dzs_not_a_jwt"); err == nil {
 		t.Error("non-JWT credential authenticated")
 	}
@@ -220,7 +207,6 @@ func TestOIDCAuthenticator_ThroughChain(t *testing.T) {
 func TestOIDCVerifier_AllowedTenants(t *testing.T) {
 	idp := newFakeIdP(t)
 
-	// Unset allowlist: any tenant the issuer asserts is honored (unchanged).
 	v := newTestOIDCVerifier(t, idp, OIDCConfig{})
 	if c, err := v.Verify(context.Background(), idp.mint(t, map[string]any{"tenant": "anything"})); err != nil || c.Tenant != "anything" {
 		t.Errorf("unset allowlist should accept any tenant: %+v / %v", c, err)
@@ -235,7 +221,6 @@ func TestOIDCVerifier_AllowedTenants(t *testing.T) {
 	if _, err := v.Verify(context.Background(), idp.mint(t, map[string]any{"tenant": "evilcorp"})); err == nil {
 		t.Error("out-of-list tenant must be rejected even with a valid signature")
 	}
-	// An empty/absent tenant claim is also outside a configured allowlist.
 	if _, err := v.Verify(context.Background(), idp.mint(t, nil)); err == nil {
 		t.Error("absent tenant claim must be rejected when an allowlist is configured")
 	}
@@ -250,7 +235,6 @@ func TestNewOIDCVerifier_ConfigErrors(t *testing.T) {
 		!strings.Contains(err.Error(), "audience") {
 		t.Errorf("missing audience: %v", err)
 	}
-	// Unreachable issuer fails discovery loudly.
 	if _, err := NewOIDCVerifier(context.Background(), OIDCConfig{
 		Issuer: "http://127.0.0.1:1", ClientID: "x",
 	}); err == nil || !strings.Contains(err.Error(), "discovery") {

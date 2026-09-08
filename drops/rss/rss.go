@@ -137,16 +137,12 @@ func executeRSS(ctx context.Context, job core.Job, progress chan<- core.Progress
 	}
 
 	if !params.BoolDefault(job.Params, "dedupe", true) {
-		// Dedupe off: the whole feed every run. Say what we got, so an empty
-		// feed reads as "fetched fine, 0 items" rather than "nothing happened".
 		params.EmitProgress(progress, job, 1, fmt.Sprintf("dedupe off: emitting all %d feed item(s)", len(items)))
 		return emitRows(job, allRows(items)), nil
 	}
 	return dedupeAndEmit(ctx, job, items, progress), nil
 }
 
-// resolveURL prefers a wired 'url' input over the param, so the feed can be
-// computed upstream (e.g. a Text drop) or set inline on the node.
 func resolveURL(job core.Job) string {
 	if ref, ok := job.Input["url"]; ok {
 		if s, ok := ref.Inline.(string); ok && s != "" {
@@ -241,13 +237,9 @@ func emitRows(job core.Job, rows []map[string]any) core.Result {
 	}
 }
 
-// emitNone is an OK result with no output ports: downstream edges go dormant
-// and the rest of the flow is skipped — an empty poll is a non-event.
 func emitNone(job core.Job) core.Result {
 	return core.Result{JobID: job.ID, Status: core.StatusOK, Output: map[string]core.Ref{}}
 }
-
-// --- cursor id-window (de)serialization ---
 
 func decodeIDs(raw string) []string {
 	if raw == "" {

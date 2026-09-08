@@ -12,9 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// graphJSONBytes is what the graph actually costs to store and to re-parse —
-// the number the ceilings exist to bound, as opposed to what ApproxGraphBytes
-// measures.
 func graphJSONBytes(g core.Graph) int {
 	b, err := json.Marshal(g)
 	if err != nil {
@@ -23,17 +20,6 @@ func graphJSONBytes(g core.Graph) int {
 	return len(b)
 }
 
-// The graph-byte ceiling weighs params, labels, env, frame titles and the
-// flow's description. It deliberately skips node IDs and module names —
-// "already bounded by the node and connection ceilings" (core.ApproxGraphBytes).
-// Those ceilings bound the COUNT of nodes and wires, not the LENGTH of the
-// strings naming them, and every identifier is a free-form string from the
-// caller: nothing between the API and the store limits one.
-//
-// So the same shape TestGraphBytes_AreCapped closed with MaxGraphBytes is
-// reachable again by moving the payload from the params into the IDs. The
-// flow ID is validated (core.ValidGraphID, 128 bytes, slug charset); a NODE
-// id is not.
 func TestIdentifierBytes_AreCapped(t *testing.T) {
 	const (
 		nodes  = 100
@@ -59,10 +45,6 @@ func TestIdentifierBytes_AreCapped(t *testing.T) {
 	}
 }
 
-// The module name is the other identifier the size walk skips, and the run
-// path deliberately accepts a module it has no manifest for (a tenant's runner
-// and MCP drops live outside the default palette). One node is therefore
-// enough: the whole payload rides in Node.Module.
 func TestModuleNameBytes_AreCapped(t *testing.T) {
 	g := graph("modulebomb", []core.Node{
 		{ID: "a", Module: "runner." + strings.Repeat("m", 32<<20)}, // 32 MiB
@@ -80,12 +62,6 @@ func TestModuleNameBytes_AreCapped(t *testing.T) {
 	}
 }
 
-// Port names are the third. A catalogued module's ports are checked against
-// its manifest, so they can't be long — but a module outside the catalog gets
-// no port rules at all (ValidateRuntime says so explicitly), and the fan-in
-// rule that does still apply counts wires without looking at the name. So the
-// payload moves onto the wires: 200 edges between two catalog-less steps, each
-// naming a distinct 128 KiB port.
 func TestPortNameBytes_AreCapped(t *testing.T) {
 	const (
 		edges    = 200
@@ -97,8 +73,6 @@ func TestPortNameBytes_AreCapped(t *testing.T) {
 		{ID: "b", Module: "runner.dst"},
 	}, nil)
 	for i := range edges {
-		// Distinct port names, so this is not fan-in into one pin — every
-		// wire is a legal single-value connection as far as every rule goes.
 		suffix := strings.Repeat("q", i)
 		g.Edges = append(g.Edges, core.Edge{
 			From: "a", FromPort: pad + suffix, To: "b", ToPort: pad + suffix,
@@ -117,9 +91,6 @@ func TestPortNameBytes_AreCapped(t *testing.T) {
 	}
 }
 
-// A stored oversized graph is only half the cost: every RUN copies it into a
-// job record, and the worker re-parses that on each dispatch pass. This runs
-// the node-ID bomb to show what one fire of it persists.
 func TestIdentifierBomb_RunRecordCost(t *testing.T) {
 	h := newHarness(t)
 	pad := strings.Repeat("n", 64<<10)

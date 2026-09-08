@@ -11,20 +11,14 @@
 // the only markup added is our own fixed <span> tags — so user input can't
 // inject HTML even though the result is set via innerHTML.
 
-// Known built-in functions and macros — colored as functions even without a
-// following "(" (the macros read like keywords). Mirrors the CEL surface the
-// Expression drop exposes.
 const BUILTINS = new Set([
   "has", "size", "int", "uint", "double", "string", "bool", "bytes",
   "timestamp", "duration", "type", "dyn", "matches", "contains",
   "startsWith", "endsWith", "map", "filter", "all", "exists", "exists_one",
 ]);
 
-// Language keywords / literals.
 const KEYWORDS = new Set(["true", "false", "null", "in"]);
 
-// The variables the Expression env binds — highlighted so they stand out from
-// the fields the user reaches through them.
 const VARS = new Set(["input", "now"]);
 
 function escapeHTML(s: string): string {
@@ -48,7 +42,6 @@ function classifyIdent(name: string, after: string): string {
   if (KEYWORDS.has(name)) return "kw";
   if (VARS.has(name)) return "var";
   if (BUILTINS.has(name)) return "fn";
-  // A bare identifier immediately followed by "(" is a function call.
   if (/^\s*\(/.test(after)) return "fn";
   return "ident";
 }
@@ -59,7 +52,6 @@ export function highlightCEL(src: string): string {
   TOKEN.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = TOKEN.exec(src)) !== null) {
-    // Any gap the scanner skipped (shouldn't happen, but stay lossless).
     if (m.index > last) out += escapeHTML(src.slice(last, m.index));
     if (m[1] !== undefined) out += escapeHTML(m[1]); // whitespace, verbatim
     else if (m[2] !== undefined) out += span("str", m[2]);

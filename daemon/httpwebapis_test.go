@@ -18,13 +18,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// webAPIHarness is a gateway with the feature wired, plus the catalog so a test
-// can check what the palette actually gained.
-//
-// The catalog is wired into the RESOLVER as well, as cmd/dzd does. Without that
-// the steps this feature registers are reachable through WebAPIs.Catalog and
-// nowhere else — so nothing that reads the drop list (the palette, the
-// integrations endpoint, the Apps page's data) could be tested at all.
 func webAPIHarness(t *testing.T) (*gatewayHarness, *WebAPIs) {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -39,7 +32,6 @@ func webAPIHarness(t *testing.T) (*gatewayHarness, *WebAPIs) {
 	return h, svc
 }
 
-// saveBody is what the admin page posts.
 func saveBody() map[string]any {
 	return map[string]any{
 		"label":     "Order service",
@@ -170,8 +162,6 @@ func TestHTTP_DeleteWebAPI(t *testing.T) {
 	}
 }
 
-// A rejected descriptor comes back as a 400 carrying the engine's own message,
-// because that message is written to be shown next to the field.
 func TestHTTP_SaveRejectionIsA400WithTheReason(t *testing.T) {
 	t.Parallel()
 	h, _ := webAPIHarness(t)
@@ -197,8 +187,6 @@ func TestHTTP_MalformedBodyIsA400(t *testing.T) {
 	}
 }
 
-// With the feature unwired the endpoints answer 501 rather than panicking on a
-// nil service — the same shape as MCP servers and runners.
 func TestHTTP_WebAPIsUnconfiguredIs501(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -254,14 +242,11 @@ func TestHTTP_RowCarriesNoCredentialField(t *testing.T) {
 			t.Errorf("the row carries a %q field — this feature stores no credential and must not imply one", forbidden)
 		}
 	}
-	// The header NAME is not a secret and the form needs it back.
 	if generic["auth_header"] != "X-Api-Key" {
 		t.Errorf("auth_header = %v, want it returned", generic["auth_header"])
 	}
 }
 
-// TestWebAPIsEndpoints_Usage: the lookup behind the delete warning, scoped to a
-// catalog that exists and answered for the caller's own org.
 func TestWebAPIsEndpoints_Usage(t *testing.T) {
 	t.Parallel()
 	h, _ := webAPIHarness(t)
@@ -297,12 +282,9 @@ func TestWebAPIsEndpoints_Usage(t *testing.T) {
 		t.Fatalf("flows = %+v", got.Flows)
 	}
 
-	// A name that is not a catalog of this org gets a 404, not a confident
-	// "nothing uses this".
 	if rw := webAPIUsageReq(t, h, adminPrincipal("acme"), "typo"); rw.Code != 404 {
 		t.Errorf("unknown catalog usage code %d, want 404", rw.Code)
 	}
-	// Admin-only, like every other route on this page.
 	if rw := webAPIUsageReq(t, h, editorPrincipal("acme"), "order-service"); rw.Code != 403 {
 		t.Errorf("editor usage code %d, want 403", rw.Code)
 	}
@@ -351,8 +333,6 @@ func TestHTTP_PutWithoutLogoKeepsTheUploadedOne(t *testing.T) {
 	}
 }
 
-// A refused icon is the admin's mistake, so it is a 400 with the reason — not a
-// 500, and not a silent fallback to the glyph.
 func TestHTTP_BadLogoIsA400WithTheReason(t *testing.T) {
 	t.Parallel()
 	h, _ := webAPIHarness(t)
@@ -382,9 +362,6 @@ func TestHTTP_RowReportsTheLogoSource(t *testing.T) {
 	}
 }
 
-// The blurb has to arrive where the Apps page and the LLM-facing catalog API
-// read it: the integration group's summary. An org's own app has no curated
-// entry to fall back on, so this is the only description it can ever have.
 func TestHTTP_DescriptionBecomesTheIntegrationSummary(t *testing.T) {
 	t.Parallel()
 	h, svc := webAPIHarness(t)
@@ -441,8 +418,6 @@ func TestHTTP_CuratedSummaryOutranksAManifestBlurb(t *testing.T) {
 	t.Fatal("Stripe is not listed")
 }
 
-// The blurb round-trips so the form can edit it, and a save that omits it keeps
-// what is stored.
 func TestHTTP_PutWithoutDescriptionKeepsIt(t *testing.T) {
 	t.Parallel()
 	h, svc := webAPIHarness(t)
@@ -461,8 +436,6 @@ func TestHTTP_PutWithoutDescriptionKeepsIt(t *testing.T) {
 		t.Errorf("description = %q after an unrelated edit, want it kept", got)
 	}
 }
-
-// --- OpenAPI import --------------------------------------------------------
 
 const specForImport = `
 openapi: 3.0.0
@@ -559,8 +532,6 @@ func TestHTTP_ParseSpecForwardsTheParsersMessage(t *testing.T) {
 	}
 }
 
-// A refresh diffs against what is stored, so the page can require confirmation
-// before an operation a live flow references stops resolving.
 func TestHTTP_ParseSpecDiffsAgainstAStoredCatalog(t *testing.T) {
 	t.Parallel()
 	h, _ := webAPIHarness(t)
@@ -593,8 +564,6 @@ func TestHTTP_ParseSpecDiffsAgainstAStoredCatalog(t *testing.T) {
 	}
 }
 
-// importCatalog does what the page does: parse a spec, then save the operations
-// it offered.
 func importCatalog(t *testing.T, h *gatewayHarness, spec string) webAPIRow {
 	t.Helper()
 	rw := h.adminDo(t, "POST", "/api/v1/admin/web-apis/spec", map[string]any{"spec": spec})
@@ -645,9 +614,6 @@ paths:
 	}
 }
 
-// Importing is the ordinary save. Pinned because it is the whole design bet:
-// an imported operation and a hand-built one are the same object, so nothing
-// downstream needed a second path.
 func TestHTTP_ImportedOperationsBecomeStepsThroughTheOrdinarySave(t *testing.T) {
 	t.Parallel()
 	h, _ := webAPIHarness(t)
@@ -673,7 +639,6 @@ func TestHTTP_ImportedOperationsBecomeStepsThroughTheOrdinarySave(t *testing.T) 
 	if len(row.StepIDs) != 2 {
 		t.Errorf("step ids = %v, want one per imported operation", row.StepIDs)
 	}
-	// Remembered so a refresh does not make the admin find the address again.
 	if row.SpecURL != "https://api.example.com/openapi.json" {
 		t.Errorf("spec_url = %q", row.SpecURL)
 	}

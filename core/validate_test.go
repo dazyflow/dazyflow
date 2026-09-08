@@ -211,9 +211,6 @@ func TestValidateWithManifests(t *testing.T) {
 			wantSub: "required input",
 		},
 		{
-			// A required input filled by an inline param (the inline-pin UX,
-			// and how a for_each body node draws ${item.…}) is satisfied even
-			// without a wire.
 			name: "required input satisfied by inline param",
 			g: Graph{
 				Nodes: []Node{{ID: "k", Module: "sink", Params: map[string]any{"in": "hello"}}},
@@ -304,8 +301,6 @@ func TestValidateWithManifests(t *testing.T) {
 			},
 		},
 		{
-			// A live node fed ONLY by a disabled upstream is still "wired":
-			// the edge counts toward its fan-in even though the source is off.
 			name: "live node fed only by disabled upstream is satisfied",
 			g: Graph{
 				Nodes: []Node{
@@ -365,7 +360,6 @@ func issueCodes(issues []LintIssue) map[string]int {
 }
 
 func TestValidateGraphFull_NoManifestsRunsLintOnly(t *testing.T) {
-	// With no manifests, only LintGraph runs; a clean graph yields no issues.
 	g := Graph{Nodes: []Node{{ID: "a", Module: "delay"}}}
 	if issues := ValidateGraphFull(g, nil); len(issues) != 0 {
 		t.Errorf("clean graph without manifests should yield no issues, got %v", issues)
@@ -377,7 +371,6 @@ func TestManifestLintIssues_Cov(t *testing.T) {
 		"src": {ID: "src", Outputs: []Port{{Port: "out"}}},
 		"dst": {ID: "dst", Inputs: []Port{{Port: "in"}}},
 	}
-	// Edge to a non-existent port → at least one invalid_structure issue.
 	bad := Graph{
 		Nodes: []Node{{ID: "a", Module: "src"}, {ID: "b", Module: "dst"}},
 		Edges: []Edge{{From: "a", FromPort: "nope", To: "b", ToPort: "in"}},
@@ -386,7 +379,6 @@ func TestManifestLintIssues_Cov(t *testing.T) {
 	if issueCodes(issues)["invalid_structure"] == 0 {
 		t.Errorf("expected invalid_structure issue, got %v", issues)
 	}
-	// Clean graph → no issues.
 	good := Graph{
 		Nodes: []Node{{ID: "a", Module: "src"}, {ID: "b", Module: "dst"}},
 		Edges: []Edge{{From: "a", FromPort: "out", To: "b", ToPort: "in"}},
@@ -394,7 +386,6 @@ func TestManifestLintIssues_Cov(t *testing.T) {
 	if issues := ManifestLintIssues(good, manifests); len(issues) != 0 {
 		t.Errorf("clean graph should yield no manifest issues, got %v", issues)
 	}
-	// No manifests → nil.
 	if issues := ManifestLintIssues(good, nil); issues != nil {
 		t.Errorf("no manifests should yield nil, got %v", issues)
 	}
@@ -413,11 +404,9 @@ func TestStructuredIntoTextWarnings_Cov(t *testing.T) {
 	if issueCodes(issues)["structured_into_text"] != 1 {
 		t.Errorf("expected one structured_into_text warning, got %v", issues)
 	}
-	// No manifests → nil.
 	if structuredIntoTextWarnings(g, nil) != nil {
 		t.Error("no manifests should yield nil")
 	}
-	// JSON output into text input also flags.
 	manifests2 := map[string]Manifest{
 		"jsoner":  {ID: "jsoner", Outputs: []Port{{Port: "data", MIME: []string{"application/json"}}}},
 		"emailer": manifests["emailer"],
@@ -429,7 +418,6 @@ func TestStructuredIntoTextWarnings_Cov(t *testing.T) {
 	if issueCodes(structuredIntoTextWarnings(g2, manifests2))["structured_into_text"] != 1 {
 		t.Error("json into text should warn")
 	}
-	// Trigger (non-text) output into text input flags too.
 	manifests3 := map[string]Manifest{
 		"trig":    {ID: "trig", ExecutionModel: ExecutionTrigger, Outputs: []Port{{Port: "body"}}},
 		"emailer": manifests["emailer"],
@@ -455,7 +443,6 @@ func TestCardinalityMismatchWarnings_Cov(t *testing.T) {
 	if issueCodes(cardinalityMismatchWarnings(g, manifests))["many_into_one"] != 1 {
 		t.Error("many into one should warn")
 	}
-	// Variadic input is skipped.
 	manifests2 := map[string]Manifest{
 		"lister":   manifests["lister"],
 		"varinput": {ID: "varinput", Inputs: []Port{{Port: "item", Variadic: true, MIME: []string{"application/json"}}}},
@@ -467,7 +454,6 @@ func TestCardinalityMismatchWarnings_Cov(t *testing.T) {
 	if len(cardinalityMismatchWarnings(g2, manifests2)) != 0 {
 		t.Error("variadic input should not warn on many-into-one")
 	}
-	// KindAny input is skipped (wildcard MIME).
 	manifests3 := map[string]Manifest{
 		"lister": manifests["lister"],
 		"anyin":  {ID: "anyin", Inputs: []Port{{Port: "item"}}},
@@ -479,7 +465,6 @@ func TestCardinalityMismatchWarnings_Cov(t *testing.T) {
 	if len(cardinalityMismatchWarnings(g3, manifests3)) != 0 {
 		t.Error("KindAny input should not warn on many-into-one")
 	}
-	// No manifests → nil.
 	if cardinalityMismatchWarnings(g, nil) != nil {
 		t.Error("no manifests should yield nil")
 	}

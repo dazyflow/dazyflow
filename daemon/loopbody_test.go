@@ -61,8 +61,6 @@ func TestValidateLoopBodies_RejectsNested(t *testing.T) {
 	}
 }
 
-// A single (non-nested) loop body passes validation, and so does a plain
-// graph with no loops.
 func TestValidateLoopBodies_AllowsSingleAndNone(t *testing.T) {
 	t.Parallel()
 	single := core.Graph{
@@ -87,8 +85,6 @@ func TestValidateLoopBodies_AllowsSingleAndNone(t *testing.T) {
 	}
 }
 
-// No body pin → no owners (an unwired for_each, and ordinary graphs, are
-// unaffected — the dispatcher excludes nothing).
 func TestLoopBodyOwners_NoBodyPin(t *testing.T) {
 	t.Parallel()
 	g := core.Graph{

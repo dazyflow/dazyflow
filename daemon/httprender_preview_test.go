@@ -12,7 +12,6 @@ import (
 	"testing"
 )
 
-// previewResp is the shape of the preview endpoint's JSON.
 type previewResp struct {
 	HTML  string `json:"html"`
 	Error string `json:"error"`
@@ -48,8 +47,6 @@ func TestRenderPreview_RendersAndEscapes(t *testing.T) {
 	}
 }
 
-// TestRenderPreview_ErrorsAreInline: a bad template comes back as a 200 with
-// an error field (so the editor shows it inline), not an HTTP error.
 func TestRenderPreview_ErrorsAreInline(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -65,8 +62,6 @@ func TestRenderPreview_ErrorsAreInline(t *testing.T) {
 	}
 }
 
-// TestRenderPreview_EmptyTemplateNoData: an empty template with no data is a
-// clean empty render (the UI state before the user types), not an error.
 func TestRenderPreview_EmptyTemplateNoData(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -76,14 +71,12 @@ func TestRenderPreview_EmptyTemplateNoData(t *testing.T) {
 	}
 }
 
-// TestRenderPreview_RequiresAuth: the endpoint is authenticated.
 func TestRenderPreview_RequiresAuth(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 	b, _ := json.Marshal(map[string]any{"template": "x"})
 	req := httptest.NewRequest("POST", "/api/v1/tools/render-template/preview", bytes.NewBuffer(b))
 	req.Header.Set("Content-Type", "application/json")
-	// deliberately NO Authorization header
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, req)
 	if rw.Code == http.StatusOK {

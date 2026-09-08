@@ -31,8 +31,6 @@ export function ConnectionGate({
   // canConnect = hasPerm("secret:write"); when false the user can't connect
   // apps, so the Connect button is replaced with an "ask an admin" note.
   canConnect: boolean;
-  // missingSetups names apps with a service connection (API key / endpoint)
-  // that isn't configured — the ConnectionFields shape (Claude, ntfy, SMTP).
   missingSetups: SetupNeed[];
   // adminBlockedProviders / adminBlockedSecretRefs name the OAuth
   // providers and ${secret.NAME} refs the graph would need but the

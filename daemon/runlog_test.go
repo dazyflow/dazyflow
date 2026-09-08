@@ -31,7 +31,6 @@ func runLogStoreContract(t *testing.T, store RunLogStore) {
 	_ = store.AppendRunLog(ctx, RunLogEntry{RunID: "run-b", TS: time.Now().UTC(), Kind: "terminal", Message: "succeeded"})
 	_ = store.AppendRunLog(ctx, RunLogEntry{RunID: "run-b", TS: time.Now().UTC(), NodeID: "sh", Kind: "progress", Stream: "stderr", Message: "warning: deprecated"})
 
-	// Full read, ordered, scoped to the run.
 	got, err := store.ListRunLogs(ctx, "run-a", 0, 0)
 	if err != nil || len(got) != 5 {
 		t.Fatalf("list = %d entries / %v, want 5", len(got), err)
@@ -45,19 +44,16 @@ func runLogStoreContract(t *testing.T, store RunLogStore) {
 		}
 	}
 
-	// Cursor resume: everything after entry 3's seq.
 	tail, err := store.ListRunLogs(ctx, "run-a", got[2].Seq, 0)
 	if err != nil || len(tail) != 2 || tail[0].Message != "line 4" {
 		t.Errorf("resume = %+v / %v, want lines 4-5", tail, err)
 	}
 
-	// Limit caps the page.
 	page, _ := store.ListRunLogs(ctx, "run-a", 0, 2)
 	if len(page) != 2 {
 		t.Errorf("limited page = %d entries, want 2", len(page))
 	}
 
-	// The stream label survives the roundtrip.
 	bLogs, err := store.ListRunLogs(ctx, "run-b", 0, 0)
 	if err != nil || len(bLogs) != 2 {
 		t.Fatalf("run-b list = %d entries / %v, want 2", len(bLogs), err)
@@ -66,7 +62,6 @@ func runLogStoreContract(t *testing.T, store RunLogStore) {
 		t.Errorf("streams = %q, %q, want \"\" and \"stderr\"", bLogs[0].Stream, bLogs[1].Stream)
 	}
 
-	// Unknown run: empty, not an error.
 	none, err := store.ListRunLogs(ctx, "ghost", 0, 0)
 	if err != nil || len(none) != 0 {
 		t.Errorf("ghost run = %v / %v", none, err)
@@ -77,7 +72,6 @@ func TestMemRunLogStore(t *testing.T) {
 	runLogStoreContract(t, NewMemRunLogStore())
 }
 
-// Gated on DAZYFLOW_TEST_DB, like the other Pg store tests.
 func TestPgRunLogStore(t *testing.T) {
 	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
@@ -104,7 +98,6 @@ func TestRecordingBus(t *testing.T) {
 	bus := NewRecordingBus(NewMemoryBus(), store)
 	ctx := context.Background()
 
-	// Subscribers still receive everything (decorator is transparent).
 	ch, cancel := bus.Subscribe("run-1")
 	defer cancel()
 
@@ -176,7 +169,6 @@ func TestRecordingBus_PayloadOptOut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	// Only the status + terminal trail survives; the payload line is dropped.
 	for _, e := range logs {
 		if e.Kind == "progress" {
 			t.Errorf("payload progress line was persisted despite opt-out: %q", e.Message)
@@ -200,7 +192,6 @@ func TestRecordingBus_CapsPerRun(t *testing.T) {
 	bus.Publish("noisy", BusEvent{Terminal: &TerminalEvent{JobID: "noisy", Status: core.JobStatusSucceeded}})
 
 	logs, _ := store.ListRunLogs(context.Background(), "noisy", 0, maxRunLogEntries+10)
-	// cap entries + 1 truncation marker + 1 terminal
 	if len(logs) != maxRunLogEntries+2 {
 		t.Fatalf("logged %d entries, want %d", len(logs), maxRunLogEntries+2)
 	}
@@ -232,12 +223,10 @@ func TestRunLogsHTTPEndpoint(t *testing.T) {
 	if rw.Code != 200 || !strings.Contains(rw.Body.String(), "line 3") {
 		t.Fatalf("logs: %d %s", rw.Code, rw.Body.String())
 	}
-	// Paging via after + limit.
 	rw = h.do(t, "GET", "/api/v1/me/runs/run-http/logs?after=1&limit=1", nil)
 	if !strings.Contains(rw.Body.String(), "line 2") || strings.Contains(rw.Body.String(), "line 3") {
 		t.Errorf("paged: %s", rw.Body.String())
 	}
-	// Unknown run → 404; foreign tenant → not visible either.
 	if rw := h.do(t, "GET", "/api/v1/me/runs/ghost/logs", nil); rw.Code != 404 {
 		t.Errorf("ghost: %d", rw.Code)
 	}
@@ -247,7 +236,6 @@ func TestRunLogsHTTPEndpoint(t *testing.T) {
 	if rw := h.do(t, "GET", "/api/v1/me/runs/foreign/logs", nil); rw.Code == 200 {
 		t.Errorf("foreign run visible: %s", rw.Body.String())
 	}
-	// Store off → 501.
 	h.svc.RunLogs = nil
 	if rw := h.do(t, "GET", "/api/v1/me/runs/run-http/logs", nil); rw.Code != 501 {
 		t.Errorf("disabled: %d", rw.Code)
@@ -274,7 +262,6 @@ func TestRunLogPrune(t *testing.T) {
 	if gone, _ := store.ListRunLogs(ctx, "r2", 0, 0); len(gone) != 0 {
 		t.Errorf("r2 should be fully pruned: %+v", gone)
 	}
-	// olderThan <= 0 disables.
 	if n, _ := store.Prune(ctx, 0, 0); n != 0 {
 		t.Errorf("disabled prune removed %d", n)
 	}
@@ -301,8 +288,6 @@ func TestPgRunLogPrune(t *testing.T) {
 	_ = store.AppendRunLog(ctx, RunLogEntry{RunID: "r1", TS: time.Now().Add(-48 * time.Hour), Kind: "progress", Message: "ancient"})
 	_ = store.AppendRunLog(ctx, RunLogEntry{RunID: "r1", TS: time.Now(), Kind: "terminal", Message: "recent"})
 
-	// batch=1: first pass deletes the old row (n == batch → loop again),
-	// second pass deletes nothing and terminates — exercises the batching loop.
 	n, err := store.Prune(ctx, 24*time.Hour, 1)
 	if err != nil || n != 1 {
 		t.Fatalf("prune = %d/%v, want 1", n, err)

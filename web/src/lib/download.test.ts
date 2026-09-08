@@ -1,9 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// jsdom implements neither the object-URL methods nor Blob.text(), so the file
-// contents are captured from the Blob constructor and the URL calls are
-// recorded by hand.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { downloadJson, downloadText } from "./download";
 
@@ -83,7 +80,6 @@ describe("downloadJson", () => {
   it("writes indented JSON as application/json", () => {
     downloadJson({ a: 1, b: [2] }, "data.json");
     expect(written[0].type).toBe("application/json");
-    // Indented on purpose: an export a person may open and read.
     expect(written[0].parts[0]).toBe('{\n  "a": 1,\n  "b": [\n    2\n  ]\n}');
     expect(clicked[0].download).toBe("data.json");
   });

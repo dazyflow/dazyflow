@@ -141,8 +141,6 @@ export function tokenizeJSON(src: string): ReactNode[] {
   return out;
 }
 
-// isInvalidJSON reports whether non-empty text fails to parse — the soft red
-// border signal. Empty/whitespace is treated as valid (nothing to flag yet).
 export function isInvalidJSON(value: string): boolean {
   if (!value.trim()) return false;
   try {

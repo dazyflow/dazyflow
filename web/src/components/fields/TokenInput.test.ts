@@ -91,7 +91,6 @@ describe("serializeEditable", () => {
   });
 
   it("is the inverse of a renderable value", () => {
-    // Mirror what renderInto produces from a tokenized value, then serialize.
     const value = "Authorization: Bearer ${secret.TOKEN} done";
     const root = document.createElement("div");
     for (const seg of tokenizeValue(value)) {

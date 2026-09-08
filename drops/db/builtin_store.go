@@ -22,13 +22,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// builtinStorePath is the fixed, workspace-local SQLite file the
-// Collections store drops read and write. It lives under a dotted dir so
-// it doesn't clutter the user's visible workspace files. The whole
-// point of these drops is that a non-technical user gets a place to
-// keep rows WITHOUT provisioning Postgres or even picking a filename —
-// "save it somewhere" just works. Power users who outgrow it graduate
-// to sqlite_* (pick your own file) or postgres_* (bring a DSN).
 const builtinStorePath = ".dazyflow-store/data.db"
 
 func init() {
@@ -43,11 +36,6 @@ func init() {
 			Category:    "io",
 			Provider:    "internal",
 			Integration: "Collections",
-			// "results"/"dashboard"/"report" tag this as the writer behind
-			// the in-app Collections page (web /results). Tags (not SearchBoost)
-			// because a blanket boost would also lift it for "save"/"database",
-			// disturbing the deliberate ranking below SQLite Insert rows for
-			// those generic verbs (see SearchBoost note there).
 			Tags:        []string{"collection", "collections", "store", "database", "save", "append", "no-setup", "results", "dashboard", "report"},
 			Description: "Save rows to a collection — no database to set up and no connection string to paste. Pick a collection name and the rows land there; the collection is created automatically the first time. Each workspace has its own private Collections, and the saved rows show up under Collections so you can browse them in-app. Every row is stamped with the time it was saved (a saved_at column) so you can sort newest-first. By default every run appends; set “Unique by” to a key column (like date) and a row with a matching key is updated in place instead of piling up a duplicate — so re-running the flow stays idempotent.",
 			Summary:     "Append rows to a workspace-local collection with zero setup; auto-creates the collection, evolves columns on the fly, and surfaces the rows under Collections.",
@@ -135,13 +123,7 @@ func init() {
 	})
 }
 
-// openBuiltinStore resolves the fixed store path through the workspace
-// os.Root (creating the parent dir on first write) and opens it via
-// database/sql. Mirrors the sandbox discipline of sqlite_insert_rows:
-// os.Root validates the path before sqlite — which takes an
-// unconstrained filename — ever sees it. The path is a constant, so
-// escape is impossible here; the os.Root dance is kept for symmetry and
-// to create the parent directory safely.
+// Through the workspace root, so a tenant cannot reach another's store.
 func openBuiltinStore(job core.Job, create bool) (*sql.DB, *core.Result) {
 	if job.WorkspaceRoot == "" {
 		r := params.Err(job, "no_sandbox", "Collections requires a workspace sandbox")
@@ -168,9 +150,7 @@ func openBuiltinStore(job core.Job, create bool) (*sql.DB, *core.Result) {
 		}
 		probe.Close()
 	} else {
-		// Read path: a store that's never been written to simply has no
-		// file yet — that's an empty store, not an error. Signal that to
-		// the caller with a nil db and nil result.
+		// A store never written to has no table yet, which is empty, not an error.
 		probe, probeErr := root.Open(builtinStorePath)
 		root.Close()
 		if probeErr != nil {
@@ -192,10 +172,7 @@ func openBuiltinStore(job core.Job, create bool) (*sql.DB, *core.Result) {
 	return db, nil
 }
 
-// executeBuiltinStoreAppend is the no-DSN twin of sqlite_insert_rows:
-// same batch-insert-in-one-transaction behaviour, but the database file
-// is fixed and auto-created so the user never sees a path or connection
-// string. The table is always auto-created from the row shape.
+// The no-DSN twin of sqlite_insert_rows.
 func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	table, err := params.String(job.Params, "table")
 	if err != nil {
@@ -208,10 +185,6 @@ func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.
 	if !ok {
 		return params.Err(job, "missing_input", "input port 'rows' is required"), nil
 	}
-	// A webhook/form body is a single {field: value} object, but the
-	// store appends row *lists*. Wrap a lone object into a one-row list
-	// so "form → save" works without a reshape step in between — that
-	// frictionless path is the whole point of the Collections store.
 	inline := rowsRef.Inline
 	if m, isObj := inline.(map[string]any); isObj {
 		inline = []any{m}
@@ -222,8 +195,6 @@ func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.
 	}
 
 	var headers []string
-	// Prefer the column order folded onto the rows value itself; fall back to
-	// deriving from the row keys.
 	if len(rowsRef.Headers) > 0 {
 		headers = rowsRef.Headers
 	}
@@ -236,20 +207,8 @@ func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.
 		}
 	}
 
-	// Stamp when each row was saved. Without this a collection answers "what
-	// did people say" but never "when did this arrive" — and the Find/Query
-	// steps offer a "Sort by" that had no time column to point at, so the
-	// obvious "newest first" was impossible on the very path (form → save)
-	// this store exists for. The column is added to the END of the header
-	// list so it never disturbs the owner's own column order.
-	//
-	// Skipped when the incoming rows already carry a column of that name: the
-	// caller's own value wins over ours (a form that posts its own
-	// submitted_at, a re-import that carries original timestamps).
-	//
-	// Only when there is something to save: stamping an empty payload would
-	// add a saved_at column (and so CREATE the collection) for a run that
-	// saved no rows, turning a no-op into a schema change.
+	// Without a save time a collection cannot answer "what arrived today", which is
+	// most of what a results board is for.
 	if tsCol, tsErr := timestampColumn(job, headers); tsErr != nil {
 		return params.Err(job, "bad_param", tsErr.Error()), nil
 	} else if tsCol != "" && len(rows) > 0 {
@@ -279,14 +238,8 @@ func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.
 		if err := sqliteEnsureTable(db, table, headers, colTypes); err != nil {
 			return params.Err(job, "db", err.Error()), nil
 		}
-		// Schema evolution: when the table already exists, ensureTable
-		// is a CREATE-IF-NOT-EXISTS no-op and any headers added since
-		// would silently break the upcoming INSERT. The Collections store
-		// is explicitly the no-schema-management path — Maria edits her
-		// form, adds "phone", and expects new submissions to land. Add
-		// any missing columns now (sqlite_insert_rows keeps its
-		// stricter behaviour; that drop is for users who manage their
-		// own schema).
+		// An existing table is widened rather than replaced, so a flow that starts
+		// emitting a new column does not lose the rows already saved.
 		if err := evolveBuiltinStoreColumns(db, table, headers, colTypes); err != nil {
 			return params.Err(job, "db", err.Error()), nil
 		}
@@ -298,9 +251,7 @@ func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.
 			Output: map[string]core.Ref{"inserted": {MIME: "application/json", Inline: 0}},
 		}, nil
 	}
-	// With a "Unique by" key, upsert on those columns so re-saving a row with
-	// the same key updates it in place (idempotent re-runs) rather than adding a
-	// duplicate. Without it, the historical append behaviour is unchanged.
+	// Upserts on the key columns, so a re-run does not duplicate rows.
 	if len(uniqueBy) > 0 {
 		if err := ensureUniqueIndex(db, table, uniqueBy); err != nil {
 			return params.Err(job, "not_unique", err.Error()), nil
@@ -328,18 +279,9 @@ func executeBuiltinStoreAppend(ctx context.Context, job core.Job, _ chan<- core.
 	}, nil
 }
 
-// defaultTimestampColumn is the column the Collections store stamps each
-// saved row with. Named for what it records — when the row was SAVED — rather
-// than when anything happened upstream, which only the caller can know.
 const defaultTimestampColumn = "saved_at"
 
-// timestampColumn resolves which column (if any) should carry the save time.
-// Defaults to saved_at; the "timestamp_column" param renames it (to match an
-// existing convention like submitted_at) or, set to "", turns it off for
-// owners who want the collection to hold exactly the columns they send.
-//
-// Returns "" when the incoming rows already declare that column, so a value
-// the caller supplied is never overwritten by ours.
+// Avoids colliding with a column the rows already carry.
 func timestampColumn(job core.Job, headers []string) (string, error) {
 	col := defaultTimestampColumn
 	if raw, ok := job.Params["timestamp_column"]; ok && raw != nil {
@@ -363,10 +305,6 @@ func timestampColumn(job core.Job, headers []string) (string, error) {
 	return col, nil
 }
 
-// parseUniqueBy reads the optional "unique_by" key columns for an idempotent
-// upsert. Empty → plain append. Each key must be a valid identifier and (when
-// there are rows to write) one of the saved columns — there'd be no value to
-// match on otherwise.
 func parseUniqueBy(job core.Job, headers []string) ([]string, *core.Result) {
 	if raw, ok := job.Params["unique_by"]; !ok || raw == nil {
 		return nil, nil // optional — absent means plain append
@@ -398,10 +336,7 @@ func parseUniqueBy(job core.Job, headers []string) ([]string, *core.Result) {
 	return keys, nil
 }
 
-// ensureUniqueIndex creates a UNIQUE index on the key columns so the store can
-// upsert (ON CONFLICT) on them; IF NOT EXISTS makes it a no-op once present.
-// SQLite refuses to build the index when existing rows already collide on the
-// key — surfaced as a clear, fixable error rather than a silent no-op.
+// The index is what makes the upsert possible at all.
 func ensureUniqueIndex(db *sql.DB, table string, keys []string) error {
 	idx := "ux_" + table + "_" + strings.Join(keys, "_")
 	stmt := fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s (%s)",
@@ -416,21 +351,7 @@ func ensureUniqueIndex(db *sql.DB, table string, keys []string) error {
 	return nil
 }
 
-// evolveBuiltinStoreColumns adds any header not already present on
-// table as a new column with the same type-defaulting rules
-// ensureTable uses (TEXT unless overridden by colTypes). Built-in
-// store only — the regular sqlite/postgres drops leave schema
-// management to the user. Idempotent: re-running with no new headers
-// is a single PRAGMA read and zero writes.
-//
-// SQLite caveats:
-//   - PRAGMA table_info returns column names case-sensitively as stored
-//     in the schema. ADD COLUMN with a differently-cased duplicate would
-//     create a conflicting column; we keep the comparison case-sensitive
-//     to mirror SQLite's own behaviour.
-//   - ALTER TABLE ADD COLUMN cannot add a NOT NULL column without a
-//     DEFAULT in SQLite. The store never asks for NOT NULL columns
-//     (TEXT default, no constraints), so this restriction doesn't bite.
+// Adds missing columns; it never drops or retypes an existing one.
 func evolveBuiltinStoreColumns(db *sql.DB, table string, headers []string, colTypes map[string]string) error {
 	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", quoteIdent(table)))
 	if err != nil {
@@ -468,9 +389,6 @@ func evolveBuiltinStoreColumns(db *sql.DB, table string, headers []string, colTy
 	return nil
 }
 
-// executeBuiltinStoreQuery is the no-DSN twin of sqlite_query. A store
-// that's never been written to returns no rows rather than erroring —
-// an empty store is a valid state, not a misconfiguration.
 func executeBuiltinStoreQuery(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	sqlText, err := params.String(job.Params, "sql")
 	if err != nil {
@@ -501,7 +419,6 @@ func executeBuiltinStoreQuery(ctx context.Context, job core.Job, _ chan<- core.P
 		return *errResult, nil
 	}
 	if db == nil {
-		// Store has never been written to — return an empty result.
 		return core.Result{
 			JobID:  job.ID,
 			Status: core.StatusOK,
@@ -541,9 +458,7 @@ func executeBuiltinStoreQuery(ctx context.Context, job core.Job, _ chan<- core.P
 		if limit > 0 && len(out) >= limit {
 			break
 		}
-		// limit=0 means "no user-imposed cap" — but the whole result set is
-		// buffered in memory, so an unbounded SELECT would OOM the daemon.
-		// Fail fast at the shared row ceiling rather than letting it grow.
+		// No user cap, but the result is still bounded by the value ceiling.
 		if len(out) > limits.MaxRows() {
 			return params.Err(job, "too_many_rows",
 				fmt.Sprintf("query returned more than the %d-row limit; add a LIMIT clause, set the 'limit' param, or raise DAZYFLOW_MAX_ROWS", limits.MaxRows())), nil

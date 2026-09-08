@@ -32,7 +32,6 @@ import type { Port, Ref } from "../../types";
 type Props = {
   // The step's name, so the data is never anonymous once it leaves the card.
   name: string;
-  // Output ports worth a tab (facePorts has already dropped the pass pin).
   ports: Port[];
   outputs?: Record<string, Ref>;
   active: string;
@@ -107,10 +106,6 @@ export function NodeDataModal({ name, ports, outputs, active, onSelect, onClose 
   );
 }
 
-// Literal class names and keys per tier, for the same reason NodeDataFace
-// writes them out: check-css-classes reads literal class text, so a name
-// assembled from a variable is invisible to the guard that exists to catch a
-// missing modifier.
 function tierClass(tier: "run" | "example" | "none"): string {
   if (tier === "run") return "dz-face-prov dz-face-prov-run";
   if (tier === "example") return "dz-face-prov dz-face-prov-example";

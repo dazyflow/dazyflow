@@ -9,13 +9,11 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// got reads the 1/0 Result the Compare drop emits, as a bool.
 func got(t *testing.T, res core.Result) bool {
 	t.Helper()
 	if res.Status != core.StatusOK {
 		t.Fatalf("status=%q (%+v)", res.Status, res.Error)
 	}
-	// Compare emits an int (1/0); In Range emits a real bool. Accept both.
 	switch v := res.Output["result"].Inline.(type) {
 	case bool:
 		return v
@@ -30,7 +28,6 @@ func got(t *testing.T, res core.Result) bool {
 	}
 }
 
-// cmp wires A and B as inputs and runs Compare with the given op.
 func cmp(t *testing.T, a, b any, op string, extra map[string]any) core.Result {
 	t.Helper()
 	p := map[string]any{"op": op}
@@ -162,7 +159,6 @@ func TestCompare_ContainsAndNotContains(t *testing.T) {
 }
 
 func TestCompare_ExistsNotExists(t *testing.T) {
-	// exists/not_exists are unary — they test A; B is ignored.
 	if !got(t, cmp(t, "something", nil, "exists", nil)) {
 		t.Errorf("non-nil A should exist")
 	}
@@ -192,12 +188,7 @@ func TestCompare_FieldFromJSONString(t *testing.T) {
 	}
 }
 
-// TestCompare_LiteralParams covers the inline-on-node path: operands come from
-// the A/B params (typed as strings) rather than wired inputs, and are
-// JSON-coerced — "1000" → number, "[200,299]" → list.
 func TestCompare_LiteralParams(t *testing.T) {
-	// B literal "1000" coerced to a number for a numeric compare against
-	// a wired A.
 	res, _ := executeCompare(t.Context(), core.Job{
 		Input:  map[string]core.Ref{"A": {Inline: 1500.0}},
 		Params: map[string]any{"op": "greater_than", "B": "1000"},
@@ -205,7 +196,6 @@ func TestCompare_LiteralParams(t *testing.T) {
 	if !got(t, res) {
 		t.Errorf("1500 > literal \"1000\" should be true")
 	}
-	// B literal "[200,299]" coerced to a list for in_range.
 	res, _ = executeCompare(t.Context(), core.Job{
 		Input:  map[string]core.Ref{"A": {Inline: 204.0}},
 		Params: map[string]any{"op": "in_range", "B": "[200,299]"},
@@ -213,7 +203,6 @@ func TestCompare_LiteralParams(t *testing.T) {
 	if !got(t, res) {
 		t.Errorf("204 in literal \"[200,299]\" should be true")
 	}
-	// Both operands as literal params, no wires.
 	res, _ = executeCompare(t.Context(), core.Job{
 		Params: map[string]any{"op": "equals", "A": "hello", "B": "hello"},
 	}, nil)
@@ -229,8 +218,6 @@ func TestCompare_BadOpErrors(t *testing.T) {
 }
 
 func TestCompare_OpDefaultsToEquals(t *testing.T) {
-	// No op param → defaults to "equals" (the schema default), so a
-	// freshly-dropped Compare is immediately valid.
 	res, _ := executeCompare(t.Context(), core.Job{
 		Input: map[string]core.Ref{"A": {Inline: "x"}, "B": {Inline: "x"}},
 	}, nil)
@@ -273,7 +260,6 @@ func TestCompare_NumericTextOperands(t *testing.T) {
 		}
 	}
 
-	// Text that isn't a number is still a clear error rather than a silent 0.
 	res, _ := executeCompare(t.Context(), core.Job{
 		ID:     "test",
 		Params: map[string]any{"op": "greater_than"},

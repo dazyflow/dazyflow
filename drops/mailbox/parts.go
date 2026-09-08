@@ -37,8 +37,6 @@ func leafParts(bs imap.BodyStructure) []part {
 	var out []part
 	bs.Walk(func(p []int, cur imap.BodyStructure) bool {
 		if leaf, ok := cur.(*imap.BodyStructureSinglePart); ok {
-			// Walk hands back a slice it reuses between calls, so the path has
-			// to be copied or every entry ends up pointing at the last one.
 			cp := make([]int, len(p))
 			copy(cp, p)
 			out = append(out, part{path: cp, leaf: leaf})
@@ -48,14 +46,6 @@ func leafParts(bs imap.BodyStructure) []part {
 	return out
 }
 
-// isAttachment reports whether a part is a file someone attached, as opposed
-// to the message text or an inline decoration.
-//
-// An explicit `Content-Disposition: inline` is honoured even when the part
-// carries a filename, which is how a signature logo announces itself — those
-// are exactly what "Only these types" exists to avoid having to filter by
-// hand. With no disposition at all, a filename is taken as the intent: some
-// senders omit the header entirely.
 func isAttachment(leaf *imap.BodyStructureSinglePart) bool {
 	if disp := leaf.Disposition(); disp != nil {
 		switch strings.ToLower(strings.TrimSpace(disp.Value)) {
@@ -68,14 +58,6 @@ func isAttachment(leaf *imap.BodyStructureSinglePart) bool {
 	return strings.TrimSpace(leaf.Filename()) != ""
 }
 
-// pickTextPart chooses the part to show as the message body: the first
-// text/plain that isn't an attachment, falling back to the first text/html.
-// Mirrors the preference Gmail's Read email applies (plain, then html), so the
-// two steps don't disagree about what "the body" means.
-//
-// A nil result means the message has no readable text part at all — a
-// notification whose entire payload is a PDF, say. That is a legitimate email,
-// so it reads as an empty body rather than an error.
 func pickTextPart(parts []part) *part {
 	var html *part
 	for i := range parts {
@@ -122,15 +104,9 @@ func decodePart(raw []byte, leaf *imap.BodyStructureSinglePart) []byte {
 	return converted
 }
 
-// decodeTransferEncoding undoes base64 or quoted-printable. Anything else
-// ("7bit", "8bit", "binary", or an empty header) is already the bytes.
 func decodeTransferEncoding(raw []byte, encoding string) []byte {
 	switch strings.ToLower(strings.TrimSpace(encoding)) {
 	case "base64":
-		// Line breaks are mandatory in a base64 MIME part and are not part of
-		// the payload, so the strict decoder has to be given a stripped
-		// stream. A truncated tail (a partial FETCH, a mail cut short) decodes
-		// as far as it goes rather than throwing the whole part away.
 		clean := make([]byte, 0, len(raw))
 		for _, b := range raw {
 			switch b {

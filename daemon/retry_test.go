@@ -18,7 +18,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// flaky manifest declares retry policy + idempotent so retries are allowed.
 var flakyManifest = core.Manifest{
 	ID:             "flaky",
 	Version:        "1.0",
@@ -32,8 +31,6 @@ var flakyManifest = core.Manifest{
 	RetryPolicy:    core.RetryExponentialBackoff,
 }
 
-// retryHarness wires Service + Workers around an isolated registry so each
-// test can register a controllable flaky module.
 type retryHarness struct {
 	svc       *daemon.Service
 	jobs      core.JobStore
@@ -92,8 +89,6 @@ func newRetryHarness(t *testing.T, exec engine.NativeDrop, workerCfg daemon.Work
 	return &retryHarness{svc: svc, jobs: jobs, bus: bus, principal: p}
 }
 
-// flakyNode builds a NativeDrop that fails the first `failCount` calls and
-// succeeds afterwards. Calls counter is shared across attempts.
 func flakyNode(failCount *atomic.Int32) engine.NativeDrop {
 	return engine.NativeDrop{
 		Manifest: flakyManifest,
@@ -177,11 +172,10 @@ func TestRetry_ExhaustedFailsGraph(t *testing.T) {
 	}
 }
 
-// TestWorker_DefaultNodeTimeoutBoundsUnboundedNode proves the worker's
-// wall-time backstop: a node with NO explicit TimeoutSeconds that would
-// otherwise block forever (here, until its context is cancelled) is bounded
-// by DefaultNodeTimeout, fails with a structured "timeout", and frees the
-// worker — rather than pinning the slot indefinitely.
+// Proves the worker's wall-time backstop: a node with NO explicit
+// TimeoutSeconds that would otherwise block forever (here, until its context
+// is cancelled) is bounded by DefaultNodeTimeout, fails with a structured
+// "timeout", and frees the worker — rather than pinning the slot indefinitely.
 func TestWorker_DefaultNodeTimeoutBoundsUnboundedNode(t *testing.T) {
 	t.Parallel()
 	blocker := engine.NativeDrop{
@@ -197,7 +191,6 @@ func TestWorker_DefaultNodeTimeoutBoundsUnboundedNode(t *testing.T) {
 			return core.Result{JobID: job.ID, Status: core.StatusOK}, nil
 		},
 	}
-	// No explicit node timeout; a short DefaultNodeTimeout is the only bound.
 	h := newRetryHarness(t, blocker, daemon.WorkerConfig{
 		MaxRetries:         1, // one shot, no retries
 		DefaultNodeTimeout: 150 * time.Millisecond,
@@ -246,16 +239,11 @@ func TestRetry_HonorsBackoffDelay(t *testing.T) {
 	if elapsed < backoff {
 		t.Errorf("completed in %v, expected at least %v from backoff", elapsed, backoff)
 	}
-	// Should not have waited multiple backoffs since there was only one retry.
 	if elapsed > backoff+800*time.Millisecond {
 		t.Errorf("completed in %v, suspiciously long; backoff=%v", elapsed, backoff)
 	}
 }
 
-// retryAfterNode fails the first call after stamping a server Retry-After on
-// its ctx — exactly what drops/net does when an upstream returns 429 — then
-// succeeds. Used to prove the worker delays the requeue by the server-asked
-// interval rather than the (tiny) configured backoff.
 func retryAfterNode(failCount *atomic.Int32, retryAfter time.Duration) engine.NativeDrop {
 	return engine.NativeDrop{
 		Manifest: flakyManifest,
@@ -280,7 +268,6 @@ func TestRetry_HonorsServerRetryAfterOverBackoff(t *testing.T) {
 	failCount.Store(1) // fail once (with Retry-After), then succeed
 
 	retryAfter := 600 * time.Millisecond
-	// Backoff is near-zero, so any delay near retryAfter proves the hint won.
 	h := newRetryHarness(t, retryAfterNode(&failCount, retryAfter), daemon.WorkerConfig{
 		MaxRetries:   3,
 		RetryBackoff: func(int) time.Duration { return time.Millisecond },
@@ -307,14 +294,10 @@ func TestRetry_HonorsServerRetryAfterOverBackoff(t *testing.T) {
 
 func TestRetry_NoRetryEdgeMeansNoRetry(t *testing.T) {
 	t.Parallel()
-	// Even with a retryable manifest, no edge requesting retry means a
-	// failure is terminal. We compose a graph where node "n" feeds "sink"
-	// via on_error=abort (or default).
 	failCount := atomic.Int32{}
 	failCount.Store(1)
 
 	exec := flakyNode(&failCount)
-	// Register a sink so we have an outgoing edge to attach OnError to.
 	sinkManifest := core.Manifest{
 		ID: "sink", Version: "1.0",
 		Summary:        "Test fixture sink.",
@@ -367,7 +350,6 @@ func TestRetry_NoRetryEdgeMeansNoRetry(t *testing.T) {
 			{ID: "sink", Module: "sink"},
 		},
 		Edges: []core.Edge{
-			// on_error defaults to "" (treated as abort)
 			{From: "n", FromPort: "out", To: "sink", ToPort: "in"},
 		},
 	}
@@ -450,8 +432,6 @@ func TestValidate_IdempotentRetryAllowed(t *testing.T) {
 
 func TestRequeue_PreservesAttemptAndClearsResult(t *testing.T) {
 	t.Parallel()
-	// Direct JobStore test (not through the worker) to nail down the
-	// Requeue contract.
 	store := jobstore.NewMemory()
 	ctx := t.Context()
 
@@ -470,11 +450,7 @@ func TestRequeue_PreservesAttemptAndClearsResult(t *testing.T) {
 		t.Errorf("attempt = %d after first claim", claimed.Attempt)
 	}
 
-	// Marshal a result onto the record to verify Requeue clears it.
 	failure := &core.Result{Status: core.StatusError, Error: &core.JobError{Code: "boom"}}
-	// We can't write the result without Complete; use Requeue to confirm
-	// the path that re-queues a still-running record (the worker calls
-	// Requeue before Complete).
 	availableAt := time.Now().Add(100 * time.Millisecond)
 	if err := store.Requeue(ctx, "j1", availableAt); err != nil {
 		t.Fatalf("Requeue: %v", err)
@@ -490,12 +466,10 @@ func TestRequeue_PreservesAttemptAndClearsResult(t *testing.T) {
 		t.Errorf("attempt = %d after requeue (should preserve)", got.Attempt)
 	}
 
-	// Claim before availability — should be skipped.
 	if _, err := store.Claim(ctx, "w2", time.Second); err == nil {
 		t.Error("Claim succeeded before availability passed")
 	}
 
-	// Wait past availability.
 	time.Sleep(120 * time.Millisecond)
 	again, err := store.Claim(ctx, "w2", time.Second)
 	if err != nil {
@@ -505,7 +479,6 @@ func TestRequeue_PreservesAttemptAndClearsResult(t *testing.T) {
 		t.Errorf("attempt = %d on second claim, want 2", again.Attempt)
 	}
 
-	// silence unused failure variable
 	_ = failure
 }
 
@@ -542,9 +515,6 @@ func TestRetry_ManifestRaisesCapAboveWorkerDefault(t *testing.T) {
 	}
 }
 
-// TestRetry_ManifestLowersCapBelowWorkerDefault: a module that declares
-// MaxRetries=1 gets a single attempt even when the worker default is
-// higher — the "this is one-shot / costly" case.
 func TestRetry_ManifestLowersCapBelowWorkerDefault(t *testing.T) {
 	t.Parallel()
 	failCount := atomic.Int32{}

@@ -65,7 +65,6 @@ func TestReprojectSchedule_FollowsFlowLifecycle(t *testing.T) {
 	ctx := context.Background()
 	p := covAdminPrincipal
 
-	// Saved but not published: not enrolled.
 	if _, err := svc.SaveGraph(ctx, p, cronFlow("f1", "*/5 * * * *")); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -73,7 +72,6 @@ func TestReprojectSchedule_FollowsFlowLifecycle(t *testing.T) {
 		t.Fatalf("unpublished flow enrolled: %v", got)
 	}
 
-	// Published: enrolled.
 	if _, err := svc.PublishFlow(ctx, p, "t", "ws", "f1", "", ""); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
@@ -81,7 +79,6 @@ func TestReprojectSchedule_FollowsFlowLifecycle(t *testing.T) {
 		t.Fatalf("after publish = %v, want 1 entry", got)
 	}
 
-	// Cadence edited on the draft: takes effect without republishing.
 	if _, err := svc.SaveGraph(ctx, p, cronFlow("f1", "*/7 * * * *")); err != nil {
 		t.Fatalf("save edit: %v", err)
 	}
@@ -90,7 +87,6 @@ func TestReprojectSchedule_FollowsFlowLifecycle(t *testing.T) {
 		t.Fatalf("after cadence edit = %+v, want the new expression", specs)
 	}
 
-	// Paused: every trigger comes offline.
 	if _, err := svc.SetFlowEnabled(ctx, p, "t", "ws", "f1", false); err != nil {
 		t.Fatalf("disable: %v", err)
 	}
@@ -98,7 +94,6 @@ func TestReprojectSchedule_FollowsFlowLifecycle(t *testing.T) {
 		t.Fatalf("disabled flow still enrolled: %v", got)
 	}
 
-	// Resumed.
 	if _, err := svc.SetFlowEnabled(ctx, p, "t", "ws", "f1", true); err != nil {
 		t.Fatalf("enable: %v", err)
 	}
@@ -106,7 +101,6 @@ func TestReprojectSchedule_FollowsFlowLifecycle(t *testing.T) {
 		t.Fatalf("after re-enable = %v, want 1 entry", got)
 	}
 
-	// Unpublished: offline again.
 	if err := svc.UnpublishFlow(ctx, p, "t", "ws", "f1"); err != nil {
 		t.Fatalf("unpublish: %v", err)
 	}
@@ -191,7 +185,6 @@ func TestScheduler_EnrollsFromScheduleStore(t *testing.T) {
 		t.Fatalf("tracked=%d, want 1", sched.TrackedCount())
 	}
 
-	// An entry that leaves the store leaves the tracked set on the next pass.
 	if err := store.ReplaceFlowSchedules(ctx, "t", "ws", "f1", nil); err != nil {
 		t.Fatalf("clear: %v", err)
 	}
@@ -259,7 +252,6 @@ func TestDeriveScheduleSpecs(t *testing.T) {
 		})
 	}
 
-	// A paused flow yields nothing regardless of what its triggers say.
 	disabled := base([]core.Node{{ID: "n", Module: "poll_trigger",
 		Params: map[string]any{"interval_seconds": 60}}},
 		[]core.GraphTrigger{{Type: "cron", Cron: "* * * * *"}})
@@ -269,7 +261,6 @@ func TestDeriveScheduleSpecs(t *testing.T) {
 	}
 }
 
-// trackedKeys snapshots what the scheduler is currently enrolled to fire.
 func trackedKeys(s *Scheduler) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -330,7 +321,6 @@ func richWorkspace(t *testing.T, ws *workspace.Store) {
 			t.Fatalf("publish %s: %v", g.ID, err)
 		}
 	}
-	// A published-then-paused flow, and an unpublished draft with a schedule.
 	paused := core.Graph{ID: "paused-flow", Tenant: "t", Workspace: "ws", Disabled: true,
 		Nodes:    []core.Node{{ID: "a", Module: "noop"}},
 		Triggers: []core.GraphTrigger{{Type: "cron", Cron: "* * * * *"}}}
@@ -357,7 +347,6 @@ func TestScheduleProjection_MatchesTheWorkspaceWalk(t *testing.T) {
 	svc, ws, store := newScheduleSvc(t)
 	richWorkspace(t, ws)
 
-	// The walk, as deployments without Postgres still run it.
 	svc.Schedules = nil
 	walkSched := NewScheduler(svc)
 	if err := walkSched.rescan(context.Background()); err != nil {
@@ -368,7 +357,6 @@ func TestScheduleProjection_MatchesTheWorkspaceWalk(t *testing.T) {
 		t.Fatal("the walk enrolled nothing; the fixture is wrong")
 	}
 
-	// The projection, filled the way a fresh install fills it.
 	svc.Schedules = store
 	if _, err := svc.ReconcileSchedules(context.Background()); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -385,7 +373,6 @@ func TestScheduleProjection_MatchesTheWorkspaceWalk(t *testing.T) {
 	t.Logf("both paths enrolled %d entries", len(walked))
 }
 
-// countingSchedules records how many writes the reconcile actually issues.
 type countingSchedules struct {
 	ScheduleStore
 	replaces int
@@ -402,8 +389,6 @@ func (c *countingSchedules) PruneMissingFlows(ctx context.Context, live, scope m
 	return c.ScheduleStore.PruneMissingFlows(ctx, live, scope)
 }
 
-// The reconcile is an hourly pass over every flow in the install. It only earns
-// that if an unchanged flow costs no write.
 func TestReconcileSchedules_SecondPassWritesNothing(t *testing.T) {
 	t.Parallel()
 	svc, ws, store := newScheduleSvc(t)
@@ -428,7 +413,6 @@ func TestReconcileSchedules_SecondPassWritesNothing(t *testing.T) {
 		t.Fatalf("steady-state reconcile issued %d writes, want 0", counter.replaces)
 	}
 
-	// A real change still gets written.
 	edited := core.Graph{ID: "graph-cron", Tenant: "t", Workspace: "ws",
 		Nodes:    []core.Node{{ID: "a", Module: "noop"}},
 		Triggers: []core.GraphTrigger{{Type: "cron", Cron: "*/7 * * * *", TZ: "Europe/Stockholm"}}}
@@ -444,8 +428,6 @@ func TestReconcileSchedules_SecondPassWritesNothing(t *testing.T) {
 	}
 }
 
-// The reconcile's whole job is repairing a projection that drifted, so the
-// repair is asserted through the scheduler rather than through the store.
 func TestReconcileSchedules_RepairsADroppedRowSoTheFlowEnrollsAgain(t *testing.T) {
 	t.Parallel()
 	svc, ws, store := newScheduleSvc(t)
@@ -460,7 +442,6 @@ func TestReconcileSchedules_RepairsADroppedRowSoTheFlowEnrollsAgain(t *testing.T
 	}
 	full := len(trackedKeys(sched))
 
-	// Simulate a projection write that failed after its commit landed.
 	if err := store.ReplaceFlowSchedules(ctx, "t", "ws", "graph-cron", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -542,8 +523,6 @@ func TestMemScheduleStore_DeleteByTenant(t *testing.T) {
 	}
 }
 
-// failingSchedules rejects every write, standing in for a database that is down
-// at the moment a flow is saved.
 type failingSchedules struct{ ScheduleStore }
 
 func (failingSchedules) ReplaceFlowSchedules(context.Context, string, string, string, []ScheduleSpec) error {
@@ -577,7 +556,6 @@ func TestReprojectSchedule_StoreFailureDoesNotFailTheWrite(t *testing.T) {
 	if err := svc.DeleteGraph(ctx, p, "t", "ws", "f1"); err != nil {
 		t.Fatalf("delete failed because the projection did: %v", err)
 	}
-	// And the flow really is gone from the workspace, not merely un-projected.
 	if _, err := ws.Load("f1"); err == nil {
 		t.Fatal("flow still present after delete")
 	}
@@ -596,7 +574,6 @@ func TestReprojectSchedule_NilStoreIsANoop(t *testing.T) {
 	if _, err := svc.PublishFlow(ctx, covAdminPrincipal, "t", "ws", "f1", "", ""); err != nil {
 		t.Fatalf("publish with no schedule store: %v", err)
 	}
-	// The walk still enrolls it.
 	sched := NewScheduler(svc)
 	if err := sched.rescan(ctx); err != nil {
 		t.Fatal(err)

@@ -62,7 +62,6 @@ beforeEach(() => {
 describe("AdminMCPServers", () => {
   it("names the steps the server contributed, not just how many", async () => {
     render(<AdminMCPServers />);
-    // A count alone leaves an admin guessing what to search the palette for.
     await screen.findByText(/search, create, list/);
     expect(screen.getByText(/mcp.andMore/)).toBeInTheDocument();
   });
@@ -98,8 +97,6 @@ describe("AdminMCPServers", () => {
 
   it("shows the id under the name, because that is what the palette says", async () => {
     render(<AdminMCPServers />);
-    // Both, and distinctly: an admin who called it "Vendor Tools" is looking
-    // for mcp:vendor:* among their steps.
     expect(await screen.findByText("Vendor Tools")).toBeInTheDocument();
     expect(screen.getByText("vendor")).toBeInTheDocument();
   });
@@ -123,7 +120,6 @@ describe("AdminMCPServers", () => {
 
     await waitFor(() => expect(saveMCPServer).toHaveBeenCalled());
     const [, input, existingName] = saveMCPServer.mock.calls[0];
-    // The edit is addressed to the id, and carries the new label only.
     expect(existingName).toBe("vendor");
     expect(input.label).toBe("Vendor tools (prod)");
     expect(input.name).toBeUndefined();
@@ -194,11 +190,9 @@ describe("AdminMCPServers", () => {
     await screen.findByText("Vendor Tools");
     await userEvent.click(screen.getByLabelText("common.remove"));
 
-    // The count and the names, not the old unconditional sentence.
     const warning = await screen.findByText(/mcp.removeInUse/);
     expect(warning.textContent).toContain("Nightly sync");
     expect(warning.textContent).toContain("Alerts");
-    // A published flow among them is worth saying out loud.
     expect(warning.textContent).toContain("mcp.removePublished");
     await waitFor(() => expect(mcpServerUsage).toHaveBeenCalledWith("tok", "vendor"));
   });
@@ -208,7 +202,6 @@ describe("AdminMCPServers", () => {
     await screen.findByText("Vendor Tools");
     await userEvent.click(screen.getByLabelText("common.remove"));
 
-    // The case the old copy could not express: removing this breaks nothing.
     expect(await screen.findByText(/mcp.removeUnused/)).toBeInTheDocument();
     expect(screen.queryByText(/mcp.removeInUse/)).toBeNull();
   });
@@ -219,8 +212,6 @@ describe("AdminMCPServers", () => {
     await screen.findByText("Vendor Tools");
     await userEvent.click(screen.getByLabelText("common.remove"));
 
-    // Two private flows: the blast radius is shown, the titles are not, and
-    // the sentence does not trail off into an empty list.
     const warning = await screen.findByText(/mcp.removeInUseHidden/);
     expect(warning.textContent).toContain('"count":2');
     expect(screen.queryByText(/mcp.removeUnused/)).toBeNull();
@@ -235,7 +226,6 @@ describe("AdminMCPServers", () => {
     // Never "nothing uses it" — that is a claim a failed lookup cannot make.
     expect(await screen.findByText(/mcp.removeReally/)).toBeInTheDocument();
     expect(screen.queryByText(/mcp.removeUnused/)).toBeNull();
-    // And the delete still works.
     deleteMCPServer.mockResolvedValue({ deleted: "vendor" });
     await userEvent.click(screen.getByText("common.remove"));
     await waitFor(() => expect(deleteMCPServer).toHaveBeenCalledWith("tok", "vendor"));
@@ -247,7 +237,6 @@ describe("AdminMCPServers", () => {
     await screen.findByText("Vendor Tools");
     await userEvent.click(screen.getByLabelText("common.remove"));
 
-    // Usage resolves to "nothing uses it" in this test's default mock.
     expect(await screen.findByText(/mcp.remove(Really|Unused)/)).toBeInTheDocument();
     expect(deleteMCPServer).not.toHaveBeenCalled();
 

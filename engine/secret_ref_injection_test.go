@@ -26,8 +26,6 @@ import (
 //
 // These tests pin the boundary. See resolveString.
 
-// injectionProviders is a secret registry holding one org secret and one
-// connection credential, both under guessable names.
 func injectionProviders() map[string]core.SecretProvider {
 	return map[string]core.SecretProvider{
 		"secret": stubSecretProvider{vals: map[string]string{
@@ -38,7 +36,6 @@ func injectionProviders() map[string]core.SecretProvider {
 }
 
 func TestResolve_UpstreamDataIsNotASecretRef(t *testing.T) {
-	// An upstream node emitted attacker-controlled text on port "out".
 	prior := map[string]core.Result{
 		"webhook": {Status: core.StatusOK, Output: map[string]core.Ref{
 			"out": {Inline: "secret://API_KEY"},

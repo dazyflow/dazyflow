@@ -12,15 +12,8 @@ import (
 	"github.com/dazyflow/dazyflow/auth"
 )
 
-// Helpers for the short-lived, single-use auth state the sign-in flows mint on
-// one request and redeem on the next. See auth.EphemeralStore for why it is not
-// in process memory.
-
-// putEphemeral stores v under token until expiresAt.
 func putEphemeral[T any](ctx context.Context, s auth.EphemeralStore, kind, token string, v T, expiresAt time.Time) error {
 	if s == nil {
-		// Never reached in a wired gateway — mountRoutes installs a default —
-		// so this is an error rather than a panic reaching a sign-in handler.
 		return errors.New("no ephemeral auth state store configured")
 	}
 	payload, err := json.Marshal(v)

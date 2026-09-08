@@ -11,9 +11,6 @@
 
 import { formatDateTime } from "./datetime";
 
-// formatCell renders a cell for machines — the CSV column, the search index.
-// Null shows blank; an object falls back to JSON so nothing renders
-// "[object Object]".
 export function formatCell(v: unknown): string {
   if (v === null || v === undefined) return "";
   if (typeof v === "object") return JSON.stringify(v);
@@ -36,8 +33,6 @@ export function formatCellDisplay(v: unknown): string {
   return ISO_INSTANT.test(s) ? formatDateTime(s) : s;
 }
 
-// rowsToCSV builds RFC-4180-ish CSV: fields are quoted and embedded quotes
-// doubled. Good enough for the "open it in Excel/Sheets" path.
 export function rowsToCSV(
   columns: string[],
   rows: Record<string, unknown>[],

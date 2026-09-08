@@ -10,9 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Every step stores its own copy of what it emitted, so one payload
-// threaded down a long chain becomes payload × steps of run state. The
-// meter is what stops the run rather than the store filling up.
 func TestRunStateMeter_ChargesPerRun(t *testing.T) {
 	defer core.SetMaxRunStateBytes(100)()
 	var m runStateMeter
@@ -26,7 +23,6 @@ func TestRunStateMeter_ChargesPerRun(t *testing.T) {
 	if total, ok := m.charge("run-1", 30); ok {
 		t.Errorf("third charge = (%d, %v), want refused past 100", total, ok)
 	}
-	// Runs are independent: one flow's big payload doesn't fail another's.
 	if _, ok := m.charge("run-2", 60); !ok {
 		t.Error("a second run was charged for the first run's bytes")
 	}
@@ -40,8 +36,6 @@ func TestRunStateMeter_DisabledByZeroLimit(t *testing.T) {
 	}
 }
 
-// The window is bounded so the meter can't grow with the run count; an
-// evicted run simply starts counting again.
 func TestRunStateMeter_WindowIsBounded(t *testing.T) {
 	defer core.SetMaxRunStateBytes(1 << 30)()
 	var m runStateMeter

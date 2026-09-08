@@ -15,9 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fakeNshift stands in for the Unifaun ExtAPI: it checks the Bearer key and
-// serves the shipments collection + item endpoints, recording the last request
-// so tests can assert on the method, path, auth and body.
 type fakeNshift struct {
 	srv          *httptest.Server
 	lastAuth     string
@@ -25,8 +22,7 @@ type fakeNshift struct {
 	lastPath     string
 	lastBody     map[string]any
 	createStatus int
-	// createResp is what POST /shipments returns (default: a one-element array).
-	createResp string
+	createResp   string
 }
 
 func newFakeNshift(t *testing.T) *fakeNshift {
@@ -117,7 +113,6 @@ func TestCreateShipment_OK(t *testing.T) {
 
 func TestCreateShipment_SingleObjectResponse(t *testing.T) {
 	f := newFakeNshift(t)
-	// Some deployments return a bare object rather than a one-element array.
 	f.createResp = `{"id":"775","parcels":[{"parcelNo":"P1"}]}`
 	res, _ := executeCreateShipment(context.Background(),
 		f.job(map[string]any{"shipment": map[string]any{"x": 1}}), nil)
@@ -127,7 +122,6 @@ func TestCreateShipment_SingleObjectResponse(t *testing.T) {
 	if got := res.Output["shipment_id"].Inline; got != "775" {
 		t.Errorf("shipment_id = %v, want 775", got)
 	}
-	// parcelNo is the fallback tracking number when copyNo is absent.
 	if got := res.Output["tracking_numbers"].Inline; got != "P1" {
 		t.Errorf("tracking_numbers = %v, want P1", got)
 	}
@@ -261,9 +255,6 @@ func TestBaseURL_OverrideWinsOverEnv(t *testing.T) {
 	}
 }
 
-// TestDecodeObject covers the shared JSON-object decoder. It names the PORT in
-// its error because the mistake it catches is a wiring one — the run viewer has
-// to say which input was wrong, not just that some JSON was.
 func TestDecodeObject(t *testing.T) {
 	t.Run("decodes an object", func(t *testing.T) {
 		m, err := decodeObject([]byte(`{"a":1,"b":"x"}`), "options")
@@ -294,8 +285,6 @@ func TestDecodeObject(t *testing.T) {
 	})
 
 	t.Run("a non-object is rejected and names the port", func(t *testing.T) {
-		// An array, a scalar and truncated JSON are all the same wiring error:
-		// the port wants an object.
 		for _, raw := range []string{
 			`[{"a":1}]`, `"a string"`, `42`, `true`, `{"a":1`, `not json`,
 		} {
@@ -314,9 +303,6 @@ func TestDecodeObject(t *testing.T) {
 	})
 
 	t.Run("JSON null is absence, not a malformed object", func(t *testing.T) {
-		// `null` unmarshals into a nil map without error, so it lands in the
-		// same place as an unwired port. That is the right reading — a caller
-		// that computed "no options" upstream should not get a wiring error.
 		m, err := decodeObject([]byte(`null`), "options")
 		if err != nil || m != nil {
 			t.Errorf("decodeObject(null) = %v, %v; want nil, nil", m, err)

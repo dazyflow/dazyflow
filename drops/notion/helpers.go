@@ -27,11 +27,8 @@ const maxResponseBytes = 64 << 20 // 64 MiB
 
 const notionVersion = "2022-06-28"
 
-// richTextLimit is Notion's per-rich-text-object content cap.
 const richTextLimit = 2000
 
-// tokenHook holds the daemon's per-account Notion OAuth lookup plus the resolve
-// sequence shared with the other OAuth connectors (drops/internal/oauthtok).
 var tokenHook = oauthtok.New("Notion", "notion", "notion")
 
 func SetTokenLookup(fn oauthtok.Lookup) { tokenHook.Set(fn) }
@@ -42,13 +39,10 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 
 var httpBase = apibase.New("https://api.notion.com/v1")
 
-// SetHTTPBase swaps the Notion API root (tests point it at httptest).
 func SetHTTPBase(base string) { httpBase.Set(base) }
 
 func currentHTTPBase() string { return httpBase.Get() }
 
-// notionDo runs one authenticated Notion API call. Returns status + body;
-// the caller maps non-2xx via notionError.
 func notionDo(ctx context.Context, method, url, token string, body []byte, timeoutMS int) (int, []byte, error) {
 	if timeoutMS <= 0 {
 		timeoutMS = 15000
@@ -67,7 +61,6 @@ func notionDo(ctx context.Context, method, url, token string, body []byte, timeo
 	return status, raw, err
 }
 
-// notionError pulls the {code,message} out of a Notion error body.
 func notionError(status int, body []byte) string {
 	var e struct {
 		Code    string `json:"code"`

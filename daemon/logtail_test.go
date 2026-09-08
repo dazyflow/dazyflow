@@ -22,7 +22,6 @@ func TestLogTailLineSplitting(t *testing.T) {
 	}
 }
 
-// The ring keeps only the most recent `size` lines, oldest-first.
 func TestLogTailRingEviction(t *testing.T) {
 	t.Parallel()
 	lt := NewLogTail(3)
@@ -34,14 +33,11 @@ func TestLogTailRingEviction(t *testing.T) {
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
-	// Snapshot(max) trims to the last max.
 	if g := lt.Snapshot(2); fmt.Sprint(g) != fmt.Sprint([]string{"line4", "line5"}) {
 		t.Fatalf("Snapshot(2) = %v", g)
 	}
 }
 
-// A subscriber receives lines written after it subscribed; cancel closes the
-// channel and unregisters it.
 func TestLogTailSubscribe(t *testing.T) {
 	t.Parallel()
 	lt := NewLogTail(10)

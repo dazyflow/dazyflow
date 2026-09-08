@@ -11,10 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// PgRunLogStore is the durable RunLogStore — one row per log entry,
-// BIGSERIAL seq for ordering/resume. Append-only at runtime; retention
-// is an operator sweep (DAZYFLOW_RUN_LOG_RETENTION, per-tenant override
-// via Service.RunLogRetentionDays), not a per-write concern.
 type PgRunLogStore struct {
 	pool *pgxpool.Pool
 }
@@ -77,8 +73,6 @@ func (s *PgRunLogStore) ListRunLogs(ctx context.Context, runID string, afterSeq 
 	return out, rows.Err()
 }
 
-// DeleteRun removes every log line for one run — backs the per-run
-// log-deletion endpoint (GDPR P2.1) and the erasure cascade.
 func (s *PgRunLogStore) DeleteRun(ctx context.Context, runID string) (int, error) {
 	tag, err := s.pool.Exec(ctx, `DELETE FROM run_logs WHERE run_id = $1`, runID)
 	if err != nil {
@@ -87,9 +81,6 @@ func (s *PgRunLogStore) DeleteRun(ctx context.Context, runID string) (int, error
 	return int(tag.RowsAffected()), nil
 }
 
-// DeleteByTenant removes the logs of every run owned by a tenant. run_logs
-// has no tenant column, so it joins the jobs table (same database) to scope
-// by run ownership. Part of the org/account erasure cascade (Art. 17).
 func (s *PgRunLogStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	tag, err := s.pool.Exec(ctx,
 		`DELETE FROM run_logs WHERE run_id IN (SELECT id FROM jobs WHERE tenant = $1)`, tenant)
@@ -99,12 +90,6 @@ func (s *PgRunLogStore) DeleteByTenant(ctx context.Context, tenant string) (int,
 	return int(tag.RowsAffected()), nil
 }
 
-// Prune deletes the logs of runs that finished before the cutoff, in batches,
-// returning the total removed. The unit is the RUN, not the line: a run parked
-// on an approval (or waiting out a delay, which accepts up to a year) writes
-// its first lines on day one and finishes weeks later, so keying on each
-// line's own ts deletes the beginning of a log the run is still writing.
-// Mirrors the jobs pruner, including its orphan pass.
 func (s *PgRunLogStore) Prune(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
 	if olderThan <= 0 {
 		return 0, nil
@@ -208,9 +193,6 @@ func (s *PgRunLogStore) PruneTenant(ctx context.Context, tenant string, olderTha
 	}
 }
 
-// RunLogTenants lists the distinct tenants that own jobs (and therefore may
-// own run logs). The per-tenant retention sweep iterates it; a tenant with no
-// old logs simply prunes nothing.
 func (s *PgRunLogStore) RunLogTenants(ctx context.Context) ([]string, error) {
 	rows, err := s.pool.Query(ctx, `SELECT DISTINCT tenant FROM jobs WHERE tenant <> ''`)
 	if err != nil {

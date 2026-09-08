@@ -41,7 +41,6 @@ func TestFSSandbox_PerWorkspaceIsolation(t *testing.T) {
 	if !strings.HasPrefix(r1, base) || !strings.HasPrefix(r2, base) {
 		t.Errorf("roots %q %q must be under base %q", r1, r2, base)
 	}
-	// Idempotent — second call returns cached value.
 	r1Again, _ := sb.Root("acme", "ws1")
 	if r1Again != r1 {
 		t.Errorf("non-deterministic Root: %q vs %q", r1, r1Again)
@@ -70,8 +69,6 @@ func TestFSSandbox_RejectsUnsafeIdentifiers(t *testing.T) {
 	}
 }
 
-// TestSandbox_E2E_FileReadWrite drives the whole stack: dzd-style service +
-// worker + FSSandbox + file_read + file_write. Proves the wiring works.
 func TestSandbox_E2E_FileReadWrite(t *testing.T) {
 	t.Parallel()
 	base := t.TempDir()
@@ -109,7 +106,6 @@ func TestSandbox_E2E_FileReadWrite(t *testing.T) {
 	}, jobs, eng, bus)
 	go func() { _ = w.Run(wctx) }()
 
-	// Pre-seed the workspace with a file so file_read has something to do.
 	root, _ := sb.Root("acme", "ws1")
 	if err := os.WriteFile(filepath.Join(root, "input.txt"), []byte("hello world"), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
@@ -147,14 +143,11 @@ func TestSandbox_E2E_CrossTenantIsolation(t *testing.T) {
 	base := t.TempDir()
 	sb, _ := daemon.NewFSSandbox(base)
 
-	// Plant a victim file in acme's workspace.
 	acmeRoot, _ := sb.Root("acme", "ws1")
 	if err := os.WriteFile(filepath.Join(acmeRoot, "secret.txt"), []byte("acme-secret"), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	// Provision a service that lets globex submit graphs targeting their
-	// own workspace.
 	ks := auth.NewMemKeyStore()
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
@@ -184,7 +177,6 @@ func TestSandbox_E2E_CrossTenantIsolation(t *testing.T) {
 	}, jobs, eng, bus)
 	go func() { _ = w.Run(wctx) }()
 
-	// Try to read acme's file with a path-traversal attempt from globex.
 	g := core.Graph{
 		ID: "exfil", Tenant: "globex", Workspace: "ws1",
 		Nodes: []core.Node{

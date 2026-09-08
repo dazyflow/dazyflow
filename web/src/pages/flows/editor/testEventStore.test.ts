@@ -4,8 +4,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearTestEvent, loadTestEvent, saveTestEvent } from "./testEventStore";
 
-// withLocalStorage swaps the global for the duration of fn and puts the real
-// one back afterwards, however fn ends.
 function withLocalStorage(stub: Partial<Storage>, fn: () => void) {
   const real = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
   Object.defineProperty(globalThis, "localStorage", {
@@ -63,8 +61,6 @@ describe("testEventStore", () => {
   });
 
   it("declines to spend the storage budget on an enormous body", () => {
-    // /test-trigger takes up to 1 MiB; localStorage is ~5 MB for the whole
-    // app. The payload still fires, it just isn't remembered.
     saveTestEvent("coffee", JSON.stringify({ blob: "x".repeat(300 * 1024) }));
     expect(loadTestEvent("coffee")).toBeNull();
   });

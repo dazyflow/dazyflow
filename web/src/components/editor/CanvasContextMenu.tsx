@@ -5,32 +5,16 @@ import { useEffect, useRef } from "react";
 import { Check } from "lucide-react";
 import { ICON } from "../../icons";
 
-// CanvasContextMenu is the small right-click actions menu the flow editor pops
-// over a node or edge (Blueprint-style). It's a dumb, positioned list: the
-// editor builds the items (label + handler) and owns what each does. It closes
-// itself on the next click, another right-click, Escape, scroll, or resize —
-// the usual "click away and it's gone" contract.
 export type ContextMenuItem =
   | { separator: true }
-  // A non-interactive caption over a group of items. Added for the connection
-  // menu, where three items are answers to one question ("when does the next
-  // step run?") and read as three unrelated commands without it.
   | { header: string }
   | {
       label: string;
       onClick: () => void;
       danger?: boolean;
       disabled?: boolean;
-      // checked marks the item as the state the thing is already in — a set of
-      // items sharing one `checked` behaves as a radio group. Rendered as a
-      // tick in a fixed gutter, so labels stay aligned whether or not any item
-      // in the menu is checked.
       checked?: boolean;
-      // Explains a disabled item. Nothing is more annoying than a greyed-out
-      // command with no reason attached.
       title?: string;
-      // Keyboard shortcut hint, right-adjusted next to the label (hidden on
-      // narrow screens — see .context-menu-shortcut in app.css).
       shortcut?: string;
     };
 
@@ -52,8 +36,6 @@ export function CanvasContextMenu({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    // Defer wiring the click-away listener to the next tick so the same
-    // event burst that opened the menu doesn't immediately close it.
     const id = window.setTimeout(() => {
       window.addEventListener("click", close);
       window.addEventListener("contextmenu", close);
@@ -86,7 +68,6 @@ export function CanvasContextMenu({
       className="canvas-context-menu"
       style={{ left: x, top: y }}
       role="menu"
-      // Keep clicks inside the menu from bubbling to the window close listener.
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >

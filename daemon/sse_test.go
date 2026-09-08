@@ -17,10 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// sseStream opens an authenticated SSE GET against a real httptest.Server (so
-// the handler sees a genuine, cancellable request context) and returns the
-// response, a channel of raw lines, and a cancel func. The reader goroutine
-// stops when the context is cancelled or the body closes.
 func sseStream(t *testing.T, base, token, path string) (lines <-chan string, cancel func()) {
 	t.Helper()
 	ctx, cancelCtx := context.WithCancel(context.Background())
@@ -54,7 +50,6 @@ func sseStream(t *testing.T, base, token, path string) (lines <-chan string, can
 	return ch, cancelCtx
 }
 
-// waitForLine reads from ch until it sees a line containing want or times out.
 func waitForLine(t *testing.T, ch <-chan string, want string) {
 	t.Helper()
 	deadline := time.After(3 * time.Second)
@@ -73,9 +68,6 @@ func waitForLine(t *testing.T, ch <-chan string, want string) {
 	}
 }
 
-// TestJobEvents_LiveStream_Cov covers jobEvents' non-terminal path: the stream
-// stays open after the snapshot, forwards progress / node / terminal frames
-// published on the bus, and returns when the terminal frame lands.
 func TestJobEvents_LiveStream_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -94,34 +86,25 @@ func TestJobEvents_LiveStream_Cov(t *testing.T) {
 	}
 	_ = json.Unmarshal(rw.Body.Bytes(), &resp)
 
-	// No worker runs in the harness, so the submitted run stays queued
-	// (non-terminal) and the stream stays open past the terminal re-read.
 	lines, cancel := sseStream(t, srv.URL, h.token, "/api/v1/me/runs/"+resp.JobID+"/events")
 	defer cancel()
 
 	waitForLine(t, lines, "event: snapshot")
 
-	// A progress event is forwarded.
 	prog := engine.GraphProgress{JobID: resp.JobID, NodeID: "a", Progress: core.Progress{NodeID: "a", Message: "half"}}
 	h.bus.Publish(resp.JobID, BusEvent{Progress: &prog})
 	waitForLine(t, lines, "event: progress")
 
-	// A node-status event is forwarded.
 	h.bus.Publish(resp.JobID, BusEvent{NodeStatus: &NodeStatusEvent{NodeID: "a", Status: core.JobStatusSucceeded}})
 	waitForLine(t, lines, "event: node")
 
-	// A paused event is forwarded.
 	h.bus.Publish(resp.JobID, BusEvent{Paused: &PausedEvent{NodeID: "a"}})
 	waitForLine(t, lines, "event: paused")
 
-	// A terminal event is forwarded and ends the stream.
 	h.bus.Publish(resp.JobID, BusEvent{Terminal: &TerminalEvent{JobID: resp.JobID, Status: core.JobStatusSucceeded}})
 	waitForLine(t, lines, "event: terminal")
 }
 
-// TestWatchFlowMe_LiveStream_Cov covers watchFlowMe end to end: it opens the
-// stream (": watching"), forwards a flow_updated frame published on the flow's
-// bus key, and disconnects cleanly on context cancel.
 func TestWatchFlowMe_LiveStream_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -142,12 +125,9 @@ func TestWatchFlowMe_LiveStream_Cov(t *testing.T) {
 	})
 	waitForLine(t, lines, "event: flow_updated")
 
-	// Cancelling the request context ends the handler's select loop.
 	cancel()
 }
 
-// TestWatchFlowMe_NotFound_Cov covers the early scope/readability guard:
-// watching an unknown flow is a clean 404 before any stream opens.
 func TestWatchFlowMe_NotFound_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)

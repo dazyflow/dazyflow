@@ -11,11 +11,6 @@ import {
 } from "lucide-react";
 import { ICON } from "../../icons";
 
-// Callout is the shared "this stands out" notice block — a bordered, tinted
-// box with a leading icon. Use it instead of a bare muted <p> whenever a
-// message needs to register as a state the user should act on or note:
-// missing permissions ("ask an admin"), a soft error, a confirmation, a tip.
-// One component so every such notice across the app reads the same.
 export type CalloutVariant = "warning" | "info" | "danger" | "success";
 
 const ICONS: Record<CalloutVariant, LucideIcon> = {

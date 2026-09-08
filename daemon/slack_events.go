@@ -20,57 +20,26 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// slackOnMentionModuleID identifies the trigger drop graph authors
-// drop into their flow to subscribe to mentions. The events handler
-// fans out to every graph in the tenant that has at least one node
-// using this module.
 const slackOnMentionModuleID = "slack_on_mention"
 
-// slackTriggerSecretName is the tenant secret holding the Slack app's
-// signing secret (Basic Information → "Signing Secret"). Organization
-// scope (bare name), same convention as Stripe's STRIPE_WEBHOOK_SECRET —
-// resolved per request and bound to the URL tenant so one tenant's
-// secret can't validate another tenant's events.
+// Per-tenant: the signing secret is the org's, not the deployment's.
 const slackTriggerSecretName = "SLACK_SIGNING_SECRET"
 
-// maxSlackBodyBytes caps the body the handler accepts. Slack events
-// are usually a few KB; the cap protects against an attacker who
-// learned the signing secret from posting an arbitrarily large body.
+// Capped: this endpoint is unauthenticated until the signature verifies.
 const maxSlackBodyBytes = 256 * 1024 // 256 KiB
 
-// slackSignatureMaxSkew is how far apart the request timestamp can
-// be from server time before the request is treated as a replay.
-// Five minutes matches Slack's published guidance.
+// Bounds replay: a captured request is only usable inside this window.
 const slackSignatureMaxSkew = 5 * time.Minute
 
-// SlackEventsHandler verifies Slack Events API requests and dispatches
-// app_mention events to every graph in the tenant that uses the
-// slack_on_mention trigger.
-//
-//	POST /api/v1/events/slack/{tenant}
-//	X-Slack-Signature: v0=<hmac-sha256-hex>
-//	X-Slack-Request-Timestamp: <unix-seconds>
-//
-// Slack's HMAC signature is the only auth, so the handler refuses any request
-// whose signature does not match, whose timestamp is older than ~5 minutes, or
-// whose URL tenant has no subscribed graphs. type=url_verification echoes the
-// `challenge` as plain text; type=event_callback seeds event.team_id and
-// SubmitGraphWithSeed against every subscribed graph in the tenant, each
-// getting its own run (a fan-out the user can use deliberately).
+// Verifies the signature BEFORE anything else is trusted.
 type SlackEventsHandler struct {
 	svc           *Service
 	signingSecret string
 	logger        *log.Logger
 
-	// now is overridable for testing the replay-window guard.
 	now func() time.Time
 }
 
-// NewSlackEventsHandler wires a handler against the daemon Service.
-// signingSecret is the Slack app's "Signing Secret" from
-// https://api.slack.com/apps → Basic Information. Empty disables the
-// endpoint — POSTs return 501 so misconfiguration shows up clearly
-// rather than silently rejecting events as bad signatures.
 func NewSlackEventsHandler(svc *Service, signingSecret string) *SlackEventsHandler {
 	return &SlackEventsHandler{
 		svc:           svc,
@@ -80,8 +49,6 @@ func NewSlackEventsHandler(svc *Service, signingSecret string) *SlackEventsHandl
 	}
 }
 
-// ServeHTTP routes a single Slack event POST. Mounted at
-// `/api/v1/events/slack/{tenant}` by HTTPGateway.
 func (h *SlackEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
@@ -93,10 +60,7 @@ func (h *SlackEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Read the body before signature verification so we have the
-	// exact bytes Slack signed. Slack's signature is over the raw
-	// body string concatenated with the timestamp; re-marshalling
-	// the JSON would change the bytes.
+	// The signature covers the raw body, so it must be read first, unparsed.
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxSlackBodyBytes+1))
 	_ = r.Body.Close()
 	if err != nil {
@@ -108,41 +72,25 @@ func (h *SlackEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Resolve the signing secret BOUND to the URL tenant. Policy
-	// (per-tenant preferred, global fallback):
-	//
-	//   - If this tenant configured its own SLACK_SIGNING_SECRET, verify
-	//     against that ONLY. A tenant that set its own secret is thereby
-	//     protected from the shared-secret cross-tenant injection — an
-	//     attacker who knows the global signing secret can't forge an
-	//     event to a tenant whose secret it doesn't know.
-	//   - Otherwise fall back to the global env-configured signing secret.
-	//     This preserves single-tenant deploys that pass --slack-signing-secret
-	//     and haven't moved their secret into the per-tenant store.
-	//   - If neither exists, reject (fail closed).
+	// Bound to the URL's tenant: resolving it any other way would let one org's
+	// signature authenticate a delivery aimed at another.
 	secret := h.tenantSecret(r.Context(), tenant)
 	if secret == "" {
 		secret = h.signingSecret
 	}
 	if secret == "" {
-		// Same generic 401 as a bad signature — an unauthenticated caller
-		// probing tenant names learns nothing about which tenants exist.
 		h.logger.Printf("reject %s: no signing secret configured", tenant)
 		http.Error(rw, "invalid signature", http.StatusUnauthorized)
 		return
 	}
 
 	if err := h.verifySignature(r.Header, body, secret); err != nil {
-		// 401 keeps the error generic — exposing "stale timestamp" vs
-		// "bad signature" would help an attacker calibrate. Detailed
-		// reason goes to the log only.
+		// Generic: a prober must not learn which check failed.
 		h.logger.Printf("reject %s: %v", tenant, err)
 		http.Error(rw, "invalid signature", http.StatusUnauthorized)
 		return
 	}
 
-	// Decode just enough to dispatch — keep the original body around
-	// for the per-graph event seed.
 	var env slackEventEnvelope
 	if err := json.Unmarshal(body, &env); err != nil {
 		http.Error(rw, fmt.Sprintf("parse: %v", err), http.StatusBadRequest)
@@ -151,11 +99,6 @@ func (h *SlackEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) 
 
 	switch env.Type {
 	case "url_verification":
-		// Slack's first-subscription handshake. Echo the challenge
-		// back as plain text — Slack reads response body verbatim,
-		// not JSON. This is the only response type that doesn't
-		// require a graph match (the URL hasn't been used yet, the
-		// user may not have built a graph at this point).
 		rw.Header().Set("Content-Type", "text/plain")
 		_, _ = rw.Write([]byte(env.Challenge))
 		return
@@ -163,18 +106,11 @@ func (h *SlackEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) 
 		h.dispatchEvent(r.Context(), tenant, env, rw)
 		return
 	default:
-		// Unknown envelope types (reaction_removed, etc.) get a
-		// success ack so Slack doesn't retry. Returning 200 without
-		// dispatch is the right shape — we just don't subscribe to
-		// this event type.
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write([]byte("ok"))
 	}
 }
 
-// slackEventEnvelope is the outermost wrapper Slack sends. Inner
-// `event` shape varies per event type; we decode it lazily once we
-// know we care about it.
 type slackEventEnvelope struct {
 	Type      string          `json:"type"`
 	Challenge string          `json:"challenge,omitempty"`
@@ -182,10 +118,6 @@ type slackEventEnvelope struct {
 	Event     json.RawMessage `json:"event,omitempty"`
 }
 
-// slackAppMentionEvent is the shape of the `event` field for
-// app_mention. We extract the named ports up front; the raw JSON
-// also goes through to the `event` output port for graphs that need
-// fields we didn't pull out.
 type slackAppMentionEvent struct {
 	Type    string `json:"type"`
 	User    string `json:"user"`
@@ -194,30 +126,18 @@ type slackAppMentionEvent struct {
 	TS      string `json:"ts"`
 }
 
-// dispatchEvent fans an event_callback out to every graph in the
-// tenant with at least one slack_on_mention node. Each graph gets
-// its own run with that node pre-completed.
 func (h *SlackEventsHandler) dispatchEvent(_ context.Context, tenant string, env slackEventEnvelope, rw http.ResponseWriter) {
-	// V1 only handles app_mention. Other event types could share
-	// this dispatcher later by branching on event.type and emitting
-	// different outputs — keeping the trigger drop's manifest
-	// stable (text/user/channel/team/ts/event are the common shape).
 	var ev slackAppMentionEvent
 	if err := json.Unmarshal(env.Event, &ev); err != nil {
 		http.Error(rw, fmt.Sprintf("parse event: %v", err), http.StatusBadRequest)
 		return
 	}
 	if ev.Type != "app_mention" {
-		// Acknowledged but not dispatched — same handling as unknown
-		// outer types above.
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write([]byte("ok"))
 		return
 	}
 
-	// Build the seed once. Every graph that subscribes gets the
-	// same seed — the trigger node's outputs match the manifest's
-	// declared ports exactly.
 	var rawEvent any
 	_ = json.Unmarshal(env.Event, &rawEvent) // best-effort; signature was already validated
 	seed := core.Result{
@@ -232,34 +152,15 @@ func (h *SlackEventsHandler) dispatchEvent(_ context.Context, tenant string, env
 		},
 	}
 
-	// Slack expects a fast response — they retry on >3s. Spawn the
-	// fanout in a background goroutine and ack immediately. Errors
-	// during fanout go to the daemon log; the user sees them on
-	// the run record.
+	// Slack retries after 3s, so the run must be dispatched asynchronously.
 	go h.fanoutSeed(context.Background(), tenant, ev.Channel, seed)
 
 	rw.WriteHeader(http.StatusOK)
 	_, _ = rw.Write([]byte("ok"))
 }
 
-// fanoutSeed walks every workspace under the tenant, loads each
-// graph, and submits a run for any that declares a slack_on_mention
-// node WHOSE channel_filter param matches the event's channel (or
-// has no filter set). Per-node filtering at the gateway cuts the
-// worker-side churn for tenants who run many channel-specific
-// graphs against one Slack app.
-//
-// eventChannel is the Slack channel ID the mention happened in
-// (e.g. C0123). channel_filter param semantics: empty/missing =
-// match anything; non-empty = exact match required. A graph with
-// multiple slack_on_mention nodes only includes the ones whose
-// filter matches — others stay dormant for this event.
 func (h *SlackEventsHandler) fanoutSeed(ctx context.Context, tenant, eventChannel string, seed core.Result) {
-	// Use a system principal for the dispatch — possession of the
-	// signing secret already proves authorization, same model the
-	// webhook listener uses (graph:admin lets the principal fire
-	// private flows without owning them). Unlike github/stripe, slack
-	// also gates each matching node on its channel filter.
+	// A system principal scoped to the URL's tenant, never a caller-supplied one.
 	fanoutSeed(ctx, h.svc, h.logger, "dazyflow-slack-events", tenant, slackOnMentionModuleID, seed,
 		func(n core.Node) bool {
 			return n.Module == slackOnMentionModuleID &&
@@ -267,11 +168,6 @@ func (h *SlackEventsHandler) fanoutSeed(ctx context.Context, tenant, eventChanne
 		})
 }
 
-// nodeChannelFilterMatches checks the slack_on_mention node's
-// channel_filter param against the event's channel. Empty filter
-// (or missing param, or non-string value) matches every channel —
-// preserves backward compatibility with graphs authored before this
-// param existed.
 func nodeChannelFilterMatches(params map[string]any, eventChannel string) bool {
 	if params == nil {
 		return true
@@ -287,10 +183,6 @@ func nodeChannelFilterMatches(params map[string]any, eventChannel string) bool {
 	return f == eventChannel
 }
 
-// tenantSecret reads this tenant's own SLACK_SIGNING_SECRET from the
-// encrypted secret store, bound to the URL tenant. Empty (no store, not
-// configured, or any lookup error) means "no per-tenant secret" — the
-// caller then falls back to the global env secret.
 func (h *SlackEventsHandler) tenantSecret(ctx context.Context, tenant string) string {
 	if h.svc == nil || h.svc.EncryptedSecrets == nil {
 		return ""
@@ -302,19 +194,8 @@ func (h *SlackEventsHandler) tenantSecret(ctx context.Context, tenant string) st
 	return secret
 }
 
-// verifySignature implements the Slack signing-secret scheme:
-//
-//	base   = "v0:" + timestamp + ":" + body
-//	sig    = "v0=" + hex(hmac-sha256(secret, base))
-//	header X-Slack-Signature must equal sig (constant-time)
-//
-// The secret is resolved per request (per-tenant preferred, global
-// fallback) and passed in, so the signature is verified against the
-// secret bound to the URL tenant.
-//
-// Plus a replay window: reject if the timestamp is more than
-// ~5 minutes off from server time. See:
-// https://api.slack.com/authentication/verifying-requests-from-slack
+// v0=HMAC-SHA256 over "v0:timestamp:body", compared in constant time over the
+// FULL header value so the version prefix cannot be substituted.
 func (h *SlackEventsHandler) verifySignature(header http.Header, body []byte, secret string) error {
 	tsStr := header.Get("X-Slack-Request-Timestamp")
 	sig := header.Get("X-Slack-Signature")
@@ -334,9 +215,7 @@ func (h *SlackEventsHandler) verifySignature(header http.Header, body []byte, se
 	mac.Write([]byte(":"))
 	mac.Write(body)
 	expected := "v0=" + hex.EncodeToString(mac.Sum(nil))
-	// Constant-time compare on the FULL header value, including the
-	// "v0=" prefix, so timing can't leak whether the version prefix
-	// was right.
+	// Constant-time, over the full header including the version prefix.
 	if !hmac.Equal([]byte(expected), []byte(strings.TrimSpace(sig))) {
 		return fmt.Errorf("signature mismatch")
 	}

@@ -10,14 +10,11 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// opKey scopes an operation's step id to its owning tenant.
-//
-// Keyed rather than filtered on read, for the same reason engine/mcp's toolKey
-// is: a filter is a check someone can forget to write, a key is one the map
-// cannot skip. By the time the engine hands a Job to a transport its params
-// carry RESOLVED secrets — here, the tenant's own API credential — so a lookup
-// that could cross tenants is a lookup that could send one org's credential to
-// another org's service.
+// opKey scopes a step id to its tenant by KEY rather than a read-time filter,
+// as engine/mcp's toolKey does: a filter is a check someone can forget to write.
+// A Job reaching a transport carries RESOLVED secrets — here the tenant's own API
+// credential — so a lookup that could cross tenants could send one org's
+// credential to another org's service.
 type opKey struct {
 	tenant string
 	id     string
@@ -28,19 +25,6 @@ type catalogKey struct {
 	name   string
 }
 
-// Catalog is the registry of web-API steps the engine's NodeResolver queries.
-//
-// Unlike engine/mcp.Catalog it holds ONE population, not two: every catalog
-// belongs to a tenant. There is no operator-configured instance-wide
-// equivalent, because there is nothing to configure centrally — a described
-// HTTP API is a tenant's own service, and an operator wanting one for everybody
-// can write a native drop.
-//
-// Also unlike engine/mcp.Catalog, registration performs NO I/O. A descriptor is
-// a document, so there is no handshake to run and nothing to keep alive: no
-// connections, no goroutines, and therefore no Close. That is the same property
-// that makes "is it working?" a genuinely different question here — see the
-// design note; there is no LastConnected to report, only what a run found out.
 type Catalog struct {
 	mu       sync.RWMutex
 	catalogs map[catalogKey]Descriptor
@@ -54,15 +38,11 @@ func NewCatalog() *Catalog {
 	}
 }
 
-// Register validates a descriptor and files a transport per operation.
-//
-// Re-registering the same (tenant, name) REPLACES it, operations and all. That
-// is what editing a catalog does — a changed base URL, a re-imported spec — and
-// it has to take effect without the org first deleting the catalog and losing
-// the steps its flows reference by id.
-//
-// The whole descriptor is validated before anything is filed, so one bad
-// operation refuses the import instead of half-registering it.
+// Register REPLACES an existing (tenant, name), operations and all: that is what
+// editing a catalog does, and it has to take effect without the org first
+// deleting the catalog and losing the steps its flows reference by id. The whole
+// descriptor is validated before anything is filed, so one bad operation refuses
+// the import instead of half-registering it.
 func (c *Catalog) Register(desc Descriptor) error {
 	if err := desc.Validate(); err != nil {
 		return err
@@ -89,17 +69,15 @@ func (c *Catalog) Register(desc Descriptor) error {
 	return nil
 }
 
-// Unregister drops a catalog and its steps. An unknown pair is not an error:
-// deleting a catalog that failed to register in the first place is the normal
-// way an org clears up a mistake, and reporting "not found" would leave a row
-// nobody can remove.
+// Unregister treats an unknown pair as success: deleting a catalog that failed
+// to register is the normal way an org clears up a mistake, and "not found" would
+// leave a row nobody can remove.
 func (c *Catalog) Unregister(tenant, name string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.detachLocked(catalogKey{tenant: tenant, name: name})
 }
 
-// detachLocked removes a catalog and its operations. The caller holds c.mu.
 func (c *Catalog) detachLocked(key catalogKey) {
 	delete(c.catalogs, key)
 	for id, t := range c.ops {
@@ -109,11 +87,6 @@ func (c *Catalog) detachLocked(key catalogKey) {
 	}
 }
 
-// Get returns the transport for id as seen BY tenant, and nothing outside it.
-//
-// An empty tenant matches nothing. That is the honest answer for a caller with
-// no tenant (docs generation, a background task): every catalog here is some
-// org's, so there is no instance-wide population to fall back to.
 func (c *Catalog) Get(tenant, id string) (core.Transport, bool) {
 	if tenant == "" {
 		return nil, false
@@ -127,7 +100,6 @@ func (c *Catalog) Get(tenant, id string) (core.Transport, bool) {
 	return t, true
 }
 
-// ManifestsFor returns every web-API manifest visible to tenant.
 func (c *Catalog) ManifestsFor(tenant string) map[string]core.Manifest {
 	if tenant == "" {
 		return nil
@@ -143,13 +115,6 @@ func (c *Catalog) ManifestsFor(tenant string) map[string]core.Manifest {
 	return out
 }
 
-// AllManifests returns every web-API manifest on the instance, with the tenants
-// that can resolve each id.
-//
-// The one legitimate caller is the platform killswitch page, which is
-// instance-wide by definition: a platform admin has to be able to switch off a
-// misbehaving org's catalog. Nothing that ROUTES may use this — it flattens
-// tenants, which is exactly the confusion opKey exists to prevent.
 func (c *Catalog) AllManifests() (map[string]core.Manifest, map[string][]string) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -165,7 +130,6 @@ func (c *Catalog) AllManifests() (map[string]core.Manifest, map[string][]string)
 	return manifests, tenants
 }
 
-// CatalogStatus is what one registered catalog looks like to an admin page.
 type CatalogStatus struct {
 	Name    string
 	Tenant  string
@@ -173,8 +137,6 @@ type CatalogStatus struct {
 	StepIDs []string
 }
 
-// CatalogsFor lists a tenant's catalogs, sorted by name so a polled list does
-// not reshuffle between refreshes.
 func (c *Catalog) CatalogsFor(tenant string) []CatalogStatus {
 	if tenant == "" {
 		return nil

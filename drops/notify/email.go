@@ -68,26 +68,14 @@ func init() {
 				{Key: "from", Label: "From address", Required: true, Placeholder: "reports@example.com", Help: `The sender recipients see. Add a display name with "Reports <reports@example.com>" — most providers require the address itself to match your login.`},
 			},
 			Inputs: []core.Port{
-				// Named after their params so the card shows inline editable
-				// boxes (Unreal-style); a wired value overrides the typed one.
-				// To takes comma-separated addresses, so it wires from any
-				// string output (e.g. a sheet's Email column). Subject is
-				// optional (defaults to "(no subject)").
 				{Port: "to", Label: "To", Required: true, MIME: []string{"text/plain"}},
 				{Port: "subject", Label: "Subject", MIME: []string{"text/plain"}},
 				{Port: "body", Label: "Body", MIME: []string{"text/plain"}},
 				{Port: "attachments", Label: "Attachments", Variadic: true},
 			},
-			// No declared outputs: sending an email is a "do" step — "after it
-			// sends, do X" chains through the pass-through pin, which fires on
-			// success. The delivery details are still EMITTED under "meta"
-			// (see the Execute result) so run records keep them for debugging;
-			// they're just not a pin (same as gmail send / ntfy).
 			Outputs: []core.Port{
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}},
 			},
-			// Only the per-message fields are params now; the server connection
-			// lives in ConnectionFields above and is injected at run time.
 			ParamsSchema: json.RawMessage(
 				`{
 					"type":"object",
@@ -118,8 +106,6 @@ func init() {
 	})
 }
 
-// splitRecipients turns comma-separated addresses from the To input into the
-// recipient list, dropping empties so trailing commas don't break the send.
 func splitRecipients(s string) []string {
 	out := make([]string, 0, 4)
 	for _, part := range strings.Split(s, ",") {
@@ -191,8 +177,6 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	if host == "" {
 		return params.Err(job, "not_connected", "Email isn't connected — set up your mail server on the Email integration page"), nil
 	}
-	// From defaults to the username — the SMTP login is usually the sender
-	// address, and most providers require the two to match anyway.
 	from := strings.TrimSpace(params.StringDefault(job.Params, "from", ""))
 	if from == "" {
 		from = strings.TrimSpace(params.StringDefault(job.Params, "username", ""))
@@ -229,8 +213,6 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	cc := splitRecipients(params.StringDefault(job.Params, "cc", ""))
 	bcc := splitRecipients(params.StringDefault(job.Params, "bcc", ""))
 
-	// Subject is optional — minimal friction for non-tech authors; To is the
-	// only per-send hard requirement (same as gmail send).
 	subject, ok := params.TextInputOr(job, "subject", params.StringDefault(job.Params, "subject", "(no subject)"))
 	if !ok {
 		return params.Err(job, "bad_input", "'Subject' input must be text"), nil
@@ -256,7 +238,6 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 				body = string(v)
 			}
 		case nil:
-			// fall through to params.body
 		default:
 			raw, mErr := json.MarshalIndent(v, "", "  ")
 			if mErr != nil {
@@ -266,16 +247,12 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 		}
 	}
 
-	// Body format: HTML by default (matches the schema and gmail send), so an
-	// unset format renders markup; "text" sends the body verbatim as plain text.
 	bodyContentType := `text/html; charset="utf-8"`
 	isHTML := params.StringDefault(job.Params, "format", "html") != "text"
 	if !isHTML {
 		bodyContentType = `text/plain; charset="utf-8"`
 	}
 
-	// Wrap the body in the referenced email template (HTML sends only). A
-	// missing/unresolvable template fails the node rather than sending unwrapped.
 	if isHTML {
 		wrapped, werr := mailmsg.WrapWithTemplate(ctx, job, body, subject)
 		if werr != nil {
@@ -296,14 +273,9 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	if err := hfnet.CheckDialHost(addr); err != nil {
 		return params.Err(job, "ssrf_blocked", err.Error()), nil
 	}
-	// The configured sender may carry a display name; the header takes that
-	// form, the SMTP envelope only the bare address (smtputil.SplitSender).
 	fromHeader, fromAddr := smtputil.SplitSender(from)
 	msg := buildMessage(fromHeader, fromAddr, to, cc, subject, body, bodyContentType, atts)
 
-	// A login is optional (an internal relay may take mail without one), but a
-	// half-configured login is a mistake, not a licence to send unauthenticated
-	// — smtputil.Auth is the single place that rules on that.
 	auth, aerr := smtputil.Auth(host, username, password)
 	if aerr != nil {
 		return params.Err(job, "not_connected", "mail server login is incomplete: "+aerr.Error()), nil

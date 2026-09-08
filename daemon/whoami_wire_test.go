@@ -11,7 +11,7 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestWhoamiWireShapeUnchanged pins meResponse to the map[string]any it
+// Pins meResponse to the map[string]any it
 // replaced, byte for byte.
 //
 // meResponse exists because marshalling a map was 39% of the CPU of the most
@@ -37,7 +37,6 @@ func TestWhoamiWireShapeUnchanged(t *testing.T) {
 		SupportTicketsEnabled: true,
 	}
 
-	// The literal the handler used before the struct landed.
 	want := map[string]any{
 		"subject": "person@example.com", "tenant": "acme", "workspace": "main",
 		"roles": roles, "permissions": perms, "memberships": memberships,

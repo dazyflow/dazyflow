@@ -1,16 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package chaos is an adversarial QA battery: flows built to crash, hang,
-// recurse or exhaust the daemon, run against the real stack (Service +
-// Worker + engine + native drops) with a hard deadline on every case, so a
-// hang surfaces as a failure instead of a stuck suite.
-//
-// It is opt-in (DAZYFLOW_CHAOS=1) and deliberately out of the default
-// `go test ./...`: some cases take minutes, and TestOOM_DoublingTemplateBomb
-// kills the test process by design — it reproduces a daemon-wide crash.
-// A case that FAILS here is an open finding, documented at the test; the
-// suite passes as it stands.
 package chaos
 
 import (
@@ -33,8 +23,6 @@ import (
 
 func TestMain(m *testing.M) {
 	if os.Getenv("DAZYFLOW_CHAOS") == "" {
-		// Nothing to skip against from TestMain; report success without
-		// running anything so the package is inert in the normal suite.
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
@@ -53,8 +41,6 @@ func newHarness(t *testing.T) *harness {
 	return newHarnessLogging(t, nil)
 }
 
-// newHarnessLogging is newHarness with the worker's log captured, for the
-// cases that assert on what a run writes to it.
 func newHarnessLogging(t *testing.T, logger *log.Logger) *harness {
 	t.Helper()
 	ks := auth.NewMemKeyStore()
@@ -73,12 +59,11 @@ func newHarnessLogging(t *testing.T, logger *log.Logger) *harness {
 	bus := daemon.NewMemoryBus()
 	eng := &engine.Engine{Resolver: &engine.NodeResolver{Native: engine.Default}}
 	svc := &daemon.Service{
-		Auth:       auth.Chain{&auth.APIKeyAuthenticator{Store: ks}},
-		Workspaces: daemon.MapWorkspaces{"acme/ws1": wsStore},
-		Jobs:       jobs,
-		Engine:     eng,
-		Bus:        bus,
-		// Mirror dzd's shipped ceilings (cmd/dzd/main.go).
+		Auth:          auth.Chain{&auth.APIKeyAuthenticator{Store: ks}},
+		Workspaces:    daemon.MapWorkspaces{"acme/ws1": wsStore},
+		Jobs:          jobs,
+		Engine:        eng,
+		Bus:           bus,
 		MaxGraphNodes: 1000,
 		MaxGraphEdges: 5000,
 	}
@@ -109,8 +94,6 @@ func b64Node(id string) core.Node {
 	return core.Node{ID: id, Module: "base64", Params: map[string]any{"mode": "encode"}}
 }
 
-// firstLine trims a joined validation error down to its first problem, so a
-// log line stays one line.
 func firstLine(err error) string {
 	if err == nil {
 		return ""
@@ -139,7 +122,6 @@ func (h *harness) submit(g core.Graph, budget time.Duration) (core.JobStatus, er
 	return statusHung, nil
 }
 
-// save publishes a graph so subgraph/trigger paths can load it.
 func (h *harness) save(g core.Graph) {
 	h.t.Helper()
 	commit, err := h.ws.Save(g, "qa")
@@ -151,8 +133,6 @@ func (h *harness) save(g core.Graph) {
 	}
 }
 
-// storedBytes is the size of every job record a graph's runs have written —
-// the metric that shows what a run costs to persist and re-read.
 func (h *harness) storedBytes(graphID string) int {
 	recs, err := h.jobs.ListByGraph(context.Background(), graphID)
 	if err != nil {

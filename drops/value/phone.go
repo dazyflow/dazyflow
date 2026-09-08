@@ -86,8 +86,6 @@ func init() {
 	})
 }
 
-// numberTypeLabel maps libphonenumber's PhoneNumberType to a lowercase word for
-// the 'type' pin — the values a downstream branch is likely to test.
 func numberTypeLabel(t phonenumbers.PhoneNumberType) string {
 	switch t {
 	case phonenumbers.FIXED_LINE:
@@ -118,8 +116,6 @@ func numberTypeLabel(t phonenumbers.PhoneNumberType) string {
 }
 
 func executePhone(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	// Wired 'phone' input wins over the inline param (params.TextInputOr), so the
-	// number can be computed upstream or set on the node.
 	raw, ok := params.TextInputOr(job, "phone", params.StringDefault(job.Params, "phone", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "the connected 'phone' input must be text"), nil
@@ -129,9 +125,6 @@ func executePhone(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 		return params.Err(job, "bad_param", "phone is required: connect the 'phone' input or set the phone param"), nil
 	}
 
-	// Uppercase the region: libphonenumber expects "SE", not "se". An empty
-	// region only parses a +international number; a local number then errors,
-	// which the messages below explain.
 	region := strings.ToUpper(strings.TrimSpace(params.StringDefault(job.Params, "default_region", "SE")))
 
 	num, err := phonenumbers.Parse(raw, region)
@@ -139,11 +132,6 @@ func executePhone(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 		return params.Err(job, "bad_param", "not a valid phone number: "+err.Error()+" (for a local number, set Default region to its country, e.g. SE)"), nil
 	}
 	if !phonenumbers.IsValidNumber(num) {
-		// The number parsed but isn't a real, dialable number. Name the country
-		// it actually resolved to — its own calling code when written in
-		// international form (+…/00…), else the default region — so the message
-		// isn't misleadingly about SE for a +1 / 0045 number the user wrote
-		// internationally.
 		where := "region " + region
 		if resolved := phonenumbers.GetRegionCodeForNumber(num); resolved != "" && resolved != "ZZ" {
 			where = "region " + resolved
@@ -166,8 +154,6 @@ func executePhone(_ context.Context, job core.Job, _ chan<- core.Progress) (core
 			"country":  {MIME: "text/plain", Inline: regionCode},
 			"national": {MIME: "text/plain", Inline: national},
 			"type":     {MIME: "text/plain", Inline: typeLabel},
-			// Fuller decomposition for templating: the numeric calling code (46),
-			// and the pretty national/international renderings.
 			"meta": {MIME: "application/json", Inline: map[string]any{
 				"e164":          e164,
 				"country":       regionCode,

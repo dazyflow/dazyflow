@@ -27,7 +27,6 @@ func TestListAccountResources(t *testing.T) {
 		delete(resourceListers, "google:boom")
 	})
 
-	// Happy path: returns the lister's options; account defaults to "default".
 	rw := h.do(t, "GET", "/api/v1/oauth/google/resources?kind=spreadsheets", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rw.Code, rw.Body.String())
@@ -40,15 +39,12 @@ func TestListAccountResources(t *testing.T) {
 		t.Errorf("resources = %+v", resp.Resources)
 	}
 
-	// Unknown kind → 404.
 	if rw := h.do(t, "GET", "/api/v1/oauth/google/resources?kind=nope", nil); rw.Code != http.StatusNotFound {
 		t.Errorf("unknown kind status=%d, want 404", rw.Code)
 	}
-	// Missing kind → 400.
 	if rw := h.do(t, "GET", "/api/v1/oauth/google/resources", nil); rw.Code != http.StatusBadRequest {
 		t.Errorf("missing kind status=%d, want 400", rw.Code)
 	}
-	// Lister error (not connected) → 502, so the picker falls back to manual.
 	if rw := h.do(t, "GET", "/api/v1/oauth/google/resources?kind=boom", nil); rw.Code != http.StatusBadGateway {
 		t.Errorf("lister error status=%d, want 502", rw.Code)
 	}

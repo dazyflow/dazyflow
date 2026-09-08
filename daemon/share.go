@@ -31,7 +31,6 @@ import (
 // counters. A leaked link reveals "is the workspace healthy", nothing it could
 // be used to act on. Private flows are excluded entirely.
 
-// Share is one workspace-overview share link.
 type Share struct {
 	Tenant    string    `json:"-"`
 	Workspace string    `json:"-"`
@@ -44,35 +43,14 @@ type Share struct {
 // (tenant, workspace); Upsert rotates the token in place so a workspace
 // always has at most one live link.
 type ShareStore interface {
-	// Get returns the workspace's current share, or core.ErrNotFound when
-	// none has been created.
 	Get(ctx context.Context, tenant, workspace string) (Share, error)
-	// Upsert creates or rotates (tenant, workspace)'s share to the given
-	// token, returning the stored row.
 	Upsert(ctx context.Context, tenant, workspace, token, createdBy string) (Share, error)
-	// Delete removes the workspace's share. Idempotent — a missing row is
-	// not an error.
 	Delete(ctx context.Context, tenant, workspace string) error
-	// Lookup resolves a token back to its share (the public path). Returns
-	// core.ErrNotFound for an unknown/rotated token.
 	Lookup(ctx context.Context, token string) (Share, error)
-	// DeleteByTenant erases every share for a tenant — the GDPR/org-erasure
-	// cascade hook (see gdpr.go's tenantEraser).
 	DeleteByTenant(ctx context.Context, tenant string) (int, error)
-	// AnonymizeSubject replaces an erased person's identifier wherever it
-	// appears in this store's rows, returning the rows changed.
-	//
-	// The rows belong to an ORG and outlive the person, so their identifier is
-	// pseudonymised rather than deleted — the same treatment the audit trail
-	// gets. Deleting an org takes these rows anyway; this is the OTHER path,
-	// where a member of a shared org erases their account and the org carries
-	// on with their address still in it.
 	AnonymizeSubject(ctx context.Context, ident string) (int, error)
 }
 
-// newShareToken mints a 32-byte cryptic token, hex-encoded (64 chars). Same
-// generator the password-reset / email-verification flows use; unguessable and
-// URL-safe.
 func newShareToken() (string, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
@@ -81,8 +59,6 @@ func newShareToken() (string, error) {
 	return hex.EncodeToString(raw), nil
 }
 
-// GetWorkspaceShare returns the workspace's current share link, or ok=false
-// when none exists. Read access is gated on workspace membership.
 func (s *Service) GetWorkspaceShare(ctx context.Context, p core.Principal, tenant, workspace string) (Share, bool, error) {
 	if err := core.RequireWorkspace(p, tenant, workspace); err != nil {
 		return Share{}, false, err
@@ -121,8 +97,6 @@ func (s *Service) CreateWorkspaceShare(ctx context.Context, p core.Principal, te
 	return s.Shares.Upsert(ctx, tenant, workspace, token, p.Subject)
 }
 
-// DeleteWorkspaceShare revokes the workspace's share link. Idempotent. Same
-// edit-level gate as creating one.
 func (s *Service) DeleteWorkspaceShare(ctx context.Context, p core.Principal, tenant, workspace string) error {
 	if err := core.RequireWorkspace(p, tenant, workspace); err != nil {
 		return err
@@ -136,24 +110,14 @@ func (s *Service) DeleteWorkspaceShare(ctx context.Context, p core.Principal, te
 	return s.Shares.Delete(ctx, tenant, workspace)
 }
 
-// PublicOverviewData is the sanitized snapshot the public TV page renders.
-// No IDs, no error detail, no tenant/workspace — only what's safe on a wall.
 type PublicOverviewData struct {
-	// Label is the org's human-facing display name, used to title the board.
-	// Empty when the org has no display name (and isn't worth showing a raw
-	// id for) — the UI then falls back to a generic title.
-	Label string `json:"label,omitempty"`
-	// Icon is the org's logo — a data: URL / image reference or a logical
-	// icon name — shown beside the board title. Empty when the org has no
-	// icon set, in which case the UI shows just the title. Already public on
-	// the sign-in page, so safe on a wall.
+	Label       string            `json:"label,omitempty"`
 	Icon        string            `json:"icon,omitempty"`
 	GeneratedAt time.Time         `json:"generated_at"`
 	Stats       PublicStats       `json:"stats"`
 	Flows       []PublicFlowState `json:"flows"`
 }
 
-// PublicStats are the headline counters across the workspace's recent runs.
 type PublicStats struct {
 	RunsToday   int  `json:"runs_today"`
 	SuccessRate *int `json:"success_rate,omitempty"` // nil = no finished runs yet
@@ -163,12 +127,9 @@ type PublicStats struct {
 	TotalFlows  int  `json:"total_flows"`
 }
 
-// PublicFlowState is one flow's tile on the TV grid.
 type PublicFlowState struct {
-	Name string `json:"name"`
-	Icon string `json:"icon,omitempty"`
-	// RunStatus is the flow's automation posture: live / manual / paused /
-	// needs_publish.
+	Name      string             `json:"name"`
+	Icon      string             `json:"icon,omitempty"`
 	RunStatus core.FlowRunStatus `json:"run_status,omitempty"`
 	// LastStatus is the most recent run's status (succeeded / failed /
 	// running / queued / …), empty when the flow has never run.
@@ -180,29 +141,16 @@ type PublicFlowState struct {
 	// nil for manual, paused, needs-publish, or webhook-only flows (nothing
 	// the scheduler will fire on a clock). Computed with the same cron parser
 	// the scheduler fires on, so it matches what will really run.
-	NextRunAt *time.Time `json:"next_run_at,omitempty"`
-	// History is the flow's recent run outcomes, newest first, capped at
-	// shareFlowHistory. Only the statuses — no ids or timing — so the board
-	// can draw an at-a-glance health strip without leaking anything.
-	History []core.JobStatus `json:"history,omitempty"`
+	NextRunAt *time.Time       `json:"next_run_at,omitempty"`
+	History   []core.JobStatus `json:"history,omitempty"`
 }
 
-// shareRunWindow is how many recent runs the public snapshot summarizes —
-// matches the Dashboard's own window so the numbers line up.
 const shareRunWindow = 200
 
-// shareFlowHistory caps the per-flow recent-run strip (the health pipes on
-// each card).
 const shareFlowHistory = 10
 
-// PublicWorkspaceOverview resolves a share token and builds the sanitized
-// status snapshot for it. No principal: the token is the authorization, so
-// this reads the workspace store and job store directly (the same pattern the
-// webhook-trigger path uses). Returns core.ErrNotFound for an unknown token.
 func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now time.Time) (PublicOverviewData, error) {
 	if s.Shares == nil {
-		// No share store on this deployment → no link can exist. Report it
-		// as an unknown link (404) rather than a server error.
 		return PublicOverviewData{}, core.ErrNotFound
 	}
 	share, err := s.Shares.Lookup(ctx, token)
@@ -210,7 +158,6 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 		return PublicOverviewData{}, err // core.ErrNotFound bubbles to a 404
 	}
 
-	// Recent-run window — matches the Dashboard's so the two surfaces agree.
 	runs, err := core.ListRunSummaries(ctx, s.Jobs, core.ListGraphRunsOpts{
 		Tenant:    share.Tenant,
 		Workspace: share.Workspace,
@@ -219,8 +166,6 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 	if err != nil {
 		return PublicOverviewData{}, err
 	}
-	// First pass: latest run + recent-run strip per graph. Runs come
-	// newest-first, so the first one we see for a graph is its latest.
 	type latest struct {
 		status core.JobStatus
 		at     time.Time
@@ -259,10 +204,6 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 				continue
 			}
 			pub, _ := store.PublishedCommit(id)
-			// An unpublished flow is a draft, whatever its trigger — its runs are
-			// test runs, so keep it off the public wall and out of every counter.
-			// (Subsumes the old needs_publish-only skip: those are unpublished
-			// too.)
 			if pub == "" {
 				continue
 			}
@@ -279,9 +220,6 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 				Icon:      g.Icon,
 				RunStatus: runStatus,
 			}
-			// Next scheduled fire — only meaningful for a live flow (published +
-			// enabled + a scheduler trigger). A paused flow won't fire on a
-			// clock, so it gets no next-run.
 			if runStatus == core.FlowLive {
 				data.Stats.LiveFlows++
 				st.NextRunAt = nextScheduledFire(g, now)
@@ -293,8 +231,6 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 					at := lr.at
 					st.LastRunAt = &at
 				}
-				// "Needs attention" = the flow's latest run failed (one per
-				// flow), the same rule the Dashboard counts by.
 				if lr.status == core.JobStatusFailed {
 					needsAttention++
 				}
@@ -303,8 +239,6 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 			data.Flows = append(data.Flows, st)
 		}
 		data.Stats.TotalFlows = len(data.Flows)
-		// Stable, friendly ordering: failing flows first (they're what a wall
-		// is for), then running, then by name.
 		sort.SliceStable(data.Flows, func(i, j int) bool {
 			pi, pj := flowSortRank(data.Flows[i]), flowSortRank(data.Flows[j])
 			if pi != pj {
@@ -314,8 +248,6 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 		})
 	}
 
-	// Headline counters over the runs of counted flows only, so owner/test-mode
-	// activity stays out of them (mirrors the Dashboard's exclusion).
 	dayStart := startOfDay(now)
 	var runsToday, running, finished, succeeded int
 	for _, r := range runs {
@@ -340,8 +272,6 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 	data.Stats.Failed = needsAttention
 	data.Stats.Running = running
 	if finished > 0 {
-		// Round (not truncate) so this matches the Dashboard's Math.round — a
-		// truncating int() here showed 76% where the overview showed 77%.
 		rate := int(math.Round(float64(succeeded) / float64(finished) * 100))
 		data.Stats.SuccessRate = &rate
 	}
@@ -351,12 +281,6 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 	return data, nil
 }
 
-// workspaceBrand is the friendly board identity for a tenant: its org display
-// name and icon when set. The label falls back to a bare personal-tenant id
-// (usr_<hex>) being dropped — it's meaningless chrome, so the UI shows its
-// generic title; a named tenant id is kept as a last resort. The icon is
-// whatever the org profile carries (empty when none). Best-effort — any store
-// error yields the fallback label and an empty icon.
 func (s *Service) workspaceBrand(ctx context.Context, tenant string) (label, icon string) {
 	if s.OrgProfiles != nil {
 		if prof, err := s.OrgProfiles.GetOrgProfile(ctx, tenant); err == nil {
@@ -381,8 +305,6 @@ func flowDisplayName(g core.Graph, id string) string {
 	return id
 }
 
-// flowSortRank orders tiles so the wall draws attention to trouble: failed
-// first, then running, then everything else.
 func flowSortRank(f PublicFlowState) int {
 	switch f.LastStatus {
 	case core.JobStatusFailed:
@@ -394,9 +316,6 @@ func flowSortRank(f PublicFlowState) int {
 	}
 }
 
-// runStartedOrEnqueued is the run's effective wall-clock time: when it began
-// if known, else when it was enqueued. Mirrors the Dashboard's client-side
-// choice so "today" counts agree.
 func runStartedOrEnqueued(r core.RunSummary) time.Time {
 	if r.StartedAt != nil {
 		return *r.StartedAt
@@ -437,7 +356,6 @@ func nextScheduledFire(g core.Graph, now time.Time) *time.Time {
 		}
 	}
 
-	// Graph-level cron triggers (no per-trigger pause flag at this level).
 	for _, tr := range g.Triggers {
 		if tr.Type != "cron" {
 			continue
@@ -451,7 +369,6 @@ func nextScheduledFire(g core.Graph, now time.Time) *time.Time {
 		}
 	}
 
-	// Trigger nodes.
 	for _, node := range g.Nodes {
 		if triggerNodeDisabled(node) {
 			continue

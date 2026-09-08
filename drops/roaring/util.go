@@ -13,11 +13,8 @@ import (
 // reserved characters (or a hostile "../") can't reshape the request path.
 func escapePathSeg(s string) string { return url.PathEscape(s) }
 
-// itoa renders an int for a text output pin.
 func itoa(n int) string { return strconv.Itoa(n) }
 
-// country resolves the ISO country segment of a Roaring path, lower-cased and
-// defaulting to Sweden — Roaring's data is per-country (se / dk / no / fi).
 func country(raw string) string {
 	c := strings.ToLower(strings.TrimSpace(raw))
 	if c == "" {
@@ -45,17 +42,11 @@ func firstString(m map[string]any, keys ...string) string {
 	return ""
 }
 
-// decodeObject best-effort decodes a response body into a generic object for the
-// record pin; a non-object (or parse failure) yields nil, and the drop still
-// returns the raw value it was given.
 func asObject(v any) map[string]any {
 	m, _ := v.(map[string]any)
 	return m
 }
 
-// countHits reports how many company records a search response carries. Roaring
-// search responses vary in the array's key across versions (hits / companies /
-// records), so we probe the common names and return the first array's length.
 func countHits(m map[string]any) int {
 	for _, k := range []string{"hits", "companies", "records", "results"} {
 		if arr, ok := m[k].([]any); ok {

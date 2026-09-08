@@ -16,10 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Gated on DAZYFLOW_TEST_DB (a real Postgres), like the other Pg*Store
-// tests. The RecordAttempt SQL is the reason this exists: its two CASE
-// expressions are the only place that decides whether a mirror looks healthy,
-// and they can't be exercised against anything but Postgres.
 func TestPgGitMirrorStore(t *testing.T) {
 	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
@@ -39,8 +35,6 @@ func TestPgGitMirrorStore(t *testing.T) {
 		t.Fatalf("truncate: %v", err)
 	}
 
-	// Absent is core.ErrNotFound, not an empty row — the handler branches on
-	// it to answer configured=false.
 	if _, err := store.Get(ctx, "acme", "main"); !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("Get on an unconfigured workspace = %v, want core.ErrNotFound", err)
 	}
@@ -84,7 +78,6 @@ func TestPgGitMirrorStore(t *testing.T) {
 		t.Fatalf("acme's row changed when globex was written: %+v (%v)", g, err)
 	}
 
-	// A successful push advances both timestamps and the commit.
 	firstSuccess := time.Now().UTC().Add(-time.Hour).Truncate(time.Millisecond)
 	if err := store.RecordAttempt(ctx, "acme", "main", MirrorAttempt{At: firstSuccess, Commit: "cafebabe"}); err != nil {
 		t.Fatalf("RecordAttempt success: %v", err)
@@ -165,13 +158,10 @@ func TestPgGitMirrorStore(t *testing.T) {
 		t.Errorf("truncation dropped the cause: %q", got.LastError[:min(60, len(got.LastError))])
 	}
 
-	// RecordAttempt on a mirror that no longer exists is a no-op, not an
-	// error: a push in flight can outlive a "stop mirroring".
 	if err := store.RecordAttempt(ctx, "acme", "gone", MirrorAttempt{At: time.Now()}); err != nil {
 		t.Errorf("RecordAttempt for a missing mirror = %v, want nil", err)
 	}
 
-	// Delete is idempotent and takes the status with it.
 	if err := store.Delete(ctx, "acme", "main"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
@@ -181,7 +171,6 @@ func TestPgGitMirrorStore(t *testing.T) {
 	if err := store.Delete(ctx, "acme", "main"); err != nil {
 		t.Errorf("second Delete = %v, want nil (idempotent)", err)
 	}
-	// The other tenant's row survived all of it.
 	if _, err := store.Get(ctx, "globex", "main"); err != nil {
 		t.Errorf("globex's mirror should be untouched: %v", err)
 	}

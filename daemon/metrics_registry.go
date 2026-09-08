@@ -44,14 +44,10 @@ func NewMetrics() *Metrics {
 	}
 }
 
-// durationBuckets covers sub-millisecond native-drop calls through
-// minute-long sandboxed runs and slow HTTP requests.
 var durationBuckets = []float64{
 	0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60,
 }
 
-// ObserveHTTP records one completed HTTP request: bumps the per
-// (method, code) counter and the per-method duration histogram.
 func (m *Metrics) ObserveHTTP(method string, code int, seconds float64) {
 	if m == nil {
 		return
@@ -73,9 +69,6 @@ func (m *Metrics) ObserveHTTP(method string, code int, seconds float64) {
 	d.observe(seconds)
 }
 
-// ObserveNode records one node execution that reached a terminal status,
-// keyed by that status so the split shows the failure rate alongside the
-// latency distribution.
 func (m *Metrics) ObserveNode(status string, seconds float64) {
 	if m == nil {
 		return
@@ -178,11 +171,6 @@ func (h *histogram) render(w io.Writer, name, labels string) {
 	fmt.Fprintf(w, "%s_count{%s} %d\n", name, labels, h.total.Load())
 }
 
-// statusRecorder wraps a ResponseWriter to capture the status code for
-// RED metrics. It mirrors jsonErrorWriter's Flush-delegation so SSE
-// streams keep flushing through the wrapper, and exposes Unwrap so
-// http.ResponseController reaches any other capability of the underlying
-// writer.
 type statusRecorder struct {
 	http.ResponseWriter
 	code  int
@@ -213,8 +201,6 @@ func (s *statusRecorder) Flush() {
 
 func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
-// statusCode returns the captured code, defaulting to 200 for a handler
-// that returned without ever writing a header or body.
 func (s *statusRecorder) statusCode() int {
 	if s.code == 0 {
 		return http.StatusOK

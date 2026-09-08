@@ -84,8 +84,6 @@ func executeExpression(_ context.Context, job core.Job, _ chan<- core.Progress) 
 		return params.Err(job, "bad_param", fmt.Sprintf(
 			"formula is %d characters; the limit is %d", len(exprStr), celexpr.MaxExpressionLen)), nil
 	}
-	// Shared with the editor's linter (POST /tools/expression/validate) via
-	// internal/celexpr, so what the linter accepts is exactly what runs here.
 	env, err := celexpr.NewEnv()
 	if err != nil {
 		return params.Err(job, "internal", fmt.Sprintf("cel env: %v", err)), nil

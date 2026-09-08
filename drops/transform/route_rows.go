@@ -32,9 +32,6 @@ import (
 // names) without behavioral changes.
 const routeSlotCount = 8
 
-// routeDefaultSlot is the catch-all port name for rows that don't
-// match any explicit route. Always present in the manifest; users
-// can override which slot acts as default via params.default_slot.
 const routeDefaultSlot = "default"
 
 func init() {
@@ -106,9 +103,6 @@ func init() {
 	})
 }
 
-// routeSpec is one parsed routing rule. Compiled CEL programs go in
-// progs (one per spec, matched by index) so the row loop doesn't
-// recompile per iteration.
 type routeSpec struct {
 	slot   string
 	filter string
@@ -125,10 +119,6 @@ func executeRouteRows(ctx context.Context, job core.Job, _ chan<- core.Progress)
 		return errRes, nil
 	}
 
-	// Compile CEL filters once, before the row loop. Bad expressions
-	// fail the whole batch up front (same contract as compute_rows /
-	// split_rows) — partial routing is worse than none for
-	// downstream consumers expecting deterministic slot sizes.
 	env, err := newRowCELEnv()
 	if err != nil {
 		return params.Err(job, "internal", fmt.Sprintf("cel env: %v", err)), nil
@@ -148,10 +138,6 @@ func executeRouteRows(ctx context.Context, job core.Job, _ chan<- core.Progress)
 		progs[i] = prog
 	}
 
-	// Allocate per-slot buckets — only for slots referenced in
-	// params plus the default. Unused manifest slots emit no rows
-	// (the engine treats no-output as a dormant edge, so downstream
-	// of an unused slot correctly skips).
 	bucket := make(map[string][]map[string]any, len(specs)+1)
 	for _, s := range specs {
 		if _, ok := bucket[s.slot]; !ok {

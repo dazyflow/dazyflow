@@ -36,10 +36,7 @@ import (
 // x/crypto/ssh is already a dependency (the git drop's auth uses it), so the
 // server is ~80 lines and leaves nothing behind.
 
-// sshGitServer is a throwaway SSH server that serves exactly one repository.
 type sshGitServer struct {
-	// Addr is host:port, and HostKey is its public host key — the caller
-	// needs both to build the known_hosts line the client verifies against.
 	Addr    string
 	HostKey gossh.PublicKey
 
@@ -50,7 +47,6 @@ type sshGitServer struct {
 	execCmds []string
 }
 
-// startSSHGitServer serves repoDir over SSH, accepting only clientPub.
 func startSSHGitServer(t *testing.T, repoDir string, clientPub gossh.PublicKey) *sshGitServer {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
@@ -104,8 +100,6 @@ func (s *sshGitServer) Close() {
 	s.wg.Wait()
 }
 
-// commands returns the exec requests the server received — used to assert the
-// client really asked for receive-pack rather than failing earlier.
 func (s *sshGitServer) commands() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -131,7 +125,6 @@ func (s *sshGitServer) serveConn(conn net.Conn, cfg *gossh.ServerConfig) {
 	_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
 	sc, chans, reqs, err := gossh.NewServerConn(conn, cfg)
 	if err != nil {
-		// Includes the auth failure we deliberately provoke below.
 		return
 	}
 	defer sc.Close()
@@ -228,8 +221,6 @@ func subtleEqual(a, b []byte) bool {
 	return true
 }
 
-// testKeyPair generates an ed25519 key and returns its OpenSSH PEM (what the
-// credential store holds) alongside the public half.
 func testKeyPair(t *testing.T) (pemKey string, pub gossh.PublicKey) {
 	t.Helper()
 	rawPub, rawPriv, err := ed25519.GenerateKey(rand.Reader)
@@ -247,8 +238,6 @@ func testKeyPair(t *testing.T) (pemKey string, pub gossh.PublicKey) {
 	return string(pem.EncodeToMemory(block)), pub
 }
 
-// testEncryptedKeyPair generates a passphrase-protected ed25519 key in the
-// same OpenSSH PEM form the credential store holds.
 func testEncryptedKeyPair(t *testing.T, passphrase string) (pemKey string, pub gossh.PublicKey) {
 	t.Helper()
 	rawPub, rawPriv, err := ed25519.GenerateKey(rand.Reader)
@@ -280,8 +269,6 @@ func knownHostsLine(addr string, key gossh.PublicKey) string {
 	return target + " " + key.Type() + " " + base64.StdEncoding.EncodeToString(key.Marshal())
 }
 
-// seedWorkspace builds a store holding one published flow, so a push has both
-// a branch and a tag to carry.
 func seedWorkspace(t *testing.T) (*Store, string) {
 	t.Helper()
 	s, err := OpenFS(t.TempDir())
@@ -301,12 +288,6 @@ func seedWorkspace(t *testing.T) (*Store, string) {
 	return s, commit
 }
 
-// TestStore_PushOverSSHWithPrivateKey is the end-to-end mirror test: a real
-// private key authenticates against a real git server over SSH, and the flow
-// lands on the far side. Every layer the production path uses is in play —
-// gitdrop.SSHAuth for key parsing and host-key pinning, go-git's SSH
-// transport, git-receive-pack — so this is what proves a configured mirror
-// can actually push, rather than that we build a plausible auth object.
 func TestStore_PushOverSSHWithPrivateKey(t *testing.T) {
 	remote := bareRemote(t)
 	keyPEM, pub := testKeyPair(t)
@@ -330,14 +311,11 @@ func TestStore_PushOverSSHWithPrivateKey(t *testing.T) {
 		t.Errorf("push result = %+v, want Changed with head %s", res, commit)
 	}
 
-	// The server really ran both halves — not, say, failed before the
-	// command and let an empty push look like success.
 	cmds := strings.Join(srv.commands(), " | ")
 	if !strings.Contains(cmds, "git-upload-pack") || !strings.Contains(cmds, "git-receive-pack") {
 		t.Errorf("server exec commands = %q, want an upload-pack (ref list) and a receive-pack (transfer)", cmds)
 	}
 
-	// And the refs landed: the flow's branch plus its published tag.
 	refs := remoteRefs(t, remote)
 	var branch string
 	for name, hash := range refs {
@@ -352,7 +330,6 @@ func TestStore_PushOverSSHWithPrivateKey(t *testing.T) {
 		t.Errorf("published tag missing from the mirror (refs: %v)", refs)
 	}
 
-	// A second push with nothing new is the quiet steady state.
 	res, err = store.Push(ctx, url, auth)
 	if err != nil {
 		t.Fatalf("second push over SSH: %v", err)
@@ -362,11 +339,10 @@ func TestStore_PushOverSSHWithPrivateKey(t *testing.T) {
 	}
 }
 
-// TestStore_PushOverSSHWithEncryptedKey covers the passphrase-protected
-// deploy key, which is a realistic way to store one and a branch nothing else
-// exercises end to end: SSHAuth threads the credential's passphrase into
-// NewPublicKeys, and a mistake there would only ever show up as a mirror that
-// can't authenticate.
+// Covers the passphrase-protected deploy key, which is a realistic way to
+// store one and a branch nothing else exercises end to end: SSHAuth threads
+// the credential's passphrase into NewPublicKeys, and a mistake there would
+// only ever show up as a mirror that can't authenticate.
 func TestStore_PushOverSSHWithEncryptedKey(t *testing.T) {
 	remote := bareRemote(t)
 	const passphrase = "correct horse battery staple"
@@ -403,10 +379,9 @@ func TestStore_PushOverSSHWithEncryptedKey(t *testing.T) {
 	}
 }
 
-// TestStore_PushOverSSHRejectsWrongKey — the server accepts one key, and we
-// present another. This is what a revoked or mistyped deploy key looks like,
-// and the failure must surface rather than being swallowed as a no-op
-// "nothing to push".
+// The server accepts one key, and we present another. This is what a revoked
+// or mistyped deploy key looks like, and the failure must surface rather than
+// being swallowed as a no-op "nothing to push".
 func TestStore_PushOverSSHRejectsWrongKey(t *testing.T) {
 	remote := bareRemote(t)
 	_, authorizedPub := testKeyPair(t)
@@ -438,16 +413,15 @@ func TestStore_PushOverSSHRejectsWrongKey(t *testing.T) {
 	}
 }
 
-// TestStore_PushOverSSHVerifiesHostKey is the MITM guard. The client is given
-// a known_hosts line for a DIFFERENT host key, so the handshake must fail —
-// the mirror never falls back to accepting whatever key it is offered.
+// The MITM guard. The client is given a known_hosts line for a DIFFERENT host
+// key, so the handshake must fail — the mirror never falls back to accepting
+// whatever key it is offered.
 func TestStore_PushOverSSHVerifiesHostKey(t *testing.T) {
 	remote := bareRemote(t)
 	keyPEM, pub := testKeyPair(t)
 	srv := startSSHGitServer(t, remote, pub)
 	store, _ := seedWorkspace(t)
 
-	// A known_hosts entry naming the right host but the wrong key.
 	_, impostor := testKeyPair(t)
 	url := "ssh://git@" + srv.Addr + "/" + strings.TrimPrefix(remote, "/")
 	auth, err := gitdrop.SSHAuth(url, keyPEM, "", knownHostsLine(srv.Addr, impostor))

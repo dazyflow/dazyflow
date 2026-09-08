@@ -69,8 +69,6 @@ type GitCredential struct {
 	Username      string `json:"username,omitempty"`
 }
 
-// listGitCredentials enumerates the org's git credentials by scanning the
-// gitcred. namespace and grouping by account.
 func listGitCredentials(ctx context.Context, secrets *EncryptedSecrets, tenant string) ([]GitCredential, error) {
 	names, err := secrets.List(ctx, tenant)
 	if err != nil {
@@ -119,7 +117,6 @@ func listGitCredentials(ctx context.Context, secrets *EncryptedSecrets, tenant s
 	return out, nil
 }
 
-// gitCredInput is the writable shape of a credential.
 type gitCredInput struct {
 	PrivateKey string
 	Passphrase string
@@ -128,10 +125,6 @@ type gitCredInput struct {
 	Username   string
 }
 
-// putGitCredential validates and stores a credential. A private key, if
-// given, is parsed up front (with its passphrase) so an unusable key is
-// rejected at save time. At least one of {private key, token} is required.
-// Optional fields left blank are cleared, so emptying a field unsets it.
 func putGitCredential(ctx context.Context, secrets *EncryptedSecrets, tenant, account string, in gitCredInput) error {
 	if err := validateGitCredAccount(account); err != nil {
 		return err
@@ -162,7 +155,6 @@ func putGitCredential(ctx context.Context, secrets *EncryptedSecrets, tenant, ac
 	} else if err := putOrClear(ctx, secrets, tenant, gitCredStorageName(account, gitCredFieldKey), ""); err != nil {
 		return err
 	}
-	// Each remaining field: set when provided, cleared when blank.
 	for field, val := range map[string]string{
 		gitCredFieldPass:  in.Passphrase,
 		gitCredFieldHosts: in.KnownHosts,
@@ -187,7 +179,6 @@ func putOrClear(ctx context.Context, secrets *EncryptedSecrets, tenant, name, va
 	return secrets.Put(ctx, tenant, name, value)
 }
 
-// deleteGitCredential removes all fields of an account. Idempotent.
 func deleteGitCredential(ctx context.Context, secrets *EncryptedSecrets, tenant, account string) error {
 	if err := validateGitCredAccount(account); err != nil {
 		return err
@@ -200,7 +191,6 @@ func deleteGitCredential(ctx context.Context, secrets *EncryptedSecrets, tenant,
 	return nil
 }
 
-// ResolvedGitCredential is the full material the git drop needs at clone time.
 type ResolvedGitCredential struct {
 	PrivateKey string
 	Passphrase string
@@ -248,8 +238,6 @@ func (secrets *EncryptedSecrets) LookupGitCredential(ctx context.Context, accoun
 	return rc, nil
 }
 
-// --- HTTP handlers ----------------------------------------------------
-
 type putGitCredBody struct {
 	PrivateKey string `json:"private_key"`
 	Passphrase string `json:"passphrase"`
@@ -283,8 +271,6 @@ func (h *secretsAPI) listGitCredsMe(rw http.ResponseWriter, r *http.Request, p c
 	writeJSON(rw, http.StatusOK, map[string]any{"credentials": creds})
 }
 
-// putGitCredMe is PUT /api/v1/git/credentials/{account} — create or replace a
-// named git credential. The key (if any) is validated before storage.
 func (h *secretsAPI) putGitCredMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.EncryptedSecrets == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "encrypted secret store is not configured")
@@ -313,7 +299,6 @@ func (h *secretsAPI) putGitCredMe(rw http.ResponseWriter, r *http.Request, p cor
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// deleteGitCredMe is DELETE /api/v1/git/credentials/{account}.
 func (h *secretsAPI) deleteGitCredMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.EncryptedSecrets == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "encrypted secret store is not configured")

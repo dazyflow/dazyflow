@@ -59,8 +59,6 @@ function splinePath(pts: WP[]): string {
   return d;
 }
 
-// Squared distance from point p to segment a–b. Squared is enough for
-// "which segment is nearest" and avoids the sqrt.
 function distToSeg(p: WP, a: WP, b: WP): number {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -159,7 +157,6 @@ function RerouteEdgeImpl({
 
   const drawing = typeof d.drawDelay === "number";
   return (
-    // Label the connection for assistive tech: which two steps it wires.
     <g role="img" aria-label={i18n.t("rerouteEdge.connectionLabel", { source, target })}>
       {drawing ? (
         // Draw-in: pathLength=1 normalises the dash so the sweep is uniform

@@ -94,9 +94,6 @@ function mount(id = "coffee-reorder") {
 }
 
 
-// A flow whose edge names a port its step hasn't got. The editor prunes such
-// an edge once the manifests arrive (lib/strayEdges) and says so — the one
-// message that arrives without the author doing anything.
 function strayEdgeGraph() {
   const g = twoStepGraph();
   g.edges = [{ from: "manual_1", from_port: "out", to: "ntfy_1", to_port: "nope" }];

@@ -17,8 +17,6 @@ import (
 )
 
 func catalogPairFixture() []core.Manifest {
-	// Big enough to clear gzipMinSize, so the compressed path is the one
-	// under test rather than the small-body fallback.
 	mans := make([]core.Manifest, 0, 40)
 	for i := range 40 {
 		mans = append(mans, core.Manifest{
@@ -57,7 +55,6 @@ func TestWriteSharedJSONPairCached_SameBytesAsPlain(t *testing.T) {
 			want := httptest.NewRecorder()
 			writeJSON(want, http.StatusOK, map[string]any{"drops": mans, "modules": mans})
 
-			// Uncompressed.
 			got := pairRequest(t, mans, "", "")
 			if got.Body.String() != want.Body.String() {
 				t.Fatalf("plain bytes differ\n got: %s\nwant: %s", got.Body.String(), want.Body.String())
@@ -66,7 +63,6 @@ func TestWriteSharedJSONPairCached_SameBytesAsPlain(t *testing.T) {
 				t.Fatalf("Content-Length = %q, want %d", got.Header().Get("Content-Length"), want.Body.Len())
 			}
 
-			// Compressed: same bytes once decoded.
 			gz := pairRequest(t, mans, "gzip", "")
 			body := decodeMaybeGzip(t, gz)
 			if body != want.Body.String() {
@@ -95,8 +91,6 @@ func decodeMaybeGzip(t *testing.T, rw *httptest.ResponseRecorder) string {
 	return string(out)
 }
 
-// A caller holding the current tag gets a 304 and no body, and the tag it
-// was given still identifies the same representation.
 func TestWriteSharedJSONPairCached_Revalidation(t *testing.T) {
 	mans := catalogPairFixture()
 	first := pairRequest(t, mans, "gzip", "")
@@ -119,8 +113,6 @@ func TestWriteSharedJSONPairCached_Revalidation(t *testing.T) {
 		t.Fatalf("304 ETag = %q, want %q", second.Header().Get("ETag"), etag)
 	}
 
-	// A weak tag and a list both have to match, per RFC 9110's weak
-	// comparison for If-None-Match.
 	for _, header := range []string{`W/` + etag, `"other", ` + etag, "*"} {
 		if rw := pairRequest(t, mans, "gzip", header); rw.Code != http.StatusNotModified {
 			t.Fatalf("If-None-Match %s = %d, want 304", header, rw.Code)
@@ -128,10 +120,6 @@ func TestWriteSharedJSONPairCached_Revalidation(t *testing.T) {
 	}
 }
 
-// The tag is derived from the body, which is the whole reason the cache
-// needs no invalidation: change the catalog and the tag moves, so a
-// revalidation returns the new bytes rather than the held ones. This is
-// also what keeps one tenant's catalog from being served as another's.
 func TestWriteSharedJSONPairCached_TagFollowsContent(t *testing.T) {
 	mans := catalogPairFixture()
 	etag := pairRequest(t, mans, "gzip", "").Header().Get("ETag")
@@ -145,7 +133,6 @@ func TestWriteSharedJSONPairCached_TagFollowsContent(t *testing.T) {
 	if after.Header().Get("ETag") == etag {
 		t.Fatal("ETag did not move when the catalog changed")
 	}
-	// And the body really is the new catalog, not a cached older one.
 	var body struct {
 		Drops []core.Manifest `json:"drops"`
 	}
@@ -240,14 +227,11 @@ func TestGzipBodyCache_EvictsOldestAndStaysBounded(t *testing.T) {
 	if len(c.byTag) != gzipBodyCacheMax || len(c.order) != gzipBodyCacheMax {
 		t.Fatalf("cache holds %d/%d entries, want %d", len(c.byTag), len(c.order), gzipBodyCacheMax)
 	}
-	// The oldest are gone, not merely unreachable.
 	if got := c.get("0"); got != nil {
 		t.Fatalf("evicted tag 0 still returns %q", got)
 	}
 }
 
-// The full request path: the route emits a validator and answers a
-// conditional request with a 304.
 func TestListDrops_EmitsValidatorOverTheRoute(t *testing.T) {
 	handler, token := benchGatewayT(t)
 	req := httptest.NewRequest("GET", "/api/v1/drops", nil)

@@ -1,10 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package jobstore contains JobStore implementations. The Memory store is
-// fully tested and suitable for single-node deployments and tests. The
-// Postgres store is the production target — see postgres.go for the
-// schema and connection model.
 package jobstore
 
 import (
@@ -17,21 +13,13 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Memory is an in-memory JobStore. Concurrency-safe; loses state on
-// restart. Useful for single-binary deployments and the engine's tests.
 type Memory struct {
-	mu            sync.Mutex
-	records       map[string]*core.JobRecord
-	clock         func() time.Time
-	maxConcurrent int // per-tenant running-node cap; 0 = unlimited
-	// slots is each record's place in the queue — enqueue time, or one
-	// burstSpacing behind the org's last waiting step. Mirrors the Postgres
-	// store's slot_at; see Postgres.Enqueue for the reasoning.
-	slots        map[string]time.Time
-	burstSpacing time.Duration
-	// notified / notifyAttempts mirror the Postgres notified_at +
-	// notify_attempts columns: which runs have had a failure notification
-	// claimed, and how many times each has been tried.
+	mu             sync.Mutex
+	records        map[string]*core.JobRecord
+	clock          func() time.Time
+	maxConcurrent  int // per-tenant running-node cap; 0 = unlimited
+	slots          map[string]time.Time
+	burstSpacing   time.Duration
 	notified       map[string]bool
 	notifyAttempts map[string]int
 }
@@ -47,15 +35,13 @@ func NewMemory() *Memory {
 	}
 }
 
-// SetBurstSpacing overrides DefaultBurstSpacing. Set once at startup.
+// SetBurstSpacing must be called once at startup.
 func (m *Memory) SetBurstSpacing(d time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.burstSpacing = d
 }
 
-// DeleteByTenant hard-deletes every job record owned by a tenant (GDPR
-// erasure cascade, Art. 17). Mirrors the Postgres store. Returns the count.
 func (m *Memory) DeleteByTenant(_ context.Context, tenant string) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -70,11 +56,9 @@ func (m *Memory) DeleteByTenant(_ context.Context, tenant string) (int, error) {
 	return n, nil
 }
 
-// SetMaxConcurrentPerTenant caps how many node jobs a single tenant may
-// have running at once. Claim won't hand out new (queued) work to a
-// tenant already at the cap; reclaiming a node whose lease expired is
-// exempt (it's recovery of existing work, not new concurrency). 0 = no
-// cap. Set once at startup.
+// SetMaxConcurrentPerTenant withholds new queued work from a tenant at the cap.
+// Reclaiming an expired lease is exempt, being recovery of existing work rather
+// than new concurrency. 0 means no cap; set once at startup.
 func (m *Memory) SetMaxConcurrentPerTenant(n int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -87,11 +71,10 @@ func (m *Memory) Enqueue(_ context.Context, rec core.JobRecord) error {
 	return m.enqueueLocked(rec)
 }
 
-// EnqueueNodes is core.NodeBatchEnqueuer over the in-memory store: the same
-// all-or-nothing contract as the Postgres one, so the conformance suite can
-// hold both to it. Every record is checked before any is written, because a
-// caller that falls back after a partial write would enqueue some of them
-// twice.
+// EnqueueNodes keeps the Postgres store's all-or-nothing contract, so the
+// conformance suite can hold both to it. Every record is checked before any is
+// written, because a caller falling back after a partial write would enqueue some
+// of them twice.
 func (m *Memory) EnqueueNodes(_ context.Context, recs []core.JobRecord) (int, error) {
 	if len(recs) == 0 {
 		return 0, nil
@@ -103,8 +86,8 @@ func (m *Memory) EnqueueNodes(_ context.Context, recs []core.JobRecord) (int, er
 		if _, exists := m.records[r.ID]; exists {
 			return 0, core.ErrConflict
 		}
-		// A duplicate WITHIN the batch would pass the check above and then
-		// overwrite its twin, so the returned count would be a lie.
+		// A duplicate WITHIN the batch would pass the check above and then overwrite
+		// its twin, making the returned count a lie.
 		if _, dup := seen[r.ID]; dup {
 			return 0, core.ErrConflict
 		}
@@ -128,17 +111,11 @@ func (m *Memory) enqueueLocked(rec core.JobRecord) error {
 	if rec.Kind == "" {
 		rec.Kind = core.JobKindGraph
 	}
-	// Allow callers (e.g. Service.SubmitGraph creating a graph-record) to
-	// override the default queued status. Workers only claim queued
-	// node-records; graph-records sit at running for the lifetime of the
-	// run.
 	if rec.Status == "" {
 		rec.Status = core.JobStatusQueued
 	}
-	// A record enqueued already-terminal (a seeded webhook/trigger node)
-	// or already-running (a graph-record) never passes through Claim, so
-	// stamp its start — and for terminal seeds the finish — here. Mirrors
-	// the Postgres store, and keeps run durations renderable.
+	// A seed or a graph-record never passes through Claim, so stamp its start — and
+	// a terminal seed's finish — here, or run durations don't render.
 	if core.IsTerminalStatus(rec.Status) || rec.Status == core.JobStatusRunning {
 		now := m.clock()
 		if rec.StartedAt == nil {
@@ -149,7 +126,6 @@ func (m *Memory) enqueueLocked(rec core.JobRecord) error {
 		}
 	}
 	rec.Attempt = 0
-	// One spacing behind the org's queue tail; see Postgres.Enqueue.
 	slot := rec.EnqueuedAt
 	if rec.Kind == core.JobKindNode && rec.Status == core.JobStatusQueued && m.burstSpacing > 0 {
 		var tail time.Time
@@ -175,10 +151,6 @@ func (m *Memory) Claim(_ context.Context, worker string, lease time.Duration) (c
 	defer m.mu.Unlock()
 	now := m.clock()
 
-	// Per-tenant concurrency cap: tally tenants' live-running node jobs
-	// (lease not expired) so we can withhold new queued work from any
-	// tenant already at the cap. Expired-lease "running" rows are dead
-	// work being recovered, so they don't count toward the live total.
 	var runningByTenant map[string]int
 	if m.maxConcurrent > 0 {
 		runningByTenant = make(map[string]int)
@@ -192,17 +164,13 @@ func (m *Memory) Claim(_ context.Context, worker string, lease time.Duration) (c
 
 	candidates := make([]*core.JobRecord, 0)
 	for _, r := range m.records {
-		// Workers only handle node-kind jobs. Graph-records are status
-		// containers updated by whichever worker finalizes the run.
 		if r.Kind != core.JobKindNode {
 			continue
 		}
-		// Honor delayed-retry scheduling.
 		if r.AvailableAt != nil && r.AvailableAt.After(now) {
 			continue
 		}
 		if r.Status == core.JobStatusQueued {
-			// Withhold new work from tenants at their concurrency cap.
 			if m.maxConcurrent > 0 && runningByTenant[r.Tenant] >= m.maxConcurrent {
 				continue
 			}
@@ -210,15 +178,12 @@ func (m *Memory) Claim(_ context.Context, worker string, lease time.Duration) (c
 			continue
 		}
 		if r.Status == core.JobStatusRunning && r.LeaseUntil != nil && r.LeaseUntil.Before(now) {
-			// Reclaiming an expired lease is recovery, not new
-			// concurrency — exempt from the cap.
 			candidates = append(candidates, r)
 		}
 	}
 	if len(candidates) == 0 {
 		return core.JobRecord{}, core.ErrNoJobs
 	}
-	// Queue order: slot, then enqueue time — the Postgres claim's ORDER BY.
 	slot := func(r *core.JobRecord) time.Time {
 		if t, ok := m.slots[r.ID]; ok {
 			return t
@@ -242,8 +207,6 @@ func (m *Memory) Claim(_ context.Context, worker string, lease time.Duration) (c
 	return *picked, nil
 }
 
-// CountsByStatus implements core.JobCounter: a tally of node-kind job
-// records by status (graph-kind container records are excluded).
 func (m *Memory) CountsByStatus(_ context.Context) (map[core.JobStatus]int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -264,8 +227,8 @@ func (m *Memory) Requeue(_ context.Context, jobID string, availableAt time.Time)
 		return core.ErrNotFound
 	}
 	if core.IsTerminalStatus(r.Status) {
-		// Terminal records can't be revived; force callers to pick a new
-		// record ID if they want to try again.
+		// Terminal records can't be revived: a caller wanting to try again must pick a
+		// new record ID.
 		return core.ErrConflict
 	}
 	r.Status = core.JobStatusQueued
@@ -294,14 +257,12 @@ func (m *Memory) Complete(_ context.Context, jobID string, status core.JobStatus
 	return m.complete(jobID, "", status, result)
 }
 
-// CompleteOwned implements core.OwnedCompleter: Complete, but only if
-// worker still owns the record (ErrConflict otherwise).
 func (m *Memory) CompleteOwned(_ context.Context, jobID, worker string, status core.JobStatus, result *core.Result) error {
 	return m.complete(jobID, worker, status, result)
 }
 
-// ClaimUnnotified implements core.FailureNotifier. The lock is this store's
-// transaction, so the claim is atomic the same way the Postgres CTE is.
+// ClaimUnnotified holds the lock as its transaction, so the claim is atomic the
+// same way the Postgres CTE is.
 func (m *Memory) ClaimUnnotified(_ context.Context, lookback time.Duration, maxAttempts, limit int) ([]core.JobRecord, error) {
 	if limit <= 0 {
 		limit = 50
@@ -328,8 +289,7 @@ func (m *Memory) ClaimUnnotified(_ context.Context, lookback time.Duration, maxA
 		}
 		due = append(due, rec)
 	}
-	// Oldest finish first, so a backlog is worked through in the order it
-	// happened rather than in map order.
+	// Oldest finish first, so a backlog is worked in the order it happened.
 	sort.Slice(due, func(a, b int) bool { return due[a].FinishedAt.Before(*due[b].FinishedAt) })
 	if len(due) > limit {
 		due = due[:limit]
@@ -343,7 +303,6 @@ func (m *Memory) ClaimUnnotified(_ context.Context, lookback time.Duration, maxA
 	return out, nil
 }
 
-// ReleaseNotifyClaim implements core.FailureNotifier.
 func (m *Memory) ReleaseNotifyClaim(_ context.Context, jobID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -351,8 +310,7 @@ func (m *Memory) ReleaseNotifyClaim(_ context.Context, jobID string) error {
 	return nil
 }
 
-// CompleteAndEnqueue implements core.CompleteEnqueuer under one lock hold,
-// which is this store's transaction.
+// CompleteAndEnqueue holds one lock as its transaction.
 func (m *Memory) CompleteAndEnqueue(_ context.Context, jobID, worker string, status core.JobStatus, result *core.Result, deps []core.JobRecord) (core.Advance, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -380,8 +338,6 @@ func (m *Memory) CompleteAndEnqueue(_ context.Context, jobID, worker string, sta
 	return adv, nil
 }
 
-// complete is the shared body. worker == "" skips the ownership check
-// (the plain Complete used by non-lease callers).
 func (m *Memory) complete(jobID, worker string, status core.JobStatus, result *core.Result) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -393,26 +349,19 @@ func (m *Memory) completeLocked(jobID, worker string, status core.JobStatus, res
 	if !ok {
 		return core.ErrNotFound
 	}
-	// Ownership fence: a worker that lost its lease (record reclaimed by
-	// another worker) must not be able to write a result.
+	// A worker that lost its lease must not be able to write a result.
 	if worker != "" && r.WorkerID != worker {
 		return core.ErrConflict
 	}
-	// Accept terminal statuses (the common case) and JobStatusAwaiting
-	// (the pause path — caller will Complete again later to terminate).
 	if !core.IsTerminalStatus(status) && status != core.JobStatusAwaiting {
 		return core.ErrConflict
 	}
-	// Idempotent: once a record is terminal, refuse further writes so
-	// racing workers can use ErrConflict to detect they were beaten to it.
 	if core.IsTerminalStatus(r.Status) {
 		return core.ErrConflict
 	}
-	// Same for a re-park: awaiting → awaiting means a node that already
-	// parked executed a second time (expired lease reclaimed mid-run), and
-	// letting the write through announced one pause twice — which the
-	// daemon's park hook turned into a duplicate approval email. Mirrors the
-	// Postgres guard; the two stores must agree on ErrConflict here.
+	// awaiting → awaiting means a node that already parked executed a second time,
+	// and letting it through announced one pause twice — which the park hook turned
+	// into a duplicate approval email. The two stores must agree on ErrConflict.
 	if status == core.JobStatusAwaiting && r.Status == core.JobStatusAwaiting {
 		return core.ErrConflict
 	}
@@ -426,10 +375,9 @@ func (m *Memory) completeLocked(jobID, worker string, status core.JobStatus, res
 	return nil
 }
 
-// SetGraphRunParked implements core.GraphRunParker. Mirrors the Postgres
-// conditional update: only the transition out of the expected status counts,
-// so repeat parks and non-final resumes are no-ops, and a terminal record is
-// never revived.
+// SetGraphRunParked counts only the transition out of the expected status, so
+// repeat parks and non-final resumes are no-ops and a terminal record is never
+// revived.
 func (m *Memory) SetGraphRunParked(_ context.Context, graphRunID string, parked bool) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -448,9 +396,6 @@ func (m *Memory) SetGraphRunParked(_ context.Context, graphRunID string, parked 
 	return true, nil
 }
 
-// MarkGraphRunning implements core.GraphRunStarter: flip a pending (queued)
-// graph record to running. Returns true only when this call performed the
-// transition (mirrors the Postgres conditional UPDATE).
 func (m *Memory) MarkGraphRunning(_ context.Context, jobID string) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -479,8 +424,6 @@ func (m *Memory) Get(_ context.Context, jobID string) (core.JobRecord, error) {
 	return *r, nil
 }
 
-// Outcomes implements core.OutcomeReader — see the Postgres implementation
-// for why dependents read this narrow shape rather than whole records.
 func (m *Memory) Outcomes(_ context.Context, jobIDs []string) (map[string]core.NodeOutcome, error) {
 	if len(jobIDs) == 0 {
 		return nil, nil
@@ -523,8 +466,7 @@ func (m *Memory) ListGraphRuns(_ context.Context, opts core.ListGraphRunsOpts) (
 		if opts.Status != "" && r.Status != opts.Status {
 			continue
 		}
-		// Since is inclusive, Until exclusive — mirrors the Postgres store's
-		// enqueued_at >= Since AND enqueued_at < Until predicates.
+		// Since is inclusive, Until exclusive, mirroring the Postgres predicates.
 		if !opts.Since.IsZero() && r.EnqueuedAt.Before(opts.Since) {
 			continue
 		}
@@ -533,10 +475,9 @@ func (m *Memory) ListGraphRuns(_ context.Context, opts core.ListGraphRunsOpts) (
 		}
 		out = append(out, *r)
 	}
-	// Match the Postgres store's "enqueued_at DESC, id DESC": id breaks
-	// enqueued_at ties so pagination is a stable total order (plain sort.Slice
-	// isn't even stable), and a tie on a page boundary can't repeat or drop a
-	// row across LIMIT/OFFSET pages.
+	// The Postgres store's "enqueued_at DESC, id DESC": id breaks ties so
+	// pagination is a stable total order, and a tie on a page boundary cannot
+	// repeat or drop a row across pages.
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].EnqueuedAt.Equal(out[j].EnqueuedAt) {
 			return out[i].ID > out[j].ID
@@ -559,12 +500,6 @@ func (m *Memory) ListGraphRuns(_ context.Context, opts core.ListGraphRunsOpts) (
 	return out, nil
 }
 
-// ListGraphRunSummaries and CountGraphRuns give the in-memory store the same
-// core.RunSummaryReader contract the Postgres one implements, so a caller
-// exercising the narrow path in a test exercises it in production too. There
-// is no read to narrow here — the records are already in memory — so these
-// are projections of the same list, which is exactly what the conformance
-// suite pins them to.
 func (m *Memory) ListGraphRunSummaries(ctx context.Context, opts core.ListGraphRunsOpts) ([]core.RunSummary, error) {
 	recs, err := m.ListGraphRuns(ctx, opts)
 	if err != nil {
@@ -586,8 +521,8 @@ func (m *Memory) GetGraphRunSummary(ctx context.Context, jobID string) (core.Run
 }
 
 func (m *Memory) CountGraphRuns(ctx context.Context, opts core.ListGraphRunsOpts) (int, error) {
-	// Limit means "count no further than", so an unset one must not fall
-	// through to ListGraphRuns' default page of 50 and under-report.
+	// Limit means "count no further than", so an unset one must not fall through to
+	// ListGraphRuns' default page of 50 and under-report.
 	if opts.Limit <= 0 {
 		opts.Limit = len(m.records) + 1
 	}
@@ -598,10 +533,6 @@ func (m *Memory) CountGraphRuns(ctx context.Context, opts core.ListGraphRunsOpts
 	return len(recs), nil
 }
 
-// ListNodeRuns is core.NodeRunReader. Same reason as the run summaries above:
-// there is no read to narrow when the records are already in memory, so this
-// is a projection of the same list — which keeps the daemon's in-memory tests
-// on the code path production takes.
 func (m *Memory) ListNodeRuns(ctx context.Context, graphRunID string, limit int) ([]core.NodeRun, error) {
 	recs, err := m.ListNodeRecords(ctx, core.ListNodeRecordsOpts{GraphRunID: graphRunID, Limit: limit})
 	if err != nil {
@@ -614,8 +545,7 @@ func (m *Memory) ListNodeRuns(ctx context.Context, graphRunID string, limit int)
 	return out, nil
 }
 
-// matchesNodeRecord is the ListNodeRecordsOpts predicate, shared by
-// ListNodeRecords and CountNodeRecords so the two cannot drift — the same
+// matchesNodeRecord is shared so the list and the count cannot drift — the same
 // reason the Postgres store builds one WHERE clause for both.
 func matchesNodeRecord(r *core.JobRecord, opts core.ListNodeRecordsOpts) bool {
 	if r.Kind != core.JobKindNode {
@@ -647,9 +577,9 @@ func matchesNodeRecord(r *core.JobRecord, opts core.ListNodeRecordsOpts) bool {
 	return true
 }
 
-// CountNodeRecords implements core.NodeRunReader. No sort and no record copy:
-// the order the list needs decides WHICH rows a limit keeps, but a count only
-// needs how many there are, and the ceiling clips the same total either way.
+// CountNodeRecords needs no sort or record copy: order decides WHICH rows a
+// limit keeps, but a count only needs how many, and the ceiling clips the same
+// total either way.
 func (m *Memory) CountNodeRecords(_ context.Context, opts core.ListNodeRecordsOpts) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -676,10 +606,9 @@ func (m *Memory) ListNodeRecords(_ context.Context, opts core.ListNodeRecordsOpt
 		}
 		out = append(out, *r)
 	}
-	// Match the Postgres store's "enqueued_at DESC, id DESC": id breaks
-	// enqueued_at ties so pagination is a stable total order (plain sort.Slice
-	// isn't even stable), and a tie on a page boundary can't repeat or drop a
-	// row across LIMIT/OFFSET pages. NewestByFinished swaps the leading column
+	// The Postgres store's "enqueued_at DESC, id DESC": id breaks ties so
+	// pagination is a stable total order, and a tie on a page boundary cannot
+	// repeat or drop a row across pages. NewestByFinished swaps the leading column
 	// for finished_at, nulls last, on the same tiebreaker.
 	sort.Slice(out, func(i, j int) bool {
 		if opts.NewestByFinished {
@@ -725,10 +654,9 @@ func (m *Memory) ListByGraph(_ context.Context, graphID string) ([]core.JobRecor
 			out = append(out, *r)
 		}
 	}
-	// Match the Postgres store's "enqueued_at DESC, id DESC": id breaks
-	// enqueued_at ties so pagination is a stable total order (plain sort.Slice
-	// isn't even stable), and a tie on a page boundary can't repeat or drop a
-	// row across LIMIT/OFFSET pages.
+	// The Postgres store's "enqueued_at DESC, id DESC": id breaks ties so
+	// pagination is a stable total order, and a tie on a page boundary cannot
+	// repeat or drop a row across pages.
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].EnqueuedAt.Equal(out[j].EnqueuedAt) {
 			return out[i].ID > out[j].ID

@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MOBILE, EDITOR_NARROW, isNarrower, mediaQuery } from "./breakpoints";
 import { savedCollapsePref, initialNavCollapsed } from "./navCollapse";
 
-// jsdom's window.innerWidth is writable, so the viewport can be set per case.
 function setWidth(px: number) {
   Object.defineProperty(window, "innerWidth", {
     value: px,
@@ -30,7 +29,6 @@ describe("breakpoints", () => {
   });
 
   it("treats the two breakpoints independently", () => {
-    // A tablet-width viewport is narrow for the editor but not for the shell.
     setWidth(900);
     expect(isNarrower(MOBILE)).toBe(false);
     expect(isNarrower(EDITOR_NARROW)).toBe(true);
@@ -63,8 +61,6 @@ describe("savedCollapsePref", () => {
   });
 
   it("keys the two sidebars independently", () => {
-    // The app shell and the docs shell are separate preferences — that is the
-    // one thing the key parameter exists to keep apart.
     localStorage.setItem("app.nav", "1");
     expect(savedCollapsePref("app.nav")).toBe(true);
     expect(savedCollapsePref("docs.nav")).toBe(false);
@@ -102,7 +98,6 @@ describe("initialNavCollapsed", () => {
   it("collapses on a narrow viewport whatever was saved", () => {
     setWidth(MOBILE - 100);
     expect(initialNavCollapsed(KEY)).toBe(true);
-    // Even an explicit "expanded" desktop choice loses: there isn't room.
     localStorage.setItem(KEY, "0");
     expect(initialNavCollapsed(KEY)).toBe(true);
   });

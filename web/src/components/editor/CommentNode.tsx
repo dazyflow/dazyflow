@@ -16,29 +16,11 @@ import { ICON } from "../../icons";
 export type CommentData = {
   title?: string;
   color?: string;
-  // Injected by FlowEditor so title edits land in the controlled frame
-  // state (and mark the graph dirty).
   onTitleChange?: (title: string) => void;
-  // Injected by FlowEditor: the swatch row writes the picked color back into
-  // frame state the same way. Absent (like onTitleChange) on a read-only
-  // canvas, which is what hides the row.
   onColorChange?: (color: string) => void;
-  // Injected by FlowEditor: removes this frame. Frames live in their own
-  // state and aren't reachable from the Inspector, so this button is the
-  // only delete affordance on touch devices (no Delete/Backspace key).
   onRequestDelete?: () => void;
 };
 
-// FRAME_COLORS is what a note can be tinted with: a fixed palette, not a free
-// color input. The tint is mixed at 9% over the canvas and at 55% into the
-// border, in both themes — a picker offers thousands of values and most of them
-// come out as an invisible wash or an unreadable border on one of the two. The
-// hues are the ones the canvas already uses for drop categories (see
-// categoryColors in icons.tsx), so a colored note reads as part of the same
-// drawing rather than a sticker on top of it.
-//
-// `name` keys into commentNode.colors.* — a swatch needs an accessible name,
-// and "the third dot" is not one.
 export const FRAME_COLORS = [
   { hex: "#9f83fe", name: "violet" }, // the default; the app accent
   { hex: "#5a9bd4", name: "blue" },
@@ -97,9 +79,6 @@ export function CommentNode({ data, selected }: NodeProps) {
                   const on = c.hex.toLowerCase() === color.toLowerCase();
                   const label = i18n.t(`commentNode.colors.${c.name}`);
                   return (
-                    // A swatch is selectable state, not an action, so it stays
-                    // outside the Button vocabulary — the `.active` family, the
-                    // same idiom as the theme picker.
                     <button
                       key={c.hex}
                       type="button"
@@ -109,8 +88,6 @@ export function CommentNode({ data, selected }: NodeProps) {
                       aria-label={label}
                       title={label}
                       onClick={(e) => {
-                        // Stop the canvas from re-selecting/dragging on the
-                        // same tap.
                         e.stopPropagation();
                         d.onColorChange?.(c.hex);
                       }}

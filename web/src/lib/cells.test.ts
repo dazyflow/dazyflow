@@ -56,7 +56,6 @@ describe("rowsToCSV", () => {
   });
 
   it("keeps the machine spelling of a timestamp", () => {
-    // The screen shows local time; a spreadsheet wants the instant.
     expect(rowsToCSV(["at"], [{ at: "2026-08-31T07:21:54Z" }])).toBe(
       '"at"\n"2026-08-31T07:21:54Z"',
     );

@@ -9,17 +9,14 @@ import (
 )
 
 func TestWebhookSecrets_Cov(t *testing.T) {
-	// []string form (Go-constructed) with trimming and empties dropped.
 	got := WebhookSecrets(map[string]any{"secrets": []string{" a ", "", "b"}})
 	if want := []string{"a", "b"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("[]string form = %v, want %v", got, want)
 	}
-	// []any form (JSON-decoded), non-string entries ignored.
 	got = WebhookSecrets(map[string]any{"secrets": []any{"x", 42, " y "}})
 	if want := []string{"x", "y"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("[]any form = %v, want %v", got, want)
 	}
-	// Missing / wrong-typed key yields nil.
 	if got := WebhookSecrets(map[string]any{}); got != nil {
 		t.Errorf("missing key should yield nil, got %v", got)
 	}
@@ -90,8 +87,6 @@ func TestWebhookPublic_DefaultsOff(t *testing.T) {
 }
 
 func TestGraphWebhookPublic_OneOpenStepOpensTheAddress(t *testing.T) {
-	// One /trigger address is shared by a graph's webhook steps, so one step
-	// marked public opens it.
 	g := Graph{Nodes: []Node{
 		{ID: "a", Module: WebhookInputModule, Params: map[string]any{"secrets": []any{"k"}}},
 		{ID: "b", Module: WebhookInputModule, Params: map[string]any{"public": true}},
@@ -101,8 +96,6 @@ func TestGraphWebhookPublic_OneOpenStepOpensTheAddress(t *testing.T) {
 	}
 }
 
-// The Request step gets the same two doors, so its status and lint have to
-// agree with /call's auth exactly as the Webhook step's do.
 func TestFlowStatus_PublicRequestCountsAsLive(t *testing.T) {
 	g := Graph{Nodes: []Node{
 		{ID: "in", Module: RequestInputModule, Params: map[string]any{"public": true}},

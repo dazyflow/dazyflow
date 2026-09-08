@@ -86,8 +86,6 @@ func executeSQLiteQuery(ctx context.Context, job core.Job, _ chan<- core.Progres
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	// Validate sql/params/limit before the sandbox probe so a bad query
-	// fails with bad_param regardless of whether the file exists.
 	qp, errRes := parseQueryParams(job)
 	if errRes != nil {
 		return *errRes, nil

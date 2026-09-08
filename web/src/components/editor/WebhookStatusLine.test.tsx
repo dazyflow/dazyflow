@@ -1,14 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The reachability lines above the Webhook and Form config, and the one thing
-// neither may do: claim a door works when it doesn't.
-//
-// The form line sits directly above the form URL and its Copy button, so it is
-// read at the exact moment an owner decides whether to send that link to a
-// customer. Both answer about the PUBLISHED flow, because /trigger and /form
-// both serve that — answering from the draft went green immediately while
-// every visitor still got a 404.
 
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -37,7 +29,6 @@ const bare = {} as GraphTrigger;
 
 const line = (kind: string) =>
   screen.getByText(new RegExp(`^inspector\\.${kind}\\.`)).textContent;
-// classList, not a substring match: "webhook-status" literally contains "ok".
 const classes = (c: HTMLElement) =>
   c.querySelector(".webhook-status")!.classList;
 
@@ -165,8 +156,6 @@ describe("an open webhook step", () => {
   });
 });
 
-// The Request step gets the same two doors, and the same duty not to claim a
-// closed one works — with its own words, because /call answers.
 describe("an open Request step", () => {
   const open = { public: true } as unknown as GraphTrigger;
 

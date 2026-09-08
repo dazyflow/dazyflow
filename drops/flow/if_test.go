@@ -9,8 +9,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestIf_RoutesByVerdict checks that each operator routes the A payload down
-// the right port, exercising the operators most likely to be used as a filter.
 func TestIf_RoutesByVerdict(t *testing.T) {
 	for _, c := range []struct {
 		name   string
@@ -50,8 +48,6 @@ func TestIf_RoutesByVerdict(t *testing.T) {
 	}
 }
 
-// TestIf_ForwardsPayloadWithMetadata confirms the A ref (MIME + inline) is
-// forwarded intact, not just its inline value.
 func TestIf_ForwardsPayloadWithMetadata(t *testing.T) {
 	res, _ := executeIf(t.Context(), core.Job{
 		Params: map[string]any{"op": "contains", "B": "hi"},
@@ -63,8 +59,6 @@ func TestIf_ForwardsPayloadWithMetadata(t *testing.T) {
 	}
 }
 
-// TestIf_TestsFieldButRoutesWholePayload checks that `field` scopes the test to
-// a nested value while the entire A payload still routes.
 func TestIf_TestsFieldButRoutesWholePayload(t *testing.T) {
 	payload := map[string]any{"status": "active", "id": 42.0}
 	res, _ := executeIf(t.Context(), core.Job{
@@ -80,8 +74,6 @@ func TestIf_TestsFieldButRoutesWholePayload(t *testing.T) {
 	}
 }
 
-// TestContainsPreset routes via the fixed-op Contains drop: B is the substring,
-// A is the text that flows on.
 func TestContainsPreset(t *testing.T) {
 	run := func(text, sub string) core.Result {
 		res, _ := executeContains(t.Context(), core.Job{
@@ -105,8 +97,6 @@ func TestContainsPreset(t *testing.T) {
 	}
 }
 
-// TestIf_BadOperandIsError mirrors Compare: contains on a non-text value is an
-// explicit error rather than a silent misroute.
 func TestIf_BadOperandIsError(t *testing.T) {
 	res, _ := executeIf(t.Context(), core.Job{
 		Params: map[string]any{"op": "contains", "B": "x"},

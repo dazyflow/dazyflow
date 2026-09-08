@@ -19,12 +19,7 @@ import (
 	"github.com/dazyflow/dazyflow/pollstate"
 )
 
-// Scheduler reads graphs from the configured workspaces, finds those with
-// cron triggers, and fires SubmitGraph internally when each schedule is
-// due. One Scheduler runs per dzd instance. In a multi-node deployment
-// every instance runs a Scheduler, but only the one holding the Postgres
-// advisory lock (see PgLeader, wired via SetLeader in cmd/dzd) actually
-// fires triggers; the rest stay warm via rescan and take over on failover.
+// Fires only the PUBLISHED revision, and only when this instance is leader.
 
 type Scheduler struct {
 	svc      *Service
@@ -37,41 +32,18 @@ type Scheduler struct {
 	tracked     map[string]*scheduledGraph // key = tenant/workspace/graphID
 	rescanEvery time.Duration
 
-	// skipMarked coalesces the Runs-list "skipped" markers: key
-	// tenant/workspace/graphID → last marker time. A per-minute cron at
-	// the cap would otherwise write a marker every tick; we emit at most
-	// one per skipMarkerWindow. The exact skip count lives in the usage
-	// counter, not here. Guarded by mu; resets on restart (at worst one
-	// extra marker after a restart).
+	// Coalesced, so a broken schedule writes one marker rather than one per tick.
 	skipMarked map[string]time.Time
 
-	// leader reports whether THIS instance may fire triggers. Default
-	// always-true (single node). In a multi-node cluster, cmd/dzd wires
-	// this to a Postgres advisory-lock leader so exactly one instance
-	// fires crons — otherwise every node fires every schedule N times.
-	// Rescan still runs on followers so a new leader can fire instantly.
+	// Defaults to true, so a single-node deployment fires without configuring it.
 	leader func() bool
 
-	// principal used when the scheduler submits graphs internally; a
-	// real deployment would give the system a dedicated identity with
-	// tenant-scoped graph:run only.
 	systemPrincipal func(tenant, workspace string) core.Principal
 
-	// pollState reads a flow's poll-outcome marker (pollstate.Read) so the
-	// scheduler can widen the interval for consistently-empty pollers. nil
-	// disables adaptive backoff — every poll fires at its base interval.
-	// cmd/dzd wires this to the encrypted secret store.
 	pollState func(ctx context.Context, tenant, graphID string) *pollstate.Marker
 }
 
-// scheduledGraph represents one tracked trigger. Discriminated by
-// which scheduling field is set:
-//
-//	scheduleFn != nil  → cron-driven (wall-clock anchored)
-//	interval   != 0    → poll-driven (interval-anchored from last fire)
-//
-// Both fields being set at once would be a programming error; the
-// rescan path sets exactly one based on the trigger Type.
+// Discriminated by interval: >0 is a poll entry, 0 a cron entry.
 type scheduledGraph struct {
 	graphID    string
 	tenant     string
@@ -80,31 +52,16 @@ type scheduledGraph struct {
 	scheduleFn cron.Schedule // for cron triggers
 	interval   time.Duration // BASE poll interval (zero when not poll-driven)
 
-	// specKey identifies the schedule spec (cron expr+tz, or poll interval).
-	// rescan preserves scheduleAt across rescans ONLY when this is unchanged;
-	// an edited cron/interval gets a freshly recomputed next-fire so a timing
-	// change takes effect immediately instead of waiting out the old schedule.
+	// Identifies the CADENCE, so an entry survives an unrelated edit to its flow.
 	specKey string
 
-	// Adaptive-backoff state for poll entries (interval > 0). The scheduler
-	// owns the empty STREAK in memory (single writer), reading the flow's
-	// pollstate marker to learn each run's outcome. emptyStreak widens the
-	// EFFECTIVE interval (see effectiveInterval); lastMarkerAt dedupes a
-	// fresh outcome from one already counted. Both are carried across
-	// rescans so a workspace edit doesn't reset a flow's learned cadence.
+	// Poll entries only; a consistently-empty poller widens its own interval.
 	emptyStreak  int
 	lastMarkerAt time.Time
 }
 
-// parseCronInTZ parses a 5-field cron expression as evaluated in the
-// given IANA timezone, using robfig/cron's CRON_TZ= prefix so the
-// wall-clock fields anchor to a real zone (and track DST). An empty tz
-// defaults to UTC, which keeps firing deterministic regardless of the
-// daemon host's local time. A malformed tz surfaces as a parse error so
-// the caller can skip it (scheduler) or report it (validate endpoint),
-// rather than silently firing in the wrong zone. Used by BOTH the
-// scheduler and the validate endpoint so the preview a user sees and the
-// time the flow actually fires are computed identically.
+// Evaluated IN the named zone, so a wall-clock field survives DST. An unknown
+// zone falls back to UTC rather than the host's local time.
 func parseCronInTZ(p cron.Parser, expr, tz string) (cron.Schedule, error) {
 	if tz == "" {
 		tz = "UTC"
@@ -115,10 +72,6 @@ func parseCronInTZ(p cron.Parser, expr, tz string) (cron.Schedule, error) {
 	return p.Parse("CRON_TZ=" + tz + " " + expr)
 }
 
-// paramSeconds reads an integer-valued node param (e.g. a poll interval),
-// tolerating the float64 that JSON unmarshalling produces as well as a plain
-// int/int64. Returns 0 when the key is absent or not a number — which callers
-// treat as "unset" (manual-only).
 func paramSeconds(params map[string]any, key string) int {
 	switch v := params[key].(type) {
 	case float64:
@@ -131,26 +84,8 @@ func paramSeconds(params map[string]any, key string) int {
 	return 0
 }
 
-// triggerNodeDisabled reports whether a trigger node has been
-// individually paused. This is finer-grained than the whole-flow
-// graph.Disabled switch: a flow with both a cron and a poll trigger can
-// pause just one.
-//
-// TWO switches mean the same thing here, and both count:
-//
-//	Params["disabled"] — the per-trigger pause the schedules API writes
-//	(see setScheduleDisabled). Stored in node Params as a plain JSON bool so
-//	no Node struct / schema change was needed, and it round-trips through the
-//	normal graph save path.
-//
-//	Node.Disabled — the editor's generic "disable this step" toggle. It was
-//	honoured only at execution time (worker.go marks the node skipped), so on
-//	a TRIGGER node it used to be a no-op at the inbound endpoints: a
-//	disabled webhook trigger still accepted the POST, started a run, and
-//	then skipped the node — an empty run instead of a refusal.
-//
-// Checking both means whichever switch the user reached for does what it
-// looks like it does. Absent/false on both = active.
+// A per-node switch, distinct from the whole-flow one: the scheduler must not
+// enroll a step its author turned off.
 func triggerNodeDisabled(node core.Node) bool {
 	if node.Disabled {
 		return true
@@ -159,10 +94,6 @@ func triggerNodeDisabled(node core.Node) bool {
 	return v
 }
 
-// nextFireFrom returns the next time this entry should fire, given
-// the current time. Cron entries delegate to the cron parser; poll
-// entries add their EFFECTIVE interval to now (interval-anchored — see the
-// GraphTrigger doc comment — widened by any empty-streak backoff).
 func (e *scheduledGraph) nextFireFrom(now time.Time) time.Time {
 	if e.scheduleFn != nil {
 		return e.scheduleFn.Next(now)
@@ -170,53 +101,26 @@ func (e *scheduledGraph) nextFireFrom(now time.Time) time.Time {
 	return now.Add(e.effectiveInterval())
 }
 
-// staggeredNextFire is nextFireFrom with the entry's deterministic poll
-// stagger applied, for the paths that anchor a fire time from a bare clock
-// read rather than carrying one forward: first enrollment and leadership
-// takeover. Both would otherwise land every entry computed in the same pass on
-// the identical instant, which is exactly the alignment pollJitter exists to
-// break up.
-//
-// Cron entries are untouched — their interval is zero, so pollJitter returns 0
-// and their wall-clock anchor stays exact. The offset is subtracted, never
-// added, so the fire stays inside one interval and no latency is introduced;
-// the span is capped at a quarter-interval, so the result is still safely in
-// the future of now.
+// Deterministic per-entry offset, so a fleet of pollers on the same interval
+// does not fire in one thundering herd.
 func (e *scheduledGraph) staggeredNextFire(key string, now time.Time) time.Time {
 	return e.nextFireFrom(now).Add(-pollJitter(key, e.interval))
 }
 
-// isLeader reports whether this instance may fire triggers. A nil predicate
-// means single-node (only reachable by building a Scheduler literal, as tests
-// do) — NewScheduler always installs one.
 func (s *Scheduler) isLeader() bool {
 	return s.leader == nil || s.leader()
 }
 
 const (
-	// maxPollJitter caps the deterministic spread added to a poll trigger's
-	// first fire. A fraction of the interval de-aligns flows that share a
-	// cadence; the absolute cap keeps even a daily poll from drifting wildly.
 	maxPollJitter = 60 * time.Second
 
-	// maxPollBackoffMultiplier caps how far a consistently-empty poller's
-	// interval widens — an "every 5 min" poll that keeps finding nothing
-	// settles at 8× (every 40 min), never further, so it still reacts within
-	// a bounded delay once data reappears.
+	// Caps how far an empty poller's interval may widen.
 	maxPollBackoffMultiplier = 8
 
-	// pollBackoffGrace is how many consecutive empty fires a poller gets
-	// before its interval starts widening. A poll that's empty once or twice
-	// then active shouldn't slow down — only a sustained dry spell should.
+	// Consecutive empty fires tolerated before backoff starts.
 	pollBackoffGrace = 3
 )
 
-// pollJitter returns a deterministic offset in [0, min(interval/4,
-// maxPollJitter)) derived from key. Anchoring the spread to the entry key
-// (not an RNG) keeps a flow's fire time stable across rescans and leader
-// failover, while flows that share an interval land on different ticks — so a
-// mass enrollment (post-deploy, or thousands of tenants on "every 5 min")
-// doesn't hammer the scheduler and the target API on the same instant.
 func pollJitter(key string, interval time.Duration) time.Duration {
 	if interval <= 0 {
 		return 0
@@ -230,18 +134,13 @@ func pollJitter(key string, interval time.Duration) time.Duration {
 	return time.Duration(h.Sum64() % uint64(span))
 }
 
-// effectiveInterval is the poll interval after empty-streak backoff: the base
-// interval until pollBackoffGrace consecutive empty fires, then doubling per
-// additional empty up to maxPollBackoffMultiplier, and never past the
-// scheduler's absolute poll ceiling. A non-poll entry returns its base.
+// The base interval widened by the empty streak, capped.
 func (e *scheduledGraph) effectiveInterval() time.Duration {
 	if e.interval <= 0 {
 		return e.interval
 	}
 	mult := 1
 	if e.emptyStreak >= pollBackoffGrace {
-		// Cap the shift before it can overflow int on a long dry spell; the
-		// multiplier is clamped to maxPollBackoffMultiplier anyway.
 		shift := min(e.emptyStreak-pollBackoffGrace+1, 16)
 		mult = min(1<<uint(shift), maxPollBackoffMultiplier) // 2, 4, 8, …
 	}
@@ -252,10 +151,6 @@ func (e *scheduledGraph) effectiveInterval() time.Duration {
 	return eff
 }
 
-// NewScheduler wires a scheduler around the daemon Service. interval is
-// how often the scheduler checks for due triggers; rescanEvery is how
-// often it refreshes the list of tracked graphs (so workspace edits
-// take effect without restarting dzd).
 func NewScheduler(svc *Service) *Scheduler {
 	return &Scheduler{
 		svc:         svc,
@@ -267,34 +162,23 @@ func NewScheduler(svc *Service) *Scheduler {
 		tracked:     make(map[string]*scheduledGraph),
 		leader:      func() bool { return true }, // single-node default
 		systemPrincipal: func(tenant, workspace string) core.Principal {
-			// graph:admin lets cron-fired runs bypass per-flow
-			// visibility: an admin who set up a schedule on a private
-			// flow shouldn't have that schedule break because they're
-			// not the active subject at fire time.
 			return SystemPrincipal("dazyflow-scheduler", tenant, workspace)
 		},
 	}
 }
 
-// SetLeader installs the leadership predicate. When fn returns false
-// this instance rescans but doesn't fire — used by cmd/dzd to gate the
-// scheduler on a Postgres advisory-lock leader in multi-node clusters.
+// A false predicate suppresses firing entirely, so a follower is inert.
 func (s *Scheduler) SetLeader(fn func() bool) {
 	if fn != nil {
 		s.leader = fn
 	}
 }
 
-// SetPollStateReader wires the adaptive-backoff feedback source: a reader of
-// the per-flow poll-outcome marker fetcher nodes write via pollstate.Report.
-// Without it, adaptive backoff is off and every poll fires at its base
-// interval. cmd/dzd points it at the encrypted secret store.
+// Without it every poller runs at its base interval.
 func (s *Scheduler) SetPollStateReader(fn func(ctx context.Context, tenant, graphID string) *pollstate.Marker) {
 	s.pollState = fn
 }
 
-// Run blocks until ctx is cancelled. It alternates between scheduling
-// ticks (every interval) and full workspace rescans (every rescanEvery).
 func (s *Scheduler) Run(ctx context.Context) error {
 	s.logger.Printf("started (tick=%s, rescan=%s)", s.interval, s.rescanEvery)
 	if err := s.rescan(ctx); err != nil {
@@ -304,15 +188,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	rescanT := time.NewTicker(s.rescanEvery)
 	defer tickT.Stop()
 	defer rescanT.Stop()
-	// Track leadership so we can re-anchor on takeover. Seed from the predicate
-	// itself: NewScheduler always installs a non-nil leader, so the old
-	// `s.leader == nil` test was never true and EVERY deploy — single-node
-	// included — took the takeover branch on its first tick. That re-anchored
-	// entries the initial rescan had just staggered, collapsing every poll flow
-	// sharing a cadence onto one instant, permanently (they then fire on the
-	// same tick and re-add the same interval forever). An instance that starts
-	// as leader has nothing to re-anchor: the rescan above already anchored
-	// from a fresh clock.
+	// Seeded from the predicate, so a leader at startup does not read as a takeover.
 	wasLeader := s.isLeader()
 	for {
 		select {
@@ -320,18 +196,10 @@ func (s *Scheduler) Run(ctx context.Context) error {
 			s.logger.Printf("stopped: %v", ctx.Err())
 			return ctx.Err()
 		case <-tickT.C:
-			// Only the leader fires; followers stay warm via rescan and
-			// take over instantly if the leader dies.
 			isLeader := s.isLeader()
 			if isLeader && !wasLeader {
-				// Just took over from a dead leader. A follower's scheduleAt is
-				// frozen at whatever rescan last computed and was never advanced
-				// (only the leader's fireDue advances it), so a stale value
-				// <= now would fire a tick the old leader already fired. Re-anchor
-				// every entry to its next fire after now: a tick that fell inside
-				// the leaderless gap is skipped (matching the documented
-				// at-most-one-catch-up semantics) rather than duplicated — the
-				// safer choice for non-idempotent flows.
+				// A follower's scheduleAt is frozen at whatever it was, so a takeover must
+				// re-anchor or the new leader fires on the dead one's stale clock.
 				s.reanchor(ctx, s.clock())
 			}
 			wasLeader = isLeader
@@ -346,8 +214,6 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	}
 }
 
-// rescan rebuilds the tracked set from the current schedule source, so
-// workspace edits take effect without restarting dzd.
 func (s *Scheduler) rescan(ctx context.Context) error {
 	specs, err := s.collectSpecs(ctx)
 	if err != nil {
@@ -357,14 +223,7 @@ func (s *Scheduler) rescan(ctx context.Context) error {
 	return nil
 }
 
-// collectSpecs returns the live schedule set: the published, non-disabled
-// flows and the cadence each asks for.
-//
-// A ScheduleStore serves it as one query. Without one, it falls back to
-// walking every workspace — a git load per flow, per pass, across every
-// tenant, holding each workspace mutex against the editor as it goes. That
-// walk is O(all flows in the install) every rescanEvery, so it is the ceiling
-// on how many flows an install can hold, not a tuning knob.
+// Published and non-disabled only.
 func (s *Scheduler) collectSpecs(ctx context.Context) ([]ScheduleSpec, error) {
 	if store := s.svc.Schedules; store != nil {
 		return store.ListSchedules(ctx)
@@ -393,9 +252,7 @@ func (s *Scheduler) collectSpecsFromWorkspaces() ([]ScheduleSpec, error) {
 			if err != nil {
 				continue
 			}
-			// Enrollment requires a published flow. The cadence itself is read
-			// from the draft above, so a timing or pause edit takes effect
-			// immediately; only the executed revision is pinned to publish.
+			// Enrollment requires a published flow; the cadence is read from that revision.
 			if pub, err := store.PublishedCommit(gid); err != nil || pub == "" {
 				continue
 			}
@@ -405,21 +262,14 @@ func (s *Scheduler) collectSpecsFromWorkspaces() ([]ScheduleSpec, error) {
 	return out, nil
 }
 
-// applySpecs swaps in a tracked set built from specs, carrying each surviving
-// entry's next-fire time and poll backoff forward so a rescan neither
-// double-fires nor resets a learned cadence. An entry whose SpecKey changed is
-// re-anchored from now, which is what makes an edited schedule take effect
-// without waiting out the old one.
+// Carries a surviving entry's next-fire forward, so an unrelated edit does not
+// reset a schedule.
 func (s *Scheduler) applySpecs(specs []ScheduleSpec, now time.Time) {
 	next := make(map[string]*scheduledGraph, len(specs))
-	// Held across the whole rebuild: the carried-forward fields are the same
-	// ones fireDue and reanchor mutate. Nothing here does I/O.
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, spec := range specs {
-		// Unchanged cadence: carry the whole entry forward — the parsed cron
-		// schedule included. Re-parsing every expression on every pass is the
-		// dominant cost of a rescan once the spec set is served as data.
+		// Unchanged cadence: carry the parsed schedule and backoff state forward.
 		if prev, ok := s.tracked[spec.EntryKey]; ok && prev.specKey == spec.SpecKey && !prev.scheduleAt.IsZero() {
 			carried := *prev
 			next[spec.EntryKey] = &carried
@@ -430,19 +280,12 @@ func (s *Scheduler) applySpecs(specs []ScheduleSpec, now time.Time) {
 			s.logger.Printf("schedule %s: %v", spec.EntryKey, err)
 			continue
 		}
-		// First enrollment, or a changed cadence: pull the fire earlier by a
-		// deterministic per-entry offset so flows sharing an interval don't all
-		// land on one tick. A no-op for cron entries.
 		entry.scheduleAt = entry.staggeredNextFire(spec.EntryKey, now)
 		next[spec.EntryKey] = entry
 	}
 	s.tracked = next
 }
 
-// entryFromSpec builds the runtime entry for a spec, resolving a cron
-// expression to its schedule. A spec that fails to parse here was already
-// rejected by DeriveScheduleSpecs, so this only guards a spec that reached the
-// scheduler by another route.
 func (s *Scheduler) entryFromSpec(spec ScheduleSpec) (*scheduledGraph, error) {
 	e := &scheduledGraph{
 		graphID:   spec.GraphID,
@@ -462,25 +305,12 @@ func (s *Scheduler) entryFromSpec(spec ScheduleSpec) (*scheduledGraph, error) {
 	return e, nil
 }
 
-// reanchor resets every tracked entry's next-fire from now, discarding a stale
-// frozen scheduleAt inherited as a follower. Called once on leadership takeover
-// so a newly-promoted leader doesn't immediately re-fire a tick the dead leader
-// already handled.
-//
-// It re-applies each poll entry's stagger rather than anchoring them all on a
-// bare `now`. Every entry here is recomputed in one pass from a single clock
-// read, so without the offset a promoted leader would fire every poll flow
-// sharing a cadence on the same tick — the thundering herd pollJitter exists to
-// prevent, arriving at the worst moment, right as a node has just gone down.
+// Discards a frozen next-fire, which is what a takeover needs.
 func (s *Scheduler) reanchor(ctx context.Context, now time.Time) {
 	s.mu.Lock()
 	stale := make([]*scheduledGraph, 0, len(s.tracked))
 	for k, e := range s.tracked {
-		// A frozen scheduleAt in the past is a fire the dead leader owed and
-		// nobody delivered. Re-anchoring discards it, which is the right call
-		// (better a missed fire than a duplicate on a non-idempotent flow) —
-		// but discarding it SILENTLY is how "the 08:00 report just didn't
-		// happen" became untraceable.
+		// A past scheduleAt is a fire the dead leader owed and never made.
 		if !e.scheduleAt.IsZero() && !e.scheduleAt.After(now) {
 			carried := *e
 			stale = append(stale, &carried)
@@ -493,28 +323,10 @@ func (s *Scheduler) reanchor(ctx context.Context, now time.Time) {
 	}
 }
 
-// maxCountedMissedFires bounds the walk in recordMissedFires. Past it the
-// message says "at least N", which is all a reader needs: the difference
-// between 200 missed fires and 2000 changes nothing about what to do.
 const maxCountedMissedFires = 500
 
-// recordMissedFires notes the fires that were due and never happened, when the
-// scheduler can be CERTAIN of it — which is the whole reason this is not
-// simply "compare the last run against the schedule".
-//
-// Certain means: this entry carried a next-fire time, that time is in the
-// past, and stepping the schedule forward from it lands on further times also
-// in the past. Those are fires this scheduler owed and did not make. It covers
-// a stalled tick loop and a takeover from a dead leader.
-//
-// It does NOT cover a cold start. After a restart every entry is anchored to a
-// fresh future time, so the process has no memory of what it owed while it was
-// down — and reconstructing that from run history would mean guessing: a flow
-// published five minutes ago, or one paused and resumed, has no recent run for
-// entirely legitimate reasons and would be reported as having missed its
-// schedule. A marker that cries wolf trains people to ignore markers, which is
-// the same failure this whole area is about, so the gap is left honest and
-// documented rather than filled in with a guess.
+// Notes fires that were due and never happened, so a leadership gap is visible
+// in the Runs list rather than silently absent.
 func (s *Scheduler) recordMissedFires(ctx context.Context, e *scheduledGraph, now time.Time) {
 	if e.scheduleAt.IsZero() {
 		return
@@ -552,33 +364,15 @@ func (s *Scheduler) fireDue(ctx context.Context) {
 	s.mu.Unlock()
 
 	for _, e := range entries {
-		// A zero scheduleAt means "never fires" — cron.Schedule.Next gives
-		// up on an impossible date (e.g. Feb 30) and returns the zero time.
-		// Without this guard the zero time reads as "due now" and the graph
-		// fires every tick forever. Treat it as dormant.
+		// A zero scheduleAt means "never fires".
 		if e.scheduleAt.IsZero() {
 			continue
 		}
 		if !e.scheduleAt.After(now) {
-			// Late enough that whole fires fell in the gap? Say so. The fire
-			// below still happens; what is recorded here is the ones that did
-			// not. A stalled scheduler (a long GC pause, a wedged store, a
-			// host that slept) silently swallowed them.
+			// Whole fires fell in the gap, so say so rather than firing them all now.
 			s.recordMissedFires(ctx, e, now)
 			s.fireGraph(ctx, e)
-			// Adaptive backoff: fold the latest poll outcome into the empty
-			// streak BEFORE computing the next fire, so a consistently-empty
-			// poller widens (and an active one snaps back). The marker reflects
-			// the PREVIOUS fire's run (this fire's run hasn't finished yet),
-			// which is exactly the signal we want for the next interval.
-			//
-			// The marker READ happens outside the lock. cmd/dzd points
-			// pollState at the Postgres-backed encrypted secret store, so it is
-			// a network round-trip; holding s.mu across it would stall rescan's
-			// map swap, reanchor, and TrackedCount behind an unrelated database
-			// call — and a hung store would wedge them indefinitely. Only the
-			// fold and the next-fire stamp, both pure, run under the lock.
-			// fireGraph is already called outside it for the same reason.
+			// Fold the latest outcome into the empty streak before computing the next fire.
 			marker := s.readPollMarker(ctx, e)
 			s.mu.Lock()
 			s.foldPollOutcomeLocked(e, marker)
@@ -588,15 +382,7 @@ func (s *Scheduler) fireDue(ctx context.Context) {
 	}
 }
 
-// readPollMarker fetches a poll entry's latest outcome marker. This is the I/O
-// half of the empty-streak update and deliberately takes NO lock — see fireDue.
-// Returns nil when the entry isn't poll-driven, no reader is wired, or no
-// marker exists yet.
-//
-// The fields it reads (interval, tenant, graphID) are set when rescan builds
-// the entry and never mutated afterwards; rescan carries state forward into
-// FRESH entries rather than editing live ones, so only scheduleAt/emptyStreak/
-// lastMarkerAt are mutable, and those are the lock's business.
+// The one I/O in the tick, so it is best-effort and never blocks the loop.
 func (s *Scheduler) readPollMarker(ctx context.Context, e *scheduledGraph) *pollstate.Marker {
 	if e.interval <= 0 || s.pollState == nil {
 		return nil
@@ -604,12 +390,6 @@ func (s *Scheduler) readPollMarker(ctx context.Context, e *scheduledGraph) *poll
 	return s.pollState(ctx, e.tenant, e.graphID)
 }
 
-// foldPollOutcomeLocked folds a marker read by readPollMarker into a poll
-// entry's empty streak. It only acts on a marker NEWER than the last one folded
-// in (markers are stamped per run), so re-reading the same outcome doesn't
-// inflate the streak. An empty outcome increments; an active one resets to
-// zero, tightening the cadence back to the base interval. Pure — no I/O — so
-// the caller can hold s.mu across it. Caller holds s.mu.
 func (s *Scheduler) foldPollOutcomeLocked(e *scheduledGraph, m *pollstate.Marker) {
 	if m == nil {
 		return
@@ -627,10 +407,6 @@ func (s *Scheduler) foldPollOutcomeLocked(e *scheduledGraph, m *pollstate.Marker
 }
 
 func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
-	// Plan gate (T3): on deployments that keep scheduling off the free
-	// plan, skip the fire (logged, not silent — and the Usage page tells
-	// the tenant why). The run-limit gate inside SubmitGraph still
-	// applies on top for pro-allowed fires.
 	if err := s.svc.checkTriggerQuota(ctx, e.tenant); err != nil {
 		s.logger.Printf("skip %s/%s/%s: %v", e.tenant, e.workspace, e.graphID, err)
 		if s.markOnce("quota", e.tenant, e.workspace, e.graphID) {
@@ -642,19 +418,14 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 	}
 	store, err := s.svc.Workspaces.Open(e.tenant, e.workspace)
 	if err != nil {
-		// The flow cannot be reached at all, so it is not running and nobody
-		// has been told. Every path in this function used to end here: one log
-		// line and a return, with the schedule quietly dead.
+		// The flow cannot be reached, so nobody would otherwise be told.
 		s.logger.Printf("open ws %s/%s: %v", e.tenant, e.workspace, err)
 		s.markBroken(ctx, e, "workspace_unavailable",
 			"This flow's schedule could not run: its workspace could not be opened. "+
 				"The flow has not run since. Error: "+err.Error())
 		return
 	}
-	// Require published: never auto-fire a flow that hasn't been published.
-	// rescan already skips enrolling unpublished flows; this is the
-	// belt-and-braces gate in case publish state changed between the last
-	// rescan and this tick (e.g. the flow was unpublished/rolled back).
+	// Never auto-fire an unpublished flow.
 	if pub, err := store.PublishedCommit(e.graphID); err != nil || pub == "" {
 		if err != nil {
 			s.logger.Printf("skip %s/%s/%s: published lookup: %v", e.tenant, e.workspace, e.graphID, err)
@@ -662,33 +433,21 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 				"This flow's schedule could not run: its published revision could not be looked up. "+
 					"The flow has not run since. Error: "+err.Error())
 		} else {
-			// Deliberate: unpublishing a flow is how you turn its schedule
-			// off, so this needs no marker. rescan drops these from the
-			// enrollment set anyway; reaching here is a race with an unpublish.
+			// Deliberate: unpublishing is how a schedule is turned off.
 			s.logger.Printf("skip %s/%s/%s: not published (publish to enable its schedule)", e.tenant, e.workspace, e.graphID)
 		}
 		return
 	}
-	// Fire the PUBLISHED revision, not the draft at HEAD: an author can
-	// keep editing a flow without a half-finished change firing on the
-	// next cron tick. The schedule itself (when to fire, whether the
-	// trigger is paused) is read from HEAD during rescan, so timing + pause
-	// changes still take effect immediately — only the executed graph
-	// content is pinned to the published version.
+	// The PUBLISHED revision, not HEAD, so an in-progress edit never fires.
 	g, err := store.LoadPublished(e.graphID)
 	if err != nil {
-		// The one that hurts most: a published revision that will not decode
-		// means the flow is dead and stays dead, on every tick, for ever.
 		s.logger.Printf("load %s/%s/%s: %v", e.tenant, e.workspace, e.graphID, err)
 		s.markBroken(ctx, e, "published_flow_unreadable",
 			"This flow's schedule could not run: its published version could not be read. "+
 				"The flow has not run since it broke — re-publish it to fix. Error: "+err.Error())
 		return
 	}
-	// Paused flows are dropped when specs are derived, so reaching here means
-	// the enrollment set is stale. Free to check, and the enrollment set is
-	// data now rather than something re-read from the flow every 30s. Manual
-	// runs of a paused flow still work — only the automatic fire is refused.
+	// Paused flows never reach here; specs drop them.
 	if g.Disabled {
 		s.logger.Printf("skip %s/%s/%s: flow is paused", e.tenant, e.workspace, e.graphID)
 		return
@@ -696,10 +455,7 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 	p := s.systemPrincipal(e.tenant, e.workspace)
 	runID, err := s.svc.SubmitGraph(ctx, p, g)
 	if err != nil {
-		// Over the monthly run cap, the fire is refused (ErrPlanLimit). Count
-		// every skip for the usage banner, and write a Runs-list marker —
-		// coalesced to one per flow per window so a frequent cron doesn't
-		// flood the list. Other errors (load/publish) aren't plan skips.
+		// Refused over the monthly cap, and counted so the operator can see it.
 		switch {
 		case errors.Is(err, core.ErrPlanLimit):
 			if s.svc.Usage != nil {
@@ -709,16 +465,8 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 				s.svc.recordSkippedFire(ctx, e.tenant, e.workspace, e.graphID, "plan_run_cap",
 					"Scheduled run skipped — over the plan's monthly run limit.")
 			}
-			// And tell somebody. The Runs-list marker and the in-app Usage
-			// banner both need a person to be looking at the app, which is
-			// what the users of an automation product are not doing: their
-			// flows stop, everything looks calm, and they hear about it from a
-			// customer. Coalesced org-wide inside notifyRunCapReached.
 			s.svc.notifyRunCapReached(g)
 		default:
-			// Anything else — an invalid graph, a suspended org, a store
-			// error — is the flow not running for a reason its owner has to
-			// act on, and it used to be log-only.
 			if s.markOnce("submit", e.tenant, e.workspace, e.graphID) {
 				s.svc.recordBrokenSchedule(ctx, g, "schedule_submit_failed",
 					"This flow's schedule could not start a run: "+err.Error())
@@ -730,15 +478,7 @@ func (s *Scheduler) fireGraph(ctx context.Context, e *scheduledGraph) {
 	s.logger.Printf("fired %s/%s/%s → %s", e.tenant, e.workspace, e.graphID, runID)
 }
 
-// markBroken records a schedule that could not fire because the flow itself is
-// unreachable or unreadable, coalesced to one marker per problem per flow per
-// window.
-//
-// It has to build its own graph stand-in, because these are exactly the paths
-// where the real flow could NOT be loaded. The draft is tried purely to
-// recover the owner's address — without it the marker lands in the Runs list
-// but reaches nobody, and reaching somebody is the point. A draft read failing
-// too is fine: the marker is still written, just without an owner.
+// Records a schedule that could not fire, so it is visible rather than silent.
 func (s *Scheduler) markBroken(ctx context.Context, e *scheduledGraph, code, message string) {
 	if !s.markOnce(code, e.tenant, e.workspace, e.graphID) {
 		return
@@ -753,14 +493,9 @@ func (s *Scheduler) markBroken(ctx context.Context, e *scheduledGraph, code, mes
 	s.svc.recordBrokenSchedule(ctx, g, code, message)
 }
 
-// skipMarkerWindow bounds how often one flow writes a Runs-list marker about
-// the same problem — see Scheduler.skipMarked.
 const skipMarkerWindow = time.Hour
 
-// markOnce reports whether to write a marker of this kind for this flow now,
-// coalescing to one per skipMarkerWindow. The kind is part of the key so a
-// flow that is both over its cap and unloadable says both things once, rather
-// than whichever happened first silencing the other.
+// Coalesces repeat markers of the same kind for the same flow.
 func (s *Scheduler) markOnce(kind, tenant, workspace, graphID string) bool {
 	key := kind + "|" + tenant + "/" + workspace + "/" + graphID
 	now := s.clock()
@@ -785,21 +520,16 @@ func splitKey(key string) (tenant, workspace string, ok bool) {
 	return "", "", false
 }
 
-// TrackedCount reports how many graphs the scheduler is currently
-// watching. Exposed for tests.
 func (s *Scheduler) TrackedCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.tracked)
 }
 
-// SetClock lets tests inject a deterministic clock. Production code
-// uses time.Now via the field default.
 func (s *Scheduler) SetClock(clock func() time.Time) {
 	s.clock = clock
 }
 
-// SetInterval lets tests tighten the tick rate.
 func (s *Scheduler) SetInterval(tick, rescan time.Duration) {
 	s.interval = tick
 	s.rescanEvery = rescan

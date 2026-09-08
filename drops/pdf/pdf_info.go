@@ -73,8 +73,6 @@ func executePDFInfo(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 
 	info, err := pdfapi.PDFInfo(bytes.NewReader(data), refName(ref, 0), nil, false, conf())
 	if err != nil {
-		// A password-protected file is the one failure worth naming, because
-		// the fix is a different file rather than a different step.
 		if isEncryptedErr(err) {
 			return params.Err(job, "encrypted", fmt.Sprintf("%s is password-protected, so its details can't be read", refName(ref, 0))), nil
 		}
@@ -104,9 +102,6 @@ func executePDFInfo(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 		JobID:  job.ID,
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
-			// Pages as text, not a number: it feeds a Compare or a Branch,
-			// which is the whole reason someone reaches for this step, and
-			// those speak the text/rows contract.
 			"pages":     {MIME: "text/plain", Inline: fmt.Sprint(info.PageCount)},
 			"encrypted": {MIME: "text/plain", Inline: fmt.Sprint(info.Encrypted)},
 			"info":      {MIME: "application/json", Inline: details},

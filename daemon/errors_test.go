@@ -11,8 +11,6 @@ import (
 	"testing"
 )
 
-// decodeEnvelope decodes a response body as the structured ErrorEnvelope and
-// fails if it isn't that shape — the whole point of the unified error surface.
 func decodeEnvelope(t *testing.T, body []byte) ErrorEnvelope {
 	t.Helper()
 	var env ErrorEnvelope
@@ -25,11 +23,11 @@ func decodeEnvelope(t *testing.T, body []byte) ErrorEnvelope {
 	return env
 }
 
-// TestErrorEnvelope_Unified pins the §1 invariant that every API error path
-// emits ONE shape — {"error":{"code","message",...}} — whether it comes from
-// writeAPIError (specific code), writeJSONError (status-derived code), or the
-// jsonErrors middleware rewriting a mux-default 404/405. No legacy
-// {"error":"<string>"} shape survives.
+// Pins the §1 invariant that every API error path emits ONE shape —
+// {"error":{"code","message",...}} — whether it comes from writeAPIError
+// (specific code), writeJSONError (status-derived code), or the jsonErrors
+// middleware rewriting a mux-default 404/405. No legacy {"error":"<string>"}
+// shape survives.
 func TestErrorEnvelope_Unified(t *testing.T) {
 	t.Parallel()
 	t.Run("writeAPIError carries the explicit code", func(t *testing.T) {
@@ -85,10 +83,6 @@ func TestErrorEnvelope_Unified(t *testing.T) {
 	})
 
 	t.Run("a handler-produced HTML 404 keeps its page", func(t *testing.T) {
-		// The hosted form renders a real page for a 404, because a stranger
-		// the owner sent the link to is the one reading it. The middleware
-		// used to swallow that body and answer with the JSON envelope,
-		// because its discriminator was "not application/json".
 		h := jsonErrors(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 			rw.WriteHeader(http.StatusNotFound)
@@ -108,8 +102,6 @@ func TestErrorEnvelope_Unified(t *testing.T) {
 	})
 }
 
-// TestCodeForStatus pins the status→code mapping the whole legacy-path
-// envelope relies on, so the web client's code-based branching stays stable.
 func TestCodeForStatus(t *testing.T) {
 	t.Parallel()
 	cases := map[int]string{

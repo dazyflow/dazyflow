@@ -121,9 +121,6 @@ func TestNormalizeLogo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WrapBody: %v", err)
 	}
-	// No escaped SVG markup leaks into the output, and the src is a data URL.
-	// (html/template entity-encodes '+' as &#43; in the attribute — the client
-	// decodes it back, so match on the stable "data:image/svg" prefix.)
 	if strings.Contains(out, "&lt;svg") || !strings.Contains(out, `src="data:image/svg`) {
 		t.Errorf("normalized SVG logo did not render as an image src: %q", out)
 	}

@@ -49,8 +49,6 @@ export function suggestNextDrops(
   limit = 5,
 ): Manifest[] {
   if (!srcModule) return [];
-  // Sum flows per candidate module. portMatch=true restricts to the dragged
-  // port; we try that first and only widen if it yields nothing.
   const tally = (portMatch: boolean): Map<string, number> => {
     const m = new Map<string, number>();
     for (const a of adjacency) {
@@ -67,10 +65,6 @@ export function suggestNextDrops(
   return rank(scored, allowed, byId, limit);
 }
 
-// topDropsByUsage ranks the most-wired drops overall — the fallback
-// "Suggested" group for the Cmd/Ctrl+K palette, where there's no source
-// port to key off. A module's score is the total flows of every edge it
-// participates in (either end), so frequently-used connectors float up.
 export function topDropsByUsage(
   adjacency: DropAdjacency[],
   allowed: Set<string>,

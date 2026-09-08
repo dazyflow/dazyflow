@@ -18,8 +18,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fakeSMTP is a minimal plaintext SMTP server: enough of the dialogue
-// (EHLO/AUTH/MAIL/RCPT/DATA/QUIT) to capture what the Mailer sends.
 type fakeSMTP struct {
 	addr string
 
@@ -139,11 +137,9 @@ func qpDecode(s string) string {
 
 func TestNewMailerFromURL(t *testing.T) {
 	t.Parallel()
-	// Not configured is a normal state.
 	if m, err := NewMailerFromURL("", ""); m != nil || err != nil {
 		t.Errorf("empty url = %v/%v, want nil/nil", m, err)
 	}
-	// smtp:// defaults: STARTTLS, port 587, from falls back to username.
 	m, err := NewMailerFromURL("smtp://noreply@example.com:hunter2@mail.example.com", "")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -151,27 +147,22 @@ func TestNewMailerFromURL(t *testing.T) {
 	if m.tlsMode != "starttls" || m.port != "587" || m.From != "noreply@example.com" || m.password != "hunter2" {
 		t.Errorf("parsed = %+v", m)
 	}
-	// smtps:// → implicit TLS on 465.
 	m, _ = NewMailerFromURL("smtps://u:p@mail.example.com", "sender@example.com")
 	if m.tlsMode != "implicit" || m.port != "465" || m.From != "sender@example.com" {
 		t.Errorf("smtps parsed = %+v", m)
 	}
-	// ?tls=none override and explicit port.
 	m, _ = NewMailerFromURL("smtp://relay.internal:25?tls=none", "noreply@example.com")
 	if m.tlsMode != "none" || m.port != "25" || m.username != "" {
 		t.Errorf("relay parsed = %+v", m)
 	}
-	// Display name: From: header keeps it, envelope uses the bare address.
 	m, _ = NewMailerFromURL("smtp://u:p@mail.example.com", "Dazyflow <hi@dazyflow.app>")
 	if m.From != "\"Dazyflow\" <hi@dazyflow.app>" || m.addr != "hi@dazyflow.app" {
 		t.Errorf("display-name parsed = From %q addr %q", m.From, m.addr)
 	}
-	// Bare address: no display name, no angle brackets added; addr matches.
 	m, _ = NewMailerFromURL("smtp://u:p@mail.example.com", "hi@dazyflow.app")
 	if m.From != "hi@dazyflow.app" || m.addr != "hi@dazyflow.app" {
 		t.Errorf("bare parsed = From %q addr %q", m.From, m.addr)
 	}
-	// Errors: bad scheme, missing from, bad tls value.
 	if _, err := NewMailerFromURL("http://x", "f@x"); err == nil {
 		t.Error("http scheme accepted")
 	}
@@ -203,14 +194,12 @@ func TestMailer_Send(t *testing.T) {
 	if len(to) != 1 || !strings.Contains(to[0], "you@example.com") {
 		t.Errorf("RCPT TO = %v", to)
 	}
-	// Non-ASCII subject rides as an encoded-word, body intact.
 	if !strings.Contains(data, "Subject: =?utf-8?q?") {
 		t.Errorf("subject not MIME-encoded:\n%s", data)
 	}
 	if !strings.Contains(data, "line one") || !strings.Contains(data, "line two") {
 		t.Errorf("body lost:\n%s", data)
 	}
-	// Header injection via the recipient can't smuggle a header line.
 	if err := m.Send(context.Background(), "evil@example.com", "s", "b"); err != nil {
 		t.Fatalf("second send: %v", err)
 	}
@@ -251,8 +240,6 @@ func TestFireFailureEmail(t *testing.T) {
 	}
 }
 
-// Creating an invitation emails the accept link when the mailer is
-// configured and the URL is absolute; the response says so.
 func TestCreateInvitation_SendsEmail(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -281,8 +268,6 @@ func TestCreateInvitation_SendsEmail(t *testing.T) {
 		t.Errorf("email missing the accept link:\n%s", data)
 	}
 
-	// Without a public base URL the link is path-only — no email goes
-	// out, and the response says so honestly.
 	h.svc.PublicBaseURL = ""
 	rw = h.adminDo(t, "POST", "/api/v1/admin/invitations", map[string]any{"email": "second@example.com"})
 	if !strings.Contains(rw.Body.String(), `"email_sent":false`) {
@@ -298,8 +283,6 @@ func TestNewMailerFromURL_PasswordWithoutUsername(t *testing.T) {
 	if _, err := NewMailerFromURL("smtp://:pw@relay.x.test:587", "hi@x.test"); err == nil {
 		t.Fatal("NewMailerFromURL accepted a password with no username")
 	}
-	// The reverse stays legal: the username doubles as the sender for an
-	// unauthenticated relay.
 	m, err := NewMailerFromURL("smtp://hi@x.test@relay.x.test:25", "")
 	if err != nil {
 		t.Fatalf("username-only URL: %v", err)

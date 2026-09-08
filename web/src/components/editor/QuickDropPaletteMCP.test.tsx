@@ -13,9 +13,6 @@ vi.mock("react-i18next", () => {
 
 import { QuickDropPalette } from "./QuickDropPalette";
 
-// The badge on a palette row is the drop's integration, and its fallback is
-// "Built-in". An MCP tool showing that fallback is what this guards against:
-// the step comes from a server the org added, not from our standard library.
 const mcpTool = {
   id: "mcp:vendor-tools:create_issue",
   label: "Vendor Tools — Create an issue",

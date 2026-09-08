@@ -10,10 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// The reminder rule, table-driven, because every one of these cases is a real
-// support thread and getting any of them wrong is either silence when someone
-// is waiting or mail nobody asked for.
-
 var nudgeNow = time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
 
 const nudgeAfter = 24 * time.Hour
@@ -49,22 +45,16 @@ func TestTicketNudge(t *testing.T) {
 		msgs: []core.TicketMessage{fromUser(50), fromSupport(30)},
 		want: []NudgeSide{NudgeUser},
 	}, {
-		// The case that broke the first version of this rule: support HAS
-		// answered, so they are not waiting on the older question, even though
-		// it is unread by the letter of a read receipt.
 		name: "answering counts as reading — support is not reminded of a question it replied to",
 		tk:   core.Ticket{Status: core.TicketAwaitingUser, UserReadAt: at(29)},
 		msgs: []core.TicketMessage{fromUser(50), fromSupport(30)},
 		want: nil,
 	}, {
-		// The reason read receipts alone are not the rule: opening the ticket
-		// BEFORE the message arrived is not having read the message.
 		name: "opened the ticket, but before the message arrived",
 		tk:   core.Ticket{Status: core.TicketAwaitingSupport, SupportReadAt: at(40)},
 		msgs: []core.TicketMessage{fromUser(30)},
 		want: []NudgeSide{NudgeSupport},
 	}, {
-		// And the reason age alone is not the rule either.
 		name: "read it and has not answered — that is not a notification problem",
 		tk:   core.Ticket{Status: core.TicketAwaitingSupport, SupportReadAt: at(20)},
 		msgs: []core.TicketMessage{fromUser(30)},
@@ -80,14 +70,11 @@ func TestTicketNudge(t *testing.T) {
 		msgs: []core.TicketMessage{fromUser(30)},
 		want: nil,
 	}, {
-		// The reminder is per waiting period. A newer message starts a new one.
 		name: "reminded before, but the other side has since written again",
 		tk:   core.Ticket{Status: core.TicketAwaitingSupport, SupportNudgedAt: at(40)},
 		msgs: []core.TicketMessage{fromUser(50), fromUser(30)},
 		want: []NudgeSide{NudgeSupport},
 	}, {
-		// Looks like it needs its own rule and does not: the customer answered
-		// at 29h, which is proof they read the 30h reply. Only support waits.
 		name: "replies crossed in flight",
 		tk:   open,
 		msgs: []core.TicketMessage{fromSupport(30), fromUser(29)},
@@ -103,8 +90,6 @@ func TestTicketNudge(t *testing.T) {
 		msgs: []core.TicketMessage{fromUser(30)},
 		want: nil,
 	}, {
-		// Narration is not a question. "Ticket marked resolved" already has its
-		// own mail, and reminding someone about a status change is noise.
 		name: "system notes never trigger a reminder",
 		tk:   open,
 		msgs: []core.TicketMessage{fromSystem(30)},

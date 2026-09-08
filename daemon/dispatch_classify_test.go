@@ -13,8 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/jobstore"
 )
 
-// succeededWith builds a succeeded predecessor record whose Result exposes the
-// given output ports.
 func succeededWith(ports ...string) core.JobRecord {
 	out := map[string]core.Ref{}
 	for _, p := range ports {
@@ -23,8 +21,6 @@ func succeededWith(ports ...string) core.JobRecord {
 	return core.JobRecord{Status: core.JobStatusSucceeded, Result: &core.Result{Output: out}}
 }
 
-// outcomeNames makes a failure say which outcome came back rather than an
-// opaque ordinal — the four are easy to transpose by eye.
 var outcomeNames = map[edgeOutcome]string{
 	edgeActive:    "active",
 	edgeDormant:   "dormant",
@@ -32,10 +28,6 @@ var outcomeNames = map[edgeOutcome]string{
 	edgeBlocking:  "blocking",
 }
 
-// TestClassifyEdge exhaustively covers the pure edge-outcome decision that
-// drives skip/wait/enqueue: (predecessor status, edge OnError, FromPort,
-// whether the FromPort produced output) → active / dormant / not-routed /
-// blocking.
 func TestClassifyEdge(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -44,13 +36,8 @@ func TestClassifyEdge(t *testing.T) {
 		edge core.Edge
 		want edgeOutcome
 	}{
-		// --- predecessor SUCCEEDED ---
 		{"succeeded, output present → active",
 			succeededWith("out"), core.Edge{FromPort: "out"}, edgeActive},
-		// The router case: `if` emits only `then`, so the `else` edge is a
-		// path the predecessor DECLINED. Not-routed rather than dormant, so
-		// it skips the else-side step even when another wire into it is live
-		// — see analyzeDependent's "not routed beats an active sibling".
 		{"succeeded, FromPort had no output → not routed",
 			succeededWith("other"), core.Edge{FromPort: "out"}, edgeNotRouted},
 		{"succeeded, nil result → not routed",
@@ -60,7 +47,6 @@ func TestClassifyEdge(t *testing.T) {
 		{"succeeded, pass control pin → active even with no data",
 			core.JobRecord{Status: core.JobStatusSucceeded}, core.Edge{FromPort: core.PassPort}, edgeActive},
 
-		// --- predecessor FAILED ---
 		{"failed, skip edge → active",
 			core.JobRecord{Status: core.JobStatusFailed}, core.Edge{FromPort: "out", OnError: core.OnErrorSkip}, edgeActive},
 		{"failed, fallback edge → active",
@@ -70,7 +56,6 @@ func TestClassifyEdge(t *testing.T) {
 		{"failed, retry → blocking",
 			core.JobRecord{Status: core.JobStatusFailed}, core.Edge{FromPort: "out", OnError: core.OnErrorRetry}, edgeBlocking},
 
-		// --- predecessor SKIPPED ---
 		{"skipped, skip edge → active (skip cascades)",
 			core.JobRecord{Status: core.JobStatusSkipped}, core.Edge{FromPort: "out", OnError: core.OnErrorSkip}, edgeActive},
 		{"skipped, fallback edge → dormant",
@@ -78,7 +63,6 @@ func TestClassifyEdge(t *testing.T) {
 		{"skipped, abort → blocking",
 			core.JobRecord{Status: core.JobStatusSkipped}, core.Edge{FromPort: "out", OnError: core.OnErrorAbort}, edgeBlocking},
 
-		// --- other statuses ---
 		{"cancelled → blocking",
 			core.JobRecord{Status: core.JobStatusCancelled}, core.Edge{FromPort: "out", OnError: core.OnErrorSkip}, edgeBlocking},
 	}
@@ -91,25 +75,18 @@ func TestClassifyEdge(t *testing.T) {
 	}
 }
 
-// decisionNames keeps aggregation failures readable, as outcomeNames does for
-// classifyEdge.
 var decisionNames = map[dependentDecision]string{
 	depWaiting: "waiting",
 	depEnqueue: "enqueue",
 	depSkipped: "skipped",
 }
 
-// TestAnalyzeDependent covers how analyzeDependent aggregates a dependent's
-// incoming edges into the waiting / skipped / enqueue decision, including the
-// "predecessor not recorded" and "predecessor still running" waiting paths.
 func TestAnalyzeDependent(t *testing.T) {
 	t.Parallel()
 	const runID = "run1"
-	// Build a graph: preds A, B feed dependent D over the given edges.
 	mkGraph := func(edges ...core.Edge) core.Graph {
 		return core.Graph{ID: "g", Nodes: []core.Node{{ID: "A"}, {ID: "B"}, {ID: "D"}}, Edges: edges}
 	}
-	// seed writes a terminal/own-status predecessor record into the store.
 	seed := func(store core.JobStore, nodeID string, status core.JobStatus, ports ...string) {
 		out := map[string]core.Ref{}
 		for _, p := range ports {
@@ -223,10 +200,6 @@ func TestAnalyzeDependent(t *testing.T) {
 	}
 }
 
-// A run with several independent notifications hanging off one source is the
-// "announce it everywhere" shape: Discord being down is no reason for the
-// Slack post and the email not to count. The on_error policies live on edges,
-// so a terminal step has nowhere to hang one — hence the per-node flag.
 func TestFailurePropagates_ContinueOnError(t *testing.T) {
 	t.Parallel()
 	d := &Dispatcher{}
@@ -251,8 +224,6 @@ func TestFailurePropagates_ContinueOnError(t *testing.T) {
 	if d.failurePropagates(graph, "discord") {
 		t.Error("a terminal step marked non-critical must not fail the run")
 	}
-	// The flag also wins over an ordinary (non-tolerant) outgoing edge: the
-	// author has said this step is allowed to fail.
 	if d.failurePropagates(graph, "middle") {
 		t.Error("a non-critical step with dependents must not fail the run either")
 	}
@@ -262,10 +233,6 @@ func TestFailurePropagates_ContinueOnError(t *testing.T) {
 	}
 }
 
-// A step that parks has published what it could — an approval link — and that
-// link is only any use while the run is still waiting. So its emitted ports go
-// live at once, while the ports that only arrive with the decision keep the
-// branch waiting rather than skipping it.
 func TestClassifyEdge_AwaitingPublishesWhatItHas(t *testing.T) {
 	t.Parallel()
 	parked := core.JobRecord{
@@ -282,7 +249,6 @@ func TestClassifyEdge_AwaitingPublishesWhatItHas(t *testing.T) {
 			t.Errorf("%q must not fire before the decision, got %v", port, got)
 		}
 	}
-	// "run after this step" means after it finishes, which it hasn't.
 	if got := classifyEdge(parked, core.Edge{FromPort: core.PassPort}); got != edgeBlocking {
 		t.Errorf("the pass pin should wait for the step to finish, got %v", got)
 	}

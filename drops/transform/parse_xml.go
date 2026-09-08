@@ -67,10 +67,6 @@ func init() {
 	})
 }
 
-// executeParseXML parses the 'in' text as XML into a generic value, optionally
-// descends a dot-path, and emits both a `value` (the parsed subtree) and
-// `rows` (when that subtree is an object or an array of objects). Mirrors
-// parse_json's outputs and reuses its digPath / rowsFromValue helpers.
 func executeParseXML(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	ref, ok := job.Input["in"]
 	if !ok {
@@ -96,9 +92,6 @@ func executeParseXML(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		}
 	}
 
-	// Rows are best-effort: an object or array-of-objects becomes rows; a
-	// scalar/array-of-scalars subtree has no row shape and yields no rows
-	// (the caller reads 'value' instead), rather than failing the whole job.
 	var rowsOut []map[string]any
 	if r, err := rowsFromValue(value); err == nil {
 		rowsOut = r
@@ -119,9 +112,6 @@ func executeParseXML(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	}, nil
 }
 
-// xmlToValue parses an XML document into a generic Go value by converting its
-// root element and unwrapping the root name (so the result is the root's
-// content). See the manifest for the attribute/child/text convention.
 func xmlToValue(s string) (any, error) {
 	dec := xml.NewDecoder(strings.NewReader(s))
 	for {
@@ -135,7 +125,6 @@ func xmlToValue(s string) (any, error) {
 		if start, ok := tok.(xml.StartElement); ok {
 			return decodeElement(dec, start, 0)
 		}
-		// Skip the XML declaration, comments, DOCTYPE, leading whitespace.
 	}
 }
 
@@ -184,8 +173,6 @@ func decodeElement(dec *xml.Decoder, start xml.StartElement, depth int) (any, er
 	}
 }
 
-// addChild sets key=val, folding a repeated element name into a growing list
-// so <item/><item/> becomes a two-element array under "item".
 func addChild(node map[string]any, key string, val any) {
 	existing, ok := node[key]
 	if !ok {

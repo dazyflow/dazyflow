@@ -32,8 +32,6 @@ func secretDo(t *testing.T, h *gatewayHarness, method, path string, body any) *h
 	role := core.Role{Name: "secrets", Permissions: []core.Permission{
 		core.PermSecretRead, core.PermSecretWrite,
 	}}
-	// The key id has a charset the store enforces, so derive it from the
-	// counter rather than the path (which carries "/" and "?").
 	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(),
 		fmt.Sprintf("k-secrets-%d", secretKeySeq.Add(1)), "t", "ws", "sam", []core.Role{role}, nil)
 	if err != nil {
@@ -54,9 +52,6 @@ func secretDo(t *testing.T, h *gatewayHarness, method, path string, body any) *h
 	return rw
 }
 
-// mirrorHarness wires the /git/mirror endpoints onto the shared gateway
-// harness: an in-memory mirror store, the encrypted secret store, and one
-// git credential holding a real (generated) SSH key.
 func mirrorHarness(t *testing.T) (*gatewayHarness, *memGitMirrorStore) {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -70,7 +65,6 @@ func mirrorHarness(t *testing.T) (*gatewayHarness, *memGitMirrorStore) {
 	if err := putGitCredential(ctx, es, "t", "deploy", gitCredInput{PrivateKey: testSSHKeyPEM(t)}); err != nil {
 		t.Fatalf("seed ssh credential: %v", err)
 	}
-	// A PAT-only credential, to prove the mirror refuses it.
 	if err := putGitCredential(ctx, es, "t", "patonly", gitCredInput{Token: "ghp_xxx"}); err != nil {
 		t.Fatalf("seed pat credential: %v", err)
 	}
@@ -86,9 +80,6 @@ func mirrorBody(url, account string, enabled bool, pushOn string) map[string]any
 	}
 }
 
-// TestGitMirror_Unconfigured is the shape the UI depends on: no mirror is a
-// 200 with configured=false, not a 404, so the panel renders the same either
-// way instead of treating "nothing set up yet" as an error.
 func TestGitMirror_Unconfigured(t *testing.T) {
 	t.Parallel()
 	h, _ := mirrorHarness(t)
@@ -119,7 +110,6 @@ func TestGitMirror_PutAndGet(t *testing.T) {
 		got.Account != "deploy" || !got.Enabled || got.PushOn != PushOnSave {
 		t.Fatalf("PUT response = %+v", got)
 	}
-	// Stored against the request's workspace, not the principal's default.
 	if _, err := store.Get(t.Context(), "t", "ws"); err != nil {
 		t.Fatalf("mirror not stored for t/ws: %v", err)
 	}
@@ -132,7 +122,7 @@ func TestGitMirror_PutAndGet(t *testing.T) {
 	}
 }
 
-// TestGitMirror_RejectsHTTPSRemote is the SSH-only rule at the wire. The
+// The SSH-only rule at the wire. The
 // credential store holds PATs, so without this the UI would accept an https
 // remote that the push path can't use — and the user would find out from a
 // failed push instead of the form.
@@ -149,8 +139,6 @@ func TestGitMirror_RejectsHTTPSRemote(t *testing.T) {
 	}
 }
 
-// TestGitMirror_RejectsCredentialWithoutKey — picking a token-only credential
-// is the other half of the same mistake, and is caught at save time.
 func TestGitMirror_RejectsCredentialWithoutKey(t *testing.T) {
 	t.Parallel()
 	h, _ := mirrorHarness(t)
@@ -198,14 +186,11 @@ func TestGitMirror_Delete(t *testing.T) {
 	if _, err := store.Get(t.Context(), "t", "ws"); err == nil {
 		t.Error("mirror still stored after DELETE")
 	}
-	// Idempotent.
 	if rw := secretDo(t, h, "DELETE", "/api/v1/git/mirror?tenant=t&workspace=ws", nil); rw.Code != http.StatusOK {
 		t.Errorf("second DELETE: code=%d, want 200", rw.Code)
 	}
 }
 
-// TestGitMirror_PushUnconfigured — the test button on a workspace with no
-// mirror is a 404 naming the situation, not a 500.
 func TestGitMirror_PushUnconfigured(t *testing.T) {
 	t.Parallel()
 	h, _ := mirrorHarness(t)
@@ -218,10 +203,6 @@ func TestGitMirror_PushUnconfigured(t *testing.T) {
 	}
 }
 
-// TestGitMirror_PushReportsTransportFailure — the remote here doesn't exist,
-// so this exercises the real path (credential lookup → SSH auth → push) up to
-// the transport and proves the failure comes back as a 502 with a reason
-// rather than a 500 or a hang.
 func TestGitMirror_PushReportsTransportFailure(t *testing.T) {
 	t.Parallel()
 	h, store := mirrorHarness(t)
@@ -244,11 +225,10 @@ func TestGitMirror_PushReportsTransportFailure(t *testing.T) {
 	}
 }
 
-// TestGitMirror_UnrelatedRemoteIs409 — the shared-history refusal has to
-// reach the UI as its own status and code, because it is the one mirror
-// failure with a safe answer to offer ("overwrite it") rather than a fault to
-// report. A 500 or a generic 502 here would leave the user with no route
-// forward except editing the config blind.
+// The shared-history refusal has to reach the UI as its own status and code,
+// because it is the one mirror failure with a safe answer to offer ("overwrite
+// it") rather than a fault to report. A 500 or a generic 502 here would leave
+// the user with no route forward except editing the config blind.
 func TestGitMirror_UnrelatedRemoteIs409(t *testing.T) {
 	t.Parallel()
 	h, store := mirrorHarness(t)
@@ -264,7 +244,6 @@ func TestGitMirror_UnrelatedRemoteIs409(t *testing.T) {
 		t.Fatalf("PUT mirror: %s", rw.Body.String())
 	}
 
-	// A plain push refuses.
 	rw := secretDo(t, h, "POST", "/api/v1/git/mirror/push?tenant=t&workspace=ws", nil)
 	if rw.Code != http.StatusConflict {
 		t.Fatalf("unrelated remote: code=%d body=%s, want 409", rw.Code, rw.Body.String())
@@ -278,7 +257,6 @@ func TestGitMirror_UnrelatedRemoteIs409(t *testing.T) {
 		t.Errorf("expected the refusal to be recorded, got %+v", got)
 	}
 
-	// The confirmed retry goes through.
 	rw = secretDo(t, h, "POST", "/api/v1/git/mirror/push?tenant=t&workspace=ws",
 		map[string]any{"overwrite_unrelated": true})
 	if rw.Code != http.StatusOK {
@@ -286,9 +264,8 @@ func TestGitMirror_UnrelatedRemoteIs409(t *testing.T) {
 	}
 }
 
-// TestGitMirror_PushBodyIsOptional — the UI posts a body, but the endpoint is
-// also the obvious thing to curl. An empty POST must mean "don't overwrite",
-// never "overwrite".
+// The UI posts a body, but the endpoint is also the obvious thing to curl. An
+// empty POST must mean "don't overwrite", never "overwrite".
 func TestGitMirror_PushBodyIsOptional(t *testing.T) {
 	t.Parallel()
 	h, _ := mirrorHarness(t)
@@ -310,8 +287,6 @@ func TestGitMirror_PushBodyIsOptional(t *testing.T) {
 	}
 }
 
-// TestGitMirror_NotConfiguredWithoutStores — a deployment with the feature
-// unwired reports 501 rather than pretending to accept settings.
 func TestGitMirror_NotConfiguredWithoutStores(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -328,10 +303,6 @@ func TestGitMirror_NotConfiguredWithoutStores(t *testing.T) {
 	}
 }
 
-// TestGitMirror_RequiresSecretPermission — the mirror is configured with a
-// credential and controls where every flow is copied, so it sits behind the
-// same permission as the credentials themselves. The harness's default token
-// is graph-scoped (run/edit/admin) with no secret perms.
 func TestGitMirror_RequiresSecretPermission(t *testing.T) {
 	t.Parallel()
 	h, _ := mirrorHarness(t)

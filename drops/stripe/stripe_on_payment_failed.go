@@ -39,8 +39,6 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
-			// Same payment-event outputs as stripe_on_payment, with a
-			// 'Failure reason' pin prepended (Stripe's decline message).
 			Outputs: append([]core.Port{
 				{Port: "failure_message", Label: "Failure reason", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Your card was declined."`)},
 			}, paymentTriggerOutputs()...),
@@ -51,8 +49,6 @@ func init() {
 	})
 }
 
-// executeStripeOnPaymentFailed is the standalone-execution path — only
-// called when a graph is run manually. Mirrors stripe_on_payment.
 func executeStripeOnPaymentFailed(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	return noPaymentTriggerData(job,
 		"This trigger only fires when a real payment_intent.payment_failed webhook arrives. To test it, use a Stripe test card that declines (e.g. 4000 0000 0000 0002); running the flow manually leaves the trigger with no event to feed the steps after it.",

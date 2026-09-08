@@ -41,14 +41,10 @@ func init() {
 					Notes:  "When Place is set (typed here or connected into the Place input) it's geocoded and overrides the map pin.",
 				},
 			},
-			// Optional per-tenant geocoding backend. All fields optional —
-			// unset means the keyless OpenStreetMap default, so the drop works
-			// out of the box; configure to self-host or use LocationIQ.
 			ConnectionFields: geoConnectionFields,
 			ExecutionModel:   core.ExecutionBatch,
 			ProcessModel:     core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Place (a city or address) overrides the map pin when set.
 				{Port: "place", Label: "Place", MIME: []string{"text/plain"}},
 			},
 			Outputs: []core.Port{
@@ -76,10 +72,6 @@ func init() {
 	})
 }
 
-// executeLocation emits a coordinate from either a Place (a city/address that
-// gets geocoded) or the map pin. Precedence: the Place input wins, then the
-// typed Place param, then the map pin. A Place, when present, always overrides
-// the pin.
 func executeLocation(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	place, ok := params.TextInputOr(job, "place", params.StringDefault(job.Params, "place", ""))
 	if !ok {
@@ -89,15 +81,12 @@ func executeLocation(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 
 	var coord, placeName string
 	if place != "" {
-		// A Place is set → geocode it through the active backend; it
-		// overrides the map pin.
 		hit, errRes := geocoderFor(job).forward(ctx, job, place)
 		if errRes != nil {
 			return *errRes, nil
 		}
 		coord, placeName = hit.Coord, hit.DisplayName
 	} else {
-		// No Place → fall back to the map pin.
 		point := strings.TrimSpace(params.StringDefault(job.Params, "point", ""))
 		if point == "" {
 			return params.Err(job, "bad_param", "set a Place (a city or address) or pick a point on the map"), nil

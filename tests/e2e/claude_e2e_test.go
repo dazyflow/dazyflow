@@ -20,22 +20,11 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// TestClaude_E2E_ClassifyAndRoute composes the LLM module with branch:
-// the graph asks the model to classify an invoice, then routes on the
-// model's verdict. Same agent-shape idea from the design call — the
-// graph IS the agent, claude is just a node.
-//
-// The "Anthropic API" is mocked with httptest so the test runs without
-// network access. Secret injection ensures the api_key parameter is a
-// reference (builtin://) in the saved graph, not the cleartext.
 func TestClaude_E2E_ClassifyAndRoute(t *testing.T) {
 	apiKeys := daemon.NewBuiltinProvider()
 	apiKeys.Set("ANTHROPIC_API_KEY", "sk-test-XYZ")
 
-	// Mock backend that returns a controlled "classification".
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Echo a deterministic classification so the branch downstream
-		// can route on it.
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -55,7 +44,6 @@ func TestClaude_E2E_ClassifyAndRoute(t *testing.T) {
 	}))
 	defer mock.Close()
 
-	// Stack with secret injection enabled.
 	ks := auth.NewMemKeyStore()
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
@@ -66,8 +54,6 @@ func TestClaude_E2E_ClassifyAndRoute(t *testing.T) {
 	wsStore, _ := workspace.OpenFS("")
 	jobs := jobstore.NewMemory()
 	bus := daemon.NewMemoryBus()
-	// claude is a native Go drop; it reaches the loopback mock via its base_url
-	// param (a fixed-vendor connector, so no SSRF guard).
 	eng := &engine.Engine{
 		Resolver: &engine.NodeResolver{Native: engine.Default},
 		Secrets: map[string]core.SecretProvider{
@@ -112,8 +98,6 @@ func TestClaude_E2E_ClassifyAndRoute(t *testing.T) {
 			{ID: "queue_review", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
-			// Compare tests the classification (A) against "urgent" (B) and
-			// emits 1/0; Branch routes the text down then/else based on it.
 			{From: "classify", FromPort: "text", To: "is_urgent", ToPort: "A"},
 			{From: "is_urgent", FromPort: "result", To: "route", ToPort: "condition"},
 			{From: "classify", FromPort: "text", To: "route", ToPort: "in"},
@@ -141,7 +125,6 @@ func TestClaude_E2E_ClassifyAndRoute(t *testing.T) {
 		t.Errorf("queue_review.Status = %q, want skipped (else branch dormant)", queueRec.Status)
 	}
 
-	// Audit: graph JSON in the store retains the secret reference.
 	graphRec, _ := jobs.Get(t.Context(), runID)
 	if !contains(graphRec.GraphPayload, "builtin://ANTHROPIC_API_KEY") {
 		t.Error("graph payload should contain builtin:// reference, not cleartext API key")

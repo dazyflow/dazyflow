@@ -159,9 +159,6 @@ function RunnerReregister({
   );
 }
 
-// RunnerStatus reuses the run-status vocabulary, so "online" reads the way
-// "succeeded" does elsewhere. An offline machine says since when, because
-// "offline since Tuesday" is the whole story of what went wrong.
 function RunnerStatus({ runner }: { runner: Runner }) {
   const { t } = useTranslation();
   const tone = runner.online ? "succeeded" : "failed";
@@ -232,9 +229,6 @@ function RunnerTags({
 
   const add = () => {
     const value = draft.trim();
-    // Nothing to do for an empty box, a tag already carried, or the machine's
-    // own name — which it carries by definition. Checked here so the common
-    // slip is a no-op rather than a round trip and a red banner.
     const already = [...labels, runner.name].some((l) => l === value.toLowerCase());
     if (!value || already) {
       setDraft("");
@@ -277,7 +271,6 @@ function RunnerTags({
           aria-label={t("runners.tagPlaceholder")}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            // Enter adds, because that is what typing a tag into a box means.
             if (e.key !== "Enter") return;
             e.preventDefault();
             add();

@@ -39,13 +39,6 @@ func (s *Service) reprojectSchedule(ctx context.Context, tenant, ws, graphID str
 	}
 }
 
-// deriveFlowSchedules returns the enrollments a flow currently asks for. A
-// flow that is unpublished, disabled, or gone yields none, which is how each
-// of those takes a schedule offline.
-//
-// The cadence is read from the DRAFT while enrollment gates on the published
-// tag, matching what fireGraph does: a timing or pause edit takes effect on
-// save, but the revision that runs is the published one.
 func (s *Service) deriveFlowSchedules(tenant, ws, graphID string) ([]ScheduleSpec, error) {
 	store, err := s.Workspaces.Open(tenant, ws)
 	if err != nil {
@@ -82,9 +75,6 @@ func (s *Service) ReconcileSchedules(ctx context.Context) (int, error) {
 	if !ok {
 		return 0, errors.New("workspace lookup does not support enumeration")
 	}
-	// Read the projection once so an unchanged flow costs no write. In steady
-	// state every flow is unchanged, which is what keeps an hourly pass over a
-	// large install from being thousands of pointless transactions.
 	stored := make(map[string][]ScheduleSpec)
 	if existing, err := s.Schedules.ListSchedules(ctx); err != nil {
 		s.logf("schedule reconcile: read projection: %v", err)
@@ -132,8 +122,6 @@ func (s *Service) ReconcileSchedules(ctx context.Context) (int, error) {
 			}
 		}
 	}
-	// Rows whose flow no longer exists: a delete that landed while this dzd
-	// was down leaves nothing else to clear them.
 	if n, err := s.Schedules.PruneMissingFlows(ctx, live, scope); err != nil {
 		s.logf("schedule reconcile: prune: %v", err)
 	} else if n > 0 {

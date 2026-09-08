@@ -96,9 +96,6 @@ describe("try-it-now template — zero-setup trial path", () => {
   });
 
   it("references no OAuth provider in any node param", () => {
-    // The two drops try-it-now uses are the json source + render_text —
-    // neither is OAuth-backed. We hand-build their (minimal) manifests
-    // with no `account` param.
     const manifestByID = new Map<string, Manifest>([
       ["json", manifest("json", undefined, false)],
       ["render_text", manifest("render_text", undefined, false)],
@@ -116,8 +113,6 @@ describe("try-it-now template — zero-setup trial path", () => {
     expect(
       unavailableProviders(nodes, manifestByID, paramsByID, null),
     ).toEqual([]);
-    // And with OAuth ON but no accounts connected, still nothing
-    // missing — the template runs against the empty provider set.
     expect(
       requiredConnections(nodes, manifestByID, paramsByID, []),
     ).toEqual([]);
@@ -150,10 +145,6 @@ describe("try-it-now template — zero-setup trial path", () => {
 describe("email-to-slack template — admin-blocked path", () => {
   const tpl = loadGraph("email-to-slack.json");
 
-  // The graph uses poll_trigger, gmail_search_messages, for_each,
-  // gmail_get_message, unwrap_results, render_text, slack_send_message.
-  // Only the gmail + slack drops are OAuth-backed (and both take an
-  // `account` param). The rest are pure transforms / triggers.
   const manifestByID = new Map<string, Manifest>([
     ["poll_trigger", manifest("poll_trigger", undefined, false)],
     ["gmail_search_messages", manifest("gmail_search_messages", "Gmail", true)],
@@ -203,7 +194,6 @@ describe("email-to-slack template — admin-blocked path", () => {
       paramsByID,
       providers,
     );
-    // Both drops use account="default" — the gate names each.
     expect(missing.map((m) => m.provider).sort()).toEqual(["google", "slack"]);
   });
 });

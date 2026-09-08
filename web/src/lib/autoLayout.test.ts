@@ -13,8 +13,6 @@ import { layerNodes } from "./autoLayout";
 
 const e = (source: string, target: string) => ({ source, target });
 
-// A five-step chain with one loose card feeding only the last step: the
-// reported shape.
 const chain = ["a", "b", "c", "d", "eStep"];
 const chainEdges = [e("a", "b"), e("b", "c"), e("c", "d"), e("d", "eStep")];
 
@@ -25,7 +23,6 @@ describe("layerNodes", () => {
       [...chainEdges, e("text", "eStep")],
     );
     expect(layer.get("eStep")).toBe(4);
-    // The bug: this was 0. One column left of its only consumer is the answer.
     expect(layer.get("text")).toBe(3);
   });
 
@@ -93,7 +90,6 @@ describe("layerNodes", () => {
   });
 
   it("leaves a disconnected node at the left rather than inventing a column", () => {
-    // Nothing consumes it, so there is nothing to hug — column 0 is honest.
     const layer = layerNodes([...chain, "loose"], chainEdges);
     expect(layer.get("loose")).toBe(0);
   });

@@ -3,14 +3,6 @@
 
 import type { ReactNode } from "react";
 
-// Switch is the app's on/off toggle. A real <input type="checkbox"
-// role="switch"> stays in the tree — keyboard, forms and screen
-// readers behave exactly like the native control — while the visible
-// UI is the track + thumb. Use it instead of a bare checkbox wherever
-// the value is a setting being turned on or off (a checkbox reads as
-// "select this item"; a switch reads as "turn this on"). The optional
-// description renders as a muted line under the label, so callers
-// don't need a separate .desc block.
 export function Switch({
   checked,
   onChange,
@@ -22,14 +14,9 @@ export function Switch({
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
-  // label is optional for slots where the name is rendered elsewhere
-  // (an inline pin row, a grid cell) — pass ariaLabel then so the
-  // control still announces itself.
   label?: ReactNode;
   description?: ReactNode;
   disabled?: boolean;
-  // compact shrinks the track for dense surfaces (node pin rows,
-  // permission grids).
   compact?: boolean;
   ariaLabel?: string;
 }) {

@@ -42,7 +42,6 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
-			// No inputs — the inbound request is the data source.
 			Outputs: []core.Port{
 				{Port: "body", Label: "Body"},
 				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},

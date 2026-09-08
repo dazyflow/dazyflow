@@ -20,9 +20,6 @@ import (
 	"sync"
 )
 
-// DefaultMaxRows is the row/item ceiling when DAZYFLOW_MAX_ROWS is unset. It's
-// generous for genuine batch work (a million rows) while still bounding memory
-// to something a daemon can hold.
 const DefaultMaxRows = 1_000_000
 
 var (
@@ -30,10 +27,6 @@ var (
 	maxRows = envInt("DAZYFLOW_MAX_ROWS", DefaultMaxRows)
 )
 
-// MaxRows is the most rows (or list items, or joined output rows) a single
-// drop will accept before failing fast. Operators with genuinely larger
-// batches raise it via the DAZYFLOW_MAX_ROWS environment variable; a value
-// that isn't a positive integer is ignored.
 func MaxRows() int {
 	mu.RLock()
 	defer mu.RUnlock()

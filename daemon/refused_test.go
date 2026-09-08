@@ -13,14 +13,9 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// refusedHarness is a Service with just a job store — enough to record a
-// refusal and read it back. Notification is off (no mailer, no webhook on the
-// graph), so nothing is dispatched.
 func refusedHarness(t *testing.T) *Service {
 	t.Helper()
 	h := newGatewayHarness(t)
-	// Each test gets its own counter, so the per-flow bound is not shared
-	// across tests (the production one is a package var by design).
 	refusals = &refusalCounter{clock: time.Now}
 	t.Cleanup(func() { refusals = &refusalCounter{clock: time.Now} })
 	return h.svc
@@ -76,7 +71,6 @@ func TestRecordRefusedDelivery_KeepsTheSubmission(t *testing.T) {
 		t.Error("no graph payload: the run-detail view has nothing to render")
 	}
 
-	// The submission itself: a succeeded seed record with the values inline.
 	seedRec, err := svc.Jobs.Get(t.Context(), NodeJobID(runID, "in"))
 	if err != nil {
 		t.Fatalf("get seed record: %v", err)
@@ -182,19 +176,16 @@ func TestRefusalCounter_WindowTurnover(t *testing.T) {
 			t.Fatalf("refusal %d should have been captured", i)
 		}
 	}
-	// First over the bound: dropped, and it is the one that writes the marker.
 	capture, marker, dropped := c.admit("f")
 	if capture || !marker || dropped != 1 {
 		t.Fatalf("first overflow = capture %v, marker %v, dropped %d; want false, true, 1",
 			capture, marker, dropped)
 	}
-	// Further overflows inside the window are silent but counted.
 	for i := 0; i < 4; i++ {
 		if capture, marker, _ := c.admit("f"); capture || marker {
 			t.Fatalf("overflow %d should be silent: capture %v, marker %v", i, capture, marker)
 		}
 	}
-	// Next window: capturing resumes, and the 4 dropped are carried forward.
 	now = now.Add(refusalWindow + time.Second)
 	for i := 0; i < maxCapturedRefusalsPerWindow; i++ {
 		if capture, _, _ := c.admit("f"); !capture {
@@ -271,19 +262,12 @@ func TestRefusalCode_And_Message(t *testing.T) {
 		if got := refusalCode(tc.err); got != tc.code {
 			t.Errorf("refusalCode(%v) = %q, want %q", tc.err, got, tc.code)
 		}
-		// Every message has to tell the owner the delivery is recoverable —
-		// that is the only thing that makes the record worth reading.
 		if msg := refusalMessage(tc.err); msg == "" || !strings.Contains(msg, "Retry") {
 			t.Errorf("refusalMessage(%v) = %q; want it to name the way out", tc.err, msg)
 		}
 	}
 }
 
-// #11: hitting the monthly run cap told nobody. The signals were an in-app
-// Usage banner and a coalesced marker in the Runs list, both of which need
-// somebody to be looking at the app — which is what the users of an
-// automation product are precisely not doing. Their flows stop, everything
-// looks calm, and they hear about it from a customer.
 func TestNotifyRunCapReached_MailsTheOwnerOncePerOrg(t *testing.T) {
 	svc := refusedHarness(t)
 	srv := attachOwnerEmail(t, svc, auth.User{Email: "owner@example.com"})
@@ -306,8 +290,6 @@ func TestNotifyRunCapReached_MailsTheOwnerOncePerOrg(t *testing.T) {
 	if !strings.Contains(strings.Join(to, ","), "owner@example.com") {
 		t.Errorf("email went to %v", to)
 	}
-	// It has to say the flows have STOPPED, not merely that usage is high:
-	// the reader's question is "is my automation running?"
 	if !strings.Contains(strings.ToLower(data), "stopped running") {
 		t.Errorf("email does not say the flows have stopped:\n%s", data)
 	}

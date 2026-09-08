@@ -11,17 +11,11 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// These tests drive the /me/flows HTTP handlers' error / authz / validation
-// branches that the service-level tests don't reach.
-
 const cov3FlowID = "t%2Fws%2Ff1"
-
-// --- readFlowID branches (shared by every /me/flows/{id} handler) -----
 
 func TestMeFlows_BadFlowID(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// A flow_id without two slashes is invalid -> 400 invalid_flow_id.
 	rw := h.do(t, "GET", "/api/v1/me/flows/justanid/published", nil)
 	if rw.Code != http.StatusBadRequest {
 		t.Fatalf("bad flow_id = %d (%s), want 400", rw.Code, rw.Body.String())
@@ -34,7 +28,6 @@ func TestMeFlows_BadFlowID(t *testing.T) {
 func TestMeFlows_ForbiddenScope(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// Principal is bound to t/ws; acting on another tenant -> 403 forbidden_scope.
 	rw := h.do(t, "GET", "/api/v1/me/flows/other%2Fws%2Ff1/published", nil)
 	if rw.Code != http.StatusForbidden {
 		t.Fatalf("cross-tenant = %d (%s), want 403", rw.Code, rw.Body.String())
@@ -42,14 +35,11 @@ func TestMeFlows_ForbiddenScope(t *testing.T) {
 	if !strings.Contains(rw.Body.String(), "forbidden_scope") {
 		t.Errorf("body %s, want forbidden_scope", rw.Body.String())
 	}
-	// Wrong workspace also forbidden.
 	rw = h.do(t, "GET", "/api/v1/me/flows/t%2Fother%2Ff1/published", nil)
 	if rw.Code != http.StatusForbidden {
 		t.Fatalf("cross-workspace = %d, want 403", rw.Code)
 	}
 }
-
-// --- publishedFlowMe / publishFlowMe / unpublishFlowMe ----------------
 
 func TestPublishedFlowMe_NotFound(t *testing.T) {
 	t.Parallel()
@@ -76,8 +66,6 @@ func TestPublishedFlowMe_OK(t *testing.T) {
 func TestPublishFlowMe_MissingFlowErrors(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// A missing flow surfaces as a resolve error mapped to 403 (the publish
-	// service can't find HEAD to promote).
 	rw := h.do(t, "POST", "/api/v1/me/flows/t%2Fws%2Fghost/publish", nil)
 	if rw.Code != http.StatusForbidden && rw.Code != http.StatusNotFound {
 		t.Fatalf("publish missing = %d (%s), want 403/404", rw.Code, rw.Body.String())
@@ -97,10 +85,10 @@ func TestPublishFlowMe_OK_WithLabel(t *testing.T) {
 	}
 }
 
-// TestPublishFlowMe_MalformedBodyIsRejected pins that a body we cannot parse
-// is a 400. It used to be logged and ignored, which published HEAD instead of
-// the ref the client asked for — a successful publish of the WRONG commit,
-// with only a server-side log line recording that anything went wrong.
+// Pins that a body we cannot parse is a 400. It used to be logged and ignored,
+// which published HEAD instead of the ref the client asked for — a successful
+// publish of the WRONG commit, with only a server-side log line recording that
+// anything went wrong.
 func TestPublishFlowMe_MalformedBodyIsRejected(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -112,8 +100,6 @@ func TestPublishFlowMe_MalformedBodyIsRejected(t *testing.T) {
 	}
 }
 
-// An absent body still means "publish HEAD, no label" — the optional-body
-// contract is unchanged.
 func TestPublishFlowMe_EmptyBodyPublishesHead(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -170,8 +156,6 @@ func TestUnpublishFlowMe_Forbidden_NonAdmin(t *testing.T) {
 	}
 }
 
-// --- restoreFlowMe ----------------------------------------------------
-
 func TestRestoreFlowMe_MissingRef(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -202,7 +186,6 @@ func TestRestoreFlowMe_OK(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 	covSeedFlow(t, h, "f1")
-	// Save a second revision, then restore to the first.
 	v1, _ := h.ws.History("f1", 1)
 	g2 := core.Graph{ID: "f1", Tenant: "t", Workspace: "ws", Nodes: []core.Node{
 		{ID: "a", Module: "noop"}, {ID: "b", Module: "noop"},
@@ -215,8 +198,6 @@ func TestRestoreFlowMe_OK(t *testing.T) {
 		t.Fatalf("restore = %d (%s), want 200", rw.Code, rw.Body.String())
 	}
 }
-
-// --- labelRevisionMe --------------------------------------------------
 
 func TestLabelRevisionMe_MissingFlowErrors(t *testing.T) {
 	t.Parallel()
@@ -236,8 +217,6 @@ func TestLabelRevisionMe_Forbidden_NonAdmin(t *testing.T) {
 		t.Fatalf("non-admin label = %d, want 403", rw.Code)
 	}
 }
-
-// --- enable / disable -------------------------------------------------
 
 func TestEnableDisableFlowMe_OK(t *testing.T) {
 	t.Parallel()
@@ -265,8 +244,6 @@ func TestSetFlowEnabled_Forbidden_NonAdmin(t *testing.T) {
 	}
 }
 
-// --- validateFlowMe ---------------------------------------------------
-
 func TestValidateFlowMe_NotFound(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -289,8 +266,6 @@ func TestValidateFlowMe_OK(t *testing.T) {
 	}
 }
 
-// --- historyFlowMe ----------------------------------------------------
-
 func TestHistoryFlowMe_NotFound(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -299,8 +274,6 @@ func TestHistoryFlowMe_NotFound(t *testing.T) {
 		t.Fatalf("history missing = %d (%s), want 404", rw.Code, rw.Body.String())
 	}
 }
-
-// --- duplicateFlowMe --------------------------------------------------
 
 func TestDuplicateFlowMe_OK(t *testing.T) {
 	t.Parallel()
@@ -313,7 +286,6 @@ func TestDuplicateFlowMe_OK(t *testing.T) {
 	if !strings.Contains(rw.Body.String(), "t/ws/f1-copy") {
 		t.Errorf("body %s, want new flow_id t/ws/f1-copy", rw.Body.String())
 	}
-	// The copy is persisted as a disabled draft.
 	g, err := h.ws.Load("f1-copy")
 	if err != nil {
 		t.Fatalf("load copy: %v", err)

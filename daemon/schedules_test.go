@@ -12,9 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// covSeedScheduledFlow saves a flow carrying a cron_trigger node so the
-// schedule listing and the trigger enable/disable handlers have something to
-// act on.
 func covSeedScheduledFlow(t *testing.T, h *gatewayHarness, id, nodeID string) {
 	t.Helper()
 	g := core.Graph{ID: id, Tenant: "t", Workspace: "ws", Nodes: []core.Node{

@@ -16,8 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fakeServer implements NodeService against an in-memory bufconn so the
-// transport can be exercised without a real network or external binary.
 type fakeServer struct {
 	nodepb.UnimplementedNodeServiceServer
 }
@@ -32,7 +30,6 @@ func (s *fakeServer) ListManifests(_ context.Context, _ *nodepb.ListManifestsReq
 }
 
 func (s *fakeServer) Execute(job *nodepb.Job, stream nodepb.NodeService_ExecuteServer) error {
-	// Send a progress tick.
 	if err := stream.Send(&nodepb.Event{
 		Payload: &nodepb.Event_Progress{
 			Progress: &nodepb.Progress{JobId: job.JobId, Percent: 0.5, Message: "halfway"},
@@ -40,8 +37,6 @@ func (s *fakeServer) Execute(job *nodepb.Job, stream nodepb.NodeService_ExecuteS
 	}); err != nil {
 		return err
 	}
-	// Echo the inline value back. Not a Ref path: a runner is on another
-	// machine, so RemoteTransport refuses a job carrying one before it dials.
 	out := map[string]*nodepb.Ref{
 		"out": {Mime: "text/plain", Inline: job.Input["in"].GetInline()},
 	}

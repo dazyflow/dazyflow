@@ -108,7 +108,6 @@ func TestExpression_CompileError(t *testing.T) {
 }
 
 func TestExpression_EvalErrorOnNullField(t *testing.T) {
-	// input is unwired (nil) but the expression dereferences a field.
 	res := runExpr(t, "input.name", nil)
 	if res.Status != core.StatusError || res.Error.Code != "eval" {
 		t.Errorf("status/code = %v/%v, want error/eval", res.Status, res.Error)

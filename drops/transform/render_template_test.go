@@ -62,8 +62,8 @@ func TestRenderTemplate_RangeItems(t *testing.T) {
 	}
 }
 
-// TestRenderTemplate_AutoEscape is the security property: a data value
-// containing HTML must be escaped, not rendered as markup.
+// The security property: a data value containing HTML must be escaped, not
+// rendered as markup.
 func TestRenderTemplate_AutoEscape(t *testing.T) {
 	got := renderedHTML(t,
 		map[string]any{"template": "<p>Hello {{.name}}</p>"},
@@ -113,7 +113,6 @@ func TestRenderTemplate_Helpers(t *testing.T) {
 }
 
 func TestRenderTemplate_NoData(t *testing.T) {
-	// A template with no merge fields renders fine with no data wired.
 	got := renderedHTML(t, map[string]any{"template": "<p>Static</p>"}, nil)
 	if got != "<p>Static</p>" {
 		t.Errorf("got %q", got)
@@ -152,13 +151,10 @@ func TestRenderTemplate_BadData(t *testing.T) {
 	}
 }
 
-// --- adversarial / security edge cases ---
-
-// TestRenderTemplate_NoSecondOrderInjection is the key SSTI property:
-// data is the render CONTEXT, never re-parsed as a template. A data value
-// that itself looks like a template action must come out as an escaped
-// literal, not get evaluated — otherwise untrusted data (a webhook field)
-// could read sibling fields it shouldn't.
+// The key SSTI property: data is the render CONTEXT, never re-parsed as a
+// template. A data value that itself looks like a template action must come
+// out as an escaped literal, not get evaluated — otherwise untrusted data (a
+// webhook field) could read sibling fields it shouldn't.
 func TestRenderTemplate_NoSecondOrderInjection(t *testing.T) {
 	got := renderedHTML(t,
 		map[string]any{"template": "{{.greeting}}"},
@@ -170,7 +166,6 @@ func TestRenderTemplate_NoSecondOrderInjection(t *testing.T) {
 	if strings.Contains(got, "TOPSECRET") {
 		t.Fatalf("data was evaluated as a template — secret leaked: %q", got)
 	}
-	// The literal "{{.secret}}" is rendered, HTML-escaped, not executed.
 	if !strings.Contains(got, "{{.secret}}") {
 		t.Errorf("expected the literal action text, got %q", got)
 	}
@@ -204,9 +199,6 @@ func TestRenderTemplate_MethodCallOnData(t *testing.T) {
 	}
 }
 
-// TestRenderTemplate_OutputCapViaExecute drives the real 8 MiB ceiling
-// through Execute (not just the limitedWriter unit), proving a template
-// that balloons its output is refused rather than allocated unbounded.
 func TestRenderTemplate_OutputCapViaExecute(t *testing.T) {
 	big := strings.Repeat("A", (8<<20)+1024) // just over the cap
 	res := runRenderTemplate(t,
@@ -229,7 +221,3 @@ func TestRenderTemplate_WholeObjectPrint(t *testing.T) {
 		t.Errorf("object print did not escape inner markup: %q", got)
 	}
 }
-
-// The output-cap unit test moved to internal/htmltmpl (where limitedWriter
-// now lives). The cap is still covered here end-to-end via
-// TestRenderTemplate_OutputCapViaExecute, which drives the real Execute path.

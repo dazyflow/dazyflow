@@ -20,9 +20,6 @@ import (
 // tenant's connection (base_url + token) into the job params, the same way
 // the Stripe pickers resolve STRIPE_API_KEY. See [[stripe-resource-picker-recipe]].
 
-// ListEntities returns the instance's entities for the "homeassistant-entity"
-// picker, each shown by its friendly name (falling back to the entity_id).
-// The id stored on the node is the entity_id (e.g. light.living_room).
 func ListEntities(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
 	status, body, err := haDo(ctx, job, "GET", "/api/states", nil)
 	if err != nil {
@@ -51,8 +48,6 @@ func ListEntities(ctx context.Context, job core.Job) ([]core.AccountResource, er
 	return out, nil
 }
 
-// haServiceDomain is one entry of GET /api/services: a domain and the
-// services it offers, each carrying an optional friendly name.
 type haServiceDomain struct {
 	Domain   string `json:"domain"`
 	Services map[string]struct {
@@ -60,9 +55,6 @@ type haServiceDomain struct {
 	} `json:"services"`
 }
 
-// ListServices returns the callable services for the "homeassistant-service"
-// picker as "domain.service" ids (the shape Call service expects), labelled
-// "Domain: Friendly name" (e.g. "Light: Turn on").
 func ListServices(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
 	status, body, err := haDo(ctx, job, "GET", "/api/services", nil)
 	if err != nil {
@@ -92,9 +84,6 @@ func ListServices(ctx context.Context, job core.Job) ([]core.AccountResource, er
 	return out, nil
 }
 
-// titleizeDomain makes a domain id readable for a label — "light" → "Light",
-// "input_boolean" → "Input boolean". Just enough polish for a dropdown; the
-// stored id keeps the canonical lowercase domain.
 func titleizeDomain(d string) string {
 	d = strings.ReplaceAll(d, "_", " ")
 	if d == "" {

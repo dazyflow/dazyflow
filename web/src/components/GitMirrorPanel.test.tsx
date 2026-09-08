@@ -26,13 +26,6 @@ const getGitMirror = vi.fn();
 const putGitMirror = vi.fn();
 const deleteGitMirror = vi.fn();
 const pushGitMirror = vi.fn();
-// APIError has to be part of the mock: the panel branches on
-// `e instanceof APIError && e.status === 409` to tell the overwrite-confirm
-// case from a real fault, and a mock without it makes that check throw.
-//
-// Declared through vi.hoisted because vi.mock's factory is lifted above every
-// top-level statement — a plain class declaration up here is not yet
-// initialised when the factory runs.
 const { MockAPIError } = vi.hoisted(() => {
   class MockAPIError extends Error {
     status: number;
@@ -224,7 +217,6 @@ describe("GitMirrorPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: /gitMirror\.pushNow/ }));
     const dialog = await screen.findByRole("alertdialog");
     expect(dialog).toHaveTextContent("gitMirror.unrelatedTitle");
-    // The server's own detail is shown, not just our generic warning.
     expect(dialog).toHaveTextContent("2 ref(s) on the remote");
 
     pushGitMirror.mockResolvedValueOnce({
@@ -262,9 +254,6 @@ describe("GitMirrorPanel", () => {
     await renderPanel([sshCred]);
 
     await userEvent.click(screen.getByRole("button", { name: /gitMirror\.remove/ }));
-    // Confirmed through the shared ConfirmModal, not window.confirm — so
-    // scope the second click to the dialog, where the confirm button shares
-    // the trigger's label.
     const dialog = await screen.findByRole("alertdialog");
     await userEvent.click(
       within(dialog).getByRole("button", { name: "gitMirror.remove" }),

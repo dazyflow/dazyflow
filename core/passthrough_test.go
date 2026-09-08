@@ -18,16 +18,12 @@ func TestWithPassthrough_PrependsPortsOnProcessingDrops(t *testing.T) {
 	if len(got.Inputs) != 2 || got.Inputs[1].Port != "in" {
 		t.Errorf("original inputs not preserved after pass: %v", got.Inputs)
 	}
-	// Untyped (wildcard) and not required so it connects to anything.
 	if p, _ := got.Input(PassPort); p.Required || len(p.MIME) != 0 {
 		t.Errorf("pass port should be optional + untyped, got %+v", p)
 	}
 }
 
 func TestWithPassthrough_SkipsTriggers(t *testing.T) {
-	// A trigger originates a flow from an external event — nothing upstream
-	// to thread from, so no pass pin. Detected by ExecutionTrigger or the
-	// "trigger" category; assert both signals independently.
 	for _, m := range []Manifest{
 		{ID: "t1", ExecutionModel: ExecutionTrigger, Outputs: []Port{{Port: "out"}}},
 		{ID: "t2", Category: "trigger", Outputs: []Port{{Port: "out"}}},
@@ -43,8 +39,6 @@ func TestWithPassthrough_SkipsTriggers(t *testing.T) {
 }
 
 func TestWithPassthrough_SkipsValueSource(t *testing.T) {
-	// A literal value source (Text, Number) opts out via ValueSource: its
-	// output is authored in a param, not wired in, so no pass pin.
 	m := Manifest{ID: "text", ValueSource: true, Outputs: []Port{{Port: "out"}}}
 	got := WithPassthrough(m)
 	if _, ok := got.Input(PassPort); ok {
@@ -75,7 +69,6 @@ func TestWithPassthrough_AddsToInputlessAction(t *testing.T) {
 		}
 	}
 
-	// And the pass pin is prepended ahead of the real output.
 	m := Manifest{ID: "slack_list_channels", Category: "network", Outputs: []Port{{Port: "channels"}}}
 	got := WithPassthrough(m)
 	if p, ok := got.Input(PassPort); !ok || p.Port != PassPort {
@@ -111,13 +104,11 @@ func TestApplyPassthrough_CopiesInputToOutputOnSuccess(t *testing.T) {
 }
 
 func TestApplyPassthrough_NoopWhenNotOKorNoPass(t *testing.T) {
-	// No pass input → nothing added.
 	res := &Result{Status: StatusOK, Output: map[string]Ref{}}
 	ApplyPassthrough(map[string]Ref{}, res)
 	if _, ok := res.Output[PassPort]; ok {
 		t.Errorf("pass output added without a pass input")
 	}
-	// Failed node → the chain breaks, no passthrough.
 	res = &Result{Status: StatusError}
 	ApplyPassthrough(map[string]Ref{PassPort: {Inline: "x"}}, res)
 	if res.Output[PassPort].Inline != nil {
@@ -159,7 +150,6 @@ func TestMarkListPorts_TagsListNamedPortsOnly(t *testing.T) {
 	if got.Outputs[1].List {
 		t.Error("summary output should not be marked List")
 	}
-	// Must not mutate the caller's slices (registry safety).
 	if m.Outputs[0].List {
 		t.Error("MarkListPorts mutated the input manifest's ports")
 	}

@@ -21,10 +21,6 @@ type Props = {
   manifests: Manifest[];
   references?: ReferenceCtx;
   workspace?: WorkspaceCtx;
-  // missingKeys are the loop's config-check flags: "__body" when the body
-  // pin is unwired, "__nested" for an unsupported loop-in-loop. When set
-  // (a jump from the "N to configure" modal), the matching banner renders
-  // red so the cue matches the highlighted fields elsewhere.
   missingKeys?: string[];
 };
 

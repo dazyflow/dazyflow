@@ -70,9 +70,7 @@ func init() {
 			// 46elks has no idempotency header, so a retried POST sends a second
 			// SMS — and double-bills. This drop is a terminal leaf the engine
 			// auto-retries on backoff, so retries must be off here.
-			RetryPolicy: core.RetryNever,
-			// …and the engine dedupes a same-job re-execution (expired-lease
-			// reclaim / crash recovery) so a recovered run doesn't re-send.
+			RetryPolicy:  core.RetryNever,
 			DedupeWrites: true,
 		},
 		Execute: executeSendSMS,
@@ -103,8 +101,6 @@ func executeSendSMS(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 	form.Set("from", from)
 	form.Set("to", to)
 	form.Set("message", message)
-	// dryrun=yes asks 46elks to validate the request without sending it — no
-	// SMS goes out and the account isn't charged.
 	if params.BoolDefault(job.Params, "dry_run", false) {
 		form.Set("dryrun", "yes")
 	}
@@ -125,8 +121,6 @@ func executeSendSMS(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 		Cost   int    `json:"cost"`
 		Parts  int    `json:"parts"`
 	}
-	// A dry run returns a body without an id — treat that as success and surface
-	// whatever validation echo 46elks returned.
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
 		return params.Err(job, "elks_error", "46elks response was not valid JSON"), nil
 	}

@@ -15,15 +15,12 @@ import (
 	"github.com/dazyflow/dazyflow/engine/mcp"
 )
 
-// mcpAPI serves the tenant MCP-server endpoints. Its fields are the whole of what
-// those handlers touch.
 type mcpAPI struct {
 	auditor
 	svc        *Service
 	MCPServers *MCPServers
 }
 
-// mcpAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) mcpAPI() *mcpAPI {
 	return &mcpAPI{auditor: h.auditor(), svc: h.svc, MCPServers: h.MCPServers}
 }
@@ -41,8 +38,6 @@ func (h *HTTPGateway) mcpAPI() *mcpAPI {
 // carry one back to a browser even if a future handler forgets to think
 // about it.
 type mcpServerRow struct {
-	// Name is the id flows reference. Read-only after creation: the client
-	// shows it, it does not offer to change it.
 	Name string `json:"name"`
 	// Label is the display name. Always populated on the wire — a row saved
 	// before labels existed reports its id here, so a client never has to
@@ -62,22 +57,15 @@ type mcpServerRow struct {
 	// process right now. A server whose steps are being described from cache
 	// is NOT connected. Distinct from last_connected, which is the last time
 	// any replica managed it.
-	Connected bool `json:"connected"`
-	// ToolIDs are the step ids this server contributes, so the page can show
-	// what was actually gained rather than only a count.
-	ToolIDs []string `json:"tool_ids,omitempty"`
+	Connected bool     `json:"connected"`
+	ToolIDs   []string `json:"tool_ids,omitempty"`
 	// Instructions is what the server said about itself at handshake, verbatim.
 	// Live-only, like Connected and ToolIDs: it comes from the connection this
 	// process holds, so a row connected on another replica reports none.
 	//
 	// Third-party text on an admin page. It is rendered as text, never as
 	// markup, and nothing here or downstream acts on it.
-	Instructions string `json:"instructions,omitempty"`
-	// ProtocolVersion is the MCP revision this connection settled on, which
-	// is not necessarily the one we asked for. Live-only, and here because it
-	// is the answer to "the server has tools but none of them have icons" —
-	// icons arrived in 2025-11-25, and a server on an older revision sends
-	// none.
+	Instructions    string    `json:"instructions,omitempty"`
 	ProtocolVersion string    `json:"protocol_version,omitempty"`
 	ToolCount       int       `json:"tool_count"`
 	LastError       string    `json:"last_error,omitempty"`
@@ -88,8 +76,6 @@ type mcpServerRow struct {
 }
 
 type mcpServerRequest struct {
-	// Label is the display name and, on a create, what the id is derived from.
-	// Blank on an edit keeps the stored one.
 	Label string `json:"label,omitempty"`
 	// Name sets the id explicitly. The UI never sends it on a create — it
 	// sends Label and lets the daemon derive one. Kept for an API caller that
@@ -98,8 +84,7 @@ type mcpServerRequest struct {
 	URL        string `json:"url"`
 	AuthKind   string `json:"auth_kind"`
 	AuthHeader string `json:"auth_header,omitempty"`
-	// Token empty on an edit means "keep the stored one".
-	Token string `json:"token,omitempty"`
+	Token      string `json:"token,omitempty"`
 	// Enabled is a pointer so "not sent" is distinguishable from "false": a
 	// PUT that omits it must not silently disable a working server.
 	Enabled *bool `json:"enabled,omitempty"`
@@ -113,14 +98,10 @@ func (h *mcpAPI) mcpServersConfigured(rw http.ResponseWriter) bool {
 	return true
 }
 
-// decodeMCPBody bounds the body. A server registration is a handful of short
-// strings; without a cap this is an unauthenticated-shaped memory sink behind
-// an authenticated route.
 func decodeMCPBody(r *http.Request, v any) error {
 	return json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(v)
 }
 
-// mcpRowFor renders one stored row with this process's live view merged in.
 func (h *mcpAPI) mcpRowFor(s MCPServer, live map[string]mcp.ServerStatus) mcpServerRow {
 	st, registered := live[s.Name]
 	// Registered is not the same as connected any more: a server whose
@@ -224,22 +205,13 @@ func (h *mcpAPI) saveMCPServer(rw http.ResponseWriter, r *http.Request, p core.P
 			writeJSONError(rw, http.StatusNotImplemented, err.Error())
 			return
 		}
-		// Everything Save rejects is the caller's input, named and explained,
-		// so it belongs in a 400 the form can display next to the field.
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
-	// Audited with the URL, not the token: an admin pointing the daemon at a
-	// new endpoint is exactly the act a reviewer needs to see later.
 	h.audit(r.Context(), p, "mcp_server.save", saved.Name, saved.URL)
 	writeJSON(rw, http.StatusOK, h.mcpRowFor(saved, h.liveMCPServers(p.Tenant)))
 }
 
-// mcpServerUsage answers "what breaks if I delete this".
-//
-// Its own endpoint rather than a field on the row: it loads every graph in the
-// org, which is fine once, when an admin opens a delete confirmation, and
-// wasteful on every render of the list.
 func (h *mcpAPI) mcpServerUsage(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.mcpServersConfigured(rw) {
 		return
@@ -297,9 +269,6 @@ func (h *mcpAPI) deleteMCPServer(rw http.ResponseWriter, r *http.Request, p core
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// Audited with what it broke, not just what was removed: "deleted vendor"
-	// and "deleted vendor, which 4 flows were using" are different events to
-	// whoever reads this back.
 	detail := ""
 	if h.svc != nil {
 		if usage, uerr := h.svc.FlowsUsingMCPServer(r.Context(), p, p.Tenant, name); uerr == nil && usage.InUse() {

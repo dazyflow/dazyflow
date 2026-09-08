@@ -58,15 +58,13 @@ func manifestMap() map[string]core.Manifest {
 	return out
 }
 
-// describeDrop delegates to the production renderer (describeDropForModel) so
-// the manual dump shows exactly what the agentic loop hands the model.
 func describeDrop(id string) string { return describeDropForModel(manifestMap(), id) }
 
-// TestShippedTemplatesValidate guards every template the gallery ships: each
-// must pass the manifest-level validator (the gate the engine runs before a
-// run). This is what would have caught the redundant/mis-shaped gmail
-// templates. The template_placeholder LINT (REPLACE_WITH_…) is intentional on
-// templates and is not checked here — that's a fill-me marker, not a wiring bug.
+// Guards every template the gallery ships: each must pass the manifest-level
+// validator (the gate the engine runs before a run). This is what would have
+// caught the redundant/mis-shaped gmail templates. The template_placeholder
+// LINT (REPLACE_WITH_…) is intentional on templates and is not checked here —
+// that's a fill-me marker, not a wiring bug.
 func TestShippedTemplatesValidate(t *testing.T) {
 	t.Parallel()
 	dir := "../web/public/templates"
@@ -100,9 +98,6 @@ func TestShippedTemplatesValidate(t *testing.T) {
 	t.Logf("validated %d shipped templates", seen)
 }
 
-// TestAgenticDescribe dumps describe_drop for the drops the scenario set
-// touches — the real grounding I read to drive the loop by hand.
-// FLOWGEN_DUMP=1 go test ./daemon -run TestAgenticDescribe -v
 func TestAgenticDescribe(t *testing.T) {
 	t.Parallel()
 	if os.Getenv("FLOWGEN_DUMP") == "" {
@@ -123,10 +118,6 @@ func edge(from, fromPort, to, toPort string) map[string]any {
 	return map[string]any{"from": from, "from_port": fromPort, "to": to, "to_port": toPort}
 }
 
-// miswiredForEach is the most-likely "model reached for for_each but mis-wired
-// it" graph: it wires the loop body/results straight on without unwrap_results,
-// producing MIME-incompatible edges. core.LintGraph alone calls it clean; only
-// the manifest validator catches it.
 func miswiredForEach() map[string]any {
 	return map[string]any{
 		"name": "log emails to sheet",
@@ -201,8 +192,6 @@ func TestFlowGen_StructuralGateSurfaces(t *testing.T) {
 	}
 }
 
-// goodEmailFlow is the simple, correct gmail→sheet flow (search returns full
-// records, so no for_each) wrapped as an emit action.
 func goodEmailFlow() map[string]any {
 	return map[string]any{
 		"name": "log emails to sheet",
@@ -248,9 +237,6 @@ func TestFlowGen_AgentExploresThenEmits(t *testing.T) {
 	}
 }
 
-// TestFlowGen_AgentValidatesBeforeEmit: the model validates a mis-wired draft
-// (gets the structural errors back), then emits a corrected flow. The validate
-// turn isn't an emit, so it doesn't burn the repair budget.
 func TestFlowGen_AgentValidatesBeforeEmit(t *testing.T) {
 	t.Parallel()
 	sp := &scriptedProvider{graphs: []map[string]any{
@@ -291,9 +277,6 @@ func TestRefineDesc(t *testing.T) {
 	}
 }
 
-// TestFlowGen_GroundingEnriched pins the grounding improvements: the catalog
-// carries worked examples and required-input markers, and the system prompt
-// teaches the compose-only patterns (for_each/unwrap_results) and the markers.
 func TestFlowGen_GroundingEnriched(t *testing.T) {
 	t.Parallel()
 	cat := compactCatalog(allManifests())
@@ -314,17 +297,12 @@ func TestFlowGen_GroundingEnriched(t *testing.T) {
 	}
 }
 
-// TestFlowGen_WorkspaceGrounding: the generator grounds on the tenant's
-// connected apps and existing secret names, so it stops inventing flows for
-// unconnected apps and made-up ${secret.NAME}s.
 func TestFlowGen_WorkspaceGrounding(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 	es := newMemSecrets(t)
 	h.gw.EncryptedSecrets = es
 	ctx := context.Background()
-	// A connected Slack account (stored as the oauth.<provider>.<account> name
-	// connectedAccountsByProvider scans for) and a user-defined org secret.
 	if err := es.Put(ctx, "t1", "oauth.slack.default", "xoxb-test"); err != nil {
 		t.Fatal(err)
 	}
@@ -345,8 +323,6 @@ func TestFlowGen_WorkspaceGrounding(t *testing.T) {
 	}
 }
 
-// ---- manual eval (skipped unless FLOWGEN_DUMP=1) -------------------------
-
 func TestFlowGenEval(t *testing.T) {
 	t.Parallel()
 	if os.Getenv("FLOWGEN_DUMP") == "" {
@@ -355,7 +331,6 @@ func TestFlowGenEval(t *testing.T) {
 	mans := allManifests()
 	fmt.Printf("\n===== COMPACT CATALOG (%d drops) =====\n%s\n===== END CATALOG =====\n", len(mans), compactCatalog(mans))
 
-	// Happy path.
 	scoreGraph(t, "A: weekday 8am — email me a summary of my sheet", core.Graph{
 		Name: "Daily sheet summary",
 		Nodes: []core.Node{
@@ -371,9 +346,6 @@ func TestFlowGenEval(t *testing.T) {
 		Triggers: []core.GraphTrigger{{Type: "cron", Cron: "0 8 * * 1-5"}},
 	})
 
-	// What an agentic model builds AFTER calling describe_drop on
-	// gmail_search_messages and learning `messages` is already full email
-	// records: search -> map_rows -> sheets. No for_each needed.
 	scoreGraph(t, "B-simple: new email -> sheet (search returns full records)", core.Graph{
 		Name: "Log emails to sheet",
 		Nodes: []core.Node{
@@ -388,8 +360,6 @@ func TestFlowGenEval(t *testing.T) {
 		},
 	})
 
-	// C: contact form -> Slack, formatted via render_text (the example tells
-	// the model to wire render_text.text into slack's body).
 	scoreGraph(t, "C: contact form -> Slack (render_text)", core.Graph{
 		Name: "Form to Slack",
 		Nodes: []core.Node{
@@ -403,9 +373,6 @@ func TestFlowGenEval(t *testing.T) {
 		},
 	})
 
-	// D: Stripe payment failed -> SMS. describe_drop taught the model that
-	// account_sid/auth_token DEFAULT to the TWILIO_* secrets, so it omits them
-	// (no hardcoding, no invented ${secret} name).
 	scoreGraph(t, "D: Stripe failed -> SMS (secrets auto-default)", core.Graph{
 		Name: "Failed payment SMS",
 		Nodes: []core.Node{
@@ -417,8 +384,6 @@ func TestFlowGenEval(t *testing.T) {
 		},
 	})
 
-	// E: weekly Leads sheet -> Postgres upsert (no dupes). describe_drop's note
-	// resolves the connection ("set once under Apps") so no DSN param invented.
 	scoreGraph(t, "E: weekly sheet -> Postgres upsert", core.Graph{
 		Name: "Leads to CRM",
 		Nodes: []core.Node{
@@ -432,7 +397,6 @@ func TestFlowGenEval(t *testing.T) {
 		Triggers: []core.GraphTrigger{{Type: "cron", Cron: "0 9 * * 1"}},
 	})
 
-	// The for_each trap (mis-wired) — caught only by the manifest validator.
 	bad := miswiredForEach()
 	g := core.Graph{Name: bad["name"].(string)}
 	for _, n := range bad["nodes"].([]any) {
@@ -446,7 +410,6 @@ func TestFlowGenEval(t *testing.T) {
 	scoreGraph(t, "B-foreach: new email -> sheet (mis-wired for_each)", g)
 }
 
-// scoreGraph runs all three production gates and prints the verdict.
 func scoreGraph(t *testing.T, name string, g core.Graph) {
 	t.Helper()
 	g.Tenant, g.Workspace = "sim", "main"

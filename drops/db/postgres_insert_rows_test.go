@@ -14,26 +14,12 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Integration tests for postgres_insert_rows. Skipped unless
-// DAZYFLOW_TEST_DB is set, matching the project convention:
-//
-//   DAZYFLOW_TEST_DB=postgres://localhost/dazyflow_test \
-//     go test ./drops/db/
-//
-// The unit tests below (validation, param parsing) run unconditionally
-// — they exercise the code paths that don't actually open a connection.
-
-// pgTestSetup picks a unique table name per test (suffixed with a
-// timestamp) and registers cleanup that drops it. Returns the DSN and
-// the table name; t.Skip is called when the env var isn't set so
-// individual tests don't need to repeat the gate.
 func pgTestSetup(t *testing.T) (dsn, table string) {
 	t.Helper()
 	dsn = os.Getenv("DAZYFLOW_TEST_DB")
 	if dsn == "" {
 		t.Skip("set DAZYFLOW_TEST_DB to run Postgres integration tests")
 	}
-	// Unique per test: t.Name with non-ident chars stripped + ns suffix.
 	base := strip(t.Name())
 	table = fmt.Sprintf("dz_test_%s_%d", base, time.Now().UnixNano())
 	t.Cleanup(func() {
@@ -114,9 +100,6 @@ func TestPostgresInsert_CreateAndInsert(t *testing.T) {
 func TestPostgresInsert_RollbackOnFailure(t *testing.T) {
 	dsn, table := pgTestSetup(t)
 
-	// Seed a table with a single column "a"; then try to insert a
-	// row that references column "b" too — should fail and roll back
-	// the whole batch.
 	ctx := t.Context()
 	conn, _ := pgx.Connect(ctx, dsn)
 	defer conn.Close(ctx)
@@ -141,7 +124,6 @@ func TestPostgresInsert_RollbackOnFailure(t *testing.T) {
 
 func TestPostgresInsert_NamedSchema(t *testing.T) {
 	dsn, table := pgTestSetup(t)
-	// Use a custom schema; assume the test DB allows CREATE SCHEMA.
 	schemaName := fmt.Sprintf("dz_test_%d", time.Now().UnixNano())
 	ctx := t.Context()
 	conn, _ := pgx.Connect(ctx, dsn)
@@ -180,11 +162,6 @@ func TestPostgresInsert_NamedSchema(t *testing.T) {
 		t.Errorf("rows in custom schema = %d, want 1", n)
 	}
 }
-
-// ----------------------------------------------------------------------
-// Unit tests — no Postgres needed. Cover the validation surface that
-// the drop performs before opening any connection.
-// ----------------------------------------------------------------------
 
 // Only the genuinely-unsafe shapes are pre-rejected. Names like
 // "with space" or `"public; DROP"` are valid Postgres identifiers

@@ -60,16 +60,12 @@ describe("guide structure", () => {
 });
 
 describe("teams & approvals guide", () => {
-  // The page that documents members, roles and approvals. Its absence is what
-  // made a cold walkthrough guess at all three.
   const body = readGuide("teams-and-approvals");
 
   it("names all three roles and what sets them apart", () => {
     for (const role of ["Viewer", "Editor", "Admin"]) {
       expect(body).toContain(`**${role}**`);
     }
-    // The non-obvious one, and the reason the page exists: approving does not
-    // need edit access, so an approver can hold the least-privileged role.
     expect(body).toMatch(/Viewer[\s\S]{0,200}approve/i);
   });
 
@@ -109,7 +105,6 @@ describe("glossary", () => {
   });
 
   it("keeps its entries in alphabetical order", () => {
-    // The whole value of a glossary is that a reader can find the word.
     const headings = [...body.matchAll(/^### (.+)$/gm)].map((m) =>
       m[1].toLowerCase(),
     );
@@ -117,8 +112,6 @@ describe("glossary", () => {
   });
 });
 
-// These need `make docs-content` to have run. Skipped rather than failed when
-// it hasn't, so the suite stays green on a clean checkout.
 describe.skipIf(!existsSync(BUNDLE))("rendered bundle", () => {
   it("ships every guide page", () => {
     const shipped = readdirSync(BUNDLE)

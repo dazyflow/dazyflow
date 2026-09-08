@@ -9,9 +9,9 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestStore_HistoryAndRestore covers the version-history panel's backing
-// data and the Google-Docs-style restore: restoring an old revision is a new
-// commit on top (history grows, never rewrites) and Load reflects it.
+// Covers the version-history panel's backing data and the Google-Docs-style
+// restore: restoring an old revision is a new commit on top (history grows,
+// never rewrites) and Load reflects it.
 func TestStore_HistoryAndRestore(t *testing.T) {
 	s, err := OpenFS("")
 	if err != nil {
@@ -40,7 +40,6 @@ func TestStore_HistoryAndRestore(t *testing.T) {
 		t.Fatalf("history commits not distinct")
 	}
 
-	// Restore v1's content: load at that commit and save as a new HEAD.
 	old, err := s.LoadAt(v1, "flow1")
 	if err != nil {
 		t.Fatalf("loadAt v1: %v", err)
@@ -49,7 +48,6 @@ func TestStore_HistoryAndRestore(t *testing.T) {
 		t.Fatalf("restore save: %v", err)
 	}
 
-	// History grew (no rewrite) and HEAD now matches v1's content.
 	revs, err = s.History("flow1", 100)
 	if err != nil {
 		t.Fatalf("history after restore: %v", err)

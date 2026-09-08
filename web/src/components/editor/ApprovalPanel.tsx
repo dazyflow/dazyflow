@@ -37,7 +37,6 @@ export function ApprovalPanel({
     try {
       await api.approveNode(token, runID, nodeID, decision, comment || undefined);
       setComment("");
-      // SSE delivers the status flip + downstream dispatch; no local refresh.
     } catch (e) {
       setError(explainApiError(e, t, "approval"));
     } finally {

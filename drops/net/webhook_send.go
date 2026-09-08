@@ -38,16 +38,9 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Named after their params so the card shows inline editable
-				// boxes (Unreal-style); a wired value overrides the typed one.
-				// url first — it's the primary input.
 				{Port: "url", Label: "URL", MIME: []string{"text/plain"}},
 				{Port: "body", Label: "Body"},
 			},
-			// No declared outputs: sending a webhook is a "do" step — chain via
-			// the pass-through pin. The delivery details (url, method, status,
-			// bytes sent, response text) are still EMITTED under "meta" for run
-			// records, just not a pin (same as gmail send / ntfy).
 			Outputs: []core.Port{
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"url":"https://hooks.nordkraft.se/faktura","method":"POST","status":200,"bytes_sent":128,"response":"ok"}`)},
 			},
@@ -77,8 +70,6 @@ func init() {
 }
 
 func executeWebhookSend(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	// The URL input overrides the param when wired (resolveURL, shared with
-	// http_request) — so the destination can be computed by an upstream node.
 	url := resolveURL(job)
 	if url == "" {
 		return params.Err(job, "bad_param", "'url' is required — set it or connect the URL input"), nil
@@ -169,9 +160,6 @@ func executeWebhookSend(ctx context.Context, job core.Job, _ chan<- core.Progres
 	}, nil
 }
 
-// encodeWebhookBody renders a body value to bytes and sets a Content-Type
-// header when the caller didn't supply one: a string goes out as-is under
-// the given default type; anything else is JSON-encoded as application/json.
 func encodeWebhookBody(v any, headers map[string]string, stringCT string) []byte {
 	switch t := v.(type) {
 	case string:

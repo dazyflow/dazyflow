@@ -34,7 +34,6 @@ func withGmailEnv(t *testing.T, base string) {
 func TestGmailSearch_ReturnsMessages(t *testing.T) {
 	var gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Per-message expansion fetch (format=full) — return a real message.
 		if strings.Contains(r.URL.Path, "/messages/") {
 			id := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -80,8 +79,6 @@ func TestGmailSearch_ReturnsMessages(t *testing.T) {
 	}
 }
 
-// memCursor installs an in-memory cursor store for the test and returns the
-// backing map so assertions can read the persisted watermark.
 func memCursor(t *testing.T) map[string]string {
 	t.Helper()
 	store := map[string]string{}
@@ -93,9 +90,6 @@ func memCursor(t *testing.T) map[string]string {
 	return store
 }
 
-// searchServer serves a Gmail search whose per-message expansion carries an
-// internalDate, so the only_new watermark has a real receive time to compare.
-// dateByID maps message id → internalDate (epoch ms string).
 func searchServer(t *testing.T, ids []string, dateByID map[string]string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -143,8 +137,6 @@ func TestGmailSearch_OnlyNew_FirstFireEmitsNothing(t *testing.T) {
 	}
 }
 
-// A later run emits only the emails newer than the stored watermark, and
-// advances it. Older/already-seen matches are dropped.
 func TestGmailSearch_OnlyNew_SubsequentFireEmitsOnlyNewer(t *testing.T) {
 	store := memCursor(t)
 	store["acme|cursor.gmail_search.g1.n1"] = "1700000005000" // as if a prior run baselined here
@@ -172,8 +164,6 @@ func TestGmailSearch_OnlyNew_SubsequentFireEmitsOnlyNewer(t *testing.T) {
 	}
 }
 
-// only_new with no new email since last run emits no ports (downstream skipped)
-// and leaves the watermark untouched.
 func TestGmailSearch_OnlyNew_NothingNew(t *testing.T) {
 	store := memCursor(t)
 	store["acme|cursor.gmail_search.g1.n1"] = "1700000009000"
@@ -193,8 +183,6 @@ func TestGmailSearch_OnlyNew_NothingNew(t *testing.T) {
 	}
 }
 
-// only_new off (default) keeps the classic behavior: every match is returned,
-// no watermark is read or written.
 func TestGmailSearch_OnlyNewOff_ReturnsAll(t *testing.T) {
 	store := memCursor(t)
 	srv := searchServer(t, []string{"a", "b"}, map[string]string{
@@ -261,8 +249,6 @@ func TestGmailGetMessage_MissingID(t *testing.T) {
 	}
 }
 
-// Wiring Search emails' "Matching emails" list straight into Message ID
-// reads the FIRST match — the obvious drag just works.
 func TestGmailGetMessage_TakesFirstOfWiredMatchList(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -287,8 +273,6 @@ func TestGmailGetMessage_TakesFirstOfWiredMatchList(t *testing.T) {
 	}
 }
 
-// An EMPTY wired match list (search found nothing) falls back to the param /
-// the clear "required" error — not a confusing bad-input failure.
 func TestGmailGetMessage_EmptyWiredMatchList(t *testing.T) {
 	withGmailEnv(t, "http://unused")
 	res, _ := executeGmailGetMessage(context.Background(), core.Job{
@@ -378,12 +362,9 @@ func TestGmailSend_StructuredBodyRejected(t *testing.T) {
 	}
 }
 
-// b64 encodes s as Gmail's unpadded base64url.
 func b64url_Cov(s string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(s))
 }
-
-// --- resolveMessageID: wired input vs param across every shape ---
 
 func TestResolveMessageID_Cov(t *testing.T) {
 	tests := []struct {
@@ -487,8 +468,6 @@ func TestResolveMessageID_Cov(t *testing.T) {
 	}
 }
 
-// --- helpers: flatten / extractHeaders / findTextPart / stripB64Pad / str ---
-
 func TestStripB64Pad_Cov(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"abc", "abc"},
@@ -543,14 +522,12 @@ func TestExtractHeaders_Cov(t *testing.T) {
 		t.Errorf("want 2 headers, got %+v", got)
 	}
 
-	// Missing/garbage headers field yields an empty map, not a panic.
 	if h := extractHeaders(map[string]any{}); len(h) != 0 {
 		t.Errorf("no headers => empty, got %+v", h)
 	}
 }
 
 func TestFindTextPart_Cov(t *testing.T) {
-	// Top-level part matches directly.
 	flat := map[string]any{
 		"mimeType": "text/plain",
 		"body":     map[string]any{"data": b64url_Cov("plain top")},
@@ -559,7 +536,6 @@ func TestFindTextPart_Cov(t *testing.T) {
 		t.Errorf("top-level = %q", got)
 	}
 
-	// Nested multipart: text/plain lives under parts.
 	multi := map[string]any{
 		"mimeType": "multipart/alternative",
 		"parts": []any{
@@ -580,12 +556,10 @@ func TestFindTextPart_Cov(t *testing.T) {
 		t.Errorf("nested html = %q", got)
 	}
 
-	// No match at all.
 	if got := findTextPart(multi, "application/pdf"); got != "" {
 		t.Errorf("no match => empty, got %q", got)
 	}
 
-	// Matching mime but empty data, and matching mime but body not a map.
 	emptyData := map[string]any{"mimeType": "text/plain", "body": map[string]any{"data": ""}}
 	if got := findTextPart(emptyData, "text/plain"); got != "" {
 		t.Errorf("empty data => empty, got %q", got)
@@ -595,13 +569,11 @@ func TestFindTextPart_Cov(t *testing.T) {
 		t.Errorf("non-map body => empty, got %q", got)
 	}
 
-	// Matching mime but invalid base64 yields empty (decode error path).
 	badB64 := map[string]any{"mimeType": "text/plain", "body": map[string]any{"data": "!!!not base64!!!"}}
 	if got := findTextPart(badB64, "text/plain"); got != "" {
 		t.Errorf("bad base64 => empty, got %q", got)
 	}
 
-	// Padded base64url decodes via stripB64Pad.
 	padded := base64.URLEncoding.EncodeToString([]byte("padded text"))
 	padPart := map[string]any{"mimeType": "text/plain", "body": map[string]any{"data": padded}}
 	if got := findTextPart(padPart, "text/plain"); got != "padded text" {
@@ -645,7 +617,6 @@ func TestFlatten_Cov(t *testing.T) {
 		t.Errorf("headers = %+v", hdrs)
 	}
 
-	// Raw without payload and without labels: those keys are simply absent.
 	bare := flatten(map[string]any{"id": "x"})
 	if _, ok := bare["headers"]; ok {
 		t.Errorf("no payload => no headers, got %+v", bare)
@@ -655,10 +626,7 @@ func TestFlatten_Cov(t *testing.T) {
 	}
 }
 
-// --- friendlyMessage: header lookup, body fallbacks, UTF-8-safe truncation ---
-
 func TestFriendlyMessage_Cov(t *testing.T) {
-	// body_text wins.
 	m := friendlyMessage(map[string]any{
 		"id":       "m1",
 		"threadId": "t1",
@@ -678,13 +646,11 @@ func TestFriendlyMessage_Cov(t *testing.T) {
 		t.Errorf("body should prefer text, got %v", m["body"])
 	}
 
-	// Falls back to html when text empty.
 	m2 := friendlyMessage(map[string]any{"body_html": "the html", "snippet": "s"})
 	if m2["body"] != "the html" {
 		t.Errorf("html fallback = %v", m2["body"])
 	}
 
-	// Falls back to snippet when both empty.
 	m3 := friendlyMessage(map[string]any{"snippet": "just snippet"})
 	if m3["body"] != "just snippet" {
 		t.Errorf("snippet fallback = %v", m3["body"])
@@ -709,8 +675,6 @@ func TestFriendlyMessage_Cov(t *testing.T) {
 	}
 }
 
-// --- baseURL: param override vs package default ---
-
 func TestBaseURL_Cov(t *testing.T) {
 	if got := baseURL(core.Job{Params: map[string]any{"base_url": "http://override"}}); got != "http://override" {
 		t.Errorf("override = %q", got)
@@ -720,8 +684,6 @@ func TestBaseURL_Cov(t *testing.T) {
 		t.Errorf("default = %q", got)
 	}
 }
-
-// --- extractGmailError: nested error.message vs raw body ---
 
 func TestExtractGmailError_Cov(t *testing.T) {
 	msg := extractGmailError([]byte(`{"error":{"message":"bad token"}}`))
@@ -734,10 +696,7 @@ func TestExtractGmailError_Cov(t *testing.T) {
 	}
 }
 
-// --- buildRFC822: MIME assembly (headers, CC/BCC/Reply-To, attachments) ---
-
 func TestBuildRFC822_Cov(t *testing.T) {
-	// No attachments: single-part, includes all headers.
 	msg := buildRFC822(rfcHeaders{
 		to:              "to@x.com",
 		cc:              "cc@x.com",
@@ -759,7 +718,6 @@ func TestBuildRFC822_Cov(t *testing.T) {
 		t.Errorf("no attachments => not multipart")
 	}
 
-	// Header injection: CR/LF in values is stripped.
 	inj := buildRFC822(rfcHeaders{
 		to:              "to@x.com\r\nBcc: evil@x.com",
 		subject:         "Hi",
@@ -771,7 +729,6 @@ func TestBuildRFC822_Cov(t *testing.T) {
 		t.Errorf("CRLF injection not stripped:\n%s", inj)
 	}
 
-	// With attachments: multipart/mixed with the body part and a file part.
 	atts := []mailmsg.Attachment{
 		{Filename: "report.pdf", MIME: "application/pdf", Data: []byte("%PDF fake")},
 	}
@@ -790,8 +747,6 @@ func TestBuildRFC822_Cov(t *testing.T) {
 		t.Errorf("body part missing:\n%s", multi)
 	}
 }
-
-// --- executeGmailGetMessage: error paths ---
 
 func TestGmailGetMessage_BadInput_Cov(t *testing.T) {
 	withGmailEnv(t, "http://unused")
@@ -851,7 +806,6 @@ func TestGmailGetMessage_AuthError_Cov(t *testing.T) {
 	}
 }
 
-// Body falls back to snippet when no text/html parts decode.
 func TestGmailGetMessage_BodyFallsBackToSnippet_Cov(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -874,8 +828,6 @@ func TestGmailGetMessage_BodyFallsBackToSnippet_Cov(t *testing.T) {
 		t.Errorf("body = %v, want snippet fallback", res.Output["body"].Inline)
 	}
 }
-
-// --- executeGmailSearch: error and edge paths ---
 
 func TestGmailSearch_AuthError_Cov(t *testing.T) {
 	SetHTTPBase("http://unused")
@@ -918,13 +870,11 @@ func TestGmailSearch_Non2xx_Cov(t *testing.T) {
 	}
 }
 
-// Search sets page token and query input override; empty results degrade safely.
 func TestGmailSearch_PageTokenAndEmpty_Cov(t *testing.T) {
 	var gotQuery, gotPageToken string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotQuery = r.URL.Query().Get("q")
 		gotPageToken = r.URL.Query().Get("pageToken")
-		// No "messages" key at all => parsed.Messages stays nil => [] out.
 		_ = json.NewEncoder(w).Encode(map[string]any{})
 	}))
 	defer srv.Close()
@@ -949,12 +899,9 @@ func TestGmailSearch_PageTokenAndEmpty_Cov(t *testing.T) {
 	}
 }
 
-// A per-message expansion failure degrades that entry to its stub instead of
-// failing the whole search.
 func TestGmailSearch_ExpansionFailureDegradesToStub_Cov(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/messages/") {
-			// Every expansion fetch errors.
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -983,8 +930,6 @@ func TestGmailSearch_ExpansionFailureDegradesToStub_Cov(t *testing.T) {
 		t.Errorf("failed expansion should degrade to stub, got %+v", first)
 	}
 }
-
-// --- executeGmailSend: error paths and CC/BCC assembly ---
 
 func TestGmailSend_AuthError_Cov(t *testing.T) {
 	SetHTTPBase("http://unused")
@@ -1038,8 +983,6 @@ func TestGmailSend_Non2xx_Cov(t *testing.T) {
 	}
 }
 
-// Text format plus CC/BCC/Reply-To/thread_id flow through into the raw message
-// and the send payload.
 func TestGmailSend_TextWithCCBCCThread_Cov(t *testing.T) {
 	var rawMsg, threadID string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1130,7 +1073,6 @@ func TestGmailSearch_OnlyNew_ReadFailureStopsAndKeepsTheWatermark(t *testing.T) 
 		t.Fatalf("watermark was overwritten: %q, want it left at %q", got, stored)
 	}
 
-	// Once the store answers again, both emails are still waiting.
 	failRead = false
 	res, err = executeGmailSearch(context.Background(), job, nil)
 	if err != nil || res.Status != core.StatusOK {
@@ -1146,14 +1088,6 @@ func TestGmailSearch_OnlyNew_ReadFailureStopsAndKeepsTheWatermark(t *testing.T) 
 	}
 }
 
-// hydrationServer serves a search whose per-message expansion fails for the
-// ids in failIDs and succeeds for the rest. gets counts expansion calls.
-//
-// The failure is a 404 (a message deleted between the list and the fetch)
-// rather than a 503, purely for test speed: the shared egress client puts a
-// 5-second cooldown on a host that answers 503 without a Retry-After, so a
-// 503 fixture makes every one of these tests wait that out — real behaviour,
-// documented on hydrateMessage, but the code path under test is identical.
 func hydrationServer(t *testing.T, ids []string, dateByID map[string]string, failIDs map[string]bool, gets *int32) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1200,7 +1134,6 @@ func TestGmailSearch_OnlyNew_UnfetchableEmailHoldsTheWatermark(t *testing.T) {
 	)
 	t.Cleanup(func() { cursor.SetStore(nil, nil) })
 
-	// "lost" arrived first, "newer" after it — both after the watermark.
 	dates := map[string]string{"lost": "1700000005000", "newer": "1700000009000"}
 	var gets int32
 	failing := map[string]bool{"lost": true}
@@ -1216,13 +1149,10 @@ func TestGmailSearch_OnlyNew_UnfetchableEmailHoldsTheWatermark(t *testing.T) {
 	if err != nil || res.Status != core.StatusOK {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
 	}
-	// The one that fetched is emitted.
 	list, _ := res.Output["messages"].Inline.([]any)
 	if len(list) != 1 {
 		t.Fatalf("emitted %d email(s), want the 1 that fetched", len(list))
 	}
-	// Both messages were attempted (no retry loop here on purpose — see
-	// hydrateMessage: the engine's retry scheduler owns that).
 	if n := atomic.LoadInt32(&gets); n != 2 {
 		t.Errorf("%d expansion call(s), want 2 (one per message, no in-step retry)", n)
 	}
@@ -1231,7 +1161,6 @@ func TestGmailSearch_OnlyNew_UnfetchableEmailHoldsTheWatermark(t *testing.T) {
 		t.Fatalf("watermark advanced to %q past an unreadable email; it must stay at %q", got, startedAt)
 	}
 
-	// Next run, with Gmail healthy: the lost email is still offered.
 	srv2 := hydrationServer(t, []string{"newer", "lost"}, dates, map[string]bool{}, &gets)
 	defer srv2.Close()
 	withGmailEnv(t, srv2.URL)
@@ -1248,8 +1177,6 @@ func TestGmailSearch_OnlyNew_UnfetchableEmailHoldsTheWatermark(t *testing.T) {
 	}
 }
 
-// Every email in the page failing is an outage, and it looks exactly like a
-// quiet poll from downstream — both emit nothing. It has to be visible.
 func TestGmailSearch_OnlyNew_AllUnfetchableFails(t *testing.T) {
 	store := memCursor(t)
 	store["acme|cursor.gmail_search.g1.n1"] = "1700000000000"
@@ -1344,7 +1271,6 @@ func backlogServer(t *testing.T, ids []string, dateByID map[string]string) *http
 				}
 			}
 		}
-		// Page through the (newest-first) matches.
 		start := 0
 		if pt := r.URL.Query().Get("pageToken"); pt != "" {
 			n, err := strconv.Atoi(pt)
@@ -1390,7 +1316,6 @@ func TestGmailSearch_OnlyNew_BacklogDrainsOldestFirst(t *testing.T) {
 	name := "acme|cursor.gmail_search.g1.n1"
 	store[name] = "1700000000000" // watermark: everything below is handled
 
-	// Five emails arrived since, newest first, one second apart.
 	ids := []string{"e5", "e4", "e3", "e2", "e1"}
 	dates := map[string]string{
 		"e1": "1700000001000", "e2": "1700000002000", "e3": "1700000003000",
@@ -1434,8 +1359,6 @@ func TestGmailSearch_OnlyNew_BacklogDrainsOldestFirst(t *testing.T) {
 		}
 	}
 
-	// Every email, exactly once, oldest first. The old behaviour emitted
-	// [e5,e4] and lost e1..e3 for good.
 	want := []string{"e1", "e2", "e3", "e4", "e5"}
 	if len(drained) != len(want) {
 		t.Fatalf("drained %v, want %v", drained, want)
@@ -1450,10 +1373,6 @@ func TestGmailSearch_OnlyNew_BacklogDrainsOldestFirst(t *testing.T) {
 	}
 }
 
-// The poll asks Gmail for the backlog rather than for the newest mail, so the
-// email cap is spent on new mail instead of being filled with already-seen
-// messages. Without the `after:` bound a busy mailbox could return a full page
-// of old mail and starve the new.
 func TestGmailSearch_OnlyNew_QueryCarriesTheWatermark(t *testing.T) {
 	store := memCursor(t)
 	store["acme|cursor.gmail_search.g1.n1"] = "1700000000000"
@@ -1477,8 +1396,6 @@ func TestGmailSearch_OnlyNew_QueryCarriesTheWatermark(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	// 1700000000000 ms → after:1700000000 (floored to the second, which errs
-	// generous; the millisecond filter removes anything re-included).
 	if gotQuery != "is:unread after:1700000000" {
 		t.Errorf("query = %q, want the search ANDed with the watermark bound", gotQuery)
 	}

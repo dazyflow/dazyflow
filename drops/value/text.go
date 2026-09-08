@@ -1,12 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package value contains source-field drops — nodes whose output is a
-// value the graph author supplies inline. Most (Text, Number, JSON) take
-// no input and are pure ValueSources; some (URL) also accept a wired
-// string so the value can be computed upstream, and validate it. Useful
-// for inline prompts, templates, snippets, addresses, and other small
-// bits of data that don't deserve a workspace file.
 package value
 
 import (
@@ -29,9 +23,6 @@ func init() {
 			Provider: "internal",
 			Tags: []string{
 				"text", "string", "constant", "literal",
-				// The same node is where a snippet of code goes — see the
-				// `language` param. Searching the palette for "sql" or "script"
-				// should land here rather than on nothing.
 				"code", "script", "snippet", "sql", "yaml", "json", "shell",
 			},
 			Description: "Emit a literal string value. The 'text' param can be multi-line; later steps see it as text/plain on the 'out' port. Set 'Written in' to a language and the box becomes a code editor — monospace, syntax-coloured, and it stops wrapping long lines — which is how you keep a SQL query, a shell script or a chunk of YAML in a flow. It is still a plain string on the way out; the JSON step is the one that parses.",

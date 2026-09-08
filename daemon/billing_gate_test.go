@@ -20,9 +20,6 @@ func gateGraph(id string) core.Graph {
 	}
 }
 
-// Free tenant at the cap: the (cap+1)-th submission is refused with
-// core.ErrPlanLimit and writes no run state; the runs under the cap all
-// went through. Counters come from the REAL metering path, not a fixture.
 func TestPlanGate_FreeTenantCappedAtLimit(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)
@@ -51,7 +48,6 @@ func TestPlanGate_FreeTenantCappedAtLimit(t *testing.T) {
 	}
 }
 
-// A pro tenant sails past the free cap.
 func TestPlanGate_ProTenantUnlimited(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)
@@ -69,13 +65,10 @@ func TestPlanGate_ProTenantUnlimited(t *testing.T) {
 	}
 }
 
-// FreeRunsPerMonth unset (the self-hosted default) = no enforcement,
-// even with a plan store wired and the tenant on free.
 func TestPlanGate_DisabledByDefault(t *testing.T) {
 	t.Parallel()
 	h := newSkipHarness(t)
 	h.svc.Plans = daemon.NewMemPlanStore()
-	// FreeRunsPerMonth left at zero.
 
 	for i := 0; i < 3; i++ {
 		runID, err := h.svc.SubmitGraph(t.Context(), h.principal, gateGraph("open"))

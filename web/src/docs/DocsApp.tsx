@@ -10,14 +10,11 @@ import { Toc } from "./Toc";
 import { DocsFooter } from "./DocsFooter";
 import { getPage } from "./content";
 
-// The shell persists across navigations; the content pane swaps by pathname.
-// `/` lands on the first guide page (the sidebar is the real home here).
 export function DocsApp() {
   const { pathname, hash } = useLocation();
   const path = pathname === "/" ? "/guide/concepts" : pathname;
   const page = getPage(path);
 
-  // Scroll to top on page change, or to the anchor if the URL carries one.
   useEffect(() => {
     if (hash) {
       const el = document.getElementById(hash.slice(1));

@@ -8,15 +8,11 @@ import (
 	"testing"
 )
 
-// sizedStruct exercises the reflect struct arm with two exported string
-// fields of known length.
 type sizedStruct struct {
 	A string
 	B string
 }
 
-// fiveByteList returns n strings of five bytes each, so a walk's early exit
-// lands on a predictable count.
 func fiveByteList(n int) []any {
 	out := make([]any, n)
 	for i := range out {
@@ -78,10 +74,6 @@ func TestApproxValueSize_RefExactCharge(t *testing.T) {
 	}
 }
 
-// The early exit fires when the running total passes the budget, not when it
-// reaches it. A walk that stops on equality under-reports by whatever the
-// remaining elements carry — and under-reporting is the direction that lets
-// an oversized value through.
 func TestApproxValueSize_BudgetIsExclusive(t *testing.T) {
 	const five = "aaaaa"
 	for name, c := range map[string]struct {
@@ -89,7 +81,6 @@ func TestApproxValueSize_BudgetIsExclusive(t *testing.T) {
 		budget int
 		want   int
 	}{
-		// Two equal elements, budget exactly the first one's size.
 		"typedStringSlice": {[]string{five, "bbbbb"}, 5, 10},
 		"anySlice":         {[]any{five, "bbbbb"}, 5, 10},
 		"reflectSlice":     {[]int{1, 2}, 8, 16},
@@ -99,8 +90,7 @@ func TestApproxValueSize_BudgetIsExclusive(t *testing.T) {
 		"rowList":    {[]map[string]any{{"aa": "bb"}, {"cc": "dd"}}, 4, 8},
 		"reflectMap": {map[int]string{1: "aa", 2: "bb"}, 10, 20},
 		"refList":    {[]Ref{{MIME: five}, {MIME: "bbbbb"}}, 5, 10},
-		// refSize: at exactly the budget it still charges the inline payload.
-		"refInline": {Ref{MIME: "ab", Inline: "xyz"}, 2, 5},
+		"refInline":  {Ref{MIME: "ab", Inline: "xyz"}, 2, 5},
 	} {
 		if got := ApproxValueSize(c.v, c.budget); got != c.want {
 			t.Errorf("%s: ApproxValueSize(budget %d) = %d, want %d", name, c.budget, got, c.want)
@@ -119,7 +109,6 @@ func TestApproxValueSize_NestedWalkGetsRemainingBudget(t *testing.T) {
 		t.Errorf("nested list: ApproxValueSize = %d, want 10 (inner walk got the remaining 1 byte)", got)
 	}
 
-	// Same through a Ref: MIME charges 5, so the inline walk gets 1.
 	if got := ApproxValueSize(Ref{MIME: "aaaaa", Inline: fiveByteList(10)}, 6); got != 10 {
 		t.Errorf("ref inline: ApproxValueSize = %d, want 10", got)
 	}
@@ -138,18 +127,14 @@ func TestApproxValueSize_DepthCapIsInclusive(t *testing.T) {
 		return v
 	}
 
-	// maxValueDepth wrappers put the leaf at depth maxValueDepth exactly.
 	if got := ApproxValueSize(nest(maxValueDepth), 100); got <= 100 {
 		t.Errorf("a value at the depth cap measured %d, want it refused as over the 100-byte budget", got)
 	}
-	// One level shallower is ordinary data and is walked to the leaf.
 	if got := ApproxValueSize(nest(maxValueDepth-1), 100); got != len("leaf") {
 		t.Errorf("a value just inside the depth cap measured %d, want %d", got, len("leaf"))
 	}
 }
 
-// ApproxGraphBytes stops at the budget in each of its four loops, and each
-// stops on passing it rather than reaching it.
 func TestApproxGraphBytes_BudgetIsExclusivePerLoop(t *testing.T) {
 	const five, other = "aaaaa", "bbbbb"
 	for name, g := range map[string]Graph{
@@ -169,8 +154,6 @@ func TestApproxGraphBytes_BudgetIsExclusivePerLoop(t *testing.T) {
 // ceiling.
 func TestApproxGraphBytes_ParamsGetRemainingBudget(t *testing.T) {
 	g := Graph{Nodes: []Node{{ID: "aaaaa", Params: map[string]any{"p": fiveByteList(10)}}}}
-	// ID charges 5 of the 6-byte budget; the param key charges 1 and its value
-	// is weighed with the remaining 1, stopping after one 5-byte element.
 	if got := ApproxGraphBytes(g, 6); got != 11 {
 		t.Errorf("ApproxGraphBytes = %d, want 11 (params got the remaining budget)", got)
 	}

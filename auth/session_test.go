@@ -23,14 +23,12 @@ func TestMemSessionStore_DeleteAndRevoke(t *testing.T) {
 			t.Fatalf("PutSession: %v", err)
 		}
 	}
-	// DeleteSession.
 	if err := store.DeleteSession(ctx, "s3"); err != nil {
 		t.Fatalf("DeleteSession: %v", err)
 	}
 	if _, err := store.GetSession(ctx, "s3"); err != ErrInvalidCredential {
 		t.Errorf("deleted session err = %v", err)
 	}
-	// RevokeSubjectSessions drops both of bob's.
 	n, err := store.RevokeSubjectSessions(ctx, "bob")
 	if err != nil || n != 2 {
 		t.Errorf("RevokeSubjectSessions = %d, %v", n, err)
@@ -50,15 +48,12 @@ func TestSessionAuthenticate_Cov(t *testing.T) {
 	}
 	a := &SessionAuthenticator{Store: store}
 
-	// Wrong prefix → fall through.
 	if _, err := a.Authenticate(ctx, "dzk_notasession"); !errors.Is(err, ErrInvalidCredential) {
 		t.Errorf("non-session token err = %v", err)
 	}
-	// Unknown token.
 	if _, err := a.Authenticate(ctx, SessionTokenPrefix+"deadbeef"); !errors.Is(err, ErrInvalidCredential) {
 		t.Errorf("unknown token err = %v", err)
 	}
-	// Valid token authenticates.
 	if p, err := a.Authenticate(ctx, token); err != nil || p.Subject != "u" {
 		t.Errorf("valid token = %+v, %v", p, err)
 	}
@@ -72,7 +67,6 @@ func TestSessionAuthenticate_ExpiredDeletes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IssueSession: %v", err)
 	}
-	// Clock past expiry → expired error, and the session is deleted.
 	a := &SessionAuthenticator{Store: store, Clock: func() time.Time { return sess.ExpiresAt.Add(time.Hour) }}
 	if _, err := a.Authenticate(ctx, token); !errors.Is(err, ErrInvalidCredential) {
 		t.Errorf("expired token err = %v", err)
@@ -93,11 +87,9 @@ func TestCachingSessionStore_FullSurface(t *testing.T) {
 	now := time.Now()
 	sess := Session{ID: "s1", Subject: "bob", ExpiresAt: now.Add(time.Hour)}
 
-	// PutSession flows through and caches.
 	if err := c.PutSession(ctx, sess); err != nil {
 		t.Fatalf("PutSession: %v", err)
 	}
-	// GetSession served from cache (hit).
 	if _, err := c.GetSession(ctx, "s1"); err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
@@ -106,7 +98,6 @@ func TestCachingSessionStore_FullSurface(t *testing.T) {
 		t.Error("expected a cache hit")
 	}
 
-	// RevokeSubjectSessions forwards + evicts.
 	c.PutSession(ctx, Session{ID: "s2", Subject: "bob", ExpiresAt: now.Add(time.Hour)})
 	n, err := c.RevokeSubjectSessions(ctx, "bob")
 	if err != nil || n != 2 {
@@ -116,7 +107,6 @@ func TestCachingSessionStore_FullSurface(t *testing.T) {
 		t.Errorf("session not revoked in inner store: %v", err)
 	}
 
-	// DeleteSession evicts + forwards.
 	c.PutSession(ctx, sess)
 	if err := c.DeleteSession(ctx, "s1"); err != nil {
 		t.Fatalf("DeleteSession: %v", err)
@@ -157,11 +147,8 @@ func TestCachingSessionStore_PutEvictsAtCapacity(t *testing.T) {
 	wrapped := NewCachingSessionStore(inner, time.Minute, 1)
 	c := wrapped.(*CachingSessionStore)
 	now := time.Now()
-	// First entry fills the single-slot cache.
 	c.PutSession(ctx, Session{ID: "s1", Subject: "a", ExpiresAt: now.Add(time.Hour)})
-	// Second insert hits the capacity sweep path.
 	c.PutSession(ctx, Session{ID: "s2", Subject: "b", ExpiresAt: now.Add(time.Hour)})
-	// Both are still retrievable from the inner store regardless.
 	if _, err := c.GetSession(ctx, "s2"); err != nil {
 		t.Errorf("GetSession s2: %v", err)
 	}

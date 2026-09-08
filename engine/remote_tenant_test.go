@@ -24,9 +24,6 @@ import (
 // because the guarantee is invisible when it works: nothing about a passing
 // run tells you the isolation is still there.
 
-// fakeRemote puts a transport into the catalog without a gRPC server. The dial
-// path is covered by TestRemoteCatalog_Register_InsecureDialAndHandshake; what
-// matters here is purely which key it lands under.
 func fakeRemote(c *RemoteCatalog, tenant, id string) {
 	c.nodes[remoteKey{tenant: tenant, id: id}] = &RemoteTransport{
 		Descriptor: RemoteDescriptor{ID: id, Tenant: tenant},
@@ -41,7 +38,6 @@ func TestRemoteCatalog_GetIsScopedToOwningTenant(t *testing.T) {
 	if _, ok := c.Get("acme", "invoices"); !ok {
 		t.Fatal("owning tenant cannot reach its own remote")
 	}
-	// The whole point: same id, different tenant.
 	if _, ok := c.Get("globex", "invoices"); ok {
 		t.Fatal("another tenant reached a remote it does not own")
 	}
@@ -112,9 +108,6 @@ func TestRemoteCatalog_RegisterRequiresTenant(t *testing.T) {
 	}
 }
 
-// The end-to-end shape: what the engine actually calls. Resolve reads the
-// tenant off the context (set by core.WithTenant before every node executes)
-// and passes it down to the catalog.
 func TestResolve_RemoteIsScopedToContextTenant(t *testing.T) {
 	c := NewRemoteCatalog()
 	fakeRemote(c, "acme", "invoices")
@@ -128,15 +121,11 @@ func TestResolve_RemoteIsScopedToContextTenant(t *testing.T) {
 	if err == nil {
 		t.Fatal("another tenant resolved a remote it does not own")
 	}
-	// It should look like an unknown module, not like a permission error:
-	// globex has no business learning that acme has a runner called invoices.
 	if !strings.Contains(err.Error(), "no transport") {
 		t.Fatalf("err = %v, want the plain 'no transport' form", err)
 	}
 }
 
-// A context with no tenant at all — the case a missing core.WithTenant
-// produces. Fails closed, and reports the same way an unknown module does.
 func TestResolve_RemoteRefusedWithoutTenant(t *testing.T) {
 	c := NewRemoteCatalog()
 	fakeRemote(c, "acme", "invoices")

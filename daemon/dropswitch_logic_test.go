@@ -5,9 +5,6 @@ package daemon
 
 import "testing"
 
-// TestDropSwitchDisabled exercises the global-vs-per-tenant resolution of
-// PgDropSwitchStore.Disabled against a hand-seeded cache, with no DB —
-// the cache map is what the resolver hot path actually reads.
 func TestDropSwitchDisabled(t *testing.T) {
 	t.Parallel()
 	s := &PgDropSwitchStore{cache: map[string]bool{

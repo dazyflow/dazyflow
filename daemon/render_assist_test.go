@@ -25,9 +25,6 @@ func doAssist(t *testing.T, h *gatewayHarness, body any) (int, assistResp) {
 	return rw.Code, ar
 }
 
-// TestRenderAssist_NoProviderNeedsConnect: with no secret store / no
-// connected LLM, the endpoint asks the user to connect one (200 +
-// need_connect), rather than erroring out — the UI turns this into a link.
 func TestRenderAssist_NoProviderNeedsConnect(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t) // harness has no EncryptedSecrets configured
@@ -42,7 +39,6 @@ func TestRenderAssist_NoProviderNeedsConnect(t *testing.T) {
 	}
 }
 
-// TestRenderAssist_EmptyDescription is a 400 (nothing to generate from).
 func TestRenderAssist_EmptyDescription(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -52,8 +48,6 @@ func TestRenderAssist_EmptyDescription(t *testing.T) {
 	}
 }
 
-// TestStripCodeFences covers the helper that removes the ```html … ```
-// wrapper models often add despite instructions.
 func TestStripCodeFences(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ in, want string }{

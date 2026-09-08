@@ -1,12 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package openai is the ChatGPT (OpenAI Chat Completions API) provider for the
-// shared llmtask core — the sibling of drops/claude. It implements one
-// Provider (the OpenAI API call + response parsing) and registers the five
-// task-shaped drops under the "ChatGPT" integration via llmtask.RegisterAll.
-// All the task UX + manifests are shared from llmtask; only the OpenAI-specific
-// request/response shape (chat messages, function tool-calls) lives here.
 package openai
 
 import (
@@ -23,7 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
-// openaiModels is shared by the task drops and the shared LLM registry.
 var openaiModels = []llmtask.ModelOption{
 	{ID: "gpt-4o", Label: "GPT-4o"},
 	{ID: "gpt-4o-mini", Label: "GPT-4o mini"},
@@ -36,9 +29,6 @@ const (
 
 type provider struct{}
 
-// Call sends one Chat Completions request and normalizes the response. Forced
-// tools map to OpenAI's tools (type:function) + tool_choice; the chosen
-// tool_call's arguments (a JSON string) decode into the result's Tool map.
 func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (llmtask.Result, *core.JobError) {
 	model := req.Model
 	if model == "" {
@@ -125,9 +115,6 @@ func init() {
 	})
 }
 
-// verifyKey checks an OpenAI API key by listing models — a free, read-only
-// GET (no tokens spent). 200 means valid; 401/403 means rejected. Backs the
-// Apps page's connection test / verify-before-save for ChatGPT.
 func verifyKey(ctx context.Context, apiKey, base string) error {
 	base = strings.TrimRight(base, "/")
 	if base == "" {
@@ -199,7 +186,6 @@ func userContent(req llmtask.Request) []any {
 	return parts
 }
 
-// mediaType strips any parameters off a content type.
 func mediaType(mime string) string {
 	return strings.TrimSpace(strings.SplitN(mime, ";", 2)[0])
 }

@@ -38,7 +38,6 @@ func TestConnectionVerifier_RegisterAndLookup_Cov(t *testing.T) {
 		t.Errorf("bad conn err = %v, want %v", err, want)
 	}
 
-	// Duplicate registration panics.
 	defer func() {
 		if recover() == nil {
 			t.Error("duplicate registration should panic")
@@ -56,7 +55,6 @@ func (stubEmailTemplateProvider) TemplateHTML(_ context.Context, tenant, id stri
 func TestEmailTemplateProvider_Context_Cov(t *testing.T) {
 	base := context.Background()
 
-	// Nil provider is left off the context.
 	if WithEmailTemplateProvider(base, nil) != base {
 		t.Error("nil provider should return ctx unchanged")
 	}
@@ -78,7 +76,6 @@ func TestEmailTemplateProvider_Context_Cov(t *testing.T) {
 func TestResolverContext_Cov(t *testing.T) {
 	base := context.Background()
 
-	// Nil resolver is left off the context.
 	if WithResolver(base, nil) != base {
 		t.Error("nil resolver should return ctx unchanged")
 	}
@@ -98,12 +95,10 @@ func TestNodeResolver_Resolve_Cov(t *testing.T) {
 
 	r := &NodeResolver{Native: reg}
 
-	// Unknown id -> "no transport" error.
 	if _, err := r.Resolve(context.Background(), "missing"); err == nil {
 		t.Error("unknown module should error")
 	}
 
-	// Known id, version pin ignored.
 	tr, err := r.Resolve(context.Background(), "ping@9.9.9")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
@@ -112,7 +107,6 @@ func TestNodeResolver_Resolve_Cov(t *testing.T) {
 		t.Errorf("resolved %q, want ping", tr.Manifest().ID)
 	}
 
-	// DropGate refuses -> resolution fails after lookup.
 	gateErr := errors.New("disabled by admin")
 	r.DropGate = func(_ context.Context, dropID, tenant string) error {
 		if dropID == "ping" {

@@ -12,15 +12,14 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestRunNode_RedactsConnectorOAuthToken guards the connector-token
-// redaction fix. Connectors (slack/github/gmail) resolve their OAuth
-// access token *inside* Execute via a SetTokenLookup hook, NOT via a
-// ${secret.} param — so the token never enters the secret-provider path
-// that populates the redaction set. cmd/dzd/wireConnectorTokenHooks now
-// calls engine.RegisterRuntimeSecret with the fetched token; this test
-// mirrors that wiring and asserts an echoed token is scrubbed from the
-// persisted Result (output AND error), which is what the run-detail API
-// (GET /api/v1/me/runs/{id}/nodes/{node}) serves.
+// Guards the connector-token redaction fix. Connectors (slack/github/gmail)
+// resolve their OAuth access token *inside* Execute via a SetTokenLookup hook,
+// NOT via a ${secret.} param — so the token never enters the secret-provider
+// path that populates the redaction set. cmd/dzd/wireConnectorTokenHooks now
+// calls engine.RegisterRuntimeSecret with the fetched token; this test mirrors
+// that wiring and asserts an echoed token is scrubbed from the persisted
+// Result (output AND error), which is what the run-detail API (GET
+// /api/v1/me/runs/{id}/nodes/{node}) serves.
 func TestRunNode_RedactsConnectorOAuthToken(t *testing.T) {
 	const oauthToken = "xoxb-1234567890-THIS-IS-A-LIVE-SLACK-BOT-TOKEN"
 
@@ -63,9 +62,9 @@ func TestRunNode_RedactsConnectorOAuthToken(t *testing.T) {
 	}
 }
 
-// TestRegisterRuntimeSecret_NoSinkIsNoop confirms the hook is safe to call
-// outside a node execution (no sink on ctx) — a connector lookup invoked
-// from a non-engine path (e.g. the resource picker) must not panic.
+// Confirms the hook is safe to call outside a node execution (no sink on ctx)
+// — a connector lookup invoked from a non-engine path (e.g. the resource
+// picker) must not panic.
 func TestRegisterRuntimeSecret_NoSinkIsNoop(t *testing.T) {
 	RegisterRuntimeSecret(context.Background(), "anything") // must not panic
 }

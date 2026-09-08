@@ -3,11 +3,6 @@
 
 package daemon
 
-// Benchmarks for the request path a browser waits on. They mount the
-// routes ONCE, the way ServeListener does, because ServeForTest remounts
-// every route per call — benchmarking through it measures route mounting
-// rather than the handler.
-
 import (
 	"bytes"
 	"context"
@@ -30,8 +25,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// benchGateway builds the same gateway newGatewayHarness does and returns
-// the production handler stack with routes mounted once, plus a token.
 func benchGateway(b *testing.B) (http.Handler, string) {
 	b.Helper()
 	return buildBenchGateway(b)
@@ -44,9 +37,6 @@ func buildBenchGateway(b testing.TB) (http.Handler, string) {
 	return h, tok
 }
 
-// buildBenchGatewayWith is buildBenchGateway over a caller-supplied job
-// store, so a benchmark can put the real Postgres one behind the handler.
-// It also returns the Service, for seeding.
 func buildBenchGatewayWith(b testing.TB, jobs core.JobStore) (http.Handler, string, *Service) {
 	ks := auth.NewMemKeyStore()
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
@@ -95,17 +85,10 @@ func benchRequest(b *testing.B, method, path string) {
 	}
 }
 
-// BenchmarkGetMe is the smallest authenticated request there is: it
-// stands in for the fixed cost every API call pays before its own work.
 func BenchmarkGetMe(b *testing.B) { benchRequest(b, "GET", "/api/v1/me") }
 
-// BenchmarkListDrops is the catalog request the flow editor's palette
-// makes, over the real built-in catalog.
 func BenchmarkListDrops(b *testing.B) { benchRequest(b, "GET", "/api/v1/drops") }
 
-// BenchmarkMountRoutes measures building the router. Production does this
-// once per process, but every ServeForTest call in the test suite repeats
-// it, so it also prices the suite's per-request overhead.
 func BenchmarkMountRoutes(b *testing.B) {
 	handlerGW, _ := benchGateway(b)
 	_ = handlerGW
@@ -124,10 +107,6 @@ func BenchmarkMountRoutes(b *testing.B) {
 	}
 }
 
-// discardWriter is a ResponseWriter that throws the body away, so a
-// benchmark measures producing the response rather than the test
-// recorder's own 1 MB of buffer growth. It is the closer analogue of a
-// socket.
 type discardWriter struct {
 	h      http.Header
 	status int
@@ -160,19 +139,12 @@ func benchRequestDiscard(b *testing.B, path, acceptEncoding string) {
 	}
 }
 
-// BenchmarkListDropsDiscard is the palette as the server actually pays
-// for it: body produced, nothing accumulated.
 func BenchmarkListDropsDiscard(b *testing.B) { benchRequestDiscard(b, "/api/v1/drops", "") }
 
-// BenchmarkListDropsGzip adds what a real browser sends, so the cost of
-// compressing the catalog is visible next to the bytes it saves.
 func BenchmarkListDropsGzip(b *testing.B) { benchRequestDiscard(b, "/api/v1/drops", "gzip") }
 
-// BenchmarkListDropsRevalidate is the palette request a browser that
-// already has the catalog makes: conditional, and answered with a 304.
 func BenchmarkListDropsRevalidate(b *testing.B) {
 	handler, token := benchGateway(b)
-	// One unconditional request to learn the current tag.
 	warm := httptest.NewRequest("GET", "/api/v1/drops", nil)
 	warm.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
@@ -196,12 +168,6 @@ func BenchmarkListDropsRevalidate(b *testing.B) {
 	}
 }
 
-// The run list is the endpoint an open tab polls every two seconds, and the
-// only one whose rows used to carry each run's whole stored flow. It needs a
-// real Postgres to mean anything: over the in-memory store both paths read
-// the same objects, so the projection is free there by construction and the
-// cost it removes — transferring and detoasting a JSONB column — does not
-// exist. Skips without DAZYFLOW_TEST_DB.
 func benchRunListGateway(b *testing.B) (http.Handler, string) {
 	b.Helper()
 	url := os.Getenv("DAZYFLOW_TEST_DB")
@@ -216,8 +182,6 @@ func benchRunListGateway(b *testing.B) (http.Handler, string) {
 	b.Cleanup(store.Close)
 	handler, token, _ := buildBenchGatewayWith(b, store)
 
-	// A 40 KB flow is the payload the run pins at submit — a hundred steps
-	// with a realistic amount of configuration on each.
 	g := core.Graph{ID: "bench-flow", Tenant: "t", Workspace: "ws"}
 	for i := range 100 {
 		g.Nodes = append(g.Nodes, core.Node{
@@ -276,16 +240,10 @@ func benchRunListAt(b *testing.B, limit int) {
 	}
 }
 
-// BenchmarkRunList20 is the default page the runs view asks for.
 func BenchmarkRunList20(b *testing.B) { benchRunListAt(b, 20) }
 
-// BenchmarkRunList200 is the page a tab watching a busy workspace polls:
-// RunList re-asks for as many rows as it currently shows.
 func BenchmarkRunList200(b *testing.B) { benchRunListAt(b, 200) }
 
-// The run-detail view polls two endpoints every couple of seconds while a
-// run is live: the run itself and its node records. Both are scoped by
-// loading the run record, which carries the run's whole stored flow.
 func benchRunDetailGateway(b *testing.B) (http.Handler, string, string) {
 	b.Helper()
 	handler, token := benchRunListGateway(b)
@@ -296,8 +254,6 @@ func benchRunDetailGateway(b *testing.B) (http.Handler, string, string) {
 		b.Fatalf("OpenPostgres: %v", err)
 	}
 	b.Cleanup(store.Close)
-	// Node records for one of the seeded runs, so the detail view has a
-	// timeline to render.
 	const runID = "benchrun-001000"
 	for i := range 100 {
 		if err := store.Enqueue(ctx, core.JobRecord{
@@ -329,27 +285,16 @@ func benchGET(b *testing.B, handler http.Handler, token, path string) {
 	}
 }
 
-// BenchmarkGetRun is the run-detail header: seven scalars and an error code.
 func BenchmarkGetRun(b *testing.B) {
 	handler, token, runID := benchRunDetailGateway(b)
 	benchGET(b, handler, token, "/api/v1/me/runs/"+runID)
 }
 
-// BenchmarkListRunNodes is the timeline beneath it.
 func BenchmarkListRunNodes(b *testing.B) {
 	handler, token, runID := benchRunDetailGateway(b)
 	benchGET(b, handler, token, "/api/v1/me/runs/"+runID+"/nodes")
 }
 
-// The approvals badge in the sidebar polls every 30 seconds on every page,
-// for every signed-in browser, and re-fires on each navigation — so it is
-// the most repeated authenticated request the product makes. It renders one
-// integer. These benchmarks measure what producing that integer costs.
-//
-// Postgres-gated for the same reason the run-list ones are: over the memory
-// store both paths read the same objects, so the cost this is about —
-// transferring and decoding each parked step's stashed context — does not
-// exist there.
 func benchApprovalsGateway(b *testing.B, pending int) (http.Handler, string) {
 	b.Helper()
 	url := os.Getenv("DAZYFLOW_TEST_DB")
@@ -399,11 +344,8 @@ func benchApprovalsAt(b *testing.B, pending int) {
 	benchGET(b, handler, token, "/api/v1/approvals/pending")
 }
 
-// BenchmarkApprovalsPending25 is an ordinary workspace with a handful parked.
 func BenchmarkApprovalsPending25(b *testing.B) { benchApprovalsAt(b, 25) }
 
-// BenchmarkApprovalsPending200 is the query's own limit — the most the badge
-// can ever be counting.
 func BenchmarkApprovalsPending200(b *testing.B) { benchApprovalsAt(b, 200) }
 
 // The same badge, served by the count endpoint. Compare against
@@ -417,10 +359,6 @@ func benchApprovalsCountAt(b *testing.B, pending int) {
 func BenchmarkApprovalsCount25(b *testing.B)  { benchApprovalsCountAt(b, 25) }
 func BenchmarkApprovalsCount200(b *testing.B) { benchApprovalsCountAt(b, 200) }
 
-// benchRequestParallel is benchRequest under concurrency. The serial
-// benchmarks above price one request; this one prices the ones a fleet
-// serves at the same time, which is where a shared lock in the request
-// path shows up and where a serial benchmark is blind by construction.
 func benchRequestParallel(b *testing.B, method, path string) {
 	handler, token := benchGateway(b)
 	b.ReportAllocs()
@@ -440,10 +378,6 @@ func benchRequestParallel(b *testing.B, method, path string) {
 
 func BenchmarkGetMeParallel(b *testing.B) { benchRequestParallel(b, "GET", "/api/v1/me") }
 
-// benchSaveFlowAt is the write path, which nothing here measured before: every
-// benchmark above reads. The editor autosaves while a person is typing, so a
-// save is not a rare event — it is the request most often in flight while
-// someone works, and it validates, lints and commits the whole flow each time.
 func benchSaveFlowAt(b *testing.B, steps int) {
 	handler, token := benchGateway(b)
 	g := core.Graph{
@@ -491,17 +425,7 @@ func BenchmarkSaveFlow8(b *testing.B)  { benchSaveFlowAt(b, 8) }
 func BenchmarkSaveFlow30(b *testing.B) { benchSaveFlowAt(b, 30) }
 func BenchmarkSaveFlow60(b *testing.B) { benchSaveFlowAt(b, 60) }
 
-// BenchmarkWebhookTrigger is the path an external system takes to fire a flow:
-// POST /trigger/{tenant}/{workspace}/{flow}. It is a write (it submits a run)
-// and the caller waits on it, and it was unbenchmarked — like every other
-// write here. It loads the PUBLISHED flow from the workspace on every
-// delivery, so its cost scales with the flow, not with the payload.
 func benchWebhookTriggerAt(b *testing.B, steps int, wide bool) {
-	// Over a real Postgres, not the in-memory store. The memory store's
-	// Enqueue scans every record it holds to find the tenant's queue tail
-	// (Postgres does it with an index), so a benchmark that submits a run per
-	// iteration measures that scan growing — 96% of the profile — and nothing
-	// about the handler.
 	url := os.Getenv("DAZYFLOW_TEST_DB")
 	if url == "" {
 		b.Skip("set DAZYFLOW_TEST_DB to run the Postgres request benchmarks")
@@ -511,19 +435,11 @@ func benchWebhookTriggerAt(b *testing.B, steps int, wide bool) {
 		b.Fatalf("OpenPostgres: %v", err)
 	}
 	b.Cleanup(store.Close)
-	// Every iteration submits a run, so this benchmark writes rows to the
-	// shared test database. Clear them at the end, or a later run of any
-	// benchmark against the same database measures this one's leftovers.
 	b.Cleanup(func() {
 		if _, derr := store.DeleteByTenant(context.Background(), "t"); derr != nil {
 			b.Logf("cleanup: %v", derr)
 		}
 	})
-	// Before the gateway is built, not after: the listener takes log.Writer()
-	// at construction, so muting the default logger later leaves it holding
-	// the old one. It logs a line per delivery, which at benchmark rates is
-	// both the dominant I/O and enough noise to make `go test -bench` output
-	// unparseable by benchstat, which reads the same stream.
 	log.SetOutput(io.Discard)
 	b.Cleanup(func() { log.SetOutput(os.Stderr) })
 	handler, token, _ := buildBenchGatewayWith(b, store)
@@ -576,7 +492,6 @@ func benchWebhookTriggerAt(b *testing.B, steps int, wide bool) {
 	if code := do("PUT", "/api/v1/me/flows/t%2Fws%2Fhook", payload, "Bearer "+token); code != http.StatusOK {
 		b.Fatalf("save = %d", code)
 	}
-	// Only the PUBLISHED revision fires, so publish before triggering.
 	if code := do("POST", "/api/v1/me/flows/t%2Fws%2Fhook/publish", nil, "Bearer "+token); code != http.StatusOK {
 		b.Fatalf("publish = %d", code)
 	}

@@ -25,21 +25,11 @@ type stepSourceKey struct {
 	name   string
 }
 
-// stepSourceRegistry records what this process has applied.
-//
-// The value is the UpdatedAt of the row behind each live registration, and
-// that is what makes reconcile both cheap and correct across replicas: a row
-// whose UpdatedAt still matches is already live with the current configuration
-// and is skipped, while an edit made on ANOTHER replica carries a newer
-// UpdatedAt and so re-applies here on the next pass.
-//
-// The zero value is ready to use; the map is built on first write.
 type stepSourceRegistry struct {
 	mu      sync.Mutex
 	applied map[stepSourceKey]time.Time
 }
 
-// remember records that k is live as of updated.
 func (r *stepSourceRegistry) remember(k stepSourceKey, updated time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -58,7 +48,6 @@ func (r *stepSourceRegistry) forget(k stepSourceKey) {
 	delete(r.applied, k)
 }
 
-// appliedAt reports when k was applied, and whether it is held at all.
 func (r *stepSourceRegistry) appliedAt(k stepSourceKey) (time.Time, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -66,8 +55,6 @@ func (r *stepSourceRegistry) appliedAt(k stepSourceKey) (time.Time, bool) {
 	return at, ok
 }
 
-// appliedKeys snapshots what this process holds. A copy, because the caller
-// walks it while calling forget.
 func (r *stepSourceRegistry) appliedKeys() []stepSourceKey {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -78,10 +65,7 @@ func (r *stepSourceRegistry) appliedKeys() []stepSourceKey {
 	return out
 }
 
-// stepSourcePlan is one source type's answers to what a reconcile pass needs
-// to know. Every field is required.
 type stepSourcePlan[R any] struct {
-	// key, enabled and updatedAt read one stored row.
 	key       func(R) stepSourceKey
 	enabled   func(R) bool
 	updatedAt func(R) time.Time
@@ -90,9 +74,7 @@ type stepSourcePlan[R any] struct {
 	// server records it on its row and stays configured; a web API records it
 	// and stays unregistered), and in both cases the pass must carry on —
 	// one org's bad row must not keep every other org's steps down.
-	apply func(context.Context, R)
-	// unregister takes a source out of the live catalog. Called for anything
-	// this process holds that the store no longer wants.
+	apply      func(context.Context, R)
 	unregister func(tenant, name string)
 }
 
@@ -121,8 +103,6 @@ func reconcileStepSources[R any](ctx context.Context, reg *stepSourceRegistry, r
 		}
 		p.apply(ctx, row)
 	}
-	// Anything this replica holds that the store no longer wants: deleted or
-	// disabled, here or on another node.
 	for _, k := range reg.appliedKeys() {
 		if _, want := desired[k]; want {
 			continue
@@ -132,16 +112,6 @@ func reconcileStepSources[R any](ctx context.Context, reg *stepSourceRegistry, r
 	}
 }
 
-// StepSourceReconcileInterval is how long a change made on another replica may
-// take to appear here.
-//
-// A compromise, and worth naming as one: shorter means a colleague's new
-// server or catalog shows up in your palette sooner, longer means fewer
-// needless list queries. Thirty seconds is well under the time it takes
-// someone to add one and then go looking for its steps.
-//
-// One value for both sources on purpose: they are configured on the same admin
-// flow, and a user should not have to learn two different latencies.
 const StepSourceReconcileInterval = 30 * time.Second
 
 // runStepSourceReconciler reconciles now and then on a ticker until ctx ends.

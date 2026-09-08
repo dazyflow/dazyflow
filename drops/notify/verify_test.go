@@ -15,10 +15,6 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// --- verifyNtfy ---
-
-// TestVerifyNtfy covers the health-check (no token), the account-check (token
-// accepted vs rejected), and the generic non-2xx branch.
 func TestVerifyNtfy(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -69,8 +65,6 @@ func TestVerifyNtfy(t *testing.T) {
 	}
 }
 
-// TestVerifyNtfy_EgressBlocked covers the egress guard: a global allowlist that
-// excludes the target host makes EgressAllowedFor reject before any request.
 func TestVerifyNtfy_EgressBlocked(t *testing.T) {
 	if err := hfnet.SetEgressAllowlist([]string{"allowed.example.com"}); err != nil {
 		t.Fatalf("set allowlist: %v", err)
@@ -81,8 +75,6 @@ func TestVerifyNtfy_EgressBlocked(t *testing.T) {
 		t.Fatalf("err = %v, want egress_blocked", err)
 	}
 }
-
-// --- verifyEmail ---
 
 func TestVerifyEmail_ParamValidation(t *testing.T) {
 	cases := []struct {
@@ -112,8 +104,6 @@ func TestVerifyEmail_ParamValidation(t *testing.T) {
 	}
 }
 
-// TestVerifyEmail_PrivateHostBlocked: a loopback host resolves but is private,
-// so CheckDialHost rejects it and verifyEmail returns the private-address help.
 func TestVerifyEmail_PrivateHostBlocked(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(false)
 	err := verifyEmail(context.Background(), map[string]string{
@@ -137,8 +127,6 @@ func TestVerifyEmail_UnresolvableHost(t *testing.T) {
 	}
 }
 
-// TestVerifyEmail_HandshakeHappyPath drives the full SMTP verify dance against
-// a scripted server (no AUTH), covering the success path including the QUIT.
 func TestVerifyEmail_HandshakeHappyPath(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -152,8 +140,6 @@ func TestVerifyEmail_HandshakeHappyPath(t *testing.T) {
 	}
 }
 
-// TestVerifyEmail_HandshakeWithAuth covers the username→PlainAuth branch in the
-// verify path.
 func TestVerifyEmail_HandshakeWithAuth(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -168,8 +154,6 @@ func TestVerifyEmail_HandshakeWithAuth(t *testing.T) {
 	}
 }
 
-// TestVerifyEmail_DialError: a closed port reaches the smtputil.Verify error
-// branch ("couldn't connect to the mail server").
 func TestVerifyEmail_DialError(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -250,11 +234,10 @@ func authRequiredSMTP(t *testing.T) string {
 	return ln.Addr().String()
 }
 
-// TestVerifyEmail_AuthRequiredIsDetected is the regression test for the bug
-// this all came from: "Test connection" reported OK for a connection whose
-// credentials were never presented. With no login configured the handshake
-// alone succeeds, so the check has to go one command further — MAIL FROM — and
-// surface the server's refusal.
+// The regression test for the bug this all came from: "Test connection"
+// reported OK for a connection whose credentials were never presented. With no
+// login configured the handshake alone succeeds, so the check has to go one
+// command further — MAIL FROM — and surface the server's refusal.
 func TestVerifyEmail_AuthRequiredIsDetected(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)

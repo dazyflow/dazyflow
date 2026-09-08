@@ -12,16 +12,10 @@ import (
 	"github.com/dazyflow/dazyflow/daemon/internal/pgstore"
 )
 
-// PgScheduleStore is the durable ScheduleStore. Every dzd reads the same set,
-// so a schedule authored on one replica is enrolled on the leader without
-// either of them touching the other's disk.
 type PgScheduleStore struct {
 	pool *pgxpool.Pool
 }
 
-// entry_key already embeds tenant/workspace/graph_id and is unique per
-// enrollment, so it is the natural primary key; the flow index backs the
-// per-flow replace and the erasure cascade.
 const pgScheduleSchema = `
 CREATE TABLE IF NOT EXISTS flow_schedules (
     entry_key        TEXT PRIMARY KEY,
@@ -103,10 +97,6 @@ func (s *PgScheduleStore) DeleteByTenant(ctx context.Context, tenant string) (in
 	return int(tag.RowsAffected()), nil
 }
 
-// PruneMissingFlows removes rows for flows absent from live, the set of flow
-// keys the workspaces actually hold, within the workspaces scope says were
-// readable. It is the delete half of a reconcile: a flow deleted while its dzd
-// was down leaves rows nothing else will clear.
 func (s *PgScheduleStore) PruneMissingFlows(ctx context.Context, live, scope map[string]struct{}) (int, error) {
 	rows, err := s.pool.Query(ctx, `SELECT DISTINCT tenant, workspace, graph_id FROM flow_schedules`)
 	if err != nil {
@@ -123,8 +113,6 @@ func (s *PgScheduleStore) PruneMissingFlows(ctx context.Context, live, scope map
 		if _, ok := live[flowKey(f.tenant, f.workspace, f.graphID)]; ok {
 			continue
 		}
-		// A workspace this pass could not read offers no live flows, so its
-		// rows are not evidence of a deleted flow.
 		if !inScope(scope, f.tenant, f.workspace) {
 			continue
 		}

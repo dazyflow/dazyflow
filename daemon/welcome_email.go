@@ -23,8 +23,6 @@ import (
 // serve different jobs. Welcome needs only a mailer; the call no-ops on
 // deployments without one.
 
-// sendWelcomeEmail greets a freshly-created account. Returns false (and
-// logs) on any failure; callers ignore the result.
 func (h *authAPI) sendWelcomeEmail(r *http.Request, user auth.User) bool {
 	if h.svc.Mailer == nil {
 		return false

@@ -89,8 +89,6 @@ describe("resolveOrgDeepLink", () => {
     ).toEqual({ kind: "switch", tenant: "acme", url: "/runs/run-1" });
   });
 
-  // A single-org user's link is still worth adopting: it costs nothing and
-  // keeps the URL clean.
   it("adopts for a single-org user", () => {
     expect(
       resolveOrgDeepLink({
@@ -102,8 +100,6 @@ describe("resolveOrgDeepLink", () => {
     ).toEqual({ kind: "adopt", tenant: "acme", url: "/runs/run-1" });
   });
 
-  // Nothing here is run-specific: the same param resolves a support ticket, a
-  // flow, or any other org-scoped route the server pins.
   it("is route-agnostic", () => {
     expect(
       resolveOrgDeepLink({

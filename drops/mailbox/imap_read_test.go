@@ -18,9 +18,6 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/sandbox"
 )
 
-// crlf joins message lines the way the wire does. A fixture written with "\n"
-// is a message no real mailbox contains, and both a mail server and a MIME
-// parser treat the bare LF as part of the line.
 func crlf(lines ...string) []byte { return []byte(strings.Join(lines, "\r\n")) }
 
 // altMessage is multipart/alternative: the same message as plain text and as
@@ -48,9 +45,6 @@ func altMessage() []byte {
 	)
 }
 
-// swedishMessage is the case that makes charset handling load-bearing rather
-// than theoretical: a Nordic invoice, quoted-printable, in ISO-8859-1. Without
-// both decodes the reader sees "Fakturan =E4r betald" or mojibake.
 func swedishMessage() []byte {
 	return crlf(
 		"From: Faktura <faktura@leverantor.test>",
@@ -66,8 +60,6 @@ func swedishMessage() []byte {
 	)
 }
 
-// attachmentMessage carries a PDF, an inline signature logo, and a text body —
-// the shape the invoice-filing use case actually meets.
 func attachmentMessage(pdf []byte) []byte {
 	return crlf(
 		"From: Billing <billing@vendor.test>",
@@ -98,8 +90,6 @@ func attachmentMessage(pdf []byte) []byte {
 	)
 }
 
-// sandboxJob is a job with somewhere to write, as the engine hands one to a
-// file-touching drop.
 func sandboxJob(t *testing.T, host string, port int, p map[string]any) core.Job {
 	t.Helper()
 	job := searchJob(host, port, p)
@@ -159,8 +149,6 @@ func TestIMAPGetMessage_ReadsTheFourPins(t *testing.T) {
 	}
 }
 
-// multipart/alternative: the plain half is the body, not the HTML one. Same
-// preference Gmail's Read email applies.
 func TestIMAPGetMessage_PrefersPlainTextOverHTML(t *testing.T) {
 	host, port, _ := startIMAP(t, altMessage())
 
@@ -185,8 +173,6 @@ func TestIMAPGetMessage_DecodesQuotedPrintableISO8859(t *testing.T) {
 	}
 }
 
-// An email whose whole payload is a file is a real email, so it reads as an
-// empty body rather than failing the step.
 func TestIMAPGetMessage_EmptyBodyWhenThereIsNoTextPart(t *testing.T) {
 	host, port, _ := startIMAP(t, crlf(
 		"From: a@x.test",
@@ -209,9 +195,6 @@ func TestIMAPGetMessage_EmptyBodyWhenThereIsNoTextPart(t *testing.T) {
 	}
 }
 
-// A UID stops existing when the mail is deleted or moved, which can happen
-// between a search and the step reading a match. That is an ordinary outcome
-// and has to say so.
 func TestIMAPGetMessage_NotFound(t *testing.T) {
 	host, port, _ := startIMAP(t, rawMessage("a@x.test", "Hello", "body"))
 
@@ -243,8 +226,6 @@ func TestIMAPGetMessage_GmailStyleIDIsExplained(t *testing.T) {
 	}
 }
 
-// The obvious drag — Search emails' whole match list into Email — reads the
-// first match, exactly as Gmail's Read email does.
 func TestIMAPGetMessage_AcceptsAMatchListOnTheInput(t *testing.T) {
 	host, port, _ := startIMAP(t,
 		rawMessage("a@x.test", "First", "one"),
@@ -480,16 +461,11 @@ func TestIMAPMarkSeen_MarksTheEmailRead(t *testing.T) {
 	if len(after) != 0 {
 		t.Fatalf("email is still unread after being marked read: %+v", after)
 	}
-	// And the mail is still there — marked, not moved or removed.
 	if all := messages(t, runSearch(t, searchJob(host, port, nil))); len(all) != 1 {
 		t.Fatalf("the mailbox now holds %d messages, want 1", len(all))
 	}
 }
 
-// Idempotent for real, which is why the manifest says so and lets the engine
-// retry: a second run leaves the mailbox in exactly the state the first one
-// did. This is the difference from the send steps, which turn retries off
-// because a resent email is a second email.
 func TestIMAPMarkSeen_IsIdempotent(t *testing.T) {
 	host, port, _ := startIMAP(t, rawMessage("a@x.test", "Handle me", "body"))
 	job := searchJob(host, port, map[string]any{"id": "1"})
@@ -527,7 +503,6 @@ func TestIMAPMarkSeen_NotFoundWhenTheEmailIsGone(t *testing.T) {
 	}
 }
 
-// Only the message it was pointed at, and no neighbours.
 func TestIMAPMarkSeen_LeavesOtherMailAlone(t *testing.T) {
 	host, port, _ := startIMAP(t,
 		rawMessage("a@x.test", "One", "one"),

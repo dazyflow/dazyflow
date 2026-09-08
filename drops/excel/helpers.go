@@ -1,10 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package excel hosts the native Excel connectors (excel_read,
-// excel_write), migrated from the scripted SheetJS drops back to Go using
-// github.com/xuri/excelize/v2. Same ids, ports and params, so existing
-// graphs keep resolving — and the ~1.9MB embedded SheetJS bundle goes away.
 package excel
 
 import (
@@ -15,10 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/sandbox"
 )
 
-// maxSandboxFileBytes caps how large a workspace file we'll pull fully into
-// memory. An .xlsx is a zip, so the compressed file is normally far smaller
-// than this; the cap stops a single oversized file from OOMing the shared
-// daemon before excelize's own decompression limits even apply.
 const maxSandboxFileBytes = 100 * 1024 * 1024 // 100 MiB
 
 func readSandboxFile(job core.Job, p string) ([]byte, error) {

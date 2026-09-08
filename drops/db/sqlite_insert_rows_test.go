@@ -13,8 +13,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// openDB opens the SQLite file we just wrote so tests can verify
-// what landed on disk.
 func openDB(t *testing.T, path string) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", path)
@@ -25,7 +23,6 @@ func openDB(t *testing.T, path string) *sql.DB {
 	return db
 }
 
-// rowCount is a small helper for the assertion every test ends with.
 func rowCount(t *testing.T, db *sql.DB, table string) int {
 	t.Helper()
 	var n int
@@ -66,8 +63,6 @@ func TestSQLiteInsert_CreateAndInsert(t *testing.T) {
 	if n := rowCount(t, db, "customers"); n != 2 {
 		t.Errorf("row count = %d, want 2", n)
 	}
-	// Spot-check that the typed value (age:30 → int) made it through
-	// SQLite's dynamic typing into the TEXT column we created.
 	var name string
 	var age string
 	if err := db.QueryRow("SELECT name, age FROM customers WHERE name='Alice'").Scan(&name, &age); err != nil {
@@ -97,8 +92,6 @@ func TestSQLiteInsert_ColumnTypes(t *testing.T) {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
 	}
 	db := openDB(t, filepath.Join(root, "out.db"))
-	// Confirm the typed column actually came back as a Go int via
-	// sqlite's affinity rules — INTEGER columns return integer values.
 	var count int
 	if err := db.QueryRow("SELECT count FROM events").Scan(&count); err != nil {
 		t.Fatalf("scan: %v", err)
@@ -110,8 +103,6 @@ func TestSQLiteInsert_ColumnTypes(t *testing.T) {
 
 func TestSQLiteInsert_AppendsToExistingTable(t *testing.T) {
 	root := t.TempDir()
-	// Pre-create the table so the drop sees it exists; second call
-	// without create_table should still insert.
 	db := openDB(t, filepath.Join(root, "out.db"))
 	if _, err := db.Exec(`CREATE TABLE t (k TEXT)`); err != nil {
 		t.Fatalf("seed: %v", err)
@@ -134,9 +125,6 @@ func TestSQLiteInsert_AppendsToExistingTable(t *testing.T) {
 	}
 }
 
-// create_table now defaults to true, so a fresh run with no explicit
-// flag auto-creates the table. The "fail loudly on missing table"
-// contract is still available — opt in with create_table=false.
 func TestSQLiteInsert_MissingTableFailsWhenCreateDisabled(t *testing.T) {
 	root := t.TempDir()
 	res, _ := executeSQLiteInsertRows(t.Context(), core.Job{
@@ -155,9 +143,6 @@ func TestSQLiteInsert_MissingTableFailsWhenCreateDisabled(t *testing.T) {
 	}
 }
 
-// Default behavior: no create_table param → table is auto-created.
-// This is the case the AI-generated flows hit and the bug report
-// "no such table: invoices (1)" used to surface here.
 func TestSQLiteInsert_AutoCreatesByDefault(t *testing.T) {
 	root := t.TempDir()
 	res, _ := executeSQLiteInsertRows(t.Context(), core.Job{
@@ -180,8 +165,6 @@ func TestSQLiteInsert_AutoCreatesByDefault(t *testing.T) {
 }
 
 func TestSQLiteInsert_RollbackOnFailure(t *testing.T) {
-	// Trying to insert into a non-existent column should fail and
-	// leave the table empty — partial inserts violate the contract.
 	root := t.TempDir()
 	db := openDB(t, filepath.Join(root, "out.db"))
 	if _, err := db.Exec(`CREATE TABLE t (a TEXT)`); err != nil {
@@ -193,7 +176,6 @@ func TestSQLiteInsert_RollbackOnFailure(t *testing.T) {
 		WorkspaceRoot: root,
 		Params:        map[string]any{"path": "out.db", "table": "t"},
 		Input: map[string]core.Ref{
-			// Column "b" doesn't exist on table t.
 			"rows":    {Inline: []map[string]any{{"a": "ok"}, {"b": "bad"}}},
 			"headers": {Inline: []string{"a", "b"}},
 		},
@@ -208,7 +190,6 @@ func TestSQLiteInsert_RollbackOnFailure(t *testing.T) {
 }
 
 func TestSQLiteInsert_DerivesHeadersAlphabetically(t *testing.T) {
-	// No headers input → union of row keys, sorted.
 	root := t.TempDir()
 	res, _ := executeSQLiteInsertRows(t.Context(), core.Job{
 		WorkspaceRoot: root,
@@ -245,8 +226,6 @@ func TestSQLiteInsert_DerivesHeadersAlphabetically(t *testing.T) {
 }
 
 func TestSQLiteInsert_JSONRoundtripShape(t *testing.T) {
-	// Simulate gRPC/MCP roundtrip: Inline arrives as []any of
-	// map[string]any.
 	root := t.TempDir()
 	res, _ := executeSQLiteInsertRows(t.Context(), core.Job{
 		WorkspaceRoot: root,
@@ -271,8 +250,6 @@ func TestSQLiteInsert_JSONRoundtripShape(t *testing.T) {
 }
 
 func TestSQLiteInsert_EmptyRows(t *testing.T) {
-	// Zero rows + create_table=true should still create the table
-	// (handy for "ensure schema" graph patterns) and report 0 inserted.
 	root := t.TempDir()
 	res, _ := executeSQLiteInsertRows(t.Context(), core.Job{
 		WorkspaceRoot: root,
@@ -315,11 +292,6 @@ func TestSQLiteInsert_PathTraversalBlocked(t *testing.T) {
 	}
 }
 
-// validateIdent enforces only the genuinely-unsafe cases — empty,
-// embedded NUL, and absurdly long. Everything else (spaces, dashes,
-// SQL injection attempts) is accepted because we quote with proper
-// SQL identifier quoting, which makes the contents of the string
-// data, not code.
 func TestSQLiteInsert_RejectsUnsafeTableName(t *testing.T) {
 	root := t.TempDir()
 	for _, tc := range []struct {
@@ -345,12 +317,6 @@ func TestSQLiteInsert_RejectsUnsafeTableName(t *testing.T) {
 	}
 }
 
-// TestSQLiteInsert_NonASCIIColumnName proves a Swedish-shaped column
-// name round-trips: CREATE TABLE writes the identifier, INSERT
-// references it, and SELECT pulls the same value back out. The
-// column also includes a percent sign ("MOMS%") which was previously
-// rejected by the [A-Za-z0-9_] regex even though SQLite handles it
-// fine when quoted.
 func TestSQLiteInsert_NonASCIIColumnName(t *testing.T) {
 	root := t.TempDir()
 	res, err := executeSQLiteInsertRows(t.Context(), core.Job{
@@ -376,9 +342,6 @@ func TestSQLiteInsert_NonASCIIColumnName(t *testing.T) {
 
 	db := openDB(t, filepath.Join(root, "out.db"))
 	var company, moms, antal string
-	// Note the quoted identifiers — SQLite needs them for non-ASCII
-	// and for "MOMS%" / "Antal à". We use the same quoteIdent the
-	// drop uses so this assertion matches what production produces.
 	q := `SELECT ` + quoteIdent("FÖRETAG") + `, ` + quoteIdent("MOMS%") + `, ` + quoteIdent("Antal à") +
 		` FROM fakturor`
 	if err := db.QueryRow(q).Scan(&company, &moms, &antal); err != nil {
@@ -462,7 +425,6 @@ func TestSQLiteInsert_MissingRowsInput(t *testing.T) {
 }
 
 func TestSQLiteInsert_MkdirsSubdirectory(t *testing.T) {
-	// path with directories should be created under the sandbox.
 	root := t.TempDir()
 	res, _ := executeSQLiteInsertRows(t.Context(), core.Job{
 		WorkspaceRoot: root,

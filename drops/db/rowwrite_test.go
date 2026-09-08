@@ -9,7 +9,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestParseConflictUpdateCols covers each branch of the upsert column parser.
 func TestParseConflictUpdateCols(t *testing.T) {
 	t.Run("missing conflict_columns errors", func(t *testing.T) {
 		_, _, _, errRes := parseConflictUpdateCols(core.Job{Params: map[string]any{}})
@@ -78,7 +77,6 @@ func TestParseConflictUpdateCols(t *testing.T) {
 	})
 }
 
-// TestCheckConflictInHeaders covers the present / missing branches.
 func TestCheckConflictInHeaders(t *testing.T) {
 	t.Run("all present → nil", func(t *testing.T) {
 		if r := checkConflictInHeaders(core.Job{}, []string{"id"}, []string{"id", "name"}); r != nil {
@@ -93,8 +91,6 @@ func TestCheckConflictInHeaders(t *testing.T) {
 	})
 }
 
-// TestParseRowsInput_MissingAndBad covers the missing-input and bad-input
-// branches of the shared row parser.
 func TestParseRowsInput_MissingAndBad(t *testing.T) {
 	t.Run("missing rows port", func(t *testing.T) {
 		_, errRes := parseRowsInput(core.Job{})

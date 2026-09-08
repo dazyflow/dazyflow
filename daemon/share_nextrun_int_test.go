@@ -13,10 +13,10 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// TestPublicWorkspaceOverview_NextRun checks the TV-board wiring: a published,
-// cron-triggered flow is "live" and surfaces next_run_at; an unpublished one
-// ("needs publish") is an effectively test-mode draft and is kept off the board
-// entirely, so it never appears as a tile.
+// Checks the TV-board wiring: a published, cron-triggered flow is "live" and
+// surfaces next_run_at; an unpublished one ("needs publish") is an effectively
+// test-mode draft and is kept off the board entirely, so it never appears as a
+// tile.
 func TestPublicWorkspaceOverview_NextRun(t *testing.T) {
 	t.Parallel()
 	h := newShareHarness(t)
@@ -31,7 +31,6 @@ func TestPublicWorkspaceOverview_NextRun(t *testing.T) {
 			t.Fatalf("save %s: %v", g.ID, err)
 		}
 	}
-	// Publish only "sched" → it becomes live; "unpub" stays needs-publish.
 	store, err := h.svc.Workspaces.Open("t", "ws")
 	if err != nil {
 		t.Fatal(err)

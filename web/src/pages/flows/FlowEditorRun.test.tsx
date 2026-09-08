@@ -91,9 +91,6 @@ vi.mock("../../api", () => {
     retryRun: (...a: unknown[]) => retryRun(...a),
     cancelRun: (...a: unknown[]) => cancelRun(...a),
     sampleNode: () => Promise.resolve({}),
-    // The rest of the editor's api surface. Stubbed rather than omitted so a
-    // mount doesn't die in an unrelated effect — the editor calls 24 methods
-    // and only the ones above matter to the run lifecycle.
     listProviders: () => Promise.resolve({ providers: [] }),
     watchFlow: () => Promise.resolve({}),
     publishFlow: () => Promise.resolve({}),
@@ -145,9 +142,6 @@ beforeEach(() => {
   cancelRun.mockResolvedValue({});
 });
 
-// openErrors clicks the toolbar's Errors button, where a run failure is
-// reported now. It used to be a banner over the canvas; the count is what
-// stands in the toolbar and the words are one click away.
 async function openErrors() {
   await userEvent.click(
     await screen.findByRole("button", { name: /editor.issuesErrorsTitle/ }),
@@ -165,7 +159,6 @@ describe("editor run lifecycle", () => {
     await userEvent.click(await screen.findByText("editor.run"));
     await waitFor(() => expect(runGraph).toHaveBeenCalled());
     await waitFor(() => expect(stream.latest()?.runID).toBe("run-1"));
-    // While a run is in flight the same toolbar slot becomes Stop.
     expect(await screen.findByText("runAction.stop")).toBeInTheDocument();
     expect(screen.queryByText("editor.run")).not.toBeInTheDocument();
   });
@@ -187,8 +180,6 @@ describe("editor run lifecycle", () => {
     if (!status) throw new Error("success status not rendered");
     expect(status.closest(".editor-banner-stack")).toBeNull();
     expect(status.closest(".editor-toolbar")).not.toBeNull();
-    // In the PINNED half. The other half scrolls, and a result that can scroll
-    // out of sight is worse than none.
     expect(status.closest(".toolbar-scroll")).toBeNull();
   });
 
@@ -201,9 +192,6 @@ describe("editor run lifecycle", () => {
     await emit(...frame.node("ntfy_1", "succeeded"));
     await emit(...frame.terminal("succeeded"));
 
-    // The success toast is the only signal that a run worked; a border tint on
-    // each node reads as "nothing happened". Match the headline, not the
-    // "view the run" link that sits under it.
     expect(await screen.findByText(succeededHeadline)).toBeInTheDocument();
   });
 
@@ -236,8 +224,6 @@ describe("editor run lifecycle", () => {
     await openErrors();
     const retry = await screen.findByText("runAction.retry");
     await userEvent.click(retry);
-    // Resumes THIS run rather than starting a fresh one, and keeps watching on
-    // the canvas instead of navigating to the run page.
     await waitFor(() => expect(retryRun).toHaveBeenCalledWith("tok", "run-1"));
     expect(runGraph).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(stream.latest()?.runID).toBe("run-2"));
@@ -265,8 +251,6 @@ describe("editor run lifecycle", () => {
     await userEvent.click(await screen.findByText("editor.run"));
     await waitFor(() => expect(stream.latest()?.runID).toBe("run-1"));
 
-    // A build/validation error or a global timeout terminates the run without
-    // any per-node frame; without this branch the canvas just goes quiet.
     await emit(...frame.terminal("failed", { message: "timeout" }));
 
     await openErrors();
@@ -314,7 +298,6 @@ describe("editor run lifecycle", () => {
     await waitFor(() => expect(stream.latest()?.runID).toBe("run-1"));
 
     await userEvent.click(await screen.findByText("runAction.stop"));
-    // The third argument is the reason the daemon records against the run.
     await waitFor(() =>
       expect(cancelRun).toHaveBeenCalledWith("tok", "run-1", expect.any(String)),
     );

@@ -1,9 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package net houses modules that reach outside the daemon's host.
-// http_request is the workhorse — most real workflows need to call an
-// external API at some point.
 package net
 
 import (
@@ -57,20 +54,11 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// url is both a param and an input port (same id) so it can be
-				// typed inline on the pin OR wired from an upstream node that
-				// builds the target URL. Listed first — it's the primary input.
-				// Typed text/plain so it reads as a string pin (green) and wires
-				// cleanly from a Text source.
 				{Port: "url", Label: "URL", MIME: []string{"text/plain"}},
 				{Port: "request_body", Label: "Body"},
 			},
 			Outputs: []core.Port{
-				// Status first: it's the field most flows branch on, so it
-				// sits at the top of the output column. Status and headers are
-				// separate ports (not one meta blob) so a downstream Branch can
-				// test the numeric status code directly — wire status →
-				// Compare with in_range [200,299] to fork on success, e.g.
+				// Status first: it is the field most flows branch on.
 				{Port: "status", Label: "Status", MIME: []string{"application/json"}},
 				{Port: "response_body", Label: "Response"},
 				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
@@ -92,13 +80,7 @@ func init() {
 					"required":["url"]
 				}`,
 			),
-			// idempotent=true so retry edges validate. GET/HEAD/OPTIONS/
-			// PUT/DELETE are safe to replay; POST/PATCH are not idempotent
-			// under HTTP, so for those we attach a stable Idempotency-Key
-			// (see executeHTTPRequest) to let compliant services dedupe a
-			// retried-but-already-applied write. Note the worker only
-			// auto-retries (without an explicit on_error=retry edge) on
-			// idempotent leaf nodes — so a leaf POST relies on that key.
+			// GET/HEAD/OPTIONS are idempotent per HTTP, so a retry edge validates.
 			Idempotent:  true,
 			RetryPolicy: core.RetryExponentialBackoff,
 		},
@@ -109,12 +91,7 @@ func init() {
 const (
 	defaultTimeoutMs    = 30000
 	defaultMaxBodyBytes = 10 * 1024 * 1024 // 10 MiB
-	// maxMaxBodyBytes is the hard ceiling on the author-settable
-	// max_body_bytes. http_request buffers the whole response in memory
-	// (io.ReadAll below), so without a cap an author could set max_body_bytes
-	// to gigabytes, point at a large/attacker-controlled URL, and OOM the
-	// shared daemon. Large transfers should use http_download, which streams
-	// to disk under the workspace quota.
+	// The ceiling an author cannot raise.
 	maxMaxBodyBytes = 100 * 1024 * 1024 // 100 MiB
 )
 
@@ -123,8 +100,6 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	if strings.TrimSpace(url) == "" {
 		return params.Err(job, "bad_param", "url is required: connect the URL input or set the url param"), nil
 	}
-	// Operator egress allowlist (above the IP-level SSRF guard). No-op
-	// when no allowlist is configured.
 	if err := EgressAllowedFor(ctx, url); err != nil {
 		return params.Err(job, "egress_blocked", err.Error()), nil
 	}
@@ -136,9 +111,7 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	if maxBodyBytes > maxMaxBodyBytes {
 		maxBodyBytes = maxMaxBodyBytes
 	}
-	// allow_private_networks disables the SSRF guard; only honor it when the
-	// operator has opted in (DAZYFLOW_ALLOW_PRIVATE_EGRESS). Otherwise it's a
-	// tenant-controllable SSRF bypass to metadata/localhost/internal hosts.
+	// Disables the SSRF guard, so it is honoured only if the operator opted in.
 	reqAllowPrivate, _ := params.Bool(job.Params, "allow_private_networks")
 	allowPrivate := reqAllowPrivate && PrivateEgressAllowed()
 
@@ -162,30 +135,17 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 		req.Header.Set(k, v)
 	}
 
-	// For verbs that are not idempotent under HTTP semantics (POST/PATCH),
-	// attach a stable Idempotency-Key so that a retry of a request whose
-	// response was lost dedupes on any service that honors the convention
-	// (Stripe, GitHub, most modern REST APIs). The key is constant across
-	// retries of the same node record; services that ignore the header are
-	// unaffected. Mirrors webhook_send. Don't override a user-set key.
+	// A stable Idempotency-Key, so a retry whose response was lost dedupes.
 	if method == http.MethodPost || method == http.MethodPatch {
 		if req.Header.Get("Idempotency-Key") == "" {
 			req.Header.Set("Idempotency-Key", job.IdempotencyKey())
 		}
 	}
 
-	// Conditional-request caching (opt-in via cache_key). For safe re-fetches
-	// (GET/HEAD) we send the validators the server last gave us so it can
-	// answer 304 Not Modified with no body — the dominant cost saver for
-	// polling. Only active when a store is wired (cmd/dzd); off in tests.
 	cacheKey := strings.TrimSpace(params.StringDefault(job.Params, "cache_key", ""))
 	conditional := cacheKey != "" && httpCacheEnabled() && (method == http.MethodGet || method == http.MethodHead)
 	cacheName := httpCacheName(job.GraphID, job.NodeID, cacheKey)
-	// sentConditional is true only once we've actually attached an
-	// If-None-Match/If-Modified-Since — i.e. there were stored validators to
-	// send. A 304 is only meaningful in answer to such a header, so this gates
-	// the 304 fast-path below (an unsolicited 304 — e.g. on the very first poll
-	// with nothing stored — must fall through to normal handling).
+	// Only once a validator was actually attached.
 	sentConditional := false
 	if conditional {
 		sentConditional = applyConditionalHeaders(req, readCacheValidators(ctx, job.Tenant, cacheName))
@@ -193,10 +153,7 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 
 	params.EmitProgress(progress, job, 0.1, fmt.Sprintf("%s %s", method, url))
 
-	// Per-(tenant, host) pacing before dialing: bound rate + concurrency and
-	// wait out any prior 429 cooldown for this host so one tenant's burst
-	// can't exhaust a shared third-party API budget or the egress IP's
-	// reputation. Honors ctx (node timeout / cancel).
+	// Paced before dialing, so a flow cannot hammer one host.
 	release, lerr := AcquireEgress(ctx, url)
 	if lerr != nil {
 		return params.Err(job, "cancelled", lerr.Error()), lerr
@@ -218,17 +175,10 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 		return params.Err(job, "http", err.Error()), nil
 	}
 	defer resp.Body.Close()
-	// Record rate-limit signals so the next call to this host self-paces and
-	// a 429 lengthens the worker's retry backoff to the server-asked interval.
 	ObserveEgressResponse(ctx, url, resp.StatusCode, resp.Header)
 
 	params.EmitProgress(progress, job, 0.7, fmt.Sprintf("received %d", resp.StatusCode))
 
-	// 304 Not Modified (only reachable when we sent conditional headers): the
-	// resource is unchanged, so there's no body to read — emit an explicit
-	// "not modified" result a downstream Branch can skip on, and tell the
-	// scheduler this poll was empty so it can widen the interval. Validators
-	// are unchanged, so nothing to re-store.
 	if sentConditional && resp.StatusCode == http.StatusNotModified {
 		pollstate.Report(ctx, job, false)
 		return core.Result{
@@ -243,10 +193,7 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	}
 
 	if !params.StatusAccepted(resp.StatusCode, expectStatus) {
-		// Fold a bounded snippet of the response body into the error. APIs
-		// almost always explain a 4xx/5xx there (which param is missing, why
-		// auth failed, a rate-limit note); without it the error is just
-		// "got 422" with no way to tell why from the inspector.
+		// Bounded: APIs explain themselves in the body, but not in a megabyte of it.
 		msg := fmt.Sprintf("got %d, expected %s", resp.StatusCode, formatExpectStatus(expectStatus))
 		if snippet := readErrorSnippet(resp.Body); snippet != "" {
 			msg += ": " + snippet
@@ -254,19 +201,13 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 		return params.Err(job, "unexpected_status", msg), nil
 	}
 
-	// A fresh, accepted response: remember its validators so the next fetch
-	// can be conditional, and mark the poll active (data delivered) so the
-	// scheduler keeps the base cadence.
 	if conditional {
 		v := validatorsFromResponse(resp.Header)
 		switch {
 		case v.ETag != "" || v.LastModified != "":
 			writeCacheValidators(ctx, job.Tenant, cacheName, v)
 		case sentConditional:
-			// We sent a validator but this fresh response carries none — the
-			// upstream dropped it. Clear the stale one so we stop conditioning
-			// on a validator the server no longer recognises. (When we sent
-			// nothing, there's nothing stored to clear.)
+			// A fresh response with no validator means the cache entry is unusable.
 			clearCacheValidators(ctx, job.Tenant, cacheName)
 		}
 		pollstate.Report(ctx, job, true)
@@ -301,18 +242,12 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
 			"response_body": {MIME: contentType, Inline: bodyInline},
-			// status is emitted as a bare JSON number so a Branch's
-			// numeric comparison (greater_than/greater_or_equal/…) can
-			// test it without any parse step in between.
-			"status":  {MIME: "application/json", Inline: resp.StatusCode},
-			"headers": {MIME: "application/json", Inline: flattenHeaders(resp.Header)},
+			"status":        {MIME: "application/json", Inline: resp.StatusCode},
+			"headers":       {MIME: "application/json", Inline: flattenHeaders(resp.Header)},
 		},
 	}, nil
 }
 
-// resolveURL takes the target from the wired `url` input when it carries a
-// non-empty string, else falls back to the url param — so the URL can be a
-// literal in the graph or computed by an upstream node.
 func resolveURL(job core.Job) string {
 	if ref, ok := job.Input["url"]; ok {
 		if s, ok := ref.Inline.(string); ok && strings.TrimSpace(s) != "" {
@@ -333,15 +268,8 @@ func formatExpectStatus(expect []int) string {
 	return strings.Join(parts, ",")
 }
 
-// errorSnippetBytes bounds how much of a failed response body we fold into the
-// error message — enough to carry an API's validation detail, not so much it
-// floods the run log or leaks a large payload.
 const errorSnippetBytes = 512
 
-// readErrorSnippet reads a short, single-line snippet of a failed response
-// body for the error message. Best-effort: whitespace is collapsed to keep the
-// message on one line, and the result is truncated with an ellipsis. Returns
-// "" when the body is empty or unreadable.
 func readErrorSnippet(body io.Reader) string {
 	raw, _ := io.ReadAll(io.LimitReader(body, errorSnippetBytes+1))
 	s := strings.Join(strings.Fields(string(raw)), " ")
@@ -361,18 +289,8 @@ func flattenHeaders(h http.Header) map[string]string {
 	return out
 }
 
-// SafeHTTPClient returns an http.Client whose dialer blocks
-// private/loopback/link-local destinations (the SSRF guard) unless
-// allowPrivate is true. Exported so other drops that dial
-// user-influenced URLs (notify/webhook_send) get the same protection
-// instead of a bare http.Client. SSRF rejections surface as a dial
-// error whose message contains "ssrf_blocked" (see IsSSRFError).
 func SafeHTTPClient(timeout time.Duration, allowPrivate bool) *http.Client {
-	// Clients are cached per (timeout, allowPrivate): a fresh client per
-	// call would rebuild its Transport each time, so the idle-connection
-	// pool never got reused and every connector API call paid a new
-	// TCP+TLS handshake. There are only a handful of distinct timeouts
-	// across the drops, so the cache stays tiny.
+	// A fresh client per request leaks connections and defeats keep-alive.
 	key := clientKey{timeout: timeout, allowPrivate: allowPrivate}
 	if c, ok := clientCache.Load(key); ok {
 		return c.(*http.Client)
@@ -388,14 +306,9 @@ type clientKey struct {
 
 var clientCache sync.Map
 
-// IsSSRFError reports whether a client.Do error came from the SSRF
-// dial guard, so callers can map it to a friendly error code.
 func IsSSRFError(err error) bool { return isSSRFError(err) }
 
-// buildClient configures the http.Client with the SSRF guard installed
-// at dial time. The Control hook fires on each TCP connection attempt
-// after DNS resolution — so even hostnames that resolve to private IPs
-// are blocked.
+// The guard is installed at DIAL time, after DNS resolution.
 func buildClient(timeout time.Duration, allowPrivate bool) *http.Client {
 	dialer := &stdnet.Dialer{Timeout: timeout}
 	if !allowPrivate {
@@ -405,9 +318,6 @@ func buildClient(timeout time.Duration, allowPrivate bool) *http.Client {
 	}
 	return &http.Client{
 		Timeout: timeout,
-		// Every outbound call a flow can make dials through here, which is
-		// why the trigger-chain stamp lives in the transport — see
-		// triggerDepthTransport.
 		Transport: &triggerDepthTransport{base: &http.Transport{
 			DialContext:           dialer.DialContext,
 			TLSHandshakeTimeout:   timeout,
@@ -415,13 +325,7 @@ func buildClient(timeout time.Duration, allowPrivate bool) *http.Client {
 			MaxIdleConns:          10,
 			IdleConnTimeout:       30 * time.Second,
 		}},
-		// The operator egress allowlist is enforced on the initial URL by
-		// the caller, but the Go default redirect policy would happily
-		// follow a 30x to any other host — bypassing the allowlist. Re-run
-		// the host check on every hop so a redirect can't be used to reach
-		// a host the operator didn't permit. (EgressAllowed is a no-op when
-		// no allowlist is configured, so this changes nothing by default.
-		// Private/loopback IPs are independently blocked by the dial guard.)
+		// Enforced on the initial URL AND on every redirect hop.
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
 				return fmt.Errorf("stopped after 10 redirects")
@@ -431,12 +335,8 @@ func buildClient(timeout time.Duration, allowPrivate bool) *http.Client {
 	}
 }
 
-// SSRFDialControl returns a net.Dialer Control hook that blocks dialing
-// loopback/private/link-local addresses. Because Control runs after DNS
-// resolution on the resolved IP, it resists DNS rebinding. Returns nil when
-// the operator has opted into private egress (no restriction). Reusable by
-// non-HTTP drops that dial user-supplied hosts (Postgres, SMTP, …) so they
-// share the one SSRF policy instead of dialing arbitrary internal hosts.
+// Fires per connection attempt AFTER DNS resolution, so a hostname that resolves
+// to a private address is refused just as a literal one is.
 func SSRFDialControl() func(network, address string, c syscall.RawConn) error {
 	if PrivateEgressAllowed() {
 		return nil
@@ -446,12 +346,6 @@ func SSRFDialControl() func(network, address string, c syscall.RawConn) error {
 	}
 }
 
-// CheckDialHost is a pre-flight (pre-dial) SSRF check for a "host:port" or
-// bare host, for drivers that don't expose a dial hook (e.g. database/sql
-// MySQL). It resolves the host and refuses if any resolved IP is
-// loopback/private/link-local — unless the operator opted into private
-// egress. Weaker than SSRFDialControl against rebinding, but blocks the
-// common "point me at an internal host" case. nil = allowed.
 func CheckDialHost(hostPort string) error {
 	if PrivateEgressAllowed() {
 		return nil
@@ -493,10 +387,7 @@ func ssrfGuard(address string) error {
 	return nil
 }
 
-// extraUnsafeCIDRs are internal-routed ranges that Go's IP predicates don't
-// classify: RFC 6598 carrier-grade NAT (100.64.0.0/10, routed inside many
-// hosting providers) and RFC 6052 NAT64 (64:ff9b::/96, which can embed an
-// IPv4 metadata/private address inside an IPv6 literal).
+// Ranges Go's own IP predicates do not classify as private.
 var extraUnsafeCIDRs = func() []*stdnet.IPNet {
 	var out []*stdnet.IPNet
 	for _, c := range []string{"100.64.0.0/10", "64:ff9b::/96"} {
@@ -507,11 +398,7 @@ var extraUnsafeCIDRs = func() []*stdnet.IPNet {
 	return out
 }()
 
-// isUnsafeIP enumerates the address ranges that should never be reachable
-// from a user-supplied URL. Loopback (127/8, ::1), link-local (169.254/16
-// — AWS metadata!), RFC 1918 (10/8, 172.16/12, 192.168/16), RFC 4193
-// (fc00::/7), CGNAT (100.64/10), NAT64 (64:ff9b::/96), multicast, and
-// unspecified all get blocked.
+// Never reachable from a tenant-supplied URL.
 func isUnsafeIP(ip stdnet.IP) bool {
 	if ip.IsLoopback() ||
 		ip.IsLinkLocalUnicast() ||

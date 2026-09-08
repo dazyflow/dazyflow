@@ -17,9 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// subgraphHarness builds a stack with a subgraph-aware worker (wired to
-// the Service's SubmitChild method) and a workspace that holds both the
-// parent and child graph definitions.
 type subgraphHarness struct {
 	svc   *daemon.Service
 	store core.JobStore
@@ -54,20 +51,9 @@ func newSubgraphHarness(t *testing.T) *subgraphHarness {
 	return &subgraphHarness{svc: svc, store: store, bus: bus, ws: wsStore, t: t}
 }
 
-// TestSubgraph_E2E_HappyPath runs the headline scenario:
-//
-//	Parent graph: prep → call_child → downstream
-//	Child graph:  receive → emit
-//
-// The parent's "in" port routes into the child's `receive` node; the
-// child's `emit.out` returns to the parent's `result` port; downstream
-// runs only after the child terminates.
 func TestSubgraph_E2E_HappyPath(t *testing.T) {
 	h := newSubgraphHarness(t)
 
-	// Child graph — receive → emit. delay threads its input through on the
-	// universal `pass` pin, so the child forwards the parent's input back to
-	// the parent via emit's `pass` output.
 	child := core.Graph{
 		ID: "child-flow", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -124,7 +110,6 @@ func TestSubgraph_E2E_HappyPath(t *testing.T) {
 		t.Errorf("after = %q, want succeeded", after.Status)
 	}
 
-	// The parent subgraph node resumed with the projected output.
 	parentRec, _ := h.store.Get(t.Context(), daemon.NodeJobID(runID, "call_child"))
 	if parentRec.Status != core.JobStatusSucceeded {
 		t.Errorf("call_child = %q, want succeeded", parentRec.Status)
@@ -134,14 +119,9 @@ func TestSubgraph_E2E_HappyPath(t *testing.T) {
 	}
 }
 
-// TestSubgraph_E2E_ChildFailurePropagatesToParent asserts that when a
-// child graph fails, the parent's subgraph node reports a child_failed
-// error and its graph aborts (unless downstream tolerates it via skip).
 func TestSubgraph_E2E_ChildFailurePropagatesToParent(t *testing.T) {
 	h := newSubgraphHarness(t)
 
-	// Child graph that always fails: a sleep with ms=-1 trips the
-	// negative-ms guard in the sleep module.
 	child := core.Graph{
 		ID: "child-broken", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{
@@ -188,9 +168,6 @@ func TestSubgraph_E2E_ChildFailurePropagatesToParent(t *testing.T) {
 	}
 }
 
-// TestSubgraph_E2E_UnknownChildFailsParent verifies that submitting a
-// non-existent child surfaces as a subgraph_submit error rather than
-// hanging the parent forever.
 func TestSubgraph_E2E_UnknownChildFailsParent(t *testing.T) {
 	h := newSubgraphHarness(t)
 

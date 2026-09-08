@@ -10,10 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// BusEvent is what flows from a worker to subscribers waiting on a job —
-// or, for FlowUpdated, from a graph save to editors watching the flow.
-// Exactly one of Progress, NodeStatus, Terminal, Paused, or FlowUpdated is
-// set per event.
 type BusEvent struct {
 	Progress    *engine.GraphProgress
 	NodeStatus  *NodeStatusEvent
@@ -22,14 +18,6 @@ type BusEvent struct {
 	FlowUpdated *FlowUpdatedEvent
 }
 
-// FlowUpdatedEvent fires when a flow's graph is saved — by anyone: the web
-// editor, the MCP server, or a direct API call. An editor subscribed to the
-// flow (see flowBusKey) uses it to live-reflect external edits — e.g. an AI
-// assistant restructuring the flow through MCP — by re-fetching and animating
-// the new graph onto its canvas. Commit lets a client suppress the echo of
-// its own save; it carries no graph content, so a subscriber only learns
-// "this flow changed", then fetches the graph through the normal authorized
-// load path.
 type FlowUpdatedEvent struct {
 	FlowID   string `json:"flow_id"` // tenant/workspace/id
 	Commit   string `json:"commit"`
@@ -37,33 +25,21 @@ type FlowUpdatedEvent struct {
 	Autosave bool   `json:"autosave"`
 }
 
-// flowBusKey namespaces a flow's update events on the bus, distinct from the
-// job-id keyspace runs use. The same Bus carries both; the prefix keeps a
-// flow id like "acme/main/digest" from ever colliding with a job id.
 func flowBusKey(tenant, workspace, id string) string {
 	return "flow:" + tenant + "/" + workspace + "/" + id
 }
 
-// PausedEvent fires when a run hits a breakpoint (or steps): execution has
-// stopped after NodeID and is holding for Continue/Step. The node's output
-// is fully available for inspection while paused. (#12)
 type PausedEvent struct {
 	NodeID   string `json:"node_id"`
 	Stepping bool   `json:"stepping"`
 }
 
-// NodeStatusEvent fires whenever a single node-record transitions to a
-// new status (succeeded / failed / skipped / awaiting). The UI uses it
-// to light up nodes as they execute. Distinct from Progress, which is
-// in-flight percent/text updates from within a still-running node.
 type NodeStatusEvent struct {
 	NodeID string         `json:"node_id"`
 	Status core.JobStatus `json:"status"`
 	Error  *core.JobError `json:"error,omitempty"`
 }
 
-// TerminalEvent marks the end of a job. Subscribers should stop reading
-// the channel once they see one.
 type TerminalEvent struct {
 	JobID    string
 	Status   core.JobStatus
@@ -138,14 +114,10 @@ func (l *localSubscribers) fanout(jobID string, ev BusEvent) {
 		select {
 		case c <- ev:
 		default:
-			// Subscriber too slow; drop event. The publisher keeps moving.
 		}
 	}
 }
 
-// MemoryBus fans out events to every active subscriber for a job. Sends
-// are non-blocking — a slow subscriber drops events rather than back the
-// worker up.
 type MemoryBus struct {
 	local localSubscribers
 }
@@ -162,11 +134,6 @@ func (b *MemoryBus) Subscribe(jobID string) (<-chan BusEvent, func()) {
 	return b.local.subscribe(jobID)
 }
 
-// jobIDs snapshots the jobs with at least one live local subscriber, and
-// reports whether jobID is among them.
-//
-// The Postgres bus reads it to decide what it actually needs from the spool:
-// on a replica watching nothing, that is nothing at all.
 func (l *localSubscribers) jobIDs() []string {
 	l.mu.Lock()
 	defer l.mu.Unlock()

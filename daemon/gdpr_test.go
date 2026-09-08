@@ -21,7 +21,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/webapi"
 )
 
-// fakePlanStore is a PlanStore that also supports tenant erasure.
 type fakePlanStore struct {
 	plans map[string]TenantPlan
 }
@@ -47,10 +46,6 @@ func (f *fakePlanStore) DeleteByTenant(_ context.Context, tenant string) (int, e
 	return 1, nil
 }
 
-// ---- minimal fakes for the Postgres-only stores -----------------------
-
-// DeleteByEmail/DeleteByTenant extend the shared fakeMembershipStore
-// (declared in member_roles_test.go) with the GDPR erasure capabilities.
 func (f *fakeMembershipStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
 	ident = strings.ToLower(strings.TrimSpace(ident))
 	if ident == "" {
@@ -163,8 +158,6 @@ func (f *fakeOrgProfiles) DeleteOrgProfile(context.Context, string) error {
 	return nil
 }
 
-// ---- tests ------------------------------------------------------------
-
 func TestEraseUserIdentity_NoResidual(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -229,7 +222,6 @@ func TestEraseUserIdentity_NoResidual(t *testing.T) {
 		t.Fatalf("eraseUserIdentity: %v", err)
 	}
 
-	// Report counts.
 	if !rep.UserDeleted || rep.Sessions != 1 || rep.APIKeys != 2 || rep.Memberships != 1 || rep.Invitations != 1 || rep.AuditEvents != 1 {
 		t.Fatalf("report = %+v", rep)
 	}
@@ -237,7 +229,6 @@ func TestEraseUserIdentity_NoResidual(t *testing.T) {
 		t.Errorf("unexpected warnings: %v", rep.Warnings)
 	}
 
-	// No residual: every store empty for this subject.
 	if _, err := users.GetByEmail(ctx, email); err == nil {
 		t.Error("user row survived erasure")
 	}
@@ -253,7 +244,6 @@ func TestEraseUserIdentity_NoResidual(t *testing.T) {
 	if il, _ := invites.ListByEmail(ctx, email); len(il) != 0 {
 		t.Errorf("invitations survived: %d", len(il))
 	}
-	// Audit pseudonymised, not deleted: the row stays but carries no PII.
 	for _, e := range audit.events {
 		if e.Actor == email {
 			t.Error("audit actor not anonymised")
@@ -263,10 +253,6 @@ func TestEraseUserIdentity_NoResidual(t *testing.T) {
 		}
 	}
 
-	// Support history: same treatment. The ticket and both messages are still
-	// there for the org, with her identity and her words gone and the agent's
-	// side untouched. Before this, the erase report said "done" while her
-	// address sat in created_by and her message body sat in the thread.
 	tkt, err := tickets.Get(ctx, "t1")
 	if err != nil {
 		t.Fatalf("the org's ticket was deleted along with the user: %v", err)
@@ -368,7 +354,6 @@ func TestDeleteOrgData_NoResidual(t *testing.T) {
 		t.Errorf("unexpected warnings: %v", rep.Warnings)
 	}
 
-	// Directories gone.
 	if _, err := os.Stat(filepath.Join(wsBase, tenant)); !os.IsNotExist(err) {
 		t.Error("workspace dir survived")
 	}
@@ -379,7 +364,6 @@ func TestDeleteOrgData_NoResidual(t *testing.T) {
 		t.Errorf("dir wipe flags: %+v", rep)
 	}
 
-	// Tenant's jobs gone, other tenant's untouched.
 	if r, _ := jobs.DeleteByTenant(ctx, tenant); r != 0 {
 		t.Errorf("tenant jobs survived: %d", r)
 	}
@@ -387,7 +371,6 @@ func TestDeleteOrgData_NoResidual(t *testing.T) {
 		t.Error("other tenant's job was wrongly deleted")
 	}
 
-	// Scoped stores cleared.
 	if ks, _ := keys.ListByTenant(ctx, tenant); len(ks) != 0 {
 		t.Errorf("api keys survived: %d", len(ks))
 	}
@@ -411,8 +394,6 @@ func TestDeleteOrgData_NoResidual(t *testing.T) {
 	}
 }
 
-// TestMergeErase_Cov covers mergeErase: counts sum, booleans OR, warnings
-// concatenate.
 func TestMergeErase_Cov(t *testing.T) {
 	t.Parallel()
 	a := EraseReport{
@@ -440,7 +421,6 @@ func TestMergeErase_Cov(t *testing.T) {
 	}
 }
 
-// TestEraseReport_Warnf covers EraseReport.warnf.
 func TestEraseReport_Warnf(t *testing.T) {
 	t.Parallel()
 	var r EraseReport
@@ -450,13 +430,10 @@ func TestEraseReport_Warnf(t *testing.T) {
 	}
 }
 
-// TestTenantHasOtherMembers_Cov covers the helper's three legs: nil store,
-// sole occupant, and a shared org.
 func TestTenantHasOtherMembers_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 
-	// Nil Memberships store -> false (no others known).
 	if h.gw.gdprAPI().tenantHasOtherMembers(context.Background(), "acme", "a@acme.test") {
 		t.Fatal("nil store should report no other members")
 	}
@@ -466,11 +443,9 @@ func TestTenantHasOtherMembers_Cov(t *testing.T) {
 	_ = mem.PutMembership(context.Background(), auth.Membership{
 		UserEmail: "a@acme.test", Tenant: "acme", Roles: []core.Role{core.TeamRoleEditor()},
 	})
-	// Sole occupant -> false.
 	if h.gw.gdprAPI().tenantHasOtherMembers(context.Background(), "acme", "A@Acme.test") {
 		t.Fatal("sole occupant should report no other members")
 	}
-	// Add a second member -> true.
 	_ = mem.PutMembership(context.Background(), auth.Membership{
 		UserEmail: "b@acme.test", Tenant: "acme", Roles: []core.Role{core.TeamRoleEditor()},
 	})
@@ -479,10 +454,6 @@ func TestTenantHasOtherMembers_Cov(t *testing.T) {
 	}
 }
 
-// TestDeleteOrgData_ErasesSecrets covers the secrets half of the erasure
-// cascade. Before DeleteByTenant was wired in, org deletion left every row in
-// encrypted_secrets — connector credentials and OAuth tokens belonging to a
-// deleted org — sitting in the database with its DEK, still decryptable.
 func TestDeleteOrgData_ErasesSecrets(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -497,7 +468,6 @@ func TestDeleteOrgData_ErasesSecrets(t *testing.T) {
 			t.Fatalf("put %s: %v", name, err)
 		}
 	}
-	// A second tenant proves the wipe is scoped, not a table truncate.
 	if err := es.Put(ctx, "other", "slack_token", "keep-me"); err != nil {
 		t.Fatalf("put other: %v", err)
 	}
@@ -521,7 +491,6 @@ func TestDeleteOrgData_ErasesSecrets(t *testing.T) {
 	if len(names) != 0 {
 		t.Errorf("secrets survived org erasure: %v", names)
 	}
-	// Every value is unreachable, not merely unlisted.
 	for _, name := range []string{"slack_token", "gmail_oauth"} {
 		if v, err := es.GetExact(ctx, tenant, name); err == nil {
 			t.Errorf("%s still readable after erasure: %q", name, v)
@@ -535,11 +504,11 @@ func TestDeleteOrgData_ErasesSecrets(t *testing.T) {
 	}
 }
 
-// TestSecretsDeleteByTenant_DropsDEK pins the crypto-shredding half: the
-// tenant's wrapped DEK goes with its secrets, and the in-process cache of that
-// DEK is evicted. A surviving cached DEK would let a later Put seal a value
-// under a key whose wrapped form is gone from the store — ciphertext that no
-// restart of this process, and no other process, could ever open.
+// Pins the crypto-shredding half: the tenant's wrapped DEK goes with its
+// secrets, and the in-process cache of that DEK is evicted. A surviving cached
+// DEK would let a later Put seal a value under a key whose wrapped form is
+// gone from the store — ciphertext that no restart of this process, and no
+// other process, could ever open.
 func TestSecretsDeleteByTenant_DropsDEK(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -574,8 +543,6 @@ func TestSecretsDeleteByTenant_DropsDEK(t *testing.T) {
 		t.Error("DEK still cached in process after erasure")
 	}
 
-	// Writing again provisions a fresh DEK and round-trips under it, so the
-	// erased tenant id is reusable rather than poisoned.
 	if err := es.Put(ctx, tenant, "token", "v2"); err != nil {
 		t.Fatalf("put after erasure: %v", err)
 	}
@@ -584,8 +551,8 @@ func TestSecretsDeleteByTenant_DropsDEK(t *testing.T) {
 	}
 }
 
-// TestSecretsDeleteByTenant_Idempotent — erasure reruns (a retried request, a
-// cascade re-invoked after a partial failure) must not error.
+// Erasure reruns (a retried request, a cascade re-invoked after a partial
+// failure) must not error.
 func TestSecretsDeleteByTenant_Idempotent(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -607,7 +574,7 @@ func TestSecretsDeleteByTenant_Idempotent(t *testing.T) {
 	}
 }
 
-// TestDeleteOrgData_ErasesTenantIntegrations covers the tenant-scoped stores
+// Covers the tenant-scoped stores
 // added to the cascade after it was first written: MCP servers, web APIs,
 // runners (and their tokens), runner tasks, git mirrors, drop switches,
 // billing, entitlements and usage counters.
@@ -636,8 +603,6 @@ func TestDeleteOrgData_ErasesTenantIntegrations(t *testing.T) {
 		if err := webStore.Put(ctx, WebAPI{Tenant: tn, Name: "billing", BaseURL: "https://api.test"}); err != nil {
 			t.Fatalf("seed webapi %s: %v", tn, err)
 		}
-		// One registered machine (mint a token, then spend it) plus one token
-		// still outstanding — erasure has to take both.
 		if err := runnerStore.MintToken(ctx, tn, "admin@"+tn, "box", []byte("spent-"+tn), time.Now().Add(time.Hour)); err != nil {
 			t.Fatalf("seed token %s: %v", tn, err)
 		}
@@ -687,7 +652,6 @@ func TestDeleteOrgData_ErasesTenantIntegrations(t *testing.T) {
 		t.Errorf("unexpected warnings: %v", rep.Warnings)
 	}
 
-	// Counts reported.
 	for _, c := range []struct {
 		name string
 		got  int
@@ -701,7 +665,6 @@ func TestDeleteOrgData_ErasesTenantIntegrations(t *testing.T) {
 		}
 	}
 
-	// Erased tenant is empty everywhere.
 	if got, _ := mcpStore.List(ctx, tenant); len(got) != 0 {
 		t.Errorf("mcp servers survived: %v", got)
 	}
@@ -721,14 +684,10 @@ func TestDeleteOrgData_ErasesTenantIntegrations(t *testing.T) {
 		t.Error("per-tenant drop switch survived")
 	}
 
-	// The unspent registration token went with the fleet: it is a live
-	// credential for an org that no longer exists.
 	if _, err := runnerStore.RedeemToken(ctx, []byte("hash-"+tenant),
 		Runner{Tenant: tenant, Name: "box2"}, []byte("cred")); err == nil {
 		t.Error("registration token survived erasure and is still redeemable")
 	}
-	// The registered machine's credential no longer resolves, which is what
-	// actually stops an agent still running somewhere from claiming work.
 	if _, err := runnerStore.RunnerByCredential(ctx, []byte("cred-"+tenant), time.Now()); err == nil {
 		t.Error("erased runner's credential still authenticates")
 	}
@@ -736,7 +695,6 @@ func TestDeleteOrgData_ErasesTenantIntegrations(t *testing.T) {
 		t.Errorf("other tenant's runner credential stopped working: %v", err)
 	}
 
-	// The neighbouring tenant is untouched, in every store.
 	if got, _ := mcpStore.List(ctx, other); len(got) != 1 {
 		t.Errorf("other tenant's mcp servers = %d, want 1", len(got))
 	}
@@ -752,17 +710,12 @@ func TestDeleteOrgData_ErasesTenantIntegrations(t *testing.T) {
 	if !switches.Disabled("http", other) {
 		t.Error("other tenant's drop switch was collateral damage")
 	}
-	// And the global switch is still in force.
 	if !switches.Disabled("smtp", "anyone") {
 		t.Error("erasing one org cleared a GLOBAL drop switch — the platform's " +
 			"kill-switch on a broken drop is not any org's data")
 	}
 }
 
-// TestDeleteOrgData_WarnsOnLiveSubscription — erasure drops the local Stripe
-// mapping, but the subscription keeps billing in Stripe and nothing here can
-// map it back afterwards. The operator has to be told while the pointer is
-// still readable.
 func TestDeleteOrgData_WarnsOnLiveSubscription(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -799,8 +752,6 @@ func TestDeleteOrgData_WarnsOnLiveSubscription(t *testing.T) {
 		t.Error("billing row survived erasure")
 	}
 
-	// A lapsed subscription is not worth warning about: there is nothing left
-	// to cancel, and a warning nobody needs trains people to ignore them.
 	rep, err = h.gdprAPI().deleteOrgData(ctx, "lapsed")
 	if err != nil {
 		t.Fatalf("deleteOrgData(lapsed): %v", err)
@@ -810,10 +761,6 @@ func TestDeleteOrgData_WarnsOnLiveSubscription(t *testing.T) {
 	}
 }
 
-// TestEraseUserIdentity_RevokesRolesAndScrubsGranters covers the three identity
-// tables. Each keys on the email itself, so erasing an account used to leave the
-// address behind as a live role holder — and as the granter on every role that
-// person had handed to someone else.
 func TestEraseUserIdentity_RevokesRolesAndScrubsGranters(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -825,7 +772,6 @@ func TestEraseUserIdentity_RevokesRolesAndScrubsGranters(t *testing.T) {
 
 	admins := newMemPlatformAdmins()
 	_ = admins.Grant(ctx, email, "root@platform.test")
-	// Alice granted Bob his role: her address is in HIS row, which survives her.
 	_ = admins.Grant(ctx, colleague, email)
 
 	agents := support.NewMemAgentStore()
@@ -833,7 +779,6 @@ func TestEraseUserIdentity_RevokesRolesAndScrubsGranters(t *testing.T) {
 	_ = agents.Grant(ctx, colleague, email)
 
 	blocklist := newCovBlocklist()
-	// Alice banned a spammer. Her email is the ADMIN on that row.
 	_ = blocklist.Block(ctx, auth.Blocked{
 		Value: "spammer@bad.test", Kind: "email", Reason: "abuse", CreatedBy: email,
 	})
@@ -858,7 +803,6 @@ func TestEraseUserIdentity_RevokesRolesAndScrubsGranters(t *testing.T) {
 		t.Errorf("unexpected warnings: %v", rep.Warnings)
 	}
 
-	// Her own grants are gone — she is no longer a platform admin or an agent.
 	if admins.Granted(email) {
 		t.Error("erased account still holds the platform-admin role")
 	}
@@ -869,7 +813,6 @@ func TestEraseUserIdentity_RevokesRolesAndScrubsGranters(t *testing.T) {
 		t.Errorf("rep.RoleGrants = %d, want 2", rep.RoleGrants)
 	}
 
-	// Bob keeps his roles, but her address is no longer recorded as the granter.
 	if !admins.Granted(colleague) {
 		t.Error("colleague lost their role — erasure took someone else's grant")
 	}
@@ -886,7 +829,6 @@ func TestEraseUserIdentity_RevokesRolesAndScrubsGranters(t *testing.T) {
 		}
 	}
 
-	// The blocklist: her name is scrubbed as the blocking admin...
 	blocked, _ := blocklist.List(ctx)
 	var banOnAliceFound bool
 	for _, b := range blocked {
@@ -897,8 +839,6 @@ func TestEraseUserIdentity_RevokesRolesAndScrubsGranters(t *testing.T) {
 			banOnAliceFound = true
 		}
 	}
-	// ...but the ban ON her stands. A block liftable by asking to be forgotten
-	// is not a block; it is kept under legitimate interest (Art. 17(1)(c)).
 	if !banOnAliceFound {
 		t.Error("erasure lifted the ban on the erased account — a deletion request " +
 			"must not be a way to clear your own blocklist entry")
@@ -908,10 +848,10 @@ func TestEraseUserIdentity_RevokesRolesAndScrubsGranters(t *testing.T) {
 	}
 }
 
-// TestEraseUserIdentity_WarnsOnEnvPlatformAdmin — platform-admin status also
-// comes from $DAZYFLOW_PLATFORM_ADMINS, which is deployment config this process
-// cannot rewrite. Erasing the account without saying so would leave an address
-// that silently re-elevates if the person ever signs up again.
+// Platform-admin status also comes from $DAZYFLOW_PLATFORM_ADMINS, which is
+// deployment config this process cannot rewrite. Erasing the account without
+// saying so would leave an address that silently re-elevates if the person
+// ever signs up again.
 func TestEraseUserIdentity_WarnsOnEnvPlatformAdmin(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -940,7 +880,7 @@ func TestEraseUserIdentity_WarnsOnEnvPlatformAdmin(t *testing.T) {
 	}
 }
 
-// TestEraseUserIdentity_ScrubsAuthorshipInSharedOrg is the shared-org path: a
+// The shared-org path: a
 // member erases their account and the ORG CARRIES ON. Every row they authored
 // belongs to that org and survives — and used to survive still carrying their
 // email in created_by / updated_by / invited_by / disabled_by.
@@ -972,7 +912,6 @@ func TestEraseUserIdentity_ScrubsAuthorshipInSharedOrg(t *testing.T) {
 	_ = bundles.Create(ctx, core.SupportBundleRecord{
 		ID: "b1", Tenant: tenant, FlowID: "f", CreatedBy: email, CreatedAt: time.Now(),
 	})
-	// Alice invited Bob: her address is on HIS membership and on a pending invite.
 	members := newFakeMembershipStore()
 	_ = members.PutMembership(ctx, auth.Membership{UserEmail: colleague, Tenant: tenant, InvitedBy: email})
 	invites, _ := auth.OpenJSONInvitationStore("")
@@ -1000,12 +939,10 @@ func TestEraseUserIdentity_ScrubsAuthorshipInSharedOrg(t *testing.T) {
 		t.Fatalf("eraseUserIdentity: %v", err)
 	}
 
-	// Nothing was deleted: these rows belong to the org, which is still here.
 	if got, _ := mcpStore.List(ctx, tenant); len(got) != 1 {
 		t.Fatalf("erasure DELETED an org's mcp server; want it kept and scrubbed: %v", got)
 	}
 
-	// The address is gone from every one of them.
 	if got, _ := mcpStore.List(ctx, tenant); got[0].CreatedBy != core.ErasedIdentity {
 		t.Errorf("tenant_mcp_servers.created_by = %q", got[0].CreatedBy)
 	}

@@ -18,7 +18,6 @@ import (
 func TestBuildMessage(t *testing.T) {
 	msg := string(buildMessage("me@x.test", "me@x.test", []string{"a@x.test", "b@x.test"}, nil, "Hello", "the body", "text/plain; charset=UTF-8", nil))
 
-	// Headers are CRLF-terminated and separated from the body by a blank line.
 	wantHeaders := []string{
 		"From: me@x.test\r\n",
 		"To: a@x.test, b@x.test\r\n", // multiple recipients joined with ", "
@@ -54,8 +53,6 @@ func TestBuildMessage_CCHeaderButNoBCC(t *testing.T) {
 }
 
 func TestBuildMessage_HonorsBodyContentType(t *testing.T) {
-	// The body's Content-Type is driven by the caller (text vs HTML), so an
-	// HTML send carries text/html on the (single) body part.
 	msg := string(buildMessage("me@x.test", "me@x.test", []string{"a@x.test"}, nil, "Hi", "<b>hi</b>", `text/html; charset="utf-8"`, nil))
 	if !strings.Contains(msg, `Content-Type: text/html; charset="utf-8"`) {
 		t.Errorf("body not sent as text/html:\n%s", msg)
@@ -63,7 +60,6 @@ func TestBuildMessage_HonorsBodyContentType(t *testing.T) {
 }
 
 func TestBuildMessage_NoCCHeaderWhenEmpty(t *testing.T) {
-	// No CC recipients → no Cc header at all (not an empty one).
 	msg := string(buildMessage("me@x.test", "me@x.test", []string{"a@x.test"}, nil, "Hi", "body", "text/plain; charset=UTF-8", nil))
 	if strings.Contains(msg, "Cc:") {
 		t.Errorf("unexpected Cc header:\n%s", msg)
@@ -83,9 +79,6 @@ func TestBuildMessage_EncodesNonASCIISubject(t *testing.T) {
 }
 
 func TestBuildMessage_Attachments(t *testing.T) {
-	// With attachments the message switches to multipart/mixed: a text body
-	// part followed by one base64 part per attachment (same shape as gmail
-	// send). Without them it stays a bare text/plain message (tested above).
 	msg := string(buildMessage("me@x.test", "me@x.test", []string{"a@x.test"}, nil, "Report", "see attached", "text/plain; charset=UTF-8", []mailmsg.Attachment{
 		{Filename: "report.pdf", MIME: "application/pdf", Data: []byte("%PDF-fake")},
 	}))
@@ -113,10 +106,6 @@ func TestBuildMessage_StripsHeaderCRLF(t *testing.T) {
 }
 
 func TestExecuteEmail_FromDefaultsToUsername(t *testing.T) {
-	// From is optional when Username is set — the login is usually the
-	// sender address. With neither, the send is rejected up front. The
-	// loopback host trips the SSRF guard AFTER param validation, proving
-	// the from/username fallback was accepted.
 	res, err := executeEmail(t.Context(), core.Job{
 		ID: "j",
 		Params: map[string]any{
@@ -134,9 +123,6 @@ func TestExecuteEmail_FromDefaultsToUsername(t *testing.T) {
 }
 
 func TestExecuteEmail_ToAcceptsCommaSeparatedString(t *testing.T) {
-	// 'to' is now a comma-separated string param (matching gmail send), so it
-	// gets an inline card editor. Reaching the SSRF guard (host 127.0.0.1)
-	// proves recipient parsing accepted the string and got past validation.
 	res, err := executeEmail(t.Context(), core.Job{
 		ID: "j",
 		Params: map[string]any{
@@ -202,8 +188,6 @@ func TestExecuteEmail_Validation(t *testing.T) {
 		mutate   func(map[string]any)
 		wantCode string
 	}{
-		// host + from come from the connection now, so their absence reads as
-		// "not connected" rather than a per-node bad param.
 		{"missing host", func(p map[string]any) { delete(p, "host") }, "not_connected"},
 		{"missing from", func(p map[string]any) { delete(p, "from") }, "not_connected"},
 		{"no recipients", func(p map[string]any) { delete(p, "to") }, "bad_param"},
@@ -228,8 +212,6 @@ func TestExecuteEmail_Validation(t *testing.T) {
 }
 
 func TestExecuteEmail_RejectsNonTextInputs(t *testing.T) {
-	// To and Subject inputs override their params, but only carry text — a
-	// structured value wired into either is a mistake we reject up front.
 	base := map[string]any{
 		"host": "smtp.x.test",
 		"from": "me@x.test",
@@ -260,8 +242,6 @@ func TestExecuteEmail_RejectsNonTextInputs(t *testing.T) {
 }
 
 func TestSplitRecipients(t *testing.T) {
-	// The To input is comma-separated text; whitespace is trimmed and
-	// empties dropped so a trailing comma doesn't break the send.
 	got := splitRecipients(" a@x.test, b@x.test ,, ")
 	if len(got) != 2 || got[0] != "a@x.test" || got[1] != "b@x.test" {
 		t.Errorf("got %v, want [a@x.test b@x.test]", got)
@@ -309,17 +289,15 @@ func TestExecuteEmail_SSRFBlocked(t *testing.T) {
 }
 
 func TestBuildMessage_DisplayNameFromHeader(t *testing.T) {
-	// The header form is what buildMessage receives, so a display name reaches
-	// the recipient's client.
 	msg := string(buildMessage(`"Reports" <reports@x.test>`, "reports@x.test", []string{"a@x.test"}, nil, "Hi", "body", "text/plain; charset=UTF-8", nil))
 	if !strings.Contains(msg, "From: \"Reports\" <reports@x.test>\r\n") {
 		t.Errorf("From header missing the display name:\n%s", msg)
 	}
 }
 
-// TestExecuteEmail_DisplayNameSender drives the full send with a From address
-// that carries a display name: the header must keep the name, the SMTP
-// envelope must carry only the bare address.
+// Drives the full send with a From address that carries a display name: the
+// header must keep the name, the SMTP envelope must carry only the bare
+// address.
 func TestExecuteEmail_DisplayNameSender(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -346,14 +324,12 @@ func TestExecuteEmail_DisplayNameSender(t *testing.T) {
 	if res.Status != core.StatusOK {
 		t.Fatalf("res = %+v, want OK", res)
 	}
-	// The envelope sender: bare address, no display name, no nested brackets.
 	if !strings.Contains(cmds, "MAIL FROM:<reports@x.test>") {
 		t.Errorf("envelope sender wrong, transcript:\n%s", cmds)
 	}
 	if strings.Contains(cmds, "Reports") {
 		t.Errorf("display name leaked into the SMTP envelope:\n%s", cmds)
 	}
-	// The header: display name preserved.
 	if !strings.Contains(sent, `From: "Reports" <reports@x.test>`) {
 		t.Errorf("From header lost the display name:\n%s", sent)
 	}
@@ -363,9 +339,9 @@ func TestExecuteEmail_DisplayNameSender(t *testing.T) {
 	}
 }
 
-// TestExecuteEmail_BareSenderEnvelope is the regression guard for the common
-// case: a plain From address must reach MAIL FROM and the From header exactly
-// as configured, with no brackets added to the header by the split.
+// The regression guard for the common case: a plain From address must reach
+// MAIL FROM and the From header exactly as configured, with no brackets added
+// to the header by the split.
 func TestExecuteEmail_BareSenderEnvelope(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -376,7 +352,6 @@ func TestExecuteEmail_BareSenderEnvelope(t *testing.T) {
 	res, err := executeEmail(t.Context(), core.Job{
 		ID: "j",
 		Params: map[string]any{
-			// Surrounding whitespace is trimmed off the configured sender.
 			"host": host, "port": port, "tls": "none",
 			"from": "  me@x.test  ", "to": "you@x.test",
 			"body": "b", "format": "text",
@@ -391,16 +366,11 @@ func TestExecuteEmail_BareSenderEnvelope(t *testing.T) {
 	if !strings.Contains(cmds, "MAIL FROM:<me@x.test>") {
 		t.Errorf("envelope sender wrong, transcript:\n%s", cmds)
 	}
-	// The scripted server records the DATA payload with bare newlines.
 	if !strings.Contains(sent, "From: me@x.test\n") {
 		t.Errorf("From header changed shape:\n%s", sent)
 	}
 }
 
-// TestExecuteEmail_CRLFSenderRejected guards the header-injection path through
-// the split: a sender carrying CR/LF doesn't parse, so it falls through
-// verbatim — and net/smtp then refuses to put it on the wire rather than the
-// drop smuggling an extra header into the message.
 func TestExecuteEmail_CRLFSenderRejected(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -427,11 +397,6 @@ func TestExecuteEmail_CRLFSenderRejected(t *testing.T) {
 	}
 }
 
-// TestBuildMessage_StampsDateAndMessageID is the regression guard for
-// duplicate delivery: a message submitted over raw SMTP with no Message-ID
-// gives every downstream relay nothing to collapse a re-queued attempt on, so
-// a transient resend lands in the inbox as a second copy. Gmail's API stamps
-// both headers itself; here they have to be ours.
 func TestBuildMessage_StampsDateAndMessageID(t *testing.T) {
 	msg := string(buildMessage(`"Reports" <reports@x.test>`, "reports@x.test",
 		[]string{"a@x.test"}, nil, "Hi", "body", "text/plain; charset=UTF-8", nil))
@@ -442,8 +407,6 @@ func TestBuildMessage_StampsDateAndMessageID(t *testing.T) {
 	if n := strings.Count(msg, "Date:"); n != 1 {
 		t.Errorf("Date headers = %d, want 1\n---\n%s", n, msg)
 	}
-	// The ID's domain comes from the BARE sender, not the display-name form —
-	// "<...@x.test>>" is malformed on relays that validate it.
 	if !strings.Contains(msg, "@x.test>\r\n") {
 		t.Errorf("Message-ID domain wrong\n---\n%s", msg)
 	}
@@ -455,7 +418,6 @@ func TestBuildMessage_StampsDateAndMessageID(t *testing.T) {
 	if !strings.Contains(msg[:headerEnd], "Message-ID:") || !strings.Contains(msg[:headerEnd], "Date:") {
 		t.Errorf("Date/Message-ID leaked out of the header block\n---\n%s", msg)
 	}
-	// Two builds of the same message are two distinct submissions.
 	other := string(buildMessage(`"Reports" <reports@x.test>`, "reports@x.test",
 		[]string{"a@x.test"}, nil, "Hi", "body", "text/plain; charset=UTF-8", nil))
 	if idOf(msg) == idOf(other) {
@@ -463,7 +425,6 @@ func TestBuildMessage_StampsDateAndMessageID(t *testing.T) {
 	}
 }
 
-// idOf pulls the Message-ID header value out of a built message.
 func idOf(msg string) string {
 	for _, line := range strings.Split(msg, "\r\n") {
 		if v, ok := strings.CutPrefix(line, "Message-ID: "); ok {
@@ -473,8 +434,6 @@ func idOf(msg string) string {
 	return ""
 }
 
-// TestBuildMessage_MessageIDSurvivesAttachments confirms the multipart branch
-// stamps the same headers — it builds its own header block.
 func TestBuildMessage_MessageIDSurvivesAttachments(t *testing.T) {
 	msg := string(buildMessage("me@x.test", "me@x.test", []string{"a@x.test"}, nil,
 		"Report", "see attached", "text/plain; charset=UTF-8", []mailmsg.Attachment{
@@ -532,10 +491,10 @@ func TestDedupeRecipients(t *testing.T) {
 	}
 }
 
-// TestExecuteEmail_DedupesEnvelopeRecipients drives the whole send: an address
-// listed in both To and CC must reach RCPT TO once — a server that doesn't
-// collapse repeated RCPTs itself delivers a copy per mention — while the
-// headers still show both fields, since that is who was visibly addressed.
+// Drives the whole send: an address listed in both To and CC must reach RCPT
+// TO once — a server that doesn't collapse repeated RCPTs itself delivers a
+// copy per mention — while the headers still show both fields, since that is
+// who was visibly addressed.
 func TestExecuteEmail_DedupesEnvelopeRecipients(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(false)
@@ -562,7 +521,6 @@ func TestExecuteEmail_DedupesEnvelopeRecipients(t *testing.T) {
 	if n := strings.Count(cmds, "RCPT TO:"); n != 1 {
 		t.Errorf("RCPT TO count = %d, want 1, transcript:\n%s", n, cmds)
 	}
-	// The headers are unchanged: To and Cc both still name the recipient.
 	if !strings.Contains(sent, "To: you@x.test\n") || !strings.Contains(sent, "Cc: You <you@x.test>\n") {
 		t.Errorf("address headers changed shape:\n%s", sent)
 	}

@@ -28,9 +28,6 @@ import (
 // — which is the honest reading of a badge that says "from the last run". A
 // sample that must outlive retention has to be pinned, and a pin is storage.
 
-// maxSampleRecords bounds how far back the merge walks. Enough to cover a
-// large graph plus several partial runs, and a hard stop on a flow with
-// months of history.
 const maxSampleRecords = 400
 
 // maxSampleValueBytes is the most one port's value may carry into a card
@@ -40,8 +37,6 @@ const maxSampleRecords = 400
 // the card still names what flows, and drop the value.
 const maxSampleValueBytes = 96 << 10 // 96 KiB
 
-// flowSamples answers GET /api/v1/me/flows/{flow_id}/samples: the most recent
-// output of each of the flow's steps, keyed by node id then port.
 func (h *flowAPI) flowSamples(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {

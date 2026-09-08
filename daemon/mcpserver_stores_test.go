@@ -10,24 +10,6 @@ import (
 	"time"
 )
 
-// One suite, both stores.
-//
-// The memory store and the Postgres one have to be indistinguishable: the
-// daemon picks between them at boot and every other test in this package runs
-// against the memory one, so a behaviour that holds only in memory is a
-// behaviour that does not hold in production.
-//
-// Two rules here are enforced by SQL in one implementation and by Go under a
-// mutex in the other, and both fail SILENTLY when wrong — which is what makes
-// them worth a contract rather than a unit test on either side:
-//
-//	A nil sealed token KEEPS the stored credential. Get it wrong and every edit
-//	that did not retype the token blanks it, and the server stops connecting
-//	for a reason nothing on the page explains.
-//
-//	SetStatus does not touch updated_at. Get it wrong and every replica sees a
-//	newer timestamp than it applied on every pass, so the whole fleet
-//	re-handshakes with every server every thirty seconds, forever.
 func mcpServerStoreContract(t *testing.T, store MCPServerStore) {
 	t.Helper()
 	ctx := context.Background()
@@ -154,8 +136,6 @@ func mcpServerStoreContract(t *testing.T, store MCPServerStore) {
 				t.Fatalf("another org's row is in acme's list: %+v", s)
 			}
 		}
-		// The same NAME in two orgs is two different servers, and neither is
-		// reachable from the other.
 		globex, _ := store.List(ctx, "globex")
 		if len(globex) != 1 || globex[0].URL != "https://other.test/mcp" {
 			t.Fatalf("globex list = %+v", globex)
@@ -184,10 +164,6 @@ func TestMemMCPServerStore_Contract(t *testing.T) {
 	mcpServerStoreContract(t, NewMemMCPServerStore())
 }
 
-// Not parallel, and neither is the restart test below: both own the whole
-// tenant_mcp_servers table for their duration — they TRUNCATE it and then
-// write the same acme/vendor row — so running them concurrently has one
-// wiping the other's row out from under it.
 func TestPgMCPServerStore_Contract(t *testing.T) {
 	pool := pgRunnerPool(t)
 	ctx := context.Background()
@@ -201,15 +177,9 @@ func TestPgMCPServerStore_Contract(t *testing.T) {
 	mcpServerStoreContract(t, store)
 }
 
-// A registration has to survive the process that created it: the org's flows
-// reference mcp:<server>:<tool> by id, so forgetting a server on restart does
-// not degrade those flows, it breaks them.
 func TestPgMCPServerStore_SurvivesARestart(t *testing.T) {
 	pool := pgRunnerPool(t)
 	ctx := context.Background()
-	// The store creates the table, so it has to come before the TRUNCATE:
-	// truncating first only worked while another test happened to have opened
-	// a store already.
 	first, err := NewPgMCPServerStore(ctx, pool)
 	if err != nil {
 		t.Fatalf("NewPgMCPServerStore: %v", err)
@@ -225,7 +195,6 @@ func TestPgMCPServerStore_SurvivesARestart(t *testing.T) {
 		t.Fatalf("Put: %v", err)
 	}
 
-	// A second store over the same pool is what the next boot sees.
 	second, err := NewPgMCPServerStore(ctx, pool)
 	if err != nil {
 		t.Fatalf("re-open: %v", err)

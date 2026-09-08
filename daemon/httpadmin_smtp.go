@@ -12,15 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// smtpTest is POST /api/v1/admin/smtp-test {to?}. It sends one throwaway
-// message through the platform Mailer so an operator can confirm
-// DAZYFLOW_SMTP_URL / DAZYFLOW_SMTP_FROM actually deliver — boot only
-// validates that the URL parses, not that the server accepts mail.
-//
-// Platform-admin only (the mailer is instance-wide infrastructure). The
-// recipient defaults to the caller's own address, so the usual click is
-// a zero-input "send me a test". A failure returns the real SMTP error
-// (auth/TLS/dial) verbatim — that diagnostic is the whole point.
 func (h *orgAPI) smtpTest(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if err := requirePlatformAdmin(p); err != nil {
 		adminError(rw, err)
@@ -32,7 +23,6 @@ func (h *orgAPI) smtpTest(rw http.ResponseWriter, r *http.Request, p core.Princi
 		return
 	}
 
-	// Body is optional — an empty POST means "send to me".
 	var body struct {
 		To string `json:"to"`
 	}
@@ -58,7 +48,6 @@ func (h *orgAPI) smtpTest(rw http.ResponseWriter, r *http.Request, p core.Princi
 
 	if err := h.svc.Mailer.Send(r.Context(), to, subject, msg); err != nil {
 		h.audit(r.Context(), p, "smtp.test", to, "error="+err.Error())
-		// 502: the daemon is fine; the upstream SMTP server rejected us.
 		writeJSONError(rw, http.StatusBadGateway, fmt.Sprintf("send failed: %v", err))
 		return
 	}

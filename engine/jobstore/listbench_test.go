@@ -3,11 +3,6 @@
 
 package jobstore
 
-// What one page of the run list costs. The list is polled every couple of
-// seconds by every open tab, and until core.RunSummary each row carried the
-// whole flow JSON the run pinned at submit — so the benchmarks come in pairs,
-// full record against summary, at two flow sizes.
-
 import (
 	"context"
 	"encoding/json"
@@ -19,7 +14,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// benchGraphPayload builds an n-step flow, which is what a run stores.
 func benchGraphPayload(tb testing.TB, n int) []byte {
 	tb.Helper()
 	g := core.Graph{ID: "flow-bench", Tenant: "t", Workspace: "ws"}
@@ -69,8 +63,6 @@ func benchStore(tb testing.TB) *Postgres {
 	return store
 }
 
-// benchTenants seeds one tenant per flow size once, and reuses it across
-// runs of the benchmark. Names carry the size so a changed shape reseeds.
 func benchTenant(tb testing.TB, s *Postgres, steps, runs int) string {
 	tb.Helper()
 	ctx := context.Background()
@@ -116,13 +108,8 @@ func benchTenant(tb testing.TB, s *Postgres, steps, runs int) string {
 	return tenant
 }
 
-// benchRunSizes are a small flow and a large one. The gap between the two
-// pairs is the point: the summary read is flat in flow size, the full read
-// is linear in it.
 var benchRunSizes = []int{12, 100}
 
-// BenchmarkRunListFull is a run-list poll as it was: whole records, each
-// carrying its run's flow.
 func BenchmarkRunListFull(b *testing.B) {
 	s := benchStore(b)
 	ctx := b.Context()
@@ -147,7 +134,6 @@ func BenchmarkRunListFull(b *testing.B) {
 	}
 }
 
-// BenchmarkRunListSummary is the same poll through the narrow projection.
 func BenchmarkRunListSummary(b *testing.B) {
 	s := benchStore(b)
 	ctx := b.Context()
@@ -172,8 +158,6 @@ func BenchmarkRunListSummary(b *testing.B) {
 	}
 }
 
-// BenchmarkAdmissionCountFull is the per-submit concurrency check as it was:
-// a page of up to 200 whole records, reduced to len().
 func BenchmarkAdmissionCountFull(b *testing.B) {
 	s := benchStore(b)
 	ctx := b.Context()
@@ -190,7 +174,6 @@ func BenchmarkAdmissionCountFull(b *testing.B) {
 	}
 }
 
-// BenchmarkAdmissionCount is the same check as a count.
 func BenchmarkAdmissionCount(b *testing.B) {
 	s := benchStore(b)
 	ctx := b.Context()

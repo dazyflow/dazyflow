@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-/// <reference types="vitest/config" />
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
@@ -12,24 +11,15 @@ import { resolve } from "node:path";
 // the daemon directly via VITE_API_BASE.
 const target = process.env.DAZYFLOW_API ?? "http://localhost:8080";
 
-// `--mode docs` builds the standalone public docs SPA (docs.dazyflow.app) from
-// docs.html into dist-docs, instead of the app from index.html into dist. Same
-// React/Vite toolchain and shared components; just a different entry + output.
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
   server: {
     port: 5173,
     proxy: {
       "/api/v1": { target, changeOrigin: true },
-      // The webhook trigger + hosted form live on the daemon too. Proxy
-      // them so the URLs the editor displays (built from the dev
-      // public-base-url, i.e. this origin) work when copy-pasted.
       "/trigger": { target, changeOrigin: true },
       "/form": { target, changeOrigin: true },
     },
-    // Vite 5.4+ blocks unknown Host headers as a DNS-rebind defense.
-    // Allow the reverse-proxy hostnames we expect — comma-separated
-    // VITE_ALLOWED_HOSTS overrides the default localhost set.
     allowedHosts: process.env.VITE_ALLOWED_HOSTS
       ? process.env.VITE_ALLOWED_HOSTS.split(",").map((h) => h.trim())
       : ["localhost", "127.0.0.1"],
@@ -46,8 +36,6 @@ export default defineConfig(({ mode }) => ({
           sourcemap: true,
         },
   test: {
-    // jsdom so component tests can render React + query the DOM. Pure-function
-    // lib tests are unaffected (jsdom is a superset of the node globals they use).
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],

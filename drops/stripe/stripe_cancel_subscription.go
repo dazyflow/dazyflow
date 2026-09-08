@@ -122,9 +122,6 @@ func executeCancelSubscription(ctx context.Context, job core.Job, _ chan<- core.
 	if err := json.Unmarshal(body, &parsed); err != nil || parsed.ID == "" {
 		return params.Err(job, "stripe_error", "Stripe response had no subscription id"), nil
 	}
-	// ends_at is when access actually stops: the paid-for period's end
-	// for a scheduled cancel, the cancellation moment for an immediate
-	// one. RFC3339 so it drops into a notification readably.
 	endsUnix := parsed.CurrentPeriodEnd
 	if !parsed.CancelAtPeriodEnd {
 		if parsed.EndedAt != 0 {

@@ -10,13 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Every node in a layer runs before the layer is judged, so every node's result
-// belongs in GraphResult.Nodes — including the siblings of a failing node.
-//
-// Merging and error-checking in a single pass returned on the first bad slot
-// and dropped the rest. ExecutionLayers sorts a layer by node ID, so the
-// survivors were decided alphabetically: here "a" (before the failing "b") was
-// kept while "c" vanished, despite both having run and succeeded.
 func TestRunLayer_KeepsSiblingResultsOfAFailedNode(t *testing.T) {
 	reg := NewRegistry()
 	okDrop := func(id string) NativeDrop {
@@ -55,8 +48,6 @@ func TestRunLayer_KeepsSiblingResultsOfAFailedNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// One layer, three independent nodes. "b" fails; "a" sorts before it and
-	// "c" after — the ordering that exposed the drop.
 	g := core.Graph{
 		ID: "siblings", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{

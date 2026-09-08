@@ -11,8 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// errUserStore lets each method fail on demand to drive ImportUsers'
-// error branches.
 type errUserStore struct {
 	users   []User
 	listErr error
@@ -35,25 +33,20 @@ func TestImportUsers_ErrorPaths(t *testing.T) {
 	ctx := context.Background()
 	boom := errors.New("boom")
 
-	// Source list error.
 	if _, _, err := ImportUsers(ctx, &errUserStore{listErr: boom}, &errUserStore{}); err == nil {
 		t.Error("expected list error")
 	}
 
-	// Destination GetByEmail error (not ErrUnknownUser).
 	src := &errUserStore{users: []User{{Email: "a@x.io"}}}
 	if _, _, err := ImportUsers(ctx, src, &errUserStore{getErr: boom}); err == nil {
 		t.Error("expected dst get error")
 	}
 
-	// Destination PutUser error.
 	if _, _, err := ImportUsers(ctx, src, &errUserStore{putErr: boom}); err == nil {
 		t.Error("expected dst put error")
 	}
 }
 
-// erroringAuthenticator always fails, to drive ModerationGate's inner-error
-// short-circuit.
 type erroringAuthenticator struct{ err error }
 
 func (e erroringAuthenticator) Authenticate(context.Context, string) (core.Principal, error) {

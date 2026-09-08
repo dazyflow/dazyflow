@@ -20,9 +20,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// memOrgAuth is a trivial in-memory auth.OrgAuthStore for tests — the
-// real store is Postgres-only, but the handlers only need the three
-// interface methods to exercise their decode + validation paths.
 type memOrgAuth struct{ m map[string]auth.OrgAuthConfig }
 
 func newMemOrgAuth() *memOrgAuth { return &memOrgAuth{m: map[string]auth.OrgAuthConfig{}} }
@@ -42,18 +39,11 @@ func (s *memOrgAuth) DeleteOrgAuth(_ context.Context, tenant string) error {
 	return nil
 }
 
-// route is one mounted (method, pattern) pair scraped from the gateway's
-// registration site.
 type route struct {
 	method  string
 	pattern string
 }
 
-// routePattern matches every `mux.HandleFunc("METHOD /path", …)` literal.
-// It deliberately scans the SOURCE of the registration site rather than
-// introspecting the *http.ServeMux (which doesn't expose its patterns),
-// so the sweep stays authoritative and a newly-added route is covered the
-// moment it's registered — no test edit required.
 var routePattern = regexp.MustCompile(`HandleFunc\(\s*"([A-Z]+) (/[^"]+)"`)
 
 // enumerateRoutes reads every non-test source file in the package and returns
@@ -92,10 +82,6 @@ func enumerateRoutes(t *testing.T) []route {
 
 var placeholder = regexp.MustCompile(`\{[^}]*\}`)
 
-// concreteURL turns a registered pattern into a hittable URL: path
-// placeholders ({tenant}, {flow_id}, {name...}) collapse to a literal
-// segment, and subtree patterns (trailing "/") get a child segment so
-// they land on the handler.
 func concreteURL(pattern string) string {
 	u := placeholder.ReplaceAllString(pattern, "x")
 	if strings.HasSuffix(u, "/") {
@@ -104,11 +90,6 @@ func concreteURL(pattern string) string {
 	return u
 }
 
-// newSweepHarness builds a gateway with every optional subsystem wired,
-// so handlers reach their real decode/validation path instead of
-// short-circuiting on a nil dependency (501). Returns a bearer token
-// carrying platform-admin + org-admin + graph + secret permissions, so
-// no route is gated out by authorization.
 func newSweepHarness(t *testing.T) (*gatewayHarness, string) {
 	t.Helper()
 	h := newGatewayHarness(t)
@@ -136,9 +117,6 @@ func newSweepHarness(t *testing.T) (*gatewayHarness, string) {
 	h.gw.OAuth = NewOAuthRegistry("https://example.test", es)
 	h.gw.OrgAuth = newMemOrgAuth()
 
-	// 2FA + upload sandbox: without these the TOTP and file-upload routes
-	// short-circuit to 503 "not configured" before parsing input, so wire
-	// them so the sweep exercises the real handler path.
 	h.gw.TOTPKey = make([]byte, 32)
 	h.gw.TOTPChallenges = auth.NewMemTOTPChallengeStore()
 	sb, err := NewFSSandbox(t.TempDir())
@@ -159,7 +137,7 @@ func newSweepHarness(t *testing.T) (*gatewayHarness, string) {
 	return h, tok
 }
 
-// TestAllRoutes_MalformedBodyNo5xx is the breadth backstop: every
+// The breadth backstop: every
 // registered route, hit with an authenticated request carrying a palette
 // of malformed bodies, must answer without a server-crash status (5xx)
 // and without panicking. A 4xx (bad request, not found, forbidden) or a
@@ -182,8 +160,6 @@ func TestAllRoutes_MalformedBodyNo5xx(t *testing.T) {
 		[]byte(`not json at all`), // not JSON
 		[]byte(`{"":null,"x":[1,[2,[3]]],"n":1e999}`), // odd keys + overflow number
 		bytes.Repeat([]byte("A"), 1<<16),              // 64 KiB of garbage
-		// A plausible union body so handlers that pass decode reach
-		// deeper validation/business logic.
 		[]byte(`{"email":"a@b.com","roles":[{"name":"admin"}],"workspace":"main","google_client_id":"a","client_id":"a","client_secret":"b","name":"n","value":"v"}`),
 	}
 
@@ -206,8 +182,6 @@ func TestAllRoutes_MalformedBodyNo5xx(t *testing.T) {
 				req.Header.Set("Authorization", "Bearer "+tok)
 				req.Header.Set("Content-Type", "application/json")
 				req.Header.Set("Origin", "http://localhost:8080")
-				// Bound any SSE / long-poll handler so it returns instead
-				// of streaming until the watchdog.
 				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 				defer cancel()
 				req = req.WithContext(ctx)
@@ -237,8 +211,6 @@ func TestAllRoutes_MalformedBodyNo5xx(t *testing.T) {
 					}
 					assertNo5xx(t, rt.method+" "+rt.pattern, r.rw)
 				case <-time.After(5 * time.Second):
-					// Streaming/long-poll handler that ignored the 2s ctx;
-					// not a crash, so don't fail — just move on.
 				}
 			}
 			if rt.method == http.MethodGet {

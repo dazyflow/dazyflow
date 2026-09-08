@@ -20,7 +20,6 @@ func TestMetrics_JobGauges(t *testing.T) {
 	h := newGatewayHarness(t)
 	h.gw.EnableMetrics = true
 
-	// Two queued node jobs → queue-depth gauge of 2; running stays 0.
 	for _, id := range []string{"j1", "j2"} {
 		if err := h.store.Enqueue(t.Context(), core.JobRecord{ID: id, Kind: core.JobKindNode, Tenant: "t"}); err != nil {
 			t.Fatalf("enqueue %s: %v", id, err)
@@ -46,7 +45,6 @@ func TestMetrics_SessionCacheGauges(t *testing.T) {
 	h := newGatewayHarness(t)
 	h.gw.EnableMetrics = true
 
-	// Wrap a session store with the cache and prime one hit + one miss.
 	cache := auth.NewCachingSessionStore(auth.NewMemSessionStore(), time.Minute, 0)
 	sess := auth.Session{ID: "s1", Subject: "u", Tenant: "t", ExpiresAt: time.Now().Add(time.Hour)}
 	if err := cache.PutSession(t.Context(), sess); err != nil {
@@ -73,8 +71,6 @@ func TestMetrics_HTTPRedSeries(t *testing.T) {
 	h.gw.EnableMetrics = true
 	h.gw.Metrics = NewMetrics()
 
-	// Drive a couple of requests through the full middleware chain so the
-	// RED counters + duration histogram accumulate.
 	h.do(t, "GET", "/healthz", nil)
 	h.do(t, "GET", "/healthz", nil)
 
@@ -104,7 +100,6 @@ func TestMetrics_EnabledEmitsUpAndQuotaGauges(t *testing.T) {
 	h := newGatewayHarness(t)
 	h.gw.EnableMetrics = true
 
-	// Wire a quota provider with a limited tenant and seed some usage.
 	base := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(base, "acme", "ws"), 0o755); err != nil {
 		t.Fatal(err)

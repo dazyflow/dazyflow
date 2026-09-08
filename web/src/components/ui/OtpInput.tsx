@@ -9,13 +9,6 @@ import {
   type KeyboardEvent,
 } from "react";
 
-// OtpInput renders a row of six grouped single-digit boxes for TOTP code
-// entry — the operator-app norm (GitHub, 1Password, …): typing advances,
-// Backspace retreats, ←/→ navigate, and a paste anywhere distributes the
-// digits across the boxes. It's a controlled component: `value` is the
-// (≤6-char) code string and `onChange` emits the new one; clearing `value`
-// to "" from the parent resets the boxes. `onComplete` fires once all six
-// boxes hold a digit, so the caller can auto-submit.
 const LEN = 6;
 
 function toBoxes(v: string): string[] {
@@ -66,9 +59,6 @@ export function OtpInput({
     if (v.length === LEN && next.every(Boolean)) onComplete?.(v);
   };
 
-  // Distribute a (possibly pasted/autofilled) string across the boxes
-  // starting at `start`, stripping non-digits, then park the caret on the
-  // last filled box.
   const fillFrom = (start: number, raw: string) => {
     const digits = raw.replace(/\D/g, "").slice(0, LEN - start);
     if (!digits) return;

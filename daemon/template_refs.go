@@ -29,14 +29,8 @@ import (
 // with no port is an error there, so there is nothing to prefetch for it.
 var upstreamRefPattern = regexp.MustCompile(`\$\{upstream\.([^.}\s]+)\.`)
 
-// triggerRefPattern matches ${trigger.…} in any of its forms.
 var triggerRefPattern = regexp.MustCompile(`\$\{trigger[.}]`)
 
-// templateRefs reports which other nodes this node's params name.
-//
-// Reads the params off the GRAPH rather than the job record: the graph holds
-// the template as written, which is the only place the reference is still
-// visible. By the time a job's params are resolved the answer is gone.
 func templateRefs(graph core.Graph, nodeID string) (nodes []string, wantsTrigger bool) {
 	var params map[string]any
 	for _, n := range graph.Nodes {
@@ -78,10 +72,6 @@ func templateRefs(graph core.Graph, nodeID string) (nodes []string, wantsTrigger
 func (w *Worker) addTemplateResults(ctx context.Context, graph core.Graph, rec core.JobRecord, prior map[string]core.Result) {
 	refs, wantsTrigger := templateRefs(graph, rec.NodeID)
 	if wantsTrigger {
-		// Which trigger FIRED is decided by which one has a result, and that
-		// is a question only the run can answer — a graph may carry both a
-		// webhook and a schedule. Offer every trigger node; the substituter
-		// picks the one that ran.
 		for _, n := range graph.Nodes {
 			if core.IsTriggerModule(n.Module) {
 				refs = append(refs, n.ID)

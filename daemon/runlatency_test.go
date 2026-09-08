@@ -18,7 +18,7 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// TestRunLatencyByPollInterval measures what the stress rig structurally
+// Measures what the stress rig structurally
 // cannot: how long ONE run takes end to end on an otherwise IDLE fleet.
 //
 // The rig answers "how many steps per second at saturation", where the queue is
@@ -77,7 +77,7 @@ func init() {
 	})
 }
 
-// TestRunLatencyFanOut is the shape TestRunLatencyByPollInterval cannot see.
+// The shape TestRunLatencyByPollInterval cannot see.
 //
 // That test uses a linear chain, where a worker completing step N goes
 // straight back and claims step N+1 itself — so the whole chain costs one
@@ -103,14 +103,6 @@ func TestRunLatencyFanOut(t *testing.T) {
 	}
 }
 
-// TestApprovalResumeLatency measures the other end of a human's wait: not
-// pressing Run, but pressing Approve.
-//
-// A parked run resumes through Service.Approve, which completes the gate and
-// dispatches what it unblocked. That enqueue is the same shape as a submit —
-// work appearing while the fleet is idle — so without a wake it is found on
-// somebody's next poll, and the approver watches a spinner for an interval
-// that has nothing to do with the work.
 func TestApprovalResumeLatency(t *testing.T) {
 	for _, wake := range []bool{false, true} {
 		t.Run(fmt.Sprintf("wake=%v", wake), func(t *testing.T) {
@@ -125,8 +117,6 @@ func TestApprovalResumeLatency(t *testing.T) {
 	}
 }
 
-// timeApprovalResume parks a run on a gate, then times from the approval
-// decision to the step it unblocks reaching a terminal state.
 func (h *latencyHarness) timeApprovalResume(t *testing.T) time.Duration {
 	t.Helper()
 	h.seq++
@@ -144,8 +134,6 @@ func (h *latencyHarness) timeApprovalResume(t *testing.T) time.Duration {
 		t.Fatalf("submit: %v", err)
 	}
 	h.waitForStatus(t, daemon.NodeJobID(id, "gate"), core.JobStatusAwaiting)
-	// Let the workers settle back into their sleep, so the decision lands on
-	// an idle fleet — which is what an approval arriving minutes later does.
 	time.Sleep(150 * time.Millisecond)
 
 	start := time.Now()
@@ -214,21 +202,14 @@ func newLatencyHarness(t *testing.T, workers int, poll time.Duration, wake bool)
 		}, jobs, eng, bus)
 		go func() { _ = w.Run(ctx) }()
 	}
-	// Let the pool reach its idle state, so the first submit measures a cold
-	// queue rather than a worker that happens to be mid-poll on startup.
 	time.Sleep(2 * poll)
 	return &latencyHarness{svc: svc, jobs: jobs, bus: bus, principal: p}
 }
 
-// runFanOut submits one root with `branches` independent dependents, so a
-// single completion makes them all ready at the same instant.
 func (h *latencyHarness) runFanOut(t *testing.T, branches int) time.Duration {
 	t.Helper()
 	h.seq++
 	g := core.Graph{ID: fmt.Sprintf("fan-%d", h.seq), Tenant: "t", Workspace: "ws"}
-	// The root holds its worker well past a poll interval, so by the time it
-	// finishes the other workers have genuinely gone back to sleep and the
-	// dependents have to be noticed rather than merely be there already.
 	g.Nodes = append(g.Nodes, core.Node{
 		ID: "root", Module: blockingDropID, Params: map[string]any{"ms": 250},
 	})
@@ -244,8 +225,6 @@ func (h *latencyHarness) runFanOut(t *testing.T, branches int) time.Duration {
 	return h.timeToTerminal(t, g)
 }
 
-// runChain submits a strictly sequential chain and returns wall time from
-// submit to the run's terminal event.
 func (h *latencyHarness) runChain(t *testing.T, steps int) time.Duration {
 	t.Helper()
 	h.seq++
@@ -265,7 +244,6 @@ func (h *latencyHarness) runChain(t *testing.T, steps int) time.Duration {
 	return h.timeToTerminal(t, g)
 }
 
-// timeToTerminal submits g and returns wall time to its terminal event.
 func (h *latencyHarness) timeToTerminal(t *testing.T, g core.Graph) time.Duration {
 	t.Helper()
 	start := time.Now()

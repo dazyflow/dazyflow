@@ -41,18 +41,8 @@ type ResourceError struct {
 func (e *ResourceError) Error() string { return fmt.Sprintf("resource %q: %v", e.Name, e.Err) }
 func (e *ResourceError) Unwrap() error { return e.Err }
 
-// wholeResourcePattern matches a string that is EXACTLY one ${resource.…}
-// placeholder (no surrounding text). Such a value resolves to the
-// provider's STRUCTURED content (a real array/object) rather than a
-// stringified blob — the load-bearing difference that lets
-// ${resource.leads.rows} feed a node's rows input directly.
 var wholeResourcePattern = regexp.MustCompile(`^\$\{resource\.([^}]*)\}$`)
 
-// resourceResolver fetches ${resource.…} content during one
-// resolveTemplatesCollecting pass. It caches each resource's root value for
-// the life of that pass, so ${resource.x.rows} and ${resource.x.headers}
-// trigger a single fetch. A nil resolver, or one with no provider, reports
-// every ref as not-mine — so flows without resources are untouched.
 type resourceResolver struct {
 	provider core.ResourceProvider
 	cache    map[string]any
@@ -67,7 +57,6 @@ func newResourceResolver(resources map[string]core.ResourceProvider) *resourceRe
 	}
 }
 
-// root fetches (and caches) NAME's whole content via the provider.
 func (rr *resourceResolver) root(ctx context.Context, name string) (any, error) {
 	if rr.cached[name] {
 		return rr.cache[name], nil
@@ -81,8 +70,6 @@ func (rr *resourceResolver) root(ctx context.Context, name string) (any, error) 
 	return v, nil
 }
 
-// value resolves a resource path "NAME[.sub.path]" — fetches NAME's root,
-// then walks the optional sub-path with the same syntax upstream refs use.
 func (rr *resourceResolver) value(ctx context.Context, path string) (any, error) {
 	name, sub, _ := strings.Cut(path, ".")
 	root, err := rr.root(ctx, name)
@@ -99,10 +86,6 @@ func (rr *resourceResolver) value(ctx context.Context, path string) (any, error)
 	return v, nil
 }
 
-// wholeValue resolves s when it is exactly one ${resource.…} placeholder,
-// returning the structured value. ok=false means s isn't a whole-string
-// resource ref (or no provider is configured) — the caller falls through
-// to ordinary string substitution.
 func (rr *resourceResolver) wholeValue(ctx context.Context, s string) (any, bool, error) {
 	if rr == nil || rr.provider == nil {
 		return nil, false, nil
@@ -118,10 +101,6 @@ func (rr *resourceResolver) wholeValue(ctx context.Context, s string) (any, bool
 	return v, true, nil
 }
 
-// substituter is the inline form: a ${resource.…} embedded in surrounding
-// text resolves to the stringified content (JSON for arrays/objects).
-// Whole-string refs are intercepted by wholeValue before this runs, so they
-// keep their structured form.
 func (rr *resourceResolver) substituter() Substituter {
 	return func(ctx context.Context, scheme, path string) (string, bool, error) {
 		if rr == nil || rr.provider == nil || scheme != "resource" {

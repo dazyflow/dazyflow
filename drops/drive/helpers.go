@@ -1,12 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package drive hosts the native Google Drive connectors (drive_list_files,
-// drive_download, drive_upload). They authenticate with Google OAuth (the
-// "google" provider) via the SetTokenLookup hook the daemon wires at startup —
-// the same provider and token plumbing the gmail, sheets and gcal packages use,
-// so connecting a Google account for Drive tops up the existing grant
-// incrementally.
 package drive
 
 import (
@@ -30,22 +24,17 @@ const (
 	driveUploadBase = "https://www.googleapis.com/upload/drive/v3"
 )
 
-// SetTokenLookup wires the shared Google OAuth token resolver (one provider
-// serves every Google connector — see drops/internal/google). Retained as a
-// package entry point for tests.
 func SetTokenLookup(fn google.TokenLookup) { google.SetTokenLookup(fn) }
 
 func resolveToken(ctx context.Context, job core.Job) (string, error) {
 	return google.ResolveToken(ctx, job)
 }
 
-// Test seams: list/download hit the API root; upload hits the upload root.
 var (
 	apiBase    = apibase.New(driveAPIBase)
 	uploadBase = apibase.New(driveUploadBase)
 )
 
-// SetHTTPBases swaps both Drive roots (tests point them at one httptest server).
 func SetHTTPBases(api, upload string) {
 	apiBase.Set(api)
 	uploadBase.Set(upload)
@@ -73,7 +62,6 @@ func googleDo(ctx context.Context, method, url, token, contentType string, body 
 // back to a bounded slice of the raw body.
 func driveErr(body []byte) string { return google.ErrMessage(body, 512) }
 
-// driveFile is the slice of the Drive file resource the drops surface.
 type driveFile struct {
 	ID           string `json:"id"`
 	Name         string `json:"name"`
@@ -101,14 +89,11 @@ func isGoogleNative(mimeType string) bool {
 	return strings.HasPrefix(mimeType, "application/vnd.google-apps")
 }
 
-// exportFormat is a concrete target a Google-editor doc can be exported to.
 type exportFormat struct {
 	mime string
 	ext  string
 }
 
-// exportFormats maps the user-facing 'format' keyword (the Download drop's
-// "Export as" choice) to its Drive export MIME type and file extension.
 var exportFormats = map[string]exportFormat{
 	"pdf":  {"application/pdf", ".pdf"},
 	"docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx"},
@@ -129,7 +114,6 @@ var nativeExportable = map[string][]string{
 	"application/vnd.google-apps.drawing":      {"pdf"},
 }
 
-// friendlyNative names a Google-editor type for error messages.
 func friendlyNative(mime string) string {
 	switch mime {
 	case "application/vnd.google-apps.folder":
@@ -145,8 +129,6 @@ func friendlyNative(mime string) string {
 	}
 }
 
-// quoteDriveValue escapes a value for interpolation into a Drive query string
-// (q=), per the API grammar: backslashes and single quotes are backslash-escaped.
 func quoteDriveValue(v string) string {
 	v = strings.ReplaceAll(v, `\`, `\\`)
 	v = strings.ReplaceAll(v, `'`, `\'`)

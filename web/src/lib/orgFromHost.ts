@@ -41,8 +41,6 @@ const RESERVED = new Set([
   "registry",
 ]);
 
-// A conservative DNS label: 1-63 chars, lowercase alphanumerics and
-// internal hyphens, no leading/trailing hyphen.
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 export function orgFromHost(hostname: string, wildcardDomain: string): string {

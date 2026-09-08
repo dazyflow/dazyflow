@@ -43,14 +43,12 @@ func TestChangePassword(t *testing.T) {
 	if rw.Code != 200 {
 		t.Fatalf("status=%d body=%s", rw.Code, rw.Body.String())
 	}
-	// New password works, old one no longer does.
 	if _, err := auth.VerifyPassword(ctx, users, "alice@example.com", "brandnewpass"); err != nil {
 		t.Errorf("new password rejected: %v", err)
 	}
 	if _, err := auth.VerifyPassword(ctx, users, "alice@example.com", "oldpassword"); err == nil {
 		t.Error("old password still accepted")
 	}
-	// Sessions revoked.
 	if _, err := sessions.GetSession(ctx, "s1"); err == nil {
 		t.Error("session not revoked after password change")
 	}
@@ -69,7 +67,6 @@ func TestChangePassword_WrongCurrent(t *testing.T) {
 	if rw.Code != 401 {
 		t.Fatalf("status=%d, want 401", rw.Code)
 	}
-	// Unchanged.
 	if _, err := auth.VerifyPassword(context.Background(), users, "alice@example.com", "oldpassword"); err != nil {
 		t.Error("password should be unchanged after a failed attempt")
 	}
@@ -104,7 +101,6 @@ func TestChangeEmail_Rekey(t *testing.T) {
 		t.Fatalf("status=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// Old identity gone, new identity present with re-keyed subject.
 	if _, err := users.GetByEmail(ctx, oldEmail); err == nil {
 		t.Error("old user row survived re-key")
 	}
@@ -115,18 +111,15 @@ func TestChangeEmail_Rekey(t *testing.T) {
 	if nu.Subject != newEmail {
 		t.Errorf("subject not re-keyed: %q", nu.Subject)
 	}
-	// Membership re-pointed.
 	if ms, _ := members.ListByEmail(ctx, newEmail); len(ms) != 1 {
 		t.Errorf("membership not re-pointed to new email: %d", len(ms))
 	}
 	if ms, _ := members.ListByEmail(ctx, oldEmail); len(ms) != 0 {
 		t.Errorf("membership left under old email: %d", len(ms))
 	}
-	// API key subject re-pointed.
 	if ks, _ := keys.ListBySubject(ctx, newEmail); len(ks) != 1 {
 		t.Errorf("api key not re-pointed: %d", len(ks))
 	}
-	// Old sessions revoked.
 	if _, err := sessions.GetSession(ctx, "s1"); err == nil {
 		t.Error("old session not revoked")
 	}

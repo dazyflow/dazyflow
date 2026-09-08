@@ -5,10 +5,6 @@ package daemon
 
 import "testing"
 
-// TestSubtreeBudget_CapsFanOut guards the subgraph fan-out fix: a single root
-// run-tree may spawn at most maxSubgraphRunsPerRoot descendant runs, after
-// which charge() refuses — turning an exponential N^depth blow-up into a clean
-// error instead of a job-store flood.
 func TestSubtreeBudget_CapsFanOut(t *testing.T) {
 	t.Parallel()
 	b := newSubtreeBudget()
@@ -22,8 +18,6 @@ func TestSubtreeBudget_CapsFanOut(t *testing.T) {
 	}
 }
 
-// TestSubtreeBudget_PerRootIsolation: distinct trigger trees get independent
-// allowances (each top-level trigger is its own root).
 func TestSubtreeBudget_PerRootIsolation(t *testing.T) {
 	t.Parallel()
 	b := newSubtreeBudget()

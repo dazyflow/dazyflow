@@ -31,13 +31,8 @@ export type OrgDeepLinkAction =
   | { kind: "adopt"; tenant: string; url: string }
   | { kind: "switch"; tenant: string; url: string };
 
-// Loc is the part of window.location this module reads — narrowed so tests can
-// pass a literal instead of stubbing a Location.
 export type Loc = { pathname: string; search: string; hash: string };
 
-// ORG_PARAM is the query key the server puts on the links it mails out. The
-// sign-in page reads the same key for the unauthenticated case (scoping SSO to
-// an org), so the name is shared vocabulary — don't rename one side alone.
 export const ORG_PARAM = "org";
 
 // stripOrgParam returns the same location as a relative URL with the org param
@@ -51,13 +46,6 @@ export function stripOrgParam(loc: Loc): string {
   return loc.pathname + (q ? "?" + q : "") + (loc.hash || "");
 }
 
-// resolveOrgDeepLink decides how to honour an `?org=` param.
-//
-// available is the orgs the user can act in (whoami's memberships, plus every
-// tenant for a platform admin) — an org outside it is not actionable, so the
-// param is ignored rather than attempted. sessionTenant is whoami's tenant,
-// i.e. what the CURRENT session is scoped to, which is what decides whether a
-// server-side re-scope is needed.
 export function resolveOrgDeepLink(args: {
   requested: string;
   available: string[];

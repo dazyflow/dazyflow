@@ -26,7 +26,6 @@ func TestContentHashed(t *testing.T) {
 		"connect-your-form.html", "short-Ab.js", "no-extension",
 		// Seven hash characters, not eight — must not be trusted.
 		"index-BAqKSaq.css",
-		// The separator has to be a dash.
 		"indexBAqKSaqx.css",
 	}
 	for _, name := range plain {
@@ -83,15 +82,10 @@ func TestWebDistHandler_CacheControlByAssetKind(t *testing.T) {
 		"/assets/app-Ab3dEf9x.js":     immutable,
 		"/assets/style-Zz9yXw8v.css":  immutable,
 		"/assets/app-Ab3dEf9x.js.map": immutable,
-		// Outside assets/ a hash-shaped name earns nothing: only the
-		// build's own output directory is trusted to be hashed.
-		"/vendor-Ab3dEf9x.js": "public, max-age=3600",
-		"/favicon.png":        "public, max-age=3600",
-		// The shell, and the client-side routes that fall back to it,
-		// name this build's assets, so they revalidate. (FileServer
-		// redirects /index.html to /, so / is the path that serves it.)
-		"/":          "no-cache",
-		"/flows/abc": "no-cache",
+		"/vendor-Ab3dEf9x.js":         "public, max-age=3600",
+		"/favicon.png":                "public, max-age=3600",
+		"/":                           "no-cache",
+		"/flows/abc":                  "no-cache",
 	} {
 		rw := httptest.NewRecorder()
 		h.ServeHTTP(rw, httptest.NewRequest("GET", path, nil))

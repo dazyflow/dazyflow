@@ -24,10 +24,6 @@ func TestResolve(t *testing.T) {
 			t.Errorf("Resolve = (%q, %q), want (/ws, sub/file.txt)", root, rel)
 		}
 	})
-	// The redundant workspace:// spelling several step examples carried. It
-	// used to pass through unresolved, so the path cleaned to
-	// "workspace:/sub/file.txt" and the step wrote into a directory literally
-	// named "workspace:" while reporting success.
 	t.Run("legacy workspace:// prefix resolves to the workspace", func(t *testing.T) {
 		job := core.Job{WorkspaceRoot: "/ws"}
 		root, rel, err := Resolve(job, WorkspaceScheme+"sub/file.txt")
@@ -37,7 +33,6 @@ func TestResolve(t *testing.T) {
 		if root != "/ws" || rel != "sub/file.txt" {
 			t.Errorf("Resolve = (%q, %q), want (/ws, sub/file.txt)", root, rel)
 		}
-		// And it lands in exactly the same place as the canonical spelling.
 		bareRoot, bareRel, err := Resolve(job, "sub/file.txt")
 		if err != nil {
 			t.Fatalf("bare err = %v", err)
@@ -46,8 +41,6 @@ func TestResolve(t *testing.T) {
 			t.Errorf("prefixed (%q,%q) != bare (%q,%q)", root, rel, bareRoot, bareRel)
 		}
 	})
-	// Only a LEADING prefix is a scheme. A file whose name happens to contain
-	// the text is just a file.
 	t.Run("the prefix is only stripped at the front", func(t *testing.T) {
 		job := core.Job{WorkspaceRoot: "/ws"}
 		_, rel, err := Resolve(job, "notes/workspace://odd.txt")
@@ -58,7 +51,6 @@ func TestResolve(t *testing.T) {
 			t.Errorf("rel = %q, want it untouched", rel)
 		}
 	})
-	// scratch:// still wins: it is a real second root, not a spelling.
 	t.Run("scratch path resolves against ScratchRoot", func(t *testing.T) {
 		job := core.Job{WorkspaceRoot: "/ws", ScratchRoot: "/scratch"}
 		root, rel, err := Resolve(job, Scheme+"a/b.json")
@@ -153,8 +145,6 @@ func TestIsEscape(t *testing.T) {
 }
 
 func TestOpenRoot_MissingDirErrors(t *testing.T) {
-	// ScratchRoot points at a path that doesn't exist, so os.OpenRoot fails
-	// and OpenRoot wraps it with "open root".
 	job := core.Job{ScratchRoot: "/nonexistent-sandbox-root-xyz"}
 	if _, _, err := OpenRoot(job, "scratch://file.txt"); err == nil {
 		t.Fatal("OpenRoot on a missing root: want error, got nil")
@@ -162,8 +152,6 @@ func TestOpenRoot_MissingDirErrors(t *testing.T) {
 }
 
 func TestOpenRoot_ResolveErrorPropagates(t *testing.T) {
-	// A scratch:// path with no scratch root configured fails in Resolve,
-	// before any os.OpenRoot attempt.
 	if _, _, err := OpenRoot(core.Job{}, "scratch://x"); err == nil {
 		t.Fatal("OpenRoot with no scratch root: want resolve error, got nil")
 	}

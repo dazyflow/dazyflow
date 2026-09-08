@@ -17,7 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// newTestSecrets builds an in-memory EncryptedSecrets for tests.
 func newTestSecrets(t *testing.T) *EncryptedSecrets {
 	t.Helper()
 	es, err := NewEncryptedSecrets(make([]byte, 32), NewMemSecretsStore())
@@ -27,8 +26,6 @@ func newTestSecrets(t *testing.T) *EncryptedSecrets {
 	return es
 }
 
-// fakeVaultClient records readKV calls and returns canned fields per (tenant is
-// implicit in cfg.Address here) path.
 type fakeVaultClient struct {
 	data  map[string]map[string]string // path -> fields
 	calls int
@@ -114,18 +111,14 @@ func TestVaultProvider_CacheExpires(t *testing.T) {
 
 func TestVaultProvider_TenantScoped(t *testing.T) {
 	client := &fakeVaultClient{data: map[string]map[string]string{"x": {"v": "secret"}}}
-	// Only acme has a config; globex doesn't.
 	p := newTestVaultProvider(client, map[string]VaultConfig{"acme": acmeCfg()}, time.Minute)
 
-	// No tenant in context → refused (BYO secrets are tenant-scoped).
 	if _, err := p.Get(context.Background(), "x#v"); err == nil {
 		t.Error("expected error with no tenant in context")
 	}
-	// A tenant without a configured manager → clear "not configured".
 	if _, err := p.Get(core.WithTenant(context.Background(), "globex"), "x#v"); err == nil {
 		t.Error("expected 'not configured' error for a tenant with no manager")
 	}
-	// The configured tenant resolves.
 	if _, err := p.Get(core.WithTenant(context.Background(), "acme"), "x#v"); err != nil {
 		t.Errorf("acme should resolve: %v", err)
 	}
@@ -150,8 +143,6 @@ func TestVaultProvider_MissingFieldAndBadRef(t *testing.T) {
 	}
 }
 
-// The per-tenant config round-trips through the encrypted store, stays
-// tenant-scoped, and is hidden from the user-facing secret listing.
 func TestVaultConfig_StorageRoundTrip(t *testing.T) {
 	es := newTestSecrets(t)
 	ctx := context.Background()
@@ -173,17 +164,14 @@ func TestVaultConfig_StorageRoundTrip(t *testing.T) {
 		t.Errorf("round-trip mismatch:\n got %+v\nwant %+v", got, cfg)
 	}
 
-	// A different tenant has no config (not an error).
 	if _, ok, err := loadProviderConfig[VaultConfig](ctx, es, "globex", vaultConfigSecretName); ok || err != nil {
 		t.Errorf("globex: ok=%v err=%v, want false/nil", ok, err)
 	}
 
-	// Saving an invalid config is refused.
 	if err := saveProviderConfig(ctx, es, "acme", vaultConfigSecretName, VaultConfig{Address: "https://x"}); err == nil {
 		t.Error("invalid config should not save")
 	}
 
-	// The reserved config name is hidden from the user secret listing.
 	names, err := es.List(ctx, "acme")
 	if err != nil {
 		t.Fatal(err)
@@ -220,13 +208,6 @@ func TestVaultConfig_Validate(t *testing.T) {
 	}
 }
 
-// fakeVaultServer stands in for an OpenBao/Vault HTTP API so the real
-// vaultAPIClient (OpenBao Go SDK) exercises its readKV/token/authedClient/
-// appRoleLogin/verify paths over httptest, with no live server.
-//
-//   - POST auth/approle/login          -> {auth:{client_token, lease_duration}}
-//   - GET  auth/token/lookup-self      -> {data:{}}  (token self-lookup verify)
-//   - GET  {mount}/data/{path}         -> {data:{data:{...fields...}}}
 type fakeVaultKVServer struct {
 	srv         *httptest.Server
 	loginCalls  int64
@@ -283,9 +264,6 @@ func newFakeVaultKVServer(t *testing.T, secrets map[string]map[string]any) *fake
 	return f
 }
 
-// TestVaultAPIClient_ReadKV_TokenAuth drives the real vaultAPIClient against a
-// fake server with static-token auth: readKV -> authedClient -> token (static)
-// -> KVv2 Get, plus stringifyVaultValue on a non-string field.
 func TestVaultAPIClient_ReadKV_TokenAuth(t *testing.T) {
 	srv := newFakeVaultKVServer(t, map[string]map[string]any{
 		"stripe": {"api_key": "sk_live", "rotations": 3, "tags": []string{"a", "b"}},
@@ -300,7 +278,6 @@ func TestVaultAPIClient_ReadKV_TokenAuth(t *testing.T) {
 	if fields["api_key"] != "sk_live" {
 		t.Errorf("api_key = %q", fields["api_key"])
 	}
-	// Non-string values are JSON-encoded by stringifyVaultValue.
 	if fields["rotations"] != "3" {
 		t.Errorf("rotations = %q, want 3", fields["rotations"])
 	}
@@ -308,15 +285,11 @@ func TestVaultAPIClient_ReadKV_TokenAuth(t *testing.T) {
 		t.Errorf("tags = %q", fields["tags"])
 	}
 
-	// Missing secret surfaces an error.
 	if _, err := c.readKV(context.Background(), cfg, "ghost"); err == nil {
 		t.Error("expected error reading a missing secret")
 	}
 }
 
-// TestVaultAPIClient_AppRoleLoginAndCache covers token()'s AppRole branch:
-// appRoleLogin mints a token, caches it (second read doesn't re-login), and
-// authedClient/readKV use it.
 func TestVaultAPIClient_AppRoleLoginAndCache(t *testing.T) {
 	srv := newFakeVaultKVServer(t, map[string]map[string]any{"db": {"password": "p"}})
 	c := newVaultAPIClient(5 * time.Second)
@@ -339,8 +312,6 @@ func TestVaultAPIClient_AppRoleLoginAndCache(t *testing.T) {
 	}
 }
 
-// TestVaultAPIClient_AppRoleLoginRejected covers appRoleLogin's error path
-// (server returns 403) propagated through token -> authedClient -> readKV.
 func TestVaultAPIClient_AppRoleLoginRejected(t *testing.T) {
 	srv := newFakeVaultKVServer(t, nil)
 	srv.denyLogin = true
@@ -357,8 +328,6 @@ func TestVaultAPIClient_AppRoleLoginRejected(t *testing.T) {
 	}
 }
 
-// TestVaultAPIClient_Verify covers verify()'s two legs: a token self-lookup
-// and an AppRole login, plus the bad-address (newClient/connect) failure.
 func TestVaultAPIClient_Verify(t *testing.T) {
 	srv := newFakeVaultKVServer(t, nil)
 	c := newVaultAPIClient(5 * time.Second)
@@ -376,30 +345,23 @@ func TestVaultAPIClient_Verify(t *testing.T) {
 		t.Fatalf("verify approle: %v", err)
 	}
 
-	// An unreachable address fails verify.
 	dead := VaultConfig{Address: "http://127.0.0.1:1", Mount: "secret", Auth: VaultAuth{Method: "token", Token: "x"}}
 	if err := c.verify(context.Background(), dead); err == nil {
 		t.Error("verify against a dead address should fail")
 	}
 }
 
-// TestVerifyVaultConfig_EndToEnd exercises the exported save-endpoint helper
-// against the fake server (validate + connect+auth), plus its validate-first
-// short-circuit.
 func TestVerifyVaultConfig_EndToEnd(t *testing.T) {
 	srv := newFakeVaultKVServer(t, nil)
 	good := VaultConfig{Address: srv.srv.URL, Mount: "secret", Auth: VaultAuth{Method: "approle", RoleID: "r", SecretID: "s"}}
 	if err := VerifyVaultConfig(context.Background(), good, 5*time.Second); err != nil {
 		t.Fatalf("verify good config: %v", err)
 	}
-	// Invalid config fails before any network call.
 	if err := VerifyVaultConfig(context.Background(), VaultConfig{Address: "ftp://x", Mount: "secret", Auth: VaultAuth{Method: "token", Token: "t"}}, time.Second); err == nil {
 		t.Error("invalid scheme should fail validation")
 	}
 }
 
-// TestNewVaultProviderForStore_Wired covers the production constructor's
-// loadConfig closure: a tenant with no stored config reads as not-configured.
 func TestNewVaultProviderForStore_Wired(t *testing.T) {
 	es := newTestSecrets(t)
 	p := NewVaultProviderForStore(es, 2*time.Second)

@@ -10,19 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// triggerSubstituter resolves ${trigger.port.path…} against the trigger node
-// the run actually started from: the same data ${upstream.<id>.port.path}
-// reaches, named the way a flow author thinks about it. WHICH node it means is
-// decided by the run, not the graph: a graph may carry several trigger nodes,
-// and the one that fired is the one holding a result in prior.
-//
-// An unresolvable ${trigger.…} is an error, not a shrug. SubstituteString
-// leaves an UNKNOWN scheme alone so arbitrary ${…} text in JSON and shell
-// survives; `trigger` is a known scheme with an owner, so failing to resolve it
-// is a broken reference, exactly as for `upstream`. The alternative once mailed
-// a customer a literal "${trigger.body.version}" with nothing failing or
-// logging. A manual Run of a webhook flow therefore fails here; "Send test
-// event" seeds the trigger and is the way to exercise such a flow by hand.
 func triggerSubstituter(graph core.Graph, prior map[string]core.Result) Substituter {
 	return func(_ context.Context, scheme, path string) (string, bool, error) {
 		if scheme != "trigger" {

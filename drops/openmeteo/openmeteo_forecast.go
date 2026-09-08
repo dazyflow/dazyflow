@@ -17,7 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// maxForecastDays is the horizon Open-Meteo's free Forecast API covers.
 const maxForecastDays = 16
 
 func init() {
@@ -77,8 +76,6 @@ func init() {
 	})
 }
 
-// omDailyResponse is the /v1/forecast daily block. Open-Meteo returns each
-// variable as a parallel column array aligned by index with `time`.
 type omDailyResponse struct {
 	Daily struct {
 		Time          []string  `json:"time"`
@@ -89,7 +86,6 @@ type omDailyResponse struct {
 	} `json:"daily"`
 }
 
-// dayEntry is one calendar day, flattened from the column arrays into a row.
 type dayEntry struct {
 	Date        string  `json:"date"` // local YYYY-MM-DD (timezone=auto)
 	TempMin     float64 `json:"temp_min"`
@@ -99,10 +95,6 @@ type dayEntry struct {
 	Description string  `json:"description"`
 }
 
-// executeForecast fetches the daily forecast for the resolved coordinate,
-// flattens Open-Meteo's column arrays into per-day rows, trims to the
-// requested number of days, and emits a readable summary plus the daily array
-// (and the full raw response).
 func executeForecast(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	lat, lon, err := geoloc.ResolveLatLon(job)
 	if err != nil {
@@ -141,10 +133,6 @@ func executeForecast(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 	}, nil
 }
 
-// flattenDaily zips Open-Meteo's parallel column arrays into per-day rows,
-// reading each variable defensively (a short column leaves that field zero) and
-// trimming to the first `days`. Open-Meteo reports precipitation_probability as
-// a percentage; it's normalised to 0..1 to match the other weather drops' pop.
 func flattenDaily(r omDailyResponse, days int) []dayEntry {
 	d := r.Daily
 	n := min(len(d.Time), days)
@@ -169,8 +157,6 @@ func flattenDaily(r omDailyResponse, days int) []dayEntry {
 	return out
 }
 
-// forecastSummary renders one line per day, e.g.
-// "Mon Jun 24: Slight rain, 9–19°C, rain 20%".
 func forecastSummary(days []dayEntry, units string) string {
 	if len(days) == 0 {
 		return "No forecast available."

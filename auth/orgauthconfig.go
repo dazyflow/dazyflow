@@ -43,9 +43,6 @@ func (c OrgAuthConfig) GoogleEnabled() bool {
 		strings.TrimSpace(c.GoogleClientSecret) != ""
 }
 
-// OrgAuthStore is the lookup boundary. Operations are keyed on
-// tenant ID; a tenant with no config returns ErrUnknownOrgAuth and
-// the sign-in flow falls back to password-only.
 type OrgAuthStore interface {
 	GetOrgAuth(ctx context.Context, tenant string) (OrgAuthConfig, error)
 	PutOrgAuth(ctx context.Context, cfg OrgAuthConfig) error

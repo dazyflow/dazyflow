@@ -26,9 +26,6 @@ vi.mock("../../api", () => ({
   api: {
     getSupportTicket: (...a: unknown[]) => getSupportTicket(...a),
     getMyTicket: (...a: unknown[]) => getMyTicket(...a),
-    // Fired when the thread mounts, so the reminder sweep can tell
-    // "hasn't answered" from "hasn't looked". Stubbed here because
-    // these tests are about other things and an unmocked call throws.
     markMyTicketRead: () => Promise.resolve({}),
     markSupportTicketRead: () => Promise.resolve({}),
   },
@@ -94,8 +91,6 @@ describe("TicketThread flow link", () => {
     expect(await screen.findByText("support.noBundle")).toBeTruthy();
   });
 
-  // The customer already knows their own ticket has no diagnostic; that note is
-  // internal support chatter, so it stays off their side.
   it("keeps the no-diagnostic note off the customer's view", async () => {
     getMyTicket.mockResolvedValue({
       ...VIEW,

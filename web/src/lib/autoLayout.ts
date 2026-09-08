@@ -44,8 +44,6 @@ export function layerNodes(
   const layer = new Map<string, number>(ids.map((id) => [id, 0]));
   if (ids.length === 0) return layer;
 
-  // Pass 1 — earliest. |V| relaxation passes settle any DAG's longest paths;
-  // the cap is also what stops a cycle diverging instead of looping forever.
   for (let pass = 0; pass < ids.length; pass++) {
     let changed = false;
     for (const e of edges) {

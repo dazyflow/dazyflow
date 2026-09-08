@@ -71,9 +71,6 @@ func init() {
 	})
 }
 
-// combinatorSpec is the per-drop variation for the variadic AND/OR pair;
-// everything else is supplied by registerCombinator. `all` selects the fold:
-// true ANDs the inputs, false ORs them.
 type combinatorSpec struct {
 	id      string
 	label   string
@@ -88,14 +85,12 @@ func registerCombinator(c combinatorSpec) {
 	min := 1
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:       c.id,
-			Version:  "1.0",
-			Label:    c.label,
-			Icon:     c.icon,
-			Category: "logic",
-			Provider: "internal",
-			// Color unset: the UI tints "logic" drops from the category palette,
-			// the way Blueprint colors pure nodes (see operators.go).
+			ID:             c.id,
+			Version:        "1.0",
+			Label:          c.label,
+			Icon:           c.icon,
+			Category:       "logic",
+			Provider:       "internal",
 			Tags:           []string{"condition", "predicate", "boolean", "logic", "combinator", c.id},
 			Description:    c.desc,
 			Summary:        c.summary,
@@ -160,7 +155,6 @@ func executeNot(_ context.Context, job core.Job, _ chan<- core.Progress) (core.R
 	return boolResult(job, !b), nil
 }
 
-// boolResult builds the single-port boolean Result every logic drop emits.
 func boolResult(job core.Job, v bool) core.Result {
 	return core.Result{
 		JobID:  job.ID,

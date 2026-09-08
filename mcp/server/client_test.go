@@ -13,8 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/mcp/server"
 )
 
-// TestClient_Whoami covers the Whoami helper end-to-end against the
-// fake daemon, including the bearer header and JSON decode.
 func TestClient_Whoami(t *testing.T) {
 	fake, srv := newFakeHzd()
 	t.Cleanup(srv.Close)
@@ -34,7 +32,6 @@ func TestClient_Whoami(t *testing.T) {
 	}
 }
 
-// TestClient_Whoami_Error covers the error return path.
 func TestClient_Whoami_Error(t *testing.T) {
 	fake, srv := newFakeHzd()
 	t.Cleanup(srv.Close)
@@ -47,8 +44,6 @@ func TestClient_Whoami_Error(t *testing.T) {
 	}
 }
 
-// TestClient_Verbs exercises Get/Post/Put/Patch/Delete directly,
-// confirming method routing, body encoding, and the no-token branch.
 func TestClient_Verbs(t *testing.T) {
 	fake, srv := newFakeHzd()
 	t.Cleanup(srv.Close)
@@ -57,7 +52,6 @@ func TestClient_Verbs(t *testing.T) {
 			_, _ = io.WriteString(w, `{"ok":true}`)
 		})
 	}
-	// Empty token: the Authorization header should be omitted.
 	c := server.NewDazydClient(srv.URL, "")
 	ctx := context.Background()
 
@@ -84,7 +78,6 @@ func TestClient_Verbs(t *testing.T) {
 	}
 }
 
-// TestClient_Delete_Error covers Delete's non-2xx path.
 func TestClient_Delete_Error(t *testing.T) {
 	fake, srv := newFakeHzd()
 	t.Cleanup(srv.Close)
@@ -97,8 +90,6 @@ func TestClient_Delete_Error(t *testing.T) {
 	}
 }
 
-// TestClient_DecodeError covers the JSON-decode failure branch in do
-// when the daemon returns a 2xx body that doesn't match the out shape.
 func TestClient_DecodeError(t *testing.T) {
 	fake, srv := newFakeHzd()
 	t.Cleanup(srv.Close)
@@ -113,11 +104,10 @@ func TestClient_DecodeError(t *testing.T) {
 	}
 }
 
-// TestClient_TransportError covers the do() branch where the HTTP round
-// trip itself fails (connection refused), which becomes a non-HTTPError
-// and must surface as an RPC error through the tools.
+// Covers the do() branch where the HTTP round trip itself fails (connection
+// refused), which becomes a non-HTTPError and must surface as an RPC error
+// through the tools.
 func TestClient_TransportError(t *testing.T) {
-	// Point at a closed server so the dial fails.
 	_, srv := newFakeHzd()
 	url := srv.URL
 	srv.Close()
@@ -128,19 +118,15 @@ func TestClient_TransportError(t *testing.T) {
 	}
 }
 
-// TestClient_HTTPError_ErrorString covers HTTPError.Error in both the
-// coded and uncoded shapes via two daemon responses.
 func TestClient_HTTPError_ErrorString(t *testing.T) {
 	fake, srv := newFakeHzd()
 	t.Cleanup(srv.Close)
 
-	// Coded envelope → Error() includes "(code: ...)".
 	fake.on("GET", "/api/v1/coded", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
 		_, _ = io.WriteString(w, `{"error":{"code":"flow_locked","message":"locked"}}`)
 	})
-	// Plain text → Error() falls back to the raw body.
 	fake.on("GET", "/api/v1/plain", func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	})
@@ -170,8 +156,6 @@ func TestClient_HTTPError_ErrorString(t *testing.T) {
 	}
 }
 
-// asHTTPError is a tiny errors.As helper kept local to avoid importing
-// errors in every test.
 func asHTTPError(err error, target **server.HTTPError) bool {
 	for err != nil {
 		if he, ok := err.(*server.HTTPError); ok {
@@ -188,9 +172,6 @@ func asHTTPError(err error, target **server.HTTPError) bool {
 	return false
 }
 
-// TestClient_HTTPError_DetailsInPayload covers the details branch of
-// ToToolPayload via a structured validation envelope surfaced through
-// a tool, asserting the per-field details ride through to the result.
 func TestClient_HTTPError_DetailsInPayload(t *testing.T) {
 	s, fake, _ := fullStack(t)
 	fake.on("POST", "/api/v1/validate/graph", func(w http.ResponseWriter, _ *http.Request) {

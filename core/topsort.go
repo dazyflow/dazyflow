@@ -10,10 +10,6 @@ import (
 
 var ErrCycle = errors.New("graph contains a cycle")
 
-// TopologicalOrder returns a linear node ordering such that for every edge
-// from A → B, A appears before B. Ties are broken by node ID for determinism.
-// Returns ErrCycle if the graph is cyclic. Edges to or from unknown nodes
-// are ignored — call Validate first to surface those.
 func TopologicalOrder(g Graph) ([]string, error) {
 	indeg, succ := buildAdjacency(g)
 	order := make([]string, 0, len(g.Nodes))
@@ -38,9 +34,6 @@ func TopologicalOrder(g Graph) ([]string, error) {
 	return order, nil
 }
 
-// ExecutionLayers groups nodes into layers where every node in layer N has
-// all its predecessors in layers 0..N-1. Nodes within a layer can execute
-// in parallel. Within a layer, IDs are sorted for determinism.
 func ExecutionLayers(g Graph) ([][]string, error) {
 	indeg, succ := buildAdjacency(g)
 	var layers [][]string

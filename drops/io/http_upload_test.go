@@ -102,12 +102,11 @@ func TestHTTPUpload_Multipart(t *testing.T) {
 	}
 }
 
-// TestHTTPUpload_MultipartServerRespondsEarly exercises the streaming
-// multipart path when the server responds before draining the request body:
-// the writer goroutine is mid-stream copying a large file into the pipe. The
-// call must not deadlock, and the writer goroutine must clean up (the deferred
-// pr.Close() guarantees it exits on every return, independent of transport
-// internals).
+// Exercises the streaming multipart path when the server responds before
+// draining the request body: the writer goroutine is mid-stream copying a
+// large file into the pipe. The call must not deadlock, and the writer
+// goroutine must clean up (the deferred pr.Close() guarantees it exits on
+// every return, independent of transport internals).
 func TestHTTPUpload_MultipartServerRespondsEarly(t *testing.T) {
 	ws := t.TempDir()
 	seedUploadFile(t, ws, "big.bin", strings.Repeat("x", 2<<20)) // 2 MiB
@@ -134,7 +133,6 @@ func TestHTTPUpload_MultipartServerRespondsEarly(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("multipart upload hung (writer goroutine deadlocked on the pipe)")
 	}
-	// Writer goroutine should have exited.
 	deadline := time.Now().Add(3 * time.Second)
 	for runtime.NumGoroutine() > before && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)

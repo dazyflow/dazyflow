@@ -23,18 +23,11 @@ import (
 // caller returns verbatim (`if r != nil { return *r, nil }`), matching
 // the inline style these functions used before.
 
-// rowsInput is the normalized payload of a row-writing drop: the rows to
-// write plus the column headers (wired explicitly or derived from the
-// rows when no headers port is connected).
 type rowsInput struct {
 	rows    []map[string]any
 	headers []string
 }
 
-// parseRowsInput pulls the required `rows` input and optional `headers`
-// input, normalizes both (accepting native typed slices and the []any /
-// JSON shapes that arrive over gRPC/MCP), derives headers from the rows
-// when none are wired, and validates every header is a safe identifier.
 func parseRowsInput(job core.Job) (rowsInput, *core.Result) {
 	rowsRef, ok := job.Input["rows"]
 	if !ok {
@@ -45,11 +38,6 @@ func parseRowsInput(job core.Job) (rowsInput, *core.Result) {
 		return rowsInput{}, errResult(job, "bad_input", err.Error())
 	}
 
-	// Optional column mapper: pick which incoming fields to write and what
-	// to call them. Applied before headers are derived/validated so the
-	// table is shaped from the OUTPUT columns (and an upsert's
-	// conflict_columns refer to the output names too). No mapping → rows
-	// pass through unchanged.
 	mapped := false
 	if mapping, ok := paramStringMap(job.Params, "field_mapping"); ok && len(mapping) > 0 {
 		rows = applyFieldMapping(rows, mapping)
@@ -107,12 +95,6 @@ func applyFieldMapping(rows []map[string]any, mapping map[string]string) []map[s
 	return out
 }
 
-// parseConflictUpdateCols validates the conflict_columns / update_columns
-// params shared by the three upsert drops. updateColsExplicit preserves
-// the three-mode update semantics: param absent → caller defaults to all
-// non-conflict columns; explicit [] present → DO NOTHING; explicit list →
-// just those columns. The distinction rides on the param's presence, not
-// its length, which is why it's surfaced as a separate bool.
 func parseConflictUpdateCols(job core.Job) (conflictCols, updateCols []string, updateColsExplicit bool, errRes *core.Result) {
 	conflictCols, err := paramStringArray(job.Params, "conflict_columns")
 	if err != nil {
@@ -159,8 +141,6 @@ func checkConflictInHeaders(job core.Job, conflictCols, headers []string) *core.
 	return nil
 }
 
-// errResult builds a heap-escaped *core.Result so the parse helpers can
-// signal "return this error verbatim" with a nil/non-nil pointer.
 func errResult(job core.Job, code, msg string) *core.Result {
 	r := params.Err(job, code, msg)
 	return &r

@@ -16,13 +16,6 @@ import {
   type ResultView,
 } from "../../lib/runResult";
 
-// The Result panel: what the run produced, first thing, in the shape it is.
-//
-// A flow that ends in "Group and count" or "Save rows" produces a rows list,
-// and the panel that renders it as JSON is asking the reader to parse braces
-// to find a number. Rows get a table; everything else gets its text. Both get
-// the two things people actually do with a result — copy it, or save it — so
-// the answer can leave the page without being selected by hand.
 
 export function RunResultPanel({
   view,
@@ -30,16 +23,11 @@ export function RunResultPanel({
   filenameStem,
 }: {
   view: ResultView;
-  // Which step produced it, already resolved to a friendly label.
   from: string;
-  // Names the downloaded file — the flow's name, so a folder of saved
-  // results says what each one is.
   filenameStem: string;
 }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
-  // Long text folds; the reader opens it. A result is worth reading, but not
-  // at the cost of the timeline being pages away.
   const [expanded, setExpanded] = useState(false);
 
   if (view.kind === "none") return null;

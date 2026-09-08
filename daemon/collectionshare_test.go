@@ -13,8 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// memCollectionShareStore is an in-memory CollectionShareStore for tests — the
-// real store is Postgres-only, but the service logic only needs the interface.
 type memCollectionShareStore struct {
 	mu sync.Mutex
 	m  map[string]CollectionShare // keyed by tenant/workspace/collection
@@ -116,8 +114,6 @@ func (s *memCollectionShareStore) AnonymizeSubject(_ context.Context, ident stri
 var _ CollectionShareStore = (*memCollectionShareStore)(nil)
 var _ CollectionShareStore = (*PgCollectionShareStore)(nil)
 
-// newCollectionShareHarness gives a service with a seeded Collections store
-// (the `leads` table from seedBoardStore) and an in-memory link store.
 func newCollectionShareHarness(t *testing.T) (*Service, *memCollectionShareStore) {
 	t.Helper()
 	svc, sb := newBoardService(t)
@@ -171,8 +167,6 @@ func TestCreateCollectionShare_RequiresEdit(t *testing.T) {
 	}
 }
 
-// A viewer may still SEE that a link exists — that is how anyone notices a
-// collection that shouldn't be published.
 func TestCollectionShare_ViewerCanRead(t *testing.T) {
 	t.Parallel()
 	svc, _ := newCollectionShareHarness(t)
@@ -196,7 +190,6 @@ func TestCollectionShare_CrossWorkspaceRefused(t *testing.T) {
 	t.Parallel()
 	svc, _ := newCollectionShareHarness(t)
 	ctx := context.Background()
-	// Same principal, somebody else's workspace.
 	if _, err := svc.CreateCollectionShare(ctx, collEditor, "other", "main", "leads"); err == nil {
 		t.Fatal("published a collection in a workspace the principal isn't bound to")
 	}
@@ -205,8 +198,6 @@ func TestCollectionShare_CrossWorkspaceRefused(t *testing.T) {
 	}
 }
 
-// A typo used to yield a live URL that 404s for whoever it was sent to, with
-// no way for the sender to tell that from a revoked link.
 func TestCreateCollectionShare_UnknownCollection(t *testing.T) {
 	t.Parallel()
 	svc, shares := newCollectionShareHarness(t)
@@ -274,7 +265,6 @@ func TestDeleteCollectionShare_RevokesAndIsIdempotent(t *testing.T) {
 	if err := svc.DeleteCollectionShare(ctx, collEditor, "acme", "main", "leads"); err != nil {
 		t.Fatalf("second delete: %v", err)
 	}
-	// And revoking takes the same edit authority as publishing.
 	if err := svc.DeleteCollectionShare(ctx, collViewer, "acme", "main", "leads"); err == nil {
 		t.Fatal("a run-only viewer was allowed to revoke a link")
 	}
@@ -326,13 +316,10 @@ func TestPublicCollection_StripsTheRowDeleteHandle(t *testing.T) {
 		if _, present := row[boardRowIDKey]; present {
 			t.Errorf("row %d leaked %s: %+v", i, boardRowIDKey, row)
 		}
-		// The real columns are still there.
 		if _, ok := row["email"]; !ok {
 			t.Errorf("row %d lost its email column: %+v", i, row)
 		}
 	}
-	// The authenticated surface still carries it — this is a public-path
-	// filter, not a change to how boards are read.
 	page, err := svc.BoardRows(ctx, collEditor, "acme", "main", "leads", 0, 0)
 	if err != nil {
 		t.Fatalf("BoardRows: %v", err)
@@ -350,8 +337,6 @@ func TestPublicCollection_UnknownToken(t *testing.T) {
 	}
 }
 
-// A deployment with no link store can't have minted a link, so an unknown
-// link (404) is the honest answer — not a 500.
 func TestPublicCollection_NoStoreIsNotFound(t *testing.T) {
 	t.Parallel()
 	svc, _ := newBoardService(t)
@@ -360,9 +345,6 @@ func TestPublicCollection_NoStoreIsNotFound(t *testing.T) {
 	}
 }
 
-// Cleared after the link was minted. Reported as an unknown link rather than
-// as an empty table: the reader can't act on the distinction, and it keeps the
-// public surface from confirming which workspaces hold which collections.
 func TestPublicCollection_ClearedCollectionIsNotFound(t *testing.T) {
 	t.Parallel()
 	svc, _ := newCollectionShareHarness(t)
@@ -406,7 +388,6 @@ func TestPublicCollection_Pages(t *testing.T) {
 	}
 }
 
-// The tenant cascade the GDPR erasure walks (gdpr.go's tenantEraser).
 func TestCollectionShareStore_DeleteByTenant(t *testing.T) {
 	t.Parallel()
 	svc, shares := newCollectionShareHarness(t)
@@ -450,8 +431,6 @@ func TestCollectionShareStore_AnonymizeSubject(t *testing.T) {
 	if sh.CreatedBy != core.ErasedIdentity {
 		t.Errorf("created_by = %q, want %q", sh.CreatedBy, core.ErasedIdentity)
 	}
-	// The link itself survives: it belongs to the org, which outlives the
-	// person who minted it.
 	if sh.Token == "" {
 		t.Error("anonymising the subject destroyed the link")
 	}

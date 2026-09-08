@@ -7,8 +7,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyTheme, getTheme, getThemeMode, initTheme, resolveTheme } from "./theme";
 
-// mockMatchMedia installs a matchMedia whose result tracks `dark`, and hands
-// back a fire() that replays the OS flipping to every registered listener.
 function mockMatchMedia(dark: boolean) {
   const listeners: (() => void)[] = [];
   const mq = {

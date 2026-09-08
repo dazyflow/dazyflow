@@ -12,9 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// referenceItem is one insertable ${…} token the reference picker offers,
-// plus the metadata the UI shows beside it. Kind-specific fields are
-// omitempty so each group's items stay lean.
 type referenceItem struct {
 	Token string `json:"token"`           // the literal ${…} to insert
 	Label string `json:"label,omitempty"` // human description
@@ -27,8 +24,6 @@ type referenceItem struct {
 	Field     string `json:"field,omitempty"`      // trigger
 }
 
-// referenceGroups mirrors the web's parseFieldRefs taxonomy so the picker
-// can render one section per kind. resources is populated in Phase 4.
 type referenceGroups struct {
 	Secrets   []referenceItem `json:"secrets"`
 	Upstream  []referenceItem `json:"upstream"`
@@ -36,11 +31,6 @@ type referenceGroups struct {
 	Resources []referenceItem `json:"resources"`
 }
 
-// listReferences answers GET /api/v1/me/flows/{flow_id}/references?node=ID:
-// everything a param on `node` can reference — secrets, the outputs of
-// upstream nodes, the trigger/form fields, and (Phase 4) flow resources.
-// Access is gated by LoadGraph (visibility/ownership) exactly like the
-// other /me/flows reads.
 func (h *secretsAPI) listReferences(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	_, _, id, g, ok := h.loadFlowForRequest(rw, r, p, "")
 	if !ok {
@@ -48,9 +38,6 @@ func (h *secretsAPI) listReferences(rw http.ResponseWriter, r *http.Request, p c
 	}
 	node := r.URL.Query().Get("node")
 
-	// Tenant + flow ride on ctx so live row-source fetches (Sheets headers,
-	// Form questions) can resolve the right OAuth account — same scoping as
-	// the input-fields endpoint.
 	ctx := core.WithFlow(core.WithTenant(r.Context(), p.Tenant), id)
 	groups := referenceGroups{
 		Secrets:   h.secretRefs(ctx, p, id),
@@ -100,9 +87,6 @@ func (h *secretsAPI) secretRefs(ctx context.Context, p core.Principal, flow stri
 	return out
 }
 
-// resourceRefs lists the flow's configured resources as ${resource.NAME}
-// tokens, plus typed sub-paths (a google_sheet offers .rows and .headers),
-// deduped flow-then-organization. Empty when the store isn't configured.
 func (h *secretsAPI) resourceRefs(ctx context.Context, p core.Principal, flow string) []referenceItem {
 	out := []referenceItem{}
 	if h.EncryptedSecrets == nil || p.Tenant == "" {
@@ -147,9 +131,6 @@ func (h *secretsAPI) resourceRefs(ctx context.Context, p core.Principal, flow st
 	return out
 }
 
-// resourceSubpaths returns the well-known sub-paths a resource type exposes,
-// so the picker can offer e.g. ${resource.leads.rows} directly. One table
-// entry per type.
 func resourceSubpaths(typ string) []string {
 	switch typ {
 	case "google_sheet":
@@ -159,10 +140,6 @@ func resourceSubpaths(typ string) []string {
 	}
 }
 
-// upstreamRefs lists ${upstream.<id>.<port>} for every output port of every
-// node that can reach `node` (its ancestors) — so a param can only pull
-// from a node that may already have run. With no/unknown node it falls back
-// to every node in the flow.
 func (h *secretsAPI) upstreamRefs(ctx context.Context, p core.Principal, g core.Graph, node string) []referenceItem {
 	out := []referenceItem{}
 	scope := g
@@ -180,11 +157,6 @@ func (h *secretsAPI) upstreamRefs(ctx context.Context, p core.Principal, g core.
 			continue // a node can't reference its own (not-yet-produced) output
 		}
 		m, hasManifest := manifests[n.Module]
-		// What to call the step in the picker: the author's own name when they
-		// gave it one, else the drop's. A reference reads as "<step> · <port>",
-		// and naming the step differently here to the way it is named on the
-		// canvas is how you end up hunting for a step that is right in front of
-		// you.
 		nodeLabel := n.Module
 		if hasManifest && m.Label != "" {
 			nodeLabel = m.Label
@@ -194,8 +166,6 @@ func (h *secretsAPI) upstreamRefs(ctx context.Context, p core.Principal, g core.
 		}
 		ports := m.Outputs
 		if len(ports) == 0 {
-			// No declared outputs (or no manifest) — offer the node itself
-			// so the user can still hand-complete the path.
 			out = append(out, referenceItem{
 				Token:     "${upstream." + n.ID + "}",
 				NodeID:    n.ID,
@@ -211,12 +181,6 @@ func (h *secretsAPI) upstreamRefs(ctx context.Context, p core.Principal, g core.
 				NodeLabel: nodeLabel,
 				Port:      port.Port,
 			})
-			// When this port carries a record LIST (the node is a registered
-			// row source), also offer the first row's fields as ready-made
-			// tokens — e.g. "Matching emails → first → id" inserting
-			// ${upstream.search.messages[0].id}. Spares non-techies from
-			// hand-typing the [0].field indexing syntax. Best-effort: a
-			// failed live fetch (Sheets headers etc.) just adds nothing.
 			if src, isSource := rowSources[n.Module]; isSource && port.Port == src.listPort {
 				fields, ferr := src.fields(ctx, n)
 				if ferr != nil {
@@ -241,11 +205,6 @@ func (h *secretsAPI) upstreamRefs(ctx context.Context, p core.Principal, g core.
 	return out
 }
 
-// triggerFieldTokens lists ${trigger.body.<field>} for a flow whose trigger
-// seeds the run from a hosted form — the fields the form renders. Other
-// triggers (cron/poll) seed nothing; the google_form_trigger surfaces its
-// responses through the upstream group like any other node. Best-effort:
-// new trigger kinds extend this one function.
 func triggerFieldTokens(g core.Graph) []referenceItem {
 	fields := hostedFormFields(g)
 	out := make([]referenceItem, 0, len(fields))
@@ -258,8 +217,6 @@ func triggerFieldTokens(g core.Graph) []referenceItem {
 	return out
 }
 
-// hostedFormFields collects the field names a flow's hosted form exposes,
-// deduped. Empty when the flow has no Form step.
 func hostedFormFields(g core.Graph) []string {
 	seen := map[string]bool{}
 	var fields []string
@@ -284,8 +241,6 @@ func hostedFormFields(g core.Graph) []string {
 	return fields
 }
 
-// stringSliceParam reads a []string-ish node param (JSON decodes a string
-// array as []any of string).
 func stringSliceParam(p map[string]any, key string) []string {
 	raw, ok := p[key]
 	if !ok {

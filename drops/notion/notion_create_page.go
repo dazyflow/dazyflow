@@ -39,18 +39,10 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Editable on the card (inline pin editors — each port name
-				// matches its string param) and wireable; a wired value
-				// overrides the param. 'content' also accepts Notion block
-				// objects wired in — an array/object passes through, plain
-				// text becomes paragraph blocks.
 				{Port: "title", Label: "Title", MIME: []string{"text/plain"}},
 				{Port: "content", Label: "Page body"},
 			},
 			Outputs: []core.Port{
-				// Friendly scalar pins — same move as gmail_get_message. The
-				// full Notion page object is still EMITTED under "meta" for
-				// run records/debugging, just not a pin.
 				{Port: "title", Label: "Title", MIME: []string{"text/plain"}, Example: json.RawMessage(`"Faktura 4471"`)},
 				{Port: "url", Label: "Page URL", MIME: []string{"text/plain"}, Example: json.RawMessage(`"https://www.notion.so/Faktura-4471-9f2ab7c4d1e0b7a3"`)},
 				{Port: "id", Label: "Page ID", MIME: []string{"text/plain"}, Example: json.RawMessage(`"9f2ab7c4-d1e0-b7a3-8f12-4471e0b7a39f"`)},
@@ -91,7 +83,6 @@ func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	if (dbID == "") == (pgID == "") {
 		return params.Err(job, "bad_param", "set exactly one of 'Add to database' or 'Add under page'"), nil
 	}
-	// The Title input pin overrides the param when wired.
 	title, ok := params.TextInputOr(job, "title", params.StringDefault(job.Params, "title", ""))
 	if !ok {
 		return params.Err(job, "bad_input", "'Title' input must be text"), nil
@@ -117,8 +108,6 @@ func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	if c, ok := job.Params["children"].([]any); ok {
 		children = append(children, c...)
 	}
-	// The Page body input overrides the param; both turn plain text into
-	// paragraph blocks (wired block objects pass through as-is).
 	if in, ok := job.Input["content"]; ok && in.Inline != nil {
 		children = append(children, contentBlocks(in.Inline)...)
 	} else if c := params.StringDefault(job.Params, "content", ""); strings.TrimSpace(c) != "" {
@@ -151,24 +140,15 @@ func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Pr
 			"title": {MIME: "text/plain", Inline: pageTitle(meta)},
 			"url":   {MIME: "text/plain", Inline: page.URL},
 			"id":    {MIME: "text/plain", Inline: page.ID},
-			// Full Notion page object — emitted for run records, not a pin.
-			"meta": {MIME: "application/json", Inline: meta},
+			"meta":  {MIME: "application/json", Inline: meta},
 		},
 	}, nil
 }
 
-// mergedProperties combines the friendly Title with the advanced raw
-// 'properties' param. Title becomes the page's title property under the key
-// "title" — Notion's fixed ID for the title property, valid for both
-// database and page parents — unless the raw properties already carry a
-// title-type property (then the raw one wins). A page needs at least a
-// title, so empty-both is rejected via the returned message.
 func mergedProperties(job core.Job, title string) (props any, errMsg string) {
 	raw := job.Params["properties"]
 	base, isMap := raw.(map[string]any)
 	if raw != nil && !isMap {
-		// Non-object 'properties' param: pass it through verbatim and let
-		// Notion report the shape error.
 		return raw, ""
 	}
 	merged := make(map[string]any, len(base)+1)
@@ -184,8 +164,6 @@ func mergedProperties(job core.Job, title string) (props any, errMsg string) {
 	return merged, ""
 }
 
-// hasTitleProperty reports whether a raw properties object already sets a
-// title-type property (a value object carrying a "title" key).
 func hasTitleProperty(props map[string]any) bool {
 	for _, v := range props {
 		if m, ok := v.(map[string]any); ok {
@@ -197,8 +175,6 @@ func hasTitleProperty(props map[string]any) bool {
 	return false
 }
 
-// pageTitle pulls the plain-text title out of a Notion page object — the
-// property whose type is "title", whatever the database named it.
 func pageTitle(page map[string]any) string {
 	props, _ := page["properties"].(map[string]any)
 	for _, v := range props {
@@ -213,10 +189,6 @@ func pageTitle(page map[string]any) string {
 	return ""
 }
 
-// contentBlocks converts a 'content' input value into Notion block
-// objects: an array passes through; a single object is wrapped; a string
-// becomes paragraph blocks (split on blank lines, chunked to Notion's
-// rich-text length cap).
 func contentBlocks(v any) []any {
 	switch t := v.(type) {
 	case nil:

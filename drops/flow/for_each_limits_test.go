@@ -10,9 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/limits"
 )
 
-// TestForEach_RejectsOversizedItemsList proves for_each refuses an items list
-// bigger than the ceiling before allocating a per-item result slot or spawning
-// a sub-job for each — i.e. fails fast rather than fanning out unboundedly.
 func TestForEach_RejectsOversizedItemsList(t *testing.T) {
 	defer limits.SetMaxRows(3)()
 
@@ -20,8 +17,6 @@ func TestForEach_RejectsOversizedItemsList(t *testing.T) {
 		t.Error("normalizeItems accepted 5 items under a 3-item limit")
 	}
 
-	// The cap is enforced in normalizeItems, before for_each looks for a body
-	// runner — so an oversized list fails fast regardless of the body wiring.
 	job := core.Job{
 		ID:    "x",
 		Input: map[string]core.Ref{"items": {Inline: []any{1, 2, 3, 4, 5}}},

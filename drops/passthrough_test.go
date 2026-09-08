@@ -37,13 +37,9 @@ import (
 //  2. nothing NEW appears with exclusive-looking output ports and no flag —
 //     the new-router case, which is the one that would actually ship broken.
 
-// routersMustOptOut is every drop that routes a payload down exactly one of
-// several ports, or emits a bare verdict rather than a payload. Removing the
-// flag from any of these reintroduces the hole, so they are pinned by name.
 var routersMustOptOut = []string{
 	// Routers: the payload leaves by one port, never both.
 	"branch", "if", "contains", "switch",
-	// Approval routes to approved/rejected once a human answers.
 	"await_approval",
 	// Predicates: a 1/0 verdict, not a payload to thread onward. The pin
 	// would also steal an operand slot on the compact operator chip.
@@ -51,8 +47,6 @@ var routersMustOptOut = []string{
 	"eq", "neq", "gt", "gte", "lt", "lte",
 }
 
-// exclusiveish are output port names that usually mean "the payload went
-// exactly one way". Used only as a tripwire for NEW drops.
 var exclusiveish = map[string]bool{
 	"then": true, "else": true, "yes": true, "no": true,
 	"matched": true, "unmatched": true, "match": true, "nomatch": true,
@@ -77,12 +71,9 @@ func TestRoutersOptOutOfPassthrough(t *testing.T) {
 		byID[d.id] = d.manifest
 	}
 
-	// 1. The pinned set still opts out.
 	for _, id := range routersMustOptOut {
 		m, ok := byID[id]
 		if !ok {
-			// Renamed or removed: decide deliberately rather than letting the
-			// guard quietly stop covering it.
 			t.Errorf("%s is in routersMustOptOut but is not registered — "+
 				"if it was renamed or retired, update the list", id)
 			continue
@@ -95,7 +86,6 @@ func TestRoutersOptOutOfPassthrough(t *testing.T) {
 		}
 	}
 
-	// 2. Nothing new looks like a router while keeping the pin.
 	var suspects []string
 	for _, d := range allDrops(t) {
 		if d.manifest.NoPassthrough || splitsRatherThanRoutes[d.id] != "" {

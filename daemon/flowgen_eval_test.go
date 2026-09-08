@@ -63,7 +63,6 @@ type ask struct {
 	Works string // the "It works when…" sentence
 }
 
-// Prompt is the exact text handed to the generator.
 func (a ask) Prompt() string {
 	return a.Title + ". It works when " + strings.TrimSuffix(a.Works, ".") + "."
 }
@@ -103,8 +102,6 @@ func loadAsks(t *testing.T, path string) []ask {
 			collecting = true
 			continue
 		}
-		// The acceptance sentence wraps across lines; it ends at the blank
-		// line before the verdict.
 		if collecting {
 			if strings.TrimSpace(line) == "" {
 				collecting = false
@@ -119,9 +116,6 @@ func loadAsks(t *testing.T, path string) []ask {
 	return asks
 }
 
-// loadReferences groups the known-good graphs by scenario number. One ask can
-// have several (an intake flow plus its sweeper, say) — the expectations are
-// the union, because between them they answer the ask.
 func loadReferences(t *testing.T, dir string) map[int][]core.Graph {
 	t.Helper()
 	files, err := filepath.Glob(filepath.Join(dir, "*.json"))
@@ -149,10 +143,6 @@ func loadReferences(t *testing.T, dir string) map[int][]core.Graph {
 	return out
 }
 
-// glueModules are the interchangeable structural steps — shaping, routing,
-// looping, formatting. Two people solving the same ask will not pick the same
-// ones, and shouldn't have to, so they don't count toward whether the
-// generator understood the job.
 var glueModules = map[string]bool{
 	"expression": true, "compute_rows": true, "map_rows": true, "render_text": true,
 	"render_template": true, "render_table": true, "for_each": true, "branch": true,
@@ -166,9 +156,6 @@ var glueModules = map[string]bool{
 	"base64": true, "hash": true, "merge_rows": true, "subgraph": true,
 }
 
-// triggerKind classes how a flow starts. The generator is judged on picking
-// the right KIND — a schedule, an inbound call, an app event — not on
-// matching a cron expression to the minute.
 func triggerKind(g core.Graph, manifests map[string]core.Manifest) string {
 	for _, tr := range g.Triggers {
 		switch tr.Type {
@@ -199,10 +186,6 @@ func triggerKind(g core.Graph, manifests map[string]core.Manifest) string {
 	return "manual"
 }
 
-// appsUsed is the set of outside services a graph touches, by integration
-// name. This is the fair granularity for "did it work out what the job
-// needs": picking a different Gmail step than the reference is fine, not
-// realising Gmail is involved at all is not.
 func appsUsed(g core.Graph, manifests map[string]core.Manifest) map[string]bool {
 	out := map[string]bool{}
 	for _, n := range g.Nodes {
@@ -212,8 +195,6 @@ func appsUsed(g core.Graph, manifests map[string]core.Manifest) map[string]bool 
 		}
 		name := m.Integration
 		if name == "" {
-			// A built-in with no integration (Collections, the file steps,
-			// the AI steps) still counts as a capability — key it by module.
 			if m.Category == "trigger" || m.Category == "flow_control" || m.Category == "logic" {
 				continue
 			}
@@ -224,7 +205,6 @@ func appsUsed(g core.Graph, manifests map[string]core.Manifest) map[string]bool 
 	return out
 }
 
-// score is one scenario's result.
 type score struct {
 	Num          int      `json:"scenario"`
 	Ask          string   `json:"ask"`
@@ -243,7 +223,6 @@ type score struct {
 	Seconds      float64  `json:"seconds"`
 }
 
-// scoreCandidate compares one generated graph against the reference answer(s).
 func scoreCandidate(a ask, refs []core.Graph, cand core.Graph, issues []core.LintIssue,
 	manifests map[string]core.Manifest, genErr error) score {
 
@@ -298,12 +277,6 @@ func scoreCandidate(a ask, refs []core.Graph, cand core.Graph, issues []core.Lin
 	return s
 }
 
-// --- the offline harness check -------------------------------------------
-
-// TestFlowGenScenariosHarness runs with no model and no key. It proves the corpus
-// and the scorer are sound, so the eval can't rot between live runs: every ask
-// in the document has a graph, and the scorer says a reference graph answers
-// its own ask.
 func TestFlowGenScenariosHarness(t *testing.T) {
 	t.Parallel()
 	manifests := manifestMap()
@@ -339,8 +312,6 @@ func TestFlowGenScenariosHarness(t *testing.T) {
 	// doesn't, the expectations are wrong and every live score is noise.
 	for _, a := range asks {
 		rs := refs[a.Num]
-		// Score the union of the reference graphs against themselves by
-		// treating the first as the candidate and checking the parts it owns.
 		cand := rs[0]
 		issues := core.ValidateGraphFull(cand, manifests)
 		s := scoreCandidate(a, rs[:1], cand, issues, manifests, nil)
@@ -378,8 +349,6 @@ func TestFlowGenScenariosHarness(t *testing.T) {
 		}
 	}
 }
-
-// --- the live eval --------------------------------------------------------
 
 func TestFlowGenScenarios(t *testing.T) {
 	t.Parallel()
@@ -433,8 +402,6 @@ func TestFlowGenScenarios(t *testing.T) {
 	scores := runScenarioEval(t, provider, key, asks, refs, manifests, mans, outDir)
 	writeEvalReport(t, outDir, scores)
 
-	// Report-only by default: a live model is not deterministic, so a hard
-	// threshold belongs to whoever is tracking the number, not to the suite.
 	if minValid := os.Getenv("FLOWGEN_EVAL_MIN_VALID"); minValid != "" {
 		want, err := strconv.ParseFloat(minValid, 64)
 		if err != nil {
@@ -453,8 +420,6 @@ func TestFlowGenScenarios(t *testing.T) {
 	}
 }
 
-// writeEvalReport writes the machine-readable scores plus a summary table, and
-// prints the table so a bare `go test -v` is enough to read the outcome.
 func writeEvalReport(t *testing.T, dir string, scores []score) {
 	t.Helper()
 	if len(scores) == 0 {
@@ -510,9 +475,6 @@ func writeEvalReport(t *testing.T, dir string, scores []score) {
 	t.Logf("\n%s\nreport: %s", md.String(), mdPath)
 }
 
-// runScenarioEval generates one draft per ask and scores it. Shared by the
-// live eval and by the scripted-model test below, so the path the live run
-// takes is exercised in ordinary CI too.
 func runScenarioEval(t *testing.T, provider, key string, asks []ask, refs map[int][]core.Graph,
 	manifests map[string]core.Manifest, mans []core.Manifest, outDir string) []score {
 	t.Helper()
@@ -532,14 +494,11 @@ func runScenarioEval(t *testing.T, provider, key string, asks []ask, refs map[in
 			s.Seconds = time.Since(start).Seconds()
 			scores = append(scores, s)
 
-			// Keep the draft so a human can read what it actually built.
 			if len(graph.Nodes) > 0 {
 				b, _ := json.MarshalIndent(graph, "", "  ")
 				_ = os.WriteFile(filepath.Join(outDir, fmt.Sprintf("%02d-generated.json", a.Num)), b, 0o644)
 			}
 
-			// A subtest failure names the scenario the generator couldn't do;
-			// the run as a whole is judged by the summary.
 			switch {
 			case s.Error != "":
 				t.Errorf("generator returned an error: %s", s.Error)
@@ -557,8 +516,6 @@ func runScenarioEval(t *testing.T, provider, key string, asks []ask, refs map[in
 	return scores
 }
 
-// flowAsToolCall renders a graph the way the model emits one: a bare flow
-// object, which the agent loop reads as an implicit emit.
 func flowAsToolCall(g core.Graph) map[string]any {
 	nodes := make([]any, 0, len(g.Nodes))
 	for _, n := range g.Nodes {
@@ -573,10 +530,6 @@ func flowAsToolCall(g core.Graph) map[string]any {
 	return map[string]any{"name": g.Name, "nodes": nodes, "edges": edges}
 }
 
-// TestFlowGenScenariosScripted drives the whole eval — generation, scoring,
-// report — against a scripted model, so the live path can't rot unnoticed and
-// the scoring is proven on GENERATED graphs, not just on the references
-// scoring themselves.
 func TestFlowGenScenariosScripted(t *testing.T) {
 	t.Parallel()
 	manifests := manifestMap()
@@ -587,8 +540,6 @@ func TestFlowGenScenariosScripted(t *testing.T) {
 	asks := loadAsks(t, scenariosDoc)
 	refs := loadReferences(t, referenceDir)
 
-	// Two scenarios: one the scripted model answers with the known-good graph,
-	// one it answers with a plainly wrong flow.
 	var good, bad ask
 	for _, a := range asks {
 		if a.Num == 2 && len(refs[2]) == 1 {
@@ -682,8 +633,6 @@ func TestFlowGenPromptTeachesLoopBodies(t *testing.T) {
 			t.Errorf("the generator's guidance no longer mentions %q — a model can't build a loop without it", must)
 		}
 	}
-	// The old wording pointed the control pin at a typed input, which injects
-	// the whole row where a string was expected and the step rejects it.
 	if strings.Contains(prompt, "for_each.body into the per-item step's input") {
 		t.Error("the guidance tells the model to wire the body pin into a typed input — that is the footgun, not the pattern")
 	}

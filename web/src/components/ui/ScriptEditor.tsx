@@ -35,9 +35,6 @@ export function ScriptEditor({
   const taRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
 
-  // useLayoutEffect so the layers are aligned before paint when the value
-  // changes programmatically (switching language, a reference inserted), not
-  // only when the user scrolls.
   useLayoutEffect(() => {
     syncScroll();
   }, [value, lang]);
@@ -84,10 +81,6 @@ export function ScriptEditor({
         onChange={(e) => onChange(e.target.value)}
         onScroll={syncScroll}
         onKeyDown={(e) => {
-          // Tab indents instead of leaving the field. In a one-line input Tab
-          // moving on is right; in a code box it is how you lose your place —
-          // and Python is not writable without it. Shift+Tab still moves focus,
-          // so the field is not a keyboard trap.
           if (e.key !== "Tab" || e.shiftKey) return;
           e.preventDefault();
           const ta = e.currentTarget;

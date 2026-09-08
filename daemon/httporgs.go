@@ -20,8 +20,6 @@ import (
 	"github.com/dazyflow/dazyflow/internal/maillang"
 )
 
-// orgAPI serves the organization, membership, invitation and org-admin endpoints. Its fields are the whole of what
-// those handlers touch.
 type orgAPI struct {
 	auditor
 	langPicker
@@ -42,22 +40,12 @@ type orgAPI struct {
 	revokeSessions func(ctx context.Context, subject string)
 }
 
-// orgAPI builds them from the gateway's configuration.
 func (h *HTTPGateway) orgAPI() *orgAPI {
 	return &orgAPI{auditor: h.auditor(), langPicker: h.lang(), seatQuota: h.seats(), svc: h.svc, logger: h.logger, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, OrgAuth: h.OrgAuth, SupportAgents: h.SupportAgents, LogTail: h.LogTail, WildcardDomain: h.WildcardDomain, EnableSignup: h.EnableSignup, auth: h.authAPI(), revokeSessions: h.platformAdminAPI().revokeSubjectSessions}
 }
 
-// switchOrg re-issues the caller's session against a tenant they
-// belong to. The session token itself doesn't change — we update the
-// server-side Session record in place, so the same cookie/Bearer keeps
-// working. The browser then refetches whoami to pick up the new
-// tenant/workspace/roles.
-//
-// Eligibility: the target tenant must be either (a) the caller's home
-// tenant (i.e. p.Tenant on the User record) or (b) one of their
-// Memberships. We resolve the user's home tenant by looking up their
-// email in Users — that's the source of truth for "the org you got
-// at signup".
+// Re-issues the session against another tenant the caller is a member of;
+// membership is re-checked here rather than trusted from the request.
 func (h *orgAPI) switchOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Sessions == nil || h.Users == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "sessions/users not configured")
@@ -75,9 +63,6 @@ func (h *orgAPI) switchOrg(rw http.ResponseWriter, r *http.Request, p core.Princ
 		return
 	}
 	if target == p.Tenant {
-		// No-op: already on this org. Returning OK so the UI can call
-		// this unconditionally on "click your current org" without
-		// special-casing.
 		writeJSON(rw, http.StatusOK, map[string]any{
 			"tenant":    p.Tenant,
 			"workspace": p.Workspace,
@@ -85,12 +70,8 @@ func (h *orgAPI) switchOrg(rw http.ResponseWriter, r *http.Request, p core.Princ
 		})
 		return
 	}
-	// Look up the user's home org + scan memberships.
 	user, err := h.Users.GetByEmail(r.Context(), p.Subject)
 	if err != nil {
-		// API-key principals get here too — they have no User record so
-		// switching is a no-op for them. Fail loudly so the UI doesn't
-		// confuse the user.
 		writeJSONError(rw, http.StatusForbidden, "this credential cannot switch orgs")
 		return
 	}
@@ -115,7 +96,6 @@ func (h *orgAPI) switchOrg(rw http.ResponseWriter, r *http.Request, p core.Princ
 		writeJSONError(rw, http.StatusForbidden, "not a member of that organization")
 		return
 	}
-	// Re-issue under the same token. The cookie keeps working.
 	token := credentialFromRequest(r)
 	if token == "" {
 		writeJSONError(rw, http.StatusUnauthorized, "no session token")
@@ -140,17 +120,8 @@ func (h *orgAPI) switchOrg(rw http.ResponseWriter, r *http.Request, p core.Princ
 	})
 }
 
-// maxSelfServeOrgsPerUser caps how many organizations a single account may
-// create via POST /me/orgs. A generous bound that still stops one account
-// from minting tenants without limit. Platform admins provisioning orgs on
-// users' behalf use the admin path, which isn't subject to this cap.
 const maxSelfServeOrgsPerUser = 10
 
-// countOrgsCreatedBy returns how many orgs the subject created. A createOrg
-// stamps the creator's own email as InvitedBy on the admin membership it
-// seeds, so a self-invited admin membership marks an org this user created.
-// Best-effort: a store that can't list yields (0, err) and the caller lets
-// the create proceed rather than blocking on a transient store error.
 func (h *orgAPI) countOrgsCreatedBy(ctx context.Context, subject string) (int, error) {
 	if h.Memberships == nil {
 		return 0, nil
@@ -168,26 +139,15 @@ func (h *orgAPI) countOrgsCreatedBy(ctx context.Context, subject string) (int, e
 	return n, nil
 }
 
-// createOrg lets a signed-in user self-serve a new organization. Body:
-// {display_name}. It mints a fresh org_<hex> tenant, makes the caller its
-// admin (a Membership with the admin role), and seeds the org profile with
-// the chosen name. The new org then shows up in the caller's whoami
-// memberships and is reachable via switch-org — no platform-admin step. The
-// tenant's workspace is provisioned lazily on first use (AutoFSWorkspaces).
 func (h *orgAPI) createOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Memberships == nil || h.Profiles == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "organizations not configured")
 		return
 	}
-	// Anti-abuse: on verification-active deployments an unverified signup
-	// can't spin up extra tenants. Mirrors invitation creation.
 	if !h.auth.requireVerifiedInviter(rw, r, p) {
 		return
 	}
-	// Per-creator cap: an unbounded self-serve create lets one account spin
-	// up arbitrarily many tenants (storage/abuse). Count the orgs this user
-	// created — every createOrg grants the creator an admin membership whose
-	// InvitedBy is themselves, so that's the marker we count.
+	// An unbounded self-serve create lets one account spin up orgs indefinitely.
 	if n, err := h.countOrgsCreatedBy(r.Context(), p.Subject); err == nil && n >= maxSelfServeOrgsPerUser {
 		writeJSONError(rw, http.StatusTooManyRequests,
 			fmt.Sprintf("you've reached the limit of %d organizations per account — ask an admin if you need more", maxSelfServeOrgsPerUser))
@@ -214,8 +174,6 @@ func (h *orgAPI) createOrg(rw http.ResponseWriter, r *http.Request, p core.Princ
 		return
 	}
 	now := time.Now().UTC()
-	// The creator is the org's first admin (full org administration). This is
-	// a trusted server-side grant — they own the tenant they just made.
 	if err := h.Memberships.PutMembership(r.Context(), auth.Membership{
 		UserEmail: p.Subject,
 		Tenant:    tenant,
@@ -232,8 +190,6 @@ func (h *orgAPI) createOrg(rw http.ResponseWriter, r *http.Request, p core.Princ
 		DisplayName: name,
 		UpdatedAt:   now,
 	}); err != nil {
-		// The membership already exists; a missing profile just means the
-		// switcher would show the raw id. Surface it but don't unwind.
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("save org profile: %v", err))
 		return
 	}
@@ -245,10 +201,6 @@ func (h *orgAPI) createOrg(rw http.ResponseWriter, r *http.Request, p core.Princ
 	})
 }
 
-// listMembers returns one row per person with access to the principal's
-// org: the home user (the org owner) plus each Membership. Used by the
-// admin Members page. Tenant scope is the principal's own; platform
-// admins can pass ?tenant= to inspect another org.
 func (h *orgAPI) listMembers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Memberships == nil || h.Users == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
@@ -281,9 +233,6 @@ func (h *orgAPI) listMembers(rw http.ResponseWriter, r *http.Request, p core.Pri
 		Home      bool        `json:"home"`
 	}
 	out := make([]memberDTO, 0, len(rows)+1)
-	// Owner: the user whose home tenant this is. Scan the user list to
-	// find them — JSONUserStore is small enough that O(n) is fine; the
-	// Pg variant should grow a "first owner of tenant" query in time.
 	users, err := h.Users.ListUsers(r.Context())
 	if err == nil {
 		for _, u := range users {
@@ -314,10 +263,7 @@ func (h *orgAPI) listMembers(rw http.ResponseWriter, r *http.Request, p core.Pri
 	writeJSON(rw, http.StatusOK, map[string]any{"members": out})
 }
 
-// removeMember deletes a Membership. The home owner can't be removed —
-// that would leave an org without a primary contact. To "transfer" the
-// org, a separate (TODO) endpoint would re-stamp Users.Tenant; for now
-// removing the home owner returns 409.
+// The home owner cannot be removed, or the org is left with no admin.
 func (h *orgAPI) removeMember(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Memberships == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
@@ -340,14 +286,12 @@ func (h *orgAPI) removeMember(rw http.ResponseWriter, r *http.Request, p core.Pr
 		writeJSONError(rw, http.StatusForbidden, "cannot modify another tenant")
 		return
 	}
-	// Guard: the home owner stays put.
 	if h.Users != nil {
 		if u, err := h.Users.GetByEmail(r.Context(), email); err == nil && u.Tenant == tenant {
 			writeJSONError(rw, http.StatusConflict, "cannot remove the org owner")
 			return
 		}
 	}
-	// Guard: a non-owner admin can't evict a peer admin.
 	if m, err := h.Memberships.GetMembership(r.Context(), email, tenant); err == nil &&
 		h.peerAdminBlocked(r.Context(), p, email, tenant, m.Roles) {
 		writeJSONError(rw, http.StatusForbidden, "only the org owner can remove another admin")
@@ -357,25 +301,17 @@ func (h *orgAPI) removeMember(rw http.ResponseWriter, r *http.Request, p core.Pr
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// Same rationale as updateMemberRoles: removal takes effect now, not
-	// whenever the removed member's session happens to expire.
 	h.revokeMemberSessions(r.Context(), email)
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// revokeMemberSessions force-signs-out the user behind email (all their
-// sessions, every org — a session carries one role set, and re-signing
-// in rebuilds it from the current memberships). Best-effort: a failed
-// sweep logs and moves on; sessions also expire on their own TTL.
 func (h *orgAPI) revokeMemberSessions(ctx context.Context, email string) {
 	if h.Users == nil || h.Sessions == nil {
 		return
 	}
 	rev, ok := h.Sessions.(auth.SessionRevoker)
 	if !ok {
-		// Every in-tree store implements SessionRevoker; a custom one
-		// that doesn't leaves demoted members holding stale roles until
-		// session expiry — say so instead of degrading silently.
+		// A custom store without SessionRevoker leaves the removed member signed in.
 		h.logger.Printf("session store %T cannot revoke by subject — %s keeps existing sessions until they expire", h.Sessions, email)
 		return
 	}
@@ -390,8 +326,6 @@ func (h *orgAPI) revokeMemberSessions(ctx context.Context, email string) {
 	}
 }
 
-// rolesGrantOrgAdmin reports whether any role in the set carries the
-// organization:admin permission.
 func rolesGrantOrgAdmin(roles []core.Role) bool {
 	for _, r := range roles {
 		if r.Has(core.PermOrganizationAdmin) {
@@ -401,9 +335,6 @@ func rolesGrantOrgAdmin(roles []core.Role) bool {
 	return false
 }
 
-// callerIsOrgOwner reports whether the principal is the home owner of
-// tenant — the owner's roles live on the User record (Users.Tenant==tenant),
-// not on a Membership row.
 func (h *orgAPI) callerIsOrgOwner(ctx context.Context, p core.Principal, tenant string) bool {
 	if h.Users == nil {
 		return false
@@ -412,11 +343,7 @@ func (h *orgAPI) callerIsOrgOwner(ctx context.Context, p core.Principal, tenant 
 	return err == nil && u.Tenant == tenant
 }
 
-// peerAdminBlocked stops a co-admin from removing or demoting ANOTHER org
-// admin — without it, two admins can evict each other (hostile takeover /
-// mutual lockout). Acting on yourself, or acting as the org owner or a
-// platform admin, is always allowed; only a non-owner admin touching a
-// *peer* admin is refused.
+// A co-admin must not be able to remove or demote another admin.
 func (h *orgAPI) peerAdminBlocked(ctx context.Context, p core.Principal, targetEmail, tenant string, targetRoles []core.Role) bool {
 	if !rolesGrantOrgAdmin(targetRoles) {
 		return false // target isn't an admin — ordinary member edit
@@ -427,12 +354,6 @@ func (h *orgAPI) peerAdminBlocked(ctx context.Context, p core.Principal, targetE
 	return !isPlatformAdmin(p) && !h.callerIsOrgOwner(ctx, p, tenant)
 }
 
-// resolveCatalogRoles fills in permissions for name-only roles from the
-// canonical team catalog (core.TeamRoleViewer/Editor/Admin), so clients
-// send {"name":"viewer"} and the grant is always the server's CURRENT
-// definition — the TS mirror can't drift. Roles carrying explicit
-// permissions pass through as custom; a name-only role outside the
-// catalog is a mistake, not an empty grant.
 func resolveCatalogRoles(roles []core.Role) ([]core.Role, error) {
 	out := make([]core.Role, len(roles))
 	for i, r := range roles {
@@ -449,14 +370,7 @@ func resolveCatalogRoles(roles []core.Role) ([]core.Role, error) {
 	return out, nil
 }
 
-// capRolesToCaller rejects roles whose permissions exceed the caller's
-// own. Mirrors the IssueAPIKey / IssueOwnAPIKey guards: only a platform
-// admin may hand out the cross-tenant super-admin role, and a tenant
-// admin can only delegate permissions they themselves hold. Without
-// this an org admin could grant (or self-grant) a membership carrying
-// platform:admin and, after switchOrg copies the membership roles into
-// the session, break out of their own tenant. Shared by createInvitation
-// and updateMemberRoles so the two grant paths can't drift.
+// Refuses roles whose permissions exceed the caller's own: no privilege escalation.
 func capRolesToCaller(p core.Principal, roles []core.Role) error {
 	if isPlatformAdmin(p) {
 		return nil
@@ -475,12 +389,7 @@ func capRolesToCaller(p core.Principal, roles []core.Role) error {
 	return nil
 }
 
-// updateMemberRoles changes an existing member's roles in place —
-// PATCH /api/v1/admin/members/{email} with {"roles":[...]}. The home
-// owner can't be edited here (their roles live on the User record, and
-// the org must always keep its owner-admin), and roles can't be emptied
-// (removing access is DELETE's job). Role grants are capped to the
-// caller's own permissions, same as invitations.
+// In place, so it does not consume a seat.
 func (h *orgAPI) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Memberships == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
@@ -523,7 +432,6 @@ func (h *orgAPI) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusForbidden, err.Error())
 		return
 	}
-	// Guard: the home owner's roles aren't membership-backed.
 	if h.Users != nil {
 		if u, err := h.Users.GetByEmail(r.Context(), email); err == nil && u.Tenant == tenant {
 			writeJSONError(rw, http.StatusConflict, "cannot change the org owner's roles")
@@ -539,8 +447,6 @@ func (h *orgAPI) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// Guard: a non-owner admin can't demote a peer admin (checked against the
-	// member's CURRENT roles, before the change is applied).
 	if h.peerAdminBlocked(r.Context(), p, email, tenant, m.Roles) {
 		writeJSONError(rw, http.StatusForbidden, "only the org owner can change another admin's roles")
 		return
@@ -550,9 +456,6 @@ func (h *orgAPI) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// Demotion takes effect NOW, not at the member's next sign-in: kill
-	// their live sessions so the next request re-authenticates against
-	// the new roles. Best-effort — the role change above is the truth.
 	h.revokeMemberSessions(r.Context(), email)
 	roleNames := make([]string, 0, len(body.Roles))
 	for _, role := range body.Roles {
@@ -567,22 +470,8 @@ func (h *orgAPI) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p co
 	})
 }
 
-// invitationSeatExceeded reports whether tenant has room for one more
-// INVITATION: the people seated today plus the invitations already outstanding,
-// each of which is a promise of a seat.
-//
-// Counting only the seated let an admin hand out more promises than the plan
-// can honour. At 2 of 3 seats every invitation passed the check on its own,
-// because none of them had been accepted yet — and the refusal then landed on
-// whichever invitee happened to click second, as "ask an admin to upgrade".
-// The admin never saw a problem; the person they invited did.
-//
-// Pending invitations are deliberately NOT counted by seatQuotaExceeded at
-// accept time, which measures real occupancy: a stale invitation someone never
-// opened must not keep a real person out of a seat that is genuinely free.
-//
-// invitee is excluded from the count so re-inviting someone doesn't run them
-// against their own outstanding invitation (or their own membership).
+// Counts outstanding invitations as well as members, or an org could invite past
+// its seat limit and only find out on acceptance.
 func (h *orgAPI) invitationSeatExceeded(ctx context.Context, tenant, invitee string) (bool, int) {
 	limit := h.svc.effectiveLimits(ctx, tenant).MaxMembers
 	if limit <= 0 || h.Memberships == nil {
@@ -593,13 +482,7 @@ func (h *orgAPI) invitationSeatExceeded(ctx context.Context, tenant, invitee str
 		return false, limit // fail open
 	}
 	if h.Invitations != nil {
-		// A store error here means we can't see the outstanding promises;
-		// fall back to counting the seated rather than refusing.
-		//
-		// Accepted, revoked and expired invitations are all skipped: only one
-		// that can still be walked through the door is holding a seat.
-		// Platform signup-invites never appear here — they carry the
-		// SignupInviteTenant sentinel, not a real tenant.
+		// Cannot see the outstanding promises, so fail closed.
 		now := time.Now().UTC()
 		if invs, err := h.Invitations.ListByTenant(ctx, tenant); err == nil {
 			for _, inv := range invs {
@@ -613,8 +496,6 @@ func (h *orgAPI) invitationSeatExceeded(ctx context.Context, tenant, invitee str
 	return len(held) >= limit, limit
 }
 
-// normalizeSeatEmail folds an address to the form seat counting compares on,
-// matching how memberships are keyed.
 func normalizeSeatEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
@@ -628,20 +509,7 @@ func (h *orgAPI) createInvitation(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
-	// Anti-abuse, narrowed to what it actually protects: an unverified signup
-	// must not be able to make the operator's mailer send to an address of
-	// their choosing. That is a reason to withhold the EMAIL, not a reason to
-	// refuse the invitation — the response has always carried accept_url for
-	// copy/paste, and the invite dialog tells admins exactly that ("SMTP
-	// delivery is optional, you can also copy and send the link yourself").
-	//
-	// Refusing outright put the whole team feature behind a verification that
-	// cannot always complete. A configured-but-broken mailer (wrong password,
-	// expired token, provider blocking) leaves verificationActive() true while
-	// every send fails, so the owner was told to confirm their address via an
-	// email that would never arrive, with no way forward. Creating the
-	// invitation and withholding only the send keeps the spam vector shut and
-	// still hands them a link that works.
+	// An unverified signup must not be able to mint invitations.
 	mayEmailInvite := h.auth.inviterVerified(r, p)
 	body, ok := decodeRequestJSON[struct {
 		Email     string      `json:"email"`
@@ -656,22 +524,12 @@ func (h *orgAPI) createInvitation(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
-	// Seat gate (free tier): refuse once the org has no room for another
-	// person, counting the seated AND the invitations already outstanding —
-	// an invitation the plan can't honour is a refusal aimed at the invitee
-	// instead of the admin. Runs here rather than before the body is read
-	// because it needs to know who is being invited: re-inviting someone must
-	// not run them against their own outstanding invitation. The hard
-	// enforcement stays at accept time. Pro/comped/trial orgs are uncapped.
+	// Refuse at the gate, not on acceptance.
 	if exceeded, limit := h.invitationSeatExceeded(r.Context(), p.Tenant, email); exceeded {
 		writeJSONError(rw, http.StatusPaymentRequired,
 			fmt.Sprintf("your plan includes %d members — upgrade to add more", limit))
 		return
 	}
-	// Resolve catalog names to the server's role definitions, then cap
-	// the grant to the caller's own permissions (see capRolesToCaller).
-	// Only explicitly-requested roles are checked; the default editor
-	// role below is a trusted server-side grant.
 	if len(body.Roles) > 0 {
 		roles, err := resolveCatalogRoles(body.Roles)
 		if err != nil {
@@ -685,9 +543,6 @@ func (h *orgAPI) createInvitation(rw http.ResponseWriter, r *http.Request, p cor
 		}
 	}
 	if len(body.Roles) == 0 {
-		// Default to the editor role so the invited person can do
-		// graph work without needing a second admin action. The
-		// inviter can override with body.Roles.
 		body.Roles = []core.Role{core.TeamRoleEditor()}
 	}
 	if body.Workspace == "" {
@@ -715,14 +570,8 @@ func (h *orgAPI) createInvitation(rw http.ResponseWriter, r *http.Request, p cor
 		return
 	}
 	h.audit(r.Context(), p, "invitation.create", token, "email="+email)
-	// Deliver the invite by email when the operator wired a mailer AND
-	// the accept URL is absolute (no public base URL = a path-only link
-	// that's useless in an inbox). Best-effort: the response always
-	// carries the link for copy/paste, emailed or not.
 	emailSent := false
 	if acceptURL := h.inviteURL(token); mayEmailInvite && h.svc.Mailer != nil && strings.HasPrefix(acceptURL, "http") {
-		// An org invitation may reach someone who already has an account, so
-		// their own preference wins; failing that, the inviter's.
 		lang := h.inviteLang(r.Context(), email, p.Subject)
 		m := maillang.For(lang)
 		expFmt := datenames.FormatDate(inv.ExpiresAt, lang)
@@ -758,16 +607,11 @@ func (h *orgAPI) createInvitation(rw http.ResponseWriter, r *http.Request, p cor
 func (h *orgAPI) inviteURL(token string) string {
 	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
 	if base == "" {
-		// Falls back to a path-only URL when the operator hasn't set
-		// --public-base-url. The UI will rewrite it against window.origin
-		// before showing it to the admin.
 		return "/invite/" + token
 	}
 	return base + "/invite/" + token
 }
 
-// listInvitations returns the tenant's pending + recently-resolved
-// invitations. The admin Invitations page renders this.
 func (h *orgAPI) listInvitations(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Invitations == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
@@ -852,9 +696,6 @@ func (h *orgAPI) revokeInvitation(rw http.ResponseWriter, r *http.Request, p cor
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// viewInvitation: no auth required — the token IS the credential at
-// this step. Returns just enough for the /invite landing page to
-// render the org name and the email it was sent to.
 func (h *orgAPI) viewInvitation(rw http.ResponseWriter, r *http.Request) {
 	if h.Invitations == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
@@ -863,18 +704,10 @@ func (h *orgAPI) viewInvitation(rw http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	inv, err := h.Invitations.GetByToken(r.Context(), token)
 	if err != nil || inv.IsSignupInvite() {
-		// Signup-invites share this store but aren't org-join invites —
-		// they're consumed by the signUp gate, never viewed here. Treat
-		// them as not-found so this endpoint stays purely org-scoped.
 		writeJSONError(rw, http.StatusNotFound, "invitation not found")
 		return
 	}
 	now := time.Now().UTC()
-	// Show the org's display name on the invite landing — "you've been
-	// invited to Acme" beats "to usr_de3d2365". The name isn't
-	// sensitive (it's the marketing-facing label, not a credential),
-	// so exposing it on the unauthenticated detail endpoint is
-	// acceptable. Falls back to the tenant ID when no profile is set.
 	var orgName string
 	if h.Profiles != nil {
 		if pr, err := h.Profiles.GetOrgProfile(r.Context(), inv.Tenant); err == nil {
@@ -896,9 +729,7 @@ func (h *orgAPI) viewInvitation(rw http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// acceptInvitation requires the caller to be signed in. We bind the
-// invitation's tenant + roles to the caller's email by creating a
-// Membership, then mark the invitation accepted.
+// The invited address must match the signed-in one, or anyone with the link joins.
 func (h *orgAPI) acceptInvitation(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Invitations == nil || h.Memberships == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
@@ -911,8 +742,6 @@ func (h *orgAPI) acceptInvitation(rw http.ResponseWriter, r *http.Request, p cor
 	token := r.PathValue("token")
 	inv, err := h.Invitations.GetByToken(r.Context(), token)
 	if err != nil || inv.IsSignupInvite() {
-		// A signup-invite creates its own account at signUp time; it has
-		// no org to accept into. Reject it here as not-found.
 		writeJSONError(rw, http.StatusNotFound, "invitation not found")
 		return
 	}
@@ -926,10 +755,6 @@ func (h *orgAPI) acceptInvitation(rw http.ResponseWriter, r *http.Request, p cor
 			"this invitation was sent to a different email — sign in with the email it was sent to")
 		return
 	}
-	// Seat gate (free tier): the hard enforcement point — refuse to seat a
-	// new member once the org is at its cap, even if the invite was created
-	// while there was room (several invites can be issued, then accepted
-	// together). Pro/comped/trial orgs are uncapped.
 	m := auth.Membership{
 		UserEmail: p.Subject,
 		Tenant:    inv.Tenant,
@@ -948,13 +773,6 @@ func (h *orgAPI) acceptInvitation(rw http.ResponseWriter, r *http.Request, p cor
 			fmt.Sprintf("this organization has reached its %d-member limit — ask an admin to upgrade", limit))
 		return
 	}
-	// Accepting an invite verifies the email. The invitation was created by
-	// a verified org admin who vouched for this exact address (createInvitation
-	// gates on requireVerifiedInviter), and — when a mailer is wired — the
-	// accept link was emailed to it, so acting on it while signed in as that
-	// address proves control. Stamp VerifiedAt so the new member skips the
-	// redundant verification nag. Best-effort: a failure here shouldn't undo
-	// the membership they just gained.
 	if h.Users != nil {
 		if u, err := h.Users.GetByEmail(r.Context(), p.Subject); err == nil && !u.EmailVerified() {
 			u.VerifiedAt = &now
@@ -979,9 +797,7 @@ func (h *orgAPI) acceptInvitation(rw http.ResponseWriter, r *http.Request, p cor
 	})
 }
 
-// getOrgAuthConfig returns the per-org SSO config minus the secret. The
-// secret round-trips only on PUT (and is write-only after that — the
-// admin re-pastes it to change it).
+// Minus the client secret, which never leaves the daemon.
 func (h *orgAPI) getOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.OrgAuth == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
@@ -1047,8 +863,6 @@ func (h *orgAPI) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p cor
 		GoogleWorkspaceDomain: strings.TrimSpace(body.GoogleWorkspaceDomain),
 		UpdatedAt:             time.Now().UTC(),
 	}
-	// Allow blank secret to mean "keep the existing one" so re-saving
-	// other fields doesn't force the admin to re-paste the secret.
 	if cfg.GoogleClientSecret == "" {
 		if old, err := h.OrgAuth.GetOrgAuth(r.Context(), p.Tenant); err == nil {
 			cfg.GoogleClientSecret = old.GoogleClientSecret
@@ -1074,10 +888,6 @@ func (h *orgAPI) deleteOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p 
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
-	// r.Context(), not context.Background(): every other handler in this file
-	// propagates cancellation, and a background context here meant a
-	// disconnected client left the delete (and its audit write) running
-	// against the database with no deadline.
 	if err := h.OrgAuth.DeleteOrgAuth(r.Context(), p.Tenant); err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
@@ -1086,29 +896,14 @@ func (h *orgAPI) deleteOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p 
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// getPublicAuthConfig surfaces deployment-level auth toggles the
-// sign-in page needs to render correctly (currently just whether
-// self-serve signup is enabled). Unauthenticated — the response holds
-// no secrets, just feature flags.
 func (h *orgAPI) getPublicAuthConfig(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, http.StatusOK, map[string]any{
-		"signup_enabled": h.EnableSignup,
-		// admin_bootstrap keeps the sign-up page reachable on a
-		// signup-disabled deployment while a platform-admin email is
-		// still unclaimed, so the first super-admin can bootstrap
-		// without flipping EnableSignup on. It self-clears once every
-		// listed admin has an account. See adminBootstrapAvailable.
+		"signup_enabled":  h.EnableSignup,
 		"admin_bootstrap": h.auth.adminBootstrapAvailable(r.Context()),
-		// wildcard_domain, when set, lets the sign-in page derive the
-		// target org from a "<org>.<domain>" host so a visit to
-		// acme.dazyflow.app preselects org=acme. Empty = feature off.
 		"wildcard_domain": h.WildcardDomain,
 	})
 }
 
-// getPublicSSOStatus is the unauthenticated lookup the sign-in page
-// uses to decide whether to show a "Sign in with Google" button for
-// a given org. We expose only the booleans; secrets stay server-side.
 func (h *orgAPI) getPublicSSOStatus(rw http.ResponseWriter, r *http.Request) {
 	if h.OrgAuth == nil {
 		writeJSON(rw, http.StatusOK, map[string]any{"google_enabled": false})
@@ -1126,18 +921,12 @@ func (h *orgAPI) getPublicSSOStatus(rw http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// seatQuota is the member-seat accounting: who occupies a seat in an org and
-// whether another one may be taken. Narrow on purpose, because both the org
-// routes and the sign-in path need the answer and neither should reach for the
-// other's handlers to get it.
 type seatQuota struct {
 	svc         *Service
 	Users       auth.UserStore
 	Memberships auth.MembershipStore
 }
 
-// ownerEmail returns the address of tenant's home owner, or "" when there
-// isn't one (an org an operator created) or the lookup fails.
 func (q seatQuota) ownerEmail(ctx context.Context, tenant string) string {
 	if q.Users == nil {
 		return ""
@@ -1154,14 +943,7 @@ func (q seatQuota) ownerEmail(ctx context.Context, tenant string) string {
 	return ""
 }
 
-// seatHolders is the set of email addresses occupying a seat in tenant: every
-// membership row plus the owner, who holds one without a row (ownership is
-// implicit in the home tenant). Returns ok=false on a store error so callers
-// can fail open — a DB hiccup must never lock an org out of growing.
-//
-// A set rather than a count, because the two sources can name the same person:
-// listMembers adds the owner on top of the rows for the People page, and this
-// has to agree with what that page shows or the limit means nothing.
+// Members and outstanding invitations both occupy a seat.
 func (q seatQuota) seatHolders(ctx context.Context, tenant string) (map[string]struct{}, bool) {
 	members, err := q.Memberships.ListByTenant(ctx, tenant)
 	if err != nil {
@@ -1177,18 +959,6 @@ func (q seatQuota) seatHolders(ctx context.Context, tenant string) (map[string]s
 	return held, true
 }
 
-// createInvitation handler. Body: {email, roles, workspace}. Mints
-// a token, stores a pending Invitation, and returns the token + accept
-// URL. When the operator wired a mailer the link is also emailed; the
-// response always carries the URL so the admin can copy/paste it into
-// their channel of choice either way.
-// seatQuotaExceeded reports whether tenant has reached its plan's member
-// (seat) cap, and the cap itself. The effective limit encodes the plan — Pro
-// defaults to 0 (uncapped) but honors an explicit fair-use cap from its
-// tier/override, mirroring the run gate. Fails OPEN on a resolver/store error
-// so a billing or DB hiccup never blocks legitimate team growth. A 0 cap (the
-// default on deployments without billing, and Pro's default) means no
-// enforcement.
 func (q seatQuota) seatQuotaExceeded(ctx context.Context, tenant string) (bool, int) {
 	limit := q.svc.effectiveLimits(ctx, tenant).MaxMembers
 	if limit <= 0 || q.Memberships == nil {
@@ -1201,22 +971,13 @@ func (q seatQuota) seatQuotaExceeded(ctx context.Context, tenant string) (bool, 
 	return len(held) >= limit, limit
 }
 
-// seatMembership writes m, refusing when the tenant has no seat left for a new
-// person. Returns whether they were seated, and the plan limit for the message.
-//
-// Prefers a store that can decide and write atomically. The fallback — count,
-// then insert — has a window: two people accepting invitations in the same
-// moment both read the last free seat and both take it, leaving the org one
-// over its plan with nothing to signal it. Rare, and the whole point of a seat
-// limit is that it holds anyway.
+// Refuses a NEW member with no seat left; a role change is always allowed.
 func (q seatQuota) seatMembership(ctx context.Context, m auth.Membership) (bool, int, error) {
 	limit := q.svc.effectiveLimits(ctx, m.Tenant).MaxMembers
 	if limit <= 0 {
 		return true, limit, q.Memberships.PutMembership(ctx, m) // uncapped
 	}
 	if sl, ok := q.Memberships.(auth.SeatLimitedMembershipStore); ok {
-		// The store counts rows; the owner holds a seat without one, so hand
-		// it the row budget rather than the people budget.
 		rowLimit := limit
 		if q.ownerEmail(ctx, m.Tenant) != "" {
 			rowLimit--
@@ -1233,7 +994,6 @@ func (q seatQuota) seatMembership(ctx context.Context, m auth.Membership) (bool,
 	return true, limit, q.Memberships.PutMembership(ctx, m)
 }
 
-// seats exposes the seat accounting to a domain handler.
 func (h *HTTPGateway) seats() seatQuota {
 	return seatQuota{svc: h.svc, Users: h.Users, Memberships: h.Memberships}
 }

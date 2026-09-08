@@ -132,7 +132,6 @@ describe("dropDescription", () => {
     expect(
       dropDescription({ id: "brand_new", label: "New", description: "Hi." }, "sv"),
     ).toBe("Hi.");
-    // No id to key on (a partial manifest) → English, not a crash.
     expect(dropDescription(drop("Email", "Send email", "Sends an email."), "sv")).toBe(
       "Sends an email.",
     );
@@ -153,8 +152,6 @@ describe("dropDescription", () => {
       const entry = SV_DESCRIPTIONS[id];
       expect(entry.sv.trim(), id).not.toBe("");
       expect(entry.en, id).toMatch(/^[0-9a-f]{8}$/);
-      // A stray Cyrillic look-alike is invisible on screen but breaks search
-      // and copy-paste; one slipped in while translating, hence the guard.
       expect(entry.sv, id).not.toMatch(/[\u0400-\u04FF]/);
     }
   });
@@ -172,8 +169,6 @@ describe("dropCategoryLabel", () => {
     expect(dropCategoryLabel("trigger", "sv")).toBe("Triggers");
   });
 
-  // The bug this guards: unmapped, these fell through to the raw engine enum,
-  // so an English reader saw a chip reading "network" or "io".
   it("renders product words in English, never the engine enum", () => {
     expect(dropCategoryLabel("network", "en")).toBe("Apps & services");
     expect(dropCategoryLabel("io", "en")).toBe("Files & data");
@@ -236,8 +231,6 @@ describe("dropLabelIsDefault", () => {
   });
 
   it("leaves a name the user typed alone", () => {
-    // This is what stops a language switch (or a late catalog load) from
-    // overwriting a renamed node.
     expect(dropLabelIsDefault(email, "Morgonrapport")).toBe(false);
     expect(dropLabelIsDefault(email, "Email to Marina")).toBe(false);
   });
@@ -303,12 +296,9 @@ describe("the params-schema surface", () => {
   });
 
   it("translates an app's name where it is generic English", () => {
-    // Both spellings the product uses: the Integration a manifest carries and
-    // the curated display name on the Apps page.
     expect(integrationName("Mailbox", "sv")).toBe("Brevlåda");
     expect(integrationName("Mailbox (IMAP)", "sv")).toBe("Brevlåda (IMAP)");
     expect(integrationName("Collections", "sv")).toBe("Samlingar");
-    // A brand is a brand.
     expect(integrationName("Slack", "sv")).toBe("Slack");
     expect(integrationName("Google Sheets", "sv")).toBe("Google Sheets");
     expect(integrationName("", "sv")).toBe("");
@@ -320,7 +310,6 @@ describe("the params-schema surface", () => {
       label: "Anthropic API key",
       example: "sk-ant-…",
     });
-    // No parenthetical: all label, and the trailing period goes.
     expect(splitConnectionNote("Notion integration token.")).toEqual({
       label: "Notion integration token",
       example: "",

@@ -11,8 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// --- runFlowMe --------------------------------------------------------
-
 func TestRunFlowMe_NotFound(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -37,8 +35,6 @@ func TestRunFlowMe_OK(t *testing.T) {
 	}
 }
 
-// --- validateGraphLiteral --------------------------------------------
-
 func TestValidateGraphLiteral_BadJSON(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -60,8 +56,6 @@ func TestValidateGraphLiteral_OK(t *testing.T) {
 	}
 }
 
-// --- removeMember -----------------------------------------------------
-
 func TestRemoveMember_NotConfigured(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t) // no Memberships
@@ -75,7 +69,6 @@ func TestRemoveMember_Forbidden(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.Memberships = newFakeMembershipStore()
-	// Default editor token lacks organization:admin.
 	rw := h.do(t, "DELETE", "/api/v1/admin/members/victim@example.com", nil)
 	if rw.Code != http.StatusForbidden {
 		t.Fatalf("non-admin remove = %d (%s), want 403", rw.Code, rw.Body.String())
@@ -97,7 +90,6 @@ func TestRemoveMember_OwnerConflict(t *testing.T) {
 	h := newGatewayHarness(t)
 	mem := newFakeMembershipStore()
 	users, _ := auth.OpenJSONUserStore("")
-	// The owner's home tenant equals the org tenant "t" -> protected.
 	_ = users.PutUser(t.Context(), auth.User{Email: "owner@example.com", Subject: "owner@example.com", Tenant: "t"})
 	h.gw.Memberships = mem
 	h.gw.Users = users

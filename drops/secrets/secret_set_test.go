@@ -203,9 +203,6 @@ func TestSecretSet_RequiresValue(t *testing.T) {
 }
 
 func TestSecretSet_UnwiredHookIsClearError(t *testing.T) {
-	// No withFakeWriter — leave the writer nil to simulate dzd
-	// running without --master-key. Save & restore the global so
-	// later tests in this file still pass.
 	prev := currentWriter()
 	SetSecretWriter(nil)
 	t.Cleanup(func() { SetSecretWriter(prev) })
@@ -264,8 +261,6 @@ func TestSecretSet_TenantIsolation(t *testing.T) {
 	}
 }
 
-// TestValidSecretName_Boundaries covers the length branches of validSecretName
-// directly: empty, too-long (>128), at-limit (128, accepted), and a valid name.
 func TestValidSecretName_Boundaries(t *testing.T) {
 	cases := []struct {
 		name    string

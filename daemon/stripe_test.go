@@ -92,7 +92,6 @@ func TestStripeClient_CreatePortalSession(t *testing.T) {
 	}
 }
 
-// signStripe builds a valid Stripe-Signature header for body at ts.
 func signStripe(t *testing.T, secret string, ts time.Time, body []byte) string {
 	t.Helper()
 	mac := hmac.New(sha256.New, []byte(secret))
@@ -129,12 +128,10 @@ func TestVerifyStripeSignature(t *testing.T) {
 		})
 	}
 
-	// Tampered body fails even with a fresh, well-formed header.
 	if err := VerifyStripeSignature(signStripe(t, secret, now, body),
 		[]byte(`{"type":"tampered"}`), secret, now); err == nil {
 		t.Error("tampered body verified")
 	}
-	// Rotation: an old-secret v1 alongside the current one still verifies.
 	rotated := signStripe(t, "whsec_old", now, body) + "," +
 		strings.TrimPrefix(signStripe(t, secret, now, body), fmt.Sprintf("t=%d,", now.Unix()))
 	if err := VerifyStripeSignature(rotated, body, secret, now); err != nil {

@@ -134,11 +134,6 @@ func executeSortRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	return resultRows(job, out, headers), nil
 }
 
-// parseSortKeys reads the `by` param: a single comma-separated string
-// ("id,name,-age" → id, name, then age descending). A leading '-' or '+' on a
-// name states that column's direction; anything unprefixed takes it from the
-// Direction param. No column-type auto-detect here — that happens lazily in
-// the comparator.
 func parseSortKeys(params map[string]any) ([]sortKey, error) {
 	raw, ok := params["by"]
 	if !ok || raw == nil {
@@ -151,8 +146,6 @@ func parseSortKeys(params map[string]any) ([]sortKey, error) {
 	return parseSortString(s)
 }
 
-// parseSortString splits "id,name,-age" into ordered keys. Empty tokens (a
-// stray comma) are skipped.
 func parseSortString(s string) ([]sortKey, error) {
 	keys := make([]sortKey, 0)
 	for _, part := range strings.Split(s, ",") {
@@ -276,10 +269,6 @@ func compareCells(a, b any) int {
 	}
 }
 
-// bothNumeric returns the float64 forms of a and b when both are
-// numeric (typed numbers or string-encoded numbers). This is the
-// rule that makes Excel-string rows sort sensibly: "10" > "9" instead
-// of the lexicographic surprise.
 func bothNumeric(a, b any) (float64, float64, bool) {
 	af, aok := toFloat(a)
 	bf, bok := toFloat(b)

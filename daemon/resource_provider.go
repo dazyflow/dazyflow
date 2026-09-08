@@ -11,11 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// ResourceFetcher fetches the live content of one resource definition —
-// e.g. for type "google_sheet", the sheet's rows + headers. Registered
-// per type in cmd/dzd so the daemon stays free of drop/connector imports
-// (the same looseness wireConnectorTokenHooks uses). tenant/flow ride on
-// ctx, so a fetcher can resolve the right OAuth account.
 type ResourceFetcher func(ctx context.Context, def core.ResourceDef) (any, error)
 
 // ResourceProvider implements core.ResourceProvider (the "resource"
@@ -43,9 +38,6 @@ func (p *ResourceProvider) Resolve(ctx context.Context, name string) (any, error
 	return fetch(ctx, def)
 }
 
-// loadDef reads NAME's definition. Get applies the flow→organization
-// cascade: a flow's own resource of that name wins over an org-wide one,
-// keyed off the flow on ctx (set by the engine before resolution).
 func (p *ResourceProvider) loadDef(ctx context.Context, name string) (core.ResourceDef, error) {
 	if p.Secrets == nil {
 		return core.ResourceDef{}, fmt.Errorf("resource store not configured")

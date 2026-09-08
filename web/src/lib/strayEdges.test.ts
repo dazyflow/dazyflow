@@ -28,8 +28,6 @@ const edge = (
   targetHandle: string | null,
 ) => ({ source, sourceHandle, target, targetHandle });
 
-// The shape of the reported bug: an edge into a value source, which declares
-// no inputs at all.
 const HTTP = manifest("http_download", ["pass"], ["pass", "out"]);
 const TEXT = manifest("text", [], ["out"]);
 
@@ -85,9 +83,6 @@ describe("findStrayEdges", () => {
     expect(stray.map((s) => s.edge)).toEqual([bad]);
   });
 
-  // A null handle is what React Flow stores for an unnamed pin, and the
-  // editor reads it as "out"/"in" — which is how the daemon comes to report a
-  // missing port called "in".
   it("resolves a null handle the way the editor does", () => {
     const nodes = new Map<string, NodePorts>([
       ["http_1", { manifest: HTTP }],
@@ -107,7 +102,6 @@ describe("findStrayEdges", () => {
       ["text_1", { manifest: TEXT }],
     ]);
     expect(findStrayEdges([edge("runner_1", "out", "text_1", "in")], nodes)).toEqual([]);
-    // ... in either direction.
     const nodes2 = new Map<string, NodePorts>([
       ["http_1", { manifest: HTTP }],
       ["mcp_1", {}],
@@ -143,7 +137,6 @@ describe("findStrayEdges", () => {
     expect(findStrayEdges([], new Map())).toEqual([]);
   });
 
-  // The passthrough pin is a real declared port, so wiring to it is fine.
   it("accepts the passthrough pin", () => {
     const nodes = new Map<string, NodePorts>([
       ["http_1", { manifest: HTTP }],

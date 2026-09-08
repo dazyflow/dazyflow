@@ -98,7 +98,6 @@ func executeCreateEvent(ctx context.Context, job core.Job, _ chan<- core.Progres
 	if summary == "" {
 		return params.Err(job, "bad_param", "'summary' is required"), nil
 	}
-	// Each field: the wired input wins, the typed setting is the fallback.
 	field := func(port string) (string, *core.Result) {
 		v, ok := params.TextInputOr(job, port, params.StringDefault(job.Params, port, ""))
 		if !ok {
@@ -118,9 +117,6 @@ func executeCreateEvent(ctx context.Context, job core.Job, _ chan<- core.Progres
 	if start == "" || end == "" {
 		return params.Err(job, "bad_param", "'start' and 'end' are required"), nil
 	}
-	// A relative value ("tomorrow+9h") becomes a concrete timestamp; an
-	// absolute one is left exactly as written, so a plain date still means an
-	// all-day event rather than midnight.
 	loc := time.UTC
 	if tzName := strings.TrimSpace(params.StringDefault(job.Params, "time_zone", "")); tzName != "" {
 		if l, lerr := time.LoadLocation(tzName); lerr == nil {
@@ -202,7 +198,6 @@ func executeCreateEvent(ctx context.Context, job core.Job, _ chan<- core.Progres
 	}, nil
 }
 
-// resolveSummary prefers a wired 'summary' input port over the param.
 func resolveSummary(job core.Job) string {
 	if in, ok := job.Input["summary"]; ok && in.Inline != nil {
 		switch v := in.Inline.(type) {
@@ -234,8 +229,6 @@ func eventTimeField(value, tz string) map[string]any {
 	return map[string]any{"date": value}
 }
 
-// parseAttendees splits a comma-separated address list into the API's
-// [{email}] form, trimming whitespace and dropping blanks.
 func parseAttendees(raw string) []map[string]any {
 	if strings.TrimSpace(raw) == "" {
 		return nil

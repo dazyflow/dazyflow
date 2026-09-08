@@ -99,14 +99,12 @@ func TestNextSessionExpiry(t *testing.T) {
 	}
 }
 
-// TestNextSessionExpiry_NoBackwardsStep guards against a renewal ever
-// shortening a session — clock skew or a maxAge below the current expiry
-// must leave the existing (longer) expiry in place.
+// Guards against a renewal ever shortening a session — clock skew or a maxAge
+// below the current expiry must leave the existing (longer) expiry in place.
 func TestNextSessionExpiry_NoBackwardsStep(t *testing.T) {
 	created := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	const idle = 7 * 24 * time.Hour
 	sess := Session{CreatedAt: created, ExpiresAt: created.Add(idle)}
-	// maxAge so small the cap is already behind the current expiry.
 	got, renew := NextSessionExpiry(sess, idle, time.Hour, created.Add(idle-time.Minute))
 	if renew {
 		t.Fatalf("renew = true, want false (would move expiry backwards)")

@@ -11,15 +11,12 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fakeAuthenticator returns a fixed principal, simulating a valid
-// credential the inner chain accepted.
 type fakeAuthenticator struct{ p core.Principal }
 
 func (f fakeAuthenticator) Authenticate(context.Context, string) (core.Principal, error) {
 	return f.p, nil
 }
 
-// fakeUsers / fakeOrgs are minimal in-memory stores for the gate test.
 type fakeUsers map[string]User
 
 func (m fakeUsers) GetByEmail(_ context.Context, email string) (User, error) {

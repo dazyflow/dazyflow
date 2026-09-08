@@ -48,8 +48,6 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Named after their params so the card shows inline editable
-				// boxes (Unreal-style); a wired value overrides the typed one.
 				{Port: "title", Label: "Title", MIME: []string{"text/plain"}},
 				{Port: "message", Label: "Message", MIME: []string{"text/plain"}},
 				// The tap link is usually computed upstream — an approval
@@ -57,10 +55,6 @@ func init() {
 				// just a typed value.
 				{Port: "click", Label: "Link to open", MIME: []string{"text/plain"}},
 			},
-			// No declared outputs: sending a notification is a "do" step —
-			// chain via the pass-through pin. The delivery details are still
-			// EMITTED under "meta" for run records, just not a pin (same as
-			// gmail send / sheets append).
 			Outputs: []core.Port{
 				{Port: "meta", Label: "Details", MIME: []string{"application/json"}, Example: json.RawMessage(`{"server":"https://ntfy.sh","topic":"fakturor","url":"https://ntfy.sh/fakturor","status":200,"bytes_sent":42,"truncated":false,"original_bytes":42}`)},
 			},
@@ -108,7 +102,6 @@ func executeNtfy(ctx context.Context, job core.Job, progress chan<- core.Progres
 	server := strings.TrimRight(params.StringDefault(job.Params, "server", "https://ntfy.sh"), "/")
 
 	body := params.StringDefault(job.Params, "message", "")
-	// The Message input overrides the param.
 	in, ok := job.Input["message"]
 	if ok && in.Inline != nil {
 		switch v := in.Inline.(type) {
@@ -156,7 +149,6 @@ func executeNtfy(ctx context.Context, job core.Job, progress chan<- core.Progres
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
 	title, _ := params.StringOpt(job.Params, "title")
-	// The Title input overrides the param when wired.
 	if in, ok := job.Input["title"]; ok && in.Inline != nil {
 		if s, isStr := in.Inline.(string); isStr && s != "" {
 			title = s

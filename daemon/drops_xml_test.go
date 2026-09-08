@@ -13,14 +13,10 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestListDrops_XML confirms the /drops catalog serves an XML representation
-// (opt-in via ?format=xml or an XML Accept header) that mirrors the JSON one:
-// same drops, same field names, ports and examples intact.
 func TestListDrops_XML(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 
-	// Baseline JSON listing.
 	var jsonResp struct {
 		Drops []core.Manifest `json:"drops"`
 	}
@@ -33,7 +29,6 @@ func TestListDrops_XML(t *testing.T) {
 		t.Fatal("no drops registered in harness")
 	}
 
-	// XML listing via ?format=xml.
 	rw = h.do(t, "GET", "/api/v1/drops?format=xml", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("xml drops: code=%d body=%s", rw.Code, rw.Body.String())
@@ -65,7 +60,6 @@ func TestListDrops_XML(t *testing.T) {
 		}
 	}
 
-	// Ports round-trip with their fields (find a drop that has one).
 	for _, x := range xmlResp.Drops {
 		if len(x.Outputs) > 0 {
 			p := x.Outputs[0]
@@ -77,8 +71,6 @@ func TestListDrops_XML(t *testing.T) {
 	}
 }
 
-// TestListDrops_XMLAcceptHeader confirms the Accept header alone selects XML,
-// and that the default (no header, no query) stays JSON.
 func TestListDrops_XMLAcceptHeader(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -95,7 +87,6 @@ func TestListDrops_XMLAcceptHeader(t *testing.T) {
 		t.Errorf("Accept: application/xml gave Content-Type %q, want application/xml", ct)
 	}
 
-	// Default stays JSON.
 	rw = h.do(t, "GET", "/api/v1/drops", nil)
 	if ct := rw.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
 		t.Errorf("default Content-Type = %q, want application/json", ct)

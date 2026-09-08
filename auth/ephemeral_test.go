@@ -68,7 +68,6 @@ func runEphemeralConformance(t *testing.T, mk func(t *testing.T) EphemeralStore)
 		if err != nil || string(b) != `"b"` {
 			t.Fatalf("oauth kind = %q / %v", b, err)
 		}
-		// Deleting one leaves the other.
 		if err := s.Delete(ctx, EphemeralGoogleSignIn, "same"); err != nil {
 			t.Fatal(err)
 		}
@@ -206,7 +205,6 @@ func TestEphemeral_Postgres(t *testing.T) {
 	_, _ = store.Sweep(ctx)
 }
 
-// prefixedEphemeral namespaces a shared Postgres store per subtest.
 type prefixedEphemeral struct {
 	inner  EphemeralStore
 	prefix string
@@ -261,7 +259,6 @@ func TestEphemeralTOTPChallengeStore_MatchesTheMemoryStore(t *testing.T) {
 				t.Fatalf("fresh challenge has %d attempts", got.Attempts)
 			}
 
-			// The brute-force cap counts through here.
 			for want := 1; want <= 3; want++ {
 				n, err := s.IncrAttempts(ctx, "tok")
 				if err != nil {
@@ -319,7 +316,6 @@ func TestMemEphemeralStore_SweepReturnsReclaimedCount(t *testing.T) {
 		}
 	}
 
-	// Past the first two expiries, short of the third.
 	s.mu.Lock()
 	n := s.sweepLocked(base.Add(30 * time.Minute))
 	remaining := len(s.items)

@@ -28,15 +28,11 @@ describe("mimeCompatible", () => {
     expect(mimeCompatible(["text/markdown"], ["text/plain"])).toBe(false);
     expect(mimeCompatible(["application/json"], ["application/x-bool"])).toBe(false);
     expect(mimeCompatible(["image/png"], ["text/plain"])).toBe(false);
-    // Overlap anywhere in the sets still connects.
     expect(mimeCompatible(["text/plain", "application/json"], ["application/json"])).toBe(true);
   });
 });
 
 describe("pickPort", () => {
-  // ntfy as the engine surfaces it: WithPassthrough prepends an untyped
-  // "pass" pin ahead of the real "body" input (labelled "Message"). Both
-  // are untyped, so the old "first compatible port" logic landed on pass.
   const ntfyInputs: Port[] = [
     { port: "pass", label: "Pass-through" },
     { port: "body", label: "Message" },
@@ -78,7 +74,6 @@ describe("pickPort", () => {
       { port: "pass" },
       { port: "img", mime: ["image/png"] },
     ];
-    // A text source matches nothing real → pass (untyped) is the only fit.
     expect(pickPort(inputs, ["text/plain"], "in")).toBe("pass");
   });
 
@@ -108,7 +103,6 @@ describe("spawnPort", () => {
       { port: "body", label: "Message" },
     ];
     expect(spawnPort(inputs, undefined, true, "in")).toBe("pass");
-    // Not a pass drag: the real input wins, as pickPort decides.
     expect(spawnPort(inputs, undefined, false, "in")).toBe("body");
   });
 
@@ -253,13 +247,10 @@ describe("portsConnectable — a target with no inputs", () => {
   });
 
   it("still allows a step with no MANIFEST (undefined, not empty)", () => {
-    // A runner or MCP step this client has no manifest for keeps the
-    // permissive treatment the server also gives it.
     expect(portsConnectable(out, "out", undefined, "in")).toBe(true);
   });
 
   it("still allows an undeclared handle on a step that has inputs", () => {
-    // Comment nodes and exec pins rely on this.
     expect(portsConnectable(out, "out", [{ port: "rows" }], null)).toBe(true);
   });
 });

@@ -16,10 +16,7 @@ import (
 )
 
 type (
-	// Reader returns the stored value for an exact tenant/name, or ("", nil)
-	// when nothing has been stored yet.
 	Reader func(ctx context.Context, tenant, name string) (string, error)
-	// Writer persists one value.
 	Writer func(ctx context.Context, tenant, name, value string) error
 )
 
@@ -38,7 +35,6 @@ var (
 	writer Writer
 )
 
-// SetStore installs the read/write pair. nil, nil uninstalls it.
 func SetStore(r Reader, w Writer) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -74,9 +70,6 @@ func Read(ctx context.Context, tenant, name string) (string, error) {
 	return r(ctx, tenant, name)
 }
 
-// FailRead is the Result a polling drop returns when Read could not tell it
-// where it had got to. Built here so every poll source stops the same way and
-// says the same thing.
 func FailRead(job core.Job, err error) core.Result {
 	code, msg, details := Unavailable(err)
 	return fail(job, code, msg, details)
@@ -117,9 +110,6 @@ func fail(job core.Job, code, msg, details string) core.Result {
 	}
 }
 
-// Unavailable turns a Read error into the code, message and technical detail a
-// polling drop should fail with. The two causes need different words, and
-// neither is the user's fault in a way they could guess from "cursor error".
 func Unavailable(err error) (code, msg, details string) {
 	if errors.Is(err, ErrNoStore) {
 		return "cursor_no_store",
@@ -135,7 +125,6 @@ func Unavailable(err error) (code, msg, details string) {
 		err.Error()
 }
 
-// Write persists value. It is a no-op when no store is wired.
 func Write(ctx context.Context, tenant, name, value string) error {
 	mu.RLock()
 	w := writer

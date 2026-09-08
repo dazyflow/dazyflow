@@ -35,8 +35,6 @@ func TestFilePicker_EmitsPathAndFile(t *testing.T) {
 	if file.Ref != "data.csv" {
 		t.Errorf("file.Ref = %q, want data.csv", file.Ref)
 	}
-	// MIME guess from the .csv extension — the table in
-	// guessMIMEByExt maps that to text/csv.
 	if file.MIME != "text/csv" {
 		t.Errorf("file.MIME = %q, want text/csv", file.MIME)
 	}
@@ -61,13 +59,9 @@ func TestFilePicker_InlineModeReadsBytes(t *testing.T) {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
 	}
 	file := res.Output["file"]
-	// Text MIME → string inline so the value survives gRPC's JSON
-	// wrapping (same convention file_read uses).
 	if got, _ := file.Inline.(string); got != "hello" {
 		t.Errorf("inline = %v, want %q", file.Inline, "hello")
 	}
-	// And in inline mode Ref.Ref is cleared — the locator and the
-	// content shouldn't both claim to be the source of truth.
 	if file.Ref != "" {
 		t.Errorf("file.Ref = %q, want empty in inline mode", file.Ref)
 	}

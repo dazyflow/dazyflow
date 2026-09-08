@@ -51,30 +51,16 @@ import (
 )
 
 type entry struct {
-	Description string `json:"description"`
-	// Sorted and de-duplicated: a drop with three pins reading "Text" should
-	// present the translator with one string, and the file should not churn
-	// because a port literal moved. Every list below is built the same way.
-	Ports []string `json:"ports"`
-	// The card's own words: Label is the step's name, Subtitle the action line
-	// under it, Integration the app chip the palette and the Inspector show.
-	Label       string `json:"label"`
-	Subtitle    string `json:"subtitle,omitempty"`
-	Integration string `json:"integration,omitempty"`
-	// The params-schema surface, one list per kind of string, matching the
-	// resolver each one goes through (fieldTitle / fieldHelp / enumLabel). A
-	// field titled "Status" and a dropdown option "Status" are different
-	// strings to a translator even when they match today, so they are not
-	// merged here either.
-	Titles    []string `json:"titles,omitempty"`
-	Help      []string `json:"help,omitempty"`
-	EnumNames []string `json:"enum_names,omitempty"`
-	// The connection card on the app's page: field labels, the help under each
-	// input, and the placeholders inside them (localized too — several are
-	// prose, e.g. "usually your email address").
-	Connection []string `json:"connection,omitempty"`
-	// The "keeps state" chip on a node card and its reset explanation.
-	NodeState []string `json:"node_state,omitempty"`
+	Description string   `json:"description"`
+	Ports       []string `json:"ports"`
+	Label       string   `json:"label"`
+	Subtitle    string   `json:"subtitle,omitempty"`
+	Integration string   `json:"integration,omitempty"`
+	Titles      []string `json:"titles,omitempty"`
+	Help        []string `json:"help,omitempty"`
+	EnumNames   []string `json:"enum_names,omitempty"`
+	Connection  []string `json:"connection,omitempty"`
+	NodeState   []string `json:"node_state,omitempty"`
 	// Secret-kind connection notes, verbatim. The Apps page splits each one
 	// into a field label and an example value ("Notion integration token
 	// (secret_…)") and localizes the label half, so the guard needs the whole
@@ -83,7 +69,6 @@ type entry struct {
 	SecretNotes []string `json:"secret_notes,omitempty"`
 }
 
-// collect appends to a de-duplicating set.
 func collect(seen map[string]bool, out []string, values ...string) []string {
 	for _, v := range values {
 		if v == "" || seen[v] {
@@ -95,10 +80,6 @@ func collect(seen map[string]bool, out []string, values ...string) []string {
 	return out
 }
 
-// walkSchema pulls every human string out of a params_schema: the title and
-// description on each property, and the enumNames beside an enum. It recurses
-// through the places a schema nests, because a field inside an object or a
-// table's row schema is still a field somebody reads.
 func walkSchema(node any, e *entry, seen map[string]map[string]bool) {
 	m, ok := node.(map[string]any)
 	if !ok {
@@ -139,8 +120,6 @@ func walkSchema(node any, e *entry, seen map[string]map[string]bool) {
 }
 
 func main() {
-	// map[id]entry — encoding/json sorts map keys, so re-runs produce clean
-	// diffs the same way docsgen's output does.
 	out := map[string]entry{}
 	for _, m := range engine.Default.Manifests() {
 		m = core.WithPassthrough(m)

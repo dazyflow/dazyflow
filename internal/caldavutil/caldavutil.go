@@ -32,8 +32,6 @@ import (
 // defaultTimeout bounds a request when the caller sets none.
 const defaultTimeout = 30 * time.Second
 
-// Config is one tenant's calendar account, parsed and defaulted from the
-// ConnectionFields bundle on the integration page.
 type Config struct {
 	// URL is whatever the provider told the user to use. It may be a
 	// discovery root ("https://caldav.fastmail.com/"), a principal, a
@@ -51,8 +49,6 @@ type Config struct {
 	Calendar string
 }
 
-// ConfigFromConn builds a Config from a stored connection map — the shape a
-// connection verifier is handed.
 func ConfigFromConn(conn map[string]string) (Config, error) {
 	cfg := Config{
 		URL:      strings.TrimSpace(conn["url"]),
@@ -131,10 +127,7 @@ func ResolveCalendar(ctx context.Context, c *caldav.Client, cfg Config) (path st
 	return "", fmt.Errorf("no calendar called %q here — this account has: %s", want, strings.Join(names(cals), ", "))
 }
 
-// discover walks from the configured URL to the calendar collections under
-// it, trying the cheapest interpretation first.
 func discover(ctx context.Context, c *caldav.Client, cfg Config) ([]caldav.Calendar, error) {
-	// 1. The URL already names a calendar home set (or one calendar).
 	if cals, err := c.FindCalendars(ctx, cfg.URL); err == nil && len(cals) > 0 {
 		return cals, nil
 	}
@@ -200,8 +193,6 @@ func FindEventPath(ctx context.Context, c *caldav.Client, dir, uid string) (stri
 		return obj.Path, nil
 	}
 
-	// UID prop-filter: the server searches its own index rather than us
-	// walking the collection.
 	objects, err := c.QueryCalendar(ctx, dir, &caldav.CalendarQuery{
 		CompRequest: caldav.CalendarCompRequest{
 			Name:  "VCALENDAR",

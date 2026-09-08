@@ -5,9 +5,6 @@ package core
 
 import "testing"
 
-// TestPortKindDerivation pins the MIME → simplified-model mapping (Phase 1 of
-// the data-layer simplification). Manifests are unchanged; Kind() is the bridge
-// tooling/engine/UI read instead of pattern-matching MIME.
 func TestPortKindDerivation(t *testing.T) {
 	cases := []struct {
 		name string

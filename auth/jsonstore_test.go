@@ -27,8 +27,6 @@ func TestNewJSONFileStore_NormalizeOnLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open user store: %v", err)
 	}
-	// The record was written in mixed case; normalizing on load is what
-	// makes it reachable by its canonical key.
 	u, err := us.GetByEmail(ctx, "alice@acme.test")
 	if err != nil {
 		t.Fatalf("normalize was not applied on load: %v", err)

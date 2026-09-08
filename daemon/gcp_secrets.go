@@ -37,9 +37,7 @@ import (
 // cloud.google.com/go + google.golang.org/api — the provider needs one GET
 // and one token exchange; same dependency trade as the AWS provider.
 type GcpSecretsProvider struct {
-	client *gcpAPIClient
-	// loadConfig returns the calling tenant's connection config. ok=false
-	// means the tenant hasn't configured GCP.
+	client     *gcpAPIClient
 	loadConfig func(ctx context.Context, tenant string) (cfg GcpSecretsConfig, ok bool, err error)
 	cache      *tenantSecretCache
 }
@@ -58,8 +56,6 @@ func NewGcpSecretsProviderForStore(es *EncryptedSecrets, httpTimeout time.Durati
 	)
 }
 
-// VerifyGcpConfig validates a config and checks the service-account key
-// actually mints a token and the project answers. Used by the save endpoint.
 func VerifyGcpConfig(ctx context.Context, cfg GcpSecretsConfig, timeout time.Duration) error {
 	if err := cfg.validate(); err != nil {
 		return err
@@ -80,17 +76,11 @@ func (p *GcpSecretsProvider) Get(ctx context.Context, ref string) (string, error
 // project plus a pasted service-account key file (JSON). The key carries
 // the private key, so the config is itself a secret — stored encrypted.
 type GcpSecretsConfig struct {
-	ProjectID string `json:"project_id"`
-	// ServiceAccountKey is the full JSON key file from the GCP console
-	// (IAM → service accounts → keys). client_email, private_key, and
-	// token_uri are read from it.
+	ProjectID         string `json:"project_id"`
 	ServiceAccountKey string `json:"service_account_key"`
-	// Endpoint overrides the API host — tests. Empty uses
-	// https://secretmanager.googleapis.com.
-	Endpoint string `json:"endpoint,omitempty"`
+	Endpoint          string `json:"endpoint,omitempty"`
 }
 
-// gcpServiceAccountKey is the slice of the key file the auth flow needs.
 type gcpServiceAccountKey struct {
 	ClientEmail string `json:"client_email"`
 	PrivateKey  string `json:"private_key"`
@@ -129,8 +119,6 @@ func (c GcpSecretsConfig) endpointURL() string {
 	return "https://secretmanager.googleapis.com"
 }
 
-// gcpConfigSecretName is the reserved encrypted-store key for a tenant's GCP
-// connection (the "cfg:" prefix hides it from user-facing listings).
 const gcpConfigSecretName = "cfg:secret-manager-gcp"
 
 // gcpAPIClient speaks Secret Manager's REST API with service-account JWT →
@@ -211,8 +199,6 @@ func (c *gcpAPIClient) verify(ctx context.Context, cfg GcpSecretsConfig) error {
 	return err
 }
 
-// token returns a cached or freshly-exchanged OAuth access token for cfg's
-// service account.
 func (c *gcpAPIClient) token(ctx context.Context, cfg GcpSecretsConfig) (string, error) {
 	key, err := cfg.key()
 	if err != nil {
@@ -268,8 +254,6 @@ func (c *gcpAPIClient) token(ctx context.Context, cfg GcpSecretsConfig) (string,
 	return out.AccessToken, nil
 }
 
-// signGcpJWT builds the RS256 service-account assertion for the OAuth
-// jwt-bearer grant (https://developers.google.com/identity/protocols/oauth2/service-account).
 func signGcpJWT(key gcpServiceAccountKey, now time.Time) (string, error) {
 	priv, err := parseGcpPrivateKey(key.PrivateKey)
 	if err != nil {
@@ -305,8 +289,6 @@ func signGcpJWT(key gcpServiceAccountKey, now time.Time) (string, error) {
 	return signingInput + "." + base64.RawURLEncoding.EncodeToString(sig), nil
 }
 
-// parseGcpPrivateKey decodes the key file's PEM private key (PKCS#8 in
-// every key Google issues today; PKCS#1 accepted for completeness).
 func parseGcpPrivateKey(pemStr string) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode([]byte(pemStr))
 	if block == nil {
@@ -324,7 +306,6 @@ func parseGcpPrivateKey(pemStr string) (*rsa.PrivateKey, error) {
 	return nil, fmt.Errorf("private_key did not parse as PKCS#8 or PKCS#1")
 }
 
-// extractGcpError pulls error.message out of a Google API error body.
 func extractGcpError(body []byte) string {
 	var e struct {
 		Error struct {
@@ -334,7 +315,6 @@ func extractGcpError(body []byte) string {
 	if err := json.Unmarshal(body, &e); err == nil && e.Error.Message != "" {
 		return e.Error.Message
 	}
-	// OAuth endpoint errors use {error, error_description}.
 	var oe struct {
 		Error       string `json:"error"`
 		Description string `json:"error_description"`

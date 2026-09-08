@@ -9,8 +9,4 @@
 // (see DocsFooter), so a page that moves cannot leave a dead link behind.
 export { SITE, SOURCE, LICENSE, CONTACT, INVITE } from "../lib/externalLinks";
 
-// Where the docs' own brand mark leads. NOT "/" — nginx serves index.html for
-// any unmatched path, so "/" boots the SPA at a route the page map has no
-// entry for and the reader lands on "Page not found". The first guide page is
-// the docs' actual front door.
 export const DOCS_HOME = "/guide/concepts";

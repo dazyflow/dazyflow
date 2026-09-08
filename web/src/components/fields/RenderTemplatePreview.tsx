@@ -7,9 +7,6 @@ import { useAuth } from "../../auth";
 import { api } from "../../api";
 import { explainApiError } from "../../lib/explainApiError";
 
-// Ready-made starting points. Each sets a working template AND matching
-// sample data, so one click gives a non-technical user a rendering email to
-// tweak — instead of a blank field that demands Go template syntax.
 type Starter = { key: string; template: string; sample: string };
 const STARTERS: Starter[] = [
   {
@@ -56,11 +53,6 @@ const STARTERS: Starter[] = [
   },
 ];
 
-// RenderTemplatePreview shows a live, server-rendered preview of a
-// render_template step's HTML as the user edits it — the same engine the
-// flow uses at run time, so the preview is exactly what gets sent. It owns
-// an editable "sample data" JSON blob (preview input only; the real data is
-// wired in at run time) and offers one-click starter layouts.
 export function RenderTemplatePreview({
   template,
   onInsertTemplate,
@@ -77,8 +69,6 @@ export function RenderTemplatePreview({
   const [busy, setBusy] = useState(false);
   const seq = useRef(0);
 
-  // Local JSON validity — caught client-side so a half-typed sample doesn't
-  // spam the server or look like a template error.
   const jsonError = useMemo(() => {
     if (sample.trim() === "") return null;
     try {
@@ -115,9 +105,6 @@ export function RenderTemplatePreview({
         })
         .catch((e: unknown) => {
           if (id !== seq.current) return;
-          // r.error above is the template engine's own message (a syntax hint
-          // the author needs, kept raw). This catch is the preview REQUEST
-          // failing — network/5xx — so show plain guidance, not a Go string.
           setServerErr(explainApiError(e, t));
         })
         .finally(() => {

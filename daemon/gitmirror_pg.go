@@ -76,9 +76,6 @@ func (s *PgGitMirrorStore) Get(ctx context.Context, tenant, workspace string) (G
 	return m, err
 }
 
-// Upsert writes config only. The status columns are left alone so saving a
-// config change doesn't erase the last push's outcome — an admin editing the
-// remote URL should still see why the previous push failed.
 func (s *PgGitMirrorStore) Upsert(ctx context.Context, m GitMirror) error {
 	if m.Tenant == "" || m.Workspace == "" {
 		return errors.New("tenant and workspace required")
@@ -106,8 +103,6 @@ func (s *PgGitMirrorStore) Upsert(ctx context.Context, m GitMirror) error {
 	return err
 }
 
-// Delete removes the mirror entirely, status included — "stop mirroring and
-// forget where it went". Idempotent.
 func (s *PgGitMirrorStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
 	if ident == "" {
 		return 0, nil

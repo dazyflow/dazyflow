@@ -24,10 +24,7 @@ type ConnectionVerifier func(ctx context.Context, conn map[string]string) error
 
 var (
 	verifierMu sync.RWMutex
-	// verifiers is keyed by integration slug (core.ConnectionSlug of the
-	// Manifest.Integration label) so the daemon can look one up from the
-	// /apps/<slug> URL without knowing which package registered it.
-	verifiers = map[string]ConnectionVerifier{}
+	verifiers  = map[string]ConnectionVerifier{}
 )
 
 // RegisterConnectionVerifier registers fn as the verifier for an integration,
@@ -46,10 +43,6 @@ func RegisterConnectionVerifier(integration string, fn ConnectionVerifier) {
 	verifiers[slug] = fn
 }
 
-// ConnectionVerifierFor returns the verifier registered for an integration
-// slug, and whether one exists. The daemon uses the boolean to advertise
-// whether a connection is testable (the Apps page only shows a "Test
-// connection" affordance when it is).
 func ConnectionVerifierFor(slug string) (ConnectionVerifier, bool) {
 	verifierMu.RLock()
 	defer verifierMu.RUnlock()

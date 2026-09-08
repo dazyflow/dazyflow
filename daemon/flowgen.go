@@ -64,9 +64,6 @@ type generatedGraph struct {
 	Trigger *genTrigger `json:"trigger,omitempty"`
 }
 
-// flowShapeSchema is the JSON-schema for a flow graph (name + nodes + edges +
-// trigger). Shared by the agent tool's validate/emit payloads so the model
-// only learns one shape.
 func flowShapeSchema() map[string]any {
 	return map[string]any{
 		"type":        "object",
@@ -111,12 +108,6 @@ func flowShapeSchema() map[string]any {
 	}
 }
 
-// flowAgentTool is the single forced tool that drives the build LOOP. Each
-// turn the model calls `act` with one action: explore the catalog
-// (search_drops / describe_drop), check a draft (validate), or return the
-// finished flow (emit). Riding ONE forced tool keeps the loop working on the
-// existing provider adapters (single tool_choice + multi-turn messages) — no
-// adapter changes needed.
 func flowAgentTool() *llm.Tool {
 	return &llm.Tool{
 		Name:        "act",
@@ -176,8 +167,6 @@ func flowGenSystemPrompt(catalog string) string {
 		"CATALOG (id [category]: what it does | params | in→out ports | e.g. example params):\n" + catalog
 }
 
-// renderFlowGenerate is POST /api/v1/tools/flow/generate — the non-streaming
-// variant (single JSON response). The editor uses the streaming sibling.
 func (h *flowAPI) renderFlowGenerate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	body, ok := decodeRequestJSON[struct {
 		Description string          `json:"description"`
@@ -216,11 +205,6 @@ func (h *flowAPI) renderFlowGenerate(rw http.ResponseWriter, r *http.Request, p 
 	writeJSON(rw, http.StatusOK, map[string]any{"graph": graph, "issues": issues, "provider": chosen.info.Name})
 }
 
-// renderFlowGenerateStream is POST /api/v1/tools/flow/generate/stream — the
-// editor's experience. It streams progress events (text/event-stream) as the
-// generation moves through its phases, then a final "done" (with the graph)
-// or "error" frame. Streaming the validate-and-repair phases is what makes
-// the feature feel alive instead of a long spinner.
 func (h *flowAPI) renderFlowGenerateStream(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	body, ok := decodeRequestJSON[struct {
 		Description string          `json:"description"`
@@ -307,9 +291,6 @@ func (h *flowAPI) workspaceGrounding(ctx context.Context, tenant string) string 
 		b.WriteByte('\n')
 	}
 
-	// ListScoped at tenant scope hides reserved namespaces (oauth./conn./ws./
-	// flow./cfg:), so this is just the user's own org secrets — exactly the
-	// names worth reusing.
 	if names, err := h.EncryptedSecrets.ListScoped(ctx, tenant, "", ScopeTenant); err == nil && len(names) > 0 {
 		sort.Strings(names)
 		const maxSecrets = 25
@@ -324,11 +305,6 @@ func (h *flowAPI) workspaceGrounding(ctx context.Context, tenant string) string 
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// refineDesc turns a plain-English change request into a generation prompt
-// that modifies an existing flow rather than rebuilding from scratch. When no
-// base flow is supplied it returns the description unchanged. This is what
-// powers conversational refine: "make it post to #sales instead" against the
-// draft the user just saw.
 func refineDesc(base json.RawMessage, desc string) string {
 	b := strings.TrimSpace(string(base))
 	if b == "" || b == "null" {
@@ -338,9 +314,6 @@ func refineDesc(base json.RawMessage, desc string) string {
 		"\n\nModify it to satisfy this change, keeping everything else intact:\n" + desc
 }
 
-// pickProvider resolves the connected providers and selects one (the
-// requested name if connected, else the first). Returns the choice + the
-// full connected list (len 0 ⇒ none connected).
 func (h *flowAPI) pickProvider(ctx context.Context, want string) (connectedProvider, []connectedProvider) {
 	conn := h.connectedProviders(ctx)
 	if len(conn) == 0 {
@@ -358,9 +331,6 @@ func (h *flowAPI) pickProvider(ctx context.Context, want string) (connectedProvi
 	return chosen, conn
 }
 
-// generateFlow runs the grounded, structured, validate-and-repair loop and
-// returns the best graph plus any remaining lint issues. onProgress (nil-safe)
-// receives phase updates for the streaming UI.
 func (h *flowAPI) generateFlow(ctx context.Context, provider, key, desc string, mans []core.Manifest, tenant, workspace, tz string, onProgress func(phase, msg string)) (core.Graph, []core.LintIssue, error) {
 	emit := func(phase, msg string) {
 		if onProgress != nil {
@@ -407,8 +377,6 @@ func (h *flowAPI) generateFlow(ctx context.Context, provider, key, desc string, 
 		act := res.Tool
 		action, _ := act["action"].(string)
 		flowMap := actFlow(act)
-		// Dual-mode: a bare flow object (has "nodes", no "action") is an emit.
-		// Keeps single-shot providers — and every existing test — working.
 		if action == "" {
 			action = "emit"
 			if act["nodes"] != nil {
@@ -470,10 +438,6 @@ func (h *flowAPI) generateFlow(ctx context.Context, provider, key, desc string, 
 			// A bad schedule is stripped (the draft must always save) and surfaced
 			// as a warning rather than shipping a trigger that never fires.
 			cand, issues = finalizeTriggers(cand, tz)
-			// Same two gates the run-time engine uses: the security/placeholder
-			// linter and the manifest-level structural validator. Running them
-			// HERE means a guessed port or mis-wired for_each is repaired now,
-			// not surfaced as a cryptic error the first time the user hits Run.
 			checks := core.ValidateGraphFull(cand, manifestByID)
 			issues = append(issues, checks...)
 			best = cand
@@ -490,10 +454,6 @@ func (h *flowAPI) generateFlow(ctx context.Context, provider, key, desc string, 
 	return best, issues, nil
 }
 
-// finalizeTriggers validates any cron trigger with the real parser, stamps
-// the user's timezone, and drops an unparseable schedule (returning a warning
-// so the user knows to set it in the editor). Returns the graph and any
-// trigger warnings.
 func finalizeTriggers(g core.Graph, tz string) (core.Graph, []core.LintIssue) {
 	if len(g.Triggers) == 0 {
 		return g, nil
@@ -522,8 +482,6 @@ func finalizeTriggers(g core.Graph, tz string) (core.Graph, []core.LintIssue) {
 	return g, warns
 }
 
-// formatLintErrors renders the LintError-severity findings as a bullet list for
-// the model's repair turn (warnings are advisory and omitted).
 func formatLintErrors(issues []core.LintIssue) string {
 	var b strings.Builder
 	for _, is := range issues {
@@ -542,8 +500,6 @@ func formatLintErrors(issues []core.LintIssue) string {
 	return b.String()
 }
 
-// flowAgentInstructions tells the model how the build LOOP works: it calls the
-// single `act` tool repeatedly — explore, then validate, then emit.
 func flowAgentInstructions() string {
 	return "HOW TO WORK — build the flow over several steps, each one a call to the `act` tool:\n" +
 		"  • describe_drop {drop_id}: BEFORE wiring a step you're unsure of, read its exact params, ports and examples.\n" +
@@ -567,10 +523,6 @@ func strFromMap(m map[string]any, key string) string {
 	return ""
 }
 
-// agentTurn appends the model's chosen action + the tool's result to the
-// transcript as plain text turns. We deliberately don't replay tool_use/
-// tool_result blocks — forcing `act` every turn keeps the provider adapters
-// unchanged while still giving the model its own decision history.
 func agentTurn(messages *[]any, act map[string]any, result string) {
 	ab, _ := json.Marshal(act)
 	*messages = append(*messages,
@@ -579,8 +531,6 @@ func agentTurn(messages *[]any, act map[string]any, result string) {
 	)
 }
 
-// searchDropsForModel returns catalog lines whose id/summary/category/integration
-// match every query token — the in-loop search_drops result.
 func searchDropsForModel(mans []core.Manifest, query string) string {
 	q := strings.TrimSpace(strings.ToLower(query))
 	if q == "" {
@@ -696,8 +646,6 @@ func describeDropForModel(byID map[string]core.Manifest, id string) string {
 	return b.String()
 }
 
-// graphFromMap converts a flow-shaped map (the emit/validate payload, or a bare
-// single-shot flow) into a core.Graph.
 func graphFromMap(m map[string]any) (core.Graph, error) {
 	raw, _ := json.Marshal(m)
 	var gg generatedGraph
@@ -733,9 +681,6 @@ func stampGraph(g *core.Graph, tenant, workspace string) {
 	}
 }
 
-// compactCatalog renders the registered steps as a token-efficient catalog
-// the model grounds on: one line per step with id, category, summary, params
-// (name + type, * = required), and input→output ports.
 func compactCatalog(mans []core.Manifest) string {
 	rows := make([]string, 0, len(mans))
 	for _, m := range mans {
@@ -788,10 +733,6 @@ func compactPorts(ports []core.Port) string {
 	return strings.Join(parts, ",")
 }
 
-// compactExample renders the first worked example's params as a single-line
-// JSON snippet the model can copy and adjust — the richest grounding signal,
-// already mandatory on every manifest at registration. Truncated to keep the
-// catalog token-efficient; empty when the params don't parse.
 func compactExample(exs []core.ParamsExample) string {
 	if len(exs) == 0 || len(exs[0].Params) == 0 {
 		return ""
@@ -820,8 +761,6 @@ func compactExample(exs []core.ParamsExample) string {
 	return s
 }
 
-// replaceWithMarker matches the REPLACE_WITH_<TOKEN> fill-me placeholders that
-// ship inside some manifest examples (mirrors core.lint's pattern).
 var replaceWithMarker = regexp.MustCompile(`REPLACE_WITH_([A-Z0-9_]+)`)
 
 func compactParams(schema json.RawMessage) string {

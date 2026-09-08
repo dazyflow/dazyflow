@@ -5,11 +5,11 @@ package core
 
 import "testing"
 
-// TestLintTriggers_PlaintextSecret covers the warning for a literal trigger
-// secret. The value ends up in the flow's committed git history in cleartext,
-// so the lint points authors at a ${secret.NAME} reference instead — while
-// staying a warning, because graphs saved before references existed still
-// carry raw values and must keep working.
+// Covers the warning for a literal trigger secret. The value ends up in the
+// flow's committed git history in cleartext, so the lint points authors at a
+// ${secret.NAME} reference instead — while staying a warning, because graphs
+// saved before references existed still carry raw values and must keep
+// working.
 func TestLintTriggers_PlaintextSecret(t *testing.T) {
 	has := func(issues []LintIssue, code string) bool {
 		for _, i := range issues {

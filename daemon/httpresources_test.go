@@ -18,10 +18,6 @@ func putResourceBodyJSON(typ string, config map[string]any) []byte {
 	return b
 }
 
-// saveFlowGraph creates a flow graph owned by the harness principal ("alice")
-// so flow-scoped secret/resource CRUD authorizes (authorizeFlowSecretScope
-// resolves the flow's graph and gates on AuthorizeGraphEdit/View — a flow that
-// doesn't exist is correctly rejected as forbidden).
 func saveFlowGraph(t *testing.T, h *gatewayHarness, id string) {
 	t.Helper()
 	if _, err := h.ws.Save(core.Graph{ID: id, Tenant: "t", Workspace: "ws", Owner: "alice"}, "alice"); err != nil {
@@ -60,7 +56,6 @@ func TestResources_FlowCRUDRoundTrip(t *testing.T) {
 		t.Errorf("resource = %+v", r)
 	}
 
-	// Delete, then it's gone.
 	if rw := h.do(t, "DELETE", "/api/v1/resources/leads?scope=flow&flow=f1", nil); rw.Code != http.StatusNoContent {
 		t.Fatalf("DELETE status=%d", rw.Code)
 	}
@@ -77,7 +72,6 @@ func TestResources_HiddenFromSecretsListing(t *testing.T) {
 	saveFlowGraph(t, h, "f1")
 	h.do(t, "PUT", "/api/v1/resources/leads?scope=flow&flow=f1",
 		json.RawMessage(putResourceBodyJSON("google_sheet", map[string]any{"spreadsheet_id": "S1"})))
-	// A flow secret too, to be sure the listing works at all.
 	h.do(t, "PUT", "/api/v1/secrets/MY_KEY?scope=flow&flow=f1", json.RawMessage(putBody("v")))
 
 	rw := h.do(t, "GET", "/api/v1/secrets?scope=flow&flow=f1", nil)
@@ -96,7 +90,6 @@ func TestResources_RejectsBadInput(t *testing.T) {
 	t.Parallel()
 	h := newSecretsHarness(t)
 	saveFlowGraph(t, h, "f1")
-	// Empty type.
 	rw := h.do(t, "PUT", "/api/v1/resources/leads?scope=flow&flow=f1",
 		json.RawMessage(putResourceBodyJSON("", map[string]any{})))
 	if rw.Code != http.StatusBadRequest {
@@ -113,7 +106,6 @@ func TestResources_RejectsBadInput(t *testing.T) {
 func TestReferences_IncludesResources(t *testing.T) {
 	t.Parallel()
 	h := newSecretsHarness(t)
-	// A flow with one node so the references endpoint loads a real graph.
 	g := core.Graph{
 		ID: "rf", Tenant: "t", Workspace: "ws",
 		Nodes: []core.Node{{ID: "n1", Module: "sheets_append_row", Params: map[string]any{"spreadsheet_id": "S"}}},

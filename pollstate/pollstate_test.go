@@ -12,7 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// memStore is an in-memory Reader/Writer pair for tests.
 func memStore() (Reader, Writer, map[string]string) {
 	m := map[string]string{}
 	r := func(_ context.Context, tenant, name string) (string, error) {
@@ -50,7 +49,6 @@ func TestReportRoundTrip(t *testing.T) {
 
 func TestReportNoopWhenUnwired(t *testing.T) {
 	SetStore(nil, nil)
-	// Must not panic and Read returns nil.
 	Report(context.Background(), core.Job{Tenant: "t", GraphID: "g"}, false)
 	if m := Read(context.Background(), "t", "g"); m != nil {
 		t.Fatalf("expected nil marker when unwired, got %+v", m)
@@ -75,8 +73,6 @@ func TestNameStable(t *testing.T) {
 	}
 }
 
-// errStore returns a Reader/Writer pair whose calls fail, to exercise the
-// best-effort error paths in Report and Read.
 func errStore(raw string, rerr, werr error) (Reader, Writer) {
 	r := func(_ context.Context, _, _ string) (string, error) {
 		return raw, rerr

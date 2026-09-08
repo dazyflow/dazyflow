@@ -27,7 +27,6 @@ const maxResponseBytes = 4 << 20 // 4 MiB — Messages responses are small
 
 var httpBase = apibase.New("https://api.twilio.com/2010-04-01")
 
-// SetHTTPBase swaps the Twilio API root (tests point it at httptest).
 func SetHTTPBase(base string) { httpBase.Set(base) }
 
 func baseURL(job core.Job) string { return httpBase.For(job) }
@@ -45,9 +44,6 @@ func resolveCreds(job core.Job) (sid, token string, err error) {
 	return sid, token, nil
 }
 
-// twilioDo runs one authenticated, form-encoded Twilio API call (HTTP Basic
-// with the Account SID + Auth Token). Returns status + body; the caller maps
-// non-2xx via extractTwilioError.
 func twilioDo(ctx context.Context, job core.Job, method, url, form string) (int, []byte, error) {
 	timeoutMS := params.TimeoutMS(job, 15000)
 	sid, token, err := resolveCreds(job)
@@ -58,8 +54,6 @@ func twilioDo(ctx context.Context, job core.Job, method, url, form string) (int,
 	if form != "" {
 		b = []byte(form)
 	}
-	// HTTP Basic: encode the Account SID + Auth Token into the Authorization
-	// header (the same scheme req.SetBasicAuth applies).
 	headers := map[string]string{
 		"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(sid+":"+token)),
 	}
@@ -73,10 +67,6 @@ func twilioDo(ctx context.Context, job core.Job, method, url, form string) (int,
 	return status, raw, err
 }
 
-// extractTwilioError pulls the message (plus code) out of a Twilio error body,
-// so "The 'To' number is not a valid phone number" reaches the user instead of
-// a bare HTTP status. Twilio's {message,code} shape is the shared one, so this
-// is a thin wrapper over params.APIErrorMessage.
 func extractTwilioError(body []byte) string {
 	return params.APIErrorMessage(body, 200)
 }

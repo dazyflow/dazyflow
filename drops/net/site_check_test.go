@@ -20,8 +20,6 @@ func checkJob(url string, extra map[string]any) core.Job {
 	return core.Job{ID: "j", GraphID: "flow1", NodeID: "check", Tenant: "acme", Params: p}
 }
 
-// The point of the step: one alert when it breaks, silence while it stays
-// broken, one message when it comes back.
 func TestSiteCheck_FiresOnTransitionsOnly(t *testing.T) {
 	SetAllowPrivateEgress(true)
 	defer SetAllowPrivateEgress(false)
@@ -33,7 +31,6 @@ func TestSiteCheck_FiresOnTransitionsOnly(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Baseline: up, nothing fires.
 	res, err := executeSiteCheck(context.Background(), checkJob(srv.URL, nil), nil)
 	if err != nil || res.Status != core.StatusOK {
 		t.Fatalf("status=%q error=%+v", res.Status, res.Error)
@@ -45,7 +42,6 @@ func TestSiteCheck_FiresOnTransitionsOnly(t *testing.T) {
 		t.Errorf("up = %v", res.Output["up"].Inline)
 	}
 
-	// It breaks: fires once.
 	code = 503
 	res, _ = executeSiteCheck(context.Background(), checkJob(srv.URL, nil), nil)
 	down, fired := res.Output["on_down"]
@@ -56,7 +52,6 @@ func TestSiteCheck_FiresOnTransitionsOnly(t *testing.T) {
 		t.Errorf("Went down = %q, want the status in it", msg)
 	}
 
-	// Still broken: silent.
 	res, _ = executeSiteCheck(context.Background(), checkJob(srv.URL, nil), nil)
 	if _, fired := res.Output["on_down"]; fired {
 		t.Error("a site that is still down must not fire again")
@@ -65,7 +60,6 @@ func TestSiteCheck_FiresOnTransitionsOnly(t *testing.T) {
 		t.Errorf("up = %v while down", res.Output["up"].Inline)
 	}
 
-	// Recovers: fires once on the way back.
 	code = 200
 	res, _ = executeSiteCheck(context.Background(), checkJob(srv.URL, nil), nil)
 	if _, fired := res.Output["on_up"]; !fired {
@@ -77,7 +71,6 @@ func TestSiteCheck_FiresOnTransitionsOnly(t *testing.T) {
 	}
 }
 
-// A site that is already down on the very first check is news.
 func TestSiteCheck_FirstCheckDownFires(t *testing.T) {
 	SetAllowPrivateEgress(true)
 	defer SetAllowPrivateEgress(false)
@@ -94,7 +87,6 @@ func TestSiteCheck_FirstCheckDownFires(t *testing.T) {
 	}
 }
 
-// The server that answers 200 with an error page.
 func TestSiteCheck_ExpectText(t *testing.T) {
 	SetAllowPrivateEgress(true)
 	defer SetAllowPrivateEgress(false)

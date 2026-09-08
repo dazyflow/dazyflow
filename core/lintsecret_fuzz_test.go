@@ -5,20 +5,7 @@ package core
 
 import "testing"
 
-// FuzzKnownSecretPrefilter pins matchesKnownSecret to the regex it fronts.
-//
-// The pre-filter is what makes the hardcoded-secret lint affordable on every
-// autosave, but it is a claim about the pattern — that every alternative of
-// knownSecretValue contains one of secretValueMarkers, and that none can match
-// a string shorter than minKnownSecretLen. If that claim is ever wrong, the
-// lint stops reporting a pasted credential and says nothing at all, which is
-// the failure mode worth fuzzing for: silent, and on the security path.
-//
-// Editing knownSecretValue without editing the markers is exactly the change
-// this catches.
 func FuzzKnownSecretPrefilter(f *testing.F) {
-	// One real example per alternative, so the corpus covers every branch the
-	// pre-filter has to let through.
 	for _, s := range []string{
 		"sk_live_abcdefghijklmnop",
 		"sk_test_abcdefghijklmnop",

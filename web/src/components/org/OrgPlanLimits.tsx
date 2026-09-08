@@ -20,10 +20,6 @@ import { ICON } from "../../icons";
 import { useEscapeToClose } from "../ui/useEscapeToClose";
 import { NBSP } from "../../lib/format";
 
-// PlanLimitsSection shows an org's effective plan + limits and lets a
-// platform admin assign a tier, grant/force a plan (trial, comp, force
-// free/pro), and override individual limits on top. Self-fetching so the
-// org detail page just drops it in.
 export function PlanLimitsSection({ tenant }: { tenant: string }) {
   const { t } = useTranslation();
   const { token } = useAuth();
@@ -120,7 +116,6 @@ export function PlanLimitsSection({ tenant }: { tenant: string }) {
   );
 }
 
-// numOrNull maps the override inputs: "" → null (inherit), else a number.
 function numOrNull(s: string): number | null {
   const trimmed = s.trim();
   if (trimmed === "") return null;
@@ -147,7 +142,6 @@ function EntitlementEditor({
   const { token } = useAuth();
   const [busy, setBusy] = useState(false);
   const [tierID, setTierID] = useState(ent.tier_id || "free");
-  // plan grant radio: "" inherit, "free", "pro"
   const [planOverride, setPlanOverride] = useState(ent.plan_override ?? "");
   const [comped, setComped] = useState(!!ent.comped);
   const [trial, setTrial] = useState(ent.trial_ends_at ? ent.trial_ends_at.slice(0, 10) : "");
@@ -162,7 +156,6 @@ function EntitlementEditor({
   const [diskMB, setDiskMB] = useState(
     ent.disk_quota_bytes ? String(Math.round(ent.disk_quota_bytes / (1024 * 1024))) : "",
   );
-  // polling override tri-state: "inherit" | "on" | "off"
   const [polling, setPolling] = useState(
     ent.polling_allowed === null || ent.polling_allowed === undefined
       ? "inherit"

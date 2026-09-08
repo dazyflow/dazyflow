@@ -12,7 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/daemon"
 )
 
-// waitForPaused subscribes and blocks until a Paused event arrives.
 func waitForPaused(t *testing.T, bus *daemon.MemoryBus, graphRunID string, timeout time.Duration) daemon.PausedEvent {
 	t.Helper()
 	events, cancel := bus.Subscribe(graphRunID)
@@ -34,9 +33,6 @@ func waitForPaused(t *testing.T, bus *daemon.MemoryBus, graphRunID string, timeo
 	}
 }
 
-// TestBreakpoint_PauseThenContinue covers the breakpoint pause path
-// (shouldPauseAfter, addPaused) and Service.ResumeGraphRun → resumeFrom: a
-// node carrying a breakpoint holds the run until Continue re-drives it.
 func TestBreakpoint_PauseThenContinue(t *testing.T) {
 	t.Parallel()
 	h := newWorkerHarness(t, 1)
@@ -51,14 +47,11 @@ func TestBreakpoint_PauseThenContinue(t *testing.T) {
 			{From: "a", FromPort: "pass", To: "b", ToPort: "pass"},
 		},
 	}
-	// Manual: a breakpoint only pauses a run somebody started and is watching,
-	// which is what the editor's Run button submits.
 	graphRunID, err := h.svc.SubmitGraphOpts(t.Context(), h.principal, g, daemon.SubmitOpts{Manual: true})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
 
-	// The run pauses after "a" (breakpoint) without dispatching "b".
 	paused := waitForPaused(t, h.bus, graphRunID, 5*time.Second)
 	if paused.NodeID != "a" {
 		t.Fatalf("paused after %q, want a", paused.NodeID)
@@ -68,7 +61,6 @@ func TestBreakpoint_PauseThenContinue(t *testing.T) {
 		t.Fatal("b dispatched before resume")
 	}
 
-	// Continue (step=false): resumeFrom dispatches b and the graph completes.
 	if err := h.svc.ResumeGraphRun(t.Context(), h.principal, graphRunID, false); err != nil {
 		t.Fatalf("ResumeGraphRun: %v", err)
 	}
@@ -77,7 +69,6 @@ func TestBreakpoint_PauseThenContinue(t *testing.T) {
 		t.Fatalf("status = %q, want succeeded", terminal.Status)
 	}
 
-	// Resuming a run that's no longer paused is a conflict.
 	if err := h.svc.ResumeGraphRun(t.Context(), h.principal, graphRunID, false); err == nil {
 		t.Fatal("ResumeGraphRun on a finished run should error")
 	}
@@ -103,8 +94,6 @@ func TestBreakpoint_UnattendedRunDoesNotPause(t *testing.T) {
 			{From: "a", FromPort: "pass", To: "b", ToPort: "pass"},
 		},
 	}
-	// No Manual: this is the shape every trigger submits (scheduler, webhook,
-	// hosted form).
 	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, g)
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
@@ -115,8 +104,6 @@ func TestBreakpoint_UnattendedRunDoesNotPause(t *testing.T) {
 	}
 }
 
-// TestResumeGraphRun_NotFound covers the early-return guards of
-// ResumeGraphRun: an unknown run id surfaces an error.
 func TestResumeGraphRun_NotFound(t *testing.T) {
 	t.Parallel()
 	h := newWorkerHarness(t, 0)

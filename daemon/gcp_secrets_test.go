@@ -23,8 +23,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// gcpTestKey mints an RSA service-account key file whose token_uri points at
-// tokenURL, returning the JSON and the public key a fake verifies with.
 func gcpTestKey(t *testing.T, tokenURL string) (string, *rsa.PublicKey) {
 	t.Helper()
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -45,9 +43,6 @@ func gcpTestKey(t *testing.T, tokenURL string) (string, *rsa.PublicKey) {
 	return string(key), &priv.PublicKey
 }
 
-// gcpHarness runs one fake server with both the OAuth token endpoint
-// (/token — VERIFIES the RS256 assertion against the generated key before
-// issuing "tok_ok") and the Secret Manager API (requires that bearer token).
 type gcpHarness struct {
 	cfg      GcpSecretsConfig
 	provider *GcpSecretsProvider
@@ -146,7 +141,6 @@ func TestGcpSecretsProvider_GetAndAuth(t *testing.T) {
 	if _, err := h.provider.Get(ctx, "ghost"); err == nil || !strings.Contains(err.Error(), "Secret not found") {
 		t.Errorf("ghost err = %v", err)
 	}
-	// The OAuth token is cached: three lookups, one exchange.
 	if tokenCalls != 1 {
 		t.Errorf("token exchanges = %d, want 1 (cached)", tokenCalls)
 	}
@@ -174,8 +168,6 @@ func TestVerifyGcpConfig(t *testing.T) {
 		t.Errorf("verify valid-but-empty project: %v", err)
 	}
 
-	// A key the token endpoint rejects (different RSA key → bad signature)
-	// fails verification.
 	badKey, _ := gcpTestKey(t, h.cfg.Endpoint+"/token")
 	bad := h.cfg
 	bad.ServiceAccountKey = badKey
@@ -184,7 +176,6 @@ func TestVerifyGcpConfig(t *testing.T) {
 		t.Errorf("bad key verify err = %v", err)
 	}
 
-	// Validation failures fire before any network call.
 	if err := VerifyGcpConfig(t.Context(), GcpSecretsConfig{ProjectID: "p", ServiceAccountKey: "{}"}, time.Second); err == nil ||
 		!strings.Contains(err.Error(), "client_email and private_key") {
 		t.Errorf("empty key err = %v", err)
@@ -222,16 +213,12 @@ func TestGcpConfig_StorageRoundTrip(t *testing.T) {
 	}
 }
 
-// TestParseGcpPrivateKey_Variants covers the PKCS#1 acceptance path and both
-// failure branches (non-PEM and an unparseable DER block) that the PKCS#8
-// happy path in the existing harness doesn't reach.
 func TestParseGcpPrivateKey_Variants(t *testing.T) {
 	t.Parallel()
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("genkey: %v", err)
 	}
-	// PKCS#1 ("RSA PRIVATE KEY") is accepted.
 	pkcs1 := pem.EncodeToMemory(&pem.Block{
 		Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv),
 	})
@@ -239,33 +226,26 @@ func TestParseGcpPrivateKey_Variants(t *testing.T) {
 		t.Errorf("PKCS#1 key should parse: %v", err)
 	}
 
-	// Not PEM at all.
 	if _, err := parseGcpPrivateKey("not a pem"); err == nil ||
 		!strings.Contains(err.Error(), "not valid PEM") {
 		t.Errorf("non-PEM err = %v", err)
 	}
 
-	// A PEM block whose bytes are neither PKCS#8 nor PKCS#1.
 	junk := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: []byte("garbage")})
 	if _, err := parseGcpPrivateKey(string(junk)); err == nil {
 		t.Error("garbage DER should fail to parse")
 	}
 }
 
-// TestGcpConfig_EndpointAndKeyDefaults covers endpointURL's default branch and
-// key()'s token_uri default.
 func TestGcpConfig_EndpointAndKeyDefaults(t *testing.T) {
 	t.Parallel()
-	// Default endpoint when none configured.
 	if got := (GcpSecretsConfig{}).endpointURL(); got != "https://secretmanager.googleapis.com" {
 		t.Errorf("default endpoint = %q", got)
 	}
-	// Trailing slash trimmed when overridden.
 	if got := (GcpSecretsConfig{Endpoint: "https://x.test/"}).endpointURL(); got != "https://x.test" {
 		t.Errorf("override endpoint = %q", got)
 	}
 
-	// key() fills in the default token_uri when the key file omits it.
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 	der, _ := x509.MarshalPKCS8PrivateKey(priv)
 	pemStr := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
@@ -281,14 +261,11 @@ func TestGcpConfig_EndpointAndKeyDefaults(t *testing.T) {
 		t.Errorf("default token_uri = %q", k.TokenURI)
 	}
 
-	// Malformed key JSON is rejected.
 	if _, err := (GcpSecretsConfig{ProjectID: "p", ServiceAccountKey: "{not json"}).key(); err == nil {
 		t.Error("malformed key JSON should fail")
 	}
 }
 
-// TestGcpAPIClient_TokenError covers token()'s key-parse failure path:
-// accessSecret bubbles a bad key up before any network call.
 func TestGcpAPIClient_TokenError(t *testing.T) {
 	t.Parallel()
 	c := newGcpAPIClient(0) // also covers the timeout<=0 default branch
@@ -298,8 +275,6 @@ func TestGcpAPIClient_TokenError(t *testing.T) {
 	}
 }
 
-// TestNewGcpSecretsProviderForStore_Wired covers the production constructor's
-// loadConfig closure for a tenant with no stored GCP config.
 func TestNewGcpSecretsProviderForStore_Wired(t *testing.T) {
 	t.Parallel()
 	es := newTestSecrets(t)

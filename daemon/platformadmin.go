@@ -33,17 +33,13 @@ import (
 // keeps the per-session-issue Granted lookup off the DB hot path; writes
 // refresh it and a ticker catches cross-node changes.
 
-// PlatformAdminGrant is one runtime grant row.
 type PlatformAdminGrant struct {
 	Email     string    `json:"email"`
 	GrantedBy string    `json:"granted_by"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// PlatformAdminStore is the runtime platform-admin grant boundary.
 type PlatformAdminStore interface {
-	// Granted reports whether email currently holds a runtime grant. Reads the
-	// cached snapshot, so it's cheap and safe to call at every session issue.
 	Granted(email string) bool
 	Grant(ctx context.Context, email, grantedBy string) error
 	Revoke(ctx context.Context, email string) error
@@ -67,12 +63,10 @@ CREATE TABLE IF NOT EXISTS platform_admins (
 );
 `
 
-// EnsurePgPlatformAdminSchema creates the platform_admins table. Idempotent.
 func EnsurePgPlatformAdminSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return pgstore.ApplySchema(ctx, pool, pgPlatformAdminSchema)
 }
 
-// PgPlatformAdminStore is the Postgres PlatformAdminStore with a cached snapshot.
 type PgPlatformAdminStore struct {
 	pool   *pgxpool.Pool
 	logger *log.Logger
@@ -81,8 +75,6 @@ type PgPlatformAdminStore struct {
 	granted map[string]struct{}
 }
 
-// NewPgPlatformAdminStore creates the schema, loads the snapshot, and starts the
-// cross-node refresh loop.
 func NewPgPlatformAdminStore(ctx context.Context, pool *pgxpool.Pool) (*PgPlatformAdminStore, error) {
 	if err := EnsurePgPlatformAdminSchema(ctx, pool); err != nil {
 		return nil, err
@@ -99,8 +91,6 @@ func NewPgPlatformAdminStore(ctx context.Context, pool *pgxpool.Pool) (*PgPlatfo
 	return s, nil
 }
 
-// normalizeEmail lowercases + trims so the snapshot and lookups agree with the
-// env allowlist's normalization (see HTTPGateway.isPlatformAdminEmail).
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
@@ -151,8 +141,6 @@ func (s *PgPlatformAdminStore) AnonymizeGrantedBy(ctx context.Context, email str
 	if err != nil {
 		return 0, err
 	}
-	// granted_by does not feed the cached grant set (only email does), so no
-	// reload is needed here — unlike Grant/Revoke.
 	return int(tag.RowsAffected()), nil
 }
 

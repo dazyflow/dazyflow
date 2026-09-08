@@ -19,8 +19,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/jobstore"
 )
 
-// approvalHarness builds a full stack (service + worker + approval
-// listener) and returns the pieces the test asserts against.
 type approvalHarness struct {
 	svc        *daemon.Service
 	store      core.JobStore
@@ -79,10 +77,6 @@ func newApprovalHarness(t *testing.T) *approvalHarness {
 	}
 }
 
-// TestAwaitApproval_E2E_ApproveResumesDownstream is the headline test.
-// A graph with sleep → await_approval → sleep submits, parks on the
-// approval, an external POST approves, and the downstream sleep runs
-// and the graph finalizes successfully.
 func TestAwaitApproval_E2E_ApproveResumesDownstream(t *testing.T) {
 	h := newApprovalHarness(t)
 
@@ -113,7 +107,6 @@ func TestAwaitApproval_E2E_ApproveResumesDownstream(t *testing.T) {
 		t.Fatalf("SubmitGraph: %v", err)
 	}
 
-	// Wait until the approval node has parked.
 	var askRec core.JobRecord
 	waitFor(t, "ask node to reach awaiting", func() bool {
 		askRec, _ = h.store.Get(t.Context(), daemon.NodeJobID(runID, "ask"))
@@ -127,8 +120,6 @@ func TestAwaitApproval_E2E_ApproveResumesDownstream(t *testing.T) {
 		t.Fatalf("graph already terminal while awaiting: %q", graphRec.Status)
 	}
 
-	// And neither downstream branch has fired yet — both should be
-	// absent from the store.
 	if _, err := h.store.Get(t.Context(), daemon.NodeJobID(runID, "execute")); err == nil {
 		t.Errorf("execute fired before approval")
 	}
@@ -136,7 +127,6 @@ func TestAwaitApproval_E2E_ApproveResumesDownstream(t *testing.T) {
 		t.Errorf("denied fired before approval")
 	}
 
-	// Hit the approval URL the module emitted on pending_url.
 	approvalURL, _ := askRec.Result.Output["pending_url"].Inline.(string)
 	if !strings.Contains(approvalURL, "/approve/") {
 		t.Fatalf("pending_url malformed: %q", approvalURL)
@@ -151,13 +141,11 @@ func TestAwaitApproval_E2E_ApproveResumesDownstream(t *testing.T) {
 		t.Fatalf("approve status = %d", resp.StatusCode)
 	}
 
-	// Wait for the graph to finalize.
 	terminal := waitForFire(t, h.store, runID)
 	if terminal != core.JobStatusSucceeded {
 		t.Fatalf("terminal status = %q", terminal)
 	}
 
-	// The approved branch ran; the rejected branch was skipped.
 	exec, _ := h.store.Get(t.Context(), daemon.NodeJobID(runID, "execute"))
 	if exec.Status != core.JobStatusSucceeded {
 		t.Errorf("execute status = %q, want succeeded", exec.Status)
@@ -167,8 +155,6 @@ func TestAwaitApproval_E2E_ApproveResumesDownstream(t *testing.T) {
 		t.Errorf("denied status = %q, want skipped", denied.Status)
 	}
 
-	// The resumed ask record routed the Value out the approved port (and
-	// not rejected), and carries the approver.
 	resumed, _ := h.store.Get(t.Context(), daemon.NodeJobID(runID, "ask"))
 	if resumed.Status != core.JobStatusSucceeded {
 		t.Errorf("ask status = %q, want succeeded", resumed.Status)
@@ -184,8 +170,6 @@ func TestAwaitApproval_E2E_ApproveResumesDownstream(t *testing.T) {
 	}
 }
 
-// TestAwaitApproval_E2E_RejectRoutesToRejectedBranch flips the decision:
-// the approved branch should be skipped, the rejected branch should run.
 func TestAwaitApproval_E2E_RejectRoutesToRejectedBranch(t *testing.T) {
 	h := newApprovalHarness(t)
 	role := core.Role{Name: "editor", Permissions: []core.Permission{
@@ -249,9 +233,8 @@ func TestAwaitApproval_E2E_RejectRoutesToRejectedBranch(t *testing.T) {
 	}
 }
 
-// TestAwaitApproval_E2E_DoubleApproveIs409 verifies that a second
-// approval call on a now-succeeded node returns a conflict rather than
-// silently double-firing dependents.
+// Verifies that a second approval call on a now-succeeded node returns a
+// conflict rather than silently double-firing dependents.
 func TestAwaitApproval_E2E_DoubleApproveIs409(t *testing.T) {
 	h := newApprovalHarness(t)
 	role := core.Role{Name: "editor", Permissions: []core.Permission{

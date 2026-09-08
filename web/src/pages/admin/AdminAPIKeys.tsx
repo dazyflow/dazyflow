@@ -26,9 +26,6 @@ export function AdminAPIKeys() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState("");
-  // confirmRevoke holds the key id the operator is being asked about;
-  // null = no dialog. Inline (no modal portal) so the focus stays on
-  // the row they're acting on.
   const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
   // Holds the just-minted key so the UI can show the secret once.
   // Clearing it (close) is one-way; the secret is never recoverable.
@@ -57,8 +54,6 @@ export function AdminAPIKeys() {
     void refresh();
   }, [refresh]);
 
-  // Pre-compute the filtered view so the table + the empty-after-filter
-  // copy can both read from one source.
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return keys;
@@ -279,8 +274,6 @@ function APIKeyRow({
 
 function StatusBadge({ status }: { status: APIKeySummary["status"] }) {
   const { t } = useTranslation();
-  // Map status to a label + tone class; CSS picks the colour from
-  // .key-status.<status>.
   const label =
     status === "active"
       ? t("admin.apiKeys.statusActive")

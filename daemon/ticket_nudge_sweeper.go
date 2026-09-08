@@ -22,15 +22,10 @@ import (
 // where "am I the leader" is trivially yes.
 type TicketNudgeSweeper struct {
 	Tickets core.TicketStore
-	// After is how long a message may sit unread before its side is reminded.
-	After time.Duration
-	// Leader reports whether this instance should act. nil means always.
-	Leader func() bool
-	// Notify sends the reminder and is called at most once per ticket per pass.
-	// A function rather than the gateway so the sweep is testable without SMTP.
-	Notify func(t core.Ticket, side NudgeSide, waiting time.Duration)
-	// Now is injectable for tests; nil means time.Now.
-	Now func() time.Time
+	After   time.Duration
+	Leader  func() bool
+	Notify  func(t core.Ticket, side NudgeSide, waiting time.Duration)
+	Now     func() time.Time
 }
 
 // ticketNudgeBatch bounds one pass. Large enough that a real queue is covered
@@ -46,7 +41,6 @@ func (s *TicketNudgeSweeper) now() time.Time {
 	return time.Now()
 }
 
-// Sweep sends the reminders due right now and returns how many it sent.
 func (s *TicketNudgeSweeper) Sweep(ctx context.Context) (int, error) {
 	if s.Tickets == nil || s.Notify == nil || s.After <= 0 {
 		return 0, nil
@@ -91,9 +85,6 @@ func (s *TicketNudgeSweeper) Sweep(ctx context.Context) (int, error) {
 	return sent, nil
 }
 
-// lastHumanMessageAt is when the thread last had something said on it by a
-// person, which is what the reminder means by "waiting". System notes do not
-// count, for the same reason they do not decide who owes a reply.
 func lastHumanMessageAt(msgs []core.TicketMessage) time.Time {
 	var at time.Time
 	for _, m := range msgs {

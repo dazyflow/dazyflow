@@ -15,12 +15,6 @@ import (
 // tenant can see in its palette, and the refusal to send a file path to a
 // machine that cannot read it.
 
-// ---- the reserved namespace -------------------------------------------
-
-// The runner/ prefix is reserved, and the native registry is what reserves it.
-// Nothing produces such ids today, so this test is the only thing keeping the
-// prefix from being quietly claimed by a built-in before anyone decides whether
-// a namespaced remote scheme should come back.
 func TestRegistry_RefusesTheRunnerNamespace(t *testing.T) {
 	reg := NewRegistry()
 	err := reg.Register(NativeDrop{
@@ -117,8 +111,6 @@ func TestManifests_UnscopedCarriesNoRunners(t *testing.T) {
 	}
 }
 
-// ---- the inline-only bound --------------------------------------------
-
 // Ref.Ref is a path on the DAEMON's disk. Sending it to a step that cannot read
 // it would fail inside the org's own code, reporting a missing file the org
 // would reasonably read as their bug. Refuse before the step runs, naming the
@@ -141,14 +133,11 @@ func TestRefuseInlineOnlyFileRefs(t *testing.T) {
 	if err == nil {
 		t.Fatal("a file path reached a port that cannot read one")
 	}
-	// The message has to name the cause, the port, and the fix — this is the
-	// error a flow author reads when their file-wired step stops working.
 	for _, want := range []string{"in", "invoices/march.csv", "value"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("err = %q, missing %q", err.Error(), want)
 		}
 	}
-	// An inline value on the same port is the supported shape.
 	if err := refuseInlineOnlyFileRefs(m, map[string]core.Ref{
 		"in": {Inline: "march", MIME: "text/plain"},
 	}); err != nil {
@@ -191,8 +180,6 @@ func TestExecute_AllowsInlineValues(t *testing.T) {
 	}
 }
 
-// The bound is declared on the manifest so the editor can say so on the port,
-// rather than leaving a flow author to discover it from a failed run.
 func TestRunnerManifest_MarksInputsInlineOnly(t *testing.T) {
 	m := inlineOnlyInputs(core.Manifest{
 		ID: "fetch",
@@ -207,16 +194,12 @@ func TestRunnerManifest_MarksInputsInlineOnly(t *testing.T) {
 			t.Errorf("input %q not marked inline-only", p.Port)
 		}
 	}
-	// Outputs are unaffected: a runner may well return a value the daemon then
-	// writes to a file itself.
 	for _, p := range m.Outputs {
 		if p.InlineOnly {
 			t.Errorf("output %q was marked inline-only", p.Port)
 		}
 	}
 }
-
-// ---- presentation, and the one category a runner may not claim ----------
 
 // A runner declares its own icon, category, description and tags. Without
 // them its step lands in the palette as a generic box that search cannot find,
@@ -262,8 +245,6 @@ func TestManifestFromPB_DropsAnUnknownCategory(t *testing.T) {
 	if m.Category != "" {
 		t.Errorf("category = %q, want it dropped", m.Category)
 	}
-	// A control: the categories a runner MAY hold still come through, so this
-	// is not just dropping everything.
 	for c := range RunnerCategories {
 		if got := manifestFromPB(&nodepb.Manifest{Id: "x", Category: c}).Category; got != c {
 			t.Errorf("category %q was dropped", c)
@@ -291,7 +272,6 @@ func TestRegister_RefusesADropIdABuiltInAlreadyOwns(t *testing.T) {
 			t.Errorf("err = %q, missing %q", err.Error(), want)
 		}
 	}
-	// Refused whole: nothing half-registered.
 	if _, ok := c.Get("acme", "http_request"); ok {
 		t.Error("the refused drop was filed anyway")
 	}

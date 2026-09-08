@@ -11,8 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/jobstore"
 )
 
-// recordSkippedFire writes a terminal "skipped" graph run so a cap-blocked
-// scheduled fire shows up in the Runs list.
 func TestRecordSkippedFire(t *testing.T) {
 	t.Parallel()
 	jobs := jobstore.NewMemory()
@@ -32,13 +30,9 @@ func TestRecordSkippedFire(t *testing.T) {
 	if recs[0].GraphID != "daily" || recs[0].Workspace != "ws" {
 		t.Errorf("marker = %+v, want graph=daily ws=ws", recs[0])
 	}
-	// No Jobs store → no-op, no panic.
 	(&Service{}).recordSkippedFire(t.Context(), "t", "ws", "daily", "plan_run_cap", "x")
 }
 
-// The Runs-list marker is coalesced to one per flow per window so a
-// frequent cron at the cap doesn't flood the list; the precise count lives
-// in the usage counter instead.
 func TestSchedulerSkipMarkerCoalesces(t *testing.T) {
 	t.Parallel()
 	sched := NewScheduler(&Service{})
@@ -54,9 +48,6 @@ func TestSchedulerSkipMarkerCoalesces(t *testing.T) {
 	if !sched.markOnce("cap", "t", "ws", "other") {
 		t.Fatal("a different flow marks independently")
 	}
-	// A different PROBLEM with the same flow marks independently too: a flow
-	// that is both over its cap and unloadable has to say both things, rather
-	// than whichever happened first silencing the other.
 	if !sched.markOnce("published_flow_unreadable", "t", "ws", "g") {
 		t.Fatal("a different problem with the same flow should mark independently")
 	}

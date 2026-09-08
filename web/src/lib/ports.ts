@@ -3,19 +3,11 @@
 
 import type { Port } from "../types";
 
-// Port-matching helpers for auto-wiring when a drag-create spawns a new
-// node. Pure functions, extracted from FlowEditor so they can be unit
-// tested.
 
-// The passthrough pin ("pass") is prepended to every processing drop's
-// inputs and outputs by core.WithPassthrough. It's untyped, so it matches
-// any MIME — which is exactly why it must not be auto-chosen by default.
+// Prepended by the server, so it is not in the drop's declared port list.
 export const PASS_PORT = "pass";
 
-// PortKind mirrors core.PortKind (core/manifest.go): the small set of
-// human-meaningful value kinds a flow moves between steps, DERIVED from a
-// port's MIME. The UI reads this (not raw MIME) so a non-techie sees "Items" or
-// "Text", not "application/json".
+// Mirrors core.PortKind; keep the two in step.
 export type PortKind = "item" | "text" | "bool" | "file" | "any";
 
 export function portKind(p: Pick<Port, "mime">): PortKind {
@@ -27,21 +19,10 @@ export function portKind(p: Pick<Port, "mime">): PortKind {
   return "file";
 }
 
-// portCardinality is "one" or "many" — a list port carries many. A "table" is
-// just many Items; there is no separate rows type.
 export function portCardinality(p: Pick<Port, "list">): "one" | "many" {
   return p.list ? "many" : "one";
 }
 
-// portTypeLabel is the plain-language description shown to the user for what a
-// port carries — kind × cardinality. e.g. "Items" (many records), "Text",
-// "Files". Used in the port tooltip so it's obvious what flows down a wire.
-//
-// Unlike a drop's label, this text is OURS rather than the catalog's, so it is
-// translated through i18n. `t` is optional and defaults to the English below:
-// callers that hold a translator (components) pass it; tests and any
-// locale-free caller get the untranslated string rather than a missing-key
-// artifact.
 type Translate = (key: string, defaultValue: string) => string;
 
 export function portTypeLabel(
@@ -66,25 +47,13 @@ export function portTypeLabel(
   }
 }
 
-// mimeCompatible reports whether two MIME sets could carry the same value.
-// An empty/absent set on either side is treated as "anything", so untyped
-// pins connect to everything. Otherwise the sets must share an exact MIME
-// — this mirrors core.mimeCompatible (core/validate.go), the rule the
-// backend enforces on submit, so the drag-create palette only ever offers
-// drops the graph validator will actually accept. (No top-level category
-// matching: `application/json` is NOT interchangeable with `application/x-bool`
-// or `application/pdf`.)
+// An empty set on either side is a wildcard, matching the server's rule.
 export function mimeCompatible(a?: string[], b?: string[]): boolean {
   if (!a?.length || !b?.length) return true;
   return a.some((x) => b.some((y) => x === y));
 }
 
-// connectionHint explains, in plain language, WHY an output can't connect to
-// an input — for the editor to show when it refuses a wire. Returns null when
-// the connection is fine (compatible, or either pin untyped). Cardinality
-// (one/many) is intentionally NOT a reason: the engine auto-lifts one→many and
-// runs many→one per item, so only a KIND clash (e.g. Items into a Text input)
-// is a real error, and the fix is a conversion step.
+// A refused wire must say why, or the author retries the same drag.
 export function connectionHint(out?: Port, inp?: Port): string | null {
   if (!out || !inp) return null;
   if (mimeCompatible(out.mime, inp.mime)) return null;
@@ -101,26 +70,14 @@ export function connectionHint(out?: Port, inp?: Port): string | null {
   return `${noun(from)} can’t connect to ${noun(to)} — the data types don’t match.`;
 }
 
-// portsConnectable is the ConnectionValidator decision: may a wire run from
-// the source node's `sourceHandle` output to the target node's `targetHandle`
-// input? It looks up each declared port and applies mimeCompatible. Either pin
-// being absent (an untyped/default/exec handle, or a comment node) means
-// "connectable" — the same permissive rule the editor uses so it never blocks
-// a wire the backend validator would accept. Pure + node-shape-agnostic: the
-// caller passes the two manifests' port lists.
+// Must agree with the server's validation, or the editor allows an unsavable flow.
 export function portsConnectable(
   sourceOutputs: Port[] | undefined,
   sourceHandle: string | null | undefined,
   targetInputs: Port[] | undefined,
   targetHandle: string | null | undefined,
 ): boolean {
-  // A target that declares its ports and declares NONE on this side cannot
-  // accept a wire at all — a value source (Text, Number) or a trigger. The
-  // permissive rule below is for pins nobody typed; this is a node with no pin
-  // to type. Saying yes here is how a graph ends up with an edge to
-  // "text_1.in", which draws nothing and blocks every save (see
-  // lib/strayEdges). An absent list means "no manifest", which stays
-  // permissive.
+  // A drop that declares its ports and none on this side cannot take a wire.
   if (targetInputs?.length === 0) return false;
   const out = sourceOutputs?.find((p) => p.port === (sourceHandle ?? "out"));
   const inp = targetInputs?.find((p) => p.port === (targetHandle ?? "in"));
@@ -128,34 +85,13 @@ export function portsConnectable(
   return mimeCompatible(out.mime, inp.mime);
 }
 
-// DEFAULT_MAX_VARIADIC_FAN_IN mirrors core.DefaultMaxVariadicFanIn: the
-// ceiling on a variadic input whose port declares no max of its own. Every
-// wire is a value the run assembles and stores, so "unset" cannot mean
-// unlimited on either side.
+// Mirrors core.DefaultMaxVariadicFanIn.
 export const DEFAULT_MAX_VARIADIC_FAN_IN = 64;
 
-// MAX_VARIADIC_FAN_IN mirrors core.MaxVariadicFanIn: the ceiling no manifest
-// can raise. A declared max is the drop's own business, but a manifest is not
-// always ours — a runner's or an MCP host's arrives over the wire and is taken
-// as given, so an unclamped max put fan-in back where it was before the
-// default existed.
+// Mirrors core.MaxVariadicFanIn: the ceiling no manifest can raise.
 export const MAX_VARIADIC_FAN_IN = 1024;
 
-// inputHasRoom reports whether an input port can take ANOTHER wire, given how
-// many it already has. A single-value input takes exactly one: the engine
-// assembles a node's input by walking its edges and keeping the last one it
-// reads, so a second wire silently wins over the first and the author is
-// never told which value arrived. A variadic input takes its declared max,
-// or DEFAULT_MAX_VARIADIC_FAN_IN.
-//
-// An undeclared pin is permissive, matching portsConnectable — with two
-// exceptions, both of which the server enforces, so without them the canvas
-// would draw wires the save refuses and the author would see a failed autosave
-// instead of a wire that won't stick. A dynamic-ports drop's pins are real
-// ports named by its own params and carry one value each. And a drop this
-// instance has no manifest for at all (catalogued=false — a runner or MCP step
-// registered elsewhere) gets the same treatment: the engine assembles one value
-// per port whether or not a manifest was available.
+// A single-value input takes ONE wire; a variadic one respects its declared max.
 export function inputHasRoom(
   targetInputs: Port[] | undefined,
   targetHandle: string | null | undefined,
@@ -169,24 +105,7 @@ export function inputHasRoom(
   return existing < Math.min(inp.max ?? DEFAULT_MAX_VARIADIC_FAN_IN, MAX_VARIADIC_FAN_IN);
 }
 
-// pickPort chooses which port on the spawned drop to auto-wire to. The
-// passthrough pin is untyped and sits first, so a naive "first compatible
-// port" would always land on it — but when you drag a Text output onto a
-// new ntfy node you want its "Message" input, not Pass-through. So we
-// prefer a real (non-pass) input:
-//
-//  1. typed source — a real port whose declared MIME explicitly matches the
-//     dragged port (so a json output lands on a json input, not a sibling);
-//  2. untyped source (a file/blob/"any" output, e.g. a downloaded file) — a
-//     real port that is ALSO untyped. An exact-MIME match is meaningless here
-//     because an empty MIME set matches everything, so tier 1 would otherwise
-//     grab the first *typed* field — landing a file on Gmail's "To" instead of
-//     its untyped "Attachments". A blob belongs in the untyped sink;
-//  3. else any compatible real port (covers a typed source → an untyped target
-//     like ntfy's "Message", which has no MIME but is still the right one);
-//  4. else fall back to the old behaviour — first compatible port (which may
-//     be the passthrough pin), then the first declared port, then the engine's
-//     default handle id.
+// Type compatibility first, then declaration order, so the pick is predictable.
 export function pickPort(
   ports: Port[] | undefined,
   otherMime: string[] | undefined,
@@ -206,23 +125,7 @@ export function pickPort(
   return (ports.find((p) => mimeCompatible(p.mime, otherMime)) ?? ports[0]).port;
 }
 
-// spawnPort picks the pin on a drop spawned by a drag off another drop's pin —
-// where the wire has to land on the NEW step. null means "nowhere": the drop
-// declares no ports on that side, so it must be placed unwired.
-//
-// That null is the whole point. pickPort's fallback names a port that may not
-// exist, which is fine where the caller already knows the drop has one, and a
-// lie here: a value source (Text, Number) has no inputs at all, so dragging off
-// an output and picking Text wired the graph to "text_1.in". React Flow draws
-// no edge for a handle the node does not have, so the wire was invisible and
-// undeletable, and every save from then on was refused by the daemon — a flow
-// that could not be saved and showed nothing to fix. Drops whose ports come
-// from their own params (dynamic_ports) declare placeholder pins, so they are
-// not this case.
-//
-// A drag off a pass/exec pin is a "run this next" gesture and must land on the
-// new drop's pass pin — not on a data port pickPort would otherwise choose,
-// since an untyped pass source loosely matches any typed input.
+// The wire the author already started must land somewhere sensible.
 export function spawnPort(
   ports: Port[] | undefined,
   otherMime: string[] | undefined,

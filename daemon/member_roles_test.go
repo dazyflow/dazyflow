@@ -18,8 +18,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// fakeMembershipStore is a map-backed auth.MembershipStore for handler
-// tests (the only real implementation is Postgres-backed).
 type fakeMembershipStore struct {
 	// mu makes the fake safe to hammer from several goroutines, which the
 	// seat-race test does on purpose, and backs the atomic seat write below.
@@ -118,10 +116,6 @@ func seedMember(t *testing.T, store *fakeMembershipStore, email, tenant string, 
 	}
 }
 
-// teamAdminDo runs the request as a realistic org admin — the catalog
-// admin role (editor perms + organization:admin) — unlike adminDo's
-// org-admin-only token, which can't grant graph permissions it doesn't
-// hold (the role-capping rule).
 func teamAdminDo(t *testing.T, h *gatewayHarness, method, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	_, tok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-team-admin", "t", "ws", "boss",
@@ -151,7 +145,6 @@ func TestUpdateMemberRoles(t *testing.T) {
 	h.gw.Memberships = store
 	seedMember(t, store, "member@example.com", "t", core.TeamRoleEditor())
 
-	// Editor → viewer (demotion).
 	rw := teamAdminDo(t, h, "PATCH", "/api/v1/admin/members/member@example.com", map[string]any{
 		"roles": []core.Role{core.TeamRoleViewer()},
 	})
@@ -163,7 +156,6 @@ func TestUpdateMemberRoles(t *testing.T) {
 		m.Roles[0].Has(core.PermGraphEdit) {
 		t.Errorf("after demotion = %+v / %v, want single viewer role", m, err)
 	}
-	// Workspace survives the role change.
 	if m.Workspace != "ws" {
 		t.Errorf("workspace = %q, want preserved 'ws'", m.Workspace)
 	}
@@ -187,7 +179,6 @@ func TestUpdateMemberRoles(t *testing.T) {
 	if len(m.Roles) != 1 || !m.Roles[0].Has(core.PermGraphEdit) || !m.Roles[0].Has(core.PermSecretWrite) {
 		t.Errorf("name-only editor did not resolve to catalog perms: %+v", m.Roles)
 	}
-	// A name-only role outside the catalog is a 400, not an empty grant.
 	rw = teamAdminDo(t, h, "PATCH", "/api/v1/admin/members/member@example.com", map[string]any{
 		"roles": []map[string]any{{"name": "superuser"}},
 	})
@@ -203,7 +194,6 @@ func TestUpdateMemberRoles_Guards(t *testing.T) {
 	h.gw.Memberships = store
 	seedMember(t, store, "member@example.com", "t", core.TeamRoleEditor())
 
-	// Unknown member → 404.
 	rw := teamAdminDo(t, h, "PATCH", "/api/v1/admin/members/ghost@example.com", map[string]any{
 		"roles": []core.Role{core.TeamRoleViewer()},
 	})
@@ -211,7 +201,6 @@ func TestUpdateMemberRoles_Guards(t *testing.T) {
 		t.Errorf("ghost: status = %d, want 404", rw.Code)
 	}
 
-	// Empty roles → 400 (removal is DELETE's job).
 	rw = teamAdminDo(t, h, "PATCH", "/api/v1/admin/members/member@example.com", map[string]any{
 		"roles": []core.Role{},
 	})
@@ -219,8 +208,6 @@ func TestUpdateMemberRoles_Guards(t *testing.T) {
 		t.Errorf("empty roles: status = %d, want 400", rw.Code)
 	}
 
-	// Over-scoped grant → 403 and roles unchanged. (adminDo's token holds
-	// only organization:admin, so secret:write exceeds it.)
 	rw = h.adminDo(t, "PATCH", "/api/v1/admin/members/member@example.com", map[string]any{
 		"roles": []map[string]any{{"name": "x", "permissions": []string{"secret:write"}}},
 	})
@@ -239,7 +226,6 @@ func TestUpdateMemberRoles_Guards(t *testing.T) {
 		t.Errorf("roles changed by refused requests: %+v", m.Roles)
 	}
 
-	// Non-admin caller (the plain editor token) → 403.
 	rw = h.do(t, "PATCH", "/api/v1/admin/members/member@example.com", map[string]any{
 		"roles": []core.Role{core.TeamRoleViewer()},
 	})
@@ -248,8 +234,6 @@ func TestUpdateMemberRoles_Guards(t *testing.T) {
 	}
 }
 
-// Changing or removing a membership sweeps the member's live sessions,
-// so a demotion takes effect immediately instead of at session expiry.
 func TestUpdateMemberRoles_SweepsSessions(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -292,7 +276,6 @@ func TestUpdateMemberRoles_SweepsSessions(t *testing.T) {
 		t.Errorf("bystander session was swept too: %v", err)
 	}
 
-	// Removal sweeps as well: re-seed, re-issue, DELETE.
 	seedMember(t, store, "member@example.com", "t", core.TeamRoleViewer())
 	if _, _, err := auth.IssueSession(t.Context(), sessions, member, time.Hour); err != nil {
 		t.Fatalf("re-issue session: %v", err)

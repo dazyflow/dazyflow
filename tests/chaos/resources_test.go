@@ -125,7 +125,6 @@ func TestDenseGraph_DispatchStaysUsable(t *testing.T) {
 			if status == statusHung {
 				t.Fatalf("run never terminated")
 			}
-			// A flow of no-op steps should not cost seconds per hundred nodes.
 			if budget := time.Duration(n) * 10 * time.Millisecond; elapsed > budget {
 				t.Errorf("%d no-op nodes took %s (budget %s)", n, elapsed.Round(time.Millisecond), budget)
 			}
@@ -133,11 +132,6 @@ func TestDenseGraph_DispatchStaysUsable(t *testing.T) {
 	}
 }
 
-// Every step stores its own copy of what it emitted and the pass pin
-// threads the payload through the chain, so run state is payload × steps:
-// 4 MiB through 50 steps wrote 209 MiB, and ~4 GiB per run at the node
-// ceiling with nothing to stop it. core.MaxRunStateBytes now bounds the run
-// as a whole — the step that crosses it fails and the run ends there.
 func TestPassPin_StateAmplification(t *testing.T) {
 	const payloadMiB, hops = 4, 50
 	defer core.SetMaxRunStateBytes(64 << 20)() // 16 hops' worth, not 50
@@ -174,15 +168,11 @@ func TestPassPin_StateAmplification(t *testing.T) {
 	if status != core.JobStatusFailed {
 		t.Errorf("status=%q, want failed at the run-state ceiling", status)
 	}
-	// Some overshoot is expected (the crossing step's own result is stored,
-	// and a couple of siblings may already be in flight), but not 50 hops of it.
 	if limit := core.MaxRunStateBytes(); stored > 4*limit {
 		t.Errorf("stored %d MiB against a %d MiB ceiling", stored>>20, limit>>20)
 	}
 }
 
-// An edge bomb — 500k wires between two steps — is cheap to submit and
-// nothing in the data model bounds it, so it has to be refused at the gate.
 func TestEdgeBomb_IsRejected(t *testing.T) {
 	hs := newHarness(t)
 	edges := make([]core.Edge, 500_000)

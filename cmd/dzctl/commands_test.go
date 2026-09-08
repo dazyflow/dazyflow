@@ -15,8 +15,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// findSub returns the immediate subcommand of parent whose name matches, or
-// nil. Cobra's Name() is the first whitespace-delimited token of Use.
 func findSub(parent *cobra.Command, name string) *cobra.Command {
 	for _, c := range parent.Commands() {
 		if c.Name() == name {
@@ -36,14 +34,12 @@ func TestGraphCmdTree(t *testing.T) {
 			t.Errorf("graph missing subcommand %q", want)
 		}
 	}
-	// Scope flags present on the commands that register them.
 	for _, name := range []string{"list", "load", "promote", "run"} {
 		sub := findSub(g, name)
 		if sub.Flags().Lookup("tenant") == nil || sub.Flags().Lookup("workspace") == nil {
 			t.Errorf("%q missing tenant/workspace flags", name)
 		}
 	}
-	// ref flag on load and run.
 	for _, name := range []string{"load", "run"} {
 		if findSub(g, name).Flags().Lookup("ref") == nil {
 			t.Errorf("%q missing ref flag", name)
@@ -94,7 +90,6 @@ func TestWorkspaceCmdTree(t *testing.T) {
 }
 
 func TestArgsValidators(t *testing.T) {
-	// ExactArgs(1) commands reject wrong arg counts.
 	one := []*cobra.Command{
 		graphLintCmd(), moduleShowCmd(), jobStatusCmd(), jobListCmd(),
 		jobCancelCmd(), jobLogsCmd(), graphSaveCmd(),
@@ -107,7 +102,6 @@ func TestArgsValidators(t *testing.T) {
 			t.Errorf("%q should accept one arg: %v", c.Name(), err)
 		}
 	}
-	// promote needs exactly 3.
 	prom := graphPromoteCmd()
 	if err := prom.Args(prom, []string{"a", "b"}); err == nil {
 		t.Error("promote should reject two args")
@@ -132,7 +126,6 @@ func TestGraphLintRunE(t *testing.T) {
 	dir := t.TempDir()
 	lint := graphLintCmd()
 
-	// Valid graph: two nodes, one edge.
 	valid := `{
 		"id":"g1","nodes":[
 			{"id":"a","module":"m"},
@@ -148,12 +141,10 @@ func TestGraphLintRunE(t *testing.T) {
 		t.Errorf("lint valid graph: %v", err)
 	}
 
-	// Missing file -> read error.
 	if err := lint.RunE(lint, []string{filepath.Join(dir, "nope.json")}); err == nil {
 		t.Error("lint missing file should error")
 	}
 
-	// Malformed JSON -> parse error.
 	badJSON := filepath.Join(dir, "bad.json")
 	if err := os.WriteFile(badJSON, []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
@@ -163,7 +154,6 @@ func TestGraphLintRunE(t *testing.T) {
 		t.Errorf("lint bad json err = %v, want parse error", err)
 	}
 
-	// Structurally invalid graph (edge to unknown node) -> validation error.
 	invalid := `{"id":"g","nodes":[{"id":"a","module":"m"}],
 		"edges":[{"from":"a","from_port":"o","to":"ghost","to_port":"i"}]}`
 	invalidPath := filepath.Join(dir, "invalid.json")
@@ -176,7 +166,6 @@ func TestGraphLintRunE(t *testing.T) {
 }
 
 func TestPrintModuleVerbose(t *testing.T) {
-	// Capture stdout to exercise every conditional branch.
 	old := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -194,7 +183,6 @@ func TestPrintModuleVerbose(t *testing.T) {
 		Inputs:      []*controlpb.Port{{Id: "in1", Required: true}, {Id: "in2"}},
 		Outputs:     []*controlpb.Port{{Id: "out1"}},
 	})
-	// Minimal manifest hits the empty-field skip branches.
 	printModuleVerbose(&controlpb.Manifest{Id: "bare", Version: "0"})
 
 	w.Close()
@@ -236,8 +224,6 @@ func TestAuthCtx(t *testing.T) {
 }
 
 func TestDaemonConn(t *testing.T) {
-	// No CA file -> insecure client built without error (NewClient is lazy,
-	// it does not dial).
 	t.Setenv("DZCTL_TLS_CA", "")
 	conn, err := daemonConn("")
 	if err != nil {
@@ -248,7 +234,6 @@ func TestDaemonConn(t *testing.T) {
 	}
 	conn.Close()
 
-	// CA file set but unreadable -> TLS load error.
 	t.Setenv("DZCTL_TLS_CA", filepath.Join(t.TempDir(), "missing-ca.pem"))
 	if _, err := daemonConn("localhost:1"); err == nil {
 		t.Error("daemonConn with bad CA should error")

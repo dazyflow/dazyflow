@@ -29,10 +29,6 @@ export type ConfigChecklistEntry = {
   };
 };
 
-// StepIcon adapts this modal's entry shape onto the shared DropIcon, so the
-// checklist reads exactly as the canvas does. It used to hand-roll the same
-// three-way branch, and had drifted into rendering branded glyphs at ICON.lg
-// and tiled ones at ICON.sm — two sizes in one list.
 function StepIcon({ icon }: { icon?: ConfigChecklistEntry["icon"] }) {
   return (
     <DropIcon

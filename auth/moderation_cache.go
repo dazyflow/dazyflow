@@ -49,7 +49,6 @@ func (c *suspensionCache) now() time.Time {
 	return time.Now()
 }
 
-// get reports the cached answer for key, and whether there was one.
 func (c *suspensionCache) get(key string) (bool, bool) {
 	now := c.now()
 	c.mu.Lock()

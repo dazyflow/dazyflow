@@ -18,7 +18,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// maxForecastDays caps the horizon (SMHI's point forecast runs ~10 days).
 const maxForecastDays = 10
 
 func init() {
@@ -74,7 +73,6 @@ func init() {
 	})
 }
 
-// smhiDay is one calendar day rolled up from the sub-daily forecast steps.
 type smhiDay struct {
 	Date        string  `json:"date"` // UTC YYYY-MM-DD
 	TempMin     float64 `json:"temp_min"`
@@ -116,10 +114,6 @@ func executeForecast(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 	}, nil
 }
 
-// aggregateDays buckets the sub-daily steps into UTC calendar days, taking the
-// min/max temperature and the conditions of the step nearest 12:00 UTC. SMHI
-// gives no timezone, so days are UTC — for the Nordics that lines up with local
-// days closely enough.
 func aggregateDays(ts []smhiEntry, days int) []smhiDay {
 	idx := map[string]int{}
 	noonDelta := map[string]int{}
@@ -175,7 +169,6 @@ func aggregateDays(ts []smhiEntry, days int) []smhiDay {
 	return out
 }
 
-// forecastSummary renders one line per day, e.g. "Mon Jun 24: Clear sky, 9–18°C".
 func forecastSummary(days []smhiDay) string {
 	if len(days) == 0 {
 		return "No forecast available."

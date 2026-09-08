@@ -142,7 +142,6 @@ describe("who a message is from", () => {
   });
 
   it("gives a system note no author label at all", async () => {
-    // Narration, not a party in the conversation.
     getMyTicket.mockResolvedValue(
       view([msg({ author_kind: "system", body: "whatever" })]),
     );
@@ -153,10 +152,6 @@ describe("who a message is from", () => {
   });
 });
 
-// The daemon writes system notes as English prose in `body` plus a
-// `system_code`. The prose is right for an API reader and an email digest and
-// wrong for a translated UI, which was dropping "The customer closed this
-// ticket." into the middle of a Swedish thread.
 describe("system notes", () => {
   const note = (over: Record<string, unknown>) =>
     msg({ author_kind: "system", body: "ENGLISH FALLBACK", ...over });
@@ -182,9 +177,6 @@ describe("system notes", () => {
   });
 
   it("translates a support-side note on BOTH surfaces", async () => {
-    // Regression: the mode check first returned "" for an agent, and "" is not
-    // null, so `??` kept it and every note fell through to the English body on
-    // the whole support side.
     me.subject = "agent-a@vendor.com";
     getSupportTicket.mockResolvedValue(view([note({ system_code: "marked_resolved" })]));
     renderThread("agent");
@@ -234,8 +226,6 @@ describe("read receipts", () => {
   });
 
   it("still renders the thread when recording the read fails", async () => {
-    // Best-effort: a failed receipt costs one extra reminder, which is not
-    // worth an error in front of someone trying to read their ticket.
     markMyTicketRead.mockRejectedValue(new Error("nope"));
     getMyTicket.mockResolvedValue(view([msg({ author_kind: "user", author: "customer@acme.com", body: "still here" })]));
     renderThread("user");

@@ -11,7 +11,7 @@ import (
 	"github.com/dazyflow/dazyflow/engine/mcp"
 )
 
-// TestManifestsForSubsetAgreesWithFullMap is the contract that makes
+// The contract that makes
 // ManifestsForSubset safe to use in place of ManifestsForTenant.
 //
 // The subset read exists because the full one clones the whole built-in

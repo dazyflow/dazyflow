@@ -17,9 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// fakeStripe stands in for api.stripe.com: it checks auth + idempotency
-// headers and serves the five endpoints the drops call. Each handler
-// records the form/query it received for assertions.
 type fakeStripe struct {
 	srv      *httptest.Server
 	lastForm url.Values
@@ -115,7 +112,6 @@ func newFakeStripe(t *testing.T) *fakeStripe {
 	return f
 }
 
-// run executes a registered drop against the fake with base params merged in.
 func run(t *testing.T, f *fakeStripe, moduleID string, p map[string]any, input map[string]core.Ref) core.Result {
 	t.Helper()
 	drop, ok := engine.Default.Get(moduleID)
@@ -153,7 +149,6 @@ func TestCreateCustomer(t *testing.T) {
 		t.Errorf("Idempotency-Key = %q, want %q (the job's stable key)", f.lastIdem, wantIdem)
 	}
 
-	// Input port overrides the param.
 	res = run(t, f, "stripe_create_customer", map[string]any{"email": "typed@x.com"},
 		map[string]core.Ref{"email": {Inline: "wired@x.com"}})
 	if f.lastForm.Get("email") != "wired@x.com" {
@@ -161,14 +156,11 @@ func TestCreateCustomer(t *testing.T) {
 	}
 	_ = res
 
-	// Missing email is a friendly param error.
 	res = run(t, f, "stripe_create_customer", map[string]any{}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
 		t.Errorf("missing email res = %+v", res)
 	}
 
-	// A Stripe API error response (400) surfaces Stripe's own message rather
-	// than a generic failure — the per-action error path for create_customer.
 	res = run(t, f, "stripe_create_customer", map[string]any{"email": "reject@stripe.test"}, nil)
 	if res.Status != core.StatusError || !strings.Contains(res.Error.Message, "Invalid email address") {
 		t.Errorf("API-error res = %+v", res)
@@ -185,7 +177,6 @@ func TestCreatePaymentLink(t *testing.T) {
 		t.Errorf("default quantity = %v", f.lastForm.Get("line_items[0][quantity]"))
 	}
 
-	// Wired quantity (numbers arrive as float64 over JSON).
 	run(t, f, "stripe_create_payment_link", map[string]any{"price": "price_ok"},
 		map[string]core.Ref{"quantity": {Inline: float64(3)}})
 	if f.lastForm.Get("line_items[0][quantity]") != "3" {
@@ -200,20 +191,17 @@ func TestCreatePaymentLink(t *testing.T) {
 		t.Errorf("fractional quantity res = %+v", res)
 	}
 
-	// The wired price overrides the param — per-row prices from upstream.
 	run(t, f, "stripe_create_payment_link", map[string]any{"price": "price_param"},
 		map[string]core.Ref{"price": {Inline: "price_wired"}})
 	if f.lastForm.Get("line_items[0][price]") != "price_wired" {
 		t.Errorf("wired price = %v", f.lastForm.Get("line_items[0][price]"))
 	}
 
-	// No price anywhere → param error before any HTTP.
 	res = run(t, f, "stripe_create_payment_link", map[string]any{}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
 		t.Errorf("no price res = %+v", res)
 	}
 
-	// Stripe's error message reaches the user.
 	res = run(t, f, "stripe_create_payment_link", map[string]any{"price": "price_bad"}, nil)
 	if res.Status != core.StatusError || !strings.Contains(res.Error.Message, "No such price") {
 		t.Errorf("bad price res = %+v", res)
@@ -232,8 +220,6 @@ func TestCreateRefund(t *testing.T) {
 		t.Errorf("form = %v", f.lastForm)
 	}
 
-	// The wired amount overrides the param — e.g. a computed partial
-	// refund from a support form. Numeric text is fine (form fields).
 	run(t, f, "stripe_create_refund",
 		map[string]any{"payment_intent": "pi_1", "amount": 500},
 		map[string]core.Ref{"amount": {Inline: "250"}})
@@ -241,7 +227,6 @@ func TestCreateRefund(t *testing.T) {
 		t.Errorf("wired amount = %v", f.lastForm.Get("amount"))
 	}
 
-	// A non-numeric or fractional wired amount is rejected, not coerced.
 	res = run(t, f, "stripe_create_refund",
 		map[string]any{"payment_intent": "pi_1"},
 		map[string]core.Ref{"amount": {Inline: "lots"}})
@@ -259,7 +244,6 @@ func TestCreateRefund(t *testing.T) {
 	if res.Status != core.StatusError || !strings.Contains(res.Error.Message, "No such payment_intent") {
 		t.Errorf("missing pi res = %+v", res)
 	}
-	// No payment intent at all → param error before any HTTP.
 	res = run(t, f, "stripe_create_refund", map[string]any{}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
 		t.Errorf("no pi res = %+v", res)
@@ -268,7 +252,6 @@ func TestCreateRefund(t *testing.T) {
 
 func TestListSubscriptions(t *testing.T) {
 	f := newFakeStripe(t)
-	// Wired customer + default status; first_id carries the first match.
 	res := run(t, f, "stripe_list_subscriptions", nil,
 		map[string]core.Ref{"customer": {Inline: "cus_7"}})
 	if res.Status != core.StatusOK {
@@ -284,13 +267,11 @@ func TestListSubscriptions(t *testing.T) {
 		t.Errorf("count = %v", res.Output["count"].Inline)
 	}
 
-	// No matches: empty list, empty first_id — not an error.
 	res = run(t, f, "stripe_list_subscriptions", map[string]any{"customer": "cus_none"}, nil)
 	if res.Status != core.StatusOK || res.Output["first_id"].Inline != "" {
 		t.Errorf("no-match res = %+v", res)
 	}
 
-	// No customer: account-wide sweep with an explicit status.
 	run(t, f, "stripe_list_subscriptions", map[string]any{"status": "past_due"}, nil)
 	if f.lastForm.Get("status") != "past_due" || f.lastForm.Has("customer") {
 		t.Errorf("sweep query = %v", f.lastForm)
@@ -299,7 +280,6 @@ func TestListSubscriptions(t *testing.T) {
 
 func TestCancelSubscription(t *testing.T) {
 	f := newFakeStripe(t)
-	// Default: at period end — an UPDATE, carrying the idempotency key.
 	res := run(t, f, "stripe_cancel_subscription", nil,
 		map[string]core.Ref{"subscription": {Inline: "sub_1"}})
 	if res.Status != core.StatusOK || res.Output["status"].Inline != "active" {
@@ -315,8 +295,6 @@ func TestCancelSubscription(t *testing.T) {
 		t.Errorf("ends_at = %v", res.Output["ends_at"].Inline)
 	}
 
-	// Immediate via the cancel_timing enum: a DELETE; ends_at is the
-	// cancellation moment.
 	res = run(t, f, "stripe_cancel_subscription",
 		map[string]any{"subscription": "sub_1", "cancel_timing": "immediately"}, nil)
 	if res.Status != core.StatusOK || res.Output["status"].Inline != "canceled" {
@@ -326,20 +304,16 @@ func TestCancelSubscription(t *testing.T) {
 		t.Errorf("immediate ends_at = %v", res.Output["ends_at"].Inline)
 	}
 
-	// Legacy boolean at_period_end:false from a pre-enum saved graph still
-	// cancels immediately (backward compat with the old param).
 	res = run(t, f, "stripe_cancel_subscription",
 		map[string]any{"subscription": "sub_1", "at_period_end": false}, nil)
 	if res.Status != core.StatusOK || res.Output["status"].Inline != "canceled" {
 		t.Fatalf("legacy immediate res = %+v", res)
 	}
 
-	// Stripe's error message reaches the user.
 	res = run(t, f, "stripe_cancel_subscription", map[string]any{"subscription": "sub_missing"}, nil)
 	if res.Status != core.StatusError || !strings.Contains(res.Error.Message, "No such subscription") {
 		t.Errorf("missing sub res = %+v", res)
 	}
-	// No id at all → param error before any HTTP.
 	res = run(t, f, "stripe_cancel_subscription", map[string]any{}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
 		t.Errorf("no sub res = %+v", res)
@@ -359,14 +333,12 @@ func TestSendInvoice(t *testing.T) {
 		t.Errorf("outputs = %+v", res.Output)
 	}
 
-	// Wired customer + amount-as-text (the sheet-row case).
 	res = run(t, f, "stripe_send_invoice", map[string]any{"currency": "sek"},
 		map[string]core.Ref{"customer": {Inline: "cus_7"}, "amount": {Inline: "50000"}})
 	if res.Status != core.StatusOK {
 		t.Fatalf("wired res = %+v", res)
 	}
 
-	// Missing pieces → param errors before any HTTP.
 	res = run(t, f, "stripe_send_invoice", map[string]any{"amount": 100}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
 		t.Errorf("no customer res = %+v", res)
@@ -377,11 +349,10 @@ func TestSendInvoice(t *testing.T) {
 	}
 }
 
-// TestSendInvoice_RetryReplaysSteps — the multi-call sequence's retry
-// contract: when a run dies mid-sequence (finalize 500s) and the engine
-// retries, every step must be re-sent with the SAME per-step
-// Idempotency-Key as the first attempt, so Stripe replays the completed
-// steps instead of creating a second invoice.
+// The multi-call sequence's retry contract: when a run dies mid-sequence
+// (finalize 500s) and the engine retries, every step must be re-sent with the
+// SAME per-step Idempotency-Key as the first attempt, so Stripe replays the
+// completed steps instead of creating a second invoice.
 func TestSendInvoice_RetryReplaysSteps(t *testing.T) {
 	type call struct {
 		path string
@@ -419,7 +390,6 @@ func TestSendInvoice_RetryReplaysSteps(t *testing.T) {
 		"api_key": "sk_test_good", "base_url": srv.URL,
 		"customer": "cus_9", "amount": 100,
 	}}
-	// First attempt dies at finalize.
 	res, err := drop.Execute(context.Background(), job, nil)
 	if err != nil {
 		t.Fatalf("execute: %v", err)
@@ -428,7 +398,6 @@ func TestSendInvoice_RetryReplaysSteps(t *testing.T) {
 		t.Fatalf("first attempt res = %+v", res)
 	}
 	firstCalls := len(calls)
-	// The engine's retry: same job, same params.
 	res, err = drop.Execute(context.Background(), job, nil)
 	if err != nil || res.Status != core.StatusOK {
 		t.Fatalf("retry res = %+v err=%v", res, err)
@@ -461,7 +430,6 @@ func TestSendInvoice_RetryReplaysSteps(t *testing.T) {
 func TestListEvents_CursorSemantics(t *testing.T) {
 	f := newFakeStripe(t)
 
-	// First poll, no cursor: newest events; last_id = the newest (evt_2).
 	res := run(t, f, "stripe_list_events", map[string]any{"types": []any{"payment_intent.succeeded"}}, nil)
 	if res.Status != core.StatusOK {
 		t.Fatalf("res = %+v", res)
@@ -473,7 +441,6 @@ func TestListEvents_CursorSemantics(t *testing.T) {
 		t.Errorf("types filter lost: %v", f.lastForm)
 	}
 
-	// Second poll with the cursor wired in: only newer events; cursor advances.
 	res = run(t, f, "stripe_list_events", nil, map[string]core.Ref{"after_id": {Inline: "evt_2"}})
 	events, _ := res.Output["events"].Inline.([]map[string]any)
 	if len(events) != 1 || events[0]["id"] != "evt_3" {
@@ -520,7 +487,6 @@ func TestSearchCustomers(t *testing.T) {
 	if res.Output["count"].Inline != 1 {
 		t.Errorf("count = %v", res.Output["count"].Inline)
 	}
-	// first_id/first_email carry the first match for the single-match wire.
 	if res.Output["first_id"].Inline != "cus_7" {
 		t.Errorf("first_id = %v", res.Output["first_id"].Inline)
 	}
@@ -535,7 +501,6 @@ func TestSearchCustomers(t *testing.T) {
 	if res.Output["count"].Inline != 0 {
 		t.Errorf("empty search count = %v", res.Output["count"].Inline)
 	}
-	// No matches → empty scalars, not an error.
 	if res.Output["first_id"].Inline != "" || res.Output["first_email"].Inline != "" {
 		t.Errorf("empty search first_id/email = %v / %v", res.Output["first_id"].Inline, res.Output["first_email"].Inline)
 	}
@@ -544,13 +509,11 @@ func TestSearchCustomers(t *testing.T) {
 func TestAuthErrors(t *testing.T) {
 	f := newFakeStripe(t)
 
-	// Wrong key: Stripe's message surfaces.
 	res := run(t, f, "stripe_search_customers", map[string]any{"api_key": "sk_wrong", "query": "email:'a@b.com'"}, nil)
 	if res.Status != core.StatusError || !strings.Contains(res.Error.Message, "Invalid API Key") {
 		t.Errorf("wrong key res = %+v", res)
 	}
 
-	// Empty key (connection not set): clear setup pointer, no HTTP call.
 	drop, _ := engine.Default.Get("stripe_create_customer")
 	r2, err := drop.Execute(context.Background(), core.Job{
 		ID: "j", Params: map[string]any{"api_key": "", "email": "a@b.com"},
@@ -564,8 +527,6 @@ func TestAuthErrors(t *testing.T) {
 }
 
 func TestManifests(t *testing.T) {
-	// All five registered, all carrying the Stripe branding + the api-key
-	// service connection, so the catalog groups them and the connection gate fires.
 	ids := []string{
 		"stripe_create_customer", "stripe_create_payment_link",
 		"stripe_create_refund", "stripe_list_events", "stripe_search_customers",
@@ -589,9 +550,6 @@ func TestManifests(t *testing.T) {
 	}
 }
 
-// A placeholder cursor (the first-run value of the cursor secret, before
-// any real event id has been saved) is ignored rather than sent to
-// Stripe, and round-trips on idle polls.
 func TestListEvents_PlaceholderCursorIgnored(t *testing.T) {
 	f := newFakeStripe(t)
 	res := run(t, f, "stripe_list_events", nil, map[string]core.Ref{"after_id": {Inline: "-"}})
@@ -601,19 +559,14 @@ func TestListEvents_PlaceholderCursorIgnored(t *testing.T) {
 	if f.lastForm.Get("ending_before") != "" {
 		t.Errorf("placeholder was sent to Stripe: %v", f.lastForm)
 	}
-	// Events existed, so the cursor advances past the placeholder.
 	if res.Output["last_id"].Inline != "evt_2" {
 		t.Errorf("last_id = %v", res.Output["last_id"].Inline)
 	}
 }
 
-// resourceJob builds a job pointed at srv with a good key for the resource
-// lister functions (ListSubscriptions / ListPaymentIntents / ListCustomers).
 func resourceJob(url string) core.Job {
 	return core.Job{Params: map[string]any{"api_key": "sk_test_good", "base_url": url}}
 }
-
-// --- pure helpers ----------------------------------------------------------
 
 func TestSetHTTPBase_RoundTrip(t *testing.T) {
 	orig := httpBase.Get()
@@ -628,15 +581,12 @@ func TestExtractStripeError_Forms(t *testing.T) {
 	if got := extractStripeError([]byte(`{"error":{"message":"No such customer","code":"resource_missing"}}`)); got != "resource_missing: No such customer" {
 		t.Errorf("code+msg = %q", got)
 	}
-	// message only.
 	if got := extractStripeError([]byte(`{"error":{"message":"boom"}}`)); got != "boom" {
 		t.Errorf("msg only = %q", got)
 	}
-	// non-JSON body short.
 	if got := extractStripeError([]byte("plain text")); got != "plain text" {
 		t.Errorf("plain = %q", got)
 	}
-	// long non-JSON body is truncated to 200 bytes.
 	long := strings.Repeat("x", 300)
 	if got := extractStripeError([]byte(long)); len(got) != 200 {
 		t.Errorf("truncated len = %d", len(got))
@@ -644,46 +594,36 @@ func TestExtractStripeError_Forms(t *testing.T) {
 }
 
 func TestNumberInputOr_Edges(t *testing.T) {
-	// Unwired → fallback.
 	if n, ok := numberInputOr(core.Job{}, "amount", 5); !ok || n != 5 {
 		t.Errorf("unwired = %d %v", n, ok)
 	}
 	mk := func(v any) core.Job {
 		return core.Job{Input: map[string]core.Ref{"amount": {Inline: v}}}
 	}
-	// nil inline → fallback.
 	if n, ok := numberInputOr(mk(nil), "amount", 9); !ok || n != 9 {
 		t.Errorf("nil inline = %d %v", n, ok)
 	}
-	// whole float64.
 	if n, ok := numberInputOr(mk(float64(12)), "amount", 0); !ok || n != 12 {
 		t.Errorf("float = %d %v", n, ok)
 	}
-	// fractional float64 → not ok.
 	if _, ok := numberInputOr(mk(float64(1.5)), "amount", 0); ok {
 		t.Error("fractional should be !ok")
 	}
-	// int.
 	if n, ok := numberInputOr(mk(7), "amount", 0); !ok || n != 7 {
 		t.Errorf("int = %d %v", n, ok)
 	}
-	// numeric string.
 	if n, ok := numberInputOr(mk("42"), "amount", 0); !ok || n != 42 {
 		t.Errorf("string = %d %v", n, ok)
 	}
-	// blank string → fallback.
 	if n, ok := numberInputOr(mk("  "), "amount", 3); !ok || n != 3 {
 		t.Errorf("blank string = %d %v", n, ok)
 	}
-	// junk string → not ok.
 	if _, ok := numberInputOr(mk("nope"), "amount", 0); ok {
 		t.Error("junk string should be !ok")
 	}
-	// []byte numeric.
 	if n, ok := numberInputOr(mk([]byte("8")), "amount", 0); !ok || n != 8 {
 		t.Errorf("[]byte = %d %v", n, ok)
 	}
-	// unsupported type → not ok.
 	if _, ok := numberInputOr(mk(true), "amount", 0); ok {
 		t.Error("bool should be !ok")
 	}
@@ -714,9 +654,8 @@ func TestStripeCurrencyLists(t *testing.T) {
 	}
 }
 
-// TestSendInvoiceParamsSchema_IsValidJSON pins that the marshalled schema is
-// well-formed and carries the currency enum — the property the old Sprintf
-// construction could silently break.
+// Pins that the marshalled schema is well-formed and carries the currency enum
+// — the property the old Sprintf construction could silently break.
 func TestSendInvoiceParamsSchema_IsValidJSON(t *testing.T) {
 	var parsed struct {
 		Type       string `json:"type"`
@@ -750,8 +689,6 @@ func TestSendInvoiceParamsSchema_IsValidJSON(t *testing.T) {
 	}
 }
 
-// --- triggers (standalone-run paths) ---------------------------------------
-
 func TestTriggers_StandaloneRunHaveNoData(t *testing.T) {
 	for _, id := range []string{
 		"stripe_on_payment", "stripe_on_payment_failed", "stripe_on_subscription_canceled",
@@ -782,14 +719,11 @@ func TestTriggerManifests_HaveWebhookSecret(t *testing.T) {
 			t.Errorf("%s category = %q", id, mf.Category)
 		}
 	}
-	// The failed trigger prepends a 'failure_message' pin onto the shared set.
 	failed := engine.Default.Manifests()["stripe_on_payment_failed"]
 	if len(failed.Outputs) == 0 || failed.Outputs[0].Port != "failure_message" {
 		t.Errorf("failed trigger outputs = %+v", failed.Outputs)
 	}
 }
-
-// --- resource listers ------------------------------------------------------
 
 func TestListSubscriptions_Resource(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
@@ -820,7 +754,6 @@ func TestListSubscriptions_Resource(t *testing.T) {
 	if got[1].Name != "b@y (trialing)" {
 		t.Errorf("sub_2 = %+v", got[1])
 	}
-	// No customer/price/status → falls back to the raw id.
 	if got[2].Name != "sub_3" {
 		t.Errorf("sub_3 fallback = %+v", got[2])
 	}
@@ -856,7 +789,6 @@ func TestListPaymentIntents_Resource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPaymentIntents: %v", err)
 	}
-	// pi_4 (not succeeded) is filtered out.
 	if len(got) != 3 {
 		t.Fatalf("got %d: %+v", len(got), got)
 	}
@@ -928,9 +860,6 @@ func TestListCustomers_Resource_APIError(t *testing.T) {
 	}
 }
 
-// ListPrices with a bare-string product (expansion unavailable) and a
-// metered (unit_amount 0) price — exercises the product fallback + no-amount
-// label paths the existing TestListPrices doesn't cover.
 func TestListPrices_BareProductAndNoNickname(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(rw, `{"data":[
@@ -944,17 +873,13 @@ func TestListPrices_BareProductAndNoNickname(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPrices: %v", err)
 	}
-	// product is a bare string → name falls back to the price id, then amount.
 	if got[0].Name != "price_x — 10.00 USD" {
 		t.Errorf("price_x = %+v", got[0])
 	}
-	// nickname only, zero amount → just the nickname.
 	if got[1].Name != "Just nick" {
 		t.Errorf("price_y = %+v", got[1])
 	}
 }
-
-// --- execute-path error/decode branches ------------------------------------
 
 func TestCreateCustomer_BadJSONResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
@@ -1019,7 +944,6 @@ func TestListSubscriptions_Drop_BadCustomerInput(t *testing.T) {
 
 func TestListSubscriptions_Drop_LimitClamp(t *testing.T) {
 	f := newFakeStripe(t)
-	// limit above 100 clamps to 100; below 1 clamps to 1.
 	run(t, f, "stripe_list_subscriptions", map[string]any{"customer": "cus_7", "limit": 500}, nil)
 	if f.lastForm.Get("limit") != "100" {
 		t.Errorf("clamp-high limit = %v", f.lastForm.Get("limit"))
@@ -1032,19 +956,16 @@ func TestListSubscriptions_Drop_LimitClamp(t *testing.T) {
 
 func TestSendInvoice_BadInputs(t *testing.T) {
 	f := newFakeStripe(t)
-	// Non-text customer input.
 	res := run(t, f, "stripe_send_invoice", map[string]any{"amount": 100},
 		map[string]core.Ref{"customer": {Inline: 1}})
 	if res.Status != core.StatusError || res.Error.Code != "bad_input" {
 		t.Errorf("bad customer res = %+v", res)
 	}
-	// Fractional amount input.
 	res = run(t, f, "stripe_send_invoice", map[string]any{"customer": "cus_7"},
 		map[string]core.Ref{"amount": {Inline: float64(1.5)}})
 	if res.Status != core.StatusError || res.Error.Code != "bad_input" {
 		t.Errorf("fractional amount res = %+v", res)
 	}
-	// Bad description input.
 	res = run(t, f, "stripe_send_invoice", map[string]any{"customer": "cus_7", "amount": 100},
 		map[string]core.Ref{"description": {Inline: 5}})
 	if res.Status != core.StatusError || res.Error.Code != "bad_input" {
@@ -1081,7 +1002,6 @@ func TestListEvents_BadCursorInput(t *testing.T) {
 
 func TestListEvents_LimitClampAndTypesSkipEmpty(t *testing.T) {
 	f := newFakeStripe(t)
-	// limit > 100 clamps; an empty/non-string type entry is skipped.
 	run(t, f, "stripe_list_events", map[string]any{
 		"limit": 999,
 		"types": []any{"payment_intent.succeeded", "", 5},
@@ -1143,8 +1063,6 @@ func TestListEvents_DecodeError(t *testing.T) {
 	}
 }
 
-// timeout_ms <= 0 falls back to the default rather than dialing with a
-// zero/negative deadline.
 func TestStripeDo_NonPositiveTimeoutDefaults(t *testing.T) {
 	f := newFakeStripe(t)
 	res := run(t, f, "stripe_search_customers",
@@ -1154,9 +1072,6 @@ func TestStripeDo_NonPositiveTimeoutDefaults(t *testing.T) {
 	}
 }
 
-// Every subscription and payment event carries a cus_… id, not an email, and
-// Stripe's search can't look up by id — so this is the step that gets you
-// someone to write to.
 func TestGetCustomer(t *testing.T) {
 	f := newFakeStripe(t)
 	res := run(t, f, "stripe_get_customer", nil, map[string]core.Ref{"customer": {Inline: "cus_42"}})

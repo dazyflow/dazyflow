@@ -16,11 +16,6 @@ import (
 	"github.com/dazyflow/dazyflow/internal/emailtmpl"
 )
 
-// newEmailAdminHarness is newSecretsHarness with the token swapped for an
-// organization:admin one — managing email templates is admin-only, and the
-// admin role also carries secret:read so the same token drives reads. Returns
-// the harness plus the original (secret:write-only, non-admin) editor token so
-// a test can assert the admin gate.
 func newEmailAdminHarness(t *testing.T) (*gatewayHarness, string) {
 	t.Helper()
 	h := newSecretsHarness(t)
@@ -90,7 +85,6 @@ func TestEmailTemplates_CRUDRoundTrip(t *testing.T) {
 		t.Errorf("template view = %+v", *got)
 	}
 
-	// Delete, then it's gone.
 	if rw := h.do(t, "DELETE", "/api/v1/email-templates/welcome", nil); rw.Code != http.StatusNoContent {
 		t.Fatalf("DELETE status=%d", rw.Code)
 	}
@@ -128,12 +122,10 @@ func TestEmailTemplates_BuiltinsAlwaysListedAndReadOnly(t *testing.T) {
 func TestEmailTemplates_RejectsBadInput(t *testing.T) {
 	t.Parallel()
 	h, _ := newEmailAdminHarness(t)
-	// Empty HTML.
 	if rw := h.do(t, "PUT", "/api/v1/email-templates/x",
 		json.RawMessage(putTemplateBody("X", "  "))); rw.Code != http.StatusBadRequest {
 		t.Errorf("empty html: status=%d, want 400", rw.Code)
 	}
-	// HTML without the {{.Body}} placeholder.
 	if rw := h.do(t, "PUT", "/api/v1/email-templates/x",
 		json.RawMessage(putTemplateBody("X", "<div>no body</div>"))); rw.Code != http.StatusBadRequest {
 		t.Errorf("missing placeholder: status=%d, want 400", rw.Code)
@@ -145,8 +137,6 @@ func TestEmailTemplates_RejectsBadInput(t *testing.T) {
 	}
 }
 
-// doAsToken sends a request with an explicit bearer token (h.do is fixed to
-// h.token) and returns the status code.
 func doAsToken(t *testing.T, h *gatewayHarness, token, method, path string, body []byte) int {
 	t.Helper()
 	var br *bytes.Buffer
@@ -178,7 +168,6 @@ func TestEmailTemplates_WriteRequiresAdmin(t *testing.T) {
 	if code := doAsToken(t, h, editorTok, "DELETE", "/api/v1/email-templates/welcome", nil); code != http.StatusForbidden {
 		t.Errorf("editor DELETE status=%d, want 403", code)
 	}
-	// The admin token (h.token) can write.
 	if rw := h.do(t, "PUT", "/api/v1/email-templates/welcome",
 		json.RawMessage(putTemplateBody("Welcome", "<div>{{.Body}}</div>"))); rw.Code != http.StatusNoContent {
 		t.Errorf("admin PUT status=%d, want 204", rw.Code)
@@ -244,7 +233,6 @@ func TestEmailTemplates_PreviewByID(t *testing.T) {
 		return rw.Code, resp.HTML
 	}
 
-	// Resolve a saved template by id and wrap the REAL body (no sample fallback).
 	code, html := preview(map[string]any{"id": "welcome", "body": "<p>real</p>"})
 	if code != http.StatusOK {
 		t.Fatalf("preview by id status=%d", code)
@@ -256,22 +244,16 @@ func TestEmailTemplates_PreviewByID(t *testing.T) {
 		t.Error("real body should not fall back to the sample body")
 	}
 
-	// A built-in id resolves too.
 	if code, _ := preview(map[string]any{"id": "builtin:plain", "body": "<p>x</p>"}); code != http.StatusOK {
 		t.Errorf("preview builtin status=%d, want 200", code)
 	}
-	// Unknown id → 404.
 	if code, _ := preview(map[string]any{"id": "nope", "body": "x"}); code != http.StatusNotFound {
 		t.Errorf("preview unknown id status=%d, want 404", code)
 	}
-	// No template + empty body still renders the body bare.
 	if code, html := preview(map[string]any{"body": "<p>bare</p>"}); code != http.StatusOK || !strings.Contains(html, "<p>bare</p>") {
 		t.Errorf("bare preview status=%d html=%q", code, html)
 	}
 }
-
-// emailTemplateGate not-configured branch (no EncryptedSecrets) across the
-// list / put / delete / preview / send-test endpoints.
 
 func TestEmailTemplates_NotConfigured(t *testing.T) {
 	t.Parallel()
@@ -297,7 +279,6 @@ func TestEmailTemplates_ListForbiddenWithoutReadPerm(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 	h.gw.EncryptedSecrets = testEncryptedSecrets(t)
-	// Default editor token lacks secret:read.
 	rw := h.do(t, "GET", "/api/v1/email-templates", nil)
 	if rw.Code != http.StatusForbidden {
 		t.Fatalf("list templates no perm = %d (%s), want 403", rw.Code, rw.Body.String())

@@ -6,39 +6,8 @@ import { api, isErrorCode, isHTTPStatus } from "../../../api";
 import { explainApiError } from "../../../lib/explainApiError";
 import type { Graph, LintIssue } from "../../../types";
 
-// How long the editor waits after the last edit before autosaving. Short enough
-// to feel "always saved", long enough that a burst of edits (typing, dragging)
-// debounces into a single save the daemon then coalesces.
 const AUTOSAVE_DEBOUNCE_MS = 1500;
 
-// useAutosave owns when the editor writes, and whether it is allowed to.
-//
-// Almost all of its value is in the six guards. Five exist to stop the editor
-// writing the wrong thing over the right thing; the last stops it writing the
-// same refused thing over and over:
-//
-//   loadFailed    the in-memory graph is the empty fallback, not the server's
-//   lockedRunID   a run is in flight and executes the SAVED graph
-//   previewing    a history preview is an old revision, intentionally != HEAD
-//   loadedID      the nodes still belong to the flow you navigated away from —
-//                 autosaving then writes flow A's graph under flow B's id, which
-//                 is real data loss and has actually happened
-//   saving        a PUT is already in flight; don't race a second one
-//   rejected      the daemon refused this exact graph; retrying it on a timer
-//                 is a save loop that flashes the error banner, not a fix
-//
-// Guards are invisible when they work, which is exactly how they rot.
-// FlowEditorSave.test.tsx asserts the ABSENCE of a write for each, which is the
-// only way to notice one that has quietly stopped guarding.
-//
-// What it deliberately does NOT own:
-//
-//   The graph. Building the document to save reads seventeen pieces of editor
-//   state, so `buildGraph` is handed in — the graph belongs to the component.
-//
-//   What a successful save means elsewhere. A save returns lint findings and
-//   flips the "unpublished changes" pill; both belong to other clusters, so
-//   they arrive through `onSaved` rather than being reached into from here.
 
 interface SaveResult {
   commit?: string;
@@ -47,34 +16,26 @@ interface SaveResult {
 
 export interface UseAutosaveArgs {
   token: string | null;
-  // Truthy once the session's identity has resolved; saving before then would
-  // PUT without knowing who the author is.
   ready: boolean;
   graphID: string | undefined;
   t: (key: string, opts?: Record<string, unknown>) => string;
-  // Produces the document to write. Called at save time, never cached, so it
-  // always reflects the latest editor state.
   buildGraph: () => Graph;
   canEdit: boolean;
   lockedRunID: string | null;
   previewing: boolean;
-  // The flow the in-memory graph actually belongs to. A ref because the mount
-  // load resolves asynchronously and the guard has to read the latest value.
   loadedID: React.MutableRefObject<string | null>;
   onSaved: (res: SaveResult, autosave: boolean) => void;
   onError: (message: string | null) => void;
-  // A 409 means another run started between the last lock check and this save.
   onConflict: () => void;
-  // The graph's content. Any change re-arms the debounce, so it measures idle
-  // time rather than time-since-the-first-edit.
-  //
-  // Passing a dependency array into a hook is unusual, and it is deliberate:
-  // the content lives in the component (seventeen atoms), while the timer and
-  // the guards belong together in here. The alternative — leaving the effect in
-  // the component — would leave the guards exactly where they were.
   reArmOn: readonly unknown[];
 }
 
+// Almost all of the value here is in the guards. Most exist to stop the editor
+// writing the wrong thing over the right thing — loadFailed means the in-memory
+// graph is the empty fallback rather than the server's; lockedRunID means a run is
+// executing the SAVED graph; previewing means an old revision is on screen; and
+// loadedID means the nodes still belong to the flow you navigated away from, so
+// autosaving would write flow A's graph under flow B's id.
 export function useAutosave({
   token,
   ready,
@@ -92,25 +53,12 @@ export function useAutosave({
 }: UseAutosaveArgs) {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  // Set when the initial load failed with anything other than a 404. A 404 is
-  // the normal state of a flow that has never been saved, and must NOT block.
   const [loadFailed, setLoadFailed] = useState(false);
-  // Set when an autosave was REFUSED. Retrying does not make a rejected graph
-  // acceptable: `dirty` stays true, and the debounce effect re-arms the moment
-  // `saving` flips back, so the editor re-PUT the identical graph every 1.5s
-  // for as long as the tab was open. Each attempt cleared the error banner and
-  // then set it again, and that banner sits in the layout — so the canvas
-  // jumped up and down once a beat while nothing was being fixed. Hold off
-  // until the content changes; the Save button is never blocked, so the author
-  // can always ask again on purpose.
   const [rejected, setRejected] = useState(false);
 
   const save = useCallback(
     async (autosave = false): Promise<boolean> => {
       if (!token || !ready || !graphID) return false;
-      // Never PUT over a graph we failed to load — the in-memory state is the
-      // empty fallback, not the server's. Defends the manual Save button too,
-      // not just the debounced effect.
       if (loadFailed) {
         onError(t("editor.loadFailedBlocked"));
         return false;
@@ -126,8 +74,6 @@ export function useAutosave({
       } catch (e) {
         const msg = (e as Error).message;
         onError(explainApiError(e, t));
-        // Only the unattended path stands down. A manual retry is the author
-        // asking, and it re-arms autosave by clearing this on success.
         if (autosave) setRejected(true);
         if (
           isHTTPStatus(e, 409) ||
@@ -144,9 +90,6 @@ export function useAutosave({
     [token, ready, graphID, loadFailed, buildGraph, t, onSaved, onError, onConflict],
   );
 
-  // Mirrors read by the debounced timer and the unload flush. Both are
-  // registered once but must act on the LATEST value, not the one captured when
-  // they were set up.
   const saveRef = useRef(save);
   saveRef.current = save;
   const dirtyRef = useRef(dirty);
@@ -156,10 +99,6 @@ export function useAutosave({
   const buildGraphRef = useRef(buildGraph);
   buildGraphRef.current = buildGraph;
 
-  // The debounced autosave: the editor saves on its own a short beat after the
-  // last edit, so there is nothing to remember to press. The daemon coalesces
-  // autosaves into one commit per editing burst, so the workspace git history
-  // stays readable; the manual Save button still writes its own checkpoint.
   useEffect(() => {
     if (!dirty || saving || !token || !ready || !graphID) return;
     if (!canEdit || lockedRunID) return;
@@ -189,27 +128,12 @@ export function useAutosave({
     ...reArmOn,
   ]);
 
-  // Editing after a refusal is what lifts it: the graph is no longer the one
-  // the daemon rejected, so it is worth another attempt. Declared after the
-  // debounce effect so clearing the flag re-runs that effect on the next
-  // render rather than within this commit.
   useEffect(() => {
     setRejected(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...reArmOn]);
 
-  // Flush a pending edit when the page unloads (refresh, close, navigate).
-  //
-  // The debounced timer clears itself on unmount, so a refresh inside the
-  // ~1.5s window — or before an in-flight save returns — would otherwise
-  // silently drop the change: you pick a form, refresh, and watch the previous
-  // value reappear. A keepalive PUT survives unload AND can carry the
-  // Authorization header, which sendBeacon cannot.
   useEffect(() => {
-    // Reads the graph (and so the flow id) from buildGraphRef at call time.
-    // Because graphID is an effect dep, an in-app route change tears this down
-    // with the PREVIOUS flow's closure, so the flush targets the flow the edits
-    // actually belong to.
     const flush = () => {
       if (
         !dirtyRef.current ||
@@ -224,11 +148,6 @@ export function useAutosave({
       const path = `/me/flows/${encodeURIComponent(
         `${g.tenant}/${g.workspace}/${g.id}`,
       )}?autosave=1`;
-      // The try/catch alone did not make this best-effort: fetch REJECTS rather
-      // than throwing synchronously, so a failed unload PUT escaped as an
-      // unhandled rejection. Harmless in a browser (the page is going away
-      // anyway) but it contradicts the intent, and it surfaced as noise in the
-      // test run. The .catch is what actually swallows it.
       try {
         void fetch((import.meta.env.VITE_API_BASE ?? "") + "/api/v1" + path, {
           method: "PUT",
@@ -249,8 +168,6 @@ export function useAutosave({
     window.addEventListener("pagehide", flush);
     return () => {
       window.removeEventListener("pagehide", flush);
-      // Unmount / route change: flush any edit still inside the debounce window
-      // before this editor instance (and its pending timer) is gone.
       flush();
     };
   }, [token, graphID, canEdit]);
@@ -259,15 +176,10 @@ export function useAutosave({
     dirty,
     setDirty,
     saving,
-    // The Settings/Triggers modal writes through its own path (it passes
-    // overrides to buildGraph and fires a sidebar-refresh event), but shares
-    // this flag so the toolbar shows one consistent "saving" state.
     setSaving,
     loadFailed,
     setLoadFailed,
     save,
-    // Exposed for the flow-watch, which must not animate an external HEAD edit
-    // over unsaved local work or a failed-load fallback.
     dirtyRef,
     loadFailedRef,
   };

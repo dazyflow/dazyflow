@@ -171,9 +171,6 @@ func TestRegex_NonStringInput(t *testing.T) {
 	}
 }
 
-// Inside a For each there is no upstream node to wire from — the item's
-// fields arrive as ${item.…} in a step's own params. So the text has to be
-// typeable, with a wired input still winning when there is one.
 func TestRegex_TextParam(t *testing.T) {
 	res, err := executeRegex(t.Context(), core.Job{
 		ID: "test",
@@ -202,17 +199,9 @@ func TestRegex_WiredInputBeatsTextParam(t *testing.T) {
 	}
 }
 
-// ----- the Replacements table ---------------------------------------
-//
-// Where this came from: an author wrote the pattern "(Clouds)|(Rain)" and tried
-// "(?1Molnigt)(?2Regn)" as the replacement — Boost/PCRE conditional-replacement
-// syntax, which Go's RE2 template has no notion of, so it came out literally.
-// The thing being asked for is a lookup, and a table says it directly.
-
 func TestRegex_ReplacementsTableTranslatesEachMatch(t *testing.T) {
 	res := runRegex(t, "Clouds today, Rain tomorrow", map[string]any{
-		"mode": "replace",
-		// No pattern: the words to look for are the table's own keys.
+		"mode":         "replace",
 		"replacements": map[string]any{"Clouds": "Molnigt", "Rain": "Regn"},
 	})
 	if got := regexOut(t, res).Inline; got != "Molnigt today, Regn tomorrow" {
@@ -221,8 +210,6 @@ func TestRegex_ReplacementsTableTranslatesEachMatch(t *testing.T) {
 }
 
 func TestRegex_ReplacementsLeaveUnlistedMatchesAlone(t *testing.T) {
-	// The author's own pattern matches more than the table mentions. The table
-	// lists what to change; everything else is not ours to touch.
 	res := runRegex(t, "Clouds and Fog", map[string]any{
 		"pattern": `Clouds|Fog`, "mode": "replace",
 		"replacements": map[string]any{"Clouds": "Molnigt"},
@@ -233,8 +220,6 @@ func TestRegex_ReplacementsLeaveUnlistedMatchesAlone(t *testing.T) {
 }
 
 func TestRegex_ReplacementsFollowTheirOwnPattern(t *testing.T) {
-	// (?i) in the pattern decides what counts as a match; the table is then
-	// consulted case-insensitively, since one row unambiguously covers it.
 	res := runRegex(t, "CLOUDS then clouds", map[string]any{
 		"pattern": `(?i)clouds`, "mode": "replace",
 		"replacements": map[string]any{"Clouds": "Molnigt"},
@@ -245,8 +230,6 @@ func TestRegex_ReplacementsFollowTheirOwnPattern(t *testing.T) {
 }
 
 func TestRegex_ReplacementsAmbiguousCaseIsLeftAlone(t *testing.T) {
-	// Two rows differing only in case: neither is guessed at, and the exact
-	// one still wins for its own spelling.
 	res := runRegex(t, "clouds CLOUDS Clouds", map[string]any{
 		"pattern": `(?i)clouds`, "mode": "replace",
 		"replacements": map[string]any{"Clouds": "Molnigt", "clouds": "molnigt"},
@@ -269,7 +252,6 @@ func TestRegex_ReplacementsLongestKeyWins(t *testing.T) {
 }
 
 func TestRegex_ReplacementsQuoteTheirKeys(t *testing.T) {
-	// A key is a word to find, not an expression: punctuation is literal.
 	res := runRegex(t, "cost is 5 (approx.)", map[string]any{
 		"mode":         "replace",
 		"replacements": map[string]any{"(approx.)": "(cirka)"},
@@ -292,8 +274,6 @@ func TestRegex_ReplacementsIgnoreBlankKeys(t *testing.T) {
 }
 
 func TestRegex_ReplacementsTableWinsOverReplacement(t *testing.T) {
-	// Documented precedence: with a table, the single replacement string is not
-	// consulted at all (it has no per-match answer).
 	res := runRegex(t, "Clouds", map[string]any{
 		"mode": "replace", "replacement": "IGNORED",
 		"replacements": map[string]any{"Clouds": "Molnigt"},
@@ -313,8 +293,6 @@ func TestRegex_ReplacementsBadShapeIsAnError(t *testing.T) {
 }
 
 func TestRegex_NoPatternAndNoTableIsAnError(t *testing.T) {
-	// The table is the only thing that can stand in for a pattern, and only in
-	// replace mode.
 	for _, params := range []map[string]any{
 		{"mode": "replace"},
 		{"mode": "extract", "replacements": map[string]any{"Clouds": "Molnigt"}},

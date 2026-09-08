@@ -10,7 +10,6 @@ import (
 	"testing"
 )
 
-// fullGoogleScopes mirrors the provider's complete scope set.
 var fullGoogleScopes = []string{
 	"https://www.googleapis.com/auth/gmail.send",
 	"https://www.googleapis.com/auth/spreadsheets",
@@ -40,11 +39,8 @@ func newGoogleOAuthHarness(t *testing.T) *gatewayHarness {
 	return h
 }
 
-// authorizeScopes drives GET /oauth/google/authorize and returns the space-
-// split scope set + the full query of the consent URL it 302s to.
 func authorizeScopes(t *testing.T, h *gatewayHarness, query string) (map[string]bool, url.Values) {
 	t.Helper()
-	// Connecting Google now requires organization:admin (org-shared credential).
 	rw := h.adminDo(t, "GET", "/api/v1/oauth/google/authorize?"+query, nil)
 	if rw.Code != http.StatusFound {
 		t.Fatalf("authorize status=%d body=%s", rw.Code, rw.Body.String())
@@ -86,7 +82,6 @@ func TestAuthorize_IncrementalScopesPerIntegration(t *testing.T) {
 	t.Parallel()
 	h := newGoogleOAuthHarness(t)
 
-	// Connecting for Sheets requests ONLY the sheets scopes — no gmail/forms.
 	scopes, q := authorizeScopes(t, h, "integration=Google+Sheets&return_to=/apps")
 	if !scopes["https://www.googleapis.com/auth/spreadsheets"] || !scopes["https://www.googleapis.com/auth/drive.readonly"] {
 		t.Errorf("missing sheets scopes: %v", scopes)
@@ -99,7 +94,6 @@ func TestAuthorize_IncrementalScopesPerIntegration(t *testing.T) {
 		t.Errorf("include_granted_scopes = %q, want true", q.Get("include_granted_scopes"))
 	}
 
-	// Gmail connect → only gmail scopes.
 	gmail, _ := authorizeScopes(t, h, "integration=Gmail")
 	if !gmail["https://www.googleapis.com/auth/gmail.send"] || gmail["https://www.googleapis.com/auth/spreadsheets"] {
 		t.Errorf("gmail connect scopes wrong: %v", gmail)
@@ -109,14 +103,12 @@ func TestAuthorize_IncrementalScopesPerIntegration(t *testing.T) {
 func TestAuthorize_NoIntegrationRequestsFullSet(t *testing.T) {
 	t.Parallel()
 	h := newGoogleOAuthHarness(t)
-	// Omitting integration falls back to the provider's full scope list.
 	scopes, _ := authorizeScopes(t, h, "return_to=/apps")
 	for _, s := range fullGoogleScopes {
 		if !scopes[s] {
 			t.Errorf("full-set fallback missing %q (got %v)", s, scopes)
 		}
 	}
-	// An unknown integration also falls back to the full set.
 	unknown, _ := authorizeScopes(t, h, "integration=Mystery")
 	if !unknown["https://www.googleapis.com/auth/gmail.send"] {
 		t.Errorf("unknown integration should fall back to full set: %v", unknown)

@@ -72,8 +72,6 @@ export function AdminWebAPIs() {
   const save = async (input: WebAPIInput, existingName?: string) => {
     if (!token) return;
     setError(null);
-    // A create has no id yet — the daemon derives one — so the busy key is the
-    // label until the row comes back with its name.
     setBusy(existingName ?? input.label);
     try {
       const saved = await api.saveWebAPI(token, input, existingName);
@@ -92,8 +90,6 @@ export function AdminWebAPIs() {
     }
   };
 
-  // askToRemove opens the confirmation and, in parallel, finds out what the
-  // catalog is used by. The warning fills in when the answer arrives.
   const askToRemove = (name: string) => {
     setConfirmRemove(name);
     if (!token || usage[name]) return;
@@ -285,8 +281,6 @@ export function AdminWebAPIs() {
   );
 }
 
-// blankOperation is what "add an operation" starts from. GET with no body is the
-// commonest shape and the one that needs the least filling in.
 const blankOperation = (): WebAPIOperation => ({
   id: "",
   method: "GET",
@@ -341,9 +335,6 @@ function WebAPIForm({
     webapi?.auth_kind ?? "bearer",
   );
   const [authHeader, setAuthHeader] = useState(webapi?.auth_header ?? "");
-  // Comma-separated, like the --labels a runner is installed with, so the two
-  // sides of the same vocabulary are typed the same way. Normalised (lower-case,
-  // de-duplicated) server-side, so what is typed here need not be exact.
   const [runnerTags, setRunnerTags] = useState(
     (webapi?.runner_tags ?? []).join(", "),
   );
@@ -360,8 +351,6 @@ function WebAPIForm({
         ? webapi.operations
         : [blankOperation()],
   );
-  // Remembered so a refresh does not make the admin find the address again.
-  // Only sent when there is one: omitted means "keep what is stored".
   const specURL = imported?.specURL ?? webapi?.spec_url;
 
   const patchOperation = (i: number, patch: Partial<WebAPIOperation>) =>
@@ -388,9 +377,6 @@ function WebAPIForm({
         enabled,
         spec_url: specURL,
         logo_mode: logoMode,
-        // Only sent for the mode that reads it. The stored image is resent
-        // unchanged when the admin did not pick a new file, which is what makes
-        // "edit the address" keep the mark.
         logo: logoMode === "custom" ? logo : undefined,
         operations: operations.map((op) => ({
           ...op,
@@ -546,8 +532,6 @@ function WebAPIForm({
               setLogoError(null);
               void fileToLogo(file).then(
                 (uri) => setLogo(uri),
-                // The codes fileToLogo rejects with each need their own
-                // suggestion, so they are keys rather than sentences.
                 (err: Error) => setLogoError(t(`webapi.icon_${err.message}`)),
               );
             }}
@@ -602,11 +586,6 @@ function WebAPIForm({
   );
 }
 
-// OperationEditor is one call, described.
-//
-// The argument list is the part that earns the space: a step is only better than
-// a generic web request because its arguments are named and typed, so this is
-// where the value of the whole feature is entered.
 function OperationEditor({
   op,
   index,
@@ -838,11 +817,6 @@ function WebAPIStatusChip({ webapi }: { webapi: WebAPI }) {
       </span>
     );
   }
-  // The pill stays neutral and the DOT carries the tone, which is how every
-  // status chip in the app works: only `.status-dot.<tone>` has rules. Six call
-  // sites used to pass the tone to the pill as well, where it matched nothing;
-  // CI's class guard caught this one (the only one written as a literal) and the
-  // rest were cleaned out with it.
   if (webapi.last_error) {
     return (
       <span className="status-chip" title={webapi.last_error}>
@@ -859,8 +833,6 @@ function WebAPIStatusChip({ webapi }: { webapi: WebAPI }) {
   );
 }
 
-// WebAPISteps shows what the org actually gained. A count alone leaves an admin
-// guessing at what to search the palette for, so the first few ids are named.
 function WebAPISteps({ webapi }: { webapi: WebAPI }) {
   const { t } = useTranslation();
   const ids = webapi.step_ids ?? [];

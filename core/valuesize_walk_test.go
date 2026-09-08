@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// Named container types whose underlying kind is the same as a fast-path
-// shape, so a type switch on the concrete type misses them and they exercise
-// the reflect arms instead.
 type (
 	anyList  []any
 	anyMap   map[string]any
@@ -64,8 +61,6 @@ func TestRefTooLarge_LimitIsInclusive(t *testing.T) {
 	}
 }
 
-// nest wraps "leaf" n times using wrap, building a chain that descends
-// through one arm of the walk.
 func nest(n int, wrap func(any) any) any {
 	var v any = "leaf"
 	for range n {
@@ -114,9 +109,8 @@ func TestApproxValueSize_EveryArmPassesRemainingBudget(t *testing.T) {
 		v    any
 		want int
 	}{
-		"refList": {[]Ref{{MIME: "aaaaa"}, {MIME: "b", Inline: big}}, 11},
-		"rowList": {[]map[string]any{{"a": "aaaa"}, {"b": big}}, 11},
-		// A typed slice and a struct both reach the reflect arms.
+		"refList":      {[]Ref{{MIME: "aaaaa"}, {MIME: "b", Inline: big}}, 11},
+		"rowList":      {[]map[string]any{{"a": "aaaa"}, {"b": big}}, 11},
 		"reflectSlice": {anyList{"aaaaa", big}, 10},
 		"struct":       {twoField{A: "aaaaa", B: big}, 10},
 	} {
@@ -138,9 +132,6 @@ func TestApproxValueSize_MapValueGetsBudgetLeftAfterKey(t *testing.T) {
 	}
 }
 
-// ptrChain returns n nested pointers around "leaf". Pointers are comparable,
-// so the chain can sit in a map KEY — the one position whose depth accounting
-// nothing else exercises.
 func ptrChain(n int) any {
 	var v any = "leaf"
 	for range n {
@@ -151,10 +142,6 @@ func ptrChain(n int) any {
 	return v
 }
 
-// A map KEY is walked too, and its recursion advances the depth like any
-// other. With maxValueDepth-1 pointers the leaf sits exactly on the cap, so
-// losing that one increment is the difference between refusing the value and
-// walking it to the bottom.
 func TestApproxValueSize_MapKeyWalkAdvancesDepth(t *testing.T) {
 	const budget = 100
 	m := map[any]string{ptrChain(maxValueDepth - 1): "v"}

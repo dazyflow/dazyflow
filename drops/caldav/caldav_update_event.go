@@ -140,15 +140,9 @@ func executeCalDAVUpdate(ctx context.Context, job core.Job, _ chan<- core.Progre
 		return *jerr, nil
 	}
 	if !changed {
-		// Nothing to do is not a failure — a flow that only sometimes has a
-		// change to make shouldn't have to branch around this step. The
-		// current event goes out on the pins so downstream still sees it.
 		return updateResult(job, uid, event, loc), nil
 	}
 
-	// DTSTAMP marks when the event was last assembled; SEQUENCE is how
-	// iCalendar tells attendees' clients that a version is newer than the one
-	// they hold. Without bumping it, some clients ignore the change.
 	event.Props.SetDateTime(ical.PropDateTimeStamp, time.Now().UTC())
 	bumpSequence(event)
 
@@ -169,13 +163,6 @@ func updateResult(job core.Job, uid string, event *ical.Event, loc *time.Locatio
 	}
 }
 
-// applyEventChanges folds the step's filled-in fields onto an existing event
-// and reports whether anything actually changed.
-//
-// A blank field means "leave it alone", not "clear it". That is the only
-// reading that makes a partial change safe, and it costs the ability to blank
-// a description — which a flow can do by writing a single space, and which is
-// a far rarer thing to want than moving a booking.
 func applyEventChanges(job core.Job, event *ical.Event, loc *time.Location) (bool, *core.Result) {
 	changed := false
 
@@ -236,8 +223,6 @@ func applyEventChanges(job core.Job, event *ical.Event, loc *time.Location) (boo
 	return changed, nil
 }
 
-// bumpSequence increments the event's SEQUENCE, which is iCalendar's version
-// counter for a change other people's clients should pick up.
 func bumpSequence(event *ical.Event) {
 	next := 1
 	if prop := event.Props.Get(ical.PropSequence); prop != nil {

@@ -1,10 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// These cases are the union of the coordinate/unit tests weather, openmeteo,
-// smhi and geo each carried against their own copy of these helpers. The
-// user-facing error strings are contract, so the assertions that pinned them
-// live here now.
 package geoloc
 
 import (
@@ -108,7 +104,6 @@ func TestResolveLatLon(t *testing.T) {
 		t.Fatalf("params path: got (%v,%v,%v)", lat, lon, err)
 	}
 
-	// Coordinate input overrides params.
 	job := core.Job{
 		Params: map[string]any{"lat": 1.0, "lon": 2.0},
 		Input:  map[string]core.Ref{"coordinate": {Inline: "40.71,-74.01"}},
@@ -118,7 +113,6 @@ func TestResolveLatLon(t *testing.T) {
 		t.Fatalf("input override: got (%v,%v,%v)", lat, lon, err)
 	}
 
-	// Coordinate text alone is enough.
 	lat, lon, err = ResolveLatLon(core.Job{Input: map[string]core.Ref{"coordinate": {Inline: "10,20"}}})
 	if err != nil || lat != 10 || lon != 20 {
 		t.Fatalf("coordinate text path: %v %v %v", lat, lon, err)
@@ -147,14 +141,12 @@ func TestResolveLatLon(t *testing.T) {
 }
 
 func TestFmt(t *testing.T) {
-	// Trailing zeros are trimmed so a tidy point stays tidy.
 	if got := Fmt(59.3293, 18.0686); got != "59.3293,18.0686" {
 		t.Errorf("Fmt = %q", got)
 	}
 	if got := Fmt(10, -20); got != "10,-20" {
 		t.Errorf("Fmt = %q", got)
 	}
-	// Round-trips through Parse.
 	lat, lon, err := Parse(Fmt(-12.5, -77))
 	if err != nil || lat != -12.5 || lon != -77 {
 		t.Errorf("round-trip: (%v,%v,%v)", lat, lon, err)
@@ -190,9 +182,7 @@ func TestCapitalizeFirst(t *testing.T) {
 		"Clear sky": "Clear sky",
 		"":          "",
 		"1 drop":    "1 drop",
-		// Non-ASCII keeps its own casing — localized descriptions are already
-		// cased by the provider.
-		"åska": "åska",
+		"åska":      "åska",
 	}
 	for in, want := range cases {
 		if got := CapitalizeFirst(in); got != want {
@@ -219,9 +209,6 @@ func TestTransportFailure(t *testing.T) {
 }
 
 func TestTransportFailure_SSRFBlocked(t *testing.T) {
-	// hfnet.IsSSRFError keys off the "ssrf_blocked" marker the guarded dialer
-	// puts in its error, so an egress refusal gets the explaining code rather
-	// than looking like an ordinary network hiccup.
 	r := TransportFailure(core.Job{}, "owm", "OpenWeather", errors.New("dial tcp: ssrf_blocked: private address"))
 	if r == nil || r.Error == nil || r.Error.Code != "egress_blocked" {
 		t.Fatalf("want egress_blocked, got %+v", r)
@@ -233,8 +220,6 @@ func TestTransportFailure_SSRFBlocked(t *testing.T) {
 }
 
 func TestProbe(t *testing.T) {
-	// Probe reaches a loopback test server only with the private-egress opt-in
-	// production gets via DAZYFLOW_ALLOW_PRIVATE_EGRESS.
 	prev := hfnet.PrivateEgressAllowed()
 	hfnet.SetAllowPrivateEgress(true)
 	defer hfnet.SetAllowPrivateEgress(prev)
@@ -245,7 +230,6 @@ func TestProbe(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// A non-2xx is a status, not an error — the caller decides what it means.
 	status, body, err := Probe(context.Background(), "OpenWeather", srv.URL)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -254,7 +238,6 @@ func TestProbe(t *testing.T) {
 		t.Fatalf("got (%d, %q)", status, body)
 	}
 
-	// A dial failure is labelled with the service name.
 	srv.Close()
 	if _, _, err := Probe(context.Background(), "OpenWeather", srv.URL); err == nil {
 		t.Error("closed server: want error")
@@ -262,16 +245,12 @@ func TestProbe(t *testing.T) {
 		t.Errorf("error should name the service, got %v", err)
 	}
 
-	// An unparseable URL fails before dialing.
 	if _, _, err := Probe(context.Background(), "OpenWeather", "http://[::1]:namedport/"); err == nil {
 		t.Error("bad URL: want error")
 	}
 }
 
 func TestProbe_SSRFGuarded(t *testing.T) {
-	// Without the private-egress opt-in a loopback target is refused by the
-	// guarded dialer. The refusal is wrapped as a dial failure (that is where
-	// it happens), but keeps the ssrf_blocked marker TransportFailure keys on.
 	prev := hfnet.PrivateEgressAllowed()
 	hfnet.SetAllowPrivateEgress(false)
 	defer hfnet.SetAllowPrivateEgress(prev)

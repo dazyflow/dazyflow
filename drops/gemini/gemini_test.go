@@ -19,7 +19,6 @@ import (
 
 func TestMain(m *testing.M) { dropstest.EgressTestMain(m) }
 
-// capture serves one canned reply and records the request the provider made.
 func capture(t *testing.T, status int, reply any) (*httptest.Server, *http.Request, *map[string]any) {
 	t.Helper()
 	var gotReq http.Request
@@ -60,11 +59,9 @@ func TestCall_TextResponse(t *testing.T) {
 	if strings.Contains(req.URL.RawQuery, "AIza") {
 		t.Errorf("api key leaked into the query: %q", req.URL.RawQuery)
 	}
-	// The model is a path segment, not a body field.
 	if want := "/v1beta/models/gemini-2.5-flash:generateContent"; req.URL.Path != want {
 		t.Errorf("path = %q, want %q", req.URL.Path, want)
 	}
-	// System is its own instruction, not a turn.
 	sys := (*body)["systemInstruction"].(map[string]any)
 	if got := sys["parts"].([]any)[0].(map[string]any)["text"]; got != "be brief" {
 		t.Errorf("systemInstruction = %+v", sys)
@@ -79,8 +76,6 @@ func TestCall_TextResponse(t *testing.T) {
 	}
 }
 
-// An empty model falls back to the package default rather than requesting
-// "/models/:generateContent", which is a 404 with a confusing message.
 func TestCall_DefaultsModel(t *testing.T) {
 	srv, req, _ := capture(t, 200, textReply("ok"))
 	if _, jerr := (provider{}).Call(context.Background(), "k", llmtask.Request{
@@ -164,7 +159,6 @@ func TestCall_ToolCallArgs(t *testing.T) {
 	if res.Tool["vendor"] != "Acme" || res.Tool["amount"] != 42.0 {
 		t.Errorf("tool = %+v", res.Tool)
 	}
-	// A forced tool is functionDeclarations + a toolConfig in ANY mode.
 	decls := (*body)["tools"].([]any)[0].(map[string]any)["functionDeclarations"].([]any)
 	if decls[0].(map[string]any)["name"] != "extract" {
 		t.Errorf("functionDeclarations = %+v", decls)
@@ -193,8 +187,6 @@ func TestCall_IgnoresMismatchedToolName(t *testing.T) {
 	}
 }
 
-// A truncated reply is the common cause of a missing tool call, and the knob
-// that fixes it has to be in the message.
 func TestCall_NoToolCallNamesTheFinishReason(t *testing.T) {
 	srv, _, _ := capture(t, 200, map[string]any{"candidates": []any{map[string]any{
 		"content":      map[string]any{"parts": []any{}},
@@ -213,7 +205,6 @@ func TestCall_NoToolCallNamesTheFinishReason(t *testing.T) {
 	}
 }
 
-// Prose split across parts is joined, not truncated to the first one.
 func TestCall_JoinsTextParts(t *testing.T) {
 	srv, _, _ := capture(t, 200, map[string]any{"candidates": []any{map[string]any{
 		"content": map[string]any{"parts": []any{
@@ -243,9 +234,6 @@ func TestCall_RateLimited(t *testing.T) {
 	}
 }
 
-// Gemini answers a bad key with 400 as readily as 401, so verifyKey has to
-// read both as "your key is wrong" — that is the only thing a keys-only
-// request can have got wrong.
 func TestVerifyKey(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -273,8 +261,6 @@ func TestVerifyKey(t *testing.T) {
 	}
 }
 
-// The provider has to be in the shared registry, not just the drop catalog:
-// the flow generator and the editor's AI assists read it from there.
 func TestRegisteredInSharedRegistry(t *testing.T) {
 	info, ok := llm.Get("gemini")
 	if !ok {
@@ -288,9 +274,6 @@ func TestRegisteredInSharedRegistry(t *testing.T) {
 	}
 }
 
-// Gemini takes every binary the same way — inline_data with a mime type —
-// whether it's a PDF or a picture, so there's no per-type branch to get wrong.
-// The ordering still matters: the file goes before the question.
 func TestCall_FilesBecomeInlineData(t *testing.T) {
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -17,10 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// TestBranch_RoutesThroughDispatch confirms the engine's dormant-edge
-// fix lets only the taken branch run. The graph forks into "then" and
-// "else"; the worker should run exactly one of them based on the
-// condition outcome.
 func TestBranch_RoutesThroughDispatch(t *testing.T) {
 	t.Parallel()
 	ks := auth.NewMemKeyStore()
@@ -63,11 +59,7 @@ func TestBranch_RoutesThroughDispatch(t *testing.T) {
 			g := core.Graph{
 				ID: "branch-" + c.name, Tenant: "t", Workspace: "ws",
 				Nodes: []core.Node{
-					// Swapped for numeric_source below, which is what the
-					// `out` wires belong to.
 					{ID: "source", Module: "numeric_source"},
-					// The check is split out (Compare → Branch): Compare turns
-					// the numeric value into a boolean, Branch just routes.
 					{ID: "check", Module: "compare", Params: map[string]any{
 						"op": "greater_than", "B": c.threshold,
 					}},
@@ -76,17 +68,13 @@ func TestBranch_RoutesThroughDispatch(t *testing.T) {
 					{ID: "no", Module: "delay", Params: map[string]any{"ms": 1}},
 				},
 				Edges: []core.Edge{
-					// source feeds A; Compare tests A > B (the threshold)…
 					{From: "source", FromPort: "out", To: "check", ToPort: "A"},
-					// …that drives Branch's condition, while the value itself
-					// is the payload routed on branch.in.
 					{From: "check", FromPort: "result", To: "decide", ToPort: "condition"},
 					{From: "source", FromPort: "out", To: "decide", ToPort: "in"},
 					{From: "decide", FromPort: "then", To: "yes", ToPort: "pass"},
 					{From: "decide", FromPort: "else", To: "no", ToPort: "pass"},
 				},
 			}
-			// The source is a per-case numeric emitter registered below.
 			reg := engine.NewRegistry()
 			_ = reg.Register(engine.NativeDrop{
 				Manifest: core.Manifest{
@@ -101,7 +89,6 @@ func TestBranch_RoutesThroughDispatch(t *testing.T) {
 					}}, nil
 				},
 			})
-			// Bring in the other modules from the default registry.
 			for id, m := range engine.Default.Manifests() {
 				m := m
 				nt, _ := engine.Default.Get(id)

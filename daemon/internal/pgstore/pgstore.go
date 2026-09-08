@@ -1,14 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package pgstore holds the plumbing shared by every Postgres-backed store
-// under daemon/: the schema bootstrap each one runs at construction, and the
-// refresh loop the cached ones run for the lifetime of the process.
-//
-// It exists because the stores no longer live in one package: daemon/support
-// owns the ticket, grant, bundle and agent tables, while the rest stay in
-// daemon, and both halves open the same way. Under daemon/internal/ so the
-// split is invisible outside the daemon subtree — this is plumbing, not API.
 package pgstore
 
 import (

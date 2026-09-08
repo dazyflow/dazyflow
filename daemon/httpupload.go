@@ -94,9 +94,6 @@ func (h *filesAPI) uploadWorkspaceFile(rw http.ResponseWriter, r *http.Request, 
 
 	dest := strings.TrimSpace(r.FormValue("path"))
 	if dest == "" {
-		// Strip any path the browser may have included in the filename
-		// (some clients send "C:\\Users\\…\\sales.xlsx"); we want just
-		// the leaf.
 		dest = filepath.Base(strings.ReplaceAll(header.Filename, "\\", "/"))
 	}
 	if dest == "" || dest == "." || dest == ".." {
@@ -165,8 +162,6 @@ func (h *filesAPI) uploadWorkspaceFile(rw http.ResponseWriter, r *http.Request, 
 	}
 	defer rootFS.Close()
 
-	// Create parent directories under the sandbox if the destination
-	// includes them ("imports/2026/q1/sales.xlsx" is common enough).
 	if dir := path.Dir(dest); dir != "." {
 		if err := rootFS.MkdirAll(dir, 0o755); err != nil {
 			writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("mkdir: %v", err))
@@ -187,7 +182,6 @@ func (h *filesAPI) uploadWorkspaceFile(rw http.ResponseWriter, r *http.Request, 
 
 	written, err := io.Copy(out, file)
 	if err != nil {
-		// Best-effort cleanup: a partial file is worse than no file.
 		_ = rootFS.Remove(dest)
 		writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("write: %v", err))
 		return

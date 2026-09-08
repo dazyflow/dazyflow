@@ -50,9 +50,6 @@ func init() {
 				},
 				"required":["shipment_id"]
 			}`),
-			// Destructive write, no idempotency key. A retried DELETE of an
-			// already-gone id 404s, so retries are off; the engine de-dupes a
-			// same-job re-execution (expired-lease reclaim / crash recovery).
 			Idempotent:   false,
 			RetryPolicy:  core.RetryNever,
 			DedupeWrites: true,

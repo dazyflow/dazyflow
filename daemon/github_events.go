@@ -23,59 +23,20 @@ const (
 	githubOnNewPRModuleID = "github_on_new_pr"
 )
 
-// githubTriggerSecretName is the tenant secret holding the webhook's
-// signing secret (the "Secret" field in the repo's webhook settings).
-// Organization scope (bare name), same convention as Stripe's
-// STRIPE_WEBHOOK_SECRET — resolved per request and bound to the URL
-// tenant so one tenant's secret can't validate another's deliveries.
+// Per-tenant: the signing secret is the org's, not the deployment's.
 const githubTriggerSecretName = "GITHUB_WEBHOOK_SECRET"
 
-// maxGitHubBodyBytes caps incoming webhook payloads. GitHub push
-// events on large monorepos can be a few hundred KB; 1 MiB leaves
-// headroom without letting a malformed sender exhaust memory.
 const maxGitHubBodyBytes = 1 * 1024 * 1024
 
-// GitHubEventsHandler verifies GitHub webhook signatures and
-// dispatches push / pull_request events to subscribed graphs.
-//
-// Routing layout:
-//
-//	POST /api/v1/events/github/{tenant}
-//	X-Hub-Signature-256: sha256=<hmac-sha256-hex>
-//	X-GitHub-Event: <event-type>
-//	X-GitHub-Delivery: <uuid>
-//	(JSON body)
-//
-// Auth: the signature header is the only auth. GitHub's HMAC scheme
-// is `sha256=<hex(hmac-sha256(secret, body))>` — see
-// https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries.
-//
-// Event types handled (per `X-GitHub-Event`):
-//
-//   - ping            → 200 OK ack so GitHub's "test delivery" works
-//   - push            → fans out to graphs with github_on_push nodes
-//   - pull_request    → fans out to github_on_new_pr nodes when
-//     action == "opened" (other actions ack silently)
-//
-// Unknown events ack with 200 so GitHub stops retrying — graphs that
-// subscribed get nothing, which is the correct outcome.
+// Verifies the signature BEFORE anything else is trusted.
 type GitHubEventsHandler struct {
 	svc           *Service
 	webhookSecret string
 	logger        *log.Logger
-	// fanoutDone, when set, is called once a dispatched fanout has finished.
-	// Nil in production. Same contract as the Stripe handler's: the endpoint
-	// answers GitHub before the fanout completes, so a test has nothing to
-	// synchronise on and otherwise has to race the clock. See
-	// StripeEventsHandler.fanoutDone for why that is a coin flip under -race.
+	// Tests use it to await an asynchronous dispatch.
 	fanoutDone func()
 }
 
-// NewGitHubEventsHandler wires a handler against the daemon Service.
-// webhookSecret is the Secret value the user enters in the repo's
-// webhook settings. Empty means the endpoint returns 501 on every
-// POST — keeps misconfiguration explicit instead of silently
-// rejecting signatures.
 func NewGitHubEventsHandler(svc *Service, webhookSecret string) *GitHubEventsHandler {
 	return &GitHubEventsHandler{
 		svc:           svc,
@@ -84,8 +45,6 @@ func NewGitHubEventsHandler(svc *Service, webhookSecret string) *GitHubEventsHan
 	}
 }
 
-// ServeHTTP routes a single GitHub webhook POST. Mounted at
-// `/api/v1/events/github/{tenant}` by HTTPGateway.
 func (h *GitHubEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
@@ -108,26 +67,13 @@ func (h *GitHubEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Resolve the signing secret BOUND to the URL tenant. Policy
-	// (per-tenant preferred, global fallback):
-	//
-	//   - If this tenant configured its own GITHUB_WEBHOOK_SECRET, verify
-	//     against that ONLY. A tenant that set its own secret is thereby
-	//     protected from the shared-secret cross-tenant injection — an
-	//     attacker who knows the global secret can't forge a delivery to
-	//     a tenant whose secret it doesn't know.
-	//   - Otherwise fall back to the global env-configured secret. This
-	//     preserves single-tenant deploys that use DAZYFLOW_GITHUB_WEBHOOK_SECRET
-	//     and haven't moved their secret into the per-tenant store.
-	//   - If neither exists, reject (fail closed).
+	// Bound to the URL's tenant: resolving it any other way would let one org's
+	// signature authenticate a delivery aimed at another.
 	secret := h.tenantSecret(r.Context(), tenant)
 	if secret == "" {
 		secret = h.webhookSecret
 	}
 	if secret == "" {
-		// Same 401 + body as a bad signature: an unauthenticated caller
-		// probing tenant names learns nothing about which tenants exist
-		// or have GitHub configured.
 		h.logger.Printf("reject %s: no webhook secret configured", tenant)
 		http.Error(rw, "invalid signature", http.StatusUnauthorized)
 		return
@@ -142,8 +88,6 @@ func (h *GitHubEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request)
 	event := r.Header.Get("X-GitHub-Event")
 	switch event {
 	case "ping":
-		// GitHub sends a ping on first webhook setup so the user can
-		// confirm the endpoint is reachable. Just ack.
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write([]byte("pong"))
 		return
@@ -152,16 +96,11 @@ func (h *GitHubEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request)
 	case "pull_request":
 		h.dispatchPullRequest(tenant, body, rw)
 	default:
-		// Unsubscribed event types — ack so GitHub doesn't retry,
-		// but nothing to dispatch.
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write([]byte("ok"))
 	}
 }
 
-// pushEvent is the decoded shape of a GitHub push event. We extract
-// the named ports up front; the raw event also goes through to the
-// `event` output for graphs that need fields we didn't pull out.
 type pushEvent struct {
 	Ref        string            `json:"ref"`
 	Before     string            `json:"before"`
@@ -209,11 +148,6 @@ func (h *GitHubEventsHandler) dispatchPush(tenant string, body []byte, rw http.R
 	_, _ = rw.Write([]byte("ok"))
 }
 
-// pullRequestEvent. We only fan out the "opened" action to the
-// github_on_new_pr trigger — the trigger drop's name says "new PR",
-// so reopens / synchronizes / closes don't fire it. Future drops
-// like github_on_pr_merged can subscribe to different actions
-// against the same handler.
 type pullRequestEvent struct {
 	Action      string `json:"action"`
 	PullRequest struct {
@@ -239,8 +173,6 @@ func (h *GitHubEventsHandler) dispatchPullRequest(tenant string, body []byte, rw
 		return
 	}
 	if ev.Action != "opened" {
-		// Non-opened actions ack without dispatch — github_on_new_pr
-		// specifically subscribes to the "this PR is new" moment.
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write([]byte("ok"))
 		return
@@ -278,11 +210,6 @@ func (h *GitHubEventsHandler) dispatchPullRequest(tenant string, body []byte, rw
 	_, _ = rw.Write([]byte("ok"))
 }
 
-// fanoutSeed walks every workspace under the tenant, loads each
-// graph, and submits a run for any that declares a node with the
-// matching trigger module. Mirrors slack_events.fanoutSeed.
-// runFanout is fanoutSeed plus the completion signal. Every dispatch goes
-// through it so no call site can forget to fire the hook.
 func (h *GitHubEventsHandler) runFanout(ctx context.Context, tenant, moduleID string, seed core.Result) {
 	defer func() {
 		if h.fanoutDone != nil {
@@ -297,10 +224,6 @@ func (h *GitHubEventsHandler) fanoutSeed(ctx context.Context, tenant, moduleID s
 		func(n core.Node) bool { return n.Module == moduleID })
 }
 
-// tenantSecret reads this tenant's own GITHUB_WEBHOOK_SECRET from the
-// encrypted secret store, bound to the URL tenant. Empty (no store, not
-// configured, or any lookup error) means "no per-tenant secret" — the
-// caller then falls back to the global env secret.
 func (h *GitHubEventsHandler) tenantSecret(ctx context.Context, tenant string) string {
 	if h.svc == nil || h.svc.EncryptedSecrets == nil {
 		return ""
@@ -312,22 +235,7 @@ func (h *GitHubEventsHandler) tenantSecret(ctx context.Context, tenant string) s
 	return secret
 }
 
-// verifyGitHubSignature implements GitHub's webhook signing scheme:
-//
-//	sig = "sha256=" + hex(hmac-sha256(secret, body))
-//	header X-Hub-Signature-256 must equal sig (constant-time)
-//
-// The secret is resolved per request (per-tenant preferred, global
-// fallback) and passed in, so the signature is verified against the
-// secret bound to the URL tenant.
-//
-// Unlike Slack's scheme there's no timestamp in the signature, so
-// no replay window — GitHub relies on TLS + per-delivery UUIDs
-// (X-GitHub-Delivery) for that. The lack of a window means an
-// attacker who somehow captures one valid signature could replay
-// it; mitigation is keeping the secret confidential and using
-// the per-delivery UUID for idempotency at the receiving side
-// (out of scope for V1).
+// sha256=HMAC over the raw body, compared in constant time.
 func verifyGitHubSignature(header http.Header, body []byte, secret string) error {
 	sig := header.Get("X-Hub-Signature-256")
 	if sig == "" {

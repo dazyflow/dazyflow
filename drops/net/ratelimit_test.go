@@ -12,14 +12,11 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// newTestLimiter builds an isolated limiter so tests don't fight the
-// package-global egressLimit or each other.
 func newTestLimiter(perMin, burst, conc int) *egressLimiter {
 	return newEgressLimiter(perMin, burst, conc)
 }
 
 func TestAcquireConsumesBurstThenPaces(t *testing.T) {
-	// 60/min = 1/s refill, burst 3: three immediate acquires, the fourth waits.
 	l := newTestLimiter(60, 3, 10)
 	ctx := context.Background()
 	for i := range 3 {
@@ -73,7 +70,6 @@ func TestConcurrencyCap(t *testing.T) {
 		t.Fatal("third concurrent acquire should block on the conc cap")
 	}
 	r1()
-	// A freed slot lets the next acquire through.
 	r3, err := l.acquire(ctx, "t|h")
 	if err != nil {
 		t.Fatalf("acquire after release: %v", err)

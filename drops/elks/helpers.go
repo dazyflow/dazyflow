@@ -49,9 +49,6 @@ func resolveCreds(job core.Job) (user, pass string, err error) {
 	return user, pass, nil
 }
 
-// elksDo runs one authenticated, form-encoded 46elks API call (HTTP Basic with
-// the API username + password). Returns status + body; the caller maps non-2xx
-// via extractElksError.
 func elksDo(ctx context.Context, job core.Job, method, url, form string) (int, []byte, error) {
 	timeoutMS := params.TimeoutMS(job, 15000)
 	user, pass, err := resolveCreds(job)
@@ -62,8 +59,6 @@ func elksDo(ctx context.Context, job core.Job, method, url, form string) (int, [
 	if form != "" {
 		b = []byte(form)
 	}
-	// HTTP Basic: encode the API username + password into the Authorization
-	// header (the same scheme req.SetBasicAuth applies).
 	headers := map[string]string{
 		"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+pass)),
 	}
@@ -77,10 +72,6 @@ func elksDo(ctx context.Context, job core.Job, method, url, form string) (int, [
 	return status, raw, err
 }
 
-// extractElksError pulls a human message out of a 46elks error body. 46elks
-// returns a short plain-text reason for most 4xx (e.g. "Field 'to' malformed"),
-// occasionally a {message} JSON — params.APIErrorMessage handles both, falling
-// back to the truncated raw body.
 func extractElksError(body []byte) string {
 	return params.APIErrorMessage(body, 200)
 }

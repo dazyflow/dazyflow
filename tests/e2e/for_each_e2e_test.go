@@ -23,9 +23,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// TestForEach_E2E_WebhookToIteration drives the full unlock end-to-end:
-// a webhook delivers a JSON array, the body is seeded straight into a
-// for_each node, and a step runs once per item.
 func TestForEach_E2E_WebhookToIteration(t *testing.T) {
 	_, wh, jobs, _, wsStore := startWebhookHarnessLocal(t)
 
@@ -34,7 +31,6 @@ func TestForEach_E2E_WebhookToIteration(t *testing.T) {
 		Nodes: []core.Node{
 			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}},
 			{ID: "iter", Module: "for_each", Params: map[string]any{"concurrency": 3}},
-			// The loop body: one delay step per item, wired to the body pin.
 			{ID: "step", Module: "delay", Params: map[string]any{"ms": 1}},
 		},
 		Edges: []core.Edge{
@@ -99,7 +95,7 @@ func TestForEach_E2E_WebhookToIteration(t *testing.T) {
 	}
 }
 
-// TestForEach_E2E_PerItemHTTPWithTemplatedURL exercises the realistic
+// Exercises the realistic
 // shape: webhook delivers a list of records, for_each runs http_request
 // once per record with ${item.id} in the URL and ${builtin.KEY} in the
 // Authorization header on the wired body node. Proves that:
@@ -110,7 +106,6 @@ func TestForEach_E2E_PerItemHTTPWithTemplatedURL(t *testing.T) {
 	tokens := daemon.NewBuiltinProvider()
 	tokens.Set("UPSTREAM_TOKEN", "real-secret-9000")
 
-	// Mock backend captures (path, auth) per request.
 	type hit struct {
 		path string
 		auth string
@@ -126,8 +121,6 @@ func TestForEach_E2E_PerItemHTTPWithTemplatedURL(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Build a full dzd-equivalent stack: workspace, job store, engine
-	// configured with the builtin secret provider, worker.
 	ks := auth.NewMemKeyStore()
 	wsStore, _ := workspace.OpenFS("")
 	jobs := jobstore.NewMemory()
@@ -157,8 +150,6 @@ func TestForEach_E2E_PerItemHTTPWithTemplatedURL(t *testing.T) {
 		Nodes: []core.Node{
 			{ID: "inbound", Module: "webhook_input", Params: map[string]any{"secrets": []any{"s"}}},
 			{ID: "fan", Module: "for_each", Params: map[string]any{"concurrency": 2}},
-			// The loop body: one http_request per item. ${item.id} is resolved
-			// per iteration by the engine; ${builtin.…} by the secret provider.
 			{ID: "call", Module: "http_request", Params: map[string]any{
 				"url":    srv.URL + "/items/${item.id}",
 				"method": "GET",

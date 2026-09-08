@@ -3,23 +3,15 @@
 
 package core
 
-// The Request/Reply pair: a flow that ANSWERS its caller, as opposed to the
-// webhook trigger, whose callers get an immediate acknowledgement and nothing
-// else. Kept here rather than in webhook.go because the two endpoints promise
-// different things and should not drift into each other.
+// A flow that ANSWERS its caller, as against the webhook trigger, whose callers
+// get an acknowledgement and nothing else. Kept out of webhook.go because the two
+// endpoints promise different things and should not drift into each other.
 const (
-	// RequestInputModule starts a flow from a call that waits for an answer.
 	RequestInputModule = "request_input"
-	// ReplyModule is the step whose value is sent back to that caller.
-	ReplyModule = "reply"
-	// ReplyDefaultStatus is the HTTP status a Reply sends when the author
-	// sets none.
+	ReplyModule        = "reply"
 	ReplyDefaultStatus = 200
 )
 
-// GraphRequestSecrets returns every bearer key across the graph's
-// request_input nodes — the full set the /call endpoint accepts. Same
-// multi-key rotation story as GraphWebhookSecrets.
 func GraphRequestSecrets(g Graph) []string {
 	var out []string
 	for _, n := range g.Nodes {
@@ -30,16 +22,6 @@ func GraphRequestSecrets(g Graph) []string {
 	return out
 }
 
-// GraphRequestPublic reports whether any request_input node in the graph
-// accepts calls with no key. Reads the same `public` param as the Webhook step
-// (WebhookPublic), for the same reason GraphRequestSecrets reuses
-// WebhookSecrets: one spelling of "keys and who may skip them" across both
-// inbound doors.
-//
-// The bargain is not identical, though, and the step's own copy says so: a
-// public /trigger lets a stranger START a flow, while a public /call also
-// hands them whatever the flow's Reply produces. Opening one is a decision
-// about execution; opening the other is a decision about output.
 func GraphRequestPublic(g Graph) bool {
 	for _, n := range g.Nodes {
 		if n.Module == RequestInputModule && WebhookPublic(n.Params) {
@@ -49,8 +31,6 @@ func GraphRequestPublic(g Graph) bool {
 	return false
 }
 
-// ReplyNodeIDs returns the graph's Reply steps, in node order. The /call
-// handler watches all of them: whichever finishes first answers the caller.
 func ReplyNodeIDs(g Graph) []string {
 	var out []string
 	for _, n := range g.Nodes {
@@ -61,9 +41,6 @@ func ReplyNodeIDs(g Graph) []string {
 	return out
 }
 
-// ReplyStatusCode reads the HTTP status a Reply node sends. Out-of-range
-// values fall back to the default — executeReply already fails the step on
-// one, so this only guards a record written by an older/hand-edited graph.
 func ReplyStatusCode(params map[string]any) int {
 	code, ok := paramInt(params, "status_code")
 	if !ok || code < 200 || code > 599 {

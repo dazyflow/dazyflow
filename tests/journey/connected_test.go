@@ -17,22 +17,10 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// timeShortDaysAgo returns an ISO date (YYYY-MM-DD) n days before now,
-// for seeding "recent" rows that fall inside a last-week filter.
 func timeShortDaysAgo(n int) string {
 	return time.Now().UTC().AddDate(0, 0, -n).Format("2006-01-02")
 }
 
-// TestJourney_OverdueInvoice_RunsWithConnectedAccounts proves the
-// connected happy path: a user with Google connected publishes the
-// "chase overdue invoices" flow, it runs on demand, reads the invoice
-// sheet, and emails exactly the one client who is overdue and unpaid.
-//
-// Gmail and Sheets are mocked at their HTTP base (the same SetHTTPBase
-// seam the integration tests use); a raw `token` param on each node
-// stands in for a connected account, so no OAuth dance is needed. This
-// is the execution counterpart to the catalog/journey tests: it watches
-// a SaaS scenario actually run, not just validate.
 func TestJourney_OverdueInvoice_RunsWithConnectedAccounts(t *testing.T) {
 	google := newGoogleMock(t)
 	defer google.Close()
@@ -42,13 +30,9 @@ func TestJourney_OverdueInvoice_RunsWithConnectedAccounts(t *testing.T) {
 
 	_, g := readGraph(t, "../scenarios/01-overdue-invoice-chaser.json")
 
-	// The Sheets + Gmail nodes are scripted connectors; point each at the mock
-	// via the base_url override (the scripted analog of the old SetHTTPBase),
-	// with a raw token standing in for a connected account.
 	mock := map[string]any{"token": "mock-token", "base_url": google.srv.URL}
 	patchParams(&g, "read_invoices", mock)
 	patchParams(&g, "log_reminded", mock)
-	// send_email is the for_each loop body (one gmail send per overdue row).
 	patchParams(&g, "send_email", mock)
 	raw := fillBlanks(mustJSON(t, g))
 
@@ -62,8 +46,6 @@ func TestJourney_OverdueInvoice_RunsWithConnectedAccounts(t *testing.T) {
 
 	runID := me.runFlow(flowID)
 	if status := me.waitForRun(runID); status != "succeeded" {
-		// Surface the failing node so the cause is obvious (this is how
-		// we caught that CEL filters had no `now` to compute overdue days).
 		t.Fatalf("the connected run did not succeed: status=%q\nnode failures:\n%s",
 			status, me.failedNodeReport(runID))
 	}
@@ -82,13 +64,6 @@ func TestJourney_OverdueInvoice_RunsWithConnectedAccounts(t *testing.T) {
 	}
 }
 
-// TestJourney_WeeklySalesSummary_RunsWithConnectedAccounts proves the
-// "scheduled report to Slack" shape end to end: read last week's orders
-// from a Sheet, filter to the last 7 days (using the `now` the CEL env
-// now exposes), total by salesperson, have the AI write the recap, and
-// post it to Slack. Sheets/Claude/Slack are mocked; the AI mock echoes
-// the aggregated rows it was handed so the test can confirm the data
-// actually flowed through filter -> aggregate -> sort -> AI -> Slack.
 func TestJourney_WeeklySalesSummary_RunsWithConnectedAccounts(t *testing.T) {
 	m := newSalesMock(t)
 	defer m.Close()
@@ -97,8 +72,6 @@ func TestJourney_WeeklySalesSummary_RunsWithConnectedAccounts(t *testing.T) {
 	me := s.signUp(t, "founder@shop.example")
 
 	_, g := readGraph(t, "../scenarios/02-weekly-sales-summary.json")
-	// All three connectors (Sheets, Claude, Slack) are scripted; point each at
-	// the shared mock via base_url (Claude already used it).
 	patchParams(&g, "read_orders", map[string]any{"token": "mock-token", "base_url": m.srv.URL})
 	patchParams(&g, "compose", map[string]any{"api_key": "mock-key", "base_url": m.srv.URL})
 	patchParams(&g, "post", map[string]any{"token": "mock-token", "base_url": m.srv.URL})
@@ -133,8 +106,6 @@ func TestJourney_WeeklySalesSummary_RunsWithConnectedAccounts(t *testing.T) {
 	}
 }
 
-// --- Sales mock (Sheets orders + Claude + Slack) ---------------------
-
 type salesMock struct {
 	srv   *httptest.Server
 	mu    sync.Mutex
@@ -164,8 +135,6 @@ func newSalesMock(t *testing.T) *salesMock {
 		})
 	})
 
-	// Claude: echo the rows it was given back as the "summary" text, so
-	// the downstream Slack message carries the aggregated data.
 	mux.HandleFunc("/v1/messages", func(rw http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Messages []struct {
@@ -186,7 +155,6 @@ func newSalesMock(t *testing.T) *salesMock {
 		})
 	})
 
-	// Slack chat.postMessage: capture the posted text.
 	mux.HandleFunc("/chat.postMessage", func(rw http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Text string `json:"text"`
@@ -212,8 +180,6 @@ func (m *salesMock) slackPosts() []string {
 	return out
 }
 
-// --- Google (Sheets + Gmail) mock ------------------------------------
-
 type googleMock struct {
 	srv  *httptest.Server
 	mu   sync.Mutex
@@ -225,15 +191,11 @@ func newGoogleMock(t *testing.T) *googleMock {
 	m := &googleMock{}
 	mux := http.NewServeMux()
 
-	// Sheets values: read returns the invoice table; append (path ends
-	// :append) just acknowledges.
 	mux.HandleFunc("/spreadsheets/", func(rw http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && strings.Contains(r.URL.Path, ":append") {
 			writeJSON(rw, map[string]any{"updates": map[string]any{"updatedRows": 1}})
 			return
 		}
-		// A small invoices table: one overdue+unpaid, one paid. due_date
-		// is well in the past so days_overdue is positive once computed.
 		writeJSON(rw, map[string]any{
 			"range":          "Invoices",
 			"majorDimension": "ROWS",
@@ -245,8 +207,6 @@ func newGoogleMock(t *testing.T) *googleMock {
 		})
 	})
 
-	// Gmail send: capture the decoded message so the test can assert
-	// who got emailed.
 	mux.HandleFunc("/users/me/messages/send", func(rw http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Raw string `json:"raw"`
@@ -277,8 +237,6 @@ func writeJSON(rw http.ResponseWriter, v any) {
 	rw.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(rw).Encode(v)
 }
-
-// --- graph patching --------------------------------------------------
 
 func patchParams(g *core.Graph, nodeID string, set map[string]any) {
 	for i := range g.Nodes {

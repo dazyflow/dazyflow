@@ -47,7 +47,6 @@ func TestRunSnapshotFromRecords_FeedsRedactedBundle(t *testing.T) {
 
 	rs := support.RunSnapshotFromRecords(runRec, nodeRecs)
 
-	// Adapter shape checks.
 	if rs.RunID != "run-42" || rs.Status != core.JobStatusFailed {
 		t.Errorf("run snapshot header wrong: %+v", rs)
 	}
@@ -57,12 +56,10 @@ func TestRunSnapshotFromRecords_FeedsRedactedBundle(t *testing.T) {
 	if len(rs.Nodes) != 1 || rs.Nodes[0].NodeID != "charge" {
 		t.Fatalf("node snapshot wrong: %+v", rs.Nodes)
 	}
-	// The snapshot carries the RAW ref (redaction happens in core, not here).
 	if rs.Nodes[0].Output["customer_id"].Inline != "cus_secretPayload123" {
 		t.Error("adapter must pass the raw ref through to core for redaction")
 	}
 
-	// End-to-end: through BuildSupportBundle, no payload/Details survives.
 	graph := core.Graph{ID: "daily-invoice", Tenant: "acme", Workspace: "main"}
 	bundle := core.BuildSupportBundle(graph, &rs, nil, core.RedactStructureOnly)
 	raw, err := json.Marshal(bundle)
@@ -75,7 +72,6 @@ func TestRunSnapshotFromRecords_FeedsRedactedBundle(t *testing.T) {
 			t.Errorf("pipeline leaked %q\n%s", leak, js)
 		}
 	}
-	// ...but the diagnostic error code+message survive.
 	if !strings.Contains(js, "timeout") || !strings.Contains(js, "exceeded 30s") {
 		t.Errorf("diagnostic error code/message dropped\n%s", js)
 	}

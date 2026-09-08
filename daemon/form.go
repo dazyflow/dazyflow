@@ -24,22 +24,10 @@ import (
 	"github.com/dazyflow/dazyflow/internal/maillang"
 )
 
-// defaultFormFields is the contact-form shape a hosted form falls back
-// to when the trigger doesn't name its own fields. Covers the canonical
-// "website contact form → somewhere" use case out of the box.
 var defaultFormFields = []string{"name", "email", "message"}
 
-// handleForm serves the hosted intake form: a public page a
-// non-technical user can point people at without anyone needing a
-// bearer token or a curl command. GET renders the form; POST accepts a
-// submission and fires the flow with the field values on the Form step's
-// body port. Only graphs carrying a Form step expose
-// anything here — every other path is a 404.
-//
-// This is the "first-class intake source" that closes the biggest
-// non-technical gap: the webhook /trigger endpoint needs an Authorization
-// header most form tools can't send, whereas this page needs nothing but
-// a link.
+// A PUBLIC page: no bearer token, so possession of the URL is the capability and
+// everything here must assume an anonymous, hostile caller.
 func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/form/"), "/")
 	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
@@ -53,28 +41,17 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 		renderFormUnavailable(rw, "")
 		return
 	}
-	// Hosted form submissions run the published revision, matching the
-	// webhook listener — an unpublished flow's form is not live.
 	g, err := store.LoadPublished(graphID)
 	if err != nil {
-		// The common case by far: the owner copied the form link out of the
-		// editor and shared it before pressing Publish. They get told about
-		// that in the editor; whoever they sent it to gets this page.
 		renderFormUnavailable(rw, "")
 		return
 	}
 	if g.Disabled {
-		// Symmetric with the webhook: a paused flow's form is off.
-		// Use 404 (not 403) to match the rest of this handler's
-		// "don't reveal whether the graph exists" stance.
 		renderFormUnavailable(rw, g.Language)
 		return
 	}
 	fields, title, ok := publicFormConfig(g)
 	if !ok {
-		// No Form step, so there is no hosted form here.
-		// Don't reveal which — the same page as every other miss keeps
-		// non-public graphs invisible.
 		renderFormUnavailable(rw, g.Language)
 		return
 	}
@@ -88,8 +65,6 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 		title = g.ID
 	}
 
-	// The flow's language, resolved once: every page this handler can serve —
-	// the form, the confirmation, either error — must be in the same one.
 	view := formView{
 		Title:    title,
 		Fields:   fields,
@@ -102,19 +77,11 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		renderForm(rw, http.StatusOK, view)
 	case http.MethodPost:
-		// Cap the body before we materialize it — the global 200 MiB limit is
-		// far too loose for a public, unauthenticated form (mirrors the 1 MiB
-		// webhook cap).
 		r.Body = http.MaxBytesReader(rw, r.Body, 1<<20)
 
 		posted, err := parseFormBody(r)
 		if err != nil {
-			// An encoding this endpoint can't read. Answering 200 here (which
-			// is what a bare ParseForm did for, say, a JSON body — it leaves
-			// PostForm empty without erroring) started a run and appended a
-			// row with every column blank, so the caller was told "Thanks!"
-			// while the owner silently collected junk. Refuse instead, and say
-			// which encodings work.
+			// A 200 here would look like a successful submission to the visitor.
 			if errors.Is(err, errFormUnsupportedMedia) {
 				http.Error(rw,
 					"this form accepts application/x-www-form-urlencoded, multipart/form-data or a flat application/json object; "+
@@ -122,18 +89,13 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 					http.StatusUnsupportedMediaType)
 				return
 			}
-			// Unreadable, malformed, or over the 1 MiB cap. Nothing to re-fill
-			// (the body never parsed), but the visitor still gets a page
-			// rather than Times New Roman on white.
+			// Nothing to re-fill the form with, so the page cannot be re-rendered.
 			view.Error = view.M.FormErrorRetry
 			renderForm(rw, http.StatusBadRequest, view)
 			return
 		}
 
-		// A filled honeypot means a bot walked the DOM and completed every
-		// input it found. Answer exactly as a success would — a bot that can
-		// tell it was refused just tries again without the field — but run
-		// nothing and store nothing.
+		// A filled honeypot means a bot completed every field, so answer as if sent.
 		if hp := honeypotField(fields); hp != "" && strings.TrimSpace(posted.Get(hp)) != "" {
 			w.logger.Printf("form %s/%s/%s: honeypot filled, submission dropped", tenant, workspace, graphID)
 			view.Submitted = true
@@ -152,50 +114,26 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if len(seeds) == 0 {
-			// Unreachable by construction: publicFormConfig above already
-			// found a live (non-paused) form_input, and this loop's
-			// predicate is the weaker one. Kept as a guard, answering the
-			// same way the owner-side refusals below do rather than with a
-			// bare status, so a future edit that breaks the invariant still
-			// shows a visitor a page.
+			// Unreachable: publicFormConfig already rejected a flow without a form.
 			view.Error = view.M.FormErrorClosed
 			renderForm(rw, http.StatusBadRequest, view)
 			return
 		}
 		principal := SystemPrincipal("dazyflow-form", g.Tenant, g.Workspace)
-		// The form is a trigger endpoint like /trigger, so it carries the
-		// trigger-chain depth the same way. Submitting at depth 0 unconditionally
-		// meant a flow whose HTTP step posts to its own form URL ran forever: the
-		// counter seedRun refuses on never climbed, and this is the door that
-		// needs no secret — the /trigger breaker was reachable only by a caller
-		// who already had the flow's key.
-		// Detached from the request, like /call and /trigger. A visitor who
-		// closes the tab, or a phone that loses signal between send and the
-		// confirmation page, must not abandon the submit half-written — that
-		// leaves a run stuck `running` with no work in it, and loses what they
-		// typed for nothing.
+		// A trigger endpoint like /trigger, so it carries the same chain-depth guard: a
+		// flow whose step posts back to its own form would otherwise run for ever.
 		runID, err := w.svc.SubmitGraphOpts(context.WithoutCancel(r.Context()), principal, g, SubmitOpts{
 			Seeds:        seeds,
 			TriggerDepth: inboundTriggerDepth(r),
 		})
 		if err != nil {
 			w.logger.Printf("form submit %s/%s/%s: %v", tenant, workspace, graphID, err)
-			// "Try again" is only honest for a transient failure. A refusal the
-			// OWNER has to act on — over the plan's run allowance, a suspended
-			// org, a graph that no longer validates — will refuse the next
-			// attempt too, and the visitor has no way to know that. Tell them
-			// to reach the owner another way instead of leaving them retyping.
 			view.Error = view.M.FormErrorRetry
 			status := http.StatusInternalServerError
 			if ownerMustFix(err) {
 				view.Error = view.M.FormErrorClosed
 				status = http.StatusServiceUnavailable
-				// Somebody just typed this and pressed send. The refusal is the
-				// owner's to fix, which means the visitor will not be back —
-				// so keep the submission as a failed run the owner can see and
-				// press Retry on, rather than dropping it on the floor with a
-				// log line. Detached from the request context: the visitor's
-				// connection is about to go away, and the record must not.
+				// Somebody just typed this, so the refusal has to be re-rendered with it.
 				capCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 15*time.Second)
 				_, stored := w.svc.recordRefusedDelivery(capCtx, g, seeds,
 					refusalCode(err), refusalMessage(err))
@@ -216,13 +154,7 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ownerMustFix reports whether a submission failure is one the flow's OWNER
-// has to resolve, rather than something a visitor's second attempt could get
-// past. The sentinels are the submission gates in SubmitGraphOpts; an invalid
-// graph joins them because it will keep failing validation until the flow is
-// edited. Anything unrecognised counts as transient — telling someone to try
-// again when they can't is a smaller wrong than telling them not to bother
-// when they could.
+// Distinguishes a visitor's mistake from a misconfiguration only the owner can fix.
 func ownerMustFix(err error) bool {
 	if err == nil {
 		return false
@@ -233,21 +165,12 @@ func ownerMustFix(err error) bool {
 		strings.Contains(err.Error(), "invalid graph")
 }
 
-// errFormUnsupportedMedia marks a POST whose Content-Type this endpoint
-// cannot read, so the caller gets 415 rather than a blank-row "success".
 var errFormUnsupportedMedia = errors.New("unsupported media type")
 
-// honeypotName is the hidden field the rendered form carries. Bots that
-// fill every input they find give themselves away by completing it; real
-// visitors never see it. The name is deliberately plausible-but-namespaced:
-// plausible so a naive bot fills it, namespaced so it can't collide with a
-// field an owner actually declared.
+// A hidden field; a real visitor never fills it.
 const honeypotName = "dz_confirm_url"
 
-// honeypotField returns the honeypot's name, or "" when an owner has
-// declared a field of the same name (in which case the field is theirs and
-// the trap is off — silently discarding a real answer would be far worse
-// than missing a bot).
+// Empty when the owner declared a field of the same name themselves.
 func honeypotField(declared []string) string {
 	for _, f := range declared {
 		if strings.EqualFold(strings.TrimSpace(f), honeypotName) {
@@ -257,31 +180,12 @@ func honeypotField(declared []string) string {
 	return honeypotName
 }
 
-// parseFormBody reads a hosted-form POST into url.Values, accepting the
-// encodings a form submission can plausibly arrive in:
-//
-//   - application/x-www-form-urlencoded → the browser's own encoding
-//   - multipart/form-data               → same, for forms with a file input
-//   - application/json                  → a FLAT object of scalars, for
-//     anyone hand-rolling a form against this URL rather than embedding ours
-//   - no body / no Content-Type         → treated as urlencoded (empty)
-//
-// Anything else is errFormUnsupportedMedia. That refusal is the point: the
-// previous code called r.ParseForm() unconditionally, and ParseForm does not
-// report an error for a Content-Type it doesn't handle — it simply leaves
-// PostForm empty. A JSON caller therefore got 200, a real run, and a row with
-// every column blank.
-//
-// Nested JSON (an object or array under a key) is flattened to its compact
-// JSON text rather than rejected: the columns are TEXT anyway, and keeping
-// the value is more useful to the owner than refusing the whole submission.
+// Accepts both urlencoded and JSON, so a page and an API caller both work.
 func parseFormBody(r *http.Request) (url.Values, error) {
 	mediaType := r.Header.Get("Content-Type")
 	if i := strings.IndexByte(mediaType, ';'); i >= 0 {
 		mediaType = mediaType[:i]
 	}
-	// Media types are case-insensitive (RFC 9110 §8.3.1) — "Application/JSON"
-	// must read the same as the lowercase form.
 	mediaType = strings.ToLower(strings.TrimSpace(mediaType))
 
 	switch mediaType {
@@ -301,9 +205,6 @@ func parseFormBody(r *http.Request) (url.Values, error) {
 		}
 		var obj map[string]any
 		if err := json.Unmarshal(raw, &obj); err != nil {
-			// Valid JSON that isn't an object (an array, a bare string) has no
-			// field names to map onto form fields, and malformed JSON has
-			// nothing at all. Either way the caller needs to know.
 			return nil, err
 		}
 		out := make(url.Values, len(obj))
@@ -315,10 +216,6 @@ func parseFormBody(r *http.Request) (url.Values, error) {
 	return nil, errFormUnsupportedMedia
 }
 
-// jsonScalarToString renders one JSON value as the text a form field would
-// have carried. Numbers keep their literal form (json.Number-style, via
-// strconv) so an id like 10000000000000001 doesn't come out as 1e+16, and
-// composites keep their JSON text so nothing is silently dropped.
 func jsonScalarToString(v any) string {
 	switch t := v.(type) {
 	case nil:
@@ -337,31 +234,11 @@ func jsonScalarToString(v any) string {
 	}
 }
 
-// maxFormFields caps the total field count on a single hosted-form
-// submission. The Collections store auto-evolves columns from whatever
-// gets posted (so the owner doesn't manage schema), so an unbounded
-// payload would let a spammy caller bloat the workspace's schema with
-// 1000s of TEXT columns. 50 is well above what Zapier / Make /
-// Typeform / Squarespace actually attach in practice (typically <20).
-//
-// It is also the ceiling on the DECLARED field list (publicFormConfig), so a
-// flow cannot render more inputs than a submission could ever carry; the
-// number lives in core so the save-time lint quotes the same one.
+// Caps a SUBMISSION as well as the render, so a field past it could never be
+// filled in anyway.
 const maxFormFields = core.MaxHostedFormFields
 
-// collectFormValues builds the {field: value} map seeded into the
-// flow's form_input.body port from a hosted-form POST. It accepts
-// every posted field (Zapier, Make, Typeform attach utm_*, source,
-// submitted_at etc. that owners commonly forget to declare), not just
-// the ones named in form_fields — the old "declared-only" filter
-// dropped extras silently while the visitor saw "Thanks!", which was
-// the worst combination: visitor reassured, owner blind, payload
-// truncated.
-//
-// declared fields are always present (blank when missing) so
-// downstream nodes that read body.email by name don't have to defend
-// against absent keys. They're inserted first so they're never crowded
-// out of maxFormFields by a payload that pads itself with junk.
+// Seeds the trigger's body port.
 func collectFormValues(declared []string, posted url.Values) map[string]any {
 	out := make(map[string]any, len(declared)+8)
 	for _, f := range declared {
@@ -386,17 +263,11 @@ func collectFormValues(declared []string, posted url.Values) map[string]any {
 	return out
 }
 
-// publicFormConfig returns the hosted-form fields and title from the graph's
-// Form step, else ok=false. The step's presence IS the opt-in: a form takes no
-// key, so there is nothing further to switch on.
 func publicFormConfig(g core.Graph) (fields []string, title string, ok bool) {
 	for _, n := range g.Nodes {
 		if n.Module != core.FormInputModule {
 			continue
 		}
-		// A paused trigger step has no public form. Rendering the form and
-		// then refusing (or worse, accepting into a run that skips the very
-		// node meant to receive it) is a crueller answer than not offering it.
 		if triggerNodeDisabled(n) {
 			continue
 		}
@@ -405,23 +276,13 @@ func publicFormConfig(g core.Graph) (fields []string, title string, ok bool) {
 			t = t[:core.MaxHostedFormTitleLen]
 		}
 		fields := formStringSlice(n.Params["form_fields"])
-		// Capping the COUNT bounded the wrong half: a name has no natural
-		// length, and each one comes back four times per render, so 50 names of
-		// 300 KB answered one anonymous GET with 60 MB. Drop an over-long name
-		// rather than truncating it — a truncated name would still render and
-		// still post, under a key the author never typed, and two names sharing
-		// a prefix would collide. The save-time lint names the offending step.
+		// Capping the COUNT bounded the wrong half: a name has no natural length, and
+		// the page emits each one four times on every anonymous GET.
 		fields = slices.DeleteFunc(fields, func(f string) bool {
 			return len(f) > core.MaxHostedFormFieldLen
 		})
 		if len(fields) > maxFormFields {
-			// The page renders every declared field on every anonymous GET —
-			// a label, an input, an id and a for= each — so an uncapped list is
-			// an amplifier on the one endpoint that needs no credential:
-			// 100,000 fields answered a bare GET with 9 MB. A submission was
-			// already capped at maxFormFields, so anything past it could never
-			// be filled in either; cap the declaration at the same number
-			// rather than rendering fields nobody can submit.
+			// Every declared field renders on every anonymous GET, so an uncapped list amplifies.
 			fields = fields[:maxFormFields]
 		}
 		return fields, t, true
@@ -429,8 +290,6 @@ func publicFormConfig(g core.Graph) (fields []string, title string, ok bool) {
 	return nil, "", false
 }
 
-// formStringSlice coerces a node param into a []string, tolerating the []any
-// of strings that JSON unmarshalling produces (and an already-typed []string).
 func formStringSlice(v any) []string {
 	switch arr := v.(type) {
 	case []string:
@@ -447,11 +306,7 @@ func formStringSlice(v any) []string {
 	return nil
 }
 
-// declaredFormValues picks out just the fields the form actually RENDERS, as
-// strings, so a failed submission can hand them back in the inputs. It is
-// deliberately not collectFormValues: that one keeps undeclared extras (utm_*
-// and friends) because the flow wants them, whereas re-filling a field the page
-// never drew would silently drop them anyway.
+// Only the fields the form RENDERS, so an extra POST key cannot inject one.
 func declaredFormValues(declared []string, posted url.Values) map[string]string {
 	out := make(map[string]string, len(declared))
 	for _, f := range declared {
@@ -460,22 +315,7 @@ func declaredFormValues(declared []string, posted url.Values) map[string]string 
 	return out
 }
 
-// formSeedHeaders is the column order a form submission carries downstream:
-// the owner's declared fields first, in the order the form drew them, then
-// any extra posted keys (utm_source and friends) sorted so two runs of the
-// same payload agree.
-//
-// The extras must be listed, not dropped: a row-writing step writes exactly
-// the columns its headers name, so a header list of only the declared fields
-// would throw away the very values collectFormValues went out of its way to
-// keep.
-//
-// Order matters because a row value carries its own column order (see
-// core.Ref.Headers) and a writer only falls back to sorting the row keys when
-// none is carried. Without this the collection a form fills comes out
-// alphabetical — "What you like about us" ahead of "Your name" — even though
-// the editor already offers the declared order as the columns, via the
-// form_input row source in rowsource.go. Same order, both sides.
+// The column order the submission carries downstream.
 func formSeedHeaders(declared []string, values map[string]any) []string {
 	out := make([]string, 0, len(values))
 	seen := make(map[string]struct{}, len(values))
@@ -499,14 +339,7 @@ func formSeedHeaders(declared []string, values map[string]any) []string {
 	return append(out, extra...)
 }
 
-// buildFormSeed mirrors buildWebhookSeed's output shape (body + headers
-// ports) but takes an already-parsed field map, so form_input
-// downstream sees the same {key: value} object it would from a JSON
-// webhook POST — i.e. ${trigger.body.email} works identically whether
-// the data arrived via the hosted form or a real webhook.
-//
-// declared is the form's field list, carried onto the body value as its
-// column order; see formSeedHeaders.
+// Mirrors buildWebhookSeed's shape, so downstream steps see one contract.
 func buildFormSeed(declared []string, values map[string]any) core.Result {
 	return core.Result{
 		Status: core.StatusOK,
@@ -521,77 +354,31 @@ func buildFormSeed(declared []string, values map[string]any) core.Result {
 }
 
 type formView struct {
-	Title     string
-	Fields    []string
-	Submitted bool
-	// Honeypot is the name of the hidden anti-bot field to render, or "" to
-	// render none (an owner declared a field of that name, so it's theirs).
-	Honeypot string
-	// Lang is the BCP-47 primary subtag for <html lang>, and M the copy in the
-	// same language. Both come from the flow's own Language: a form is the flow
-	// speaking to a visitor, exactly as an approval email is (see
-	// internal/maillang), and the visitor has no account to hold a preference.
-	Lang string
-	M    maillang.Messages
-	// Error, when set, renders a banner above the form instead of the
-	// confirmation. Values re-fills the fields, so a failure never costs the
-	// visitor what they typed — the previous behaviour was a plain-text
-	// http.Error page, which lost it and offered no way back.
-	Error  string
-	Values map[string]string
-	// Unavailable renders the "there is no form here" page: the notice alone,
-	// with no form beneath it to fill in. Set by renderFormUnavailable for
-	// every 404 this handler can produce.
+	Title       string
+	Fields      []string
+	Submitted   bool
+	Honeypot    string
+	Lang        string
+	M           maillang.Messages
+	Error       string
+	Values      map[string]string
 	Unavailable bool
 }
 
-// humanizeField turns a field name into the label the form shows.
-//
-// It deliberately does LESS than the frontend's humanize, because it is fed
-// something different. The frontend humanizes manifest param keys — machine
-// identifiers like "first_row_headers" that nobody typed. These names come out
-// of the owner's own "Form fields" box, are read by their customers, and so
-// are edited toward what they want shown rather than away from it:
-//
-//   - Underscores become spaces. "first_name" is a shape people paste in from
-//     somewhere else, and "_" never appears in a label anyone wrote by hand.
-//   - HYPHENS ARE LEFT ALONE. They are letters in ordinary words — "E-post",
-//     "e-mail", "follow-up", "self-employed" — and stripping them published
-//     "E post" on a Swedish company's contact form.
-//   - The first letter is capitalized, so "what you love about our tea" reads
-//     as a label without the owner having to think about it. Anything already
-//     capitalized is untouched.
+// Owner-supplied, so it is escaped on render.
 func humanizeField(s string) string {
 	s = strings.ReplaceAll(s, "_", " ")
 	if s == "" {
 		return s
 	}
-	// Decode the first RUNE. Slicing s[:1] took the first BYTE, which turned
-	// every label starting with a non-ASCII letter — "Ärende", "Önskemål",
-	// "Écrire" — into invalid UTF-8 on a page shown to the public.
 	r, size := utf8.DecodeRuneInString(s)
 	if r == utf8.RuneError {
-		// Not valid UTF-8 to begin with; hand it back rather than corrupt it
-		// further. html/template still escapes whatever this is.
 		return s
 	}
 	return string(unicode.ToUpper(r)) + s[size:]
 }
 
-// renderFormUnavailable answers a request for a form that isn't there to
-// answer — the workspace, the published revision, or the public-form opt-in is
-// missing, or the flow is paused. Every one of those renders the SAME page:
-// naming which would tell a stranger whether a given flow exists, and this
-// handler's whole stance is that it shouldn't.
-//
-// It is HTML rather than the API's JSON error envelope because this is the one
-// URL in the product an owner hands to their own customers. A link copied out
-// of the editor and shared before publishing used to show them
-// {"error":{"code":"not_found","message":"Not Found"}} on a bare white page.
-//
-// lang is the flow's, when we got far enough to load one; empty falls back to
-// English. We deliberately don't load the draft just to translate this page —
-// that would put a store read on an unauthenticated endpoint's miss path.
+// Must not disclose whether the flow exists.
 func renderFormUnavailable(rw http.ResponseWriter, lang string) {
 	m := maillang.For(lang)
 	renderForm(rw, http.StatusNotFound, formView{
@@ -604,40 +391,20 @@ func renderFormUnavailable(rw http.ResponseWriter, lang string) {
 
 func renderForm(rw http.ResponseWriter, status int, v formView) {
 	if v.Values == nil {
-		// The template indexes Values for every field; a nil map would work in
-		// html/template but not in any reader's head.
 		v.Values = map[string]string{}
 	}
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// Allow the form to be iframed onto any site — the "Put this form on
-	// my own website" embed snippet relies on it. Set frame-ancestors
-	// explicitly (rather than leaning on the absence of X-Frame-Options)
-	// so the intent is deliberate. Clickjacking risk is low: the form is
-	// secret-less and submits only public, owner-declared fields.
+	// Deliberately frameable: embedding it on the org's own site is the point.
 	rw.Header().Set("Content-Security-Policy", "frame-ancestors *")
 	rw.WriteHeader(status)
 	if err := formTemplate.Execute(rw, v); err != nil {
-		// Headers may already be written; nothing useful to do but log
-		// via the default logger and bail.
 		fmt.Fprintf(rw, "<!-- render error: %v -->", err)
 	}
 }
 
-// formTemplate is a self-contained, dependency-free HTML page. html/template
-// escapes every interpolation, so field names and titles can't inject
-// markup. "message" (and any field whose name contains "message") gets a
-// textarea; everything else a single-line input, with email/name getting
-// the matching input type for nicer mobile keyboards.
-//
-// Its own words — the button, the confirmation, either error — come from the
-// flow's language rather than being written in English here, and `lang` is set
-// from the same resolution so the attribute cannot contradict the copy. This
-// is the only page in the product a stranger sees, so it was also the only one
-// that still spoke English to a Swedish visitor.
-//
-// On a failed submission it renders the form again, banner on top and the
-// posted values back in the fields, instead of the plain-text http.Error page
-// that used to lose what the visitor had typed.
+// Self-contained and dependency-free. html/template escapes every interpolation,
+// which is what keeps an owner-supplied label or a visitor's echoed value from
+// becoming markup.
 var formTemplate = template.Must(template.New("form").Funcs(template.FuncMap{
 	"label":     humanizeField,
 	"inputType": formInputType,
@@ -678,10 +445,6 @@ button:hover{background:#5a49e6}
 {{end}}
 </body></html>`))
 
-// longAnswerWords are the field-name hints that mean "this answer is prose",
-// and so deserves a textarea rather than a one-line input. Kept in both
-// English and Swedish because the hosted form is the one page in the product
-// a stranger sees, and owners name their fields in their own language.
 var longAnswerWords = []string{
 	"message", "comment", "feedback", "question", "enquiry", "inquiry",
 	"describe", "description", "details", "reason", "note", "notes",
@@ -690,14 +453,6 @@ var longAnswerWords = []string{
 	"anteckning", "omdöme", "berätta", "varför",
 }
 
-// isLongAnswerField reports whether a declared field should render as a
-// textarea. The old rule matched only the literal word "message", so a field
-// an owner actually named — "What you like about us", "Your feedback",
-// "Tell us why" — got a single-line box for what is obviously a paragraph.
-//
-// Two signals, either of which is enough: a recognisable long-answer word, or
-// a label long enough that it is plainly a question rather than a column name
-// ("What did you think of your visit?" vs "Name").
 func isLongAnswerField(f string) bool {
 	s := strings.ToLower(strings.TrimSpace(f))
 	if s == "" {
@@ -708,32 +463,15 @@ func isLongAnswerField(f string) bool {
 			return true
 		}
 	}
-	// A question mark is an unambiguous tell, and a field name of five or more
-	// words is a sentence, not a label.
 	return strings.Contains(s, "?") || len(strings.Fields(s)) >= 5
 }
 
-// The field-name hints behind the keyboard promise, kept in both languages the
-// product ships for the same reason longAnswerWords above is: owners name their
-// fields in their own language, and this is the page their customers fill in on
-// a phone.
-//
-// They are matched against a name with its separators removed, so "E-post",
-// "e_post" and "E post" all reduce to "epost" and one entry covers them.
 var (
 	emailWords = []string{"email", "epost", "mejl"}
 	phoneWords = []string{"phone", "telefon", "mobil", "tfn"}
 	urlWords   = []string{"website", "webbplats", "webbsida", "hemsida"}
 )
 
-// formInputType picks an HTML input type from the field name so phones surface
-// the right keyboard. Best-effort: getting it wrong costs a keyboard layout,
-// so the rule leans on recognising a word rather than on being exhaustive.
-//
-// The old rule compared the whole name against a handful of English words, so
-// only a field named exactly "email" was ever recognised. Every natural
-// phrasing missed — "Email address", "Your email", and every non-English name
-// the docs' "Email and Phone get the matching keyboard" promise implied.
 func formInputType(field string) string {
 	s := normalizeFieldWord(field)
 	if s == "" {
@@ -749,17 +487,13 @@ func formInputType(field string) string {
 	if s == "url" || containsAnyHint(s, urlWords) {
 		kinds = append(kinds, "url")
 	}
-	// A name that reads as two kinds at once — "Email or phone", "Phone/web" —
-	// is a field for either, and type=email would make the browser REJECT the
-	// other one on submit. A plain text box accepts both.
+	// A name that reads as two kinds at once must not be typed as either.
 	if len(kinds) != 1 {
 		return "text"
 	}
 	return kinds[0]
 }
 
-// normalizeFieldWord lowercases a field name and drops the separators people
-// put between words, so one hint matches every way of writing the same name.
 func normalizeFieldWord(field string) string {
 	return strings.Map(func(r rune) rune {
 		switch r {

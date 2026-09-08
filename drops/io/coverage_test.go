@@ -18,13 +18,7 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
-// ----------------------------------------------------------------------
-// http_download helpers: downloadURL, downloadHeaders, downloadStatusOK.
-// (int-slice parsing now lives in drops/internal/params.IntSlice.)
-// ----------------------------------------------------------------------
-
 func TestDownloadURL_InputOverridesParam(t *testing.T) {
-	// Input["url"] wins over params.url.
 	job := core.Job{
 		Input:  map[string]core.Ref{"url": {Inline: "https://from-input"}},
 		Params: map[string]any{"url": "https://from-params"},
@@ -32,17 +26,14 @@ func TestDownloadURL_InputOverridesParam(t *testing.T) {
 	if got := downloadURL(job); got != "https://from-input" {
 		t.Errorf("got %q, want from-input", got)
 	}
-	// Empty Input falls through to params.
 	job.Input = nil
 	if got := downloadURL(job); got != "https://from-params" {
 		t.Errorf("got %q, want from-params", got)
 	}
-	// Input present but Inline is not a string → falls through to params.
 	job.Input = map[string]core.Ref{"url": {Inline: 42}}
 	if got := downloadURL(job); got != "https://from-params" {
 		t.Errorf("got %q (non-string input), want from-params", got)
 	}
-	// Input with empty string → falls through.
 	job.Input = map[string]core.Ref{"url": {Inline: ""}}
 	if got := downloadURL(job); got != "https://from-params" {
 		t.Errorf("got %q (empty input), want from-params", got)
@@ -50,24 +41,20 @@ func TestDownloadURL_InputOverridesParam(t *testing.T) {
 }
 
 func TestDownloadHeaders_Variants(t *testing.T) {
-	// nil/missing returns nil headers, no error.
 	if got, err := downloadHeaders(map[string]any{}); err != nil || got != nil {
 		t.Errorf("missing → (%v, %v)", got, err)
 	}
 	if got, err := downloadHeaders(map[string]any{"headers": nil}); err != nil || got != nil {
 		t.Errorf("nil → (%v, %v)", got, err)
 	}
-	// Happy path.
 	in := map[string]any{"headers": map[string]any{"X-Auth": "abc"}}
 	got, err := downloadHeaders(in)
 	if err != nil || got["X-Auth"] != "abc" {
 		t.Errorf("happy → (%v, %v)", got, err)
 	}
-	// Not an object → error.
 	if _, err := downloadHeaders(map[string]any{"headers": "string"}); err == nil {
 		t.Error("string headers: want error")
 	}
-	// Non-string value → error mentioning the key.
 	bad := map[string]any{"headers": map[string]any{"X-Num": 42}}
 	if _, err := downloadHeaders(bad); err == nil || !strings.Contains(err.Error(), "X-Num") {
 		t.Errorf("non-string val → %v, want one mentioning 'X-Num'", err)
@@ -75,7 +62,6 @@ func TestDownloadHeaders_Variants(t *testing.T) {
 }
 
 func TestDownloadStatusOK(t *testing.T) {
-	// Empty expect → default 2xx.
 	if !params.StatusAccepted(200, nil) {
 		t.Error("200 with empty expect: want OK")
 	}
@@ -94,8 +80,6 @@ func TestDownloadStatusOK(t *testing.T) {
 	}
 }
 
-// TestHTTPDownload_AcceptsCustomExpectStatus covers the
-// expect_status configuration path end-to-end.
 func TestHTTPDownload_AcceptsCustomExpectStatus(t *testing.T) {
 	ws := t.TempDir()
 	srv := downloadServer(t, []byte("nope"), 404)
@@ -112,8 +96,6 @@ func TestHTTPDownload_AcceptsCustomExpectStatus(t *testing.T) {
 	}
 }
 
-// TestHTTPDownload_BadHeaders covers the bad-param branch for headers
-// (object map → string val expected).
 func TestHTTPDownload_BadHeaders(t *testing.T) {
 	ws := t.TempDir()
 	srv := downloadServer(t, []byte("x"), 200)
@@ -130,10 +112,6 @@ func TestHTTPDownload_BadHeaders(t *testing.T) {
 	}
 }
 
-// TestHTTPDownload_SendsHeaders confirms the headers loop in the
-// execute path actually sets request headers (the for-range over
-// headers). Uses an httptest server that echoes back the seen
-// X-Foo header.
 func TestHTTPDownload_SendsHeaders(t *testing.T) {
 	ws := t.TempDir()
 	var seenHeader string
@@ -159,8 +137,6 @@ func TestHTTPDownload_SendsHeaders(t *testing.T) {
 	}
 }
 
-// TestHTTPDownload_MkdirsBeforeCreate covers the mkdirs=true branch of
-// executeHTTPDownload.
 func TestHTTPDownload_MkdirsBeforeCreate(t *testing.T) {
 	ws := t.TempDir()
 	srv := downloadServer(t, []byte("hi"), 200)
@@ -180,8 +156,6 @@ func TestHTTPDownload_MkdirsBeforeCreate(t *testing.T) {
 	}
 }
 
-// TestHTTPDownload_BadURLRequest covers the http.NewRequestWithContext
-// error path — pass a URL the http package can't parse.
 func TestHTTPDownload_BadURLRequest(t *testing.T) {
 	ws := t.TempDir()
 	res, _ := executeHTTPDownload(t.Context(), core.Job{
@@ -197,13 +171,9 @@ func TestHTTPDownload_BadURLRequest(t *testing.T) {
 	}
 }
 
-// TestHTTPDownload_HTTPErrorWithoutSSRF covers the "http" error code
-// branch — the server closes the connection without responding so
-// resp.Do() errors with a non-SSRF reason.
 func TestHTTPDownload_HTTPErrorWithoutSSRF(t *testing.T) {
 	ws := t.TempDir()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Hijack and close to produce a stream error after request acceptance.
 		hj, ok := w.(http.Hijacker)
 		if !ok {
 			return
@@ -224,11 +194,6 @@ func TestHTTPDownload_HTTPErrorWithoutSSRF(t *testing.T) {
 		t.Errorf("status=%q, want error", res.Status)
 	}
 }
-
-// ----------------------------------------------------------------------
-// streamToFile via mock root: short-write injection covers the "io"
-// error code branch when the destination Write fails.
-// ----------------------------------------------------------------------
 
 type erroringWriter struct{}
 
@@ -253,10 +218,6 @@ func TestStreamToFile_WriteFailure(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// file_write: isSandboxEscape on various error shapes
-// ----------------------------------------------------------------------
-
 func TestIsSandboxEscape(t *testing.T) {
 	if isSandboxEscape(nil) {
 		t.Error("nil err: want false")
@@ -278,22 +239,15 @@ func TestIsSandboxEscape(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// inlineToBytes: every input shape
-// ----------------------------------------------------------------------
-
 func TestInlineToBytes_Variants(t *testing.T) {
-	// []byte passes through.
 	got, err := inlineToBytes([]byte("hello"))
 	if err != nil || string(got) != "hello" {
 		t.Errorf("[]byte → (%q, %v)", got, err)
 	}
-	// string → []byte.
 	got, err = inlineToBytes("hi")
 	if err != nil || string(got) != "hi" {
 		t.Errorf("string → (%q, %v)", got, err)
 	}
-	// Anything else marshals to JSON.
 	got, err = inlineToBytes(map[string]any{"k": "v"})
 	if err != nil {
 		t.Errorf("map: err = %v", err)
@@ -304,12 +258,7 @@ func TestInlineToBytes_Variants(t *testing.T) {
 	}
 }
 
-// silence unused: io.Discard if a sub-test stops using it
 var _ = io.Discard
-
-// ----------------------------------------------------------------------
-// file_write error branches: missing param, missing input
-// ----------------------------------------------------------------------
 
 func TestFileWrite_MissingPathParam(t *testing.T) {
 	ws := t.TempDir()
@@ -336,7 +285,6 @@ func TestFileWrite_MissingInputPort(t *testing.T) {
 
 func TestFileWrite_NoSandbox(t *testing.T) {
 	res, _ := executeFileWrite(t.Context(), core.Job{
-		// No WorkspaceRoot, no ScratchRoot.
 		Input:  map[string]core.Ref{"in": {Inline: "hi"}},
 		Params: map[string]any{"path": "out.txt"},
 	}, nil)
@@ -345,8 +293,6 @@ func TestFileWrite_NoSandbox(t *testing.T) {
 	}
 }
 
-// TestFileWrite_FromRef covers the input.Ref path: read from a source
-// file (in the sandbox) and write to a destination.
 func TestFileWrite_FromRef(t *testing.T) {
 	ws := t.TempDir()
 	if err := os.WriteFile(filepath.Join(ws, "src.txt"), []byte("from-ref"), 0o644); err != nil {
@@ -378,10 +324,6 @@ func TestFileWrite_FromMissingRef(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------
-// file_read missing path param + missing sandbox.
-// ----------------------------------------------------------------------
-
 func TestFileRead_MissingPathParam(t *testing.T) {
 	ws := t.TempDir()
 	res, _ := executeFileRead(t.Context(), core.Job{
@@ -393,7 +335,6 @@ func TestFileRead_MissingPathParam(t *testing.T) {
 	}
 }
 
-// TestHTTPDownload_MissingURL covers the early bad_param branch.
 func TestHTTPDownload_MissingURL(t *testing.T) {
 	ws := t.TempDir()
 	res, _ := executeHTTPDownload(t.Context(), core.Job{
@@ -405,8 +346,6 @@ func TestHTTPDownload_MissingURL(t *testing.T) {
 	}
 }
 
-// TestHTTPDownload_MissingPath covers the bad_param branch when url is
-// supplied but path isn't.
 func TestHTTPDownload_MissingPath(t *testing.T) {
 	ws := t.TempDir()
 	res, _ := executeHTTPDownload(t.Context(), core.Job{
@@ -418,11 +357,9 @@ func TestHTTPDownload_MissingPath(t *testing.T) {
 	}
 }
 
-// TestHTTPDownload_NoSandbox covers the no_sandbox branch.
 func TestHTTPDownload_NoSandbox(t *testing.T) {
 	srv := downloadServer(t, []byte("x"), 200)
 	res, _ := executeHTTPDownload(t.Context(), core.Job{
-		// no WorkspaceRoot, no scratch
 		Params: map[string]any{"url": srv.URL, "path": "x.txt", "allow_private_networks": true},
 	}, nil)
 	if res.Status != core.StatusError || res.Error.Code != "no_sandbox" {
@@ -430,7 +367,6 @@ func TestHTTPDownload_NoSandbox(t *testing.T) {
 	}
 }
 
-// TestHTTPUpload_MissingURL covers the bad_param branch.
 func TestHTTPUpload_MissingURL(t *testing.T) {
 	ws := t.TempDir()
 	res, _ := executeHTTPUpload(t.Context(), core.Job{

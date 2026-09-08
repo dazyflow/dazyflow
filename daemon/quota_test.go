@@ -45,7 +45,6 @@ func TestFSQuota_LimitsPerTenant(t *testing.T) {
 func TestFSQuota_UsageCountsRecursively(t *testing.T) {
 	t.Parallel()
 	base := t.TempDir()
-	// Seed two workspaces under the same tenant.
 	for _, p := range []string{"acme/ws1/a.txt", "acme/ws1/sub/b.txt", "acme/ws2/c.txt"} {
 		full := filepath.Join(base, p)
 		_ = os.MkdirAll(filepath.Dir(full), 0o755)
@@ -86,7 +85,6 @@ func TestFSQuota_CacheRespectsTTL(t *testing.T) {
 	q, _ := daemon.NewFSQuota(base, nil)
 	q.SetCacheTTL(time.Minute)
 	first, _ := q.Used("t")
-	// Mutate without telling the cache.
 	if err := os.WriteFile(filepath.Join(base, "t", "b"), make([]byte, 1000), 0o644); err != nil {
 		t.Fatalf("mutate: %v", err)
 	}
@@ -101,7 +99,6 @@ func TestFSQuota_CacheRespectsTTL(t *testing.T) {
 	}
 }
 
-// E2E quota harness — drives writes through the full dzd stack.
 type quotaHarness struct {
 	svc       *daemon.Service
 	jobs      core.JobStore
@@ -209,9 +206,6 @@ func TestQuota_E2E_AllowsThenRefuses(t *testing.T) {
 
 func TestQuota_E2E_UnlimitedTenant(t *testing.T) {
 	t.Parallel()
-	// Tenant has no limit configured → engine sets QuotaLimit=0, module
-	// skips the check. Any size write succeeds (subject to actual disk
-	// space, which we assume is plentiful in CI).
 	h := newQuotaHarness(t, nil) // empty map ⇒ unlimited for all
 
 	root, _ := h.sandbox.Root("acme", "ws1")
@@ -239,7 +233,7 @@ func TestQuota_E2E_UnlimitedTenant(t *testing.T) {
 	}
 }
 
-// --- Reservation (concurrent-write race close) ---
+// Reservation (concurrent-write race close)
 
 func TestFSQuota_ReserveHoldsInflightUntilRelease(t *testing.T) {
 	t.Parallel()
@@ -254,7 +248,6 @@ func TestFSQuota_ReserveHoldsInflightUntilRelease(t *testing.T) {
 	if _, err := q.Reserve("acme", 600); !errors.Is(err, core.ErrQuotaExceeded) {
 		t.Fatalf("second reserve err = %v, want ErrQuotaExceeded", err)
 	}
-	// Releasing the first frees the budget for the next.
 	rel1()
 	rel2, err := q.Reserve("acme", 600)
 	if err != nil {
@@ -305,18 +298,15 @@ func TestFSQuota_ReserveCountsCommittedFiles(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(base, "acme"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// 600 bytes already on disk for the tenant.
 	if err := os.WriteFile(filepath.Join(base, "acme", "a.bin"), make([]byte, 600), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	q, _ := daemon.NewFSQuota(base, map[string]int64{"acme": 1000})
 	q.SetCacheTTL(0)
 
-	// 600 committed + 600 reserve = 1200 > 1000 → rejected.
 	if _, err := q.Reserve("acme", 600); !errors.Is(err, core.ErrQuotaExceeded) {
 		t.Fatalf("reserve over committed err = %v, want ErrQuotaExceeded", err)
 	}
-	// 600 committed + 300 reserve = 900 ≤ 1000 → granted.
 	rel, err := q.Reserve("acme", 300)
 	if err != nil {
 		t.Fatalf("reserve within committed budget: %v", err)

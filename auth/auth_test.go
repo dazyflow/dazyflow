@@ -13,10 +13,9 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// TestSession_StoredKeyIsHashedNotToken locks in that a session is stored
-// under the SHA-256 of its token, never the token itself — so a leak of the
-// session store can't be replayed as a live bearer credential. The cleartext
-// token still authenticates end-to-end.
+// Locks in that a session is stored under the SHA-256 of its token, never the
+// token itself — so a leak of the session store can't be replayed as a live
+// bearer credential. The cleartext token still authenticates end-to-end.
 func TestSession_StoredKeyIsHashedNotToken(t *testing.T) {
 	store := NewMemSessionStore()
 	user := User{Subject: "u", Tenant: "t", Workspace: "ws"}
@@ -41,7 +40,6 @@ func TestSession_StoredKeyIsHashedNotToken(t *testing.T) {
 	if _, err := store.GetSession(context.Background(), SessionLookupKey(token)); err != nil {
 		t.Errorf("GetSession(hash) = %v, want a hit", err)
 	}
-	// End-to-end: the authenticator still accepts the cleartext token.
 	a := &SessionAuthenticator{Store: store}
 	p, err := a.Authenticate(context.Background(), token)
 	if err != nil {
@@ -86,7 +84,6 @@ func TestIssueAPIKey_RejectsUnsafeID(t *testing.T) {
 			t.Errorf("IssueAPIKey(id=%q) = nil error, want rejection", id)
 		}
 	}
-	// A clean id with a hyphen round-trips and authenticates.
 	_, cleartext, err := IssueAPIKey(store, t.Context(), "ci-bot-1", "t", "", "u", nil, nil)
 	if err != nil {
 		t.Fatalf("IssueAPIKey(clean id): %v", err)
@@ -100,7 +97,6 @@ func TestAPIKey_RejectsTampered(t *testing.T) {
 	store := NewMemKeyStore()
 	_, cleartext, _ := IssueAPIKey(store, t.Context(), "k1", "t", "", "u", nil, nil)
 
-	// Flip a hex char in the secret portion.
 	tampered := cleartext[:len(cleartext)-1] + flipHex(cleartext[len(cleartext)-1])
 	auth := &APIKeyAuthenticator{Store: store}
 	if _, err := auth.Authenticate(t.Context(), tampered); !errors.Is(err, ErrInvalidCredential) {

@@ -58,7 +58,6 @@ export function edgeErrorLabelKey(mode: EdgeErrorMode): string {
   }
 }
 
-// EdgeStyle is the subset of React Flow's edge style this module decides.
 export type EdgeStyle = {
   stroke: string;
   strokeWidth: number;
@@ -80,12 +79,8 @@ export function edgeErrorStyle(mode: EdgeErrorMode): EdgeStyle {
       // idle on every run that goes well.
       return { stroke: "var(--danger)", strokeWidth: 1.5, strokeDasharray: "2 4" };
     case "skip":
-      // Carries on either way — amber for "the failure was tolerated", and a
-      // longer dash so it is not mistaken for the handler.
       return { stroke: "var(--status-warning)", strokeWidth: 1.5, strokeDasharray: "7 4" };
     case "retry":
-      // Routes like the default, so it keeps the default colour; the dash says
-      // something extra was asked for.
       return { stroke: "var(--accent)", strokeWidth: 1.5, strokeDasharray: "1 3" };
     default:
       return { stroke: "var(--accent)", strokeWidth: 1.5 };

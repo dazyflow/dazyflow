@@ -27,16 +27,10 @@ type ServiceMeta = {
   label: string;
   tint: string; // monogram tile fill; monogram is always white for contrast
   mono: string; // 1–2 char monogram
-  // Real brand logo. When present it replaces the monogram tile entirely;
-  // `box` is the logo's own viewBox and `art` its (often multi-colour) paths.
   glyph?: { box: string; art: ReactNode };
 };
 
-// services keys are the stable identifiers the backend uses (OAuth
-// provider `name`, SSO provider id). Tints lean on each brand's primary
-// colour so the placeholder already feels right.
 const services: Record<string, ServiceMeta> = {
-  // OAuth connectors / sign-in
   google: {
     label: "Google",
     tint: "#1a73e8",
@@ -101,9 +95,6 @@ const services: Record<string, ServiceMeta> = {
     label: "GitHub",
     tint: "#2b3137",
     mono: "Gh",
-    // GitHub's mark is monochrome — render it in currentColor (the ink
-    // colour) so it stays legible in both light and dark themes rather
-    // than the SVG's hardcoded white.
     glyph: {
       box: "0 0 98 96",
       art: (
@@ -118,8 +109,6 @@ const services: Record<string, ServiceMeta> = {
     label: "Notion",
     tint: "#2f2f2f",
     mono: "N",
-    // Notion's mark is a self-contained white page with a black glyph, so
-    // it reads on both themes (white tile, black N) without recolouring.
     glyph: {
       box: "0 0 100 100",
       art: (
@@ -166,7 +155,6 @@ const services: Record<string, ServiceMeta> = {
       ),
     },
   },
-  // SSO identity providers (placeholders for the ones not yet wired)
   microsoft: { label: "Microsoft Entra", tint: "#2f6fed", mono: "M" },
   okta: { label: "Okta", tint: "#007dc1", mono: "O" },
   saml: { label: "SAML", tint: "#5d09c7", mono: "SA" },

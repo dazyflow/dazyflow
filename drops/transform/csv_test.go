@@ -179,7 +179,6 @@ func TestBuildCSV_QuotesFieldsNeedingIt(t *testing.T) {
 	}
 }
 
-// Round-trip: parse then build reproduces the canonical CSV.
 func TestCSV_RoundTrip(t *testing.T) {
 	in := "name,age\nAlice,30\nBob,25"
 	parsed := runParseCSV(t, in, nil)

@@ -17,11 +17,6 @@ import { SV_VOCABULARY } from "../i18n/drops/sv";
 // fetch in each would only re-state what the boot path already guarantees.
 registerVocabulary("sv", SV_VOCABULARY);
 
-// Node ships a `localStorage` global that shadows jsdom's and throws on every
-// method when the process was started without a valid --localstorage-file, so
-// anything reading storage (the auth session marker, the active-tenant key,
-// theme/language caches) blows up mid-render. Install a plain in-memory
-// implementation over it; the afterEach below empties it between tests.
 const storage = new Map<string, string>();
 Object.defineProperty(globalThis, "localStorage", {
   configurable: true,
@@ -37,9 +32,6 @@ Object.defineProperty(globalThis, "localStorage", {
   } satisfies Storage,
 });
 
-// jsdom implements no layout, so Element.scrollIntoView is missing entirely —
-// any component that scrolls a chat thread or list to the bottom on mount
-// throws in tests. Stub it once here rather than in each test file.
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }

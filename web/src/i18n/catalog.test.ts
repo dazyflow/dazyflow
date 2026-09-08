@@ -93,7 +93,6 @@ describe("locale catalogues", () => {
   // entry below says which it is. Adding one is a real decision — if you cannot
   // write the reason, it is drift.
   const ALLOWED_DIVERGENCE: Record<string, string> = {
-    // Gender / number agreement — one English word, two Swedish forms.
     Custom: "neuter 'schema' (Anpassat) vs en-word 'roll'/'mall' (Anpassad)",
     "Built-in": "plural group heading (Inbyggda) vs singular badge (Inbyggd)",
     required: "en-word 'port' (obligatorisk) vs neuter 'fält' (obligatoriskt)",
@@ -104,9 +103,7 @@ describe("locale catalogues", () => {
     Succeeded: "plural filter chip (Lyckade) vs singular status (Lyckad)",
     Failed:
       "plural filter (Misslyckade), singular status (Misslyckad), verb headline (Misslyckades)",
-    // Different parts of speech.
     Open: "the verb, a button (Öppna) vs a ticket's state (Öppet)",
-    // The English label covers two genuinely different things.
     Retry:
       "retry a failed fetch (Försök igen) vs resume a failed run from its failed step (Återuppta)",
     Owner:
@@ -121,8 +118,6 @@ describe("locale catalogues", () => {
   it("render one English label as one Swedish label", () => {
     const byEnglish = new Map<string, string[]>();
     for (const [k, v] of Object.entries(EN)) {
-      // Long strings are sentences; two translations of one sentence is not the
-      // vocabulary problem this guards.
       if (v.length <= 2 || v.length >= 44) continue;
       if (!byEnglish.has(v)) byEnglish.set(v, []);
       byEnglish.get(v)!.push(k);
@@ -140,17 +135,6 @@ describe("locale catalogues", () => {
     expect(drifted).toEqual([]);
   });
 
-  // One English label, one key.
-  //
-  // 46 English values were reachable through three or more keys, 170 keys in
-  // all — the same word written out again for every surface that needed it. The
-  // cost is not the bytes: a translator sees the same string N times with no
-  // sign they are one thing, and a rewording lands on one surface and not the
-  // others. 79 of those keys now point at a single shared one.
-  //
-  // The rest are legitimate, and the reasons fall into four kinds. They are
-  // listed one by one rather than pattern-matched, because "these keys happen
-  // to read alike" is a claim that needs checking, not inferring.
   const ALLOWED_DUPLICATION: Record<string, string> = {
     // 1. A status family read as t(`…status.${value}`). The family has to stay
     //    complete, so a value shared with a fixed label cannot be merged away.

@@ -15,10 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// approveAuthed: the authenticated approval endpoint. Approving a run that
-// doesn't exist (or isn't in the caller's tenant) is rejected before the
-// service Approve call.
-
 func TestApproveAuthed_UnknownRun(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -37,13 +33,6 @@ func TestApproveAuthed_UnknownRunWithDecision(t *testing.T) {
 	}
 }
 
-// Noninteractive approval is opt-in. The endpoint accepts any key holding
-// workspace membership, so without this a key minted to RUN a flow could also
-// wave through the gate that exists to stop it — the step has to say a machine
-// may decide it.
-//
-// seedParkedApproval stages a run parked on one await_approval node, with the
-// step's params as given, and returns the run id.
 func seedParkedApproval(t *testing.T, h *gatewayHarness, runID string, params map[string]any) string {
 	t.Helper()
 	g := core.Graph{ID: "g", Tenant: "t", Workspace: "ws",
@@ -55,7 +44,6 @@ func seedParkedApproval(t *testing.T, h *gatewayHarness, runID string, params ma
 	}); err != nil {
 		t.Fatalf("seed run: %v", err)
 	}
-	// Parked exactly as the module leaves it: the marker URL plus the prompt.
 	if err := h.store.Enqueue(t.Context(), core.JobRecord{
 		ID: NodeJobID(runID, "gate"), Kind: core.JobKindNode,
 		GraphRunID: runID, GraphID: "g", NodeID: "gate",
@@ -72,7 +60,6 @@ func seedParkedApproval(t *testing.T, h *gatewayHarness, runID string, params ma
 func TestApproveAuthed_APIKeyRefusedUnlessStepOptsIn(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// No allow_api: a person's gate.
 	seedParkedApproval(t, h, "run-human", map[string]any{"prompt": "Refund $230?"})
 
 	rw := h.do(t, "POST", "/api/v1/approvals/run-human/gate?decision=approve", nil)
@@ -115,8 +102,6 @@ func TestApproveAuthed_APIKeyAllowedWhenStepOptsIn(t *testing.T) {
 	}
 }
 
-// The gate is on the credential KIND, not on permissions: a person working the
-// Approvals inbox decides either way, which is the whole point of the step.
 func TestApproveAuthed_SessionApprovesWithoutOptIn(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)

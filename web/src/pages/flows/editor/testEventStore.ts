@@ -18,11 +18,6 @@
 
 const KEY_PREFIX = "dazyflow.testEvent.";
 
-// PERSIST_CAP bounds what we are willing to keep. The /test-trigger endpoint
-// accepts up to 1 MiB, but localStorage is a ~5 MB budget shared with
-// everything else this app stores, and evicting the rest of it to remember one
-// enormous pasted body is a bad trade. Above the cap the payload still fires —
-// it just isn't remembered.
 const PERSIST_CAP = 256 * 1024;
 
 function keyFor(flowID: string | undefined): string | null {

@@ -18,8 +18,6 @@ import (
 	"github.com/dazyflow/dazyflow/daemon"
 )
 
-// formServer stands the /form handler up on an httptest server using
-// the same dispatch trick the webhook tests use.
 func formServer(t *testing.T, wh *daemon.WebhookListener) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -64,7 +62,7 @@ func TestForm_GETRendersOptedInForm(t *testing.T) {
 	}
 }
 
-// TestForm_UnpublishedRendersAPage covers the path a real owner hits first:
+// Covers the path a real owner hits first:
 // they copy the form link out of the editor and share it before pressing
 // Publish. The published revision doesn't exist yet, so this is a 404 — but
 // the person reading it is their customer, not an API client, and used to get
@@ -76,7 +74,6 @@ func TestForm_GETRendersOptedInForm(t *testing.T) {
 func TestForm_UnpublishedRendersAPage(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
-	// Saved as a DRAFT only — savePublished is deliberately not called.
 	g := core.Graph{
 		ID: "draft-only", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{}}},
@@ -102,7 +99,6 @@ func TestForm_UnpublishedRendersAPage(t *testing.T) {
 	if !strings.Contains(html, "may not be live yet") {
 		t.Errorf("body missing the unavailable notice, got:\n%s", html)
 	}
-	// Nothing that names the flow or its state.
 	for _, leak := range []string{"draft-only", "publish", "Publish", "not_found"} {
 		if strings.Contains(html, leak) {
 			t.Errorf("page leaks %q — every miss must look identical to a stranger", leak)
@@ -130,10 +126,6 @@ func TestForm_NotOptedInIs404(t *testing.T) {
 	}
 }
 
-// TestForm_CollectValuesPassesExtras documents the "Zapier/Make
-// attaches extra fields the owner forgot to declare" path: declared
-// fields are always present (blank when not posted), and any extras
-// the caller attached come through too — no silent drop.
 func TestForm_CollectValuesPassesExtras(t *testing.T) {
 	t.Parallel()
 	declared := []string{"name", "email", "message"}
@@ -158,9 +150,6 @@ func TestForm_CollectValuesPassesExtras(t *testing.T) {
 	}
 }
 
-// TestForm_CollectValuesIncludesDeclaredBlanks: a declared field that
-// wasn't posted still appears in the seed (as ""), so downstream nodes
-// that index by name aren't broken by a missing key.
 func TestForm_CollectValuesIncludesDeclaredBlanks(t *testing.T) {
 	t.Parallel()
 	got := daemon.CollectFormValuesForTest(
@@ -175,9 +164,6 @@ func TestForm_CollectValuesIncludesDeclaredBlanks(t *testing.T) {
 	}
 }
 
-// TestForm_CollectValuesCaps a flood of extra fields can't bloat the
-// store's schema unboundedly. Declared fields go in first so a spammy
-// payload can't crowd the owner's own fields out of the cap.
 func TestForm_CollectValuesCaps(t *testing.T) {
 	t.Parallel()
 	declared := []string{"a", "b"}
@@ -230,7 +216,6 @@ func TestForm_POSTSubmitsRun(t *testing.T) {
 	if !strings.Contains(string(body), "Thanks") {
 		t.Errorf("expected thank-you page, got: %s", string(body))
 	}
-	// A run should have been created for the graph.
 	recs, err := jobs.ListByGraph(context.Background(), "contact2")
 	if err != nil {
 		t.Fatalf("list by graph: %v", err)
@@ -240,9 +225,9 @@ func TestForm_POSTSubmitsRun(t *testing.T) {
 	}
 }
 
-// TestForm_DisabledGraphIs404 — a paused flow's hosted form is off, and
-// returns 404 (not 403) so a disabled flow is indistinguishable from a
-// non-existent one (don't leak which graphs exist).
+// A paused flow's hosted form is off, and returns 404 (not 403) so a disabled
+// flow is indistinguishable from a non-existent one (don't leak which graphs
+// exist).
 func TestForm_DisabledGraphIs404(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -268,10 +253,6 @@ func TestForm_DisabledGraphIs404(t *testing.T) {
 	}
 }
 
-// TestForm_NoWebhookInputNodeIs400 — a public_form flow with no
-// With config on the node, a public form can't exist without a webhook_input
-// node (public_form is the node's param). So a flow with no webhook_input node
-// has no hosted form — /form 404s, keeping non-public graphs invisible.
 func TestForm_NoWebhookInputNodeHidden(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -291,8 +272,6 @@ func TestForm_NoWebhookInputNodeHidden(t *testing.T) {
 	}
 }
 
-// TestForm_CustomFieldsRendered — declared FormFields override the
-// default name/email/message set on the rendered GET page.
 func TestForm_CustomFieldsRendered(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -318,9 +297,9 @@ func TestForm_CustomFieldsRendered(t *testing.T) {
 	}
 }
 
-// TestForm_FieldNameAndTitleEscaped — field names and the title flow
-// into the HTML template; html/template must escape them so a field
-// name like <script> can't inject markup into the hosted page.
+// Field names and the title flow into the HTML template; html/template must
+// escape them so a field name like <script> can't inject markup into the
+// hosted page.
 func TestForm_FieldNameAndTitleEscaped(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -347,7 +326,7 @@ func TestForm_FieldNameAndTitleEscaped(t *testing.T) {
 	}
 }
 
-// TestForm_LabelsKeepWhatTheOwnerTyped — field names come out of the owner's
+// Field names come out of the owner's
 // own "Form fields" box and are read by their customers, so the humanizer is
 // only allowed to make them read like labels, never to rewrite them.
 //
@@ -391,20 +370,11 @@ func TestForm_LabelsKeepWhatTheOwnerTyped(t *testing.T) {
 	if strings.Contains(html, ">E post<") {
 		t.Error(`"E-post" rendered as "E post" — the hyphen was stripped again`)
 	}
-	// The name/id attributes carry the field name verbatim, so what the flow
-	// receives is unaffected by any of the above.
 	if !strings.Contains(html, `name="E-post"`) {
 		t.Error(`field name attribute should be the owner's text verbatim`)
 	}
 }
 
-// TestForm_InputTypeFollowsTheFieldName covers the docs' promise that "Email
-// and Phone get the matching keyboard on a phone".
-//
-// It used to compare the whole field name against a short English list, so it
-// only ever fired for a field named exactly "email". Every natural phrasing
-// missed — "Email address", "Your phone" — and so did every non-English name,
-// which is what a Swedish owner's "E-post" hit.
 func TestForm_InputTypeFollowsTheFieldName(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -455,7 +425,7 @@ func TestForm_InputTypeFollowsTheFieldName(t *testing.T) {
 	}
 }
 
-// TestForm_SpeaksTheFlowsLanguage — the hosted form is the flow speaking to a
+// The hosted form is the flow speaking to a
 // stranger, so its own words follow core.Graph.Language (the rule
 // internal/maillang documents for an approval email), and <html lang> is set
 // from the same resolution so the attribute can't contradict the copy.
@@ -472,7 +442,6 @@ func TestForm_SpeaksTheFlowsLanguage(t *testing.T) {
 		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"form_title": "Kontakta oss"}}},
 	}
 	savePublished(t, wsStore, sv)
-	// Language empty means English — the same fallback For() gives.
 	en := core.Graph{
 		ID: "contact-en", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"secrets": []any{"s"}}}},
@@ -492,8 +461,6 @@ func TestForm_SpeaksTheFlowsLanguage(t *testing.T) {
 	}
 
 	svHTML := get("kontakt")
-	// The honeypot's label is off-screen, so it is only ever READ OUT — which
-	// makes it the flow speaking to a visitor like every other string here.
 	for _, want := range []string{`<html lang="sv">`, ">Skicka<", "Kontakta oss", "Lämna det här fältet tomt"} {
 		if !strings.Contains(svHTML, want) {
 			t.Errorf("Swedish form missing %q", want)
@@ -512,7 +479,6 @@ func TestForm_SpeaksTheFlowsLanguage(t *testing.T) {
 		}
 	}
 
-	// The confirmation follows the same language as the form that produced it.
 	res, err := http.PostForm(ts.URL+"/form/acme/ws1/kontakt", url.Values{"name": {"Ada"}})
 	if err != nil {
 		t.Fatalf("post: %v", err)
@@ -524,7 +490,7 @@ func TestForm_SpeaksTheFlowsLanguage(t *testing.T) {
 	}
 }
 
-// TestForm_FailedSubmitKeepsWhatTheVisitorTyped — a submission that can't be
+// A submission that can't be
 // accepted re-renders the form with a banner and the values still in the
 // fields. It used to answer with a plain-text http.Error page, which lost
 // everything the visitor had written on the one surface of the product they
@@ -558,14 +524,12 @@ func TestForm_FailedSubmitKeepsWhatTheVisitorTyped(t *testing.T) {
 	}
 	body, _ := io.ReadAll(res.Body)
 	html := string(body)
-	// The banner, and the "don't just retry" wording rather than the transient one.
 	if !strings.Contains(html, "Something went wrong") {
 		t.Errorf("no error banner in the re-rendered form: %s", html)
 	}
 	if !strings.Contains(html, "get in touch another way") {
 		t.Errorf("owner-side refusal should not tell the visitor to try again: %s", html)
 	}
-	// Every value they typed is back in the form.
 	for _, want := range []string{`value="Ada Lovelace"`, `value="ada@shop.se"`, ">Hej!</textarea>"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("re-rendered form lost %q", want)
@@ -576,9 +540,9 @@ func TestForm_FailedSubmitKeepsWhatTheVisitorTyped(t *testing.T) {
 	}
 }
 
-// TestForm_UnreadableBodyStillRendersAPage — an unparseable body (or one over
-// the 1 MiB cap) is answered with the styled form and a banner, not a bare
-// status. Nothing can be re-filled here, because the body never parsed.
+// An unparseable body (or one over the 1 MiB cap) is answered with the styled
+// form and a banner, not a bare status. Nothing can be re-filled here, because
+// the body never parsed.
 func TestForm_UnreadableBodyStillRendersAPage(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -609,18 +573,17 @@ func TestForm_UnreadableBodyStillRendersAPage(t *testing.T) {
 	}
 }
 
-// TestForm_RefilledValuesAreEscaped — re-filling the fields reflects a
-// visitor's input back into the page, which the form never did before. It is
-// html/template that makes that safe (contextual escaping inside an attribute
-// and inside the textarea), so pin it: a value trying to close its attribute
-// or open a tag must come back as text.
+// Re-filling the fields reflects a visitor's input back into the page, which
+// the form never did before. It is html/template that makes that safe
+// (contextual escaping inside an attribute and inside the textarea), so pin
+// it: a value trying to close its attribute or open a tag must come back as
+// text.
 func TestForm_RefilledValuesAreEscaped(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
 	g := core.Graph{
 		ID: "reflect", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "in", Module: "form_input", Params: map[string]any{"secrets": []any{"s"}}}},
-		// Invalid on purpose, so the submit fails and the values come back.
 		Edges: []core.Edge{{From: "in", FromPort: "body", To: "nope", ToPort: "in"}},
 	}
 	savePublished(t, wsStore, g)
@@ -644,11 +607,11 @@ func TestForm_RefilledValuesAreEscaped(t *testing.T) {
 	}
 }
 
-// TestForm_JSONBodyIsAcceptedAsFields — someone hand-rolling a form against
-// this URL naturally posts JSON. That used to answer 200, fire a run, and
-// append a row with every column blank: r.ParseForm() does not error on a
-// Content-Type it can't read, it just leaves PostForm empty. Now a flat JSON
-// object maps onto the fields exactly as a urlencoded body does.
+// Someone hand-rolling a form against this URL naturally posts JSON. That used
+// to answer 200, fire a run, and append a row with every column blank:
+// r.ParseForm() does not error on a Content-Type it can't read, it just leaves
+// PostForm empty. Now a flat JSON object maps onto the fields exactly as a
+// urlencoded body does.
 func TestForm_JSONBodyIsAcceptedAsFields(t *testing.T) {
 	t.Parallel()
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
@@ -677,9 +640,6 @@ func TestForm_JSONBodyIsAcceptedAsFields(t *testing.T) {
 	}
 }
 
-// TestForm_ParseFormBodyDecodesEachEncoding pins the decoder itself: this is
-// where the blank-row bug lived, so assert the values actually arrive rather
-// than only that a run started.
 func TestForm_ParseFormBodyDecodesEachEncoding(t *testing.T) {
 	t.Parallel()
 	post := func(ct, body string) (url.Values, error) {
@@ -706,15 +666,12 @@ func TestForm_ParseFormBodyDecodesEachEncoding(t *testing.T) {
 		if err != nil {
 			t.Fatalf("err: %v", err)
 		}
-		// Scalars keep a readable literal — not 1e+00, not %!s(float64=3).
 		if got.Get("name") != "Jane" || got.Get("count") != "3" || got.Get("ok") != "true" {
 			t.Errorf("scalars wrong: %v", got)
 		}
 		if got.Get("nothing") != "" {
 			t.Errorf("null should become empty, got %q", got.Get("nothing"))
 		}
-		// A nested value is kept as JSON text rather than dropped — the column
-		// is TEXT anyway, and keeping it beats losing the submission.
 		if got.Get("nested") != `{"a":1}` {
 			t.Errorf("nested value not preserved: %q", got.Get("nested"))
 		}
@@ -745,9 +702,9 @@ func TestForm_ParseFormBodyDecodesEachEncoding(t *testing.T) {
 	})
 }
 
-// TestForm_UnsupportedContentTypeIsRefused — an encoding the form cannot read
-// must be refused loudly. Answering 200 while storing an empty row is the
-// worst outcome: the caller is reassured and the owner silently collects junk.
+// An encoding the form cannot read must be refused loudly. Answering 200 while
+// storing an empty row is the worst outcome: the caller is reassured and the
+// owner silently collects junk.
 func TestForm_UnsupportedContentTypeIsRefused(t *testing.T) {
 	t.Parallel()
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
@@ -777,9 +734,9 @@ func TestForm_UnsupportedContentTypeIsRefused(t *testing.T) {
 	}
 }
 
-// TestForm_HoneypotDropsSubmission — a bot that fills every input it finds
-// completes the hidden field too. It gets the ordinary confirmation (telling
-// it otherwise just teaches it to skip the field) but starts no run.
+// A bot that fills every input it finds completes the hidden field too. It
+// gets the ordinary confirmation (telling it otherwise just teaches it to skip
+// the field) but starts no run.
 func TestForm_HoneypotDropsSubmission(t *testing.T) {
 	t.Parallel()
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
@@ -823,9 +780,6 @@ func TestForm_HoneypotDropsSubmission(t *testing.T) {
 	}
 }
 
-// TestForm_LongAnswerFieldsGetATextarea — the old rule matched only the
-// literal word "message", so a field an owner actually named ("What you like
-// about us") rendered as a one-line box for an obvious paragraph.
 func TestForm_LongAnswerFieldsGetATextarea(t *testing.T) {
 	t.Parallel()
 	_, wh, _, _, wsStore := startWebhookHarness(t)
@@ -849,13 +803,12 @@ func TestForm_LongAnswerFieldsGetATextarea(t *testing.T) {
 		t.Errorf("want 2 textareas (the two prose fields), got %d in: %s",
 			strings.Count(html, "<textarea"), html)
 	}
-	// Name and Email stay single-line, and Email keeps its typed input.
 	if !strings.Contains(html, `type="email"`) {
 		t.Errorf("Email should still get a typed single-line input")
 	}
 }
 
-// TestForm_SeedCarriesDeclaredColumnOrder — the columns a submission
+// The columns a submission
 // carries downstream are the owner's fields in the order the form drew
 // them, not alphabetical.
 //
@@ -888,7 +841,7 @@ func TestForm_SeedCarriesDeclaredColumnOrder(t *testing.T) {
 	}
 }
 
-// TestForm_SeedHeadersKeepExtraFields — a header list names exactly the
+// A header list names exactly the
 // columns that get written, so the extras collectFormValues deliberately
 // keeps (utm_source and friends) have to appear in it or they are
 // collected and then silently thrown away one step later.
@@ -936,10 +889,9 @@ func TestForm_SeedHeadersKeepExtraFields(t *testing.T) {
 	}
 }
 
-// TestForm_SeedHeadersSkipDeclaredFieldsThatWereCapped — collectFormValues
-// stops at maxFormFields, so a declared name can be missing from the
-// values. A header naming a column with no value would have the writer
-// create an empty column, so headers list only what is actually there.
+// CollectFormValues stops at maxFormFields, so a declared name can be missing
+// from the values. A header naming a column with no value would have the
+// writer create an empty column, so headers list only what is actually there.
 func TestForm_SeedHeadersSkipDeclaredFieldsThatWereCapped(t *testing.T) {
 	t.Parallel()
 	seed := daemon.BuildFormSeedForTest(
@@ -1041,7 +993,6 @@ func TestForm_DeclaredFieldsAreCapped(t *testing.T) {
 		t.Errorf("rendered %d of %d declared fields, cap is %d",
 			rendered, len(fields), core.MaxHostedFormFields)
 	}
-	// The ones it does render are the ones the owner listed first.
 	if !strings.Contains(string(html), `name="f0"`) {
 		t.Errorf("the first declared field was not rendered")
 	}
@@ -1092,17 +1043,14 @@ func TestForm_LongFieldNamesAreDropped(t *testing.T) {
 	}
 }
 
-// TestForm_RefusedSubmissionIsKept is the visitor-side half of the refusal
-// record. Someone fills the form in and presses send; the flow can't run
-// because its published revision no longer validates. They are told the form
-// is closed — and their answers must not be gone. Before this, the submission
-// was a line in the daemon log and nothing else: no run, no marker, no mail,
-// and no way for the owner to learn the form had stopped collecting.
+// The visitor-side half of the refusal record. Someone fills the form in and
+// presses send; the flow can't run because its published revision no longer
+// validates. They are told the form is closed — and their answers must not be
+// gone. Before this, the submission was a line in the daemon log and nothing
+// else: no run, no marker, no mail, and no way for the owner to learn the form
+// had stopped collecting.
 func TestForm_RefusedSubmissionIsKept(t *testing.T) {
 	_, wh, jobs, _, wsStore := startWebhookHarness(t)
-	// A published flow that will not validate at submit time: the second step
-	// names a module that does not exist, so ValidateRuntime rejects the graph
-	// while publicFormConfig still finds a live form step to render.
 	g := core.Graph{
 		ID: "contact", Name: "Contact form", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{
@@ -1143,8 +1091,6 @@ func TestForm_RefusedSubmissionIsKept(t *testing.T) {
 		t.Errorf("run error = %+v, want code invalid_graph", runs[0].Error)
 	}
 
-	// What she typed has to be in there, or the record is just a receipt for
-	// something nobody can recover.
 	seed, err := jobs.Get(context.Background(), runs[0].ID+":in")
 	if err != nil {
 		t.Fatalf("submission not stored: %v", err)

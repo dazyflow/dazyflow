@@ -34,9 +34,6 @@ func publishGraph(t *testing.T, store *workspace.Store, g core.Graph) {
 
 func TestScheduler_FiresGraphWithCronTrigger(t *testing.T) {
 	t.Parallel()
-	// Build a Service + worker, save a graph with a cron trigger that
-	// fires every minute, then advance a synthetic clock past the
-	// schedule and observe the worker run the graph.
 	ks := auth.NewMemKeyStore()
 	role := core.Role{Name: "scheduler-test", Permissions: []core.Permission{
 		core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
@@ -61,7 +58,6 @@ func TestScheduler_FiresGraphWithCronTrigger(t *testing.T) {
 	}, jobs, eng, bus)
 	go func() { _ = w.Run(wctx) }()
 
-	// Seed a graph that fires every minute and contains a single sleep.
 	graph := core.Graph{
 		ID: "hourly", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "tick", Module: "delay", Params: map[string]any{"ms": 1}}},
@@ -72,11 +68,8 @@ func TestScheduler_FiresGraphWithCronTrigger(t *testing.T) {
 	publishGraph(t, wsStore, graph)
 
 	sched := daemon.NewScheduler(svc)
-	// Fast tick + rescan so the test doesn't have to wait real time.
 	sched.SetInterval(5*time.Millisecond, 50*time.Millisecond)
 
-	// Use a controllable clock. The scheduler reads it from a goroutine
-	// while the test mutates it from another, so we guard with a mutex.
 	var (
 		clockMu sync.Mutex
 		now     = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -97,12 +90,10 @@ func TestScheduler_FiresGraphWithCronTrigger(t *testing.T) {
 	if sched.TrackedCount() != 1 {
 		t.Fatalf("tracked=%d, want 1", sched.TrackedCount())
 	}
-	// Jump past the next minute so the cron entry becomes due.
 	clockMu.Lock()
 	now = now.Add(2 * time.Minute)
 	clockMu.Unlock()
 
-	// Wait up to 3 seconds for the graph to run.
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		records, _ := jobs.ListByGraph(t.Context(), "hourly")
@@ -205,14 +196,11 @@ func TestScheduler_RejectsBadCron(t *testing.T) {
 	defer cancel()
 	go func() { _ = sched.Run(schedCtx) }()
 	time.Sleep(80 * time.Millisecond)
-	// Bad cron should not be tracked.
 	if got := sched.TrackedCount(); got != 0 {
 		t.Errorf("tracked=%d, want 0 (bad cron expr should be rejected)", got)
 	}
 }
 
-// TestScheduler_TracksCronTriggerNode verifies Phase 2: a schedule set on
-// a cron_trigger NODE (not on g.Triggers) is picked up by the scheduler.
 func TestScheduler_TracksCronTriggerNode(t *testing.T) {
 	t.Parallel()
 	ks := auth.NewMemKeyStore()
@@ -240,10 +228,6 @@ func TestScheduler_TracksCronTriggerNode(t *testing.T) {
 	}
 }
 
-// TestScheduler_SkipsDisabledTriggerNode confirms a cron_trigger node with
-// params.disabled=true is individually paused: not tracked, not fired —
-// even though the flow itself is enabled. This is the per-trigger pause
-// the Schedules page toggles, finer-grained than the whole-flow Disabled.
 func TestScheduler_SkipsDisabledTriggerNode(t *testing.T) {
 	t.Parallel()
 	ks := auth.NewMemKeyStore()
@@ -273,8 +257,6 @@ func TestScheduler_SkipsDisabledTriggerNode(t *testing.T) {
 	}
 }
 
-// TestScheduler_IgnoresCronTriggerNodeWithoutSchedule confirms a blank
-// schedule on the node means "run only on demand" — not tracked, not fired.
 func TestScheduler_IgnoresCronTriggerNodeWithoutSchedule(t *testing.T) {
 	t.Parallel()
 	ks := auth.NewMemKeyStore()
@@ -302,10 +284,9 @@ func TestScheduler_IgnoresCronTriggerNodeWithoutSchedule(t *testing.T) {
 	}
 }
 
-// TestScheduler_ImpossibleCronDateDoesNotFire guards a runaway-loop:
-// "0 0 30 2 *" (Feb 30 — never exists) PARSES fine, but cron.Schedule.
-// Next() gives up after 5 years and returns the ZERO time. The fire
-// check (!scheduleAt.After(now)) treats a zero time as "due now", so the
+// Guards a runaway-loop: "0 0 30 2 *" (Feb 30 — never exists) PARSES fine, but
+// cron.Schedule. Next() gives up after 5 years and returns the ZERO time. The
+// fire check (!scheduleAt.After(now)) treats a zero time as "due now", so the
 // graph would fire on every tick forever. A never-fires schedule must be
 // dormant, not perpetually due.
 func TestScheduler_ImpossibleCronDateDoesNotFire(t *testing.T) {

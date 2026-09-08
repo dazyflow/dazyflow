@@ -1,11 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package trigger contains modules whose execution depends on an
-// external trigger event. They register normal Execute handlers that
-// produce a clear error when run without their corresponding trigger,
-// so graph authors get a fast "you need a webhook" signal instead of
-// silent zero-value behavior.
 package trigger
 
 import (
@@ -47,14 +42,10 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionTrigger,
 			ProcessModel:   core.ProcessLongLived,
-			// No inputs — webhook is the data source.
 			Outputs: []core.Port{
 				{Port: "body", Label: "Body"},
 				{Port: "headers", Label: "Headers", MIME: []string{"application/json"}},
 			},
-			// Webhook config lives on the node (like the Schedule/Poll nodes),
-			// read by the daemon's /trigger handler. The hosted form is its own
-			// step now: one door per trigger, one contract per address.
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{

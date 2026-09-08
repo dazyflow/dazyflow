@@ -59,9 +59,6 @@ func init() {
 	})
 }
 
-// executeGitHubOnPush is the standalone-execution path — only called
-// when a graph is run manually (no webhook event seeded the node).
-// Mirrors webhook_input / slack_on_mention.
 func executeGitHubOnPush(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	return core.Result{
 		JobID:  job.ID,

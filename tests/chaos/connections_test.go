@@ -74,8 +74,6 @@ func TestIllegalWiring_IsRefusedNotRun(t *testing.T) {
 
 	for name, g := range cases {
 		t.Run(name, func(t *testing.T) {
-			// The editor gate sees every one of these as an error, which is
-			// what makes the run path's silence a gap rather than a design.
 			issues := core.ValidateGraphFull(g, manifests)
 			var editorErrors int
 			for _, i := range issues {
@@ -122,20 +120,10 @@ func TestUnknownModule_FailsAtTheStep(t *testing.T) {
 	}
 }
 
-// analyzeDependent logged one "waiting: predecessor …" line per dependent
-// per completion, so a wide fan-in buried the log: the 200-wire graph above
-// wrote thousands of lines in under a second, none of them actionable ("not
-// ready yet" is the normal state of every step before its turn). The trace
-// is now behind DAZYFLOW_DEBUG_DISPATCH.
 func TestWideFanIn_DoesNotFloodTheLog(t *testing.T) {
 	var logged bytes.Buffer
 	hs := newHarnessLogging(t, log.New(&logged, "", 0))
 
-	// The widest legal fan-in, tiered: core.DefaultMaxVariadicFanIn caps one
-	// pin, so four full Merge pins converge on a fifth. 260 steps, and every
-	// completion still makes the dispatcher re-evaluate a step with dozens of
-	// predecessors — the shape that produced one log line per dependent per
-	// completion.
 	const tiers, width = 4, core.DefaultMaxVariadicFanIn
 	nodes := []core.Node{{ID: "sink", Module: "merge"}}
 	var edges []core.Edge

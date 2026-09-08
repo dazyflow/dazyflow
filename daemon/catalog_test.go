@@ -15,12 +15,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Coverage for the public discovery + catalog read handlers in catalog.go.
-// They're driven through the real mux (ServeForTest) so route wiring, auth
-// gating, and the handler bodies are all exercised. The harness's engine
-// uses engine.Default, so the registry is populated (see ListModules test).
-
-// decodeJSON unmarshals a recorder body, failing the test on malformed JSON.
 func decodeJSON(t *testing.T, rw *httptest.ResponseRecorder, into any) {
 	t.Helper()
 	if err := json.Unmarshal(rw.Body.Bytes(), into); err != nil {
@@ -31,7 +25,6 @@ func decodeJSON(t *testing.T, rw *httptest.ResponseRecorder, into any) {
 func TestServiceDescriptor_PublicNoAuth(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	// No Authorization header — GET /api/v1 is the public discovery entry.
 	req := httptest.NewRequest("GET", "/api/v1", nil)
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, req)
@@ -123,10 +116,6 @@ func TestListIntegrations_AndFilter(t *testing.T) {
 	}
 }
 
-// TestListIntegrations_SummaryWired proves IntegrationSummary.Summary is
-// populated from integrationSummaries (it used to be hardcoded ""): Stripe
-// carries a non-empty summary, and the ?q= filter — which searches
-// label+summary — matches a word that appears only in that summary.
 func TestListIntegrations_SummaryWired(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -235,10 +224,9 @@ func TestListDrops_AndGetDrop(t *testing.T) {
 	}
 }
 
-// TestListDrops_DisabledVisibility confirms a platform-disabled drop is hidden
-// from the default catalog but kept (flagged Disabled) when the editor opts in
-// with include_disabled — so the palette can show it greyed-out rather than
-// having it silently vanish.
+// Confirms a platform-disabled drop is hidden from the default catalog but
+// kept (flagged Disabled) when the editor opts in with include_disabled — so
+// the palette can show it greyed-out rather than having it silently vanish.
 func TestListDrops_DisabledVisibility(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -261,19 +249,16 @@ func TestListDrops_DisabledVisibility(t *testing.T) {
 	}
 	target := all[0].ID
 
-	// Switch the drop off globally (tenant "" hits every tenant).
 	h.svc.DropSwitches = &PgDropSwitchStore{cache: map[string]bool{
 		dropSwitchKey(target, ""): true,
 	}}
 
-	// Default listing hides it.
 	for _, d := range drops("/api/v1/drops") {
 		if d.ID == target {
 			t.Fatalf("disabled drop %q should be hidden without include_disabled", target)
 		}
 	}
 
-	// Editor opt-in keeps it, flagged disabled.
 	var got *core.Manifest
 	shown := drops("/api/v1/drops?include_disabled=1")
 	for i := range shown {
@@ -289,10 +274,6 @@ func TestListDrops_DisabledVisibility(t *testing.T) {
 	}
 }
 
-// TestListDrops_Filters exercises the query-param filter branches (q,
-// category, provider, tag, and the integration post-filter). The harness
-// data is fixed, so we assert the response stays well-formed and the filter
-// can only narrow — not the exact membership.
 func TestListDrops_Filters(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -318,9 +299,9 @@ func TestListDrops_Filters(t *testing.T) {
 	}
 }
 
-// TestMyAPIKeys_PermissionOverflow confirms the self-issue endpoint refuses
-// to mint a key with more permission than the caller holds — a 403, not a
-// silently-broken key. The editor role lacks platform:admin.
+// Confirms the self-issue endpoint refuses to mint a key with more permission
+// than the caller holds — a 403, not a silently-broken key. The editor role
+// lacks platform:admin.
 func TestMyAPIKeys_PermissionOverflow(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
@@ -333,22 +314,19 @@ func TestMyAPIKeys_PermissionOverflow(t *testing.T) {
 	}
 }
 
-// TestMyAPIKeys_DefaultCappedToViewer covers the Connect-an-assistant
-// default path: a viewer (graph:run only) issuing a key with NO roles
-// gets the claude-mcp default CAPPED to what they hold — a run-only key,
-// not a 403. An assistant can never exceed its user.
+// Covers the Connect-an-assistant default path: a viewer (graph:run only)
+// issuing a key with NO roles gets the claude-mcp default CAPPED to what they
+// hold — a run-only key, not a 403. An assistant can never exceed its user.
 func TestMyAPIKeys_DefaultCappedToViewer(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 
-	// Mint a viewer token (graph:run only) in the same keystore.
 	viewer := core.TeamRoleViewer()
 	_, vtok, err := auth.IssueAPIKey(h.ks, t.Context(), "k-viewer", "t", "ws", "vera", []core.Role{viewer}, nil)
 	if err != nil {
 		t.Fatalf("issue viewer key: %v", err)
 	}
 
-	// Self-issue with no roles → server applies the capped default.
 	req := httptest.NewRequest("POST", "/api/v1/me/api-keys", bytes.NewBufferString("{}"))
 	req.Header.Set("Authorization", "Bearer "+vtok)
 	req.Header.Set("Content-Type", "application/json")
@@ -393,14 +371,10 @@ func TestTriggerKinds(t *testing.T) {
 	}
 }
 
-// TestMyAPIKeys_Lifecycle exercises the self-service key trio: list, issue
-// (capped to a subset of the caller's own perms), then revoke.
 func TestMyAPIKeys_Lifecycle(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 
-	// The harness's editor token already owns one key ("k1"), so the
-	// caller sees at least their own.
 	rw := h.do(t, "GET", "/api/v1/me/api-keys", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("list: code = %d body = %s", rw.Code, rw.Body.String())
@@ -413,8 +387,6 @@ func TestMyAPIKeys_Lifecycle(t *testing.T) {
 		t.Fatal("caller should see their own key")
 	}
 
-	// Issue a key scoped to graph:run — a subset of the editor role, so it
-	// passes the permission-cap check.
 	body := SelfIssueAPIKeyParams{
 		Roles: []core.Role{{Name: "scoped", Permissions: []core.Permission{core.PermGraphRun}}},
 	}
@@ -479,13 +451,10 @@ func TestRevokeMyAPIKey_OtherUsersKeyIs404(t *testing.T) {
 	}
 }
 
-// TestListIntegrationsHandler_Cov covers listIntegrationsHandler across the
-// unfiltered, query-filtered, and category-filtered branches.
 func TestListIntegrationsHandler_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 
-	// Unfiltered -> 200 with items.
 	rw := h.do(t, "GET", "/api/v1/catalog/integrations", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("list = %d, want 200; body=%s", rw.Code, rw.Body.String())
@@ -498,7 +467,6 @@ func TestListIntegrationsHandler_Cov(t *testing.T) {
 		t.Fatalf("unfiltered integrations empty: %s", rw.Body.String())
 	}
 
-	// A query that matches nothing returns an empty (but valid) list.
 	rw = h.do(t, "GET", "/api/v1/catalog/integrations?q=zzz_no_such_integration", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("q-filtered = %d, want 200", rw.Code)
@@ -509,19 +477,16 @@ func TestListIntegrationsHandler_Cov(t *testing.T) {
 		t.Fatalf("nonsense query matched %d items", len(resp.Items))
 	}
 
-	// A category filter exercises the dropCategories branch.
 	rw = h.do(t, "GET", "/api/v1/catalog/integrations?category=flow_control", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("category-filtered = %d, want 200", rw.Code)
 	}
 }
 
-// TestRequireSecretStore_Cov covers requireSecretStore's three legs.
 func TestRequireSecretStore_Cov(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
 
-	// No store -> 501, returns false.
 	rw := httptest.NewRecorder()
 	if h.gw.secretsAPI().requireSecretStore(rw, core.Principal{Tenant: "t"}) {
 		t.Fatal("no-store should return false")
@@ -532,7 +497,6 @@ func TestRequireSecretStore_Cov(t *testing.T) {
 
 	h.gw.EncryptedSecrets = testEncryptedSecrets(t)
 
-	// Store present but no tenant -> 403, false.
 	rw = httptest.NewRecorder()
 	if h.gw.secretsAPI().requireSecretStore(rw, core.Principal{}) {
 		t.Fatal("no-tenant should return false")
@@ -541,7 +505,6 @@ func TestRequireSecretStore_Cov(t *testing.T) {
 		t.Fatalf("no-tenant = %d, want 403", rw.Code)
 	}
 
-	// Store + tenant -> true, no write.
 	rw = httptest.NewRecorder()
 	if !h.gw.secretsAPI().requireSecretStore(rw, core.Principal{Tenant: "t"}) {
 		t.Fatal("store+tenant should return true")

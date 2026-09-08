@@ -135,11 +135,6 @@ function fmtSeconds(t: (k: string) => string, s: number): string {
   return s > 0 ? `${s}${NBSP}s` : t("admin.workspace.none");
 }
 
-// OrgProfileEditor lets the owner rename their organization. The
-// underlying tenant ID is shown in fine print because it still appears
-// in webhook URLs and audit entries — the rename only changes the
-// display label. Defaulted from the email domain on signup so a fresh
-// account doesn't surface "usr_de3d2365" anywhere.
 function OrgProfileEditor() {
   const { t } = useTranslation();
   const { token, me, refreshMe } = useAuth();
@@ -149,10 +144,6 @@ function OrgProfileEditor() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Subdomain (per-org wildcard host) state. wildcardDomain is empty unless the
-  // deploy enabled the feature, in which case the section renders. savedSub is
-  // the persisted label; sub is the current input. avail tracks the live
-  // availability probe so the user learns "taken"/"invalid" before saving.
   const [wildcardDomain, setWildcardDomain] = useState("");
   const [sub, setSub] = useState("");
   const [savedSub, setSavedSub] = useState("");
@@ -162,9 +153,6 @@ function OrgProfileEditor() {
   const [avail, setAvail] = useState<
     "idle" | "checking" | "ok" | "taken" | "invalid" | "current"
   >("idle");
-  // loadedRef gates autosave until the initial GET completes; savedRef
-  // holds the last-persisted values so the autosave effect only fires on
-  // a genuine user edit (not the load itself).
   const loadedRef = useRef(false);
   const savedRef = useRef<{ name: string; icon?: string }>({ name: "", icon: undefined });
 
@@ -203,9 +191,6 @@ function OrgProfileEditor() {
       await api.putOrgProfile(token, displayName.trim(), icon);
       savedRef.current = { name: displayName.trim(), icon };
       setSavedAt(new Date());
-      // Refresh identity so the switcher + top bar pick up the new
-      // name/icon immediately (updates the context's `me`, not just a
-      // throwaway fetch). The session itself doesn't change, just labels.
       await refreshMe();
     } catch (e) {
       setError(explainApiError(e, t));
@@ -260,16 +245,12 @@ function OrgProfileEditor() {
       setSubSavedAt(new Date());
       setAvail("current");
     } catch (e) {
-      // 409 taken / 400 invalid carry friendly server messages; the generic
-      // mapper handles everything else.
       setSubError(explainApiError(e, t));
     } finally {
       setSavingSub(false);
     }
   }, [token, sub, t]);
 
-  // Autosave: debounce-persist a genuine change (skipped until the
-  // initial load, and when the values already match what's stored).
   useEffect(() => {
     if (!loadedRef.current) return;
     if (
@@ -283,8 +264,6 @@ function OrgProfileEditor() {
   }, [displayName, icon, save]);
 
   if (loading) return null;
-  // Load failure (e.g. 501 not-configured) replaces the editor; a
-  // transient save error renders inline below instead.
   if (error && !loadedRef.current) {
     return (
       <div className="card" style={{ marginBottom: "var(--space-4)" }}>

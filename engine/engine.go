@@ -19,18 +19,12 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// GraphProgress wraps a node-level Progress event with the graph context so
-// a single caller channel can multiplex progress from every node in the run.
 type GraphProgress struct {
 	JobID    string        `json:"job_id"`
 	NodeID   string        `json:"node_id"`
 	Progress core.Progress `json:"progress"`
 }
 
-// GraphResult is the final outcome of a graph run. Nodes contains the
-// per-node Result for every node that completed (including the failing one
-// when Status is "error"). Error is populated on engine- or node-level
-// failure; the returned error wraps the same information.
 type GraphResult struct {
 	GraphID string
 	Status  string
@@ -40,52 +34,20 @@ type GraphResult struct {
 
 type Engine struct {
 	Resolver Resolver
-	// Sandbox is optional. When set, every Job built by the engine has
-	// its WorkspaceRoot populated from Sandbox.Root before Execute is
-	// called. Filesystem-touching modules refuse to run without a root.
-	Sandbox core.SandboxProvider
-	// Quota is optional. When set, the engine snapshots the tenant's
-	// byte budget onto each Job so modules can refuse writes that would
-	// exceed it.
+	Sandbox  core.SandboxProvider
+	// Quota snapshots the tenant's byte budget onto each Job, so modules can
+	// refuse writes that would exceed it.
 	Quota core.QuotaProvider
-	// Secrets is a registry of secret providers keyed by URI scheme.
-	// When set, the engine walks Job.Params/Env before each Execute and
-	// replaces any "scheme://path" string with the provider's value.
-	// Unresolved values stay in the JobStore so audit trails never
-	// capture cleartext secrets.
-	Secrets map[string]core.SecretProvider
-	// Resources is an optional registry of resource providers keyed by
-	// scheme ("resource"). When set, the engine resolves ${resource.NAME}
-	// references in Job.Params to live external content (e.g. a Google
-	// Sheet's rows) before Execute — a whole-string ref yields the
-	// structured value, an inline one the stringified form. A fetch
-	// failure fails the node with code "resource".
-	Resources map[string]core.ResourceProvider
-	// EmailTemplates is optional. When set, the engine carries it onto each
-	// node's Execute context so the email-sending drops can resolve a
-	// referenced email-template ID to its layout shell HTML at run time (a
-	// live reference). Nil means templates are unavailable — a drop that
-	// references one then fails cleanly.
+	// Secrets resolves "scheme://path" strings in Params and Env before each
+	// Execute. The UNresolved values are what reach the JobStore, so audit
+	// trails never capture cleartext.
+	Secrets        map[string]core.SecretProvider
+	Resources      map[string]core.ResourceProvider
 	EmailTemplates EmailTemplateProvider
-	// ApprovalSigner is optional. When set and the resolved module's
-	// manifest has AwaitsApproval=true, the engine populates
-	// Job.ApprovalURL pre-Execute so the module can emit the URL on
-	// its output. Without a signer, awaiting-style modules still run
-	// but receive an empty ApprovalURL.
 	ApprovalSigner core.ApprovalSigner
-	// WriteDedupe is optional. When set, modules whose manifest opts in via
-	// DedupeWrites (non-idempotent external writes with no upstream
-	// idempotency key) are guarded: the engine returns a node-record's
-	// previously recorded successful result instead of re-firing the write
-	// when that same job runs again (an expired-lease reclaim or crash
-	// recovery). Nil disables dedupe — every execution calls the drop.
-	WriteDedupe core.WriteDedupeStore
+	WriteDedupe    core.WriteDedupeStore
 }
 
-// Run validates the graph, computes parallel execution layers, and executes
-// each layer concurrently. The first node failure aborts the run. If
-// progress is non-nil the engine streams GraphProgress events on it and
-// closes it on return.
 func (e *Engine) Run(ctx context.Context, graph core.Graph, progress chan<- GraphProgress) (GraphResult, error) {
 	ctx, span := startGraphSpan(ctx, graph)
 	defer span.End()
@@ -132,9 +94,6 @@ func (e *Engine) Run(ctx context.Context, graph core.Graph, progress chan<- Grap
 }
 
 func (e *Engine) validate(graph core.Graph) error {
-	// Prefer a tenant-scoped manifest set so a graph validates against the
-	// drops its tenant has installed (and any exact versions it pins), not the
-	// global-default palette.
 	if mp, ok := e.Resolver.(interface {
 		ManifestsForTenant(string) map[string]core.Manifest
 	}); ok {
@@ -148,9 +107,6 @@ func (e *Engine) validate(graph core.Graph) error {
 	return core.Validate(graph)
 }
 
-// runLayer executes every node in a layer concurrently and merges their
-// results into the shared map. Returns the first node error encountered; on
-// success returns nil.
 func (e *Engine) runLayer(
 	ctx context.Context,
 	graph core.Graph,
@@ -177,14 +133,13 @@ func (e *Engine) runLayer(
 	}
 	wg.Wait()
 
-	// Merge every sibling's result BEFORE inspecting any of them for failure.
-	// Merging and checking in one pass returned on the first bad slot, so the
-	// nodes ordered after it were dropped from `results` entirely — and since
-	// ExecutionLayers sorts a layer by node ID, which successful siblings
-	// survived came down to alphabetical accident. They all ran; the caller
-	// should see all of them. This matters beyond tidiness: Worker.bodyRunner
-	// drives loop bodies through Engine.Run and reads GraphResult.Nodes, so a
-	// body with one failing node was silently losing its siblings' output.
+	// Merge every sibling BEFORE inspecting any for failure. One pass returned
+	// on the first bad slot, dropping the nodes ordered after it — and since
+	// ExecutionLayers sorts by node ID, which siblings survived was alphabetical
+	// accident. They all ran, so the caller should see them all:
+	// Worker.bodyRunner drives loop bodies through Run and reads
+	// GraphResult.Nodes, so a body with one failing node lost its siblings'
+	// output.
 	for _, s := range out {
 		results[s.id] = s.result
 	}
@@ -203,15 +158,6 @@ func (e *Engine) runLayer(
 	return nil
 }
 
-// RunNode executes a single node using already-known predecessor results.
-// It is the per-node counterpart to Run, used by the daemon's distributed
-// worker so different nodes of a graph can land on different workers.
-// progress receives core.Progress events directly (no GraphProgress
-// wrapping) — the caller decides how to surface them.
-//
-// graphRunID identifies the specific run (not the persistent graph ID)
-// and is used to scope the approval URL for await_approval modules.
-// Callers that aren't running per-run can pass graph.ID.
 func (e *Engine) RunNode(
 	ctx context.Context,
 	graph core.Graph,
@@ -237,11 +183,9 @@ func (e *Engine) RunNode(
 	ctx, span := startNodeSpan(ctx, graph, node)
 	defer span.End()
 
-	// The job ID is the idempotency key for outbound side effects
-	// (Job.IdempotencyKey). It MUST be stable across retries so a retried
-	// POST is deduped by the receiving service — the worker re-invokes
-	// RunNode with the same record ID on every attempt. Fall back to a
-	// random ID only for callers that don't supply one (e.g. ad-hoc tests).
+	// The job ID is the idempotency key for outbound side effects, so it MUST be
+	// stable across retries — the worker re-invokes RunNode with the same record
+	// ID every attempt. Only a caller supplying none gets a random one.
 	jobID := recordID
 	if jobID == "" {
 		id, err := newJobID()
@@ -252,21 +196,18 @@ func (e *Engine) RunNode(
 		jobID = id
 	}
 
-	// The distributed path stamps sandbox/template errors on the span and
-	// namespaces scratch (and the approval URL) by the per-run graphRunID.
 	return e.buildAndExecute(ctx, span, graph, node, prior, jobID, graphRunID,
 		func(err error) { recordSpanError(span, err) },
 		func(execCtx context.Context, transport core.Transport, job core.Job, secrets *secretSet) (core.Result, error) {
-			// Scrub secrets a drop might echo into live progress events before
-			// they leave the engine — redactResult only covers the final Result.
+			// redactResult covers only the final Result, so scrub live progress
+			// events a drop might echo a secret into.
 			redactedProgress, progressDone := redactProgress(execCtx, progress, secrets)
 			// Deferred, not inline: a panic out of Execute must still close the
 			// channel and drain the forwarder. Native drops recover inside their
-			// own transport, but the remote transport doesn't, so an inline close
-			// leaked the redaction goroutine for the life of the process every
-			// time a gRPC node server misbehaved. The defer runs before control
-			// returns to the caller, so every progress event is still forwarded
-			// before the Result is observed — the ordering the inline form gave.
+			// transport but the remote one does not, so an inline close leaked the
+			// redaction goroutine for the life of the process whenever a gRPC node
+			// server misbehaved. The defer still runs before control returns, so
+			// the forwarding order is unchanged.
 			defer func() {
 				if redactedProgress != nil {
 					close(redactedProgress)
@@ -277,8 +218,6 @@ func (e *Engine) RunNode(
 		})
 }
 
-// runNode resolves the transport, assembles the Job from upstream outputs,
-// runs Execute with a per-node progress forwarder, and returns the result.
 func (e *Engine) runNode(
 	ctx context.Context,
 	graph core.Graph,
@@ -294,15 +233,13 @@ func (e *Engine) runNode(
 		return core.Result{Status: core.StatusError}, fmt.Errorf("generate job ID: %w", err)
 	}
 
-	// The in-process Run path has no per-run ID of its own — but a loop-body
-	// run carries the PARENT run's ID on ctx (WithLoopRunID) so body nodes
-	// share the parent's scratch space. Outside a loop this stays "" (no
-	// scratch), as before. populateSandbox reads the run ID from ctx, so it
-	// must run inside buildAndExecute after the ctx is set up.
+	// The in-process path has no run ID of its own, but a loop body carries the
+	// PARENT run's on ctx so body nodes share its scratch. Outside a loop this
+	// stays "", meaning no scratch. populateSandbox reads it off ctx, so it must
+	// run inside buildAndExecute.
 	//
-	// recordErr is a no-op here: the in-process path historically did NOT
-	// stamp the span with sandbox/template errors (only resolve/exec errors),
-	// so we preserve that to avoid changing emitted spans.
+	// recordErr is a no-op: this path never stamped the span with sandbox or
+	// template errors, and changing that would change emitted spans.
 	return e.buildAndExecute(ctx, span, graph, node, prior, jobID,
 		loopRunIDFromContext(ctx),
 		func(error) {},
@@ -317,20 +254,6 @@ func (e *Engine) runNode(
 		})
 }
 
-// buildAndExecute holds the body shared by RunNode (distributed worker
-// path) and runNode (in-process Run path): resolve the transport,
-// assemble the Job from upstream outputs, populate the sandbox, inject
-// connection defaults, resolve secret/resource templates, sign the
-// approval URL, run the transport, and post-process the result
-// (passthrough + secret redaction + span error). The two entrypoints
-// differ only in their job-ID source, the run ID used to namespace
-// scratch, whether sandbox/template errors are stamped on the span
-// (recordErr), and how progress is wired (exec) — all passed in.
-//
-// exec receives the fully wired execution context, the assembled job,
-// and the resolved secret set, runs transport.Execute with the caller's
-// progress strategy, and returns its result. The transport is rebound
-// onto execCtx so callers that read it via WithResolver see it.
 func (e *Engine) buildAndExecute(
 	ctx context.Context,
 	span trace.Span,
@@ -341,8 +264,6 @@ func (e *Engine) buildAndExecute(
 	recordErr func(error),
 	exec func(ctx context.Context, transport core.Transport, job core.Job, secrets *secretSet) (core.Result, error),
 ) (core.Result, error) {
-	// Tenant rides on ctx through resolution so the scripted catalog returns
-	// this tenant's installed (and version-pinned) drops, not the global set.
 	ctx = core.WithTenant(ctx, graph.Tenant)
 
 	transport, err := e.Resolver.Resolve(ctx, node.Module)
@@ -353,19 +274,13 @@ func (e *Engine) buildAndExecute(
 			Error:  &core.JobError{Code: "resolve_failed", Message: err.Error()},
 		}, err
 	}
-	// MarkListPorts normalizes the conventional list-carrying ports (rows,
-	// results, …) to List=true — the same view the catalog/validation use.
-	// Without it, transport.Manifest() reports those ports as single-value and
-	// the many→one auto-fan would wrongly iterate a node that takes a whole list.
 	manifest := core.MarkListPorts(transport.Manifest())
 	input := AssembleInput(graph, node.ID, manifest, prior)
-	// A port declared InlineOnly cannot take a file on the daemon's disk. The
-	// flag was advisory until now — only a tooltip read it — so `run_on_runner`
-	// silently ran its script with EMPTY stdin when a file-producing step was
-	// wired in, exited 0, and reported SUCCESS with whatever the script printed
-	// for no input. Enforced here rather than in a transport because the drop
-	// that declares it may be native, and core/manifest.go promises the job is
-	// refused before it is dispatched.
+	// InlineOnly was advisory until now — only a tooltip read it — so
+	// run_on_runner silently ran its script with EMPTY stdin when a
+	// file-producing step was wired in, exited 0, and reported SUCCESS. Enforced
+	// here rather than in a transport because the declaring drop may be native,
+	// and core/manifest.go promises the job is refused before dispatch.
 	if err := refuseInlineOnlyFileRefs(manifest, input); err != nil {
 		recordErr(err)
 		return core.Result{
@@ -396,13 +311,10 @@ func (e *Engine) buildAndExecute(
 	secrets, err := resolveTemplatesCollecting(sctx, e.Secrets, e.Resources, graph, prior, &job)
 	if err != nil {
 		recordErr(err)
-		// resolveTemplatesCollecting returns the partially-collected secret set
-		// even on error, and the error string can embed an already-resolved
-		// secret value (e.g. a secret spliced into a DSN that then fails to
-		// parse). This is the only early-return that can carry resolved secret
-		// material — the resolve_failed/sandbox paths above run before any value
-		// is resolved — so scrub it with the same redactor the success path uses
-		// before it lands in the persisted Result / run-detail UI.
+		// The error string can embed an already-resolved secret — one spliced
+		// into a DSN that then fails to parse — and this is the only early return
+		// that can, the paths above running before anything is resolved. So scrub
+		// it with the redactor the success path uses.
 		res := core.Result{
 			Status: core.StatusError,
 			Error:  &core.JobError{Code: templateErrCode(err), Message: err.Error()},
@@ -410,46 +322,28 @@ func (e *Engine) buildAndExecute(
 		redactResult(&res, secrets)
 		return res, err
 	}
-	// Sign the approval URL for await_approval modules. The in-process Run
-	// path has no signer (ApprovalSigner is nil), so this is naturally a
-	// no-op there — matching the historical behavior where runNode never
-	// set ApprovalURL.
 	if manifest.AwaitsApproval && e.ApprovalSigner != nil {
 		job.ApprovalURL = e.ApprovalSigner.SignApprovalURL(scratchRunID, node.ID)
 	}
 	jobIDsFromSpan(ctx, &job)
 
-	// Tenant rides on the context into Execute so connector token lookups
-	// (OAuth GetOAuthToken) can resolve the per-tenant account.
+	// Tenant rides into Execute so connector token lookups resolve the
+	// per-tenant account.
 	ctx = core.WithTenant(ctx, job.Tenant)
 	ctx = WithResolver(ctx, e.Resolver)
-	// Email-sending drops resolve a referenced email-template ID to its layout
-	// shell here, keyed by the job's tenant — a live reference, re-read each run.
 	ctx = WithEmailTemplateProvider(ctx, e.EmailTemplates)
-	// Those same connector lookups resolve OAuth tokens *inside* Execute,
-	// outside the secret-provider path that populated `secrets`. Expose a
-	// sink so they register the resolved token for redaction too.
 	ctx = withSecretSink(ctx, secrets)
 
-	// Many→one: if a single-value input received a list, run the node once per
-	// item and aggregate (the simplified data model's "run for each"). Falls
-	// straight through to a single exec when there's no fan-out.
+	// Many→one: a single-value input handed a list runs the node once per item
+	// and aggregates, falling straight through to one exec without fan-out.
 	//
-	// Write dedupe: for a non-idempotent external write (DedupeWrites) whose
-	// SAME node-record already fired successfully (an expired-lease reclaim or
-	// crash re-running this job ID), return the recorded result instead of
-	// sending the SMS/email/message a second time. Recorded AFTER a successful
-	// run, so the guarantee is at-least-once.
-	//
-	// Dedupe is applied PER EXECUTION, not per node: when a list fans this node
-	// (one SMS per recipient), runMaybeFanned calls exec once per item in a
-	// stable order, so keying each call as job.ID#<idx> dedupes every send
-	// independently. A crash after sending items 0..2 of 5 then replays only
-	// items 3..4 on reclaim — a whole-node key would have re-sent 0..2, the very
-	// double-fire DedupeWrites exists to prevent. The non-fanned node is just
-	// the one-item case (key job.ID#0). idx is incremented from a single
-	// goroutine (runMaybeFanned's loop and the no-fan path are sequential), so
-	// no lock is needed.
+	// Dedupe is applied PER EXECUTION, not per node: when a list fans this node,
+	// runMaybeFanned calls exec once per item in a stable order, so keying each
+	// as job.ID#<idx> dedupes every send independently. A crash after sending
+	// items 0..2 of 5 replays only 3..4 on reclaim, where a whole-node key would
+	// re-send 0..2 — the very double-fire DedupeWrites prevents. A non-fanned
+	// node is the one-item case. idx advances from a single goroutine, so it
+	// needs no lock.
 	if manifest.DedupeWrites && e.WriteDedupe != nil && job.ID != "" {
 		store := e.WriteDedupe
 		baseExec := exec
@@ -462,13 +356,10 @@ func (e *Engine) buildAndExecute(
 			}
 			res, err := baseExec(ctx, transport, j, secrets)
 			if err == nil && res.Status == core.StatusOK {
-				// Record with a context detached from cancellation but with a
-				// fresh bounded deadline: the side effect already succeeded, so a
-				// lost lease / tripped node deadline cancelling ctx must not
-				// suppress the dedupe record (that would let a reclaim re-fire it)
-				// — but a shared/Postgres store must still not block the worker
-				// forever if its backend hangs. WithoutCancel alone also strips the
-				// deadline, so re-impose a budget.
+				// The side effect already succeeded, so a lost lease cancelling ctx
+				// must not suppress the record and let a reclaim re-fire it — but a
+				// shared store must not block the worker forever either.
+				// WithoutCancel strips the deadline too, so re-impose a budget.
 				putCtx, cancelPut := context.WithTimeout(context.WithoutCancel(ctx), dedupePutTimeout)
 				store.Put(putCtx, key, res)
 				cancelPut()
@@ -481,10 +372,9 @@ func (e *Engine) buildAndExecute(
 	if result.JobID == "" {
 		result.JobID = job.ID
 	}
-	// Byte ceiling on what a step emits, checked before the value reaches the
-	// job store or the next step. An uncapped value compounds — a step that
-	// references its predecessor twice doubles it — and the eventual failure
-	// is a runtime out-of-memory throw that no recover catches, so it takes
+	// Checked before the value reaches the job store or the next step. An
+	// uncapped value compounds — a step referencing its predecessor twice
+	// doubles it — and the eventual out-of-memory throw no recover catches takes
 	// the whole daemon down rather than this one node.
 	if oversize := oversizedOutput(result.Output); oversize != nil {
 		result = core.Result{
@@ -494,8 +384,6 @@ func (e *Engine) buildAndExecute(
 		}
 	}
 	core.ApplyPassthrough(job.Input, &result)
-	// Scrub resolved secret values from the result before it leaves the
-	// engine (and lands in the job store / run-detail UI).
 	redactResult(&result, secrets)
 	if execErr != nil {
 		recordSpanError(span, execErr)
@@ -505,8 +393,6 @@ func (e *Engine) buildAndExecute(
 	return result, execErr
 }
 
-// oversizedOutput returns the first output port whose value passes the
-// per-value ceiling, or nil when every port is within it.
 func oversizedOutput(out map[string]core.Ref) *ValueTooLargeError {
 	ports := make([]string, 0, len(out))
 	for port := range out {
@@ -525,19 +411,17 @@ func oversizedOutput(out map[string]core.Ref) *ValueTooLargeError {
 	return nil
 }
 
-// AssembleInput walks incoming edges and builds the Job.Input map by reading
-// each upstream node's Result.Output.
+// AssembleInput builds Job.Input from each upstream node's Result.Output.
+// Variadic ports get one entry per edge keyed "port[idx]", which module authors
+// recover with core.VariadicInputs.
 //
-// Exported because it is also how a run is EXPLAINED after the fact. A node
-// record stores what a node produced, never what it received — the inputs are
-// assembled here, in memory, at execution time — so the run viewer's "Inputs"
-// section has to rebuild them from the run's own graph and its stored outputs.
-// Calling this rather than re-deriving "the upstream output for each edge"
-// keeps the explanation honest: variadic fan-in, fallback edges that carry no
-// data, and the one→many auto-lift are all decisions made here, and a second
-// implementation would quietly disagree with the first. Variadic input ports get one entry per
-// edge keyed as "port[idx]" — module authors recover the list with
-// core.VariadicInputs. Non-variadic ports use the plain port name.
+// Exported because it is also how a run is EXPLAINED afterwards: a node record
+// stores what a node produced, never what it received, so the run viewer has to
+// rebuild the inputs from the run's own graph and stored outputs. Calling this
+// rather than re-deriving "the upstream output for each edge" keeps the
+// explanation honest — variadic fan-in, dataless fallback edges and the
+// one→many auto-lift are all decided here, and a second implementation would
+// quietly disagree.
 func AssembleInput(graph core.Graph, nodeID string, manifest core.Manifest, prior map[string]core.Result) map[string]core.Ref {
 	input := make(map[string]core.Ref)
 	variadicCount := make(map[string]int)
@@ -546,9 +430,8 @@ func AssembleInput(graph core.Graph, nodeID string, manifest core.Manifest, prio
 		if edge.To != nodeID {
 			continue
 		}
-		// Fallback edges never feed data into the downstream node — they
-		// exist purely to trigger activation when the source fails. Any
-		// data flow to this destination must come via separate edges.
+		// Fallback edges only trigger activation when the source fails; data
+		// must reach the destination through separate edges.
 		if edge.OnError == core.OnErrorFallback {
 			continue
 		}
@@ -572,17 +455,6 @@ func AssembleInput(graph core.Graph, nodeID string, manifest core.Manifest, prio
 	return input
 }
 
-// autoLiftToList implements the one→many rule of the simplified data model: a
-// MANY input port (port.List) fed a single value gets that value wrapped in a
-// one-element list, so every list-consuming drop can assume it received a list.
-// This is the central, lossless half of the model — a flow author wiring a
-// single record (a form submission, an extracted item) into a list step no
-// longer needs a manual wrap, and it works uniformly, not just for drops that
-// happen to tolerate a lone object themselves.
-//
-// Only inline, not-already-a-list values are wrapped. Values that are already a
-// list (any slice/array) pass through untouched, as do out-of-line blob refs
-// (a streamed list is a list by construction) and empty refs.
 func autoLiftToList(port core.Port, ref core.Ref) core.Ref {
 	if !port.List || ref.Inline == nil {
 		return ref
@@ -594,10 +466,8 @@ func autoLiftToList(port core.Port, ref core.Ref) core.Ref {
 	return ref
 }
 
-// forwardProgress drains the per-node channel, wrapping each event as a
-// GraphProgress and sending it on the engine-wide channel. If ctx ends
-// mid-run, we drop incoming events on the floor instead of forwarding —
-// but we keep draining so Execute is never blocked on a full channel.
+// forwardProgress keeps draining after ctx ends, dropping events rather than
+// forwarding them, so Execute is never blocked on a full channel.
 func forwardProgress(
 	ctx context.Context,
 	jobID, nodeID string,
@@ -622,12 +492,9 @@ func forwardProgress(
 	}
 }
 
-// populateSandbox sets Job.Tenant, Job.Language, Job.WorkspaceRoot and
-// snapshots quota state from
-// the configured providers. Failures here short-circuit before
-// transport.Execute so a misconfigured sandbox never lets a module run
-// unsandboxed, and a quota-lookup error fails the job rather than
-// silently allowing unmetered writes.
+// populateSandbox short-circuits before transport.Execute, so a misconfigured
+// sandbox never lets a module run unsandboxed and a quota-lookup error fails the
+// job rather than silently allowing unmetered writes.
 func (e *Engine) populateSandbox(job *core.Job, graph core.Graph, runID string) error {
 	job.Tenant = graph.Tenant
 	job.Language = graph.Language
@@ -637,10 +504,6 @@ func (e *Engine) populateSandbox(job *core.Job, graph core.Graph, runID string) 
 			return fmt.Errorf("sandbox for %s/%s: %w", graph.Tenant, graph.Workspace, err)
 		}
 		job.WorkspaceRoot = root
-		// Per-run ephemeral scratch, when the provider supports it and we
-		// have a run ID to namespace by. Reclaimed by the dispatcher when
-		// the run finishes. The in-process Engine.Run path passes runID=""
-		// (no scratch) — only the daemon's per-node RunNode path runs.
 		if sp, ok := e.Sandbox.(core.ScratchProvider); ok && runID != "" {
 			scratch, err := sp.ScratchRoot(graph.Tenant, graph.Workspace, runID)
 			if err != nil {
@@ -663,11 +526,6 @@ func (e *Engine) populateSandbox(job *core.Job, graph core.Graph, runID string) 
 	return nil
 }
 
-// newJobID mints a run/job identifier. 16 bytes to match the entropy the
-// rest of the system uses for opaque identifiers (session tokens, invite
-// tokens, OAuth state) — 8 bytes left job IDs guessable enough to be worth
-// tightening, even though every read path authorizes on the record's tenant
-// rather than trusting the ID.
 func newJobID() (string, error) {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
@@ -676,24 +534,18 @@ func newJobID() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-// cloneNodeIO returns deep copies of a node's Params and Env. The engine
-// resolves ${secret.…}/${upstream.…} placeholders into params IN PLACE, so
-// without a copy the resolved cleartext (including secret values) would be
-// written back into the caller's shared graph map — leaking secrets into any
-// later serialization/inspection of the graph and making a re-run
-// non-deterministic. Params can hold nested maps/slices, so a shallow
-// maps.Clone is insufficient; a JSON round-trip mirrors how the graph is
-// already stored and persisted. Env is flat strings, so a shallow clone is
-// exact. On a (practically impossible) marshal error we fall back to the
-// original maps rather than failing the node — resolution would then mutate
-// in place, the pre-existing behavior.
+// cloneNodeIO deep-copies Params and Env. The engine resolves placeholders IN
+// PLACE, so without a copy the resolved cleartext would be written back into the
+// caller's shared graph map — leaking secrets into any later serialization and
+// making a re-run non-deterministic. Params can nest, so a shallow maps.Clone is
+// insufficient and a JSON round-trip mirrors how the graph is already stored;
+// Env is flat strings, so a shallow clone is exact. A marshal error falls back to
+// the originals rather than failing the node.
 func cloneNodeIO(params map[string]any, env map[string]string) (map[string]any, map[string]string) {
-	// Never hand back the caller's map: the graph these params come from is
-	// shared by every step of the run and, via the worker's run cache, by
-	// every concurrent run of the same flow. Secret resolution writes into
-	// what it gets back, so a shared map would leak one run's resolved values
-	// into another's. A shallow clone is the floor when the deep copy cannot
-	// be made.
+	// The graph these params come from is shared by every step of the run and,
+	// through the worker's run cache, by every concurrent run of the same flow.
+	// Resolution writes into what it gets back, so a shared map would leak one
+	// run's resolved values into another's.
 	outParams := maps.Clone(params)
 	if len(params) > 0 {
 		if b, err := json.Marshal(params); err == nil {

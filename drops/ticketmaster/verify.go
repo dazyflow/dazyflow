@@ -20,9 +20,6 @@ func init() {
 	engine.RegisterConnectionVerifier("Ticketmaster", verifyTicketmaster)
 }
 
-// verifyTicketmaster confirms the key is accepted by asking for a single
-// event — the same endpoint both drops use, so a key that passes here works at
-// run time. The dial goes through the same SSRF-guarded client.
 func verifyTicketmaster(ctx context.Context, conn map[string]string) error {
 	key := strings.TrimSpace(conn["api_key"])
 	if key == "" {
@@ -34,7 +31,6 @@ func verifyTicketmaster(ctx context.Context, conn map[string]string) error {
 
 	status, body, err := tmGet(ctx, httpBase.Get()+"/events.json?"+q.Encode(), 10000)
 	if err != nil {
-		// The error can carry the request URL, and the URL carries the key.
 		return errors.New("could not reach Ticketmaster")
 	}
 	switch {

@@ -17,83 +17,52 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// StdioDescriptor names a subprocess to run as an MCP server. One
-// connection is opened per descriptor at Register time and kept alive
-// for the lifetime of the Catalog.
+// StdioDescriptor names a subprocess to run as an MCP server, connected once at
+// Register time and kept alive for the Catalog's lifetime.
 //
-// There is no Tenant field, and that omission is the security boundary.
-// Registering one of these starts a process on the daemon host, so it is an
-// OPERATOR capability — configured in the environment by whoever runs the
-// instance. A tenant-supplied stdio server would be arbitrary code execution
-// as the daemon user, available to any org admin. Tenants get HTTPDescriptor.
-//
-// The way to give a TENANT a command-distributed MCP server is to run it on a
-// machine the org owns — a runner — where the same process grants no capability
-// `run_on_runner` does not already grant. Designed but not built.
+// There is no Tenant field, and that omission is the security boundary:
+// registering one starts a process on the daemon host, so it is an OPERATOR
+// capability. A tenant-supplied stdio server would be arbitrary code execution as
+// the daemon user, available to any org admin. Tenants get HTTPDescriptor.
 type StdioDescriptor struct {
-	// Name is the server identifier used in tool IDs (mcp:<name>:<tool>).
-	Name string
-	// Command + Args are passed to exec.Cmd. The program must implement
-	// the MCP stdio transport.
+	Name    string
 	Command string
 	Args    []string
-	// Env adds variables on top of the inherited environment.
-	Env map[string]string
+	Env     map[string]string
 }
 
-// session is a live connection to one MCP server, whichever transport carries
-// it. The catalog needs exactly one thing from a connected server after the
-// handshake — the ability to call a tool — so that is all this names.
 type session interface {
 	CallTool(ctx context.Context, name string, args map[string]any) (*ToolCallResult, error)
 }
 
-// serverKey identifies one registered server. tenant "" is instance-wide.
 type serverKey struct {
 	tenant string
 	name   string
 }
 
-// serverIdentity is everything attach needs about a server that is not the
-// live connection: who owns it, what it is called, and what it said about
-// itself at handshake. Grouped rather than passed as six positional arguments,
-// which is how the label ended up in the wrong slot twice while this grew.
+// serverIdentity groups what attach needs besides the live connection, rather
+// than passing six positional arguments — which is how the label ended up in the
+// wrong slot twice while this grew.
 type serverIdentity struct {
-	tenant string
-	name   string
-	// label is the human display name; empty falls back to name.
-	label        string
-	info         ServerInfo
-	instructions string
-	// protocolVersion is the revision the server answered with, which is not
-	// necessarily the one we asked for. Recorded because it is the answer to
-	// "why does this server have no icons".
+	tenant          string
+	name            string
+	label           string
+	info            ServerInfo
+	instructions    string
 	protocolVersion string
-	// offlineReason, when set, means this registration describes a server's
-	// cached tools with no live session behind them. See offline.go.
-	offlineReason string
+	offlineReason   string
 }
 
-// toolKey scopes a tool id to its owning tenant.
-//
-// Keyed rather than filtered on read, for the same reason RemoteCatalog is: a
-// filter is a check someone can forget to write, a key is one the map cannot
-// skip. An org's MCP server carries that org's credential, and every job the
-// engine hands a transport has RESOLVED secrets in its params — so a lookup
-// that could cross tenants is a lookup that could send one org's secrets to
-// another org's server.
+// toolKey scopes a tool id to its tenant by KEY rather than a read-time filter:
+// a filter is a check someone can forget to write. An org's MCP server carries
+// that org's credential and every job the engine hands a transport has RESOLVED
+// secrets in its params, so a lookup that could cross tenants could send one org's
+// secrets to another org's server.
 type toolKey struct {
 	tenant string
 	id     string
 }
 
-// Catalog implements the Resolver-catalog pattern: a registry of MCP
-// tools, keyed by "mcp:<server>:<tool>", that the engine's
-// NodeResolver can query.
-//
-// It holds two populations at once. INSTANCE-WIDE servers (tenant "") come
-// from the operator's environment and are visible to every org; TENANT servers
-// are configured by an org admin in the UI and are visible only to that org.
 type Catalog struct {
 	HandshakeTimeout time.Duration
 
@@ -110,8 +79,7 @@ func NewCatalog() *Catalog {
 	}
 }
 
-// scrubbedEnviron returns the process environment with every DAZYFLOW_* variable
-// removed, so the daemon's own secrets (master key, Postgres DSN, signing keys)
+// scrubbedEnviron strips every DAZYFLOW_* variable, so the daemon's own secrets
 // never reach a spawned MCP server. Mirrors drops/shell's env floor.
 func scrubbedEnviron() []string {
 	src := os.Environ()
@@ -125,12 +93,9 @@ func scrubbedEnviron() []string {
 	return out
 }
 
-// RegisterStdio spawns the descriptor's subprocess, runs the MCP
-// handshake, lists the server's tools, and synthesizes a manifest per
-// tool. The subprocess stays running until Close.
-//
-// Always instance-wide: see StdioDescriptor for why a tenant cannot reach
-// this path.
+// RegisterStdio spawns the subprocess, handshakes, and synthesizes a manifest
+// per tool; it stays running until Close. Always instance-wide — see
+// StdioDescriptor for why a tenant cannot reach this path.
 func (c *Catalog) RegisterStdio(desc StdioDescriptor) error {
 	if desc.Name == "" {
 		return fmt.Errorf("mcp descriptor: Name required")
@@ -140,17 +105,13 @@ func (c *Catalog) RegisterStdio(desc StdioDescriptor) error {
 	}
 
 	cmd := exec.Command(desc.Command, desc.Args...)
-	// Withhold the daemon's own secrets from the MCP subprocess: a compromised
-	// or malicious server binary must not be able to read DAZYFLOW_MASTER_KEY
-	// (which decrypts every tenant's secrets), the Postgres DSN, webhook signing
-	// keys, etc. Strip every DAZYFLOW_* var (the same floor drops/shell applies);
-	// the server still inherits PATH/HOME and gets its explicit desc.Env on top.
+	// A malicious server binary must not read DAZYFLOW_MASTER_KEY, which decrypts
+	// every tenant's secrets, nor the Postgres DSN. The server still inherits
+	// PATH/HOME and gets desc.Env on top.
 	cmd.Env = scrubbedEnviron()
 	for k, v := range desc.Env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
-	// stderr stays attached for visibility — MCP servers tend to log
-	// useful diagnostics there.
 	cmd.Stderr = os.Stderr
 
 	stdin, err := cmd.StdinPipe()
@@ -182,8 +143,6 @@ func (c *Catalog) RegisterStdio(desc StdioDescriptor) error {
 	}
 
 	closer := func() error {
-		// Closing stdin gives the server a chance to drain; the
-		// hard kill is the safety net.
 		_ = stdin.Close()
 		done := make(chan error, 1)
 		go func() { done <- cmd.Wait() }()
@@ -205,13 +164,10 @@ func (c *Catalog) RegisterStdio(desc StdioDescriptor) error {
 	return nil
 }
 
-// RegisterHTTP handshakes with a remote MCP endpoint, lists its tools, and
-// files each one under the descriptor's tenant.
-//
-// Re-registering the same (tenant, name) REPLACES it, tools and all. That is
-// what editing a server in the UI does — a changed URL or a rotated token has
-// to take effect without the org first deleting the server and losing the
-// steps its flows reference by id.
+// RegisterHTTP files each tool under the descriptor's tenant. Re-registering the
+// same (tenant, name) REPLACES it, tools and all — a changed URL or a rotated
+// token has to take effect without the org first deleting the server and losing
+// the steps its flows reference by id.
 func (c *Catalog) RegisterHTTP(desc HTTPDescriptor) error {
 	if desc.Name == "" {
 		return fmt.Errorf("mcp descriptor: Name required")
@@ -244,16 +200,10 @@ func (c *Catalog) RegisterHTTP(desc HTTPDescriptor) error {
 	return nil
 }
 
-// RegisterStream wires a Client built over the supplied reader/writer
-// (after the caller has run Initialize and ListTools themselves). It's
-// the test-friendly entry point that bypasses os/exec — used by
-// in-process FakeServer harnesses. Instance-wide; see RegisterStreamFor
-// to place one in a tenant.
 func (c *Catalog) RegisterStream(name string, client *Client, info ServerInfo, tools []Tool, closer func() error) error {
 	return c.RegisterStreamFor("", name, client, info, tools, closer)
 }
 
-// RegisterStreamFor is RegisterStream with an explicit tenant.
 func (c *Catalog) RegisterStreamFor(tenant, name string, client *Client, info ServerInfo, tools []Tool, closer func() error) error {
 	return c.attach(context.Background(), serverIdentity{tenant: tenant, name: name, info: info},
 		client, tools, nil, closer)
@@ -266,16 +216,16 @@ func (c *Catalog) handshakeTimeout() time.Duration {
 	return 10 * time.Second
 }
 
-// attach files a connected server and its tools under (tenant, name),
-// replacing a previous registration of the same pair.
+// attach replaces a previous registration of the same (tenant, name).
 //
-// A tenant may not take a name the operator's instance-wide catalog already
-// holds. Shadowing is refused rather than resolved by precedence because the
-// two would disagree silently: NodeResolver prefers the tenant's entry, so an
-// org that named its server "github" would keep composing flows against the
-// operator's tool descriptions while every run went somewhere else.
-// logos, when non-nil, is used as-is; nil means resolve them from the tools'
-// own icon descriptors, which is what a live handshake does.
+// A tenant may not take a name the operator's instance-wide catalog holds.
+// Shadowing is refused rather than resolved by precedence, because the two would
+// disagree silently: NodeResolver prefers the tenant's entry, so an org naming its
+// server "github" would compose flows against the operator's tool descriptions
+// while every run went somewhere else.
+//
+// Non-nil logos are used as-is; nil resolves them from the tools' own icon
+// descriptors, which is what a live handshake does.
 func (c *Catalog) attach(ctx context.Context, id serverIdentity, client session, tools []Tool, logos map[string]string, closer func() error) error {
 	tenant, name := id.tenant, id.name
 	label := id.label
@@ -291,17 +241,16 @@ func (c *Catalog) attach(ctx context.Context, id serverIdentity, client session,
 		}
 	}
 
-	// An HTTP session takes concurrent calls; a stdio one shares a single pair
-	// of pipes and must not.
+	// An HTTP session takes concurrent calls; a stdio one shares one pair of pipes
+	// and must not.
 	_, isHTTP := client.(*HTTPClient)
 	conn := &serverConn{name: name, label: label, instructions: id.instructions,
 		protocolVersion: id.protocolVersion, offlineReason: id.offlineReason, tenant: tenant,
 		tools: tools, logos: logos,
 		client: client, info: id.info, closer: closer, concurrent: isHTTP}
 
-	// Before the lock: fetching icons is network work, and holding the
-	// catalog's mutex across someone else's outage would stall every lookup
-	// on the instance for the icon budget.
+	// Before the lock: holding the catalog's mutex across someone else's outage
+	// would stall every lookup on the instance for the icon budget.
 	if logos == nil {
 		logos = resolveToolIcons(ctx, nil, tools)
 	}
@@ -311,9 +260,8 @@ func (c *Catalog) attach(ctx context.Context, id serverIdentity, client session,
 	key := serverKey{tenant: tenant, name: name}
 	if old, exists := c.servers[key]; exists {
 		if tenant == "" {
-			// An operator registers instance-wide servers once, from the
-			// environment, at startup. A duplicate there is a typo in the
-			// config, not an edit — say so instead of silently keeping one.
+			// A duplicate instance-wide name is a typo in the operator's config, not an
+			// edit — say so rather than silently keeping one.
 			return fmt.Errorf("mcp server %q already registered", name)
 		}
 		c.detachLocked(key, old)
@@ -330,7 +278,6 @@ func (c *Catalog) attach(ctx context.Context, id serverIdentity, client session,
 	return nil
 }
 
-// detachLocked removes a server and its tools. The caller holds c.mu.
 func (c *Catalog) detachLocked(key serverKey, conn *serverConn) {
 	delete(c.servers, key)
 	for id, t := range c.tools {
@@ -343,9 +290,8 @@ func (c *Catalog) detachLocked(key serverKey, conn *serverConn) {
 	}
 }
 
-// Unregister drops a server and closes its connection. Unknown pairs are not
-// an error: deleting a server that failed to register in the first place is
-// the normal way an org clears up a mistake, and reporting "not found" there
+// Unregister treats an unknown pair as success: deleting a server that failed to
+// register is the normal way an org clears up a mistake, and "not found" there
 // would leave a row nobody can remove.
 func (c *Catalog) Unregister(tenant, name string) {
 	c.mu.Lock()
@@ -356,16 +302,11 @@ func (c *Catalog) Unregister(tenant, name string) {
 	}
 }
 
-// Get returns the transport for id as seen BY tenant: the org's own servers
-// first, then the operator's instance-wide ones.
-//
-// The order matters and the shadowing check in attach is what makes it safe —
-// a tenant cannot occupy an instance-wide name, so at most one of the two
-// lookups can hit for any id.
-//
-// An empty tenant sees only instance-wide servers. That is the honest answer
-// for a caller with no tenant (docs generation, a background task): it must
-// not reach into an org's private catalog.
+// Get looks in the org's own servers before the operator's instance-wide ones.
+// The order is safe because attach refuses shadowing, so at most one of the two
+// lookups can hit. An empty tenant sees only instance-wide servers — the honest
+// answer for a caller with no tenant, which must not reach into an org's private
+// catalog.
 func (c *Catalog) Get(tenant, id string) (core.Transport, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -381,14 +322,10 @@ func (c *Catalog) Get(tenant, id string) (core.Transport, bool) {
 	return t, true
 }
 
-// Manifests returns the instance-wide manifests — the operator's servers, with
-// no org's private ones. For callers with no tenant to scope by.
 func (c *Catalog) Manifests() map[string]core.Manifest {
 	return c.ManifestsFor("")
 }
 
-// ManifestsFor returns every MCP manifest visible to tenant: the operator's
-// instance-wide servers plus that org's own.
 func (c *Catalog) ManifestsFor(tenant string) map[string]core.Manifest {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -401,32 +338,19 @@ func (c *Catalog) ManifestsFor(tenant string) map[string]core.Manifest {
 	return out
 }
 
-// ServerStatus is what one registered server looks like to an admin page: the
-// name flows reference it by, what the server called itself at handshake, and
-// the tools it contributed.
 type ServerStatus struct {
-	Name string
-	// Label is the display name, defaulted to Name when the server has none.
+	Name   string
 	Label  string
 	Tenant string
 	Info   ServerInfo
-	// Instructions is the server's own guidance from the handshake, verbatim
-	// and untrusted — text a third party wrote, for a human to read.
-	Instructions string
-	// ProtocolVersion is the MCP revision the server settled on.
+	// Instructions is the server's own handshake guidance, verbatim and untrusted:
+	// text a third party wrote, for a human to read.
+	Instructions    string
 	ProtocolVersion string
-	// OfflineReason is set when this registration is a cached description with
-	// no connection behind it.
-	OfflineReason string
-	ToolIDs       []string
+	OfflineReason   string
+	ToolIDs         []string
 }
 
-// SnapshotFor returns what a registered server was last seen publishing: its
-// tool list and the icons already resolved for it.
-//
-// The one caller is the daemon's connect path, which persists this so the
-// steps stay described after the connection goes. Returns false when nothing
-// is registered under (tenant, name).
 func (c *Catalog) SnapshotFor(tenant, name string) ([]Tool, map[string]string, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -434,7 +358,6 @@ func (c *Catalog) SnapshotFor(tenant, name string) ([]Tool, map[string]string, b
 	if !ok || conn == nil {
 		return nil, nil, false
 	}
-	// Copied: the caller serializes these and the catalog keeps its originals.
 	tools := make([]Tool, len(conn.tools))
 	copy(tools, conn.tools)
 	var logos map[string]string
@@ -447,8 +370,6 @@ func (c *Catalog) SnapshotFor(tenant, name string) ([]Tool, map[string]string, b
 	return tools, logos, true
 }
 
-// ServersFor lists the servers tenant can see, its own and the operator's,
-// sorted by name so a polled list does not reshuffle between refreshes.
 func (c *Catalog) ServersFor(tenant string) []ServerStatus {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -472,15 +393,6 @@ func (c *Catalog) ServersFor(tenant string) []ServerStatus {
 	return out
 }
 
-// AllManifests returns every MCP manifest on the instance INCLUDING every
-// tenant's servers, with the tenants that can resolve each id.
-//
-// The one legitimate caller is the platform killswitch page, which is
-// instance-wide by definition: a platform admin has to be able to switch off a
-// misbehaving tenant server, and ManifestsFor cannot show it to them without
-// asking which org to look in. Nothing that ROUTES may use this — an id can
-// belong to several tenants and this flattens them, which is exactly the
-// confusion toolKey exists to prevent.
 func (c *Catalog) AllManifests() (map[string]core.Manifest, map[string][]string) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -498,8 +410,6 @@ func (c *Catalog) AllManifests() (map[string]core.Manifest, map[string][]string)
 	return manifests, tenants
 }
 
-// Close terminates every registered MCP server — subprocesses and HTTP
-// connections alike. Safe to call multiple times.
 func (c *Catalog) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

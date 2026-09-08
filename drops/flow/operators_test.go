@@ -10,11 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// runOp fetches a primitive operator drop from the registry by ID and runs it
-// with A and B wired, returning the 1/0 Result as a bool. Going through the
-// registry proves the drop is actually registered AND that it bakes the right
-// operator end to end — not just that compareWith works. (got() is from
-// compare_test.go.)
 func runOp(t *testing.T, id string, a, b any) bool {
 	t.Helper()
 	tr, ok := engine.Default.Get(id)
@@ -55,10 +50,6 @@ func TestOperatorPrimitives_Behaviour(t *testing.T) {
 	}
 }
 
-// TestOperatorPrimitives_Manifest locks in the metadata the canvas relies on:
-// each primitive is in the "logic" category and leaves Color unset, so the UI
-// tints it from the category palette (Blueprint-style) rather than a baked
-// per-node color.
 func TestOperatorPrimitives_Manifest(t *testing.T) {
 	want := map[string]string{
 		"eq": "A = B", "neq": "A ≠ B",
@@ -84,10 +75,6 @@ func TestOperatorPrimitives_Manifest(t *testing.T) {
 	}
 }
 
-// TestInRangePrimitive_Removed: the standalone in_range primitive was trimmed
-// (it duplicated a whole ternary node for the least glance-value). The range
-// check lives on as Compare's in_range op — see TestCompare_* in
-// compare_test.go — so no capability is lost, only the redundant node.
 func TestInRangePrimitive_Removed(t *testing.T) {
 	if _, ok := engine.Default.Get("in_range"); ok {
 		t.Error("in_range primitive drop is still registered; it should have been trimmed in favour of Compare's in_range op")

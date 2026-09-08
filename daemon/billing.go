@@ -51,18 +51,11 @@ type TenantPlan struct {
 	Tenant string `json:"tenant"`
 	Plan   string `json:"plan"` // PlanFree | PlanPro
 
-	// StripeCustomerID / StripeSubscriptionID let the webhook map
-	// subscription lifecycle events back to the tenant, and the
-	// billing-portal endpoint mint a session for the right customer.
 	StripeCustomerID     string `json:"stripe_customer_id,omitempty"`
 	StripeSubscriptionID string `json:"stripe_subscription_id,omitempty"`
 
-	// SubscriptionStatus mirrors Stripe's status string (active,
-	// past_due, canceled, …) for the UI; the plan field is the
-	// enforcement truth.
 	SubscriptionStatus string `json:"subscription_status,omitempty"`
 
-	// CurrentPeriodEnd is when the paid period lapses (informational).
 	CurrentPeriodEnd time.Time `json:"current_period_end,omitzero"`
 
 	// CancelAtPeriodEnd is true once the subscription is set to cancel at
@@ -96,7 +89,6 @@ type StripeEventDeduper interface {
 	StripeEventProcessed(ctx context.Context, id string) (bool, error)
 }
 
-// MemPlanStore is the in-process PlanStore for dev/tests.
 type MemPlanStore struct {
 	mu    sync.Mutex
 	plans map[string]TenantPlan
@@ -142,13 +134,6 @@ func (m *MemPlanStore) SetPlan(_ context.Context, p TenantPlan) error {
 	return nil
 }
 
-// BillingService owns the free-tier plan gates — the cohesive billing
-// concern extracted off the Service god object. It holds only the deps the
-// gates need (plans, usage metering, the free-tier limits, a logger), so the
-// logic is independently testable and Service is left a thin facade that
-// delegates to it via Service.billing(). OAuth and secrets are likewise their
-// own services (OAuthRegistry, EncryptedSecrets); this carves out the last
-// in-Service cluster.
 type BillingService struct {
 	plans               PlanStore
 	usage               UsageStore
@@ -156,15 +141,9 @@ type BillingService struct {
 	freePollingDisabled bool
 	freeMaxConcurrency  int
 	logger              *log.Logger
-	// effective, when set, resolves per-org tier/override limits + the
-	// effective plan. The gates prefer it over the raw plan-store + global
-	// knobs; left nil (e.g. in unit tests that build a BillingService
-	// directly) the gates fall back to the pre-entitlement behaviour.
-	effective func(ctx context.Context, tenant string) EffectiveLimits
+	effective           func(ctx context.Context, tenant string) EffectiveLimits
 }
 
-// billing builds the BillingService view over the Service's billing fields.
-// Cheap (a struct copy), so callers construct one per use rather than caching.
 func (s *Service) billing() *BillingService {
 	b := &BillingService{
 		plans:               s.Plans,
@@ -180,8 +159,6 @@ func (s *Service) billing() *BillingService {
 	return b
 }
 
-// Service-level delegations keep every existing caller (and test) working
-// while the logic lives on BillingService.
 func (s *Service) runsThisMonth(ctx context.Context, tenant string) (int64, error) {
 	return s.billing().runsThisMonth(ctx, tenant)
 }
@@ -195,9 +172,6 @@ func (s *Service) reserveRun(ctx context.Context, tenant string) (bool, error) {
 	return s.billing().reserveRun(ctx, tenant)
 }
 
-// releaseRun gives back a run reserved for a submission that then failed to
-// write, so the tenant is not charged for a run that exists nowhere. See
-// runReleaser: best-effort, and a store without it keeps the old behaviour.
 func (s *Service) releaseRun(ctx context.Context, tenant string) {
 	if s.Usage == nil {
 		return
@@ -235,9 +209,6 @@ func (s *Service) runningGraphRuns(ctx context.Context, tenant string, limit int
 	if page <= 1 {
 		page = 200
 	}
-	// A count, not a page of records: this is on the submit path, and the
-	// records it used to materialize each carry the flow JSON their run
-	// pinned — up to 200 of them, to produce one integer.
 	return core.CountRuns(ctx, s.Jobs, core.ListGraphRunsOpts{
 		Tenant: tenant, Status: core.JobStatusRunning, Limit: page,
 	})
@@ -269,8 +240,6 @@ func (s *Service) admitGraphRun(ctx context.Context, tenant string) bool {
 // OPEN (reports pro) on plan-store errors: a billing-infrastructure
 // hiccup must degrade to "no gate" rather than "product down".
 func (b *BillingService) tenantIsFree(ctx context.Context, tenant, gate string) bool {
-	// Prefer the effective plan (it layers tier/comp/trial/force over
-	// Stripe) when the entitlement resolver is wired.
 	if b.effective != nil {
 		return b.effective(ctx, tenant).Plan != PlanPro
 	}
@@ -287,8 +256,6 @@ func (b *BillingService) tenantIsFree(ctx context.Context, tenant, gate string) 
 	return plan.Plan != PlanPro
 }
 
-// runLimit is the tenant's effective monthly run cap: the per-org/tier
-// value when entitlements are wired, else the global free-tier default.
 func (b *BillingService) runLimit(ctx context.Context, tenant string) int {
 	if b.effective != nil {
 		return b.effective(ctx, tenant).RunsPerMonth
@@ -301,23 +268,16 @@ func (b *BillingService) runLimit(ctx context.Context, tenant string) int {
 	return b.freeRunsPerMonth
 }
 
-// pollingAllowed reports whether tenant may run scheduled/poll triggers.
 func (b *BillingService) pollingAllowed(ctx context.Context, tenant string) bool {
 	if b.effective != nil {
 		return b.effective(ctx, tenant).PollingAllowed
 	}
-	// Pre-entitlement: allowed unless the global gate is on and the tenant
-	// is free.
 	if !b.freePollingDisabled || b.plans == nil {
 		return true
 	}
 	return !b.tenantIsFree(ctx, tenant, "trigger gate")
 }
 
-// runsThisMonth reads the tenant's current-month run count from the
-// metering buckets. One home for the "current bucket" semantics, shared
-// by the run gate and the billing view — when billing-day anchoring
-// lands, both change together.
 func (b *BillingService) runsThisMonth(ctx context.Context, tenant string) (int64, error) {
 	buckets, err := b.usage.Usage(ctx, tenant, 1)
 	if err != nil {
@@ -340,16 +300,10 @@ func (b *BillingService) checkTriggerQuota(ctx context.Context, tenant string) e
 	return fmt.Errorf("%w: schedules and polling triggers are a Pro feature — manual runs still work", core.ErrPlanLimit)
 }
 
-// checkRunQuota is the free-tier run gate, called by SubmitGraphWithSeed
-// before any run state is written. Pro tenants and deployments without
-// enforcement configured pass through; usage-store errors fail open too.
 func (b *BillingService) checkRunQuota(ctx context.Context, tenant string) error {
 	if b.usage == nil {
 		return nil
 	}
-	// The effective limit already encodes the plan: 0 = uncapped (Pro's
-	// default, and any plan with no cap), N > 0 = enforce — so a Pro tier with
-	// an explicit fair-use cap is honored, not bypassed.
 	limit := b.runLimit(ctx, tenant)
 	if limit <= 0 {
 		return nil // 0 = no cap
@@ -381,7 +335,6 @@ func (b *BillingService) reserveRun(ctx context.Context, tenant string) (admitte
 	}
 	limit := b.runLimit(ctx, tenant)
 	if limit <= 0 {
-		// Uncapped: meter the run, always admit.
 		return true, b.usage.AddRun(ctx, tenant, time.Now())
 	}
 	if rr, ok := b.usage.(runReserver); ok {
@@ -393,8 +346,6 @@ func (b *BillingService) reserveRun(ctx context.Context, tenant string) (admitte
 		}
 		return admitted, nil
 	}
-	// Fallback for a store without atomic reserve (no shipping store): the
-	// pre-fix racy read-then-add.
 	used, err := b.runsThisMonth(ctx, tenant)
 	if err != nil {
 		return true, err
@@ -405,27 +356,16 @@ func (b *BillingService) reserveRun(ctx context.Context, tenant string) (admitte
 	return true, b.usage.AddRun(ctx, tenant, time.Now())
 }
 
-// concurrencyLimit is the tenant's effective cap on simultaneously in-flight
-// runs: the per-org/tier value when entitlements are wired, else the global
-// free-tier default. 0 = no cap.
 func (b *BillingService) concurrencyLimit(ctx context.Context, tenant string) int {
 	if b.effective != nil {
 		return b.effective(ctx, tenant).MaxConcurrency
 	}
-	// Pre-entitlements: the free default caps free tenants only; pro/comped/
-	// trial are uncapped.
 	if !b.tenantIsFree(ctx, tenant, "concurrency gate") {
 		return 0
 	}
 	return b.freeMaxConcurrency
 }
 
-// CachedPlanStore fronts a PlanStore with a short-TTL read cache. Plans
-// sit on the hottest paths — every gated submission and every scheduled
-// fire reads one — but change only via the Stripe webhook, whose
-// SetPlan writes through this cache so the SAME replica sees the flip
-// immediately. Other replicas converge within ttl (default 30s): an
-// acceptable upgrade lag, in keeping with the gates' fail-open posture.
 type CachedPlanStore struct {
 	inner PlanStore
 	cache *ttlCache[TenantPlan]
@@ -470,7 +410,6 @@ func (c *CachedPlanStore) MarkStripeEvent(ctx context.Context, id string) (bool,
 	return true, nil
 }
 
-// StripeEventProcessed passes the replay read through to the inner store.
 func (c *CachedPlanStore) StripeEventProcessed(ctx context.Context, id string) (bool, error) {
 	if dd, ok := c.inner.(StripeEventDeduper); ok {
 		return dd.StripeEventProcessed(ctx, id)

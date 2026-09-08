@@ -14,17 +14,6 @@ import { ICON } from "../../icons";
 import { useEscapeToClose } from "../../components/ui/useEscapeToClose";
 import { Loading } from "../../components/ui/Loading";
 
-// AdminGoogle is the org-admin page for managing the organization's shared
-// Google connections. Google accounts are org-level credentials (not
-// per-user): an admin connects and names them here, and every member's
-// flows use them. Because Dazyflow authorizes Google incrementally (each
-// integration requests only its own scopes), one account can cover some
-// services but not others — so this page shows a per-account permission
-// matrix and lets an admin top up a missing service (re-consent, which
-// merges via include_granted_scopes) or connect an additional account.
-//
-// All mutations route through the org-admin-gated authorize/disconnect
-// endpoints; the page itself also hides behind organization:admin.
 const RETURN_TO = "/admin/google";
 
 // Account names become the secret key oauth.google.<name>, so they must
@@ -38,14 +27,8 @@ export function AdminGoogle() {
   const [data, setData] = useState<GoogleAccountsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // notConfigured: Google OAuth client creds aren't wired at all (501/404
-  // from the accounts endpoint). Distinct from a real error so we can point
-  // the admin at the platform-level setup instead of showing a red banner.
   const [notConfigured, setNotConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
-  // connectOpen drives the "connect a named account" modal; pendingDisconnect
-  // holds the account name awaiting delete confirmation. Both replace the
-  // old window.prompt / window.confirm with in-app Dazyflow modals.
   const [connectOpen, setConnectOpen] = useState(false);
   const [pendingDisconnect, setPendingDisconnect] = useState<string | null>(null);
 
@@ -71,9 +54,6 @@ export function AdminGoogle() {
     void refresh();
   }, [refresh]);
 
-  // authorize hands off to Google's consent screen. We resolve the URL via
-  // the JSON endpoint first so a bad name / missing permission / unconfigured
-  // provider surfaces here instead of dumping JSON in the address bar.
   const authorize = useCallback(
     async (account: string, integration?: string) => {
       if (!token) return;
@@ -94,8 +74,6 @@ export function AdminGoogle() {
     [token, t],
   );
 
-  // The connect modal validates the name and hands it back here; we close
-  // the modal and hand off to Google's consent (which navigates away).
   const onConnectSubmit = useCallback(
     (name: string) => {
       setConnectOpen(false);
@@ -258,9 +236,6 @@ export function AdminGoogle() {
   );
 }
 
-// ConnectAccountDialog collects a name for a new shared Google account
-// (set-name-at-connect — the name becomes the oauth.google.<name> key) and
-// hands it back validated. Submitting hands off to Google's consent screen.
 function ConnectAccountDialog({
   busy,
   onCancel,
@@ -335,9 +310,6 @@ function ConnectAccountDialog({
   );
 }
 
-// ConfirmDisconnectDialog is the in-app replacement for window.confirm on
-// the destructive disconnect — a shared credential whose removal stops
-// everyone's flows that use it, so it's worth a real modal.
 function ConfirmDisconnectDialog({
   account,
   busy,

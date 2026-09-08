@@ -6,8 +6,6 @@ import { primaryLanguage } from "./language";
 
 describe("primaryLanguage", () => {
   it("drops the region", () => {
-    // What i18next actually hands out on a Swedish machine, and what
-    // core.Graph.Language wants to store.
     expect(primaryLanguage("sv-SE")).toBe("sv");
     expect(primaryLanguage("sv-FI")).toBe("sv");
     expect(primaryLanguage("en-GB")).toBe("en");
@@ -23,9 +21,6 @@ describe("primaryLanguage", () => {
   });
 
   it("answers empty for nothing, rather than throwing", () => {
-    // Callers stamp the result onto a graph. An empty string is the value
-    // core.Graph.Language already documents as "English", so a missing tag
-    // degrades to the existing default instead of crashing the save.
     expect(primaryLanguage(undefined)).toBe("");
     expect(primaryLanguage(null)).toBe("");
     expect(primaryLanguage("")).toBe("");

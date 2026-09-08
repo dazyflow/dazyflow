@@ -16,93 +16,53 @@ import (
 	yaml "go.yaml.in/yaml/v3"
 )
 
-// The second front end onto the descriptor.
+// The second front end onto the descriptor: a hand-built step and an imported
+// operation are the same object, so this file produces exactly the []Operation
+// the admin form produces and everything downstream is untouched.
 //
-// A hand-built step and an imported operation are the same object — that is the
-// decision the design note exists to record — so this file produces exactly the
-// []Operation the admin form produces, and everything downstream (validation,
-// manifest synthesis, the executor) is untouched.
+// A parser of our own rather than an OpenAPI library, because the feature is
+// "import OPERATIONS", not "register a spec". A library validates and refuses a
+// document as a whole, so one operation we cannot express would block the fifty
+// we can; here it is SKIPPED with a warning naming it. It also makes the SSRF
+// rule structural rather than configured — there is no fetcher in this parser,
+// so an external $ref cannot be followed even by mistake, where a library's
+// equivalent is a flag someone can flip.
 //
-// ── Why a parser of our own rather than an OpenAPI library ──
-//
-// Because the feature is "import OPERATIONS", not "register a spec". A library
-// validates a document as a whole and refuses it as a whole; a real-world spec
-// with one operation we cannot express would then block the fifty we can. Here
-// an operation that does not fit is SKIPPED with a warning naming it, and the
-// admin imports the rest — which is the same curation stance the operations cap
-// takes.
-//
-// It also makes the note's SSRF rule structural instead of configured: this
-// parser has no fetcher in it, so an external $ref cannot be followed even by
-// mistake. A library's equivalent is a flag someone can flip.
-//
-// The cost is honest: 3.1's JSON-Schema unions, discriminators and servers
-// variables get a conservative reading rather than a complete one. Where that
-// bites, it bites as a warning, never as a wrong request.
+// The cost is honest: 3.1's unions, discriminators and server variables get a
+// conservative reading. Where that bites, it bites as a warning, never as a
+// wrong request.
 
-// SpecFormat is how far this parser will go.
-//
-// Swagger 2.0 is REFUSED rather than half-read. It is still everywhere, its
-// parameter model differs (`in: body` is one parameter carrying a schema, not a
-// set of fields), and reading it as if it were 3.x would produce operations
-// that look right and send the wrong request. "We crashed on it" and "we
-// silently mangled it" are both worse than saying so.
+// SpecFormat REFUSES Swagger 2.0 rather than half-reading it: its parameter
+// model differs (`in: body` is one parameter carrying a schema, not a set of
+// fields), and reading it as 3.x would produce operations that look right and
+// send the wrong request.
 const swagger2Message = "this is a Swagger 2.0 document, which this importer does not read. " +
 	"Convert it to OpenAPI 3 (most tools can) and import that."
 
-// ImportWarning is one thing the parser declined to do, named well enough that
-// an admin can decide whether they care.
-//
-// Every warning corresponds to something NOT imported. A parse that returns
-// operations and warnings has done its job: the operations are importable and
-// the warnings say what was left behind and why.
+// ImportWarning names something NOT imported. A parse returning operations and
+// warnings has done its job: the operations are importable, the warnings say what
+// was left behind and why. Where is "" for a warning about the document itself.
 type ImportWarning struct {
-	// Where is the operation this is about — "GET /orders/{id}" — or "" for a
-	// warning about the document itself.
 	Where  string `json:"where,omitempty"`
 	Reason string `json:"reason"`
 }
 
-// SpecImport is everything a parsed document offers the admin form.
 type SpecImport struct {
-	// Title and Description are the API's own, offered as defaults for the
-	// catalog's label and blurb.
 	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
-	// BaseURL is servers[0].url when the document declares an absolute one.
-	// Relative server URLs ("/v1") are common and cannot stand alone, so they
-	// are reported as a warning and the admin supplies the address.
-	BaseURL string `json:"base_url,omitempty"`
-	// Operations are importable as they stand: each has already been through
-	// the same validation Save will apply.
-	Operations []Operation `json:"operations"`
-	// Tags are every tag the imported operations carry, sorted, so the form can
-	// offer selection by tag — the note's "pick by tag, path prefix or
-	// operation".
-	Tags []string `json:"tags,omitempty"`
-	// OperationTags maps operation id to the tags the spec gave it, so the
-	// picker can offer "select everything tagged billing" without Operation —
-	// a STORED type, where a new field changes what every persisted descriptor
-	// means — having to grow a field that is only useful before saving.
+	// BaseURL is servers[0].url when absolute. A relative one ("/v1") is common and
+	// cannot stand alone, so it becomes a warning and the admin supplies the address.
+	BaseURL       string              `json:"base_url,omitempty"`
+	Operations    []Operation         `json:"operations"`
+	Tags          []string            `json:"tags,omitempty"`
 	OperationTags map[string][]string `json:"operation_tags,omitempty"`
 	Warnings      []ImportWarning     `json:"warnings,omitempty"`
 }
 
-// opTags carries an operation's spec tags out of the parser without widening
-// Operation itself, which is a STORED type: adding a field to it changes what
-// every persisted descriptor means. Selection happens before anything is
-// stored, so the tags only have to survive as far as the picker.
 type opTags map[string][]string
 
-// ParseSpec reads an OpenAPI 3.x document — JSON or YAML — and returns the
-// operations it can express.
-//
-// An error means the DOCUMENT is unusable (not OpenAPI, unreadable, Swagger 2).
-// Anything narrower is a warning against an operation that was skipped.
 func ParseSpec(raw []byte) (SpecImport, error) {
 	var doc map[string]any
-	// A JSON document is valid YAML, so one parser reads both and there is no
-	// format sniffing to get wrong.
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
 		return SpecImport{}, fmt.Errorf("this does not read as JSON or YAML: %v", err)
 	}
@@ -135,14 +95,13 @@ func ParseSpec(raw []byte) (SpecImport, error) {
 	}
 
 	tags := opTags{}
-	// Sorted so an import is deterministic: the same document produces the same
-	// operation order every time, which is what makes a refresh diff stable.
+	// Sorted so the same document produces the same operation order every time,
+	// which is what makes a refresh diff stable.
 	for _, path := range sortedKeys(paths) {
 		item, ok := paths[path].(map[string]any)
 		if !ok {
 			continue
 		}
-		// Path-level parameters apply to every operation under it.
 		shared := p.parameters(item["parameters"], path)
 		for _, method := range sortedKeys(item) {
 			if !knownMethods[strings.ToUpper(method)] {
@@ -171,24 +130,18 @@ func ParseSpec(raw []byte) (SpecImport, error) {
 	return out, nil
 }
 
-// baseURLFrom reads servers[0].url. A relative one is normal in a spec served
-// beside the API it describes, and useless on its own here.
 func baseURLFrom(doc map[string]any, warnings []ImportWarning) (string, []ImportWarning) {
 	servers, _ := doc["servers"].([]any)
 	if len(servers) == 0 {
 		return "", warnings
 	}
 	first, _ := servers[0].(map[string]any)
-	// Not named `url`: this file imports net/url, and shadowing a package name
-	// in the one function that does not use it is how the next edit here goes
-	// wrong.
 	addr, _ := first["url"].(string)
 	addr = strings.TrimSpace(addr)
 	if addr == "" {
 		return "", warnings
 	}
-	// Server variables ({region}.api.example.com) would need values this
-	// importer has no way to ask for. Reported rather than guessed.
+	// Server variables would need values this importer cannot ask for.
 	if strings.Contains(addr, "{") {
 		return "", append(warnings, ImportWarning{
 			Reason: fmt.Sprintf("the server address %q uses variables, so it cannot be filled in automatically — type the address yourself", addr),
@@ -211,14 +164,10 @@ func (p *specParser) warn(where, reason string) {
 	p.warnings = append(p.warnings, ImportWarning{Where: where, Reason: reason})
 }
 
-// maxRefDepth bounds $ref following. A spec that refers to itself — directly or
-// through a chain — would otherwise spin here, and a hostile one is a plausible
-// way to try it.
+// maxRefDepth stops a self-referring spec spinning here, which a hostile one is
+// a plausible way to try.
 const maxRefDepth = 20
 
-// resolve follows internal $refs. External ones are refused BY CONSTRUCTION:
-// there is no fetcher in this package, which is the note's rule made structural
-// rather than configured.
 func (p *specParser) resolve(node any, depth int) (any, error) {
 	m, ok := node.(map[string]any)
 	if !ok {
@@ -232,13 +181,11 @@ func (p *specParser) resolve(node any, depth int) (any, error) {
 		return nil, fmt.Errorf("$ref chains more than %d deep", maxRefDepth)
 	}
 	if !strings.HasPrefix(ref, "#/") {
-		// An external $ref is a URL this parser would have to fetch, which is
-		// an SSRF vector wearing a document's clothes.
+		// An external $ref is an SSRF vector wearing a document's clothes.
 		return nil, fmt.Errorf("refers to %q, outside this document — external references are not followed", ref)
 	}
 	cur := any(p.doc)
 	for _, seg := range strings.Split(strings.TrimPrefix(ref, "#/"), "/") {
-		// JSON Pointer escapes, in the order the RFC specifies.
 		seg = strings.ReplaceAll(strings.ReplaceAll(seg, "~1", "/"), "~0", "~")
 		obj, ok := cur.(map[string]any)
 		if !ok {
@@ -252,13 +199,6 @@ func (p *specParser) resolve(node any, depth int) (any, error) {
 	return p.resolve(cur, depth+1)
 }
 
-// schemaOf resolves a schema node and merges a shallow allOf.
-//
-// Shallow on purpose: allOf's real semantics are "satisfies all of these", which
-// for object schemas is a property union, and that is what is implemented. A
-// member that is not an object schema (a bare $ref to a scalar, a oneOf) is
-// left alone rather than approximated — the argument keeps whatever type it
-// already had, and the full schema is carried verbatim on Arg.Schema regardless.
 func (p *specParser) schemaOf(node any) (map[string]any, error) {
 	resolved, err := p.resolve(node, 0)
 	if err != nil {
@@ -297,8 +237,8 @@ func (p *specParser) schemaOf(node any) (map[string]any, error) {
 			}
 		}
 	}
-	// The allOf node's own siblings win over its members, which is how a spec
-	// narrows an inherited schema.
+	// The allOf node's siblings win over its members, which is how a spec narrows an
+	// inherited schema.
 	for k, v := range m {
 		if k == "allOf" {
 			continue
@@ -314,27 +254,18 @@ func (p *specParser) schemaOf(node any) (map[string]any, error) {
 	return merged, nil
 }
 
-// operation turns one method under one path into an Operation, or explains why
-// it cannot.
 func (p *specParser) operation(method, path string, raw map[string]any, shared []Arg) (Operation, []string, error) {
 	op := Operation{
 		Method:     method,
 		Path:       path,
 		Deprecated: boolOf(raw["deprecated"]),
 	}
-	// OpenAPI has two prose fields and the descriptor has three, so the mapping
-	// is a choice rather than a copy.
-	//
-	// `summary` is a short line naming the operation, which is exactly what
-	// Title is for: it captions the palette row and the node. Summary is left
-	// EMPTY so the subtitle falls back to "GET /orders/{id}" — the call itself,
-	// which complements the caption instead of repeating it. Setting both from
-	// `summary` put the same sentence on the card twice.
-	//
-	// `description` is the paragraph, and it also has to absorb `summary` when
-	// there is no description: Description is what the flow generator grounds
-	// on, and losing the one human sentence a spec wrote would make an imported
-	// operation harder to find than a hand-built one.
+	// OpenAPI has two prose fields to the descriptor's three, so the mapping is a
+	// choice. `summary` becomes Title, which captions the palette row; Summary is
+	// left EMPTY so the subtitle falls back to "GET /orders/{id}" — setting both from
+	// `summary` put the same sentence on the card twice. `description` becomes
+	// Description and absorbs `summary` when absent, that being what the flow
+	// generator grounds on.
 	specSummary, _ := raw["summary"].(string)
 	specDescription, _ := raw["description"].(string)
 	op.Title = strings.TrimSpace(specSummary)
@@ -359,13 +290,10 @@ func (p *specParser) operation(method, path string, raw map[string]any, shared [
 	op.BodyMode = mode
 	args = append(args, bodyArgs...)
 
-	// Deduplicate by name, keeping the FIRST — a path-level parameter that the
-	// operation restates, which specs do routinely. A genuine collision between
-	// two different locations is caught below by the descriptor's own rule.
+	// Keep the FIRST: a path-level parameter the operation restates is routine. A
+	// genuine collision between two locations is caught below.
 	op.Args = dedupeArgs(args)
 
-	// Validated here rather than at Save so a spec's one unusable operation is
-	// a skipped row with a reason, not a failed import of the other fifty.
 	if err := op.validate(); err != nil {
 		return Operation{}, nil, err
 	}
@@ -381,8 +309,8 @@ func (p *specParser) operation(method, path string, raw map[string]any, shared [
 	return op, tagList, nil
 }
 
-// operationID prefers the spec's own operationId, because it is the stable
-// identity a refresh matches on and the one thing a spec author controls.
+// operationID prefers the spec's own operationId: it is the stable identity a
+// refresh matches on, and the one thing a spec author controls.
 func operationID(raw map[string]any, method, path string) (string, error) {
 	if id, _ := raw["operationId"].(string); strings.TrimSpace(id) != "" {
 		slug := slugID(id)
@@ -392,8 +320,8 @@ func operationID(raw map[string]any, method, path string) (string, error) {
 		return slug, nil
 	}
 	// No operationId is legal and common. Deriving from method and path is
-	// deterministic, which matters more than pretty: the same document must
-	// produce the same id next time or a refresh would read as remove-and-add.
+	// deterministic, which matters more than pretty: the same document must produce
+	// the same id, or a refresh reads as remove-and-add.
 	derived := slugID(strings.ToLower(method) + "_" + path)
 	if err := validName(derived); err != nil {
 		return "", fmt.Errorf("no operationId, and one could not be derived from %s %s", method, path)
@@ -401,7 +329,6 @@ func operationID(raw map[string]any, method, path string) (string, error) {
 	return derived, nil
 }
 
-// slugID reduces a spec's identifier to the descriptor's name rules.
 func slugID(in string) string {
 	var b strings.Builder
 	lastUnderscore := false
@@ -416,9 +343,6 @@ func slugID(in string) string {
 				lastUnderscore = true
 			}
 		default:
-			// Everything else — /, {, }, ., spaces — collapses to one separator,
-			// so "/orders/{id}/lines" is orders_id_lines rather than a run of
-			// underscores.
 			if !lastUnderscore && b.Len() > 0 {
 				b.WriteRune('_')
 				lastUnderscore = true
@@ -432,9 +356,8 @@ func slugID(in string) string {
 	return out
 }
 
-// parameters reads path/query/header parameters. Cookie parameters are skipped:
-// there is nowhere to put them in a described call, and quietly sending one as a
-// header would be worse than not sending it.
+// Cookie parameters are skipped: there is nowhere to put them in a described
+// call, and quietly sending one as a header would be worse than not sending it.
 func (p *specParser) parameters(node any, where string) []Arg {
 	list, ok := node.([]any)
 	if !ok {
@@ -477,11 +400,9 @@ func (p *specParser) parameters(node any, where string) []Arg {
 		}
 		desc, _ := m["description"].(string)
 		out = append(out, Arg{
-			Name: name,
-			In:   loc,
-			Type: schema["type"],
-			// A path parameter is required by definition; the spec is allowed to
-			// say so redundantly, and some forget.
+			Name:        name,
+			In:          loc,
+			Type:        schema["type"],
 			Required:    loc == InPath || boolOf(m["required"]),
 			Description: desc,
 			Schema:      rawSchema(schema),
@@ -490,12 +411,6 @@ func (p *specParser) parameters(node any, where string) []Arg {
 	return out
 }
 
-// requestBody reads a JSON request body into per-field arguments.
-//
-// Only application/json, and only an object schema. A body that is an array, a
-// scalar, or any other media type has no field-per-argument reading, so it
-// becomes BodyRaw — the `request_body` port — which is a working step rather
-// than a skipped one.
 func (p *specParser) requestBody(node any, method string) ([]Arg, BodyMode, error) {
 	if node == nil {
 		return nil, BodyNone, nil
@@ -513,8 +428,6 @@ func (p *specParser) requestBody(node any, method string) ([]Arg, BodyMode, erro
 		return nil, BodyNone, nil
 	}
 	if !methodTakesBody(method) {
-		// A GET with a requestBody is legal OpenAPI and unsendable here. The
-		// operation is still worth importing without it.
 		return nil, BodyNone, nil
 	}
 	jsonMedia, ok := content["application/json"]
@@ -531,8 +444,6 @@ func (p *specParser) requestBody(node any, method string) ([]Arg, BodyMode, erro
 	}
 	props, _ := schema["properties"].(map[string]any)
 	if len(props) == 0 {
-		// An object with no declared properties, an array, a free-form blob —
-		// all of them are "send what you're given".
 		return nil, BodyRaw, nil
 	}
 	required := map[string]bool{}
@@ -562,9 +473,6 @@ func (p *specParser) requestBody(node any, method string) ([]Arg, BodyMode, erro
 	return out, BodyJSON, nil
 }
 
-// dedupeArgs keeps the first argument of each name. A path-level parameter
-// restated on the operation is the common case and is not a conflict; a name
-// used in two DIFFERENT locations is, and validate() reports it.
 func dedupeArgs(in []Arg) []Arg {
 	seen := make(map[string]ArgIn, len(in))
 	out := make([]Arg, 0, len(in))
@@ -573,8 +481,8 @@ func dedupeArgs(in []Arg) []Arg {
 			if prev == a.In {
 				continue // the same parameter, restated
 			}
-			// Two locations, one name: kept so validate() refuses the operation
-			// with its own message rather than this file inventing a winner.
+			// Kept so validate refuses the operation with its own message, rather than this
+			// file inventing a winner.
 			out = append(out, a)
 			continue
 		}
@@ -584,13 +492,10 @@ func dedupeArgs(in []Arg) []Arg {
 	return out
 }
 
-// rawSchema carries a schema verbatim onto Arg.Schema so an enum or a pattern
-// survives Type having reduced it to a word. Nil when there is nothing to keep.
 func rawSchema(schema map[string]any) json.RawMessage {
 	if len(schema) == 0 {
 		return nil
 	}
-	// Only worth carrying when it says more than the type already does.
 	if len(schema) == 1 {
 		if _, only := schema["type"]; only {
 			return nil
@@ -633,12 +538,13 @@ func boolOf(v any) bool {
 	return b
 }
 
-// ── Fetching a spec ─────────────────────────────────────────────────────────
-
 const (
-	// specBudget bounds the whole fetch. A spec is a document served beside an
-	// API, not a slow computation; an admin waiting on a paste-or-fetch form
-	// should be told it failed rather than left watching a spinner.
+	// specBudget bounds the whole fetch: an admin waiting on a form should be told
+	// it failed rather than watch a spinner.
+	//
+	// maxSpecBytes is generous on purpose — Stripe's spec is ~6 MB — because the
+	// operations CAP is what stops a huge document becoming a huge catalog, and
+	// refusing to read one would only push the admin to paste it instead.
 	specBudget = 20 * time.Second
 	// maxSpecBytes caps what will be read. Stripe's spec is ~6 MB and GitHub's
 	// larger, so this is generous on purpose — the operations CAP is what stops
@@ -647,13 +553,10 @@ const (
 	maxSpecBytes = 32 << 20
 )
 
-// FetchSpec retrieves a spec over the guarded caller and parses it.
-//
-// The URL goes through the same Doer a step's call does, which is the note's
-// rule: a spec URL is tenant-supplied, so it gets the SSRF dial guard, the
-// egress allowlist and the response cap exactly as any other tenant-supplied
-// address would. Fetching it with a bare http.Client here would be the one
-// unguarded request in the package.
+// FetchSpec goes through the same Doer a step's call does: a spec URL is
+// tenant-supplied, so it gets the SSRF dial guard, the egress allowlist and the
+// response cap. A bare http.Client here would be the one unguarded request in the
+// package.
 func FetchSpec(ctx context.Context, specURL string) (SpecImport, error) {
 	do, ok := currentDoer()
 	if !ok {
@@ -661,8 +564,7 @@ func FetchSpec(ctx context.Context, specURL string) (SpecImport, error) {
 	}
 	u, err := url.Parse(strings.TrimSpace(specURL))
 	if err != nil || u.Host == "" || !strings.EqualFold(u.Scheme, "https") {
-		// https only, at the same boundary a catalog's base URL is held to. A
-		// spec fetched over cleartext is a spec an intermediary can rewrite,
+		// https only: a spec fetched over cleartext is one an intermediary can rewrite,
 		// and what it would rewrite is where every step of this catalog calls.
 		return SpecImport{}, fmt.Errorf("the spec address must be an https:// URL")
 	}

@@ -18,8 +18,6 @@ import (
 // A support agent need NOT have an account here (they may sign in via SSO and be
 // elevated on the fly); the store is keyed on email, so we grant by email.
 
-// listSupportAgents returns every provisioned support-agent email.
-// GET /api/v1/admin/platform/support-agents
 func (h *orgAPI) listSupportAgents(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
@@ -37,9 +35,6 @@ func (h *orgAPI) listSupportAgents(rw http.ResponseWriter, r *http.Request, p co
 	writeJSON(rw, http.StatusOK, map[string]any{"agents": agents})
 }
 
-// grantSupportAgent provisions an email as a support agent. The role is stamped
-// at session issue, so any live sessions for that email are dropped to force a
-// re-auth that picks it up. POST /api/v1/admin/platform/support-agents {email}
 func (h *orgAPI) grantSupportAgent(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
@@ -65,9 +60,6 @@ func (h *orgAPI) grantSupportAgent(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// Drop live sessions (if the email has an account here) so the role applies
-	// on their next request rather than at session expiry. No account is fine —
-	// a vendor agent may not have signed in yet.
 	if h.Users != nil {
 		if u, err := h.Users.GetByEmail(r.Context(), email); err == nil {
 			h.revokeSessions(r.Context(), u.Subject)
@@ -78,9 +70,6 @@ func (h *orgAPI) grantSupportAgent(rw http.ResponseWriter, r *http.Request, p co
 	writeJSON(rw, http.StatusOK, map[string]any{"agents": agents})
 }
 
-// revokeSupportAgent removes a support-agent grant. Live sessions are dropped so
-// the role is gone on the target's next request.
-// DELETE /api/v1/admin/platform/support-agents/{email}
 func (h *orgAPI) revokeSupportAgent(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")

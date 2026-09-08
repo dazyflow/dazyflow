@@ -118,14 +118,10 @@ function mount(id = "coffee-reorder") {
   );
 }
 
-// Adding a frame is the one document edit reachable from the toolbar without
-// touching the canvas — React Flow's pointer surface does not exist in jsdom.
 const undoButton = () => screen.getByLabelText("editor.undo");
 const redoButton = () => screen.getByLabelText("editor.redo");
 const addFrame = () => screen.getByLabelText("editor.addFrame");
 
-// The load is async and the autosave timer only arms once it resolves, so
-// waiting for the toolbar first is load-bearing (see FlowEditorSave).
 async function ready() {
   await screen.findByText("editor.run");
 }
@@ -135,7 +131,6 @@ async function settle() {
   });
 }
 
-// The frame count in the most recent PUT — the document as the server sees it.
 function savedFrames(): number | undefined {
   const call = saveGraph.mock.calls.at(-1);
   const doc = call?.find((a) => a && typeof a === "object" && "nodes" in a) as
@@ -144,9 +139,6 @@ function savedFrames(): number | undefined {
   return doc && (doc.frames?.length ?? 0);
 }
 
-// One node's flag in the most recent PUT. `undefined` is the real assertion
-// for "off": the Go side is omitempty, so the editor writes the key only when
-// the flag is set.
 function savedFlag(nodeID: string, key: string): unknown {
   const call = saveGraph.mock.calls.at(-1);
   const doc = call?.find((a) => a && typeof a === "object" && "nodes" in a) as
@@ -243,9 +235,6 @@ describe("editor undo/redo", () => {
     await waitFor(() => expect(savedFlag("ntfy_1", "collapsed")).toBe(true));
     expect(undoButton()).toBeEnabled();
 
-    // One undo, and the fold is gone from the document the server holds. With
-    // the flag missing from the dep list this button was still disabled; with
-    // it missing from applyHistoryDoc the PUT kept collapsed:true.
     await user.click(undoButton());
     await settle();
     await waitFor(() => expect(savedFlag("ntfy_1", "collapsed")).toBeUndefined());
@@ -344,7 +333,6 @@ describe("editor undo/redo", () => {
     expect(undoButton()).toBeDisabled();
   });
 
-  // Cmd/Ctrl+Z is muscle memory; the toolbar button is the discoverable copy.
   it("undoes from the keyboard", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     mount();
@@ -388,15 +376,10 @@ describe("phone inspector", () => {
     window.innerWidth = MOBILE - 100;
     mount();
     await ready();
-    // The label doubles as the explanation of why it's dead — a disabled icon
-    // with the same name as the live one says nothing.
     expect(screen.getByLabelText("editor.inspectEmpty")).toBeDisabled();
   });
 
   it("leaves it out on a laptop window narrower than the old breakpoint", async () => {
-    // The regression this guards: at 900px the editor used to be in phone
-    // mode, so a click on a step opened nothing and this button was the only
-    // way in. That width now gets the selection-driven side panel.
     window.innerWidth = EDITOR_NARROW - 200;
     mount();
     await ready();

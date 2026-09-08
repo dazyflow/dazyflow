@@ -3,10 +3,6 @@
 
 import type { SVGProps } from "react";
 
-// GitIcon renders the official Git logo (CC-BY 3.0, Jason Long /
-// git-scm.com). Shaped to match lucide-react's API so it can drop into
-// the iconFor() registry alongside the rest. Fill is set to Git's
-// canonical orange unless the caller overrides `color`.
 type Props = SVGProps<SVGSVGElement> & {
   size?: number | string;
   color?: string;

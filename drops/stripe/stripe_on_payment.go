@@ -47,9 +47,6 @@ func init() {
 	})
 }
 
-// executeStripeOnPayment is the standalone-execution path — only called
-// when a graph is run manually (no webhook event seeded the node).
-// Mirrors github_on_push / webhook_input.
 func executeStripeOnPayment(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	return noPaymentTriggerData(job,
 		"This Stripe payment trigger only fires when a real payment_intent.succeeded webhook arrives. To test it, send a test event from the Stripe dashboard's webhook page (or make a test-mode payment); running the flow manually leaves the trigger with no event to feed the steps after it.",

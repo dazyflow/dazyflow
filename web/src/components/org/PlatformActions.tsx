@@ -3,11 +3,6 @@
 
 import type { ReactNode } from "react";
 
-// ActionsCard frames the moderation actions on the user/org detail pages
-// as a titled list. Each ActionRow pairs an explanation (icon + title +
-// one-line description) with its button, so a destructive action always
-// states what it does right next to the control — far clearer than a row
-// of unlabelled buttons.
 export function ActionsCard({
   title,
   children,
@@ -33,9 +28,7 @@ export function ActionRow({
   icon: ReactNode;
   title: string;
   description: string;
-  // danger tints the icon to signal an irreversible / destructive action.
   danger?: boolean;
-  // children is the action control (a Button).
   children: ReactNode;
 }) {
   return (

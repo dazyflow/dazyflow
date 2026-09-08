@@ -18,9 +18,6 @@ import (
 	_ "github.com/dazyflow/dazyflow/drops/stripe"
 )
 
-// Signing helper: signStripe in stripe_test.go (shared with the
-// billing-webhook tests — same Stripe-Signature scheme).
-
 type stripeHarness struct {
 	*gatewayHarness
 	secret string
@@ -31,9 +28,6 @@ type stripeHarness struct {
 	fanouts chan struct{}
 }
 
-// newStripeHarness wires the events handler plus an in-memory encrypted
-// secret store holding tenant "t"'s signing secret — the per-tenant
-// model the handler authenticates against (no operator-level secret).
 func newStripeHarness(t *testing.T) *stripeHarness {
 	t.Helper()
 	gh := newGatewayHarness(t)
@@ -107,9 +101,8 @@ func TestStripeEvents_MissingSignatureRejected(t *testing.T) {
 	}
 }
 
-// TestStripeEvents_StaleTimestampRejected — a correctly-signed delivery
-// whose timestamp is outside the 5-minute tolerance must not validate
-// (replay protection).
+// A correctly-signed delivery whose timestamp is outside the 5-minute
+// tolerance must not validate (replay protection).
 func TestStripeEvents_StaleTimestampRejected(t *testing.T) {
 	t.Parallel()
 	h := newStripeHarness(t)
@@ -123,9 +116,8 @@ func TestStripeEvents_StaleTimestampRejected(t *testing.T) {
 	}
 }
 
-// TestStripeEvents_NoTenantSecretRejected — a tenant that never saved a
-// STRIPE_WEBHOOK_SECRET gets the same 401 as a bad signature, so probing
-// tenant names leaks nothing.
+// A tenant that never saved a STRIPE_WEBHOOK_SECRET gets the same 401 as a bad
+// signature, so probing tenant names leaks nothing.
 func TestStripeEvents_NoTenantSecretRejected(t *testing.T) {
 	t.Parallel()
 	h := newStripeHarness(t)
@@ -142,7 +134,6 @@ func TestStripeEvents_NoTenantSecretRejected(t *testing.T) {
 func TestStripeEvents_NotConfiguredReturns501(t *testing.T) {
 	t.Parallel()
 	gh := newGatewayHarness(t)
-	// gw.StripeEvents intentionally nil.
 	req := httptest.NewRequest("POST", "/api/v1/events/stripe/t", bytes.NewReader([]byte(`{}`)))
 	rw := httptest.NewRecorder()
 	ServeForTest(gh.gw, rw, req)
@@ -181,8 +172,6 @@ func TestStripeEvents_PaymentDispatchesToSubscribedGraphs(t *testing.T) {
 		t.Fatalf("code=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// The fanout runs in the background, so wait for it rather than for the
-	// clock, then assert once.
 	h.awaitFanout(t)
 	runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
 		Tenant: "t", Workspace: "ws", GraphID: "payment-alert",
@@ -247,8 +236,6 @@ func TestStripeEvents_PaymentFailedDispatches(t *testing.T) {
 		t.Fatalf("code=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// The fanout runs in the background, so wait for it rather than for the
-	// clock, then assert once.
 	h.awaitFanout(t)
 	runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
 		Tenant: "t", Workspace: "ws", GraphID: "decline-alert",
@@ -269,8 +256,6 @@ func TestStripeEvents_PaymentFailedDispatches(t *testing.T) {
 	if got, _ := node.Result.Output["failure_message"].Inline.(string); got != "Your card was declined." {
 		t.Errorf("failure_message = %q", got)
 	}
-	// A failed intent has amount_received=0 — amount falls back
-	// to the requested amount.
 	if got, _ := node.Result.Output["amount_display"].Inline.(string); got != "25.00 EUR" {
 		t.Errorf("amount_display = %q", got)
 	}
@@ -310,8 +295,6 @@ func TestStripeEvents_SubscriptionCanceledDispatches(t *testing.T) {
 		t.Fatalf("code=%d body=%s", rw.Code, rw.Body.String())
 	}
 
-	// The fanout runs in the background, so wait for it rather than for the
-	// clock, then assert once.
 	h.awaitFanout(t)
 	runs, err := h.store.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{
 		Tenant: "t", Workspace: "ws", GraphID: "churn-alert",

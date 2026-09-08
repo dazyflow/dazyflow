@@ -27,12 +27,6 @@ import (
 //     embedded quotes — same convention SQLite, Postgres, and
 //     MySQL share for their respective quote styles.
 
-// maxIdentLen is a defensive cap. Real DBs cut off well before this
-// (Postgres 63, MySQL 64, SQLite has no documented limit), but the
-// drops sit between the user's spreadsheet and the DB, and we don't
-// want a 100KB pasted "header" to keep the parser busy. The DB will
-// give a clearer per-dialect error if a legitimate-but-too-long name
-// makes it through.
 const maxIdentLen = 1024
 
 // validateIdent enforces the bare minimum every dialect needs: the
@@ -68,15 +62,10 @@ func quoteIdent(name string) string {
 	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 }
 
-// quoteIdentBacktick is the MySQL-flavored sibling: backticks with
-// embedded backticks doubled. Used by the MySQL drops.
 func quoteIdentBacktick(name string) string {
 	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
 }
 
-// maxColumnTypeLen caps a single column_types value. Real type
-// expressions are short ("DECIMAL(10,2)", "timestamp with time zone");
-// the cap stops a pasted blob from reaching the DB parser.
 const maxColumnTypeLen = 64
 
 // knownColumnTypes is the allowlist of base SQL types the db drops will
@@ -90,28 +79,22 @@ const maxColumnTypeLen = 64
 // timestamptz, DECIMAL, NUMERIC, DOUBLE PRECISION, INT UNSIGNED,
 // TIMESTAMP WITH TIME ZONE, DATETIME, …) all appear here.
 var knownColumnTypes = map[string]bool{
-	// Integers (incl. the MySQL UNSIGNED variants used in tests).
 	"smallint": true, "int": true, "integer": true, "bigint": true,
 	"int unsigned": true, "integer unsigned": true,
 	"smallint unsigned": true, "bigint unsigned": true,
 	"tinyint": true, "mediumint": true, "serial": true, "bigserial": true,
-	// Floating / fixed point.
 	"real": true, "double": true, "double precision": true,
 	"float": true, "numeric": true, "decimal": true,
-	// Text.
 	"text": true, "varchar": true, "char": true, "character": true,
 	"character varying": true, "nvarchar": true, "nchar": true,
 	"longtext": true, "mediumtext": true, "tinytext": true,
-	"clob": true,
-	// Boolean.
+	"clob":    true,
 	"boolean": true, "bool": true,
-	// Date / time.
 	"timestamptz": true, "timestamp": true, "timestamp with time zone": true,
 	"timestamp without time zone": true, "datetime": true,
 	"date": true, "time": true, "time with time zone": true,
 	"time without time zone": true,
-	// Binary / structured / misc.
-	"bytea": true, "blob": true, "longblob": true, "mediumblob": true,
+	"bytea":                  true, "blob": true, "longblob": true, "mediumblob": true,
 	"tinyblob": true, "uuid": true, "json": true, "jsonb": true,
 }
 

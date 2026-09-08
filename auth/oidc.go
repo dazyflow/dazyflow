@@ -11,14 +11,10 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// OIDCConfig configures the OIDC bearer-token authenticator.
 type OIDCConfig struct {
-	Issuer   string
-	Audience string
-	ClientID string
-	// TenantClaim names the claim that maps to a Dazyflow tenant ID
-	// (default "tenant"). Different IdPs use different conventions; for
-	// Microsoft Entra it's typically "tid", for Google Workspace "hd".
+	Issuer      string
+	Audience    string
+	ClientID    string
 	TenantClaim string
 	RolesClaim  string
 	// AllowedTenants optionally constrains which tenant claim values this
@@ -52,7 +48,6 @@ type IDTokenVerifier interface {
 	Verify(ctx context.Context, rawIDToken string) (Claims, error)
 }
 
-// Claims is the subset the system needs from the verified ID token.
 type Claims struct {
 	Subject string
 	Tenant  string
@@ -64,8 +59,6 @@ func (a *OIDCAuthenticator) Authenticate(ctx context.Context, credential string)
 	if a.Verifier == nil {
 		return core.Principal{}, errors.New("OIDC verifier not configured")
 	}
-	// JWTs use three dot-separated base64 segments. A naive prefix check
-	// lets the Chain authenticator skip OIDC for non-JWT credentials.
 	if !looksLikeJWT(credential) {
 		return core.Principal{}, ErrInvalidCredential
 	}

@@ -60,12 +60,9 @@ func TestWorker_DrainsInFlightNodeOnShutdown(t *testing.T) {
 	done := make(chan struct{})
 	go func() { _ = w.Run(ctx); close(done) }()
 
-	// Let the worker claim and start executing the 250ms node, then cancel
-	// mid-run — simulating SIGTERM while a job is in flight.
 	time.Sleep(60 * time.Millisecond)
 	cancel()
 
-	// The worker loop should exit (it stops claiming new work)...
 	select {
 	case <-done:
 	case <-time.After(3 * time.Second):

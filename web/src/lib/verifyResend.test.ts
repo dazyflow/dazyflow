@@ -10,8 +10,6 @@ describe("resendOutcome", () => {
   });
 
   it("reports an account that was already verified", () => {
-    // Nothing was emailed, but nothing needs to be — the banner should go
-    // away rather than promise an inbox.
     expect(resendOutcome({ sent: false, already_verified: true })).toBe(
       "verified",
     );
@@ -26,8 +24,6 @@ describe("resendOutcome", () => {
   });
 
   it("treats a thrown request as a failure", () => {
-    // The mailer is unset or unreachable and the route answered 502. This
-    // used to be swallowed by a bare catch, leaving no signal at all.
     expect(resendOutcome(null)).toBe("failed");
   });
 });

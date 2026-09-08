@@ -44,8 +44,6 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Accepts a thread id, or a message row / search result whose
-				// threadId is read out of it — so the obvious drag works.
 				{Port: "id", Label: "Conversation", MIME: []string{"text/plain", "application/json"}},
 			},
 			Outputs: []core.Port{
@@ -119,8 +117,6 @@ func executeGmailGetThread(ctx context.Context, job core.Job, _ chan<- core.Prog
 		lastFrom = str(rows[n-1]["from"])
 		lastDate = str(rows[n-1]["date"])
 	}
-	// Gmail returns a thread's messages oldest first, so "have they answered?"
-	// is simply "is the newest message not one of mine?".
 	replied := len(rows) > 0 && !lastSent
 
 	summary := map[string]any{
@@ -146,7 +142,6 @@ func executeGmailGetThread(ctx context.Context, job core.Job, _ chan<- core.Prog
 	}, nil
 }
 
-// hasLabel reports whether a raw Gmail message carries a label id.
 func hasLabel(raw map[string]any, label string) bool {
 	labels, _ := raw["labelIds"].([]any)
 	for _, l := range labels {
@@ -157,10 +152,6 @@ func hasLabel(raw map[string]any, label string) bool {
 	return false
 }
 
-// resolveThreadID reads the conversation id from the wired input (a plain id,
-// a message row carrying threadId, or a search result list — the first match),
-// falling back to the typed param. Mirrors resolveMessageID so both steps
-// accept the same obvious drags.
 func resolveThreadID(job core.Job) (string, bool) {
 	in, present := job.Input["id"]
 	if !present || in.Inline == nil {
@@ -189,8 +180,6 @@ func threadIDFromRow(row map[string]any) (string, bool) {
 	if s := strings.TrimSpace(str(row["threadId"])); s != "" {
 		return s, true
 	}
-	// A row with only an id (e.g. a message record) still identifies its
-	// conversation: Gmail's thread id equals the first message's id.
 	if s := strings.TrimSpace(str(row["id"])); s != "" {
 		return s, true
 	}

@@ -76,9 +76,6 @@ func executeFileWrite(_ context.Context, job core.Job, _ chan<- core.Progress) (
 	if !ok {
 		return params.Err(job, "missing_input", "input port 'in' is required"), nil
 	}
-	// Resolves dest against the workspace or the run's scratch area
-	// (scratch:// scheme). root confines all writes; destRel is the path
-	// within it.
 	root, destRel, err := openSandboxRoot(job, dest)
 	if err != nil {
 		return params.Err(job, "no_sandbox", err.Error()), nil
@@ -92,8 +89,6 @@ func executeFileWrite(_ context.Context, job core.Job, _ chan<- core.Progress) (
 		if sizeErr != nil {
 			return params.Err(job, "io", fmt.Sprintf("size input: %v", sizeErr)), nil
 		}
-		// Cheap snapshot check first — the only enforcement when no live
-		// reserver is wired (unit tests, embedded use).
 		if job.QuotaUsed+size > job.QuotaLimit {
 			return params.Err(job, "quota_exceeded",
 				fmt.Sprintf("write of %d bytes would push tenant past %d (currently %d)",
@@ -141,8 +136,6 @@ func executeFileWrite(_ context.Context, job core.Job, _ chan<- core.Progress) (
 			return params.Err(job, "io", fmt.Sprintf("write %q: %v", dest, err)), nil
 		}
 	} else if input.Ref != "" {
-		// The source ref may itself be a scratch:// path (e.g. read from
-		// scratch, written to the workspace), so resolve it independently.
 		srcRoot, srcRel, err := openSandboxRoot(job, input.Ref)
 		if err != nil {
 			return params.Err(job, "no_sandbox", err.Error()), nil
@@ -199,7 +192,6 @@ func determineWriteSize(job core.Job, input core.Ref) (int64, error) {
 		return int64(len(data)), nil
 	}
 	if input.Ref != "" {
-		// Stat through the source ref's own root (workspace or scratch).
 		srcRoot, srcRel, err := openSandboxRoot(job, input.Ref)
 		if err != nil {
 			return 0, err

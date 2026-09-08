@@ -23,16 +23,13 @@ func TestStripCRLF(t *testing.T) {
 }
 
 func TestWrap76(t *testing.T) {
-	// Shorter than one line: returned unchanged, no CRLF.
 	if got := Wrap76("short"); got != "short" {
 		t.Errorf("Wrap76(short) = %q", got)
 	}
-	// Exactly 76 chars: a single line, no trailing CRLF.
 	line := strings.Repeat("x", 76)
 	if got := Wrap76(line); got != line {
 		t.Errorf("Wrap76(76) split unexpectedly: %q", got)
 	}
-	// 77 chars: split into 76 + 1 joined by CRLF.
 	in := strings.Repeat("y", 77)
 	got := Wrap76(in)
 	rows := strings.Split(got, "\r\n")
@@ -58,12 +55,10 @@ func TestRandomHex(t *testing.T) {
 }
 
 func TestDispositionHeader(t *testing.T) {
-	// ASCII filename is quoted; embedded quotes stripped.
 	got := DispositionHeader(`re"port.pdf`)
 	if got != `attachment; filename="report.pdf"` {
 		t.Errorf("ascii disposition = %q", got)
 	}
-	// Non-ASCII filename uses RFC 2231 encoding.
 	got = DispositionHeader("räksmörgås.txt")
 	if !strings.HasPrefix(got, "attachment; filename*=utf-8''") {
 		t.Errorf("non-ascii disposition = %q", got)
@@ -108,8 +103,7 @@ func TestExtForMIME(t *testing.T) {
 		"application/zip":          ".zip",
 		"application/octet-stream": ".bin",
 		"":                         ".bin",
-		// Case and parameters are normalized away.
-		"TEXT/CSV; charset=utf-8": ".csv",
+		"TEXT/CSV; charset=utf-8":  ".csv",
 	}
 	for mime, want := range cases {
 		if got := ExtForMIME(mime); got != want {
@@ -119,15 +113,12 @@ func TestExtForMIME(t *testing.T) {
 }
 
 func TestAttachmentFilename(t *testing.T) {
-	// A sandbox path yields its base name.
 	if got := AttachmentFilename(core.Ref{Ref: "scratch://reports/q1.pdf"}, 0); got != "q1.pdf" {
 		t.Errorf("filename from ref = %q", got)
 	}
-	// A scratch root with no usable base falls back to the synthesized name.
 	if got := AttachmentFilename(core.Ref{Ref: "scratch://", MIME: "text/csv"}, 2); got != "attachment-3.csv" {
 		t.Errorf("fallback filename = %q", got)
 	}
-	// No ref at all: synthesized name from index + MIME extension.
 	if got := AttachmentFilename(core.Ref{MIME: "image/png"}, 0); got != "attachment-1.png" {
 		t.Errorf("synthesized filename = %q", got)
 	}
@@ -140,7 +131,6 @@ func TestReadRefBytes(t *testing.T) {
 	if b, err := ReadRefBytes(core.Job{}, core.Ref{Inline: "str"}); err != nil || string(b) != "str" {
 		t.Errorf("inline string: %q, %v", b, err)
 	}
-	// No inline data and no path is an error.
 	if _, err := ReadRefBytes(core.Job{}, core.Ref{}); err == nil {
 		t.Error("expected error for ref with no inline and no path")
 	}
@@ -153,18 +143,15 @@ func TestReadRefBytes_ScratchFile(t *testing.T) {
 	}
 	job := core.Job{ScratchRoot: scratch}
 
-	// A scratch:// ref resolves to the file under ScratchRoot.
 	b, err := ReadRefBytes(job, core.Ref{Ref: "scratch://note.txt"})
 	if err != nil || string(b) != "from disk" {
 		t.Errorf("scratch read = %q, %v", b, err)
 	}
 
-	// A missing file surfaces the open error.
 	if _, err := ReadRefBytes(job, core.Ref{Ref: "scratch://absent.txt"}); err == nil {
 		t.Error("expected error opening missing scratch file")
 	}
 
-	// A scratch ref with no scratch root configured fails in Resolve.
 	if _, err := ReadRefBytes(core.Job{}, core.Ref{Ref: "scratch://note.txt"}); err == nil {
 		t.Error("expected error when no scratch root is configured")
 	}

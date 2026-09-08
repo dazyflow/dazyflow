@@ -13,7 +13,6 @@
 // `runner/<runner>/<step>`. This file used to parse those. Nothing does now.)
 const RUNNER_STEP = "run_on_runner";
 
-// isRunnerStep reports whether a module id is the run-on-a-machine step.
 export function isRunnerStep(moduleID: string | undefined): boolean {
   return moduleID === RUNNER_STEP;
 }
@@ -35,10 +34,6 @@ export function runnerTargetOf(params: Record<string, unknown> | undefined): str
     : [];
   const named = tags.filter((t) => t !== "");
   if (named.length > 0) return named.join(" + ");
-  // The pre-tags params, for a flow saved before this step took tags. Both were
-  // a single target and both are one tag now — a machine's name is itself a tag
-  // — so an old step still reads correctly on the canvas instead of going blank
-  // and looking unconfigured. The drop honours them at run time the same way.
   for (const legacy of ["runner", "label"]) {
     const v = typeof params[legacy] === "string" ? (params[legacy] as string).trim() : "";
     if (v) return v;

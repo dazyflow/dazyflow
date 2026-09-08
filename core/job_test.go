@@ -12,7 +12,6 @@ func TestJob_IdempotencyKey(t *testing.T) {
 	if got := j.IdempotencyKey(); got != "dazyflow:abc123" {
 		t.Errorf("IdempotencyKey = %q", got)
 	}
-	// Same record ID is stable across re-execution.
 	j1 := Job{ID: "x"}
 	j2 := Job{ID: "x"}
 	if j1.IdempotencyKey() != j2.IdempotencyKey() {

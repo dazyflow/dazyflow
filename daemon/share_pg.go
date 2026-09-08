@@ -60,8 +60,6 @@ func (s *PgShareStore) Get(ctx context.Context, tenant, workspace string) (Share
 
 func (s *PgShareStore) Upsert(ctx context.Context, tenant, workspace, token, createdBy string) (Share, error) {
 	sh := Share{Tenant: tenant, Workspace: workspace}
-	// Rotate in place: a fresh token replaces the old one, and created_at /
-	// created_by are reset so the dialog reflects the current link's age.
 	err := s.pool.QueryRow(ctx,
 		`INSERT INTO workspace_shares (tenant, workspace, token, created_by)
 		   VALUES ($1, $2, $3, $4)
@@ -99,8 +97,6 @@ func (s *PgShareStore) Lookup(ctx context.Context, token string) (Share, error) 
 	return sh, nil
 }
 
-// DeleteByTenant removes every share for a tenant — the org-erasure cascade
-// hook (gdpr.go's tenantEraser).
 func (s *PgShareStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
 	if ident == "" {
 		return 0, nil

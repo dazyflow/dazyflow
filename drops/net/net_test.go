@@ -17,8 +17,6 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
-// ===== do.go Do =======================================================
-
 func TestCov_DoGETSucceeds(t *testing.T) {
 	var gotHdr string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +73,6 @@ func TestCov_DoBodyExceedsCap(t *testing.T) {
 }
 
 func TestCov_DoBadRequestError(t *testing.T) {
-	// A malformed method makes http.NewRequestWithContext fail.
 	_, _, _, err := Do(context.Background(), "BAD METHOD", "http://x.example", nil, nil, 1000, 1000)
 	if err == nil {
 		t.Fatal("expected request-build error")
@@ -94,8 +91,6 @@ func TestCov_DoEgressBlocked(t *testing.T) {
 	}
 }
 
-// ===== http_request.go buildRequestBody ===============================
-
 func TestCov_BuildRequestBody(t *testing.T) {
 	r, err := params.RequestBody(core.Job{Input: map[string]core.Ref{"request_body": {Inline: "hi"}}})
 	if err != nil || r == nil {
@@ -112,14 +107,12 @@ func TestCov_BuildRequestBody(t *testing.T) {
 		t.Errorf("bytes body = %q", b2)
 	}
 
-	// struct/map input → JSON marshalled.
 	r3, _ := params.RequestBody(core.Job{Input: map[string]core.Ref{"request_body": {Inline: map[string]any{"a": 1}}}})
 	b3, _ := io.ReadAll(r3)
 	if !strings.Contains(string(b3), `"a":1`) {
 		t.Errorf("map body = %q", b3)
 	}
 
-	// nil input → falls through to params.body.
 	r4, _ := params.RequestBody(core.Job{
 		Input:  map[string]core.Ref{"request_body": {Inline: nil}},
 		Params: map[string]any{"body": "fromparam"},
@@ -129,14 +122,11 @@ func TestCov_BuildRequestBody(t *testing.T) {
 		t.Errorf("param body = %q", b4)
 	}
 
-	// no input, no param → nil reader.
 	r5, _ := params.RequestBody(core.Job{})
 	if r5 != nil {
 		t.Error("expected nil reader when no body")
 	}
 }
-
-// ===== http_request.go statusAccepted / formatExpectStatus ===========
 
 func TestCov_StatusAccepted(t *testing.T) {
 	if !params.StatusAccepted(204, nil) {
@@ -161,8 +151,6 @@ func TestCov_FormatExpectStatus(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
-
-// ===== http_request.go SSRF surface ===================================
 
 func TestCov_IsSSRFError(t *testing.T) {
 	if !IsSSRFError(errors.New("dial tcp: ssrf_blocked: bad")) {
@@ -192,8 +180,6 @@ func TestCov_SafeHTTPClientCached(t *testing.T) {
 }
 
 func TestCov_SSRFGuardAndDialControl(t *testing.T) {
-	// With private egress disabled, the dial control + CheckDialHost block
-	// loopback/private. TestMain enables it globally, so flip it off here.
 	SetAllowPrivateEgress(false)
 	defer SetAllowPrivateEgress(true)
 
@@ -207,11 +193,9 @@ func TestCov_SSRFGuardAndDialControl(t *testing.T) {
 	if err := ctrl("tcp", "8.8.8.8:80", nil); err != nil {
 		t.Errorf("public IP should pass: %v", err)
 	}
-	// Unparseable address.
 	if err := ctrl("tcp", "garbage", nil); err == nil {
 		t.Error("unparseable address should be blocked")
 	}
-	// Non-IP host in address.
 	if err := ctrl("tcp", "example.com:80", nil); err == nil {
 		t.Error("non-IP host should be blocked by guard")
 	}
@@ -244,7 +228,6 @@ func TestCov_CheckDialHost(t *testing.T) {
 }
 
 func TestCov_CheckDialHostOptInAllows(t *testing.T) {
-	// With opt-in (TestMain default), CheckDialHost is a no-op pass.
 	SetAllowPrivateEgress(true)
 	if err := CheckDialHost("127.0.0.1:5432"); err != nil {
 		t.Errorf("opted-in private egress should allow loopback: %v", err)
@@ -254,13 +237,10 @@ func TestCov_CheckDialHostOptInAllows(t *testing.T) {
 func TestCov_IsUnsafeIPRanges(t *testing.T) {
 	SetAllowPrivateEgress(false)
 	defer SetAllowPrivateEgress(true)
-	// CGNAT 100.64.0.0/10 is in extraUnsafeCIDRs.
 	if err := CheckDialHost("100.64.0.1"); err == nil {
 		t.Error("CGNAT address should be blocked")
 	}
 }
-
-// ===== http_request.go executeHTTPRequest extra paths =================
 
 func TestCov_HTTPNonTextBodyReturnsBytes(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -303,51 +283,39 @@ func TestCov_HTTPBadHeadersParam(t *testing.T) {
 	}
 }
 
-// ===== helpers.go paramHeaders ========================================
-
 func TestCov_ParamHeaders(t *testing.T) {
-	// absent.
 	h, err := paramHeaders(map[string]any{}, "headers")
 	if err != nil || h != nil {
 		t.Errorf("absent: h=%v err=%v", h, err)
 	}
-	// good.
 	h2, err := paramHeaders(map[string]any{"headers": map[string]any{"A": "b"}}, "headers")
 	if err != nil || h2["A"] != "b" {
 		t.Errorf("good: h=%v err=%v", h2, err)
 	}
-	// wrong outer type.
 	if _, err := paramHeaders(map[string]any{"headers": "nope"}, "headers"); err == nil {
 		t.Error("wrong outer type should error")
 	}
-	// non-string value.
 	if _, err := paramHeaders(map[string]any{"headers": map[string]any{"A": 1}}, "headers"); err == nil {
 		t.Error("non-string value should error")
 	}
 }
 
-// ===== webhook_send.go encodeWebhookBody / hasHeader ==================
-
 func TestCov_EncodeWebhookBody(t *testing.T) {
-	// string with no CT set → uses provided default CT.
 	h := map[string]string{}
 	b := encodeWebhookBody("text", h, "text/plain")
 	if string(b) != "text" || h["Content-Type"] != "text/plain" {
 		t.Errorf("string: b=%q h=%v", b, h)
 	}
-	// string with CT already set → not overwritten.
 	h2 := map[string]string{"Content-Type": "text/csv"}
 	encodeWebhookBody("x", h2, "text/plain")
 	if h2["Content-Type"] != "text/csv" {
 		t.Errorf("CT should not be overwritten: %v", h2)
 	}
-	// []byte.
 	h3 := map[string]string{}
 	b3 := encodeWebhookBody([]byte("raw"), h3, "application/octet-stream")
 	if string(b3) != "raw" || h3["Content-Type"] != "application/octet-stream" {
 		t.Errorf("bytes: b=%q h=%v", b3, h3)
 	}
-	// object → JSON.
 	h4 := map[string]string{}
 	b4 := encodeWebhookBody(map[string]any{"k": "v"}, h4, "ignored")
 	if !strings.Contains(string(b4), `"k":"v"`) || h4["Content-Type"] != "application/json" {
@@ -393,8 +361,6 @@ func TestCov_WebhookSendIdempotencyKeySet(t *testing.T) {
 	}
 }
 
-// ===== ratelimit.go SetEgressRateLimit / headerInt / gc / evict ======
-
 func TestCov_SetEgressRateLimitTunes(t *testing.T) {
 	// Restore the disabled pacing TestMain sets up. Re-assigning the pointer
 	// would NOT do it: SetEgressRateLimit mutates the limiter in place, so the
@@ -411,7 +377,6 @@ func TestCov_SetEgressRateLimitTunes(t *testing.T) {
 	if egressLimit.burst != float64(defaultEgressBurst) || egressLimit.conc != defaultEgressConcurrency {
 		t.Errorf("non-positive burst/conc should fall back: burst=%v conc=%d", egressLimit.burst, egressLimit.conc)
 	}
-	// Disabled limiter passes through.
 	rel, err := AcquireEgress(context.Background(), "https://api.example.com/x")
 	if err != nil {
 		t.Fatalf("acquire on disabled: %v", err)
@@ -425,7 +390,6 @@ func TestCov_SetEgressRateLimitTunes(t *testing.T) {
 }
 
 func TestCov_NewEgressLimiterClamps(t *testing.T) {
-	// burst < 1 and conc < 1 are clamped up to 1.
 	l := newEgressLimiter(60, 0, 0)
 	if l.burst != 1 || l.conc != 1 {
 		t.Errorf("burst=%v conc=%d, want both clamped to 1", l.burst, l.conc)
@@ -457,7 +421,6 @@ func TestCov_HeaderInt(t *testing.T) {
 func TestCov_EvictOldestLocked(t *testing.T) {
 	l := newEgressLimiter(6000, 100, 10)
 	now := time.Now()
-	// Two idle buckets; one older, one newer; plus one with an in-flight call.
 	l.buckets["old"] = &egressBucket{last: now.Add(-2 * time.Hour)}
 	l.buckets["new"] = &egressBucket{last: now}
 	l.buckets["busy"] = &egressBucket{last: now.Add(-3 * time.Hour), inflight: 1}
@@ -474,9 +437,7 @@ func TestCov_GCLockedDropsIdle(t *testing.T) {
 	l := newEgressLimiter(6000, 100, 10)
 	now := time.Now()
 	l.lastGC = now.Add(-2 * time.Minute) // make gc eligible to run
-	// Idle, full, no cooldown, untouched > 1 min → eligible for GC.
 	l.buckets["idle"] = &egressBucket{tokens: l.burst, last: now.Add(-2 * time.Minute)}
-	// Recently used → kept.
 	l.buckets["fresh"] = &egressBucket{tokens: l.burst, last: now}
 	l.gcLocked(now)
 	if _, ok := l.buckets["idle"]; ok {
@@ -499,7 +460,6 @@ func TestCov_ResetDelayEpochAndDelta(t *testing.T) {
 	if got := resetDelay(h2, now); got != 0 {
 		t.Errorf("zero reset: got %v", got)
 	}
-	// Epoch in the past → 0.
 	h3 := http.Header{}
 	h3.Set("RateLimit-Reset", "200000000") // > epochThreshold, but in the past
 	if got := resetDelay(h3, now); got != 0 {
@@ -507,17 +467,13 @@ func TestCov_ResetDelayEpochAndDelta(t *testing.T) {
 	}
 }
 
-// ===== httpcache.go read/write edge cases =============================
-
 func TestCov_WriteCacheValidatorsNoops(t *testing.T) {
 	m, cleanup := memCacheStore()
 	defer cleanup()
-	// Empty validators → nothing written.
 	writeCacheValidators(context.Background(), "t", "name", cacheValidators{})
 	if len(m) != 0 {
 		t.Errorf("empty validators should not be stored: %v", m)
 	}
-	// Empty tenant → nothing written.
 	writeCacheValidators(context.Background(), "", "name", cacheValidators{ETag: `"x"`})
 	if len(m) != 0 {
 		t.Errorf("empty tenant should not store: %v", m)
@@ -527,11 +483,9 @@ func TestCov_WriteCacheValidatorsNoops(t *testing.T) {
 func TestCov_ReadCacheValidatorsEdge(t *testing.T) {
 	_, cleanup := memCacheStore()
 	defer cleanup()
-	// Empty tenant → nil.
 	if v := readCacheValidators(context.Background(), "", "name"); v != nil {
 		t.Errorf("empty tenant should read nil, got %+v", v)
 	}
-	// Unparseable stored value → nil.
 	name := httpCacheName("g", "n", "k")
 	cacheMu.RLock()
 	w := cacheWriter
@@ -540,7 +494,6 @@ func TestCov_ReadCacheValidatorsEdge(t *testing.T) {
 	if v := readCacheValidators(context.Background(), "t", name); v != nil {
 		t.Errorf("unparseable value should read nil, got %+v", v)
 	}
-	// Valid JSON but empty validators → nil.
 	_ = w(context.Background(), "t", name, `{}`)
 	if v := readCacheValidators(context.Background(), "t", name); v != nil {
 		t.Errorf("empty validators should read nil, got %+v", v)

@@ -45,7 +45,6 @@ func langFromStore(ctx context.Context, store auth.UserStore, email string) stri
 	return u.UI.Language
 }
 
-// mailLang reads the language preference of the account at `email`.
 func (s *Service) mailLang(ctx context.Context, email string) string {
 	if s == nil {
 		return ""
@@ -53,28 +52,17 @@ func (s *Service) mailLang(ctx context.Context, email string) string {
 	return langFromStore(ctx, s.Users, email)
 }
 
-// flowLang is the language a flow writes in — the same field the Date & time
-// step reads, so a Swedish flow's approval email and the dates inside it agree.
 func flowLang(graph core.Graph) string { return graph.Language }
 
-// mailMsgs is maillang.For for a recipient's account language, in one call.
 func (s *Service) mailMsgs(ctx context.Context, email string) maillang.Messages {
 	return maillang.For(s.mailLang(ctx, email))
 }
 
-// langPicker resolves which language to write a person's mail in. Two inputs
-// are all it needs: the user store holding an explicit preference, and the
-// service for the fallback.
 type langPicker struct {
 	svc   *Service
 	Users auth.UserStore
 }
 
-// mailLang is the gateway's resolver. It asks its OWN user store before the
-// service's: the two fields are separate handles that production wiring points
-// at the same store, and the HTTP layer's is the one the auth endpoints
-// (signup, reset, verification) already read — so preferring it keeps this
-// answer consistent with the account those handlers just touched.
 func (l langPicker) mailLang(ctx context.Context, email string) string {
 	if l := langFromStore(ctx, l.Users, email); l != "" {
 		return l
@@ -91,7 +79,6 @@ func (l langPicker) inviteLang(ctx context.Context, invitee, inviter string) str
 	return l.mailLang(ctx, inviter)
 }
 
-// lang exposes the language picker to a domain handler.
 func (h *HTTPGateway) lang() langPicker { return langPicker{svc: h.svc, Users: h.Users} }
 
 func (h *HTTPGateway) mailLang(ctx context.Context, email string) string {

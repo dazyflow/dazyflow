@@ -162,9 +162,6 @@ function GrantRow({ grant, onOpen }: { grant: AccessGrant; onOpen: () => void })
   );
 }
 
-// RequestNewFlow is the secondary affordance: ask an org for access to a flow
-// you don't have a grant for yet. The org approves it on /admin/support, after
-// which it appears in the list above with an Open button.
 function RequestNewFlow({ onRequested }: { onRequested: () => void }) {
   const { t } = useTranslation();
   const { token } = useAuth();

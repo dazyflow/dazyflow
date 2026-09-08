@@ -88,9 +88,6 @@ vi.mock("../../api", () => {
 
 import { FlowEditor } from "./FlowEditor";
 
-// The scroll region's geometry, readable and writable by the test. Only
-// .toolbar-scroll reports it; every other element keeps jsdom's zero, so React
-// Flow and the rest of the editor behave exactly as in the other suites.
 const GEOM_PROPS = ["clientWidth", "scrollWidth", "scrollLeft"] as const;
 const geom = { clientWidth: 0, scrollWidth: 0, scrollLeft: 0 };
 const savedDescriptors = new Map<string, PropertyDescriptor | undefined>();
@@ -164,8 +161,6 @@ describe("editor toolbar overflow", () => {
     await screen.findByText("editor.run");
     expect(screen.queryByRole("button", { name: "editor.toolbarMoreLeft" })).toBeNull();
     expect(screen.queryByRole("button", { name: "editor.toolbarMoreRight" })).toBeNull();
-    // No fade either: a permanent one dimmed the trailing control on a bar
-    // that had nothing hidden.
     expect(scrollRegion().dataset.fadeRight).toBe("false");
   });
 
@@ -193,13 +188,10 @@ describe("editor toolbar overflow", () => {
     );
 
     await settleScrollAt(160);
-    // Both sides now have tools out of view, so both arrows stand.
     await screen.findByRole("button", { name: "editor.toolbarMoreLeft" });
     expect(screen.getByRole("button", { name: "editor.toolbarMoreRight" })).toBeTruthy();
     expect(scrollRegion().dataset.fadeLeft).toBe("true");
 
-    // At the far end the right-hand arrow retires — there is nothing left to
-    // reveal, and an arrow that scrolls nowhere is worse than none.
     await settleScrollAt(500);
     await act(async () => {});
     expect(screen.queryByRole("button", { name: "editor.toolbarMoreRight" })).toBeNull();

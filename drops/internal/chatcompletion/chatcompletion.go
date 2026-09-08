@@ -1,13 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package chatcompletion reads the OpenAI-style chat completion envelope
-// ({choices:[{message:{content, tool_calls}}]}) that OpenAI and Ollama share.
 package chatcompletion
 
 import "encoding/json"
 
-// Message returns choices[0].message, or nil.
 func Message(parsed map[string]any) map[string]any {
 	choices, ok := parsed["choices"].([]any)
 	if !ok || len(choices) == 0 {
@@ -21,7 +18,6 @@ func Message(parsed map[string]any) map[string]any {
 	return m
 }
 
-// Text returns the assistant message content, or "".
 func Text(parsed map[string]any) string {
 	m := Message(parsed)
 	if m == nil {
@@ -33,9 +29,6 @@ func Text(parsed map[string]any) string {
 	return ""
 }
 
-// ToolArgs decodes the first tool_call's function.arguments into a map, or
-// nil when the model made no tool call. Arguments arrive as a JSON string
-// (OpenAI) or an already-decoded object (Ollama).
 func ToolArgs(parsed map[string]any) map[string]any {
 	m := Message(parsed)
 	if m == nil {

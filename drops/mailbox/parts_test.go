@@ -42,8 +42,6 @@ func TestBytesForSection_MatchesOnPathNotPosition(t *testing.T) {
 		}
 	}
 
-	// A path nothing was fetched for yields nothing, rather than the first
-	// buffer that happens to be lying around.
 	if got := bytesForSection(buffers, []int{9}); got != nil {
 		t.Errorf("unknown path returned %q, want nil", got)
 	}
@@ -78,8 +76,6 @@ func TestIsAttachment(t *testing.T) {
 	if isAttachment(withDisposition("INLINE", "logo.png")) {
 		t.Error("the disposition is case-insensitive")
 	}
-	// No disposition header at all: some senders omit it, so a filename in the
-	// Content-Type is taken as the intent.
 	named := &imap.BodyStructureSinglePart{Type: "application", Subtype: "pdf", Params: map[string]string{"name": "invoice.pdf"}}
 	if !isAttachment(named) {
 		t.Error("a part named only in Content-Type should count as an attachment")
@@ -89,25 +85,18 @@ func TestIsAttachment(t *testing.T) {
 	}
 }
 
-// decodeTransferEncoding is the layer between "what the wire carried" and
-// "the file someone attached".
 func TestDecodeTransferEncoding(t *testing.T) {
-	// Base64 in a MIME part is line-wrapped, and those breaks are not payload.
 	if got := string(decodeTransferEncoding([]byte("aGVsbG8g\r\nd29ybGQ="), "base64")); got != "hello world" {
 		t.Errorf("wrapped base64 decoded to %q", got)
 	}
 	if got := string(decodeTransferEncoding([]byte("Fakturan =E4r betald"), "quoted-printable")); got != "Fakturan \xe4r betald" {
 		t.Errorf("quoted-printable decoded to %q", got)
 	}
-	// 7bit/8bit/binary and a missing header all mean "already the bytes".
 	for _, enc := range []string{"", "7bit", "8bit", "binary", "BINARY"} {
 		if got := string(decodeTransferEncoding([]byte("plain"), enc)); got != "plain" {
 			t.Errorf("encoding %q changed the bytes to %q", enc, got)
 		}
 	}
-	// Undecodable input degrades to what we were given rather than to nothing:
-	// a partly readable attachment beats an error on a step whose job is to
-	// hand someone their file.
 	if got := string(decodeTransferEncoding([]byte("!!!not base64!!!"), "base64")); got == "" {
 		t.Error("broken base64 decoded to nothing, want the raw bytes back")
 	}
@@ -141,8 +130,6 @@ func TestOverCap(t *testing.T) {
 	if _, over := overCap(parts(mailfiles.MaxBytes, 1)); !over {
 		t.Error("one byte over the cap must be refused")
 	}
-	// The sum is what matters, not any single part: fifty near-limit files are
-	// the realistic way to blow the budget.
 	if _, over := overCap(parts(mailfiles.MaxBytes/2, mailfiles.MaxBytes/2, 1024)); !over {
 		t.Error("the cap applies to the total across parts")
 	}

@@ -32,15 +32,9 @@ import (
 // DAZYFLOW_PLATFORM_ADMINS, so a fresh instance can bootstrap its first
 // super-admin without opening signup to the world.
 
-// signupRequest is the wire shape of POST /api/v1/auth/signup.
 type signupRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	// SignupInvite is the optional platform signup-invite token (see
-	// httpsignup_invite.go). When self-serve signup is disabled, a valid,
-	// pending invite for this email is the third way through the gate
-	// — letting a platform owner onboard specific users one at a time
-	// without opening signup to the world.
+	Email        string `json:"email"`
+	Password     string `json:"password"`
 	SignupInvite string `json:"signup_invite,omitempty"`
 }
 
@@ -51,25 +45,10 @@ func (h *authAPI) signUp(rw http.ResponseWriter, r *http.Request) {
 	}
 	var body signupRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		// A malformed body shouldn't happen from the real UI; keep the message
-		// human in case it ever reaches a person (the web mapper also swallows
-		// the raw decode error, but non-web clients see this verbatim).
 		writeJSONError(rw, http.StatusBadRequest, "we couldn't read the sign-up details — please try again")
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))
-	// Signup is closed by default. Three ways through the gate: the
-	// operator enabled self-serve signup; this email is in the
-	// platform-admin allowlist (DAZYFLOW_PLATFORM_ADMINS); or the request
-	// carries a valid, pending platform signup-invite issued for this
-	// email (see httpsignup_invite.go). The allowlist path is the bootstrap
-	// hatch — it lets a fresh instance mint its first super-admin without
-	// flipping EnableSignup on and back off. All three are self-limiting:
-	// once the account exists the duplicate check below returns 409, so a
-	// listed email or an invited email can be claimed exactly once. The
-	// new account is elevated to platform:admin at IssueSession time (see
-	// elevatePlatformAdmin) only for allowlisted emails — an invited user
-	// is an ordinary tenant owner.
 	invited := h.validSignupInvite(r.Context(), email, body.SignupInvite)
 	if !h.EnableSignup && !h.isPlatformAdminEmail(email) && !invited {
 		writeJSONError(rw, http.StatusNotImplemented, "self-serve signup is not enabled on this deployment")
@@ -156,11 +135,6 @@ func (h *authAPI) signUp(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Seed the org's display name from the email's domain so the
-	// switcher and admin pages don't surface the raw usr_<hex> ID by
-	// default. The owner can edit it on /admin/workspace at any time.
-	// Best-effort: a failure here doesn't block sign-up because the UI
-	// already falls back to the tenant ID when no profile exists.
 	if h.Profiles != nil {
 		if name := auth.DefaultOrgDisplayName(email); name != "" {
 			_ = h.Profiles.PutOrgProfile(r.Context(), auth.OrgProfile{
@@ -176,15 +150,8 @@ func (h *authAPI) signUp(rw http.ResponseWriter, r *http.Request) {
 	// banner via whoami until the link is clicked.
 	verificationSent := h.sendVerificationEmail(r, user)
 
-	// Welcome email: best-effort, on every signup path. Distinct from
-	// verification (see welcome_email.go) — one confirms the address,
-	// this one greets the new account.
 	h.sendWelcomeEmail(r, user)
 
-	// Auto sign-in: issue a session immediately so the UI can land
-	// the user on the welcome page without an extra round trip
-	// through the sign-in form. Use the shared sessionTTL() so signup
-	// matches the sign-in/SSO/TOTP legs (one source of the default).
 	sess, token, err := auth.IssueSession(r.Context(), h.Sessions, h.elevateSessionRoles(r.Context(), user), h.sessionTTL())
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("issue session: %v", err))
@@ -207,14 +174,11 @@ func (h *authAPI) signUp(rw http.ResponseWriter, r *http.Request) {
 		Secure: h.requestIsHTTPS(r),
 	})
 	writeJSON(rw, http.StatusCreated, map[string]any{
-		"token":      token,
-		"subject":    sess.Subject,
-		"tenant":     sess.Tenant,
-		"workspace":  sess.Workspace,
-		"expires_at": sess.ExpiresAt,
-		// True when a confirmation email went out — the UI can word the
-		// welcome step accordingly. False on deployments without a
-		// mailer (verification inactive) or on a send failure.
+		"token":                   token,
+		"subject":                 sess.Subject,
+		"tenant":                  sess.Tenant,
+		"workspace":               sess.Workspace,
+		"expires_at":              sess.ExpiresAt,
 		"verification_email_sent": verificationSent,
 	})
 }
@@ -238,7 +202,6 @@ func validSignupEmail(email string) error {
 		return errors.New("email domain must contain a dot")
 	}
 	for _, r := range email {
-		// Reject control chars + whitespace inside the address.
 		if r < 0x20 || r == 0x7f || r == ' ' || r == '\t' || r == '\r' || r == '\n' {
 			return errors.New("email contains invalid characters")
 		}
@@ -246,11 +209,6 @@ func validSignupEmail(email string) error {
 	return nil
 }
 
-// validSignupPassword enforces the minimum we can defend in a
-// startup-phase product. The point of length-only is to keep the
-// signup form fast — complexity rules slow users down without
-// meaningfully reducing brute-force risk (the bcrypt cost factor
-// is what limits that).
 func validSignupPassword(password string) error {
 	if len(password) < 8 {
 		return errors.New("password must be at least 8 characters")
@@ -261,11 +219,6 @@ func validSignupPassword(password string) error {
 	return nil
 }
 
-// mintTenantID returns "usr_" + 8 hex chars. Keeps the tenant out
-// of URLs/logs as anything resembling the user's email — important
-// because tenant IDs show up in webhook URLs and audit trails. The
-// 8 hex chars give ~10^9 combinations; collisions are vanishingly
-// unlikely for an MVP.
 func mintTenantID() (string, error) {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {
@@ -274,11 +227,6 @@ func mintTenantID() (string, error) {
 	return "usr_" + hex.EncodeToString(b), nil
 }
 
-// mintOrgTenantID returns "org_" + 8 hex chars — the id for a self-serve
-// organization a user creates. The "org_" prefix (vs "usr_") keeps it out of
-// the personal-tenant heuristics: a user-created org is a real shared tenant,
-// not the auto-deletable personal tenant minted at signup (see
-// looksPersonalTenant in gdpr.go).
 func mintOrgTenantID() (string, error) {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {
@@ -287,10 +235,6 @@ func mintOrgTenantID() (string, error) {
 	return "org_" + hex.EncodeToString(b), nil
 }
 
-// defaultSignupRoles wires the new user with enough permissions to
-// drive their own tenant — they can edit and run graphs, manage
-// secrets (so OAuth works), and admin their own tenant (issue API
-// keys, invite users via the team-features T3 item).
 func defaultSignupRoles() []core.Role {
 	return []core.Role{
 		core.TeamRoleEditor(),
@@ -300,9 +244,3 @@ func defaultSignupRoles() []core.Role {
 		},
 	}
 }
-
-// Workspace provisioning for new signups: every org has exactly one
-// workspace, named "main" (set on the User above). Its backing store is
-// provisioned lazily on first use by AutoFSWorkspaces.Open, so signup
-// itself creates nothing here. There is deliberately no workspace
-// create/list surface — workspace is not a user-facing concept.

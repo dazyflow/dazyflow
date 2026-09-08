@@ -5,9 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-// Stable `t` and a stable useTranslation result: RunList's load effect lists
-// `t` in its deps, so a fresh function per render re-fires it forever. The
-// real i18next hands back a stable one.
 vi.mock("react-i18next", () => {
   const t = (k: string) => k;
   const value = { t };
@@ -47,12 +44,6 @@ import { RunList } from "./RunList";
 const RUN_ID = "69a6f59b21aa3a4e7530df27";
 const FLOW_ID = "refunds";
 
-// A list of runs has to lead to runs. The row's obvious target used to open the
-// EDITOR — a different object, on a page you go to when you want to change the
-// flow, not when you want to know what a run did — while the run itself was
-// parked behind a muted 14px glyph at the end of the row. The dashboard's
-// recent-runs lists always linked straight to the run; this is the page that
-// disagreed.
 describe("RunList row links", () => {
   beforeEach(() => {
     listGraphs.mockResolvedValue({ graphs: [{ id: FLOW_ID, name: "Refunds" }] });

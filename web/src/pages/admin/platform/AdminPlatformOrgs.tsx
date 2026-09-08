@@ -14,9 +14,6 @@ import { ICON } from "../../../icons";
 import { Loading } from "../../../components/ui/Loading";
 import { Notice } from "../../../components/ui/Notice";
 
-// AdminPlatformOrgs is the cross-tenant org roster. Each row links to
-// that org's moderation page (suspend / ban / delete). Read-only list;
-// the actions live on the per-org detail page behind confirms.
 export function AdminPlatformOrgs() {
   const { t } = useTranslation();
   const { token, hasPerm } = useAuth();

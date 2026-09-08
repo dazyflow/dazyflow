@@ -33,8 +33,6 @@ type loopStack struct {
 
 func newLoopStack(t *testing.T) *loopStack {
 	t.Helper()
-	// The httptest server listens on 127.0.0.1, which the SSRF guard blocks;
-	// a real deployment reaches itself over a public name it does not block.
 	hfnet.SetAllowPrivateEgress(true)
 	t.Cleanup(func() { hfnet.SetAllowPrivateEgress(false) })
 
@@ -86,8 +84,6 @@ func (s *loopStack) publish(t *testing.T, g core.Graph) {
 	}
 }
 
-// kick is the one anonymous POST that starts the chain: no bearer token, no
-// flow secret, nothing but the public form link.
 func (s *loopStack) kick(t *testing.T, url string) {
 	t.Helper()
 	req, _ := http.NewRequest("POST", url, bytes.NewReader([]byte(`{"name":"kick"}`)))
@@ -102,8 +98,6 @@ func (s *loopStack) kick(t *testing.T, url string) {
 	}
 }
 
-// runCounts samples the total number of graph runs once a second, which is
-// what tells a chain that broke (flat) from one that is still going (rising).
 func (s *loopStack) runCounts(samples int) []int {
 	var counts []int
 	for range samples {
@@ -114,14 +108,6 @@ func (s *loopStack) runCounts(samples int) []int {
 	return counts
 }
 
-// TestWebhookSendLoop_IsBroken is TestFormLoop_IsBroken through the drop built
-// for exactly this: "Webhook — send to a URL". The depth stamp lived in the
-// http_request drop, so the same graph with a webhook_send step carried no
-// core.TriggerDepthHeader at all: seedRun saw depth 0 every time and one
-// anonymous form submission ran forever (65 → 85 runs over five seconds).
-//
-// The stamp now lives in the HTTP client every outbound call shares
-// (net.triggerDepthTransport), so it does not depend on which drop posts.
 func TestWebhookSendLoop_IsBroken(t *testing.T) {
 	s := newLoopStack(t)
 	hfnet.SetSelfOrigin(s.ts.URL)
@@ -152,28 +138,14 @@ func TestWebhookSendLoop_IsBroken(t *testing.T) {
 	}
 }
 
-// TestFailureNotifyLoop_IsBroken is the same loop with no step in it at all.
-// A flow's failure webhook is a tenant-supplied URL the DAEMON posts to when a
-// run fails, and fireFailureNotification built that request itself: no depth
-// header, and the throttle that stands between a broken flow and a mail flood
-// covers the email channels only. Pointed at the flow's own form, every
-// failure submitted the next one — 155 → 652 runs over five seconds.
-//
-// The notifier dials the shared client too, and now carries the failed run's
-// TriggerDepth so the count climbs across the hop.
 func TestFailureNotifyLoop_IsBroken(t *testing.T) {
 	s := newLoopStack(t)
-	// As any real deployment is configured: dzd registers its public base URL
-	// and the address it listens on, so a call that comes back to us is
-	// recognizable as ours.
 	hfnet.SetSelfOrigin(s.ts.URL)
 	t.Cleanup(func() { hfnet.SetSelfOrigin("") })
 	formURL := s.formURL("notifyloop")
 
 	s.publish(t, core.Graph{
 		ID: "notifyloop", Tenant: "acme", Workspace: "ws1",
-		// The run has to FAIL for the notifier to fire: a module this daemon
-		// has no drop for fails at the step, which is a failed run.
 		Nodes: []core.Node{
 			{ID: "intake", Module: "form_input", Params: map[string]any{
 				"form_fields": []any{"name"},
@@ -194,12 +166,6 @@ func TestFailureNotifyLoop_IsBroken(t *testing.T) {
 	}
 }
 
-// TestSelfDirected_RecognizesEquivalentURLs attacks the depth stamp itself.
-// IsSelfDirected compared scheme://host as a STRING against the configured
-// public base URL, so every spelling of the same origin that a URL parser
-// treats as equal — the default port written out, a trailing root dot — read
-// as "not us", and the call that carried it got no depth header. The
-// comparison now normalizes both sides.
 func TestSelfDirected_RecognizesEquivalentURLs(t *testing.T) {
 	t.Cleanup(func() { hfnet.SetSelfOrigin("") })
 	cases := []struct{ origin, url, why string }{
@@ -218,7 +184,7 @@ func TestSelfDirected_RecognizesEquivalentURLs(t *testing.T) {
 	}
 }
 
-// TestAliasedSelfCall_LoopIsBroken is the finding above spent: the flow's HTTP
+// The finding above spent: the flow's HTTP
 // step posts to its own form through the name the operator did NOT configure
 // as the public base URL. Same daemon, same endpoint, and no depth stamp.
 //
@@ -228,8 +194,6 @@ func TestSelfDirected_RecognizesEquivalentURLs(t *testing.T) {
 // with one passes it to net.SetSelfOrigins as well.
 func TestAliasedSelfCall_LoopIsBroken(t *testing.T) {
 	s := newLoopStack(t)
-	// The operator configured the instance's public base URL as localhost; the
-	// flow's author typed the address it resolves to. Both reach this daemon.
 	hfnet.SetSelfOrigin(strings.Replace(s.ts.URL, "127.0.0.1", "localhost", 1))
 	t.Cleanup(func() { hfnet.SetSelfOrigin("") })
 

@@ -73,9 +73,6 @@ func init() {
 	})
 }
 
-// owmObservation is the subset of the /data/2.5/weather response the summary
-// uses. Fields the API omits decode to their zero value; the JSON output pin
-// carries the full, untrimmed observation so nothing is lost.
 type owmObservation struct {
 	Dt   int64  `json:"dt"`
 	Name string `json:"name"`
@@ -95,9 +92,6 @@ type owmObservation struct {
 	Weather []owmWeather `json:"weather"`
 }
 
-// executeCurrent fetches the current conditions for the resolved coordinate
-// and emits a readable summary, the bare temperature and conditions word, and
-// the full observation as JSON.
 func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	lat, lon, err := geoloc.ResolveLatLon(job)
 	if err != nil {
@@ -137,8 +131,6 @@ func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 	}, nil
 }
 
-// currentSummary renders the current conditions as one human line, e.g.
-// "Clear sky, 12.3°C (feels 11.1°C), humidity 64%, wind 3.4 m/s".
 func currentSummary(o owmObservation, units string) string {
 	desc := ""
 	if len(o.Weather) > 0 {

@@ -12,23 +12,13 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// The two reasons a replay can be refused outright. Both wrap core.ErrConflict
-// (409 at the gateway) and are distinct sentinels so the HTTP layer can give
-// each its own error code, and the web client its own localized sentence —
-// what the reader should do next differs between them.
 var (
 	// ErrReplayNoTriggerData: the run being replayed never received an inbound
 	// delivery (it was started by hand, or its trigger step failed), so there
 	// is nothing to re-send.
-	ErrReplayNoTriggerData = fmt.Errorf("%w: this run wasn't started by an incoming webhook or form submission, so there is no delivery to re-send", core.ErrConflict)
-	// ErrReplayTriggerChanged: the run did receive a delivery, but the flow's
-	// trigger step has been replaced since, so the stored payload no longer
-	// belongs to any step in the current flow.
+	ErrReplayNoTriggerData  = fmt.Errorf("%w: this run wasn't started by an incoming webhook or form submission, so there is no delivery to re-send", core.ErrConflict)
 	ErrReplayTriggerChanged = fmt.Errorf("%w: this flow's trigger step has changed since this run, so its original delivery can no longer be matched to it", core.ErrConflict)
-	// ErrReplayTriggerOff: every trigger step in the flow is turned off, so
-	// there is nowhere to deliver the payload — matching the /trigger
-	// endpoint's refusal to accept a delivery for a paused step.
-	ErrReplayTriggerOff = fmt.Errorf("%w: this flow's trigger step is turned off — turn the step back on to re-send what it received", core.ErrConflict)
+	ErrReplayTriggerOff     = fmt.Errorf("%w: this flow's trigger step is turned off — turn the step back on to re-send what it received", core.ErrConflict)
 )
 
 // ReplayRun re-runs a finished run from the start, feeding the flow's trigger
@@ -146,10 +136,6 @@ func (s *Service) replayTriggerSeeds(
 		return nil, fmt.Errorf("list node records for run %q: %w", rec.ID, err)
 	}
 
-	// Which nodes were trigger steps in the run being replayed is answered by
-	// the revision that ran (stored on the run record), not by the flow as it
-	// looks now — a step the flow has since dropped still delivered data then,
-	// and that difference is exactly what tells the two refusals below apart.
 	wasTrigger := inboundTriggerNodes(g)
 	if len(rec.GraphPayload) > 0 {
 		var ran core.Graph
@@ -158,10 +144,6 @@ func (s *Service) replayTriggerSeeds(
 		}
 	}
 
-	// A trigger record is replayable when the step actually received something:
-	// it succeeded (the trigger path pre-completes it) and its output is inline
-	// — a scratch-backed output is gone, the run's scratch space having been
-	// reclaimed when it finished (dispatch.go finalizeGraph → reclaimScratch).
 	seeds := map[string]core.Result{}
 	delivered := 0
 	for _, n := range nodes {
@@ -177,10 +159,6 @@ func (s *Service) replayTriggerSeeds(
 		}
 	}
 	if len(seeds) == 0 {
-		// Two different situations, and the fix differs, so they get their own
-		// message: nothing was ever delivered to this run (it was started by
-		// hand), versus a delivery that no longer lines up with the flow's
-		// trigger step because the step was replaced since.
 		if delivered == 0 {
 			return nil, ErrReplayNoTriggerData
 		}
@@ -189,10 +167,6 @@ func (s *Service) replayTriggerSeeds(
 	return seeds, nil
 }
 
-// inboundTriggerNodes is the set of node IDs in g whose module receives its
-// data from an inbound delivery. Node-level "disabled" is deliberately not
-// consulted: this answers what a step WAS, and a run's records outlive the
-// switch being flipped.
 func inboundTriggerNodes(g core.Graph) map[string]struct{} {
 	ids := map[string]struct{}{}
 	for _, n := range g.Nodes {

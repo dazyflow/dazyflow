@@ -58,9 +58,6 @@ describe("the run-succeeded status", () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  // The regression the ref exists for: the parent re-renders constantly while
-  // an editor is in use, and with onDismiss in the dependency array each
-  // re-render cancelled and restarted the countdown.
   it("still fades when the parent re-renders with a new callback each time", async () => {
     const onDismiss = vi.fn();
     const { rerender } = show(onDismiss);

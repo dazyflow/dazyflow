@@ -42,15 +42,12 @@ describe("mapConfig", () => {
     });
   });
 
-  // Every picker on the canvas asks; one round trip should serve them all.
   it("fetches once and memoises", async () => {
     getMapConfig.mockResolvedValue({ tile_url: "a", geocoder_url: "b" });
     await Promise.all([mapConfig(), mapConfig(), mapConfig()]);
     expect(getMapConfig).toHaveBeenCalledTimes(1);
   });
 
-  // An older daemon has no /map/config route. Falling back to the public OSM
-  // hosts keeps the picker working there instead of leaving it blank.
   it("falls back to the public OSM hosts when the call fails", async () => {
     getMapConfig.mockRejectedValue(new Error("404"));
     await expect(mapConfig()).resolves.toEqual({

@@ -173,9 +173,6 @@ function PageFallback() {
 export function App() {
   const { token } = useAuth();
   const { pathname } = useLocation();
-  // Public TV-dashboard share page: cryptic link, no auth, no AppShell.
-  // Handled before the signed-in/out split so it renders identically whether
-  // or not a session exists (an operator previewing it, or a login-less TV).
   if (pathname.startsWith("/tv/")) {
     return (
       <Suspense fallback={<PageFallback />}>
@@ -334,11 +331,6 @@ export function App() {
   );
 }
 
-// HAS_FLOWS_KEY is FlowList's sticky "this user has built at least
-// one flow" hint. RootRedirect reads it (and only it — no API call)
-// to decide whether the bare-root visit should land on /welcome
-// (first-time) or /flows (returning). Written by FlowList itself
-// when the graph list resolves; cleared when it resolves empty.
 const HAS_FLOWS_KEY = "dazyflow.hasFlows";
 
 // RootRedirect decides where a logged-in user lands on the bare root.
@@ -365,15 +357,11 @@ function RootRedirect() {
   const [dest, setDest] = useState<string | null>(null);
 
   useEffect(() => {
-    // A query string means "intentional deep-link" → /flows (preserves ?run=…).
     if (loc.search) {
       setDest(`/flows${loc.search}`);
       return;
     }
-    // The flag is per-account (see userScope), so we need `me` first.
     if (!me) return;
-    // Fast path: a sticky hint from a previous session on THIS origin says the
-    // user already has flows → overview, no API call.
     let hasFlows = false;
     try {
       hasFlows =
@@ -414,8 +402,6 @@ function RootRedirect() {
         setDest(has ? "/overview" : "/welcome");
       })
       .catch(() => {
-        // On a lookup failure, prefer the app over re-running onboarding for
-        // someone who may well have flows.
         if (!cancelled) setDest("/overview");
       });
     return () => {
@@ -423,7 +409,6 @@ function RootRedirect() {
     };
   }, [loc.search, me, token, activeTenant, activeWorkspace]);
 
-  // Render nothing until we've decided — avoids a wrong-destination flash.
   if (!dest) return <div />;
   return <Navigate to={dest} replace />;
 }

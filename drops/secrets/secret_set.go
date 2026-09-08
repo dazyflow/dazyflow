@@ -42,7 +42,6 @@ func init() {
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
 			Inputs: []core.Port{
-				// Overrides params.value when wired (see executeSecretSet).
 				{Port: "value", Label: "Value"},
 			},
 			Outputs: []core.Port{

@@ -72,8 +72,6 @@ func executeFileRead(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
 	}
-	// Resolves both workspace-relative paths and scratch:// paths; the
-	// returned root confines all access, rel is the path within it.
 	root, rel, err := openSandboxRoot(job, path)
 	if err != nil {
 		return params.Err(job, "no_sandbox", err.Error()), nil
@@ -95,8 +93,6 @@ func executeFileRead(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		mime = "application/octet-stream"
 	}
 
-	// Ref carries the original path (scheme and all) so a downstream
-	// reader resolves it the same way; internal ops use rel.
 	out := core.Ref{MIME: mime, Ref: path}
 	if inline, _ := params.Bool(job.Params, "inline"); inline {
 		f, err := root.Open(rel)

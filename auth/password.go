@@ -18,10 +18,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// User is a password-authenticated identity. PasswordHash is bcrypt.
-// Roles are checked the same way API-key roles are, so once a user
-// signs in their session principal is indistinguishable from an
-// equivalent API-key principal downstream.
 type User struct {
 	Email        string      `json:"email"`
 	PasswordHash []byte      `json:"password_hash"`
@@ -31,147 +27,63 @@ type User struct {
 	Roles        []core.Role `json:"roles"`
 	CreatedAt    time.Time   `json:"created_at"`
 
-	// TOTP 2FA state. All four fields are zero on a user who has never
-	// enrolled; the JSON tags carry omitempty so existing user-store
-	// files stay byte-compatible when 2FA is off. The secret is stored
-	// AES-256-GCM-encrypted (see auth/totp.go) so a leak of the store —
-	// a DB backup, a stray JSON file — yields ciphertext, not live
-	// seeds. Recovery codes are kept as bcrypt hashes only; the
-	// plaintext is shown to the user exactly once at mint time.
-	//
-	// TOTPSecretEnc holds a *pending* secret (TOTPEnabled=false) between
-	// EnrolStart and EnrolConfirm, and the *active* secret once enabled.
+	// All four are zero on a user who never enrolled.
 	TOTPSecretEnc      []byte     `json:"totp_secret_enc,omitempty"`
 	TOTPEnabled        bool       `json:"totp_enabled,omitempty"`
 	TOTPEnrolledAt     *time.Time `json:"totp_enrolled_at,omitempty"`
 	RecoveryCodeHashes []string   `json:"recovery_code_hashes,omitempty"`
 
-	// TOTPLastStep is the most recent TOTP time-step (unix/period) this
-	// user successfully authenticated with. A code is valid for ~90s
-	// (period 30 × skew ±1), so without recording the consumed step an
-	// observed code could be replayed inside its window. ConsumeTOTPChallenge
-	// rejects any code whose step is <= this. Zero = never used a TOTP code.
+	// Replay protection: a code stays valid ~90s, so the last step must be refused.
 	TOTPLastStep int64 `json:"totp_last_step,omitempty"`
 
-	// Email-verification state. All three are zero on deployments
-	// without a transactional mailer (verification can't run there) and
-	// on accounts created before the feature; omitempty keeps existing
-	// stores byte-compatible. VerifyTokenHash is the SHA-256 of the
-	// emailed token — the store never holds the clickable secret.
 	VerifiedAt      *time.Time `json:"verified_at,omitempty"`
 	VerifyTokenHash []byte     `json:"verify_token_hash,omitempty"`
 	VerifyExpiresAt *time.Time `json:"verify_expires_at,omitempty"`
 
-	// Password-reset state. Both zero on accounts with no reset in
-	// flight; omitempty keeps existing stores byte-compatible. Mirrors
-	// the email-verification token: ResetTokenHash is the SHA-256 of the
-	// emailed token (the store never holds the clickable secret), and
-	// the pair is cleared the moment the reset is consumed or superseded
-	// by a fresh request. See daemon/password_reset.go.
 	ResetTokenHash []byte     `json:"reset_token_hash,omitempty"`
 	ResetExpiresAt *time.Time `json:"reset_expires_at,omitempty"`
 
-	// Notify holds the user's operational notification preferences (the
-	// ones they can toggle in Settings — currently just flow-failure
-	// email). A zero NotifyPrefs means "all defaults"; resolve through
-	// the NotifyPrefs methods rather than reading its fields directly.
-	// See NotifyPrefs for why the inner fields are tri-state pointers.
 	Notify NotifyPrefs `json:"notify,omitempty"`
 
-	// UI holds account-roaming interface preferences (theme, language)
-	// so a user's chosen look + locale follow them across devices rather
-	// than living only in one browser's localStorage. Empty fields mean
-	// "no explicit choice" — the client falls back to its device/browser
-	// default. See UIPrefs.
 	UI UIPrefs `json:"ui,omitempty"`
 
-	// Platform-admin moderation state. Status is "" / "active" for a
-	// normal account and "suspended" once a platform admin locks it. A
-	// suspended user cannot authenticate (sessions and API keys are both
-	// refused — see VerifyPassword's callers and the auth chain) and the
-	// account's home org keeps running only until separately suspended.
-	// SuspendedAt / SuspendReason record who-cares-when and the operator's
-	// note for the audit trail and the user-facing lockout message. A ban
-	// is a suspension plus a blocklist entry that blocks re-signup (see
-	// BlocklistStore); the User row itself only tracks the suspension.
-	// omitempty keeps existing stores byte-compatible.
+	// An empty status reads as active, so an old row is not locked out.
 	Status        string     `json:"status,omitempty"`
 	SuspendedAt   *time.Time `json:"suspended_at,omitempty"`
 	SuspendReason string     `json:"suspend_reason,omitempty"`
 }
 
-// StatusActive is the implicit status of a normal account: an empty
-// string (never moderated) is treated as active, so accounts that
-// predate the moderation columns need no backfill.
+// Implicit: an empty column reads as active.
 const (
 	StatusActive    = "active"
 	StatusSuspended = "suspended"
 )
 
-// Suspended reports whether a platform admin has locked this account.
-// Empty status means active, so pre-moderation rows read as not
-// suspended without a migration.
 func (u User) Suspended() bool { return u.Status == StatusSuspended }
 
-// UIPrefs is a user's account-level interface preferences. Both fields
-// are empty-string-means-unset (no tri-state pointer needed): unlike the
-// notification opt-out, there's no server-side default to distinguish
-// from "never set" — an empty value simply defers to the client's
-// device/browser default (saved theme cache, browser Accept-Language).
 type UIPrefs struct {
-	// Theme is "dark", "light", or "" (no explicit choice). Mirrors the
-	// web client's data-theme values; the server doesn't interpret it
-	// beyond validating the allowed set.
-	Theme string `json:"theme,omitempty"`
-	// Language is a locale code the client understands (e.g. "en",
-	// "sv"), or "" for "use browser detection". Stored opaquely — the
-	// daemon only bounds its shape, it doesn't own the locale list.
+	Theme    string `json:"theme,omitempty"`
 	Language string `json:"language,omitempty"`
 }
 
-// NotifyPrefs is a user's operational notification preferences —
-// notifications the user is allowed to turn off, as distinct from
-// transactional/security mail (email verification, password reset)
-// which is always sent regardless. Persisted as JSON (a JSONB column
-// in Postgres) so a new preference is just a new key, never a schema
-// migration.
 type NotifyPrefs struct {
-	// EmailOnFlowFailure controls whether the owner of a flow is emailed
-	// when one of their flows fails. Tri-state on purpose: nil means
-	// "never set" and resolves to the default (ON) — so accounts that
-	// predate this field, or simply never opened Settings, still get
-	// failure mail without a migration backfilling every row. A non-nil
-	// pointer is the user's explicit choice. Always read it through
-	// EmailOnFlowFailureEnabled, never dereference the pointer directly.
+	// A tri-state pointer: unset means ON, so it is opt-out.
 	EmailOnFlowFailure *bool `json:"email_on_flow_failure,omitempty"`
 
-	// EmailOnSupportReply controls whether the person who filed a support
-	// ticket is emailed when support replies or resolves it. Same tri-state
-	// opt-out contract as EmailOnFlowFailure: nil means "never set" and
-	// resolves to ON, because a support reply nobody is told about is the
-	// same as no reply. Read it through EmailOnSupportReplyEnabled.
+	// A tri-state pointer: unset means ON, so it is opt-out.
 	EmailOnSupportReply *bool `json:"email_on_support_reply,omitempty"`
 }
 
-// EmailOnFlowFailureEnabled resolves the tri-state pointer to its
-// effective value: unset defaults to ON (the opt-out model — owners
-// are notified until they explicitly turn it off).
 func (p NotifyPrefs) EmailOnFlowFailureEnabled() bool {
 	return p.EmailOnFlowFailure == nil || *p.EmailOnFlowFailure
 }
 
-// EmailOnSupportReplyEnabled resolves the tri-state pointer: unset defaults
-// to ON, same opt-out model as flow-failure mail.
 func (p NotifyPrefs) EmailOnSupportReplyEnabled() bool {
 	return p.EmailOnSupportReply == nil || *p.EmailOnSupportReply
 }
 
-// EmailVerified reports whether the account's address was confirmed.
 func (u User) EmailVerified() bool { return u.VerifiedAt != nil }
 
-// UserStore is the password-auth lookup boundary. Implementations may
-// back themselves with a JSON file (this package's JSONUserStore), a
-// Postgres table, or whatever else fits the deployment.
 type UserStore interface {
 	GetByEmail(ctx context.Context, email string) (User, error)
 	PutUser(ctx context.Context, u User) error
@@ -180,39 +92,16 @@ type UserStore interface {
 
 var ErrUnknownUser = errors.New("unknown user")
 
-// timingDummyHash is a bcrypt hash of a throwaway password. The unknown-user
-// and no-password-set paths compare against it so they spend the same bcrypt
-// cost as a genuine wrong-password compare. Without this, a missing account
-// returns ~instantly while an existing one pays full bcrypt cost — a remotely
-// observable timing difference that reveals which emails have accounts, the
-// very enumeration this function's uniform error is meant to prevent.
-//
-// Minted at activeHashCost, not DefaultCost: the point is to spend what a
-// genuine compare spends, and genuine hashes are minted at activeHashCost.
-//
-// Minted lazily, because minting it is a full bcrypt derivation — a quarter of
-// a second at PasswordHashCost, by design. As a package-level initializer that
-// landed on the init path of every binary linking this package, so `dzctl`
-// spent half a second before printing its help and every dzd pod spent it
-// before binding. Nothing outside VerifyPassword's unknown-user branch needs
-// the value. WarmPasswordTiming keeps that branch honest for a process that
-// does serve sign-ins.
+// The unknown-user path compares against this, so a missing account costs the
+// same bcrypt work as a wrong password and cannot be told apart by timing.
 var timingDummyHash = sync.OnceValue(func() []byte {
 	h, _ := bcrypt.GenerateFromPassword([]byte("dazyflow-timing-equalizer"), activeHashCost)
 	return h
 })
 
-// WarmPasswordTiming precomputes the equalizing hash off the request path.
-// Call it in the background from anything that serves sign-ins: without it the
-// first unknown-user attempt in a process pays a mint on top of its compare,
-// which is a timing difference in the safe direction (missing account looks
-// *slower*) but a difference all the same.
+// Precomputed off the request path, or the first sign-in pays for it.
 func WarmPasswordTiming() { _ = timingDummyHash() }
 
-// VerifyPassword normalizes email and bcrypt-compares the password.
-// Returns the User on success; ErrInvalidCredential on any failure
-// (unknown user OR wrong password) so callers cannot enumerate
-// accounts via the error distinction.
 func VerifyPassword(ctx context.Context, store UserStore, email, password string) (User, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" || password == "" {
@@ -220,53 +109,25 @@ func VerifyPassword(ctx context.Context, store UserStore, email, password string
 	}
 	u, err := store.GetByEmail(ctx, email)
 	if err != nil || len(u.PasswordHash) == 0 {
-		// Equalize timing: spend the bcrypt cost even when there's no account
-		// (or no password set, e.g. an SSO-only user) so the response time
-		// doesn't betray account existence.
+		// Spend the bcrypt cost even with no account, or timing enumerates users.
 		_ = bcrypt.CompareHashAndPassword(timingDummyHash(), []byte(password))
 		return User{}, ErrInvalidCredential
 	}
 	if bcrypt.CompareHashAndPassword(u.PasswordHash, []byte(password)) != nil {
 		return User{}, ErrInvalidCredential
 	}
-	// Opportunistic cost upgrade. This is the only point where a correct
-	// plaintext is available, so it's the only place a hash minted at an
-	// older, weaker cost can be strengthened without user involvement.
-	// Failures are logged and swallowed: the credential is valid and the
-	// login must succeed regardless.
+	// The only point where a correct plaintext is in hand to re-hash with.
 	if err := UpgradePasswordCost(ctx, store, u, password); err != nil {
 		log.Printf("WARNING: could not re-hash password for %q at cost %d: %v", email, activeHashCost, err)
 	}
 	return u, nil
 }
 
-// PasswordHashCost is the bcrypt work factor for new hashes. bcrypt's
-// DefaultCost is 10, which has drifted below current guidance (12+) as
-// hardware got faster; 12 is ~4x the work per guess.
-//
-// Raising it is safe without a migration because a bcrypt hash encodes its
-// own cost, so every existing cost-10 hash keeps verifying. UpgradePasswordCost
-// then re-hashes them opportunistically on successful login.
 const PasswordHashCost = 12
 
-// testPasswordHashCost replaces it under `go test`. bcrypt at cost 12 is a
-// quarter-second per hash BY DESIGN, and the suites mint and verify thousands
-// of them: auth alone spent 347s of a CI run on key derivation, and daemon —
-// whose sign-in, signup, TOTP and password-reset tests all go through here —
-// spent 858s. Neither was testing bcrypt.
-//
-// MinCost+1 rather than MinCost, so one rung remains below it for
-// TestVerifyPassword_UpgradesLegacyCost to mint a "legacy" hash from.
 const testPasswordHashCost = bcrypt.MinCost + 1
 
-// activeHashCost is what new hashes are actually minted at, and what
-// NeedsPasswordRehash measures against so the upgrade path stays
-// self-consistent at either cost.
-//
-// testing.Testing() is fixed by the linker when `go test` builds a test binary,
-// so this cannot be flipped at runtime: a released dzd always hashes at
-// PasswordHashCost, whatever it is handed on the command line or in its
-// environment.
+// What new hashes are minted at, and what an upgrade re-hashes to.
 var activeHashCost = func() int {
 	if testing.Testing() {
 		return testPasswordHashCost
@@ -274,8 +135,6 @@ var activeHashCost = func() int {
 	return PasswordHashCost
 }()
 
-// HashPassword wraps bcrypt so callers don't have to import the package
-// (and keeps the cost choice in one place).
 func HashPassword(password string) ([]byte, error) {
 	if password == "" {
 		return nil, fmt.Errorf("password required")
@@ -283,10 +142,6 @@ func HashPassword(password string) ([]byte, error) {
 	return bcrypt.GenerateFromPassword([]byte(password), activeHashCost)
 }
 
-// NeedsPasswordRehash reports whether hash was produced with a weaker cost
-// than the one in force. An unparseable hash returns false: it isn't
-// something we can improve by re-hashing, and it will fail verification
-// anyway.
 func NeedsPasswordRehash(hash []byte) bool {
 	cost, err := bcrypt.Cost(hash)
 	if err != nil {
@@ -295,13 +150,7 @@ func NeedsPasswordRehash(hash []byte) bool {
 	return cost < activeHashCost
 }
 
-// UpgradePasswordCost re-hashes a verified password at the current cost and
-// persists it. Called from the login path, where the plaintext is in hand and
-// already known-correct — the only moment a stored hash can be strengthened
-// without asking the user to do anything.
-//
-// Best-effort by design: a failure here must never fail a login that has
-// already succeeded, so the error is returned for logging and nothing more.
+// Only ever called with an already-verified password.
 func UpgradePasswordCost(ctx context.Context, store UserStore, u User, password string) error {
 	if !NeedsPasswordRehash(u.PasswordHash) {
 		return nil
@@ -314,16 +163,11 @@ func UpgradePasswordCost(ctx context.Context, store UserStore, u User, password 
 	return store.PutUser(ctx, u)
 }
 
-// JSONUserStore persists users to a single JSON file. Mutations rewrite
-// the file atomically (.tmp + rename) under a mutex. Intended for dev
-// / single-node deployments — production should use a database. The
-// load/flush/atomic-write machinery lives in the embedded jsonFileStore.
+// Mutations rewrite the whole file, so it is for single-node use only.
 type JSONUserStore struct {
 	*jsonFileStore[string, User]
 }
 
-// normalizeUserEmail lower-cases and trims the record's email — applied on
-// load and on Put so the map key and the stored value stay canonical.
 func normalizeUserEmail(u User) User {
 	u.Email = strings.ToLower(strings.TrimSpace(u.Email))
 	return u
@@ -369,7 +213,6 @@ func (s *JSONUserStore) ListUsers(_ context.Context) ([]User, error) {
 	return out, nil
 }
 
-// DeleteUser removes the user (erasure, Art. 17). Idempotent.
 func (s *JSONUserStore) DeleteUser(_ context.Context, email string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
 	s.mu.Lock()

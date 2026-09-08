@@ -57,9 +57,6 @@ func TestCatalogLessModule_StillObeysFanIn(t *testing.T) {
 		})
 	}
 
-	// Still accepted, and deliberately so: with no manifest there is no port
-	// list to judge, so a port name we don't recognize is the drop's business.
-	// One wire per port is all the data model promises to carry.
 	mustAccept := map[string]core.Graph{
 		"a port name that is pure noise": graph("noise",
 			[]core.Node{textNode("a", "x"), {ID: "b", Module: "mcp.some_tool"}},
@@ -89,9 +86,6 @@ func TestCatalogLessModule_StillObeysFanIn(t *testing.T) {
 	}
 }
 
-// Why fan-in has to be validated even without a manifest: AssembleInput writes
-// each wire to the same map key, so the step receives ONE value — whichever
-// edge was walked last — and nothing anywhere reports the rest as dropped.
 func TestCatalogLessModule_AssemblesOneValuePerPort(t *testing.T) {
 	const wires = 300
 	nodes := []core.Node{{ID: "sink", Module: "runner.mystery_step"}}
@@ -107,7 +101,6 @@ func TestCatalogLessModule_AssemblesOneValuePerPort(t *testing.T) {
 	}
 	g := graph("silentdrop", nodes, edges)
 
-	// core.Manifest{} is what the daemon has for a module outside its catalog.
 	input := engine.AssembleInput(g, "sink", core.Manifest{}, prior)
 	if len(input) != 1 {
 		t.Errorf("AssembleInput delivered %d values for %d wires; the fan-in rule is calibrated to it keeping exactly one",

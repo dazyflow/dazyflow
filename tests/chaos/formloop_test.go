@@ -90,7 +90,6 @@ func TestFormLoop_IsBroken(t *testing.T) {
 		t.Fatalf("publish: %v", err)
 	}
 
-	// One anonymous POST — no bearer token, no secret, nothing but the link.
 	req, _ := http.NewRequest("POST", formURL, bytes.NewReader([]byte(`{"name":"kick"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)

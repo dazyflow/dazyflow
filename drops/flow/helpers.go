@@ -19,10 +19,6 @@ func paramInt(params map[string]any, key string) (int, error) {
 	return 0, fmt.Errorf("param %q: expected number, got %T", key, v)
 }
 
-// coerceInt converts a JSON-ish numeric value to int, accepting the same
-// types paramInt does. Used to read numbers that arrive via a wired input
-// ref (core.Ref.Inline) rather than from params. Returns false for nil or
-// any non-numeric value.
 func coerceInt(v any) (int, bool) {
 	switch x := v.(type) {
 	case int:

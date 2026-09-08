@@ -18,9 +18,6 @@ import (
 	"github.com/dazyflow/dazyflow/workspace"
 )
 
-// pollHarness mirrors the cron test's setup — Service + worker +
-// scheduler with controllable clock. Pulled into a helper since the
-// poll tests use the same scaffolding three times.
 type pollHarness struct {
 	svc     *daemon.Service
 	jobs    core.JobStore
@@ -82,8 +79,6 @@ func (h *pollHarness) advance(d time.Duration) {
 	h.now = h.now.Add(d)
 }
 
-// waitForGraphRuns polls the jobstore until at least `want` completed
-// graph runs exist for graphID, or the deadline passes.
 func (h *pollHarness) waitForGraphRuns(t *testing.T, graphID string, want int, deadline time.Duration) int {
 	t.Helper()
 	end := time.Now().Add(deadline)
@@ -120,12 +115,10 @@ func TestScheduler_FiresGraphWithPollTrigger(t *testing.T) {
 		},
 	}
 	publishGraph(t, h.wsStore, graph)
-	// Wait for rescan to pick it up.
 	time.Sleep(80 * time.Millisecond)
 	if h.sched.TrackedCount() != 1 {
 		t.Fatalf("tracked=%d, want 1", h.sched.TrackedCount())
 	}
-	// Advance past the first fire (initial scheduleAt = now+60s).
 	h.advance(70 * time.Second)
 	got := h.waitForGraphRuns(t, "poll-1", 1, 3*time.Second)
 	if got < 1 {
@@ -152,7 +145,6 @@ func TestScheduler_TracksGoogleFormTrigger(t *testing.T) {
 	if h.sched.TrackedCount() != 1 {
 		t.Fatalf("tracked=%d, want 1 (google_form_trigger should schedule like poll)", h.sched.TrackedCount())
 	}
-	// A blank/zero interval is manual-only — not tracked.
 	graph2 := core.Graph{
 		ID: "gform-manual", Tenant: "acme", Workspace: "ws1",
 		Nodes: []core.Node{{ID: "form", Module: "google_form_trigger", Params: map[string]any{"form_id": "F1"}}},
@@ -166,8 +158,6 @@ func TestScheduler_TracksGoogleFormTrigger(t *testing.T) {
 
 func TestScheduler_PollTriggerFiresRepeatedlyOnInterval(t *testing.T) {
 	t.Parallel()
-	// Confirm the interval-anchored schedule advances correctly —
-	// after one fire, the next should be `interval` seconds later.
 	h := newPollHarness(t)
 	graph := core.Graph{
 		ID: "poll-rep", Tenant: "acme", Workspace: "ws1",
@@ -176,12 +166,10 @@ func TestScheduler_PollTriggerFiresRepeatedlyOnInterval(t *testing.T) {
 	publishGraph(t, h.wsStore, graph)
 	time.Sleep(80 * time.Millisecond)
 
-	// Advance 70s → first fire.
 	h.advance(70 * time.Second)
 	if h.waitForGraphRuns(t, "poll-rep", 1, 3*time.Second) < 1 {
 		t.Fatalf("first fire missed")
 	}
-	// Advance another 70s → second fire.
 	h.advance(70 * time.Second)
 	if h.waitForGraphRuns(t, "poll-rep", 2, 3*time.Second) < 2 {
 		t.Fatalf("second fire missed (got %d)", h.waitForGraphRuns(t, "poll-rep", 0, 0))
@@ -190,9 +178,6 @@ func TestScheduler_PollTriggerFiresRepeatedlyOnInterval(t *testing.T) {
 
 func TestScheduler_PollAndCronCoexistOnSameGraph(t *testing.T) {
 	t.Parallel()
-	// The node-ID-keyed tracked entries mean a graph with both a Schedule
-	// (cron_trigger) node AND a Poll (poll_trigger) node gets two scheduler
-	// entries — one per node — rather than one clobbering the other.
 	h := newPollHarness(t)
 	graph := core.Graph{
 		ID: "hybrid", Tenant: "acme", Workspace: "ws1",
@@ -225,19 +210,17 @@ func TestScheduler_BadPollIntervalIsIgnored(t *testing.T) {
 	}
 }
 
-// TestScheduler_HugePollIntervalIsIgnored guards an integer-overflow
-// foot-gun: time.Duration is int64 nanoseconds (~292 years max), so
-// `time.Duration(IntervalSeconds) * time.Second` wraps NEGATIVE for a
-// large enough IntervalSeconds. A negative interval makes nextFireFrom
-// return a time in the PAST, so the poll fires every scheduler tick —
-// a runaway-run loop from one fat-fingered config value. The scheduler
+// Guards an integer-overflow foot-gun: time.Duration is int64 nanoseconds
+// (~292 years max), so `time.Duration(IntervalSeconds) * time.Second` wraps
+// NEGATIVE for a large enough IntervalSeconds. A negative interval makes
+// nextFireFrom return a time in the PAST, so the poll fires every scheduler
+// tick — a runaway-run loop from one fat-fingered config value. The scheduler
 // must reject an out-of-range interval the way it rejects <= 0.
 func TestScheduler_HugePollIntervalIsIgnored(t *testing.T) {
 	t.Parallel()
 	h := newPollHarness(t)
 	graph := core.Graph{
 		ID: "huge-poll", Tenant: "acme", Workspace: "ws1",
-		// >> maxInt64/1e9 seconds: the *time.Second multiply overflows.
 		Nodes: []core.Node{{ID: "tick", Module: "poll_trigger", Params: map[string]any{"interval_seconds": 1 << 60}}},
 	}
 	_, _ = h.wsStore.Save(graph, "test")

@@ -12,9 +12,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/jobstore"
 )
 
-// TestPgRunLogPrune_ParkedRun pins the run-scoped contract: a run that has not
-// finished keeps its whole log however old the lines are. Verified to fail
-// against the per-line predicate this replaced (both lines were deleted).
 func TestPgRunLogPrune_ParkedRun(t *testing.T) {
 	pool, ctx := covPGPool(t)
 
@@ -33,7 +30,6 @@ func TestPgRunLogPrune_ParkedRun(t *testing.T) {
 		t.Fatalf("truncate run_logs: %v", err)
 	}
 
-	// Parked on an approval since 72h ago; a finished run from the same day.
 	old := time.Now().Add(-72 * time.Hour).UTC()
 	for _, r := range []struct {
 		id     string
@@ -76,9 +72,6 @@ func TestPgRunLogPrune_ParkedRun(t *testing.T) {
 	}
 }
 
-// TestPgRunLogPrune_Orphans covers the pass that does the real work once the
-// jobs sweep (which runs first, on the same default window) has already taken
-// the run record.
 func TestPgRunLogPrune_Orphans(t *testing.T) {
 	pool, ctx := covPGPool(t)
 	if _, err := jobstore.NewPostgresFromPool(ctx, pool); err != nil {
@@ -95,12 +88,10 @@ func TestPgRunLogPrune_Orphans(t *testing.T) {
 		t.Fatalf("truncate run_logs: %v", err)
 	}
 
-	// No jobs row at all: the run was pruned before its log was.
 	_ = store.AppendRunLog(ctx, RunLogEntry{
 		RunID: "run-gone", TS: time.Now().Add(-72 * time.Hour).UTC(),
 		Kind: "progress", Message: "orphan",
 	})
-	// A recent orphan stays: inside the window, whatever its run's fate.
 	_ = store.AppendRunLog(ctx, RunLogEntry{
 		RunID: "run-gone-recent", TS: time.Now().UTC(),
 		Kind: "progress", Message: "recent orphan",
@@ -115,8 +106,6 @@ func TestPgRunLogPrune_Orphans(t *testing.T) {
 	}
 }
 
-// TestMemRunLogPrune_RunScoped pins the same contract on the in-process store
-// once it is given a job store to ask.
 func TestMemRunLogPrune_RunScoped(t *testing.T) {
 	ctx := context.Background()
 	jobs := jobstore.NewMemory()
@@ -143,7 +132,6 @@ func TestMemRunLogPrune_RunScoped(t *testing.T) {
 	_ = store.AppendRunLog(ctx, RunLogEntry{RunID: "parked", TS: old, Message: "early"})
 	_ = store.AppendRunLog(ctx, RunLogEntry{RunID: "done", TS: old, Message: "early"})
 
-	// "done" finished just now, so it is inside the window and stays too.
 	if n, err := store.Prune(ctx, 24*time.Hour, 0); err != nil || n != 0 {
 		t.Fatalf("prune = %d / %v, want 0", n, err)
 	}

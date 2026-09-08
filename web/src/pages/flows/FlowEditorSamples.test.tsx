@@ -1,13 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// A freshly opened editor knows what its steps last produced.
-//
-// The card data faces read per-node outputs, and until now those existed only
-// in memory for the length of a session: reload and every face went back to
-// "no data yet". The samples fetch answers the same question from the node
-// records the runs already wrote, and the editor reads it UNDER the live run
-// values so a running flow always wins.
 
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -101,14 +94,9 @@ describe("a step's last output on a freshly opened editor", () => {
     const user = userEvent.setup();
     mount();
     await waitFor(() => expect(flowSamples).toHaveBeenCalled());
-    // It is asked for by flow, not by run — there is no run id to hand.
     expect(flowSamples).toHaveBeenCalledWith("tok", "acme", "main", "coffee-reorder");
 
     await user.click(await screen.findByRole("button", { name: "editor.dataView" }));
-    // Scoped to the data face: the same value also reaches the port hover-peek,
-    // which reads the same per-node outputs and so gains the same persistence.
-    // A short text value is its own shape line, so the card shows it verbatim
-    // rather than describing it.
     await waitFor(() =>
       expect(document.querySelector(".dz-face-line-value")?.textContent).toContain(
         "Ordered 2kg of beans",
@@ -123,8 +111,6 @@ describe("a step's last output on a freshly opened editor", () => {
     await waitFor(() => expect(flowSamples).toHaveBeenCalled());
 
     await user.click(await screen.findByRole("button", { name: "editor.dataView" }));
-    // "No data yet" rather than a blank panel — the card says so itself,
-    // on every step of the flow.
     expect(await screen.findAllByText("nodeCard.face.noData")).not.toHaveLength(0);
   });
 
@@ -134,7 +120,6 @@ describe("a step's last output on a freshly opened editor", () => {
     mount();
     await waitFor(() => expect(flowSamples).toHaveBeenCalled());
 
-    // The canvas still mounts and folds; nothing is reported to the user.
     await user.click(await screen.findByRole("button", { name: "editor.dataView" }));
     expect(await screen.findAllByText("nodeCard.face.noData")).not.toHaveLength(0);
   });

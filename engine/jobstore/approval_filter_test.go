@@ -11,9 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// approvalFixture is the record set both store implementations are checked
-// against: two settled approvals (one decided recently but enqueued long ago),
-// one ordinary succeeded step, and one approval still parked.
 func approvalFixture(t *testing.T, store core.JobStore, setFinished func(id string, at time.Time)) {
 	t.Helper()
 	ctx := context.Background()
@@ -21,8 +18,6 @@ func approvalFixture(t *testing.T, store core.JobStore, setFinished func(id stri
 	fin := func(d time.Duration) *time.Time { v := now.Add(d); return &v }
 
 	recs := []core.JobRecord{{
-		// Enqueued three weeks ago, decided a minute ago: the row that proves
-		// the ordering column matters.
 		ID: "old-decided", Kind: core.JobKindNode, GraphRunID: "run-old", NodeID: "gate",
 		Tenant: "acme", Workspace: "default", Status: core.JobStatusSucceeded,
 		EnqueuedAt: now.Add(-21 * 24 * time.Hour), FinishedAt: fin(-time.Minute),
@@ -53,12 +48,6 @@ func approvalFixture(t *testing.T, store core.JobStore, setFinished func(id stri
 		if err := store.Enqueue(ctx, r); err != nil {
 			t.Fatalf("enqueue %s: %v", r.ID, err)
 		}
-		// Enqueuing a record that is already terminal stamps finished_at with
-		// the clock — the memory store honors a supplied one, Postgres does
-		// not — so the store under test puts the fixture's own finish times
-		// back. Controlling them is the whole point here: the ordering this
-		// exercises is only visible when "finished last" and "enqueued last"
-		// disagree.
 		if r.FinishedAt != nil && setFinished != nil {
 			setFinished(r.ID, *r.FinishedAt)
 		}
@@ -83,13 +72,10 @@ func checkApprovalFilters(t *testing.T, store core.JobStore) {
 	for _, r := range decided {
 		ids = append(ids, r.ID)
 	}
-	// The ordinary step is excluded by the port filter; the parked one by the
-	// status; and the long-parked decision leads because it finished last.
 	if len(ids) != 2 || ids[0] != "old-decided" || ids[1] != "new-decided" {
 		t.Fatalf("decided = %v, want [old-decided new-decided]", ids)
 	}
 
-	// The same port filter, on the awaiting side, is the inbox query.
 	parked, err := store.ListNodeRecords(ctx, core.ListNodeRecordsOpts{
 		Tenant: "acme", Workspace: "default", Status: core.JobStatusAwaiting,
 		HasOutputPort: "pending_url",
@@ -101,7 +87,6 @@ func checkApprovalFilters(t *testing.T, store core.JobStore) {
 		t.Fatalf("parked = %+v, want the one awaiting approval", parked)
 	}
 
-	// A port nothing carries returns nothing, rather than everything.
 	none, err := store.ListNodeRecords(ctx, core.ListNodeRecordsOpts{
 		Tenant: "acme", HasOutputPort: "no_such_port",
 	})
@@ -112,7 +97,6 @@ func checkApprovalFilters(t *testing.T, store core.JobStore) {
 		t.Errorf("unknown port matched %d records", len(none))
 	}
 
-	// Under a limit, the ordering decides WHICH row comes back.
 	one, err := store.ListNodeRecords(ctx, core.ListNodeRecordsOpts{
 		Tenant: "acme", Workspace: "default", Status: core.JobStatusSucceeded,
 		HasOutputPort: "pending_url", NewestByFinished: true, Limit: 1,

@@ -22,50 +22,23 @@ import (
 	"github.com/dazyflow/dazyflow/internal/maillang"
 )
 
-// approvalTokenTTL bounds how long a signed approval link stays valid.
-// An approval URL is emailed to a human; without an expiry the link is an
-// eternal bearer credential that resumes the run forever. Two weeks is
-// generous enough for an out-of-office approver yet bounds the blast
-// radius of a leaked link.
 const approvalTokenTTL = 14 * 24 * time.Hour
 
-// approvalTokenBucket quantizes the signed expiry so re-signing the same pause
-// yields the same URL. exp is part of the signed payload, so deriving it from a
-// raw clock read made every re-sign mint a different link — see
-// SignApprovalURL. Truncating the clock to a bucket makes the whole URL a pure
-// function of (run, node, bucket).
-//
-// An hour comfortably spans the re-execution window this exists for (an expired
-// lease is reclaimed within a lease duration — tens of seconds — and crash
-// recovery within minutes), and costs only that the effective TTL varies between
-// approvalTokenTTL and one bucket less, which is immaterial for a deliberately
-// generous two-week link.
+// Quantizes the signed expiry, so re-signing the same pause yields the SAME URL
+// — otherwise every notification carried a different link for one decision.
 const approvalTokenBucket = time.Hour
 
-// ApprovalDecision is the input from the human approver, accepted by
-// Service.Approve and forwarded to the resumed node-record as Result
-// output ports.
 type ApprovalDecision struct {
 	Decision string // "approve" | "reject"
 	Approver string
 	Comment  string
 }
 
-// HMACApprovalSigner mints per-(graphRunID, nodeID) URLs signed with
-// HMAC-SHA256 over a shared secret. Stable across re-signs within an
-// approvalTokenBucket window so a retried await_approval Execute (after a lease
-// expiry) re-emits the same URL: external systems that already received the URL
-// by email don't have to be re-notified.
-//
-// BaseURL should be the externally-visible address of the approval
-// listener, e.g. "https://dzd.acme.com". Token validation lives in
-// ApprovalListener.
+// Per-(run, node) and HMAC-signed, so a job id alone is not a capability.
 type HMACApprovalSigner struct {
 	BaseURL string
 	Secret  []byte
 
-	// now is injectable for tests; nil means time.Now. Mirrors the clock seams
-	// on Scheduler and the in-memory write-dedupe store.
 	now func() time.Time
 }
 
@@ -76,28 +49,7 @@ func (s *HMACApprovalSigner) clock() time.Time {
 	return s.now()
 }
 
-// SignApprovalURL builds the absolute URL the approver hits. Format:
-//
-//	<base>/approve/<graphRunID>/<nodeID>?exp=<unix>&token=<hex>
-//
-// The token signs (run, node, exp) so a link holder cannot extend the
-// expiry or forge a link for another pause. By design a single link backs
-// both outcomes — the approver picks approve/reject at click time (the
-// mailer/UI renders both buttons against this base, appending
-// `&decision=reject` for the reject button). The `decision` and `approver`
-// query params are deliberately NOT signed: the link is a time-boxed
-// capability to decide this pause, and whoever holds it is the approver, so
-// choosing either outcome is exactly the intended action. `approver` is a
-// display label only and must never authorize anything.
-//
-// The clock is truncated to approvalTokenBucket before the TTL is added, so the
-// URL is a pure function of (run, node, bucket): every re-sign inside the same
-// bucket — the retry case this exists for — reproduces it byte for byte. A
-// re-sign that straddles a bucket boundary does mint a fresh link; the
-// previously emailed one keeps working until its own expiry, so the worst case
-// is the pre-bucket behaviour rather than a broken link. Truncate works on the
-// absolute time since the zero instant, so the boundary doesn't move with the
-// server's timezone.
+// The absolute URL an approver hits; possession of it is the capability.
 func (s *HMACApprovalSigner) SignApprovalURL(graphRunID, nodeID string) string {
 	exp := s.clock().Truncate(approvalTokenBucket).Add(approvalTokenTTL).Unix()
 	token := s.computeToken(graphRunID, nodeID, exp)
@@ -105,8 +57,6 @@ func (s *HMACApprovalSigner) SignApprovalURL(graphRunID, nodeID string) string {
 		s.BaseURL, graphRunID, nodeID, exp, token)
 }
 
-// computeToken signs (run, node, exp). exp is signed so it can't be
-// extended; run+node bind the token to exactly one pause.
 func (s *HMACApprovalSigner) computeToken(graphRunID, nodeID string, exp int64) string {
 	m := hmac.New(sha256.New, s.Secret)
 	m.Write([]byte(graphRunID))
@@ -117,9 +67,7 @@ func (s *HMACApprovalSigner) computeToken(graphRunID, nodeID string, exp int64) 
 	return hex.EncodeToString(m.Sum(nil))
 }
 
-// verifyToken does constant-time comparison so a malicious holder can't
-// time-side-channel the expected token character by character, then checks
-// the signed expiry hasn't passed.
+// Constant-time, so a holder cannot brute-force a signature byte by byte.
 func (s *HMACApprovalSigner) verifyToken(graphRunID, nodeID string, exp int64, provided string) bool {
 	expected := s.computeToken(graphRunID, nodeID, exp)
 	if subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) != 1 {
@@ -128,21 +76,9 @@ func (s *HMACApprovalSigner) verifyToken(graphRunID, nodeID string, exp int64, p
 	return s.clock().Unix() <= exp
 }
 
-// errBadApprovalDecision marks a malformed decision value (400). Typed so
-// the HTTP layer classifies it by sentinel instead of substring-matching the
-// message, which is what the rest of the error surface does.
 var errBadApprovalDecision = errors.New("invalid approval decision")
 
-// Approve is the resume path: a human (via ApprovalListener) signals
-// their decision and the daemon transitions the awaiting node-record to
-// Succeeded with the decision recorded in the Result. Downstream nodes
-// then proceed exactly as if a regular node had emitted on the
-// approved/rejected port.
-//
-// Errors:
-//   - ErrNotFound if the node-record doesn't exist
-//   - ErrConflict if the record isn't actually awaiting (already
-//     resumed, never paused, or hit by two concurrent approves)
+// The resume path for a parked node.
 func (s *Service) Approve(
 	ctx context.Context,
 	graphRunID, nodeID string,
@@ -157,28 +93,18 @@ func (s *Service) Approve(
 	if err != nil {
 		return fmt.Errorf("get node record: %w", err)
 	}
-	// Wraps ErrConflict so callers classify by sentinel rather than by message
-	// text. The same duplicate-click outcome surfaces here (sequential: the record
-	// already read terminal) or out of Complete below (concurrent: two approves
-	// raced and this one lost the conditional UPDATE) — both must map to 409.
+	// Wrapped as a sentinel, so callers classify by errors.Is, not by message.
 	if rec.Status != core.JobStatusAwaiting {
 		return fmt.Errorf("node %s is %s, not awaiting: %w", nodeID, rec.Status, core.ErrConflict)
 	}
 
-	// Build the resume Result. Start from whatever the awaiting Execute
-	// already emitted (pending_url, prompt, the stashed Value, …) so any
-	// port the pause wrote survives across the resume boundary.
 	output := map[string]core.Ref{}
 	if rec.Result != nil {
 		for port, ref := range rec.Result.Output {
 			output[port] = ref
 		}
 	}
-	// Route the threaded Value out the decision port, Branch-style: it rides
-	// out `approved` on approve and `rejected` on reject, and exactly one of
-	// those ports is present so downstream edges fork by presence (the same
-	// mechanism Branch's then/else uses). The pause stashed the Value on the
-	// internal `context` key — consume it so it doesn't also leak as a port.
+	// Branch-style: the threaded value leaves by the decision port, not both.
 	carried := output["context"]
 	delete(output, "context")
 	decisionPort := "approved"
@@ -186,8 +112,6 @@ func (s *Service) Approve(
 		decisionPort = "rejected"
 	}
 	output[decisionPort] = carried
-	// `approver` is the authenticated subject (set by the caller path, never
-	// client-spoofable); `comment` is their note.
 	output["approver"] = core.Ref{MIME: "text/plain", Inline: decision.Approver}
 	output["comment"] = core.Ref{MIME: "text/plain", Inline: decision.Comment}
 
@@ -200,8 +124,6 @@ func (s *Service) Approve(
 		return fmt.Errorf("complete: %w", err)
 	}
 
-	// Advance the graph: load the graph payload from the graph-record,
-	// then run the shared dispatcher.
 	graphRec, err := s.Jobs.Get(ctx, graphRunID)
 	if err != nil {
 		return fmt.Errorf("get graph record: %w", err)
@@ -215,46 +137,22 @@ func (s *Service) Approve(
 	}
 	disp := NewDispatcher(s.Jobs, s.bus(), s.Engine, log.New(log.Writer(), "approve: ", log.LstdFlags))
 	disp.AdvanceAfterCompletion(ctx, g, graphRunID, nodeID, core.JobStatusSucceeded, nil)
-	// Wake a worker for whatever that unblocked. Unlike a step finishing on a
-	// worker — which goes straight back and claims its own successor — this
-	// dispatch happens on an HTTP goroutine while the fleet may be entirely
-	// idle, so without this the approver waits out somebody's poll interval
-	// (measured at 50.7ms mean) for work that was ready the moment they
-	// clicked. Unconditional: a decision is a human action at human rates, so
-	// a broadcast that turns out to have unblocked nothing costs nothing.
+	// Nothing else will wake a worker here: no step just finished on one.
 	s.Wake.Notify()
-	// The run was showing "Waiting for approval"; put it back to Running now
-	// that it has somewhere to go — unless another step in the same run is
-	// still parked on its own approver, in which case the run genuinely is
-	// still waiting. Checked AFTER the dispatch above so a run that the
-	// decision just finished has already been written terminal, and this
-	// conditional update can't drag it back.
+	// Put the run back to Running, or it keeps claiming to be waiting.
 	if !runHasParkedApproval(ctx, s.Jobs, graphRunID, nodeID) {
 		setRunParked(ctx, s.Jobs, s.Logger, graphRunID, false)
 	}
-	// Close the loop with the same people who were asked. After the resume is
-	// committed and dispatched, so the mail can't describe a decision that
-	// then failed to apply — and best-effort, so a dead mailer never turns a
-	// successful approval into an error the approver sees.
+	// After the resume commits, so a failed resume does not mail a decision.
 	s.NotifyApprovalDecided(ctx, g, graphRunID, nodeID, decision)
 	return nil
 }
 
-// ApprovalListener is the HTTP front for Service.Approve. The endpoint
-// is intentionally thin: token check, parameter parse, call Approve,
-// return JSON. Network operators put it behind their normal ingress
-// (TLS, optional VPN, audit logging) — the listener itself doesn't
-// duplicate that infrastructure.
 type ApprovalListener struct {
 	svc    *Service
 	signer *HMACApprovalSigner
 	logger *log.Logger
 
-	// Audit, when set, records who decided. The authenticated inbox path
-	// audits through the gateway's principal; this path has no session, so
-	// without its own write the link-based decisions — the ones taken from an
-	// email, by whoever holds the URL — were the only approvals absent from
-	// the trail. They are also the ones most worth having in it.
 	Audit core.AuditLog
 }
 
@@ -266,10 +164,6 @@ func NewApprovalListener(svc *Service, signer *HMACApprovalSigner) *ApprovalList
 	}
 }
 
-// auditDecision records an HMAC-path decision. The tenant comes off the graph
-// record rather than a principal, and the actor is whatever the link carried:
-// self-declared, so it is stored with an explicit marker rather than passed
-// off as a verified identity.
 func (a *ApprovalListener) auditDecision(ctx context.Context, graphRunID, nodeID, decision, approver string) {
 	if a.Audit == nil {
 		return
@@ -309,23 +203,15 @@ func (a *ApprovalListener) handle(rw http.ResponseWriter, r *http.Request) {
 		a.denyApproval(rw, r, http.StatusUnauthorized, "invalid or expired token")
 		return
 	}
-	// The decision is the approver's choice at click time and is intentionally
-	// not signed. It arrives in the query from a script, or in the form body
-	// from the page's own buttons.
 	decision := approvalField(r, "decision")
 	if decision == "" {
 		decision = "approve"
 	}
-	// Only after proving possession of the token do we start reporting request
-	// shape: an unsigned caller gets the same generic 401 either way. Service
-	// .Approve guards this too (it serves non-HTTP callers), but rejecting here
-	// turns a client typo into a 400 instead of a 500.
+	// Only after the token verifies: an unauthenticated caller learns nothing.
 	if decision != "approve" && decision != "reject" {
 		a.denyApproval(rw, r, http.StatusBadRequest, "decision must be approve or reject")
 		return
 	}
-	// approver is a display label only; it is NOT part of the signed
-	// payload and must never be trusted to authorize the action.
 	approver := approvalField(r, "approver")
 	comment := approvalField(r, "comment")
 
@@ -335,18 +221,8 @@ func (a *ApprovalListener) handle(rw http.ResponseWriter, r *http.Request) {
 		Comment:  comment,
 	}); err != nil {
 		a.logger.Printf("approve %s/%s: %v", graphRunID, nodeID, err)
-		// Distinguish "wrong state" (409) from "no such record" (404) so
-		// approvers can tell a duplicate click from a bad link. Classify on the
-		// wrapped SENTINEL, never on message text: matching "not awaiting" caught
-		// only the sequential duplicate and dropped the concurrent one (which
-		// loses at Complete, reporting "job state conflict") through to a 500,
-		// and matching "not found" worked solely because core.ErrNotFound happens
-		// to read "job not found".
 		switch {
 		case errors.Is(err, core.ErrConflict):
-			// A duplicate click is the commonest failure here by far: two
-			// people opened the same mail. Say so in words on the page rather
-			// than handing a person a 409.
 			if wantsHTML(r) {
 				lang, _, _ := a.approvalPageState(r, graphRunID, nodeID)
 				renderApproval(rw, http.StatusConflict, approvalView{
@@ -364,8 +240,6 @@ func (a *ApprovalListener) handle(rw http.ResponseWriter, r *http.Request) {
 	}
 	a.auditDecision(r.Context(), graphRunID, nodeID, decision, approver)
 	a.logger.Printf("resumed %s/%s decision=%s approver=%s", graphRunID, nodeID, decision, approver)
-	// A person who just clicked a button gets a page saying what happened; a
-	// script gets the JSON it has always parsed.
 	if wantsHTML(r) {
 		lang, _, _ := a.approvalPageState(r, graphRunID, nodeID)
 		renderApproval(rw, http.StatusOK, approvalView{
@@ -382,9 +256,6 @@ func (a *ApprovalListener) handle(rw http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// parseApprovalPath splits /approve/<run>/<node>, answering the 400 itself on
-// a malformed path. Shared by the page and the decision so the two can never
-// disagree about what a valid approval URL looks like.
 func parseApprovalPath(rw http.ResponseWriter, r *http.Request) (graphRunID, nodeID string, ok bool) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/approve/"), "/")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
@@ -394,10 +265,6 @@ func parseApprovalPath(rw http.ResponseWriter, r *http.Request) (graphRunID, nod
 	return parts[0], parts[1], true
 }
 
-// tokenOK verifies the signed link. The expiry is signed into the token, so it
-// is read from the query and the signature checked over (run, node, exp): a
-// link holder can neither extend the expiry nor forge a link for another
-// pause.
 func (a *ApprovalListener) tokenOK(r *http.Request, graphRunID, nodeID string) bool {
 	exp, err := strconv.ParseInt(r.URL.Query().Get("exp"), 10, 64)
 	if err != nil {
@@ -407,10 +274,6 @@ func (a *ApprovalListener) tokenOK(r *http.Request, graphRunID, nodeID string) b
 	return token != "" && a.signer.verifyToken(graphRunID, nodeID, exp, token)
 }
 
-// approvalField reads one of the unsigned fields from wherever this caller put
-// it: the form body (the page's buttons) or the query string (every script
-// that has been posting this URL). Query wins so a scripted call whose body
-// happens to parse is not reinterpreted.
 func approvalField(r *http.Request, name string) string {
 	if v := r.URL.Query().Get(name); v != "" {
 		return v
@@ -423,10 +286,6 @@ func approvalField(r *http.Request, name string) string {
 	return ""
 }
 
-// denyApproval answers a refusal in the caller's own terms: the dead-end page
-// for a browser, the plain-text status a script already handles otherwise.
-// Every browser refusal renders the same "not valid" page, so the URL cannot
-// be used to tell an expired link from a run that never existed.
 func (a *ApprovalListener) denyApproval(rw http.ResponseWriter, r *http.Request, status int, msg string) {
 	if wantsHTML(r) {
 		renderApproval(rw, status, approvalView{Lang: "en", M: maillang.English, Gone: true})
@@ -435,14 +294,10 @@ func (a *ApprovalListener) denyApproval(rw http.ResponseWriter, r *http.Request,
 	http.Error(rw, msg, status)
 }
 
-// ServeApprovalForTest exposes the listener's handler without binding a
-// port — analogous to ServeWebhookForTest. Production code uses Serve.
 func ServeApprovalForTest(a *ApprovalListener, rw http.ResponseWriter, r *http.Request) {
 	a.handle(rw, r)
 }
 
-// ServeApprovalPageForTest is the GET counterpart: the page the emailed link
-// opens, without binding a port.
 func ServeApprovalPageForTest(a *ApprovalListener, rw http.ResponseWriter, r *http.Request) {
 	a.handleApprovalPage(rw, r)
 }

@@ -39,23 +39,14 @@ var errTooManyRows = errors.New("too many rows")
 // below hold the shared skeleton so each backend file is just a dialect
 // plus its connection wiring.
 
-// dialect is the per-backend SQL flavor. The generic execute* functions
-// build every statement through it, so SQL stays byte-identical to the
-// hand-written per-backend code it replaced.
 type dialect interface {
 	// quote returns ident wrapped in the dialect's identifier quoting,
 	// with the embedded quote char doubled to escape it.
 	quote(ident string) string
-	// placeholder returns the bind marker for the i-th value (1-based):
-	// "?" for SQLite/MySQL, "$i" for Postgres.
 	placeholder(i int) string
-	// upsertClause renders the trailing ON CONFLICT / ON DUPLICATE KEY
-	// clause for an INSERT, given the already-quoted statement context.
-	// conflictCols and updateCols are raw (unquoted) identifiers.
 	upsertClause(conflictCols, updateCols []string) string
 }
 
-// placeholders builds the comma-joined bind-marker list for n columns.
 func placeholders(d dialect, n int) string {
 	ps := make([]string, n)
 	for i := range ps {
@@ -64,7 +55,6 @@ func placeholders(d dialect, n int) string {
 	return strings.Join(ps, ", ")
 }
 
-// quoteAll quotes every identifier in names.
 func quoteAll(d dialect, names []string) []string {
 	out := make([]string, len(names))
 	for i, n := range names {
@@ -73,9 +63,6 @@ func quoteAll(d dialect, names []string) []string {
 	return out
 }
 
-// insertSQL renders "INSERT INTO <table> (<cols>) VALUES (<ph>)" with an
-// optional trailing clause (the upsert tail, empty for a plain insert).
-// table is already qualified+quoted by the caller.
 func insertSQL(d dialect, table string, headers []string, tail string) string {
 	stmt := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
 		table, strings.Join(quoteAll(d, headers), ", "), placeholders(d, len(headers)))
@@ -123,7 +110,6 @@ func sqliteEnsureTable(db *sql.DB, table string, headers []string, colTypes map[
 // functions only need: run one statement, run a SELECT and collect
 // rows, and run a batch of bound statements in a single transaction.
 type conn interface {
-	// exec runs a single statement with no result rows (CREATE TABLE).
 	exec(ctx context.Context, sql string) error
 	// query runs sql with args and returns the column names and every
 	// row as a {column: value} map, applying the limit / row-ceiling
@@ -163,18 +149,12 @@ func queryGuard(out []map[string]any, rec map[string]any, limit int) ([]map[stri
 	return out, false, nil
 }
 
-// --- shared drop skeletons --------------------------------------------
-
-// queryParams is the parsed common input of the three query drops.
 type queryParams struct {
 	sql   string
 	args  []any
 	limit int
 }
 
-// parseQueryParams reads the sql / params / limit inputs shared by all
-// three query drops. A non-nil *core.Result is the caller's verbatim
-// error reply.
 func parseQueryParams(job core.Job) (queryParams, *core.Result) {
 	sqlText, err := params.String(job.Params, "sql")
 	if err != nil {
@@ -205,7 +185,6 @@ func parseQueryParams(job core.Job) (queryParams, *core.Result) {
 	return queryParams{sql: sqlText, args: args, limit: limit}, nil
 }
 
-// queryResult builds the shared rows+columns OK Result.
 func queryResult(job core.Job, rows []map[string]any, columns []string) core.Result {
 	return core.Result{
 		JobID:  job.ID,
@@ -217,9 +196,6 @@ func queryResult(job core.Job, rows []map[string]any, columns []string) core.Res
 	}
 }
 
-// runQueryParsed is runQuery for callers that validated the params
-// earlier (sqlite, which checks them before its sandbox probe so a bad
-// query fails before a missing-file error).
 func runQueryParsed(ctx context.Context, job core.Job, c conn, qp queryParams) (core.Result, error) {
 	cols, rows, err := c.query(ctx, qp.sql, qp.args, qp.limit)
 	if err != nil {
@@ -232,8 +208,6 @@ func runQueryParsed(ctx context.Context, job core.Job, c conn, qp queryParams) (
 	return queryResult(job, rows, cols), nil
 }
 
-// insertedResult / processedResult build the count Results the
-// insert/upsert drops emit. The port name is the only difference.
 func countResult(job core.Job, port string, n int) core.Result {
 	return core.Result{
 		JobID:  job.ID,
@@ -244,9 +218,6 @@ func countResult(job core.Job, port string, n int) core.Result {
 	}
 }
 
-// runInsert is the shared body of every insert drop once the connection
-// and qualified+quoted table name are in hand: optionally CREATE TABLE,
-// then batch-insert in one transaction.
 func runInsert(ctx context.Context, job core.Job, d dialect, c conn, table string, ri rowsInput) (core.Result, error) {
 	if shouldCreateTable(job) && len(ri.headers) > 0 {
 		colTypes, err := parseColumnTypes(job.Params)
@@ -268,10 +239,6 @@ func runInsert(ctx context.Context, job core.Job, d dialect, c conn, table strin
 	return countResult(job, "inserted", n), nil
 }
 
-// runUpsert is the shared body of every upsert drop once the connection,
-// qualified+quoted table name, parsed rows and conflict/update columns
-// are in hand: optionally CREATE TABLE (with the UNIQUE constraint),
-// then batch-upsert in one transaction.
 func runUpsert(ctx context.Context, job core.Job, d dialect, c conn, table string, ri rowsInput, conflictCols, updateCols []string, updateColsExplicit bool) (core.Result, error) {
 	if shouldCreateTable(job) && len(ri.headers) > 0 {
 		colTypes, err := parseColumnTypes(job.Params)
@@ -300,7 +267,6 @@ func runUpsert(ctx context.Context, job core.Job, d dialect, c conn, table strin
 	return countResult(job, "processed", n), nil
 }
 
-// shouldCreateTable reads the create_table param, defaulting to true.
 func shouldCreateTable(job core.Job) bool {
 	create := true
 	if v, present := params.Bool(job.Params, "create_table"); present {

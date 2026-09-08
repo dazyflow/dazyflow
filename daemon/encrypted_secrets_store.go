@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ---- in-memory backend ----------------------------------------------
+// in-memory backend
 //
 // MemSecretsStore lives in the daemon process — no disk, no DB. Used
 // by tests and by single-binary dev runs without a Postgres
@@ -30,8 +30,6 @@ type memDEKRow struct {
 	nonce   []byte
 }
 
-// NewMemSecretsStore returns an empty in-memory store. The returned
-// value is safe for concurrent use.
 func NewMemSecretsStore() *MemSecretsStore {
 	return &MemSecretsStore{
 		secrets: map[string]map[string]memSecretRow{},
@@ -39,7 +37,6 @@ func NewMemSecretsStore() *MemSecretsStore {
 	}
 }
 
-// MemSecretsStore implements secretsStore against in-process maps.
 type MemSecretsStore struct {
 	mu      sync.Mutex
 	secrets map[string]map[string]memSecretRow // tenant → name → row
@@ -52,7 +49,6 @@ func (m *MemSecretsStore) putSecret(_ context.Context, tenant, name string, ct, 
 	if _, ok := m.secrets[tenant]; !ok {
 		m.secrets[tenant] = map[string]memSecretRow{}
 	}
-	// Copy slices so callers can reuse their buffers.
 	m.secrets[tenant][name] = memSecretRow{
 		ciphertext: append([]byte(nil), ct...),
 		nonce:      append([]byte(nil), nonce...),
@@ -156,13 +152,6 @@ func (m *MemSecretsStore) setWrappedDEK(_ context.Context, tenant string, wrappe
 	return true, nil
 }
 
-// ---- Postgres backend -----------------------------------------------
-//
-// PgSecretsStore persists secrets and tenant DEKs to two tables in
-// the same Postgres the daemon already uses for its JobStore. The
-// schema is applied at OpenPgSecretsStore time; production
-// deployments can also manage it through normal migration tooling.
-
 const pgSecretsSchema = `
 CREATE TABLE IF NOT EXISTS encrypted_secrets (
     tenant       TEXT NOT NULL,
@@ -182,15 +171,10 @@ CREATE TABLE IF NOT EXISTS encrypted_secret_deks (
 );
 `
 
-// PgSecretsStore implements secretsStore against a Postgres pool.
 type PgSecretsStore struct {
 	pool *pgxpool.Pool
 }
 
-// NewPgSecretsStore wraps a pgxpool.Pool and ensures the schema
-// exists. Callers can share the pool with the JobStore (same
-// connection budget) — pgxpool is already a concurrent pool so the
-// extra usage is fine.
 func NewPgSecretsStore(ctx context.Context, pool *pgxpool.Pool) (*PgSecretsStore, error) {
 	if pool == nil {
 		return nil, errors.New("NewPgSecretsStore: nil pool")
@@ -219,9 +203,6 @@ func (p *PgSecretsStore) getSecret(ctx context.Context, tenant, name string) ([]
 	var ct, nonce []byte
 	err := p.pool.QueryRow(ctx, q, tenant, name).Scan(&ct, &nonce)
 	if err != nil {
-		// pgx returns its own no-rows error; we normalize so callers
-		// can errors.Is against a single sentinel regardless of the
-		// backend in play.
 		if isPgNoRows(err) {
 			return nil, nil, ErrSecretNotFound
 		}
@@ -236,11 +217,6 @@ func (p *PgSecretsStore) deleteSecret(ctx context.Context, tenant, name string) 
 }
 
 func (p *PgSecretsStore) deleteTenant(ctx context.Context, tenant string) (int, error) {
-	// Both tables in one transaction. Halfway through is the one outcome
-	// worth engineering against: secrets gone but the DEK left behind is a
-	// dangling key, and the DEK gone but secrets left behind is ciphertext
-	// nobody can ever open — reported as erased either way. Commit or
-	// neither.
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
 		return 0, err
@@ -335,8 +311,6 @@ func (p *PgSecretsStore) setWrappedDEK(ctx context.Context, tenant string, wrapp
 	return tag.RowsAffected() == 1, nil
 }
 
-// isPgNoRows detects pgx's no-rows sentinel via errors.Is against
-// pgx.ErrNoRows — robust to wrapping, unlike a string compare.
 func isPgNoRows(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)
 }

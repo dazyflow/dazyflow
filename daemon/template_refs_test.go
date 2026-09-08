@@ -11,11 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/engine/jobstore"
 )
 
-// webhook → if → email is the shape that broke. The email step's direct
-// predecessor is the `if`, so before this the trigger was simply not there:
-// ${upstream.webhook_input_1.body} failed the node, and ${trigger.body.version}
-// was left in the text and mailed out.
-
 func chainGraph(emailParams map[string]any) core.Graph {
 	return core.Graph{
 		ID: "release", Tenant: "acme", Workspace: "main",
@@ -170,7 +165,6 @@ func TestAddTemplateResults_FetchesNothingWhenNothingIsReferenced(t *testing.T) 
 
 func TestAddTemplateResults_NeverOverwritesARealPredecessor(t *testing.T) {
 	t.Parallel()
-	// The direct predecessor's result is already loaded and is the authority.
 	w := chainWorker(t)
 	seedRun(t, w, "run-1")
 	g := chainGraph(map[string]any{"body": "${upstream.if_1.then}"})

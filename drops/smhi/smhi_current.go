@@ -67,9 +67,6 @@ func init() {
 	})
 }
 
-// executeCurrent fetches just the current step (timeseries=1) and emits a
-// readable summary, the bare temperature and conditions word, and the full
-// response as JSON.
 func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	lat, lon, err := geoloc.ResolveLatLon(job)
 	if err != nil {
@@ -109,8 +106,6 @@ func executeCurrent(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 	}, nil
 }
 
-// currentSummary renders one human line, e.g.
-// "Variable cloudiness, 21.7°C, humidity 55%, wind 2.3 m/s".
 func currentSummary(e smhiEntry) string {
 	desc := ""
 	if code, ok := e.num("symbol_code"); ok {

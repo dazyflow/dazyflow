@@ -26,8 +26,6 @@ import (
 // requireStepSourceAdmin (httprunners.go) is the authorization half of the same
 // idea and predates this file.
 
-// maxStepSourceNameLen bounds a generated id. It is a component of every step
-// id the source contributes, and those are read in a palette.
 const maxStepSourceNameLen = 48
 
 // slugStepSourceName derives a step-id-safe name from what a human typed.
@@ -56,8 +54,6 @@ func slugStepSourceName(label string) string {
 			b.WriteRune(r)
 			prevDash = false
 		default:
-			// Underscore is legal in an id but a hyphen is what a typed name
-			// wants; one separator keeps generated ids uniform.
 			if !prevDash && b.Len() > 0 {
 				b.WriteByte('-')
 				prevDash = true

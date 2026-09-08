@@ -5,7 +5,6 @@ package core
 
 import "testing"
 
-// hasLintCode reports whether any issue carries the given code.
 func hasLintCode(issues []LintIssue, code string) bool {
 	for _, i := range issues {
 		if i.Code == code {
@@ -15,8 +14,6 @@ func hasLintCode(issues []LintIssue, code string) bool {
 	return false
 }
 
-// webhookInputNode is the sink a hosted form delivers to; several cases
-// need one present (or absent) to exercise trigger_form_no_sink.
 func webhookInputNode() Node { return Node{ID: "in", Module: "webhook_input"} }
 
 func TestLintTriggers_FlagsBadConfigs(t *testing.T) {
@@ -127,8 +124,6 @@ func TestLintTriggers_FlagsBadConfigs(t *testing.T) {
 			wantCode: "trigger_webhook_no_secret",
 		},
 		{
-			// The Form step needs no key: its presence is the opt-in, so there
-			// is nothing to warn about on a bare one.
 			name: "form node with no config — fine (the form is secret-less)",
 			graph: Graph{
 				Nodes: []Node{{ID: "in", Module: FormInputModule}},
@@ -172,9 +167,6 @@ func TestLintTriggers_FlagsBadConfigs(t *testing.T) {
 	}
 }
 
-// TestLintTriggers_WiredThroughLintGraph confirms the rule is actually
-// reachable via the public LintGraph entry point (not just the private
-// helper), since that's what the save path calls.
 func TestLintTriggers_WiredThroughLintGraph(t *testing.T) {
 	g := Graph{
 		Nodes:    []Node{{ID: "a", Module: "delay"}},

@@ -11,8 +11,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// runCompute is the compute_rows analog of map_rows' run helper —
-// keeps the test bodies focused on the case-under-test.
 func runCompute(t *testing.T, params map[string]any, rows []map[string]any, headers []string) ([]map[string]any, []string) {
 	t.Helper()
 	input := map[string]core.Ref{"rows": {Inline: rows, Headers: headers}}
@@ -45,7 +43,6 @@ func TestComputeRows_StringConcat(t *testing.T) {
 	if rows[0]["full_name"] != "Alice Walker" || rows[1]["full_name"] != "Bob King" {
 		t.Errorf("rows = %+v", rows)
 	}
-	// Original columns preserved.
 	if rows[0]["first_name"] != "Alice" {
 		t.Errorf("first_name dropped: %+v", rows[0])
 	}
@@ -157,7 +154,6 @@ func TestComputeRows_Filter(t *testing.T) {
 }
 
 func TestComputeRows_FilterAndCompute(t *testing.T) {
-	// Real ETL shape: drop the noise, then derive a column.
 	rows, headers := runCompute(t,
 		map[string]any{
 			"filter": "row.status == 'active'",
@@ -192,8 +188,6 @@ func TestComputeRows_Identity(t *testing.T) {
 	}
 }
 
-// --- Error cases ------------------------------------------------------
-
 func TestComputeRows_BadSyntaxIsCompileError(t *testing.T) {
 	// Syntax error in the expression must fail before the row loop —
 	// no partial output, no per-row scan.
@@ -223,10 +217,6 @@ func TestComputeRows_FilterMustReturnBool(t *testing.T) {
 }
 
 func TestComputeRows_RuntimeErrorFailsBatch(t *testing.T) {
-	// Referring to a field that doesn't exist on a row is a CEL
-	// runtime error — we fail the whole batch rather than emitting
-	// partial output, mirroring the SQL drops' all-or-nothing
-	// contract.
 	res, _ := executeComputeRows(t.Context(), core.Job{
 		Params: map[string]any{
 			"compute": map[string]any{"x": "row.missing_field + 1"},
@@ -263,10 +253,7 @@ func TestComputeRows_MissingRowsInput(t *testing.T) {
 	}
 }
 
-// --- Shape + composition ----------------------------------------------
-
 func TestComputeRows_JSONRoundtripShape(t *testing.T) {
-	// gRPC/MCP roundtrip: rows arrive as []any of map[string]any.
 	res, _ := executeComputeRows(t.Context(), core.Job{
 		Params: map[string]any{
 			"compute": map[string]any{"doubled": "row.n * 2"},
@@ -288,9 +275,6 @@ func TestComputeRows_JSONRoundtripShape(t *testing.T) {
 }
 
 func TestComputeRows_PreservesInputRowReference(t *testing.T) {
-	// The drop should not mutate the input row map — downstream
-	// nodes might share it. Verify by inspecting the input slice
-	// after the call.
 	input := []map[string]any{{"a": int64(1)}}
 	res, _ := executeComputeRows(t.Context(), core.Job{
 		Params: map[string]any{"compute": map[string]any{"b": "row.a + 10"}},

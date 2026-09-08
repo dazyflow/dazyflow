@@ -8,8 +8,6 @@ import type { Graph, Node as DazyGraphNode } from "./types";
 
 export type FlowRunStatus = "live" | "manual" | "paused" | "needs_publish";
 
-// Matches core.MaxPollIntervalSeconds — the scheduler ignores intervals
-// above this, so they don't count as "live".
 const MAX_POLL_INTERVAL_SECONDS = 366 * 24 * 60 * 60;
 
 // readNumber mirrors core.paramInt: only a real number counts. A string
@@ -94,22 +92,14 @@ function hasConfiguredAutoTrigger(
         break;
       }
       case "webhook_input":
-        // A key to check, or the author's explicit choice to take calls
-        // without one. Key-less and not public is inert.
         if (webhookKeys(n.params).length > 0 || webhookPublic(n.params)) return true;
         break;
       case "request_input":
-        // Same two doors as the webhook. Opening this one is the bigger
-        // decision — /call answers — but the reachability rule is identical.
         if (webhookKeys(n.params).length > 0 || webhookPublic(n.params)) return true;
         break;
       case "form_input":
-        // The step's presence IS the opt-in: a hosted form takes no key.
         return true;
       default:
-        // Provider-event triggers (a Slack mention, a GitHub push, a Stripe
-        // payment). Mirrors core.EventTriggerModules — the node's presence is
-        // enough, since the daemon's fan-out matches on module ID alone.
         if (EVENT_TRIGGER_MODULES.has(n.module)) return true;
     }
   }
