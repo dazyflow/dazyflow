@@ -2917,7 +2917,10 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-sm);
   color: var(--muted);
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  /* No border of its own: this is the last row inside .editor-banner-stack,
+     which already closes the strip off from the canvas with the same 1px
+     border. Having both painted a stray line UNDER the text, a stack-padding
+     apart from the real separator below it. */
 }
 .editor-live-dot {
   flex: none;
@@ -9925,8 +9928,9 @@ a.pa-card:hover {
    pushed below the strip: the strip's height varies with its contents, and a
    tip that jitters down the canvas as banners come and go is worse than one
    that waits its turn.) */
-.canvas:has(.editor-banner-stack:not(:empty)) .editor-trigger-hint,
-.canvas:has(.editor-run-done) .editor-trigger-hint {
+/* The run-succeeded readout used to need a clause here too — it shared this
+   exact spot. It is in the toolbar now, so it cannot collide with the tip. */
+.canvas:has(.editor-banner-stack:not(:empty)) .editor-trigger-hint {
   display: none;
 }
 .editor-trigger-hint {
@@ -10178,6 +10182,11 @@ a.pa-card:hover {
   }
   .editor-toolbar button.primary .toolbar-label {
     display: inline;
+  }
+  /* Same reasoning as the labels above: on a short bar the tick and "See the
+     full run" carry the message on their own. */
+  .editor-toolbar .editor-run-status-text {
+    display: none;
   }
   /* The nudge arrows are excluded: they are icon-only at every width already,
      and squaring them off to 36px would give a scroll affordance the footprint
@@ -13196,75 +13205,48 @@ button:active,
    the last step's raw output was printed straight into it. Same geometry and
    the same click-through rule as .editor-trigger-hint, which solved this for
    the teaching tip; the two take turns in the top slot (see below). */
-.editor-run-done {
-  position: absolute;
-  top: 62px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 6;
-  /* Click-through: it floats over the top of the canvas, so taps reach a node
-     beneath it. Its own controls re-enable them. */
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1h);
-  max-width: min(620px, calc(100% - 24px));
-  padding: var(--space-2) var(--space-2) var(--space-2) 14px;
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--success) 55%, var(--border));
-  border-radius: var(--r-3);
-  box-shadow: var(--shadow-pop);
-  color: var(--ink);
-  font-size: var(--text-md);
-}
-/* The inspector is an absolute panel on the right; centring on the whole
-   editor would push this half under it. Centre on what is left instead —
-   the same correction the banner strip makes with its padding. */
-@media (min-width: 769px) {
-  .editor[data-has-selection="true"] .editor-run-done {
-    transform: translateX(calc(-50% - var(--inspector-w) / 2));
-  }
-}
-.editor-run-done-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-.editor-run-done-head {
-  color: var(--success);
-}
-/* Every control inside is clickable; the panel around them is not. */
-.editor-run-done-toggle,
-.editor-run-done-link,
-.editor-run-done-x {
-  pointer-events: auto;
-  flex: 0 0 auto;
-}
-.editor-run-done-toggle {
+/* Run outcome, in the toolbar beside the button that started it.
+   It used to be an absolutely-positioned panel at top-centre of the canvas
+   that stayed until dismissed — which is the one spot a flow always occupies,
+   since a flow reads from its top-left. The result now sits where the user was
+   already looking and fades on its own, so there is no dismiss control to
+   clutter the bar either. */
+.editor-run-status {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-1h);
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--r-2);
+  background: color-mix(in srgb, var(--success) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--success) 40%, var(--border));
+  font-size: var(--text-sm);
+  color: var(--ink);
+  animation: editor-run-status-in 160ms ease-out;
+}
+.editor-run-status-tick {
+  flex: none;
+  color: var(--success);
+}
+/* The message yields first: the link is the affordance and must not be the
+   thing that gets cut. The full sentence is on the element's title. */
+.editor-run-status-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.editor-run-status-link {
+  flex: none;
   font-size: var(--text-sm);
 }
-.editor-run-done-link {
-  font-size: var(--text-sm);
-}
-.editor-run-done-x {
-  font-size: var(--text-xs);
-  padding: var(--space-0) var(--space-2);
-}
-/* Folded away until asked for: raw port data, which for most of the people
-   this product is for is syntax rather than an answer. */
-.editor-run-done-output {
-  pointer-events: auto;
-  margin: 0;
-  max-height: 160px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: var(--text-sm);
-  color: var(--muted);
+@keyframes editor-run-status-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* ---- Runners (AdminRunners.tsx) ------------------------------------------ */

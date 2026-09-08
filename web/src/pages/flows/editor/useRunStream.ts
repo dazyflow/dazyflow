@@ -31,12 +31,15 @@ import type { JobStatus, Ref } from "../../../types";
 //   errors, orphaned steps, the Slack reminder) is the editor's business. The
 //   hook only knows how to start one.
 
-// A run that finished cleanly, with the output of the last step that produced
-// anything — "what did it produce?" answered where the user is standing.
+// A run that finished cleanly, named after the last step that produced
+// anything. The output ITSELF is no longer carried: the toolbar readout only
+// announces the outcome, and the canvas answers "what did it produce?" better
+// — the data face and the output pins' hover-peek both show real values in
+// place. previewOutput is still what PICKS the step, though (see below), so
+// dropping it here does not make it dead.
 export interface RunDone {
   runID: string;
   label: string;
-  preview: string;
 }
 
 export interface UseRunStreamArgs {
@@ -142,7 +145,7 @@ export function useRunStream({
     async (runID: string) => {
       const inst = flow.current;
       if (!token || !inst) {
-        setRunDone({ runID, label: "", preview: "" });
+        setRunDone({ runID, label: "" });
         return;
       }
       const sources = new Set(inst.getEdges().map((e) => e.source));
@@ -152,20 +155,18 @@ export function useRunStream({
       for (const leaf of leaves) {
         try {
           const rec = await api.getNodeRecord(token, runID, leaf.id);
-          const preview = previewOutput(rec.Result?.output);
-          if (preview) {
-            setRunDone({
-              runID,
-              label: String(leaf.data?.label || leaf.id),
-              preview,
-            });
+          // Not for display — it is the test for "did this leaf actually
+          // produce something?", which is what decides WHICH step the message
+          // names. A leaf that ran but emitted nothing is not the answer.
+          if (previewOutput(rec.Result?.output)) {
+            setRunDone({ runID, label: String(leaf.data?.label || leaf.id) });
             return;
           }
         } catch {
           /* node never materialised (off / skipped) — try the next leaf */
         }
       }
-      setRunDone({ runID, label: "", preview: "" });
+      setRunDone({ runID, label: "" });
     },
     [token, flow],
   );

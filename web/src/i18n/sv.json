@@ -2152,8 +2152,6 @@
     "runSucceeded": "Klart — flödet kördes.",
     "runSucceededWith": "Klart — flödet kördes och ”{{label}}” gav ett resultat.",
     "runSucceededDetails": "Visa hela körningen",
-    "runSucceededShow": "Visa vad det gav",
-    "runSucceededHide": "Dölj det",
     "edgeError": {
       "head": "När körs nästa steg?",
       "abort": "Bara om det här steget lyckas",

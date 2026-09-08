@@ -170,18 +170,26 @@ describe("editor run lifecycle", () => {
     expect(screen.queryByText("editor.run")).not.toBeInTheDocument();
   });
 
-  it("floats over the canvas instead of taking a bite out of it", async () => {
+  // Where the outcome lands. It has moved twice, and both moves were for the
+  // same reason: announcing a success must not cost the author sight of the
+  // flow. Out of the docked banner strip first (it grows to 40vh, so it
+  // resized the editor), then out of the canvas overlay it went to — pinned at
+  // top-centre, which is exactly where a flow begins. It now sits in the
+  // toolbar, which neither resizes the canvas nor covers it.
+  it("puts the outcome in the toolbar, not over the flow or in the docked strip", async () => {
     mount();
     await userEvent.click(await screen.findByText("editor.run"));
     await waitFor(() => expect(stream.latest()?.runID).toBe("run-1"));
     await emit(...frame.terminal("succeeded"));
 
     await screen.findByText(succeededHeadline);
-    const toast = document.querySelector(".editor-run-done");
-    if (!toast) throw new Error("success toast not rendered");
-    // The docked strip is what resizes the editor; an overlay does not.
-    expect(toast.closest(".editor-banner-stack")).toBeNull();
-    expect(toast.closest(".canvas")).not.toBeNull();
+    const status = document.querySelector(".editor-run-status");
+    if (!status) throw new Error("success status not rendered");
+    expect(status.closest(".editor-banner-stack")).toBeNull();
+    expect(status.closest(".editor-toolbar")).not.toBeNull();
+    // In the PINNED half. The other half scrolls, and a result that can scroll
+    // out of sight is worse than none.
+    expect(status.closest(".toolbar-scroll")).toBeNull();
   });
 
   it("reports success with the finishing step's label once the run terminates", async () => {

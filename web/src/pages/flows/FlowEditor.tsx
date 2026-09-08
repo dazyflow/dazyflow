@@ -124,7 +124,7 @@ import { stampScheduleTimezones } from "./editor/scheduleTimezone";
 import { ConnectionGate } from "./editor/ConnectionGate";
 import { TestEventDialog } from "./editor/TestEventDialog";
 import { DiffDialog } from "./editor/DiffDialog";
-import { RunSucceededToast } from "./editor/RunSucceededToast";
+import { RunSucceededStatus } from "./editor/RunSucceededStatus";
 import { useRunStream } from "./editor/useRunStream";
 import { useAutosave } from "./editor/useAutosave";
 import { useRevisions } from "./editor/useRevisions";
@@ -4741,6 +4741,12 @@ function EditorInner() {
             </div>
           )}
 
+          {/* Run outcome, beside the button that started it. In the PINNED
+              half of the bar, not the scrolling half: a result that can scroll
+              out of sight is worse than none. */}
+          {runDone && (
+            <RunSucceededStatus run={runDone} onDismiss={() => setRunDone(null)} />
+          )}
           {/* Primary action — pinned to the right edge as the focal point.
               While a run is active the button BECOMES a Stop button (click to
               cancel) rather than a disabled "Running…" plus a separate Cancel.
@@ -5285,13 +5291,6 @@ function EditorInner() {
           >
             {t("editor.loadingGraph")}
           </div>
-        )}
-        {/* "It worked" — floating over the canvas rather than in the docked
-            strip, which grows to 40vh and so took a bite out of the flow to
-            announce a success. What the last step produced is folded away
-            inside it; see RunSucceededToast. */}
-        {runDone && (
-          <RunSucceededToast run={runDone} onDismiss={() => setRunDone(null)} />
         )}
         {/* Trigger discoverability: a flow with steps but no trigger only
             ever runs on a manual click. First-timers don't know "run it

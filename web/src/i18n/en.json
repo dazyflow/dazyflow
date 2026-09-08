@@ -2152,8 +2152,6 @@
     "runSucceeded": "Done — the flow ran.",
     "runSucceededWith": "Done — the flow ran, and “{{label}}” produced a result.",
     "runSucceededDetails": "See the full run",
-    "runSucceededShow": "Show what it produced",
-    "runSucceededHide": "Hide that",
     "edgeError": {
       "head": "When does the next step run?",
       "abort": "Only if this step succeeds",

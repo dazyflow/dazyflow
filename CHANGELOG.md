@@ -10,6 +10,28 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Changed
+
+- **The "it worked" message moved into the toolbar and now fades by itself.**
+  It was a panel pinned to the top-centre of the canvas that stayed until you
+  dismissed it or pressed Run again — which is the one spot a flow always
+  occupies, since a flow reads from its top-left, so announcing success covered
+  the trigger and the first steps. The outcome now appears beside the button
+  that started the run and fades after a few seconds, holding while the pointer
+  or keyboard is on it so the link can't vanish mid-click. On a short bar the
+  sentence yields and the tick plus "See the full run" carry it. The folded-away
+  JSON of the last step's output is gone with the panel: the canvas already
+  answers that better, in place, through the data face and the output pins'
+  hover-peek.
+
+### Fixed
+
+- **The published banner no longer draws a stray line under its own text.**
+  "Published — the live version matches your draft." sits in the editor's
+  banner strip, which already closes itself off from the canvas with a 1px
+  border; the row inside it painted a second one, a stack-padding above the
+  first, so the message read as underlined.
+
 ## [0.41.4] - 2026-09-08
 
 ### Added
