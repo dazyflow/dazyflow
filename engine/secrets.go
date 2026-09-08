@@ -12,31 +12,19 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// scopeCtx lets the provider resolve ${secret.NAME} flow-before-organization,
-// nearest scope winning. An empty flow degrades the cascade to the organization.
 func scopeCtx(ctx context.Context, graph core.Graph) context.Context {
 	ctx = core.WithTenant(ctx, graph.Tenant)
 	ctx = core.WithFlow(ctx, graph.ID)
 	return ctx
 }
 
-// injectConnectionDefaults fills a node's unset params from the tenant's stored
-// service connection. Secret fields are injected as ${secret.conn...} references
-// so the normal resolver substitutes and redacts them; plain fields go in
-// literally, so an ntfy server URL still shows in node output. Unconfigured
-// fields are left alone, so a drop's own default still applies.
+// Fills unset params from the tenant's connection. Secret fields go in as
+// ${secret.conn...} references so the normal resolver redacts them.
 //
-// Whether a node param may override a configured connection depends on whether
-// the field is also a DECLARED param:
-//   - Declared (claude's advanced api_key): the author may override per-node, so
-//     an already-set param wins and this fills only when unset.
-//   - Not declared (ntfy's server/token, which live solely on the connection):
-//     the connection is authoritative and overrides whatever is in the graph.
-//     A stale value baked into a graph is no longer editable in the UI, so
-//     without the override it would shadow the tenant's connection forever.
-//
-// Called immediately before resolveTemplatesCollecting, so injected references
-// resolve in the same pass.
+// A DECLARED param the author already set wins, being a deliberate per-node
+// override. A field that is NOT a declared param is pure connection setting, and
+// the connection wins — a stale value baked into a graph is no longer editable in
+// the UI, so otherwise it would shadow the connection for ever.
 func injectConnectionDefaults(ctx context.Context, providers map[string]core.SecretProvider, m core.Manifest, job *core.Job) {
 	if len(m.ConnectionFields) == 0 {
 		return
@@ -99,40 +87,19 @@ func resolveTemplates(ctx context.Context, providers map[string]core.SecretProvi
 	return err
 }
 
-// resolveTemplatesCollecting replaces secret refs (${secret.NAME},
-// secret://NAME) against the registered providers, and upstream refs
-// (${upstream.nodeID.port.path}) against the prior-node results. Either may be
-// empty; an unrecognized scheme is left alone.
-//
-// Resolution happens on the in-memory Job after the JobStore has captured the
-// UNresolved reference, so the resolved value exists only in the
-// transport.Execute call and never lands in storage or audit trails.
-//
-// It also returns the secret plaintexts it substituted, so the caller can scrub
-// them from the persisted Result — a module echoing a resolved param into its
-// output would otherwise leak the secret into storage. Upstream substitutions are
-// ordinary data flow and are not collected.
+// Runs on the in-memory Job AFTER the JobStore captured the unresolved reference,
+// so a resolved value exists only in the Execute call. Returns the plaintexts it
+// substituted, so the caller can scrub them from the persisted Result.
 func resolveTemplatesCollecting(ctx context.Context, providers map[string]core.SecretProvider, resources map[string]core.ResourceProvider, graph core.Graph, prior map[string]core.Result, job *core.Job) (*secretSet, error) {
 	set := newSecretSet()
 	if job == nil {
 		return set, nil
 	}
-	// rr caches ${resource.…} content per pass. Whole-string resource refs are
-	// intercepted in resolveMap/resolveSlice so they stay structured; the inline form
-	// goes through the chain below.
-	//
-	// Order matters: upstream first, so a node ID sharing a name with a secret
-	// provider (a node called "vault") is not shadowed. The secret substituter is
-	// wrapped to record every plaintext it resolves.
+	// Whole-string resource refs stay structured; the inline form goes through the chain.
 	rr := newResourceResolver(resources)
-	// Build the substituter chain once per job. The order matters:
-	// upstream first so a node ID that happens to share a name with
-	// a secret provider (e.g. a node called "vault") doesn't get
-	// shadowed. The resource substituter handles only the inline form.
-	// The secret substituter is wrapped to record every plaintext it
-	// resolves into set.
+	// Order matters: upstream first, so a node ID sharing a name with a secret
+	// provider is not shadowed.
 	sub := chainSubstituters(
-		// item first: the most specific scheme, and it never collides with the others.
 		itemSubstituter(ctx),
 		upstreamSubstituter(prior),
 		triggerSubstituter(graph, prior),
@@ -171,8 +138,6 @@ func resolveMap(ctx context.Context, providers map[string]core.SecretProvider, s
 	for k, v := range m {
 		switch tv := v.(type) {
 		case string:
-			// A whole-string ${resource.…} resolves to the provider's structured value and
-			// is NOT re-walked — it is fetched data, not a template.
 			if val, ok, err := rr.wholeValue(ctx, tv); err != nil {
 				return fmt.Errorf("%s: %w", k, err)
 			} else if ok {
@@ -237,18 +202,12 @@ func resolveSlice(ctx context.Context, providers map[string]core.SecretProvider,
 	return nil
 }
 
-// resolveString handles the inline form ("Bearer ${secret.STRIPE_KEY}") and the
-// whole-string form ("secret://STRIPE_KEY").
-//
-// The whole-string form is checked FIRST, against the raw param, and inline
-// output is never re-interpreted as a reference. That ordering is security, not
-// style: ${upstream.…} and ${item.…} carry data the flow ingested from outside,
-// so resolving `scheme://NAME` against post-substitution text would let whoever
-// controls that data read any secret the tenant's providers hold. Redaction would
-// not help, the drop still receiving the plaintext.
+// The whole-string form is checked FIRST, against the RAW param, and inline
+// output is never re-interpreted as a reference. That ordering is security:
+// ${upstream.…} carries data the flow ingested from outside, so resolving
+// `scheme://NAME` against post-substitution text would let whoever controls that
+// data read any secret the tenant holds.
 func resolveString(ctx context.Context, providers map[string]core.SecretProvider, sub Substituter, set *secretSet, s string) (string, error) {
-	// Secret-only by design: "upstream://node.field" reads like a URL and would be
-	// ambiguous, so upstream refs are inline-only.
 	if scheme, path, ok := splitSecretRef(s); ok {
 		if provider, ok := providers[scheme]; ok {
 			value, err := provider.Get(ctx, path)

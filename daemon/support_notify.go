@@ -13,43 +13,12 @@ import (
 	"github.com/dazyflow/dazyflow/internal/emailtheme"
 )
 
-// support_notify.go closes the "nobody is ever told" gap in the ticket surface:
-// without it, a customer learns support replied only by revisiting the page, and
-// an agent learns a ticket exists only by watching the queue. That's fine for a
-// demo and useless for a real support desk.
-//
-// Three edges are worth an email, and no others — a chat thread that mails on
-// every state change trains people to ignore it:
-//
-//   - support replied            → the customer who filed it
-//   - the customer replied       → the agent who owns it (or the support inbox)
-//   - support marked it resolved → the customer who filed it
-//
-// A NEW ticket goes to SupportInbox (DAZYFLOW_SUPPORT_INBOX) because there is no
-// single agent to address yet — the queue is shared. With no inbox configured
-// that edge is silently skipped rather than fanned out to every agent.
-//
-// Delivery is best-effort and detached from the request, exactly like
-// failure_notify.go: a slow or dead SMTP server must never make replying to a
-// ticket slow or fail. Nothing here is transactional mail, so the customer's
-// opt-out (NotifyPrefs.EmailOnSupportReply) is honoured; agent-side mail is
-// operational and always sent.
+// A ticket thread nobody is told about is a ticket nobody answers. Both sides get
+// mail, and the sweeper nudges whichever side has been waiting.
 
-// supportNotifyTimeout bounds the detached send. Generous — SMTP handshakes on a
-// cold connection are slow — but finite so a hung server can't leak goroutines.
 const supportNotifyTimeout = 2 * time.Minute
 
-// ticketURLFor builds the absolute link to a ticket for the audience that gets
-// the mail. The two sides live at different routes and an agent following the
-// customer's URL would land on a ticket that isn't in their tenant.
-//
-// Only the customer link is pinned to the filing org (see withOrg in
-// orglink.go). The customer's own view is tenant-scoped — loadTicketForTenant
-// refuses a ticket outside the session's org — so a member of several orgs
-// following an unpinned link would be told the ticket doesn't exist. The agent
-// queue resolves tickets cross-tenant on purpose (loadTicketForAgent, gated on
-// the support-agent role), so pinning it there would try to move the agent into
-// the customer's org for no benefit — and agents generally aren't members of it.
+// The two audiences land on different pages for the same ticket.
 func (h *supportAPI) ticketURLFor(t core.Ticket, agent bool) string {
 	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
 	if base == "" {
@@ -85,9 +54,8 @@ func (h *supportAPI) notifySupportReplied(t core.Ticket) {
 			Intro: []string{
 				fmt.Sprintf(m.SupportRepliedIntro, t.Subject),
 			},
-			// The reply text itself is deliberately NOT included: it is stored
-			// secret-scrubbed, but email is the one channel that leaves our
-			// trust boundary, so the message stays behind the login.
+			// The reply text is deliberately NOT included: it is scrubbed on ingest, but mail
+			// leaves the deployment and a support thread can carry anything.
 			Outro:   []string{m.SupportRepliedOutro},
 			LogoURL: emailLogoURL(h.svc.PublicBaseURL),
 		}
@@ -126,13 +94,6 @@ func (h *supportAPI) notifyTicketResolved(t core.Ticket) {
 	})
 }
 
-// notifyUserReplied mails the support side that the customer came back.
-//
-// English, deliberately: this goes to the operator's own staff — the assigned
-// agent, or the shared inbox from configuration — and a config-file address
-// carries no language preference to read. Same for notifyTicketFiled below. Goes to
-// the assigned agent when there is one, otherwise the shared inbox — an
-// unclaimed ticket is nobody's personal responsibility.
 func (h *supportAPI) notifyUserReplied(t core.Ticket) {
 	to := supportQueueRecipient(t, h.SupportInbox)
 	if !h.supportMailReady() || to == "" {
@@ -161,12 +122,6 @@ func (h *supportAPI) notifyUserReplied(t core.Ticket) {
 	})
 }
 
-// notifyWaitingOnUser reminds the customer that support answered and is waiting.
-//
-// Distinct from notifySupportReplied, which fires the moment support answers.
-// This one fires later and only when the reply was never opened — the case the
-// first mail did not reach, or reached and was forgotten. Same opt-out, because
-// it is the same kind of message: useful, not transactional.
 func (h *supportAPI) notifyWaitingOnUser(t core.Ticket) {
 	if !h.supportMailReady() || t.CreatedBy == "" {
 		return
@@ -229,10 +184,7 @@ func (h *supportAPI) notifyWaitingOnSupport(t core.Ticket, waiting time.Duration
 	})
 }
 
-// NotifyTicketWaiting is the TicketNudgeSweeper's Notify hook: it turns "this
-// side is waiting" into the right mail for that side. Exported because the
-// sweeper is constructed in cmd/dzd, and kept as a one-line dispatch so the
-// sweep itself never learns which audience gets which template.
+// The sweeper's hook: turns a waiting ticket into one reminder per waiting period.
 func (h *supportAPI) NotifyTicketWaiting(t core.Ticket, side NudgeSide, waiting time.Duration) {
 	if side == NudgeUser {
 		h.notifyWaitingOnUser(t)
@@ -241,9 +193,7 @@ func (h *supportAPI) NotifyTicketWaiting(t core.Ticket, side NudgeSide, waiting 
 	h.notifyWaitingOnSupport(t, waiting)
 }
 
-// formatWaited renders a waiting time the way a person would say it. Whole days
-// once there is at least one, whole hours below that — a reminder that says
-// "26h" when it means "over a day" reads like a machine talking to itself.
+// The way a person would say it, not a duration.
 func formatWaited(d time.Duration) string {
 	if days := int(d.Hours()) / 24; days >= 1 {
 		if days == 1 {
@@ -313,8 +263,6 @@ func (h *supportAPI) supportOptInAddress(ctx context.Context, subject string) (s
 	return u.Email, true
 }
 
-// goSupportMail runs fn detached from the request, on the same bounded-context
-// pattern the failure notifier uses.
 func (h *supportAPI) goSupportMail(fn func(context.Context)) {
 	ctx, cancel := context.WithTimeout(context.Background(), supportNotifyTimeout)
 	go func() {

@@ -13,26 +13,14 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Billing (T3 / Phase 3): tenant plans + the free-tier run gate.
-//
-// Two plans for now — "free" and "pro". A tenant with no stored plan is
-// free; Stripe webhook events (see stripe_events.go) flip the plan when
-// a subscription starts or dies. Enforcement is a separate, operator-
-// opt-in knob (Service.FreeRunsPerMonth) so self-hosted deployments
-// without billing never hit a gate.
+// Tenant plans and the free-tier run gate.
 
 const (
 	PlanFree = "free"
 	PlanPro  = "pro"
 )
 
-// liveSubscription reports whether the tenant already has a Stripe
-// subscription that is billing (or about to): minting a second Checkout
-// session in this state would create a duplicate subscription on a new
-// customer and double-bill. "active"/"trialing"/"past_due" all count —
-// past_due is still mid-retry, and a cancel-at-period-end subscription is
-// still "active" (resume via the portal, not a fresh checkout). A lapsed
-// one (canceled/unpaid/incomplete_expired/empty) is fair game to re-checkout.
+// A live subscription is what distinguishes a paid tenant from a lapsed one.
 func liveSubscription(p TenantPlan) bool {
 	if p.StripeSubscriptionID == "" {
 		return false
@@ -45,8 +33,6 @@ func liveSubscription(p TenantPlan) bool {
 	}
 }
 
-// TenantPlan is a tenant's billing state. The Stripe fields are empty
-// for tenants that never went through Checkout.
 type TenantPlan struct {
 	Tenant string `json:"tenant"`
 	Plan   string `json:"plan"` // PlanFree | PlanPro
@@ -58,34 +44,16 @@ type TenantPlan struct {
 
 	CurrentPeriodEnd time.Time `json:"current_period_end,omitzero"`
 
-	// CancelAtPeriodEnd is true once the subscription is set to cancel at
-	// the period boundary: Stripe keeps status "active" (access continues)
-	// but won't renew, so the UI shows "cancels on <CurrentPeriodEnd>"
-	// rather than implying an open-ended plan.
 	CancelAtPeriodEnd bool `json:"cancel_at_period_end,omitempty"`
 }
 
-// PlanStore persists tenant plans. Implementations must be safe for
-// concurrent use. Get returns a zero-value free plan (not an error)
-// for tenants with no stored row, so callers never special-case "new
-// tenant".
 type PlanStore interface {
 	GetPlan(ctx context.Context, tenant string) (TenantPlan, error)
 	SetPlan(ctx context.Context, p TenantPlan) error
 }
 
-// StripeEventDeduper is an optional PlanStore extension: record a Stripe
-// webhook event id, reporting whether this is the FIRST time it's seen.
-// Stripe retries deliveries, and while the plan upserts are idempotent,
-// dedupe keeps replays from re-running side effects (audit noise today,
-// anything heavier tomorrow).
 type StripeEventDeduper interface {
 	MarkStripeEvent(ctx context.Context, id string) (first bool, err error)
-	// StripeEventProcessed reports whether this event id was already recorded.
-	// The webhook handler marks an event ONLY after a successful apply, so a
-	// recorded id means the side effect completed — letting a replay skip
-	// re-applying without the mark-before-apply hazard (a failed apply that was
-	// already marked would never be retried).
 	StripeEventProcessed(ctx context.Context, id string) (bool, error)
 }
 
@@ -185,12 +153,6 @@ func (s *Service) releaseRun(ctx context.Context, tenant string) {
 	}
 }
 
-// concurrencyCapped reports the tenant's effective simultaneous-run limit when
-// it applies (limit > 0), and false otherwise (no limit → unlimited). The
-// effective limit already encodes the plan — Pro defaults to 0 (uncapped) but
-// honors an explicit fair-use cap from its tier/override. Shared by the
-// submit-time admission decision and the promotion sweep so both agree on who
-// is capped and at what number.
 func (s *Service) concurrencyCapped(ctx context.Context, tenant string) (limit int, capped bool) {
 	b := s.billing()
 	limit = b.concurrencyLimit(ctx, tenant)
@@ -200,10 +162,6 @@ func (s *Service) concurrencyCapped(ctx context.Context, tenant string) (limit i
 	return limit, true
 }
 
-// runningGraphRuns counts a tenant's currently-running top-level graph runs. It
-// stops counting once it reaches limit — the admission decision only needs to
-// know whether the cap is hit. limit <= 0 means "no early stop" (count up to a
-// generous page).
 func (s *Service) runningGraphRuns(ctx context.Context, tenant string, limit int) (int, error) {
 	page := limit + 1
 	if page <= 1 {
@@ -214,10 +172,6 @@ func (s *Service) runningGraphRuns(ctx context.Context, tenant string, limit int
 	})
 }
 
-// admitGraphRun reports whether a new top-level run for tenant may START now
-// (true) or must wait as pending/queued (false). Free-tier only; pro/comped/
-// trial and a 0 limit always admit. Fails OPEN (admit) on a job-store hiccup —
-// a counting error must never strand a run in the pending queue.
 func (s *Service) admitGraphRun(ctx context.Context, tenant string) bool {
 	if s.Jobs == nil {
 		return true
@@ -236,9 +190,6 @@ func (s *Service) admitGraphRun(ctx context.Context, tenant string) bool {
 	return running < limit
 }
 
-// tenantIsFree resolves whether the plan gates apply to tenant. Fails
-// OPEN (reports pro) on plan-store errors: a billing-infrastructure
-// hiccup must degrade to "no gate" rather than "product down".
 func (b *BillingService) tenantIsFree(ctx context.Context, tenant, gate string) bool {
 	if b.effective != nil {
 		return b.effective(ctx, tenant).Plan != PlanPro
@@ -260,8 +211,6 @@ func (b *BillingService) runLimit(ctx context.Context, tenant string) int {
 	if b.effective != nil {
 		return b.effective(ctx, tenant).RunsPerMonth
 	}
-	// Pre-entitlements: the free default caps free tenants only; pro/comped/
-	// trial are uncapped (the free env value isn't a global ceiling).
 	if !b.tenantIsFree(ctx, tenant, "plan gate") {
 		return 0
 	}
@@ -289,10 +238,6 @@ func (b *BillingService) runsThisMonth(ctx context.Context, tenant string) (int6
 	return 0, nil
 }
 
-// checkTriggerQuota is the free-tier scheduling gate, called by the
-// scheduler before firing a cron/poll trigger. Same fail-open policy as
-// checkRunQuota: a billing-store hiccup must not silence everyone's
-// schedules.
 func (b *BillingService) checkTriggerQuota(ctx context.Context, tenant string) error {
 	if b.pollingAllowed(ctx, tenant) {
 		return nil
@@ -322,13 +267,6 @@ func (b *BillingService) checkRunQuota(ctx context.Context, tenant string) error
 	return nil
 }
 
-// reserveRun is the AUTHORITATIVE run-cap gate: it atomically counts one run
-// iff the tenant is under its monthly cap, closing the check-then-increment
-// race that checkRunQuota (a read) leaves open. Returns admitted=false (without
-// counting) when at the cap, admitted=true (having counted) otherwise. A
-// store/limit error fails OPEN (admitted=true, counted best-effort) — same
-// posture as checkRunQuota: a billing hiccup must not halt runs. The caller
-// must NOT separately AddRun — reserveRun already metered the accepted run.
 func (b *BillingService) reserveRun(ctx context.Context, tenant string) (admitted bool, err error) {
 	if b.usage == nil {
 		return true, nil
@@ -340,8 +278,6 @@ func (b *BillingService) reserveRun(ctx context.Context, tenant string) (admitte
 	if rr, ok := b.usage.(runReserver); ok {
 		admitted, rerr := rr.AddRunIfUnder(ctx, tenant, time.Now(), limit)
 		if rerr != nil {
-			// Fail open, matching the documented contract: a store error must
-			// not block runs, and admitted is only meaningful when err == nil.
 			return true, rerr
 		}
 		return admitted, nil
@@ -401,8 +337,6 @@ func (c *CachedPlanStore) SetPlan(ctx context.Context, p TenantPlan) error {
 	return nil
 }
 
-// MarkStripeEvent passes the webhook dedupe through to the inner store,
-// so wrapping a PgPlanStore doesn't silently lose replay protection.
 func (c *CachedPlanStore) MarkStripeEvent(ctx context.Context, id string) (bool, error) {
 	if dd, ok := c.inner.(StripeEventDeduper); ok {
 		return dd.MarkStripeEvent(ctx, id)

@@ -26,16 +26,7 @@ import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
 import { ICON } from "../../icons";
 
-// AdminWebAPIs is where an org describes its OWN service and gets steps out of
-// it.
-//
-// The difference from Admin → MCP servers is worth stating, because the two
-// pages look alike: there, saving CONNECTS, and the thing that can go wrong is
-// invisible until something tries. Here there is nothing to dial — a described
-// API is a document — so a save that returns is a save that put the steps in the
-// palette, and the whole of the feedback is validation. That is why this page
-// spends its effort on the operation editor and shows no "connected" chip: a
-// green light claiming health would be a lie about a call nobody made.
+// Where an org describes its OWN service and gets steps out of it.
 export function AdminWebAPIs() {
   const { t } = useTranslation();
   const { token } = useAuth();
@@ -43,16 +34,11 @@ export function AdminWebAPIs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<WebAPI | "new" | null>(null);
-  // What the importer last produced. Held here rather than inside the form so
-  // that reading a spec re-seeds the form (via its key) instead of the form
-  // having to reconcile an external change to its own state mid-edit.
+  // Held outside the form, so a re-render does not discard a parsed spec.
   const [imported, setImported] = useState<ImportedSpec | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
-  // usage is what the catalog being confirmed is actually used by, keyed by
-  // name. undefined means "still asking" — the confirm renders without a count
-  // rather than waiting, so the button is never dead while a scan of the org's
-  // graphs runs.
+  // What a removal would break, so the confirmation can name it.
   const [usage, setUsage] = useState<Record<string, StepSourceUsage>>({});
 
   const load = useCallback(() => {
@@ -78,9 +64,7 @@ export function AdminWebAPIs() {
       setEditing(null);
       setImported(null);
       load();
-      // Normally empty. It is set only for a stored catalog the current release
-      // refuses, which an admin can otherwise only experience as steps that
-      // quietly went missing.
+      // Set only for a stored catalog this release can no longer register.
       if (saved.last_error)
         setError(t("webapi.savedButBroken", { error: saved.last_error }));
     } catch (e) {
@@ -96,8 +80,6 @@ export function AdminWebAPIs() {
     api
       .webAPIUsage(token, name)
       .then((u) => setUsage((prev) => ({ ...prev, [name]: u })))
-      // A failed lookup must not block the delete or claim nothing is using the
-      // catalog. The confirm falls back to the unconditional warning.
       .catch(() => {});
   };
 
@@ -291,12 +273,6 @@ const blankOperation = (): WebAPIOperation => ({
 
 const blankArg = (): WebAPIArg => ({ name: "", in: "query", type: "string" });
 
-// ImportedSpec is what the importer handed over, plus a stamp.
-//
-// The stamp exists so that reading the SAME spec twice still re-seeds the form:
-// the form is keyed on it, and two structurally identical imports would
-// otherwise produce the same key and leave the form showing the admin's
-// half-finished edits from the first read.
 type ImportedSpec = {
   operations: WebAPIOperation[];
   title?: string;
@@ -305,11 +281,7 @@ type ImportedSpec = {
   stamp: number;
 };
 
-// WebAPIForm is add and edit in one, because they are one operation.
-//
-// The name here is the DISPLAY name and is always editable. The id underneath it
-// is derived from the name once, at creation, and then frozen — re-deriving it
-// on an edit would silently re-key every step id the org's flows reference.
+// Add and edit in one, because the server treats them as one operation.
 function WebAPIForm({
   webapi,
   imported,
@@ -318,10 +290,6 @@ function WebAPIForm({
   onSave,
 }: {
   webapi: WebAPI | null;
-  // imported, when present, seeds the form from a spec the admin just read.
-  // It wins over the stored catalog for the fields a spec can supply, and the
-  // form is remounted (keyed on its stamp) rather than reconciled — a half-
-  // edited form silently gaining forty operations is worse than starting over.
   imported: ImportedSpec | null;
   busy: boolean;
   onCancel: () => void;
@@ -367,9 +335,7 @@ function WebAPIForm({
         base_url: baseURL.trim(),
         auth_kind: authKind,
         auth_header: authKind === "header" ? authHeader.trim() : undefined,
-        // Always sent, never omitted: omitting means "leave it alone", so a
-        // form that cleared the field would otherwise be unable to move a
-        // catalog back onto the direct path.
+        // Omitting means "leave it alone", so a cleared field would never clear.
         runner_tags: runnerTags
           .split(",")
           .map((tag) => tag.trim())
@@ -604,9 +570,7 @@ function OperationEditor({
   const patchArg = (i: number, patch: Partial<WebAPIArg>) =>
     onPatch({ args: args.map((a, n) => (n === i ? { ...a, ...patch } : a)) });
 
-  // A body argument is only assemblable when the operation sends a JSON body,
-  // and the daemon refuses the save otherwise. Offering the choice only when it
-  // is legal is better than explaining the refusal afterwards.
+  // Only assemblable when the operation sends a JSON body.
   const bodyAllowed = op.body_mode === "json";
 
   return (
@@ -715,10 +679,7 @@ function OperationEditor({
           value={op.body_mode ?? "none"}
           onChange={(e) => {
             const mode = e.target.value as WebAPIOperation["body_mode"];
-            // Switching away from a JSON body would leave body arguments the
-            // daemon must refuse, so they move to the query string rather than
-            // being silently dropped: the admin typed them, and a save that
-            // erases input is worse than one that relocates it visibly.
+            // Or the operation keeps arguments it can no longer send.
             const rehomed =
               mode === "json"
                 ? args
@@ -801,12 +762,8 @@ function OperationEditor({
   );
 }
 
-// WebAPIStatusChip has three states and none of them claims the service is
-// reachable.
-//
-// "In your palette" is the honest strong state: the daemon holds the catalog and
-// the steps resolve. Whether the service answers is knowable only from a run,
-// and a chip that implied otherwise would be the one lie this page could tell.
+// None of the three claims the service is UP: registration is a local fact, and
+// only a run finds out whether the service answers.
 function WebAPIStatusChip({ webapi }: { webapi: WebAPI }) {
   const { t } = useTranslation();
   if (!webapi.enabled) {

@@ -3,17 +3,7 @@
 
 package daemon
 
-// OAuthProviderDefault is the URLs+scopes side of an OAuthProvider —
-// everything except the per-deployment ClientID/ClientSecret. The
-// defaults table below is the canonical "what services can a Dazy
-// Flow install talk to OAuth-wise", used both at boot (env-var
-// hydration in cmd/dzd) and at admin runtime (so the UI can list
-// every connectable service even before its credentials are pasted
-// in).
-//
-// Adding a new connector means adding one entry here. The URLs +
-// scopes are deployment-invariant; clients change per install and
-// come from env or the admin endpoint.
+// The deployment-invariant half: everything except the org's own client id.
 type OAuthProviderDefault struct {
 	Name            string
 	AuthorizeURL    string
@@ -25,14 +15,7 @@ type OAuthProviderDefault struct {
 	TokenAuthStyle  string
 }
 
-// KnownOAuthProviderDefaults is the deployment-invariant catalogue of
-// OAuth providers Dazyflow's drops can use. Order matters: it's the
-// order admin UI rows render in.
-//
-// The Google entry requests only non-restricted scopes by default
-// (gmail.send + spreadsheets). The restricted readonly scopes are parked
-// (see the Google entry) because Google blocks restricted-scope consent
-// on an unverified app, which otherwise fails the entire connect.
+// Deployment-invariant, so an operator configures only credentials.
 var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 	{
 		Name:         "slack",
@@ -60,17 +43,8 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 			"https://www.googleapis.com/auth/spreadsheets",
 			"https://www.googleapis.com/auth/calendar.events",
 			"https://www.googleapis.com/auth/calendar.readonly",
-			// Restricted scopes: gmail.readonly powers gmail_search /
-			// gmail_get; drive.readonly powers sheets_export_pdf;
-			// forms.responses.readonly + forms.body.readonly power the
-			// google_form_trigger (read new responses, plus the question
-			// titles used to key each answer).
-			//
-			// These grant freely on an INTERNAL Workspace app (no
-			// verification). On an EXTERNAL app, Google blocks restricted-
-			// scope consent until the app passes its security assessment —
-			// so a multi-org / External deployment must get the app verified
-			// (or drop these) before outside companies can connect.
+			// Google RESTRICTED scopes: an app requesting these needs verification, so the
+			// set is kept to exactly what the shipped drops read.
 			"https://www.googleapis.com/auth/gmail.readonly",
 			"https://www.googleapis.com/auth/drive.readonly",
 			"https://www.googleapis.com/auth/drive.file",
@@ -80,12 +54,8 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 		AuthorizeExtras: map[string]string{
 			"access_type": "offline",
 			"prompt":      "consent",
-			// Incremental authorization: when a connect requests only one
-			// service's scopes (see scopeSubsetForIntegration), Google
-			// MERGES the new grant with any already held instead of
-			// replacing it. So connecting for Sheets after Gmail keeps the
-			// Gmail grant, and the user only ever sees consent for the
-			// service they're actually connecting.
+			// Google grants scopes cumulatively, so a second connect for one drop must ask
+			// only for what that drop needs, not re-request the lot.
 			"include_granted_scopes": "true",
 		},
 		SetupHelp: "Create OAuth credentials in Google Cloud Console (APIs & Services → Credentials → Create OAuth client ID, type Web). Add the daemon's /api/v1/oauth/google/callback URL as an authorized redirect URI.",
@@ -99,14 +69,10 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 		SetupHelp:    "Create a public integration at notion.so/my-integrations; OAuth client ID + secret appear under Capabilities → OAuth.",
 	},
 	{
-		Name:         "fortnox",
-		DisplayName:  "Fortnox",
-		AuthorizeURL: "https://apps.fortnox.se/oauth-v1/auth",
-		TokenURL:     "https://apps.fortnox.se/oauth-v1/token",
-		// Scopes are per-resource. This set covers the shipped drops:
-		// customer (create/list), invoice (create + the paid-invoice poll),
-		// and companyinformation (a cheap read to verify a connection).
-		// Add more here as the connector grows (article, order, bookkeeping…).
+		Name:            "fortnox",
+		DisplayName:     "Fortnox",
+		AuthorizeURL:    "https://apps.fortnox.se/oauth-v1/auth",
+		TokenURL:        "https://apps.fortnox.se/oauth-v1/token",
 		Scopes:          []string{"customer", "invoice", "companyinformation"},
 		AuthorizeExtras: map[string]string{"access_type": "offline"},
 		TokenAuthStyle:  "basic",
@@ -123,16 +89,7 @@ var KnownOAuthProviderDefaults = []OAuthProviderDefault{
 	},
 }
 
-// googleScopeGroups maps a connector's Integration label (Manifest.Integration)
-// to the minimal Google scopes that integration needs. It drives incremental
-// authorization: connecting Google for one integration requests only its
-// scopes, so a user wiring up Gmail never sees a Sheets/Forms consent screen.
-// include_granted_scopes=true (on the google provider's AuthorizeExtras)
-// merges each grant with any already held, so connecting for a second service
-// tops up rather than replaces.
-//
-// Keyed by the same labels the drops set (drops/gmail, drops/sheets,
-// drops/trigger/gform) and the Apps page passes back as ?integration=.
+// Keyed on the Integration label, which is what a connect knows.
 var googleScopeGroups = map[string][]string{
 	"Gmail": {
 		"https://www.googleapis.com/auth/gmail.send",
@@ -157,11 +114,7 @@ var googleScopeGroups = map[string][]string{
 	},
 }
 
-// scopeSubsetForIntegration returns the minimal scopes to request when
-// connecting `provider` for a specific `integration`. Returns nil when the
-// provider has no scope groups or the integration is unknown/empty — callers
-// then fall back to the provider's full scope list (request-everything, the
-// legacy behaviour, still available for a deliberate "connect all" flow).
+// The MINIMAL set: asking for more than the drop needs is what triggers review.
 func scopeSubsetForIntegration(provider, integration string) []string {
 	if provider != "google" || integration == "" {
 		return nil
@@ -176,12 +129,7 @@ func scopeGroupsForProvider(provider string) map[string][]string {
 	return nil
 }
 
-// providerUsesIncrementalScopes reports whether a provider grants scopes
-// incrementally (per integration) rather than all-at-once. For such a
-// provider a connected account is never "globally stale" merely for lacking
-// some other service's scopes — that scope is topped up the moment the user
-// connects for that service, so the all-scopes staleness pill would be a
-// false alarm.
+// Only Google grants cumulatively; the others replace the granted set.
 func providerUsesIncrementalScopes(provider string) bool {
 	return provider == "google"
 }

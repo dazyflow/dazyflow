@@ -1,23 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// explainApiError turns any failed API call into one plain-language sentence
-// a non-technical user can act on — the general-purpose companion to
-// explainRunError (which is specific to flow-run failures).
-//
-// The problem it solves: most catch blocks used to render the raw exception
-// message straight into the UI, so a user hit Go/OS error strings ("dial tcp
-// …: connection refused", "strconv.ParseInt: invalid syntax", "permission
-// denied") or lowercase developer phrasing ("auth: invalid credential") with
-// no idea what to do. This maps the APIError's status + structured code +
-// message onto friendly, localized guidance, and — crucially — SWALLOWS raw
-// technical strings into a generic "something went wrong" rather than showing
-// them.
-//
-// It returns a resolved string (it takes `t`) because call sites store plain
-// strings in error state. Pass an optional `context` so a status that means
-// different things per surface (a 401 on sign-in = wrong password; elsewhere =
-// expired session) resolves correctly.
+// One plain-language sentence a non-developer can act on, so a raw Go or HTTP
+// string never reaches a person.
 
 import { APIError } from "../api";
 
@@ -43,12 +28,9 @@ export function explainApiError(
   const msg = (err.message || "").trim();
   const lc = msg.toLowerCase();
 
-  // No HTTP response at all — the request never reached the server.
   if (status === 0) return t("apiError.network");
 
-  // Deployment-config refusals first: they ride the same 401/403 statuses but
-  // have nothing to do with what the user typed, so the auth-surface branches
-  // below must not repaint them as "wrong password".
+  // First: these ride the same statuses but are the operator's fault, not the user's.
   if (code && CONFIG_CODES.has(code)) {
     if (code === "csrf_origin" && context === "signin") {
       return t("apiError.csrfOriginSignin");
@@ -104,18 +86,12 @@ export function explainApiError(
     return msg && !looksTechnical(lc) ? msg : t("apiError.tooLarge");
   }
 
-  // A leaked Go/OS/stdlib string the user can't act on — hide it.
   if (looksTechnical(lc) || !msg) return t("apiError.generic");
 
-  // What's left is a server-authored human 4xx message (a validation hint
-  // like "value must not be empty") — surfacing it verbatim is the right call.
   return msg;
 }
 
-// looksTechnical flags raw Go/OS/stdlib error strings that leak through error
-// wrapping — meaningless to a user and a sign we should show a generic message
-// instead. Kept conservative: only unmistakably-internal shapes, so genuine
-// human validation hints still pass through.
+// Raw Go and OS strings that leak through, which must be replaced rather than shown.
 function looksTechnical(lc: string): boolean {
   return (
     lc.includes("dial tcp") ||
@@ -139,39 +115,17 @@ function looksTechnical(lc: string): boolean {
   );
 }
 
-// CONFIG_CODES are refusals caused by how the server is deployed. Add a code
-// only if it can NEVER mean "your input was wrong".
 const CONFIG_CODES = new Set(["csrf_origin"]);
 
-// PERMISSION_CODES are the refusal codes whose generic headline ("ask an
-// admin") is only right when the server had nothing better to say.
 const PERMISSION_CODES = new Set(["forbidden", "permission_denied"]);
 
-// keepForbiddenMessage reports whether a refusal carries the one sentence that
-// unblocks the reader, and so beats the generic headline.
-//
-// Why this is worth the extra test: the invite gate answers 403 with "verify
-// your email before inviting others — check your inbox or resend from the
-// banner", which is exactly the fix. Replacing it with "You don't have
-// permission to do that. Ask an admin if you think you should." tells the
-// ORGANIZATION OWNER to go find an admin — there isn't one above them — and
-// hides the only route out. A refusal that names a remedy should show it.
-//
-// The headline still wins for the other family of 403s, which name the
-// permission the caller lacks ("organization:admin required", "graph:edit
-// required"). Those are written for whoever wired the API call, not for the
-// person reading the screen.
+// A refusal that names the missing permission is more useful than a generic
+// "forbidden", so it survives the rewrite.
 function keepForbiddenMessage(msg: string, lc: string): boolean {
   return Boolean(msg) && !looksTechnical(lc) && !looksLikeScopeDemand(lc);
 }
 
-// looksLikeScopeDemand flags a refusal phrased as the permission the caller is
-// missing rather than as something they can do about it.
-//
-// Kept separate from looksTechnical rather than folded into it, because
-// "required" is a perfectly good word in a validation hint ("a name is
-// required") that other statuses DO surface verbatim — teaching looksTechnical
-// that word would silence those too.
+// Phrased as the permission being demanded, which is worth showing verbatim.
 function looksLikeScopeDemand(lc: string): boolean {
   return (
     /\b[a-z_]+:[a-z_]+\b/.test(lc) || // scope token: organization:admin, graph:edit
@@ -182,11 +136,7 @@ function looksLikeScopeDemand(lc: string): boolean {
 }
 
 const CODE_MESSAGES: Record<string, string> = {
-  // The browser sent a state-changing request the daemon would not accept
-  // from this origin. Correct, and entirely about deployment configuration —
-  // the person reading it can do nothing except tell whoever runs the server.
-  // The raw text ("cookie-authenticated request from disallowed origin …
-  // (CSRF defense)") used to land in the UI verbatim.
+  // A CSRF refusal reads as an ordinary 403, so it needs its own sentence.
   csrf_origin: "apiError.csrfOrigin",
   permission_denied: "apiError.forbidden",
   forbidden: "apiError.forbidden",

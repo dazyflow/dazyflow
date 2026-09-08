@@ -17,19 +17,8 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Public workspace-overview share links.
-//
-// A share is a single, regenerable cryptic token per (tenant, workspace). It
-// backs a read-only public page — the TV-dashboard view of the workspace's run
-// health — without a login. The token IS the credential (same model as the
-// hosted-form / approval links), so the public endpoint takes no principal: it
-// looks the token up, recovers the (tenant, workspace), and serves a sanitized
-// status snapshot.
-//
-// The payload deliberately carries no IDs, error codes, payloads, owners, or
-// tenant/workspace identifiers — only flow names + run status + aggregate
-// counters. A leaked link reveals "is the workspace healthy", nothing it could
-// be used to act on. Private flows are excluded entirely.
+// Unauthenticated: possession of the link is the capability, so the payload must
+// carry nothing a stranger should not see.
 
 type Share struct {
 	Tenant    string    `json:"-"`
@@ -39,9 +28,7 @@ type Share struct {
 	CreatedBy string    `json:"created_by,omitempty"`
 }
 
-// ShareStore persists workspace-overview share links. One row per
-// (tenant, workspace); Upsert rotates the token in place so a workspace
-// always has at most one live link.
+// One row per workspace: minting again ROTATES rather than adding.
 type ShareStore interface {
 	Get(ctx context.Context, tenant, workspace string) (Share, error)
 	Upsert(ctx context.Context, tenant, workspace, token, createdBy string) (Share, error)
@@ -76,10 +63,7 @@ func (s *Service) GetWorkspaceShare(ctx context.Context, p core.Principal, tenan
 	return sh, true, nil
 }
 
-// CreateWorkspaceShare mints (or rotates) the workspace's share link and
-// returns it. Rotating invalidates any link handed out earlier. Minting a
-// public link is an edit-level action, so it takes graph:edit — a run-only
-// viewer can see an existing link but can't publish a new public surface.
+// Rotating invalidates the previous link, which is how a share is revoked.
 func (s *Service) CreateWorkspaceShare(ctx context.Context, p core.Principal, tenant, workspace string) (Share, error) {
 	if err := core.RequireWorkspace(p, tenant, workspace); err != nil {
 		return Share{}, err
@@ -128,19 +112,12 @@ type PublicStats struct {
 }
 
 type PublicFlowState struct {
-	Name      string             `json:"name"`
-	Icon      string             `json:"icon,omitempty"`
-	RunStatus core.FlowRunStatus `json:"run_status,omitempty"`
-	// LastStatus is the most recent run's status (succeeded / failed /
-	// running / queued / …), empty when the flow has never run.
-	LastStatus core.JobStatus `json:"last_status,omitempty"`
-	LastRunAt  *time.Time     `json:"last_run_at,omitempty"`
-	// NextRunAt is the next automatic fire time (RFC3339 UTC), set only for
-	// flows that are actually live on a scheduler trigger (cron / poll / form
-	// interval) — so the board can show "next run" alongside the last one.
-	// nil for manual, paused, needs-publish, or webhook-only flows (nothing
-	// the scheduler will fire on a clock). Computed with the same cron parser
-	// the scheduler fires on, so it matches what will really run.
+	Name       string             `json:"name"`
+	Icon       string             `json:"icon,omitempty"`
+	RunStatus  core.FlowRunStatus `json:"run_status,omitempty"`
+	LastStatus core.JobStatus     `json:"last_status,omitempty"`
+	LastRunAt  *time.Time         `json:"last_run_at,omitempty"`
+	// Set only for a flow that will actually fire on its own.
 	NextRunAt *time.Time       `json:"next_run_at,omitempty"`
 	History   []core.JobStatus `json:"history,omitempty"`
 }
@@ -184,13 +161,7 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 	label, icon := s.workspaceBrand(ctx, share.Tenant)
 	data := PublicOverviewData{Label: label, Icon: icon, GeneratedAt: now}
 
-	// Flow tiles + the "counted" set the stats are scoped to — one and the
-	// same, so the board and the authenticated Dashboard show identical
-	// numbers. Excluded entirely (no tile, no count): private flows
-	// (owner-scoped, names could be sensitive) and needs_publish flows
-	// (configured-but-unpublished drafts the scheduler won't run — effectively
-	// test mode, and their runs would skew the numbers). Best-effort: an
-	// unavailable store yields an empty board rather than unscoped counters.
+	// One pass: the tiles and the stats must describe the same set of flows.
 	counted := map[string]bool{}
 	var needsAttention int
 	if store, werr := s.Workspaces.Open(share.Tenant, share.Workspace); werr == nil {
@@ -208,9 +179,7 @@ func (s *Service) PublicWorkspaceOverview(ctx context.Context, token string, now
 				continue
 			}
 			runStatus := core.FlowRunStatusPublished(g, true)
-			// A disabled flow is intentionally off — same treatment: not shown,
-			// not counted, so a pre-pause failure can't read as "needs attention"
-			// nor drag down the success rate.
+			// Intentionally off, so it is neither shown nor counted as broken.
 			if runStatus == core.FlowPaused {
 				continue
 			}
@@ -296,8 +265,6 @@ func (s *Service) workspaceBrand(ctx context.Context, tenant string) (label, ico
 	return tenant, icon
 }
 
-// flowDisplayName falls back to the flow id when a graph has no name set, so a
-// tile is never blank.
 func flowDisplayName(g core.Graph, id string) string {
 	if g.Name != "" {
 		return g.Name
@@ -323,25 +290,12 @@ func runStartedOrEnqueued(r core.RunSummary) time.Time {
 	return r.EnqueuedAt
 }
 
-// startOfDay truncates to local midnight — the boundary "runs today" counts from.
 func startOfDay(now time.Time) time.Time {
 	y, m, d := now.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, now.Location())
 }
 
-// nextScheduledFire returns the earliest upcoming automatic fire after `now`
-// across a flow's enabled scheduler triggers — graph-level cron, cron_trigger
-// nodes, and poll_trigger/google_form_trigger nodes — or nil when the flow has
-// no active schedule. It mirrors the scheduler's firing rules (and reuses the
-// same cron parser as the Schedules page) so the time shown matches reality:
-//   - a whole-flow pause (g.Disabled) suppresses everything;
-//   - a per-trigger pause (node `disabled`) skips that node;
-//   - poll intervals are projected from now (interval-anchored, like the
-//     scheduler's own preview).
-//
-// Webhook triggers are excluded — they fire from an HTTP request, not a clock,
-// so they have no "next run". The caller gates on FlowLive, so this is only
-// invoked for published, enabled flows.
+// Earliest across every trigger, cron and poll alike.
 func nextScheduledFire(g core.Graph, now time.Time) *time.Time {
 	if g.Disabled {
 		return nil

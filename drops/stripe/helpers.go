@@ -1,22 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package stripe hosts the native Stripe connectors: customers (create,
-// search), payments (payment link, refund, send invoice), subscriptions
-// (list, cancel), webhook triggers (on payment / payment failed /
-// subscription canceled, fed by the daemon's Stripe events handler) and
-// the raw event feed (list events) for polling everything else.
-// Auth is an API key — there's no Stripe OAuth app. The key is a per-tenant
-// service connection (stripeConnectionFields → conn.stripe.api_key), entered
-// once on the Apps page and injected into each action's `api_key` param at run
-// time; it never lives in the graph. (The webhook triggers instead use
-// STRIPE_WEBHOOK_SECRET, verified server-side by the events handler.)
-//
-// "Fire on new payment" has a real trigger (stripe_on_payment, fed by the
-// daemon's Stripe events webhook). Other event reactions ("failed invoice",
-// "new subscription") compose via poll_trigger → stripe_list_events (cursor
-// in `after_id`, next cursor out of `last_id`, persisted with secret_set) →
-// for_each — the same pattern the Gmail and Notion connectors document.
+// The native Stripe connectors.
 package stripe
 
 import (
@@ -34,9 +19,7 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// maxResponseBytes caps how much of an API response we buffer, so a
-// hostile or buggy upstream (reachable via the base_url override) can't
-// OOM the daemon by streaming an unbounded body.
+// Caps the buffered response, so a large list cannot exhaust memory.
 const maxResponseBytes = 16 << 20 // 16 MiB
 
 var httpBase = apibase.New("https://api.stripe.com/v1")
@@ -45,22 +28,14 @@ func SetHTTPBase(base string) { httpBase.Set(base) }
 
 func baseURL(job core.Job) string { return httpBase.For(job) }
 
-// stripeConnectionFields is the per-tenant Stripe connection: the secret API
-// key, entered once on the Apps page (stored as conn.stripe.api_key) and
-// injected into each action's job at run time. Shared by every action drop so
-// the whole integration configures from one place. The webhook triggers instead
-// use STRIPE_WEBHOOK_SECRET, verified server-side by the daemon's events handler
-// (a separate concern), so they keep their secret requirement.
+// Per-tenant, so a flow carries no key.
 func stripeConnectionFields() []core.ConnectionField {
 	return []core.ConnectionField{
 		{Key: "api_key", Label: "Secret API key", Secret: true, Required: true, Placeholder: "sk_live_… / sk_test_…"},
 	}
 }
 
-// resolveAPIKey reads the `api_key` value — the per-tenant Stripe connection
-// (Manifest.ConnectionFields), injected into the job params at run time by the
-// engine. An empty value means the Stripe connection hasn't been set up, and
-// the error says exactly that.
+// Injected from the connection, or typed per node as an override.
 func resolveAPIKey(job core.Job) (string, error) {
 	key, _ := params.StringOpt(job.Params, "api_key")
 	if key == "" {
@@ -69,20 +44,12 @@ func resolveAPIKey(job core.Job) (string, error) {
 	return key, nil
 }
 
-// stripeDo runs one authenticated Stripe API call. POSTs are form-encoded
-// (Stripe's protocol) and carry the job's Idempotency-Key so a retried
-// node can't double-create or double-refund — Stripe honors the header
-// natively. Returns status + body; the caller maps non-2xx via
-// extractStripeError.
+// Stripe takes form encoding, not JSON.
 func stripeDo(ctx context.Context, job core.Job, method, url string, form string) (int, []byte, error) {
 	return stripeDoIdem(ctx, job, method, url, form, job.IdempotencyKey())
 }
 
-// stripeDoIdem is stripeDo with an explicit Idempotency-Key — for drops
-// that make SEVERAL calls per execution (send invoice). Each step gets a
-// distinct key derived from the job's (e.g. key+":finalize"), so a retry
-// after a partial failure replays completed steps as Stripe-side no-ops
-// instead of duplicating them.
+// For the non-idempotent writes: a retry must not charge twice.
 func stripeDoIdem(ctx context.Context, job core.Job, method, url, form, idemKey string) (int, []byte, error) {
 	timeoutMS := params.TimeoutMS(job, 15000)
 	apiKey, err := resolveAPIKey(job)
@@ -100,9 +67,7 @@ func stripeDoIdem(ctx context.Context, job core.Job, method, url, form, idemKey 
 	if method == http.MethodPost {
 		headers["Idempotency-Key"] = idemKey
 	}
-	// base_url is a tenant-supplied param, so net.Do guards the dial: the SSRF
-	// client blocks loopback/private/link-local targets and the egress
-	// allowlist (when set) bounds which public hosts the API key may be sent to.
+	// Tenant-supplied, so net.Do guards the dial.
 	status, raw, _, err := hfnet.Do(ctx, method, url, headers, b, timeoutMS, maxResponseBytes)
 	return status, raw, err
 }
@@ -126,11 +91,7 @@ func extractStripeError(body []byte) string {
 	return string(body)
 }
 
-// numberInputOr returns the whole number wired into input port `port` (a
-// JSON number or numeric text), or `fallback` when the port is unwired or
-// empty. ok is false when the port carries anything else — including a
-// fractional number, which is a wiring mistake (quantities and minor-unit
-// amounts are integers), not something to silently truncate.
+// A wired port overrides the param.
 func numberInputOr(job core.Job, port string, fallback int) (int, bool) {
 	in, present := job.Input[port]
 	if !present || in.Inline == nil {
@@ -164,12 +125,7 @@ func numberInputOr(job core.Job, port string, fallback int) (int, bool) {
 }
 
 func paymentTriggerOutputs() []core.Port {
-	// The examples mirror daemon.paymentPorts, which is what actually fills
-	// these pins when a webhook lands — including its two surprises: `amount`
-	// is the minor unit as a STRING (fmt.Sprintf("%d")), and `currency` is
-	// upper-cased. `payment` and `event` show the fields daemon's
-	// stripePaymentIntent / stripeTriggerEvent read, which is the subset a
-	// flow has any reason to template across.
+	// Mirrors daemon.paymentPorts, which is what actually fills them.
 	return []core.Port{
 		{Port: "amount_display", Label: "Amount (display)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"249.00 SEK"`)},
 		{Port: "amount", Label: "Amount (cents/öre)", MIME: []string{"text/plain"}, Example: json.RawMessage(`"24900"`)},

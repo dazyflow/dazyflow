@@ -131,9 +131,7 @@
   gap: var(--space-2);
   color: var(--muted);
   font-size: var(--text-md);
-  /* The right-hand cluster (org switcher, flow menu) must shrink rather than
-     push the topbar past the viewport. min-width:0 lets it compress, and the
-     org-name label ellipsizes instead of forcing the bar wider. */
+  /* min-width: 0, or a long name pushes the toolbar off-screen instead of shrinking. */
   min-width: 0;
 }
 .topbar .user .who {
@@ -219,11 +217,6 @@
 .sidebar-collapse-toggle {
   display: flex;
   align-items: center;
-  /* Expanded, this is a full-width nav row: chevron then label, left-aligned
-     like the items above it. Without this the global button{} rule centers
-     the pair (text-align below does nothing to flex children), and the
-     collapsed override further down — which sets center deliberately for the
-     icon-only rail — had nothing to override. */
   justify-content: flex-start;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
@@ -270,11 +263,7 @@
     transform: translateX(-100%);
     transition: transform 200ms ease;
     box-shadow: var(--shadow-pop);
-    /* Opaque as an overlay (the inline desktop sidebar is translucent
-       over the page, but a drawer floating over content must not show
-       it through). */
     background: var(--surface);
-    /* Always the full menu in the drawer — never the icon rail. */
     padding: var(--space-4) var(--space-2);
     align-items: stretch;
   }
@@ -338,8 +327,6 @@
   flex-shrink: 0;
   opacity: 0.85;
 }
-/* Uploaded image icons (flows/orgs) render as <img>; keep them square,
-   contained, and crisp at small sizes. */
 .flow-icon-img {
   object-fit: contain;
   border-radius: 3px;
@@ -434,10 +421,6 @@
   margin: 0 0 var(--space-5) 0;
 }
 .page-title h1 {
-  /* Flex, so a leading glyph is spaced by gap and centred on the text's
-     optical midline. Sixteen page headers used to do this with
-     `marginRight: 8, verticalAlign: -3` inline — and the verticalAlign was
-     only ever needed because this was not a flex container. */
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -558,8 +541,6 @@
   color: var(--ink);
   white-space: nowrap;
 }
-/* The ∞ glyph for an unlimited value — a touch larger and centered on the
-   text baseline so it reads as a deliberate symbol, not a stray character. */
 .plan-unlimited {
   display: inline-block;
   font-size: 1.25em;
@@ -588,12 +569,6 @@
   margin: 0 0 var(--space-4);
 }
 
-/* Secondary text, one tier down from body ink. Use for hints, placeholders
-   and "nothing here yet" lines that sit beside primary content.
-   Five call sites were already asking for `.muted` while only `.badge.muted`
-   existed, so they rendered at full body ink — this defines what they meant.
-   Colour only: the caller keeps its own element and spacing. `.badge.muted`
-   is more specific and still wins for badges. */
 .muted {
   color: var(--muted);
 }
@@ -637,9 +612,6 @@
   align-items: center;
   gap: var(--space-2);
 }
-/* Per-card delete: hidden until the card is hovered/focused so it doesn't
-   clutter the grid, and tinted red on its own hover so the destructive
-   action reads clearly. Kept reachable for keyboard users via focus-within. */
 .graph-card-delete {
   flex-shrink: 0;
   opacity: 0;
@@ -655,8 +627,6 @@
 .graph-card-delete:hover {
   color: var(--danger);
 }
-/* Description clamped to two lines so a long blurb can't stretch one card
-   taller than its row-mates. */
 .graph-card-desc {
   color: var(--muted);
   font-size: var(--text-sm);
@@ -724,13 +694,6 @@
   margin: 0 0 var(--space-4);
   flex-wrap: wrap;
 }
-/* A search field. The box owns the border and the focus ring; the glyph and
-   the input are flex children of it.
-   Four pages used to build this a second way — an absolutely positioned glyph
-   at `left: 10, top: 11` with a matching `paddingLeft` on the input. Three
-   magic numbers that had to agree with each other, and didn't: the padding was
-   30 on the results page and 32 on the three platform pages, so the glyph sat
-   2px closer to the text on one of them. */
 .search-box {
   display: flex;
   align-items: center;
@@ -1197,8 +1160,6 @@
 .data-export-list li {
   margin-bottom: var(--space-1);
 }
-/* .card carries no margin, so stacked sections would touch. Space each
-   section below the first off the one above it. */
 .settings-page .settings-card + .settings-card {
   margin-top: var(--space-4);
 }
@@ -1526,9 +1487,6 @@
   color: var(--muted);
   font-size: var(--text-md);
 }
-/* Button styled as an inline link — used for the "use a recovery code"
-   toggle on the second-factor step, where a full button would read as
-   too heavy next to the primary Verify action. */
 .linklike {
   background: none;
   border: none;
@@ -1814,9 +1772,6 @@
   font-size: var(--text-sm);
   line-height: 1.5;
 }
-/* A prerequisite the card can't satisfy on its own — shown only when it is
-   actually unmet, so a working install never sees it. Warning-toned rather
-   than muted: it changes whether the card is worth pressing. */
 .welcome-option-note {
   margin-top: var(--space-2);
   color: var(--warning);
@@ -2091,8 +2046,7 @@
 .integration-card-head h2 {
   margin: 0;
   font-size: var(--text-lg);
-  /* Single line + ellipsis so a long name never wraps and shifts height.
-     min-width:0 lets the flex item shrink so the ellipsis kicks in. */
+  /* Single line, or a long name wraps and shifts the row height. */
   flex: 1;
   min-width: 0;
   white-space: nowrap;
@@ -2161,9 +2115,6 @@
   font-style: italic;
 }
 
-/* Password input + reveal toggle (PasswordField). The button overlays the
-   right end of the field, and the input reserves room for it so a long value
-   never slides under the icon. */
 .password-field {
   position: relative;
   display: block;
@@ -2250,9 +2201,6 @@
   flex: 1;
   font-size: var(--text-md);
 }
-/* Highlight pulse fired when the user lands on /connections?focus=NAME
-   and the credential already exists. Two seconds is long enough to
-   notice without lingering once the user starts reading. */
 .credentials-item-highlight {
   animation: credentials-highlight 2s ease-out;
   border-color: var(--accent);
@@ -2407,8 +2355,7 @@
 .connection-account.needs-reconnect {
   border-color: var(--warning);
 }
-/* Grey would read as "not set up yet". This account IS set up — it stopped
-   working, which is a different thing to say and a different thing to do. */
+/* Grey would read as "not set up yet"; this account IS set up and stopped working. */
 .connection-account.needs-reconnect .connection-dot.off {
   background: var(--warning);
 }
@@ -2534,7 +2481,7 @@
   font-size: var(--text-md);
   color: var(--muted);
 }
-/* Paused-flow toggle: amber so a disabled flow is never a silent surprise. */
+/* Amber, so a paused flow is never a silent surprise. */
 button.warning {
   background: color-mix(in srgb, var(--warning) 16%, transparent);
   color: var(--warning);
@@ -2594,26 +2541,6 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-md);
 }
 
-/* All editor banners (error, lint, run finished, needs-setup, publish) live in
-   this one flex column instead of each pinning itself with a magic-number top
-   offset. That way any banner can wrap to multiple lines and the rest still
-   stack cleanly beneath it — no more overlap when several are shown at once.
- *
- * DOCKED, not floating. These used to be an absolute overlay at top:60/left:12
- * up to 700px wide — which is exactly where a flow's first nodes sit, so a
- * warning, an error and a run result could bury the trigger and the step after
- * it under an opaque block that stayed until dismissed. Being click-through
- * did not help: you could see nothing to click.
- *
- * As a flex item between the toolbar and ReactFlow it takes its own height out
- * of the canvas, so it can never cover a node. That costs some canvas height
- * while a banner is up, and the view shifts when one appears — the trade is
- * deliberate: a canvas that is a little shorter beats a canvas whose top-left
- * corner is unreadable. React Flow keeps its viewport transform across the
- * resize, so nodes do not jump relative to each other; only the frame changes.
- *
- * :empty is why the strip costs nothing when there is nothing to say — an
- * empty flex column would still contribute its gap and border. */
 .editor-banner-stack {
   flex: 0 0 auto;
   display: flex;
@@ -2622,8 +2549,7 @@ button.warning:hover:not(:disabled) {
   padding: var(--space-2) var(--space-3);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  /* Several banners at once must not eat the whole editor: past a few, the
-     strip scrolls instead of growing. */
+  /* Past a few, the stack scrolls rather than eating the editor. */
   max-height: 40vh;
   overflow-y: auto;
 }
@@ -3133,10 +3059,6 @@ button.warning:hover:not(:disabled) {
   cursor: default;
 }
 
-/* Publish toggle — a real on/off switch in the toolbar so publishing reads as
-   a deliberate state change, not a fire-and-forget button. OFF = draft only
-   (accent), ON = live (green); the knob carries a tiny rocket and slides
-   across on publish. */
 .editor-publish-group {
   display: inline-flex;
   align-items: center;
@@ -3218,13 +3140,6 @@ button.warning:hover:not(:disabled) {
   }
 }
 
-/* The publish confirmation (components/PublishCelebration.tsx).
-   Replaced a rocket that flew 220px up the centre of the screen through two
-   expanding coloured rings under the word "Published!". Publishing is what
-   makes a flow start receiving; the feedback should carry weight rather than
-   celebrate. So: a small card, a check that draws itself, one quiet halo, and
-   short ease-out moves with no bounce or overshoot. Fixed, centred, never
-   intercepts clicks; the parent unmounts it (~1.15s). */
 .publish-live {
   position: fixed;
   inset: 0;
@@ -3684,8 +3599,6 @@ button.warning:hover:not(:disabled) {
   overflow: auto;
 }
 
-/* Run log: the persisted line-by-line record below the node timeline
-   (web twin of `dzctl job logs`). Monospace, scrolls, tail-sticky. */
 .run-log {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -3738,39 +3651,13 @@ button.warning:hover:not(:disabled) {
 
 .editor {
   display: grid;
-  /* Single column: the canvas — including the full-width toolbar — spans the
-     whole editor, so opening the inspector never narrows (and collapses) the
-     toolbar. The inspector is an absolute panel anchored BELOW the toolbar
-     (see the desktop rules) rather than a grid column that would compress it. */
   grid-template-columns: 1fr;
   height: 100%;
   background: var(--bg);
   position: relative;
-  /* The inspector is an absolute panel parked off the right edge
-     (translateX(100%)) when hidden. Clip it so that off-screen panel doesn't
-     extend the page's scroll width and add a horizontal scrollbar. */
   overflow: hidden;
 }
-/* Phone: the inspector opens on demand as a FULLSCREEN overlay via the
-   floating "Inspect" button; the canvas keeps full width. Deliberately NOT
-   opened by selection — on a phone that would slam the whole screen over the
-   canvas on every tap.
-
-   This band used to run to 1100px, which meant a half-width desktop window
-   got the phone behaviour: clicking a step selected it and nothing appeared,
-   because the only thing that opens this overlay is the FAB. Above 768px the
-   user has a pointer and room for a side panel, so they get the panel rules
-   below instead. */
 @media (max-width: 768px) {
-  /* Keep the banner stack clear of the inspect FAB. The FAB sits at top:64 /
-     right:12 with a z-index ABOVE the banners (deliberately — it's the only
-     way into the inspector on a phone), and it is on screen at every narrow
-     width. A banner's own actions sit at its right edge — Publish on the
-     publish nudge, Dismiss on the connection banner — which is exactly what
-     the FAB would cover. Padding rather than `right`: the strip is a docked
-     flex item, so it has no inset to shift; what it needs is for its CONTENT
-     to stop short of the floating button. Mirrors the desktop rule that keeps
-     the stack clear of the inspector panel. */
   .editor-banner-stack {
     padding-right: 60px;
   }
@@ -3791,10 +3678,6 @@ button.warning:hover:not(:disabled) {
     pointer-events: auto;
   }
 }
-/* Pointer-sized viewports: the inspector is an absolute panel pinned below the
-   52px toolbar on the right edge, and it slides in WHEN A STEP IS SELECTED.
-   Selecting a step and seeing its settings is the core loop of the editor, so
-   it must not depend on finding a separate button. */
 @media (min-width: 769px) {
   .editor .inspector {
     position: absolute;
@@ -3815,14 +3698,7 @@ button.warning:hover:not(:disabled) {
     padding-right: calc(var(--inspector-w) + 12px);
   }
 }
-/* Wide enough to keep a usable canvas beside the panel: reserve room for it
-   instead of letting it float over the canvas. Below this the panel overlaps
-   the right edge — at 900px, narrowing React Flow to ~380px would leave less
-   canvas than a single step needs, so covering part of it is the better trade.
-   The (full-width) toolbar is untouched either way. */
 @media (min-width: 1101px) {
-  /* React Flow sets an inline width:100%, so !important is needed to reserve
-     room for the inspector panel rather than let the canvas slide under it. */
   .editor[data-has-selection="true"] .canvas > .react-flow {
     width: calc(100% - var(--inspector-w)) !important;
   }
@@ -3835,11 +3711,6 @@ button.warning:hover:not(:disabled) {
   min-height: 0;
 }
 
-/* ===== Motion: professional micro-animations ==============================
-   Subtle, fast, ease-out entrances on transient surfaces, plus a gentle node
-   hover lift. The easing (a soft overshoot-free ease-out) is shared with the
-   inspector slide so the editor feels coherent. All disabled under
-   prefers-reduced-motion. */
 @keyframes dz-fade-in {
   from {
     opacity: 0;
@@ -3913,9 +3784,6 @@ button.warning:hover:not(:disabled) {
 .canvas-context-menu .context-menu-label {
   text-align: left;
 }
-/* Keyboard shortcut hint, pushed to the right edge of the row. Hidden on
-   narrow screens where the extra column would crowd the label — revealed at
-   the large-screen breakpoint below. */
 .canvas-context-menu .context-menu-shortcut {
   display: none;
   margin-left: auto;
@@ -4088,9 +3956,6 @@ button.warning:hover:not(:disabled) {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  /* Buttons inherit font-size, and the inspector panel runs at --text-lg, so
-     without this the CTA would render larger than every other button (Run,
-     Save, …) which sit at --text-md. */
   font-size: var(--text-md);
   font-weight: 600;
 }
@@ -4130,11 +3995,6 @@ button.warning:hover:not(:disabled) {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  /* Query container for the toolbar's label-collapse (see below). The
-     toolbar must respond to its OWN width, not the viewport's — opening
-     the Inspector steals ~320px from the canvas, so a 1366px viewport can
-     leave the toolbar ~800px wide while a viewport media query still
-     thinks it's roomy and keeps every label, overflowing into overlap. */
   container: editor-canvas / inline-size;
 }
 .editor .canvas > .react-flow {
@@ -4258,24 +4118,6 @@ button.warning:hover:not(:disabled) {
   user-select: none;
 }
 
-/* The fold (data face). The header stays where it is and the data panel
-   expands BELOW it via the grid 0fr->1fr idiom, so the header captions the
-   data by sitting above it. No measured pixel values, so a card whose header
-   carries three chips expands as correctly as a bare one.
-
-   This used to be a fold in the literal sense: the panel grew ABOVE the
-   header and the header rotated about its own bottom edge to land back on
-   top. It read well but cost a `perspective` 3D context around the panel,
-   and past roughly 700px of card width Chrome stopped rasterising the table
-   inside it — the rows were in the DOM, correctly laid out and fully opaque,
-   and simply never painted. Expanding downward needs no transform at all.
-
-   min-width: 0 all the way down is what stops a wide table dragging the card
-   open with it. Flex and grid items default to min-width: auto, i.e. "never
-   narrower than my content", so the table's min-content width propagated out
-   through every wrapper and stretched the card from its 200px min-width to
-   ~790px — and .dz-face-scroll's overflow: auto never engaged, because the
-   card just grew to fit it instead. */
 .dz-fold {
   position: relative;
   min-width: 0;
@@ -4320,24 +4162,11 @@ button.warning:hover:not(:disabled) {
   color: var(--accent);
 }
 
-/* The data face itself — one rendering per port kind. Its own well (the code
-   surface) so it reads as data rather than as more card chrome. */
 .dz-face {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  /* Opening the face must not resize the card. min-width: 0 alone cannot do
-     that: nothing here is being SHRUNK: the card has no definite width, so it
-     grows to its content's max-content width and a 7-column table drags it
-     from 472px to 1158px, taking every wire endpoint with it.
-
-     width: 0 takes the well out of that intrinsic-width calculation
-     altogether (its preferred width is zero, and the percentage min-width
-     below resolves to nothing while the card is still measuring itself), so
-     the card sizes to its label, fields and ports exactly as it does closed.
-     min-width: 100% then fills whatever width that turned out to be, and the
-     table overflows into .dz-face-scroll rather than pushing outward. */
   width: 0;
   min-width: 100%;
   margin: var(--space-3) 0;
@@ -4352,9 +4181,6 @@ button.warning:hover:not(:disabled) {
   gap: var(--space-1h);
   flex-wrap: wrap;
 }
-/* Room for the pinned "Show all data" button, which is out of flow and so
-   cannot reserve its own. Only on a face that HAS one — an empty face has
-   nothing to expand, and the gap would be a hole with no cause. */
 .dz-face-head-inset {
   padding-right: calc(var(--space-5) + var(--space-1));
 }
@@ -4522,20 +4348,6 @@ button.warning:hover:not(:disabled) {
   color: var(--code-fg);
 }
 
-/* "Show all data" — opens the same value at reading size in a dialog.
-   Pinned to the well's top-right corner rather than trailing the port tabs.
-   Two reasons, both about being findable:
-
-   It used to MOVE. The head wraps, and the tabs take the free space, so on a
-   router with several branches the button dropped onto a second row — a
-   control that sits somewhere different on every card is one nobody learns
-   the position of.
-
-   It used to read as decoration. A bare --faint glyph on the code surface is
-   the same weight as the well's own chrome, so it did not look like anything
-   you could press. It now rests as a bordered chip on the panel surface,
-   which is how every other icon control in the app announces itself, and
-   keeps the accent for hover. */
 .dz-face-expand {
   position: absolute;
   top: var(--space-1);
@@ -4562,16 +4374,6 @@ button.warning:hover:not(:disabled) {
   background: var(--surface-2);
 }
 
-/* ── The data dialog (NodeDataModal) ───────────────────────────────────────
-   The card's face is a glance; this is the same value at reading size. It
-   builds on .modal-backdrop/.modal for the chrome, the z-index and the
-   fade/pop animations, and only widens the panel: a table wants far more than
-   the 640px a confirm dialog does. 1100px is EDITOR_NARROW, the width the
-   editor already treats as "roomy".
-
-   .modal.dz-datamodal, not .dz-datamodal: `.modal` sets max-width: 640px and
-   is an equally specific selector further down the sheet, so a bare modifier
-   would lose the tie on source order. */
 .modal.dz-datamodal {
   max-width: min(1100px, calc(100vw - 32px));
   max-height: 85vh;
@@ -4691,9 +4493,6 @@ button.warning:hover:not(:disabled) {
   color: var(--faint);
 }
 
-/* Minimize, beside the data-face chevron. Same geometry as .dz-fold-chev but
-   its own class on purpose: `.dz-fold.open .dz-fold-chev` rotates 180deg, and
-   sharing it would spin this button whenever the data face is open. */
 .dz-node-min {
   flex: none;
   display: grid;
@@ -4715,13 +4514,6 @@ button.warning:hover:not(:disabled) {
   background: var(--surface-2);
 }
 
-/* ---------------------------------------------------------------------------
-   The folded card (node.collapsed): icon, name, and one pin a side.
-
-   Laid out as a row rather than the open card's column, and deliberately
-   narrower than .dz-node's 200px min-width — folding a card that stayed
-   200px wide would save a little height and no scanning effort, which is the
-   whole point of folding it. */
 .dz-node-collapsed {
   flex-direction: row;
   align-items: center;
@@ -4797,10 +4589,6 @@ button.warning:hover:not(:disabled) {
   }
 }
 
-/* A locked card. Kept deliberately quiet — a dashed border would collide with
-   .dz-loop-owned, and a dimmed card would read as switched off, which is a
-   different state entirely. The chip carries the message; this is just enough
-   edge to see it without reading. */
 .dz-node-locked {
   border-style: dashed;
 }
@@ -4846,18 +4634,10 @@ button.warning:hover:not(:disabled) {
   position: relative;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  /* ink-soft (not muted): port names are secondary to the bold title but
-     must stay legible — muted washed out on the card surface in both
-     themes. The inward chevrons keep them visually subordinate. */
   color: var(--ink-soft);
   line-height: 16px;
   white-space: nowrap;
 }
-/* Unreal-style exec pin: a rounded white arrow drawn by PassPinIcon's SVG.
-   The handle itself is just a transparent, correctly-sized hit area; the
-   arrow's colour comes from `color` (inherited as currentColor by the SVG),
-   so hover + connected are pure colour/fill swaps. z-index keeps it above
-   the card border. */
 .react-flow__handle.connectingto:not(.valid) {
   border-color: var(--danger) !important;
   animation: dz-handle-invalid 0.9s ease-in-out infinite;
@@ -4899,16 +4679,6 @@ button.warning:hover:not(:disabled) {
   display: block;
   overflow: visible;
 }
-/* Tidy, in the pinned canvas Controls cluster. React Flow's own control
-   glyphs are solid paths, so its stylesheet forces `fill: currentColor` on
-   every svg inside a control button — which turns a stroked Lucide icon into
-   a filled blob. Undo that here and size the icon like the built-in ones.
-   No disabled rule here, deliberately. React Flow dims its own controls via
-   `fill-opacity`, which does nothing to an outline, so this button carried an
-   `opacity: 0.4` instead — and 40% on a 1px stroked glyph over the pale canvas
-   grid does not read as "dimmed", it reads as "not there". That is why Tidy
-   looked missing on flows with fewer than two steps. The button is never
-   disabled now (see FlowEditor). */
 .react-flow__controls .dz-tidy-control svg {
   width: 14px;
   max-width: 14px;
@@ -4998,8 +4768,6 @@ button.warning:hover:not(:disabled) {
   border: 1px solid var(--surface);
   z-index: 2;
 }
-/* "List into a one-at-a-time step" hint — amber like a lint, but on the
-   top-left so it never collides with the lint/config badges on the right. */
 .dz-node-loop {
   position: absolute;
   top: -7px;
@@ -5039,9 +4807,6 @@ button.warning:hover:not(:disabled) {
 .dz-node.dz-node-off.selected {
   opacity: 0.8;
 }
-/* Downstream of a switched-off step: the run-time skip cascade will skip
-   these too, so grey them as a preview — softer than the off node itself
-   (no chip, less dimming), and hover still restores readability. */
 .dz-node.dz-node-off-cascade {
   opacity: 0.55;
   filter: grayscale(0.6);
@@ -5110,9 +4875,6 @@ button.warning:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 20%, var(--surface));
 }
 
-/* The lock, beside the step's on/off switch. Ghost until it is on, then it
-   holds the accent — a lock you have to look twice at to read the state of is
-   worse than none, since the whole point is explaining an inert form. */
 .inspector-lock {
   color: var(--faint);
 }
@@ -5142,9 +4904,6 @@ button.warning:hover:not(:disabled) {
   color: var(--muted);
 }
 
-/* Loop body: a node that runs once per row inside a for_each. The dashed
-   border (matching the for_each `body` pin's exec convention) signals "this
-   doesn't run on its own — the loop drives it" without adding chrome. */
 .dz-node.dz-loop-owned {
   border-style: dashed;
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border-strong));
@@ -5166,9 +4925,6 @@ button.warning:hover:not(:disabled) {
   position: absolute;
   top: 64px;
   right: 12px;
-  /* Above the conn banner (z-index 10): the FAB is the primary way to open
-     the inspector on mobile, so it must stay tappable even when a banner
-     overlaps its corner. */
   z-index: 11;
   width: 36px;
   height: 36px;
@@ -5260,8 +5016,6 @@ button.warning:hover:not(:disabled) {
   margin-top: 0;
   border-top: 1px solid var(--surface);
 }
-/* Locked variant: the user can't connect apps (no secret:write). Non-actionable
-   "ask an admin" note — muted, no link affordance, default cursor. */
 .dz-node-setup-locked {
   background: var(--surface-2);
   color: var(--muted);
@@ -5320,16 +5074,12 @@ button.warning:hover:not(:disabled) {
 .editor-issues-count {
   font-variant-numeric: tabular-nums;
 }
-/* Portaled to <body> with fixed left/top from useAnchoredPop, which clamps it
-   to the viewport: the toolbar scrolls horizontally, and an absolutely
-   positioned panel would be clipped by it. */
 .editor-issues-pop {
   position: fixed;
   z-index: var(--z-issues-pop);
   display: flex;
   flex-direction: column;
   width: max-content;
-  /* Wide enough for a full explanation, never wider than a phone. */
   max-width: min(52ch, calc(100vw - var(--space-4)));
   max-height: min(60vh, 520px);
   background: var(--surface);
@@ -5680,10 +5430,6 @@ button.warning:hover:not(:disabled) {
   transform: translateX(2px);
   color: var(--ink);
 }
-/* Per-status border/glow on the whole node. Running pulses so it's
-   unmistakable mid-canvas; terminal states stay static. Selected wins
-   over status for border color so the user can still tell what's
-   focused, but the glow stays. */
 .dz-node.status-running {
   border-color: var(--status-running);
   border-width: 2.5px;
@@ -5746,19 +5492,6 @@ button.warning:hover:not(:disabled) {
   object-fit: contain;
   display: block;
 }
-/* Single-colour brand marks loaded as <img> can't inherit currentColor,
-   so they disappear against the theme whose background matches their one
-   ink colour: github.svg is pure white (invisible in light mode) and
-   smhi.svg is pure black (invisible in dark mode). Invert just those two
-   marks on the offending theme so the silhouette stays legible. Any future
-   monochrome mark with the same problem can be added to the matching list.
-
-   `filter` recolours the element's WHOLE box, backdrop included — so any
-   logo chip behind the mark (e.g. the Apps card's --surface-2 tile) flips
-   along with it, turning near-black in light mode and swallowing the now
-   black silhouette. Strip the chip from these marks so the invert only
-   touches the silhouette; it then sits on the card surface, legible in
-   both themes. */
 img[src$="/brands/github.svg"],
 img[src$="/brands/smhi.svg"] {
   background: transparent !important;
@@ -5798,13 +5531,6 @@ img[src$="/brands/smhi.svg"] {
   overflow-wrap: anywhere;
   text-decoration: none;
   box-shadow: var(--shadow-pop);
-  /* 4, not the 20 this used to carry. It only ever competed with the node's own
-     badges (1–3): the peek renders inside NodeCard, which React Flow mounts in
-     .react-flow__viewport, and the transform on that element creates a stacking
-     context the peek cannot leave. So 20 bought nothing and read like a tie
-     with --z-topbar, inviting someone to "fix" an overlap that can't happen.
-     Deliberately a raw number — see the stacking-order note in theme.css for
-     why the canvas interior stays out of the token scale. */
   z-index: 4;
   pointer-events: none;
 }
@@ -6379,10 +6105,6 @@ img[src$="/brands/smhi.svg"] {
   color: var(--muted);
   margin: 0;
 }
-/* Missing-value highlight: a field flagged by the config check (jumped to
-   from the "N to configure" modal). The label reads red, a small "required"
-   pill sits beside it, and the input gets a red border + focus ring — echoing
-   the red port dots on the node card so the cue is consistent. */
 .sf-field-missing > .label-row label {
   color: var(--danger);
 }
@@ -6620,10 +6342,6 @@ img[src$="/brands/smhi.svg"] {
   gap: var(--space-2);
   align-items: start;
 }
-/* The "remove this one?" prompt, under the row it is about — the row stays on
-   screen so what is going is still visible while the question is answered. The
-   same inline-confirm idiom the admin tables use for a row action; a modal
-   would be far too much for one line of a form. */
 .sf-dict-confirm {
   padding: var(--space-1) 0 var(--space-1) var(--space-1);
 }
@@ -7091,12 +6809,6 @@ img[src$="/brands/smhi.svg"] {
   opacity: 0.7;
 }
 
-/* Status dot — the at-a-glance run state in history rows and the run
-   header. These spans had no styling at all, so they were invisible: a
-   run parked at an await_approval node looked identical to a finished
-   one. Each engine JobStatus maps to a colour; the "awaiting" state (the
-   only one needing a human) gets a pulsing ring so it stands out in a
-   list of otherwise-finished runs. */
 .status-dot {
   display: inline-block;
   width: 9px;
@@ -7471,9 +7183,6 @@ img[src$="/brands/smhi.svg"] {
   font-size: var(--text-sm);
   margin-bottom: var(--space-3);
 }
-/* The margin above spaces .meta from the rows that usually follow it. When
-   nothing does (a support ticket card is subject + meta and nothing else) it
-   would leave dead space at the bottom of the card. */
 .user-card .meta:last-child {
   margin-bottom: 0;
 }
@@ -7800,9 +7509,6 @@ a.pa-card:hover {
   margin-bottom: var(--space-2);
   line-height: 1.4;
 }
-/* What's actually being decided: the value the flow wired into the step.
-   Sits between the prompt and the meta line, indented off a rule so it reads
-   as quoted evidence rather than more of the card's own chrome. */
 .approval-context {
   margin: 0 0 var(--space-3);
   padding-left: var(--space-3);
@@ -7891,10 +7597,6 @@ a.pa-card:hover {
   }
 }
 
-/* Recent decisions — the settled half of the page, beneath the inbox.
-   Deliberately quieter than .approval-card: no surface, no shadow, tighter
-   rows. The inbox is work; this is the record of work, and it must not
-   compete for the eye of someone who came here to decide something. */
 .approval-history {
   margin-top: var(--space-6);
 }
@@ -7936,8 +7638,6 @@ a.pa-card:hover {
 .approval-history-row.is-reject .approval-history-mark {
   color: var(--danger);
 }
-/* Cancelled: nobody decided. Muted rather than red — a called-off request is
-   not a rejection, and colouring it like one would misreport what happened. */
 .approval-history-row.is-cancelled .approval-history-mark {
   color: var(--muted);
 }
@@ -7977,23 +7677,6 @@ a.pa-card:hover {
   font-size: var(--text-xs);
 }
 
-/* ── The dialog shell ────────────────────────────────────────────────────
-   One backdrop + panel + head/body/foot, used by all 27 dialogs.
-
-   There used to be two of these. `.settings-*` dressed twenty dialogs and
-   `.modal-*` five, and the second was introduced with the comment "Mirrors
-   .settings-backdrop" — which it did, apart from three things nobody chose:
-   it was 560px instead of 640px wide, its head and foot were 4–8px tighter,
-   and it had no entrance animation. So five dialogs were quietly narrower and
-   appeared instantly while every other one popped in.
-
-   They are merged onto the `.settings-*` values under the `.modal-*` names,
-   because most of the twenty were not settings dialogs and the prefix said
-   they were.
-
-   NOT part of this shell: `.settings-tabs`. That one is genuinely shared with
-   the admin secrets PAGE, so it is a tab strip that happens to appear in a
-   dialog, not a piece of dialog chrome. */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -8091,9 +7774,6 @@ a.pa-card:hover {
 .confirm-dialog {
   max-width: 440px;
 }
-/* The publish gate adds a third footer button ("connect" alongside publish /
-   publish-unnamed), which wraps a button label onto two lines at the shared
-   440px. Widen only that variant rather than every confirm. */
 .confirm-dialog.publish-gate {
   max-width: 520px;
 }
@@ -8111,12 +7791,6 @@ a.pa-card:hover {
   border-top: 1px solid var(--border);
   background: var(--surface-2);
 }
-/* MCP connect modal: a touch wider than the default dialog, and goes
-   edge-to-edge on small screens so its client cards, OS tabs, and config
-   snippets get the whole viewport instead of a cramped centred card.
-   Mirrors the Ctrl+K palette's mobile treatment: 100dvh (so the mobile
-   URL bar collapsing doesn't clip the bottom) and no backdrop blur (the
-   dialog covers it anyway). 768px = the app's mobile break. */
 .mcp-connect-dialog {
   max-width: 680px;
 }
@@ -8529,10 +8203,6 @@ a.pa-card:hover {
   top: 0;
   right: 0;
   bottom: 0;
-  /* Above the inspector (z-index 6): both are right-edge absolute panels, so
-     when a node is selected and history is opened the list must sit on top
-     rather than behind the inspector. Match the inspector width so it covers
-     it cleanly with no sliver showing through. */
   z-index: 7;
   width: var(--inspector-w);
   display: flex;
@@ -8660,9 +8330,6 @@ a.pa-card:hover {
   font-size: var(--text-sm);
   padding: var(--space-1h) 10px;
 }
-/* Google Workspace SSO card. A header (logo + title + status pill), a
-   stack of fields, then a footer with the actions right-aligned. Section
-   dividers are inset by the card padding, which reads as deliberate. */
 .sso-card-head {
   display: flex;
   align-items: flex-start;
@@ -8863,11 +8530,6 @@ a.pa-card:hover {
   z-index: 5;
   min-width: 0;
 }
-/* The scrolling half. When the controls can't all fit (small screens,
-   inspector open) THIS region scrolls horizontally rather than widening the
-   app — the primary actions are its siblings, so they stay put. min-width:0
-   lets it shrink below its content instead of pushing the canvas wider; flex
-   1 makes it absorb the slack, which is what the old .toolbar-spacer did. */
 .editor-toolbar .toolbar-scroll {
   flex: 1 1 auto;
   display: flex;
@@ -8923,9 +8585,6 @@ a.pa-card:hover {
 .editor-toolbar .toolbar-scroll > * {
   flex-shrink: 0;
 }
-/* Direct children keep their natural width and overflow into the scroll
-   region instead of compressing — so buttons never squish below their
-   icon/label; the spacer just collapses to nothing when space runs out. */
 .editor-toolbar > * {
   flex-shrink: 0;
 }
@@ -8980,14 +8639,6 @@ a.pa-card:hover {
   padding: 0 14px;
   font-weight: 600;
 }
-/* While a run is active the Run button becomes Stop. It used to be
-   variant="primary" with the red fill forced on right here, so the button
-   system said "affirmative" while the pixels said "destructive", and the same
-   action on the run-detail page rendered as a red OUTLINE. Both are
-   `variant="danger" filled` now, which puts the red fill in the button system
-   (theme.css) where both surfaces read it from one definition. All that's left
-   here is holding the Stop button to the Run button's width so the toolbar
-   doesn't reflow the moment a run starts. */
 .editor-toolbar button.run-stop {
   min-width: 5.5rem;
 }
@@ -9001,9 +8652,6 @@ a.pa-card:hover {
 .editor-toolbar .editor-saving .spin {
   animation: dz-spin 1s linear infinite;
 }
-/* The pending/saving status mirrors the calm "saved" chrome — muted, no
-   button affordance — but its spinner takes the accent so it reads as
-   in-progress, not done. */
 .editor-saving {
   color: var(--muted);
   user-select: none;
@@ -9011,9 +8659,6 @@ a.pa-card:hover {
 .editor-saving svg {
   color: var(--accent);
 }
-/* Idle "all saved" status — a calm confirmation in place of the Save
-   button when there's nothing to save. No button chrome; a soft success
-   check + muted label, sized to sit flush with the toolbar buttons. */
 .editor-saved {
   color: var(--muted);
   user-select: none;
@@ -9021,15 +8666,6 @@ a.pa-card:hover {
 .editor-saved svg {
   color: var(--success);
 }
-/* It floats at top:62, which is where the docked banner strip now is — so
-   while any banner is up the hint would sit on top of it. A banner is always
-   the more urgent, more transient message, so the teaching tip stands down
-   while one is showing and returns when it is dismissed. (Hidden rather than
-   pushed below the strip: the strip's height varies with its contents, and a
-   tip that jitters down the canvas as banners come and go is worse than one
-   that waits its turn.) */
-/* The run-succeeded readout used to need a clause here too — it shared this
-   exact spot. It is in the toolbar now, so it cannot collide with the tip. */
 .canvas:has(.editor-banner-stack:not(:empty)) .editor-trigger-hint {
   display: none;
 }
@@ -9098,10 +8734,6 @@ a.pa-card:hover {
   align-items: center;
   gap: var(--space-1h);
 }
-/* The note's colour, as a row of swatches rather than a popover: a popover
-   opened inside a frame would paint behind the steps it groups (frames sit at
-   z-index -1 so wires and cards stay readable over them), and one click beats
-   two for a choice this small. */
 .dz-frame-colors {
   display: flex;
   align-items: center;
@@ -9162,9 +8794,6 @@ a.pa-card:hover {
   font-weight: 500;
 }
 
-/* Reroute knots: small draggable dots on a wire (approach-B reroute).
-   Filled with the wire's colour (set inline), a thin surface ring for
-   contrast against the canvas, and a grab cursor. */
 .reroute-knot {
   stroke: var(--surface);
   stroke-width: 1.5;
@@ -9182,16 +8811,10 @@ a.pa-card:hover {
 }
 
 
-/* While a build is playing, node position changes interpolate (a moved drop
-   glides) instead of jumping. Scoped to nodes so the viewport pan/zoom
-   transform — also a translate — is never animated. */
 .canvas.rf-animating .react-flow__node {
   transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* A freshly-added drop scales + fades in after its staggered delay. Applied
-   to the inner card, NOT the React Flow wrapper, whose own transform places
-   the node — animating the wrapper's transform would yank it to the origin. */
 .dz-node.dz-enter {
   animation: dz-node-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: var(--enter-delay, 0s);
@@ -9239,15 +8862,6 @@ a.pa-card:hover {
   padding: 0;
   justify-content: center;
 }
-/* Tight toolbar: drop the text labels and the Ctrl+K hint, collapsing
-   secondary actions to square icon buttons. The primary action keeps its
-   label — it's the focal point and conveys run state. Keyed on the canvas
-   container's own width (see `container: editor-canvas` on .editor .canvas)
-   so it triggers whenever the *toolbar* is short — including when the
-   Inspector pane is open — rather than only on a narrow viewport. The
-   threshold sits above the full-label content width (~900px with a node
-   selected, when Breakpoint + "N to configure" are also present) so labels
-   collapse before they can overlap. */
 @container editor-canvas (max-width: 960px) {
   .editor-toolbar .toolbar-label {
     display: none;
@@ -9258,9 +8872,6 @@ a.pa-card:hover {
   .editor-toolbar .editor-run-status-text {
     display: none;
   }
-  /* The nudge arrows are excluded: they are icon-only at every width already,
-     and squaring them off to 36px would give a scroll affordance the footprint
-     of the tools it reveals. */
   .editor-toolbar button:not(.primary, .toolbar-nudge) {
     width: 36px;
     padding: 0;
@@ -9271,10 +8882,6 @@ a.pa-card:hover {
     margin: 0 var(--space-1);
   }
 }
-/* Small screens: even the primary Run/Stop/Test-event button drops its
-   label and becomes a square icon button — the accent colour alone marks
-   it as the focal point, and the label would otherwise crowd out the
-   status chip and pause toggle on phone widths. */
 @container editor-canvas (max-width: 640px) {
   .editor-toolbar button.primary {
     padding: 0 var(--space-2);
@@ -9484,7 +9091,6 @@ a.pa-card:hover {
   font-size: var(--text-xs);
   color: var(--faint);
 }
-/* Escape hatch under the entry-point list: widen to the full catalog. */
 .quick-palette-showall {
   display: block;
   width: 100%;
@@ -9511,13 +9117,6 @@ a.pa-card:hover {
   color: var(--muted);
 }
 
-/* Fullscreen palette on small screens: a centred float with a backdrop
-   makes no sense on a phone (the dialog is most of the viewport anyway
-   and the soft keyboard eats the rest). Go edge-to-edge — search pinned
-   to the top, results filling the space, no rounded float. The
-   keyboard-shortcut hint is hidden since there's no hardware keyboard to
-   speak of; tap-to-pick still works. Uses 100dvh so the mobile URL bar
-   collapsing doesn't clip the bottom. */
 @media (max-width: 768px) {
   .quick-palette-backdrop {
     padding-top: 0;
@@ -9539,7 +9138,6 @@ a.pa-card:hover {
     z-index: 1;
   }
   .quick-palette-search input {
-    /* 16px avoids iOS Safari's auto-zoom on focus for <16px inputs. */
     font-size: var(--text-lg);
   }
   .quick-palette-hint {
@@ -9621,20 +9219,6 @@ a.pa-card:hover {
   color: var(--ink);
 }
 
-/* ── JSON editor (dz-json-editor) ───────────────────────────────────────
-   A transparent <textarea> layered over an aria-hidden highlighted <pre>.
-   Both layers MUST share identical metrics (font, size, line-height,
-   padding, wrapping) so the caret sits exactly over its highlighted glyph;
-   the component syncs scrollTop/Left between them. See JsonEditor.tsx.
-
-   Every layer rule is written as a CHILD of its container, and that is not
-   tidiness — it is what makes the metrics hold. A bare `.dz-json-ta` is
-   specificity (0,1,0), which LOSES to any ambient form-control rule reaching
-   into wherever the editor is dropped: on a node card, `.dz-node-params
-   textarea` (0,1,1) gave the textarea 4px/6px padding while the <pre> behind
-   it kept 8px, so the caret sat off the text everywhere a JSON node was edited
-   on the canvas. Scoped, the pair is (0,2,0) and out of reach.
-   check-overlay-metrics.mjs enforces the shape. */
 .dz-json-editor,
 .dz-code-editor {
   position: relative;
@@ -9666,13 +9250,6 @@ a.pa-card:hover {
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: break-word;
-  /* Reserve the scrollbar's width in BOTH layers, always. The textarea scrolls
-     and the <pre> does not, so once the content was tall enough for a scrollbar
-     the textarea's content box narrowed by ~15px and the <pre>'s did not — and
-     with pre-wrap that means the two layers wrap at different columns, so the
-     text drifts apart line by line and the caret lands on the wrong glyph.
-     Where scrollbar-gutter is unsupported this degrades to that older
-     behaviour rather than breaking anything. */
   scrollbar-gutter: stable;
 }
 .dz-json-editor .dz-json-pre,
@@ -9717,29 +9294,9 @@ a.pa-card:hover {
   color: var(--json-punct);
 }
 
-/* ── Script editor (dz-code-editor) ─────────────────────────────────────
-   The runner step's script box. Shares every metric with the JSON editor
-   above — same two-layer overlay, same reason they must not diverge — and
-   differs only in which tokens it colours. See ScriptEditor.tsx. */
 .dz-code-editor {
   resize: vertical;
 }
-/* Long lines SCROLL; they do not wrap. Both layers, in one rule, because the
-   two must never disagree about this.
- *
- * The overlay technique asks two different layout engines — CSS text layout in
- * the <pre>, the browser's text-control code in the <textarea> — to break a
- * line at exactly the same character. Identical CSS is necessary but not
- * sufficient: they are separate implementations, and anything that narrows one
- * content box and not the other (a scrollbar appearing, a gutter reserved on
- * one side only) shifts every wrap point below it, which is what puts the caret
- * a few characters off the glyph it is in front of. With no wrapping there is
- * nothing left to disagree about — only per-line font metrics, which the shared
- * rule above pins.
- *
- * It is also what a code box should do. Wrapping a shell pipeline or a long
- * URL mid-token to fit a narrow inspector panel is worse than scrolling it,
- * which is why every code editor scrolls. */
 .dz-code-editor .dz-code-pre,
 .dz-code-editor .dz-code-ta {
   white-space: pre;
@@ -10060,9 +9617,6 @@ a.pa-card:hover {
   background: var(--muted);
 }
 
-/* Fill the available height so the whole visible area accepts a drop —
-   otherwise a file dropped in the empty space below the (often short) file
-   list misses the handler and the browser just opens the file instead. */
 .files-page {
   position: relative;
   min-height: 100%;
@@ -10091,9 +9645,6 @@ a.pa-card:hover {
   pointer-events: none;
 }
 
-/* CEL formula editor (CelInput) — a highlight <pre> painted under a
-   transparent-text <textarea>. The two MUST share identical typography, padding
-   and wrapping so the colored tokens sit under the real caret. */
 .cel-input {
   display: flex;
   flex-direction: column;
@@ -10336,9 +9887,6 @@ a.pa-card:hover {
   color: var(--ink);
   overflow-wrap: anywhere;
 }
-/* The second box of an editing/add row. Narrower than the column box by
-   default: a heading is usually shorter than the field name it replaces, and
-   the column is the half that must stay readable. */
 .rtc-label-input {
   flex: 1 1 40%;
 }
@@ -10774,12 +10322,6 @@ a.pa-card:hover {
   flex: 1;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   Motion polish — consistent, gentle motion across the GUI, built on the
-   --dur-* / --ease-* tokens (theme.css). Additive and low-specificity: it eases
-   the common interactive states without overriding component-specific motion,
-   and never animates layout (width/height) so it can't introduce jank.
-   ───────────────────────────────────────────────────────────────────────── */
 
 .route-fade {
   animation: route-fade-in var(--dur-3) var(--ease-out);
@@ -10795,8 +10337,6 @@ a.pa-card:hover {
   }
 }
 
-/* Interaction polish: ease the everyday visual states so hover/focus/press
-   glide. Property allow-list only — no width/height. */
 button,
 a,
 .btn,
@@ -10833,8 +10373,6 @@ button:active,
   }
 }
 
-/* Editor feel: smooth the editor CHROME (inspector slide, overlay banners) —
-   not the React Flow canvas/nodes, whose transform is owned by the library. */
 .inspector,
 .editor-banner-stack > * {
   transition:
@@ -10842,7 +10380,6 @@ button:active,
     opacity var(--dur-3) var(--ease-out);
 }
 
-/* Accessibility: honor reduced-motion globally — near-instant, no movement. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -10865,16 +10402,6 @@ button:active,
   align-items: center;
 }
 
-/* Full-viewport, dark, large type for across-the-room legibility. This is the
-   one surface strangers see without ever signing in — a screen on a wall in
-   someone's office — so it is dressed like the marketing site rather than like
-   app chrome: the same nebula wash, the same graph-paper grid bleeding through
-   from the editor canvas, the same lit-edge glass cards, the same brand
-   gradient on the eyebrow. (../dazyflow-web/style.css is the sibling.)
-
-   A single ambient accent (--tv-accent) is tinted by board health and threaded
-   through the background wash, the top hairline and the eyebrow, so the whole
-   surface reads as one calm, coherent state at a glance. */
 .tv-view {
   --tv-accent: var(--accent);
   --tv-fill: linear-gradient(
@@ -10969,11 +10496,6 @@ button:active,
 .tv-health-good {
   --tv-accent: var(--status-completed);
 }
-/* Light board. Same composition, different physics: cards go opaque-ish white
-   and the elevation becomes a diffuse grey drop instead of the dark theme's
-   near-black well, which on a light canvas reads as dirt. The paper is dialled
-   up because the light canvas grid is deliberately faint for an editor that is
-   mostly nodes — a wall board is mostly empty space and needs the texture. */
 :root[data-theme="light"] .tv-view {
   --tv-fill: linear-gradient(
     180deg,
@@ -11023,9 +10545,6 @@ button:active,
   gap: clamp(var(--space-3), 1.4vw, var(--space-5));
   min-width: 0;
 }
-/* Org logo beside the board title — sized to roughly match the title's cap
-   height and never shrinks. FlowIcon renders an <img> for uploaded logos or a
-   glyph for a logical icon name. */
 .tv-org-ico {
   display: inline-flex;
   flex: 0 0 auto;
@@ -11110,10 +10629,6 @@ button:active,
   border-color: color-mix(in srgb, var(--status-awaiting) 34%, transparent);
   color: color-mix(in srgb, var(--status-awaiting) 60%, var(--ink));
 }
-/* The board's two controls (theme, full screen), sitting together as one
-   segmented cluster. Deliberately quiet — they exist for the person setting
-   the screen up, not for the room watching it, so they fade back once the
-   pointer leaves and come back on hover or keyboard focus. */
 .tv-ctls {
   display: inline-flex;
   align-items: center;
@@ -11208,8 +10723,6 @@ button:active,
 .tv-stat-warn,
 .tv-stat-bad,
 .tv-stat-live {
-  /* A toned number is a flat status colour, not a gradient: the colour IS the
-     message, and a gradient would dilute it. */
 }
 .tv-stat-good .tv-stat-value,
 .tv-stat-warn .tv-stat-value,
@@ -11349,12 +10862,6 @@ button:active,
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-/* Two deliberate lines: the status pill, then the run history and the times.
-   One wrapping line was the honest first try and it reads as an accident —
-   at four columns on a 16:9 wall the pill, the run pipes, "7 minutes ago" and
-   "next in 44 minutes" do not fit across, so each tile broke in a different
-   place. Dense boards below put it back on one line, where the type is
-   smaller and there is no next-run to carry. */
 .tv-flow-bottom {
   display: flex;
   flex-direction: column;
@@ -11387,8 +10894,6 @@ button:active,
 .tv-pill-queued {
   --pill: var(--status-running);
 }
-/* The second line: recent-run history strip, when it last ran, when it runs
-   next. Wraps rather than clipping on a narrow tile. */
 .tv-flow-meta {
   display: inline-flex;
   align-items: center;
@@ -11433,11 +10938,6 @@ button:active,
 .tv-spark-bar.queued {
   background: var(--status-running);
 }
-/* The newest pipe breathes while that run is still going. Only the last one:
-   it is the only bar that can still change, and a strip of pulsing bars would
-   be a light show rather than a signal. The board polls on a timer, so this is
-   also the one thing on screen that proves the wall is not showing a frozen
-   snapshot. */
 .tv-spark-bar:last-child.running,
 .tv-spark-bar:last-child.queued {
   animation: tv-spark-pulse 1.6s ease-in-out infinite;
@@ -11582,10 +11082,6 @@ button:active,
   }
 }
 
-/* A combobox, not a select: the list is the ~400 IANA zones filtered as you
-   type, so it needs its own popup rather than a native dropdown. Anchored to
-   the field and floated over the form — the Inspector scrolls, and a list that
-   pushed the fields below it down would move the thing you were reading. */
 .tz-field {
   position: relative;
 }
@@ -11618,8 +11114,6 @@ button:active,
   font-size: var(--text-md);
   cursor: pointer;
 }
-/* Hover and keyboard share one highlight, so arrowing down and moving the
-   mouse can't leave two rows looking equally chosen. */
 .tz-option.active {
   background: var(--surface-3);
 }
@@ -11808,8 +11302,6 @@ button:active,
   margin: var(--space-4) 0;
   max-height: 60vh;
   overflow-y: auto;
-  /* Vertical padding only: a horizontal inset would push the bubbles out of
-     line with the ticket header above and the composer below. */
   padding: var(--space-2) 0;
 }
 .ticket-bubble {
@@ -11855,10 +11347,6 @@ button:active,
   flex: 1;
   resize: vertical;
 }
-/* Support-queue dashboard tiles. Each tile is also the filter for what it
-   counts, so it's a <button> rather than the Dashboard's <Link> — restate the
-   card surface the global button reset would otherwise flatten, and mark the
-   selected view so the numbers and the list below never look unrelated. */
 .support-stat {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -11876,15 +11364,6 @@ button:active,
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-/* `card error` is the single error surface for the whole app — always rendered
-   via <ErrorNotice> (components/ErrorNotice.tsx), never hand-assembled. It used
-   to be text-only at --text-sm while some call sites pasted in their own icon
-   and others used a plain `card` with an inline colour, so the same failure
-   looked different per page. The icon + sizing now live here so every error
-   reads identically.
-
-   --text-base (not --text-sm): an error is the one thing on the page the user
-   MUST be able to read, so it doesn't get the de-emphasised size. */
 .card.error {
   display: flex;
   align-items: flex-start;
@@ -12014,8 +11493,6 @@ button:active,
   flex: none;
   color: var(--success);
 }
-/* The message yields first: the link is the affordance and must not be the
-   thing that gets cut. The full sentence is on the element's title. */
 .editor-run-status-text {
   min-width: 0;
   overflow: hidden;
@@ -12035,11 +11512,6 @@ button:active,
   }
 }
 
-/* overflow:hidden clips the table to the card's rounded corners. The table
-   itself scrolls inside .run-table-scroll — without that wrapper this rule was
-   the bug: on a narrow screen the table keeps a readable minimum width, and
-   what stuck out was CUT OFF rather than scrollable, so the last columns were
-   unreachable on a phone. */
 .runner-list {
   padding: 0;
   overflow: hidden;
@@ -12100,8 +11572,6 @@ button:active,
   font-family: var(--font-mono);
 }
 
-/* The install command. Accented border because it is the one thing on the page
-   that cannot be recovered once dismissed — the token is shown exactly once. */
 .runner-install {
   margin: var(--space-4) 0;
   border-color: var(--accent);
@@ -12136,18 +11606,12 @@ button:active,
 .mcp-form {
   margin-bottom: var(--space-4);
 }
-/* The endpoint and the step ids are identifiers, not prose — monospaced for
-   the same reason runner labels are. The URL wraps rather than truncating: it
-   is the field most likely to be wrong, and a clipped one cannot be checked. */
 .mcp-url {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
   max-width: 32ch;
 }
-/* A server's own handshake note, under its endpoint. Clamped to three lines
-   with the full text on hover: it is a paragraph a third party wrote, and an
-   unbounded one would push every other row off the screen. */
 .mcp-instructions {
   font-size: var(--text-xs);
   margin-top: var(--space-1);
@@ -12201,8 +11665,6 @@ button:active,
   font-family: var(--font-mono);
   font-size: var(--text-sm);
 }
-/* A checkbox and its label on one line, aligned on the control rather than on
-   the text box the other .sf-field rows contain. */
 .checkbox-row {
   display: flex;
   align-items: center;
@@ -12219,10 +11681,6 @@ button:active,
   gap: var(--space-2);
   font-weight: 600;
 }
-/* Step id, method and path on one line: they are read together as "POST
-   /orders", and stacking them would make the commonest scan the slowest. Method
-   is sized to its content (a fixed vocabulary of six words) while the id and the
-   path share what is left — the path being the one that needs the room. */
 .webapi-op-row {
   display: grid;
   grid-template-columns: minmax(10ch, 1fr) auto minmax(16ch, 2fr);
@@ -12232,9 +11690,6 @@ button:active,
 .webapi-args {
   margin-top: var(--space-3);
 }
-/* An argument: name, where it goes, type, required, remove. Grid rather than
-   flex so the columns line up DOWN the list — with flex, each row would size to
-   its own content and the eye would have nothing to follow. */
 .webapi-arg-row {
   display: grid;
   grid-template-columns: minmax(8ch, 1.5fr) auto auto auto auto;
@@ -12242,9 +11697,6 @@ button:active,
   align-items: center;
   margin-bottom: var(--space-2);
 }
-/* Narrow screens: the two grids collapse to stacked rows rather than shrinking
-   every control past usefulness. An argument name field of four characters is
-   worse than a taller form. */
 @media (max-width: 720px) {
   .webapi-op-row,
   .webapi-arg-row {
@@ -12252,18 +11704,6 @@ button:active,
   }
 }
 
-/* A glyph inside a line of prose — a status line, a card heading, a label.
-   Unlike a button, these containers can't simply be flexed: `.sso-test-ok` and
-   friends hold a heading AND a description under the glyph, so flex would lay
-   them out side by side. Here the glyph really is an inline box, and the two
-   properties it needs are the optical nudge and (when it leads the line) a gap.
-   Both were being hand-written: 41 `verticalAlign` nudges at -1, -2 and -3 —
-   some as numbers, some as "-1px" strings — and 24 margins at 3, 4, 6 and 8px.
-
-   -0.15em rather than a pixel count, because `em` on vertical-align resolves
-   against the element's own font size, which an svg inherits from the text
-   around it. So the nudge tracks the type size instead of needing three
-   hand-picked values for three icon sizes. */
 .icon-inline {
   vertical-align: -0.15em;
 }
@@ -12277,9 +11717,6 @@ button:active,
   color: var(--muted);
 }
 
-/* The same message where a card would be redundant chrome: inside a dialog
-   body, a panel, a list that already has a border. Centred, because here it
-   stands in for the content rather than sitting beside it. */
 .notice-line {
   padding: var(--space-4);
   text-align: center;
@@ -12298,10 +11735,6 @@ button:active,
   padding: var(--space-6) var(--space-4);
   color: var(--muted);
 }
-/* Targeted by class, not as `> svg`. The rule this replaced tinted the direct
-   child, which also caught the Plus icon inside the call-to-action button and
-   needed a comment warning future editors not to nest it there. A class cannot
-   reach into the action at all. */
 .empty-state-icon {
   color: var(--accent);
   margin-bottom: var(--space-2);
@@ -12399,15 +11832,10 @@ button:active,
   padding: var(--space-2);
 }
 
-/* Replaces the native `title=` tooltip that carried step and field guidance.
-   A native tooltip never fires on touch, so this content was unreachable on a
-   tablet; and it cannot scroll, which a 131-word drop description needs. */
 .help-pop-wrap {
   display: inline-grid;
   place-items: center;
 }
-/* The trigger reuses .inspector-info for colour and sizing; it is a <button>
-   now rather than a <span>, so the UA button chrome has to come back off. */
 .help-pop-wrap .inspector-info {
   background: none;
   border: 0;
@@ -12415,20 +11843,11 @@ button:active,
   font: inherit;
   cursor: pointer;
 }
-/* Portaled to <body> and given fixed left/top by useAnchoredPop, which
-   clamps it to the viewport. It used to be an absolute panel anchored
-   top:100%/right:0 on the (i), which .inspector-body's scroll container clipped
-   on both axes — the prose was cut in half near the panel's bottom or left
-   edge. The placement lives in JS because CSS cannot ask "is there room". */
 .help-pop {
   position: fixed;
   z-index: var(--z-help-popover);
   display: block;
   width: max-content;
-  /* Wide enough for a paragraph, never wider than a narrow inspector or a
-     phone. max-height + scroll is what the native tooltip could not do. The
-     100vw cap leaves both 8px keep-out margins anchorBelow() clamps to, so a
-     panel at full width still lands inside them. */
   max-width: min(34ch, calc(100vw - var(--space-4)));
   max-height: 60vh;
   overflow-y: auto;
@@ -12443,8 +11862,6 @@ button:active,
   line-height: 1.5;
   white-space: normal;
   text-align: left;
-  /* Inherited centring from the node/field header would otherwise letterbox
-     the text; and a header sets its own tighter tracking. */
   letter-spacing: normal;
   text-transform: none;
 }
@@ -12548,8 +11965,6 @@ button:active,
 .wa-op-title {
   color: var(--muted);
 }
-/* The counts line of a refresh. Colour carries the meaning at a glance and the
-   words carry it for everyone else — removals are never colour alone. */
 .wa-diff-summary {
   display: flex;
   align-items: center;
@@ -12585,13 +12000,6 @@ button:active,
   cursor: pointer;
 }
 
-/* ── Public collection page (/board/:token) ──
-   The login-free read-only table behind a collection share link. Deliberately
-   NOT dressed like the TV board next door: that one is furniture on a wall,
-   read from across a room, and it earns its nebula and glass. This is a
-   document someone was sent — the shape of a report, on a plain ground, in one
-   readable column. The chrome's whole job is to say whose data this is and
-   let the reader take it away. */
 .pub-view {
   min-height: 100vh;
   box-sizing: border-box;

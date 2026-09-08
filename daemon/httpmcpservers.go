@@ -25,46 +25,20 @@ func (h *HTTPGateway) mcpAPI() *mcpAPI {
 	return &mcpAPI{auditor: h.auditor(), svc: h.svc, MCPServers: h.MCPServers}
 }
 
-// The admin API behind Admin → MCP servers.
-//
-// Every handler is scoped to p.Tenant and never takes a tenant from the
-// request. An org administering "its" servers is administering exactly the
-// rows its session is for; there is no path here that names another org's.
-
-// mcpServerRow is the list's wire shape.
-//
-// No token, and no field for one. The credential is write-only by
-// construction — the store's read columns exclude it — so this type cannot
-// carry one back to a browser even if a future handler forgets to think
-// about it.
 type mcpServerRow struct {
 	Name string `json:"name"`
-	// Label is the display name. Always populated on the wire — a row saved
-	// before labels existed reports its id here, so a client never has to
-	// implement the fallback itself.
-	Label    string `json:"label"`
-	URL      string `json:"url"`
-	AuthKind string `json:"auth_kind"`
-	// AuthHeader is the header name for auth_kind "header". The NAME is not a
-	// secret; the value it carries is.
+	// Always populated on the wire, falling back to the id for an older row.
+	Label      string `json:"label"`
+	URL        string `json:"url"`
+	AuthKind   string `json:"auth_kind"`
 	AuthHeader string `json:"auth_header,omitempty"`
-	// HasToken tells the edit form whether a credential is stored, so it can
-	// offer "replace" rather than demanding the token be retyped on every
-	// save.
+	// Whether a credential is stored; the value itself never comes back.
 	HasToken bool `json:"has_token"`
 	Enabled  bool `json:"enabled"`
-	// Connected is the live fact: this row has a working session in THIS
-	// process right now. A server whose steps are being described from cache
-	// is NOT connected. Distinct from last_connected, which is the last time
-	// any replica managed it.
+	// The live fact for THIS process, not a stored column.
 	Connected bool     `json:"connected"`
 	ToolIDs   []string `json:"tool_ids,omitempty"`
-	// Instructions is what the server said about itself at handshake, verbatim.
-	// Live-only, like Connected and ToolIDs: it comes from the connection this
-	// process holds, so a row connected on another replica reports none.
-	//
-	// Third-party text on an admin page. It is rendered as text, never as
-	// markup, and nothing here or downstream acts on it.
+	// Verbatim third-party prose: shown to an admin, never acted on.
 	Instructions    string    `json:"instructions,omitempty"`
 	ProtocolVersion string    `json:"protocol_version,omitempty"`
 	ToolCount       int       `json:"tool_count"`
@@ -77,17 +51,13 @@ type mcpServerRow struct {
 
 type mcpServerRequest struct {
 	Label string `json:"label,omitempty"`
-	// Name sets the id explicitly. The UI never sends it on a create — it
-	// sends Label and lets the daemon derive one. Kept for an API caller that
-	// wants to choose the id its flows will reference.
+	// The UI never sends it: two clients slugging differently would be two ids.
 	Name       string `json:"name,omitempty"`
 	URL        string `json:"url"`
 	AuthKind   string `json:"auth_kind"`
 	AuthHeader string `json:"auth_header,omitempty"`
 	Token      string `json:"token,omitempty"`
-	// Enabled is a pointer so "not sent" is distinguishable from "false": a
-	// PUT that omits it must not silently disable a working server.
-	Enabled *bool `json:"enabled,omitempty"`
+	Enabled    *bool  `json:"enabled,omitempty"`
 }
 
 func (h *mcpAPI) mcpServersConfigured(rw http.ResponseWriter) bool {
@@ -104,10 +74,7 @@ func decodeMCPBody(r *http.Request, v any) error {
 
 func (h *mcpAPI) mcpRowFor(s MCPServer, live map[string]mcp.ServerStatus) mcpServerRow {
 	st, registered := live[s.Name]
-	// Registered is not the same as connected any more: a server whose
-	// handshake failed stays in the catalog DESCRIBING its cached tools, so
-	// flows keep their ports. Only a live session counts as connected, or this
-	// chip would report a broken server as working.
+	// Registered is not connected: an offline registration still describes its steps.
 	connected := registered && st.OfflineReason == ""
 	return mcpServerRow{
 		Name:            s.Name,
@@ -130,12 +97,7 @@ func (h *mcpAPI) mcpRowFor(s MCPServer, live map[string]mcp.ServerStatus) mcpSer
 	}
 }
 
-// liveMCPServers indexes what this process currently has registered for the
-// tenant, by server name.
-//
-// Only the tenant's OWN servers: an operator's instance-wide server is not
-// something an org configured and must not appear on a page whose every other
-// control would edit or delete it.
+// What THIS process has registered, which another replica may differ on.
 func (h *mcpAPI) liveMCPServers(tenant string) map[string]mcp.ServerStatus {
 	out := map[string]mcp.ServerStatus{}
 	for _, st := range h.MCPServers.Catalog.ServersFor(tenant) {
@@ -164,12 +126,6 @@ func (h *mcpAPI) listMCPServers(rw http.ResponseWriter, r *http.Request, p core.
 	writeJSON(rw, http.StatusOK, map[string]any{"servers": out})
 }
 
-// saveMCPServer handles both create (POST) and edit (PUT).
-//
-// One handler because the operation is the same one: a server is identified by
-// its name, and saving under an existing name replaces that configuration and
-// reconnects. Splitting them would mean two paths that must agree on
-// validation, sealing, and reconnection.
 func (h *mcpAPI) saveMCPServer(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !requireStepSourceAdmin(rw, p) || !h.mcpServersConfigured(rw) {
 		return
@@ -179,10 +135,7 @@ func (h *mcpAPI) saveMCPServer(rw http.ResponseWriter, r *http.Request, p core.P
 		writeJSONError(rw, http.StatusBadRequest, "malformed request body")
 		return
 	}
-	// On PUT the name is in the path and the body's copy is ignored, so a
-	// mismatched body cannot rename (and thereby re-key) a server behind the
-	// caller's back. The LABEL is free to change on the same request: nothing
-	// references it, so renaming what a human sees costs nothing.
+	// The path wins on PUT, so a mismatched body cannot rename the server.
 	if pathName := r.PathValue("name"); pathName != "" {
 		req.Name = pathName
 	}
@@ -217,8 +170,6 @@ func (h *mcpAPI) mcpServerUsage(rw http.ResponseWriter, r *http.Request, p core.
 		return
 	}
 	name := r.PathValue("name")
-	// Report usage only for a server that exists, so a typo'd name cannot be
-	// answered with a confident "nothing uses this".
 	if _, err := h.MCPServers.Store.Get(r.Context(), p.Tenant, name); err != nil {
 		if errors.Is(err, ErrMCPServerNotFound) {
 			writeJSONError(rw, http.StatusNotFound, "no MCP server named "+name)

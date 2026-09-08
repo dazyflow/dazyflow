@@ -19,9 +19,7 @@ const (
 	AuthHeader AuthKind = "header"
 )
 
-// Auth names the credential shape. The VALUE is never here — it arrives at run
-// time in the job's params, put there by connection injection — so this package
-// holds no secrets and a Descriptor is safe to log.
+// The VALUE is never here, so this package holds no secrets and is safe to log.
 type Auth struct {
 	Kind   AuthKind
 	Header string
@@ -41,14 +39,10 @@ type BodyMode string
 const (
 	BodyNone BodyMode = "none"
 	BodyJSON BodyMode = "json"
-	// BodyRaw sends the `request_body` port verbatim — the escape hatch for a body
-	// no argument list describes.
-	BodyRaw BodyMode = "raw"
+	BodyRaw  BodyMode = "raw"
 )
 
-// Arg's JSON tags are load-bearing: this type is both the admin API's request
-// shape and the stored form of a catalog, so a field renamed without its tag
-// would silently orphan every stored descriptor.
+// Load-bearing: a field renamed without its tag orphans every stored descriptor.
 type Arg struct {
 	Name        string          `json:"name"`
 	In          ArgIn           `json:"in"`
@@ -60,9 +54,7 @@ type Arg struct {
 }
 
 type Operation struct {
-	ID string `json:"id"`
-	// Title is display only, NOT an identifier: the step id keeps using ID, so
-	// renaming re-captions without moving anything a flow references.
+	ID          string   `json:"id"`
 	Title       string   `json:"title,omitempty"`
 	Method      string   `json:"method"`
 	Path        string   `json:"path"`
@@ -73,9 +65,7 @@ type Operation struct {
 	Deprecated  bool     `json:"deprecated,omitempty"`
 }
 
-// DisplayName is bounded for the reason a palette row is: a name is typed by an
-// admin, not validated by a schema, and a pasted paragraph would break the layout
-// rather than inform anyone. A sentence belongs in the summary.
+// Typed by an admin, not validated by a schema; a pasted paragraph breaks layout.
 func (o Operation) DisplayName() string {
 	return displayName(o.Title, o.ID)
 }
@@ -103,9 +93,8 @@ type Descriptor struct {
 	Tenant string
 	Name   string
 	Label  string
-	// BaseURL is owned by the catalog and changeable only by an admin. It used to be
-	// overridable through the tenant's connection, which put it behind secret:write.
-	// A node param still overrides it for the one-step exception.
+	// Admin-only: it used to be overridable through the tenant's connection, which
+	// put it behind secret:write instead.
 	BaseURL      string
 	Integration  string
 	Description  string
@@ -113,24 +102,14 @@ type Descriptor struct {
 	Operations   []Operation
 	TimeoutMS    int
 	MaxBodyBytes int
-	// Logo becomes every operation's Manifest.BrandLogo. A data: URI and nothing
-	// else, enforced by Validate: the app's CSP does not load third-party images, so
-	// an https URL would render as a broken image. Empty means the globe.
+	// A data: URI only: the app's CSP will not load a third-party image.
 	Logo   string
 	Runner RunnerReach
 }
 
-// RunnerReach performs a catalog's calls from inside the org's network. One
-// field rather than a fourth product because nothing else changes.
-//
-// It buys the one thing phase 1 could not: a service with no public address,
-// Dazyflow refusing to dial private ranges by design.
-//
-// What it COSTS has to be stated plainly: a runner call does not pass through the
-// daemon's guarded Doer, so there is no SSRF dial guard (the point), no
-// per-tenant egress allowlist and no per-host rate limit. The response cap
-// survives, re-imposed inside the script. Setting this is an admin decision about
-// a machine the org already trusts to run arbitrary scripts.
+// Reaches a service with no public address, which Dazyflow otherwise refuses to
+// dial. The COST has to be stated: a runner call bypasses the guarded Doer, so it
+// has no SSRF guard (that is the point), no egress allowlist and no rate limit.
 type RunnerReach struct {
 	Tags []string `json:"tags,omitempty"`
 }
@@ -153,8 +132,6 @@ func (r RunnerReach) validate() error {
 		if len(t) > maxRunnerTagLen {
 			return fmt.Errorf("runner tag %q is longer than %d characters", t, maxRunnerTagLen)
 		}
-		// NormalizeRunnerTags is expected to have run first, so anything still
-		// upper-case or padded came in around the front door and would match no machine.
 		if t != strings.ToLower(strings.TrimSpace(t)) {
 			return fmt.Errorf("runner tag %q must be lower-case and unpadded", t)
 		}
@@ -162,13 +139,9 @@ func (r RunnerReach) validate() error {
 	return nil
 }
 
-// NormalizeRunnerTags is what makes a tag typed "Linux " match a machine
-// labelled linux.
-//
-// The same three lines live in drops/runner's targetTags, deliberately not
-// shared: that one reads a step's params and this one an admin's form, and
-// sharing would mean engine/webapi and drops/runner reaching for each other to
-// save six lines.
+// Makes a tag typed "Linux " match a machine labelled linux. The same three lines
+// live in drops/runner, deliberately not shared: one reads a step's params, the
+// other an admin's form.
 func NormalizeRunnerTags(in []string) []string {
 	seen := make(map[string]struct{}, len(in))
 	out := make([]string, 0, len(in))
@@ -195,10 +168,8 @@ const (
 	DefaultMaxBodyBytes = 10 << 20
 )
 
-// reservedParams are refused at validation rather than silently demoted, because
-// the collision is invisible at run time: an argument called `token` would be
-// overwritten by the connection's credential, one called `status` shadowed on the
-// way out.
+// Refused rather than silently demoted: an argument called `token` would be
+// overwritten by the connection's credential, invisibly at run time.
 var reservedParams = map[string]bool{
 	"base_url": true, "token": true,
 	"timeout_ms": true, "expect_status": true,
@@ -207,9 +178,7 @@ var reservedParams = map[string]bool{
 	"pass": true, "out": true,
 }
 
-// idempotentMethods per RFC 9110 §9.2.2 — a property HTTP DECLARES, which is why
-// a described API can set core.Manifest.Idempotent honestly where engine/mcp has
-// to hardcode false.
+// A property HTTP DECLARES, which is why this can set Idempotent honestly.
 var idempotentMethods = map[string]bool{
 	"GET": true, "HEAD": true, "PUT": true, "DELETE": true,
 }
@@ -218,9 +187,6 @@ var knownMethods = map[string]bool{
 	"GET": true, "HEAD": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true,
 }
 
-// Validate runs at registration, before any step exists, so the whole catalog is
-// refused rather than half-filed. Every message is written to be shown to the
-// admin who pasted the spec.
 func (d Descriptor) Validate() error {
 	if d.Tenant == "" {
 		return fmt.Errorf("web api catalog: Tenant required (a catalog with no tenant resolves for nobody)")
@@ -287,8 +253,6 @@ func (op Operation) validate() error {
 			return fmt.Errorf("operation %q: an argument has no name", op.ID)
 		}
 		if _, dup := args[a.Name]; dup {
-			// A query `id` and a body `id` cannot both be set from one params map, and
-			// picking a winner here would be picking it silently.
 			return fmt.Errorf("operation %q: argument %q declared twice — an argument name must be unique across path, query, header and body", op.ID, a.Name)
 		}
 		if reservedParams[a.Name] {
@@ -310,9 +274,6 @@ func (op Operation) validate() error {
 		args[a.Name] = a
 	}
 
-	// A placeholder with no required path argument leaves a literal brace in the URL
-	// and the call goes somewhere nobody meant; a path argument no placeholder
-	// mentions would silently never be sent.
 	holders := pathPlaceholders(op.Path)
 	for _, name := range holders {
 		a, ok := args[name]
@@ -378,10 +339,6 @@ func validName(name string) error {
 	return nil
 }
 
-// validBaseURL is the readable half of the dial guard, so an admin sees "must be
-// http(s)" at save time rather than a failed run later; the IP-level guard still
-// applies at dial time. Also called at RUN time on the address the connection
-// supplied, a base URL being tenant-editable.
 func validBaseURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -393,9 +350,6 @@ func validBaseURL(raw string) error {
 	if u.Host == "" {
 		return fmt.Errorf("base URL %q has no host", raw)
 	}
-	// A query on the BASE is silently destroyed: the path and encoded query are
-	// appended after it, so "https://x/v1?debug=1" builds
-	// "https://x/v1?debug=1/orders?id=2".
 	if u.RawQuery != "" || u.ForceQuery {
 		return fmt.Errorf("base URL %q must not carry a query string — operation paths are joined onto it", raw)
 	}
@@ -439,8 +393,6 @@ func pathPlaceholders(path string) []string {
 	return out
 }
 
-// operationIDs is sorted, for a status view that must not reshuffle between
-// refreshes.
 func (d Descriptor) operationIDs() []string {
 	out := make([]string, 0, len(d.Operations))
 	for _, op := range d.Operations {

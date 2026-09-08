@@ -1,24 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Command docsgen renders the user-facing "Step catalog" reference (§10 of the
-// docs IA) straight from the live drop registry. Because it reads the same
-// engine.Default.Manifests() the daemon serves and the contract tests assert on,
-// the reference can never drift from the code: add or change a drop and its page
-// regenerates from the manifest's own Summary / Description / ports / params /
-// Examples.
-//
-// It is deliberately generator-agnostic Markdown (minimal YAML front matter +
-// an HTML "generated" marker), so it drops into Docusaurus / Hugo / Astro /
-// MkDocs alike. The index groups steps into three reader-facing buckets (apps,
-// triggers, building blocks); each group is one page. Every page links back to
-// the hand-written Concepts + Glossary so the jargon has somewhere to resolve.
-//
-// Usage:
-//
-//	go run ./cmd/docsgen -out docs/reference/steps
-//
-// Output is deterministic (everything sorted) so re-runs produce clean diffs.
+// Renders the Step catalog reference from the drop manifests, so the docs cannot
+// drift from what the daemon actually serves.
 package main
 
 import (
@@ -132,10 +116,7 @@ func renderIndex(names []string, groups map[string][]core.Manifest) string {
 func renderGroup(name string, drops []core.Manifest) string {
 	var b strings.Builder
 	frontMatter(&b, name, groupBrand(drops))
-	// Give the page title an explicit anchor so its auto-slug can't collide with
-	// a drop section's anchor — e.g. the "ChatGPT" group heading would otherwise
-	// slug to "chatgpt", clashing with the ChatGPT — Ask drop's {#chatgpt}. The
-	// leading underscore guarantees it never equals a drop id.
+	// An explicit anchor, or the auto-slug collides with a heading below.
 	fmt.Fprintf(&b, "# %s {#_group}\n\n", name)
 	b.WriteString(banner())
 	b.WriteString(tableLegend())
@@ -155,9 +136,7 @@ func renderDrop(b *strings.Builder, m core.Manifest) {
 		fmt.Fprintf(b, "**Connect first:** %s\n\n", conn)
 	}
 
-	// Lead paragraph: prefer the fuller Description and fall back to the Summary,
-	// so we never print both — they overlap and read as repetition. (The Summary
-	// still powers the one-liner in the index.)
+	// Description first, Summary as the fallback.
 	lead := strings.TrimSpace(m.Description)
 	if lead == "" {
 		lead = oneLine(m.Summary)
@@ -307,16 +286,7 @@ func dropTitle(m core.Manifest) string {
 	return m.Label
 }
 
-// humanKind renders a port's value kind in plain words (never a MIME type).
-//
-// These are deliberately the SAME words the canvas puts on a pin — see
-// portTypeLabel in web/src/lib/ports.ts. The docs used to teach their own
-// vocabulary ("data", "list of data") while the product said "Item" and "Items
-// (a table)", so a reader who had just finished the concepts page had to
-// translate every type on sight. Keep the two in step: change one, change both.
-//
-// "Item" is the umbrella for structured JSON (a row, an object, a number, a
-// count) — deliberately vaguer than "record" so a scalar isn't mislabelled.
+// Plain words: a MIME type means nothing to the reader of this page.
 func humanKind(p core.Port) string {
 	many := p.Cardinality() == core.Many
 	switch p.Kind() {
@@ -348,8 +318,6 @@ func portLabel(p core.Port) string {
 	return mdSafe(p.Port)
 }
 
-// connectionNote describes, in one plain sentence, what the user must connect
-// before this step will run — derived from ConnectionFields / RequiresConnections.
 func connectionNote(m core.Manifest) string {
 	if len(m.ConnectionFields) > 0 {
 		app := m.Integration
@@ -399,9 +367,7 @@ type paramProp struct {
 	EnumNames   []string        `json:"enumNames"`
 }
 
-// enumHint synthesises a "What it does" cell for a choice setting that has no
-// description of its own — the docs otherwise hide the options the app shows as
-// a dropdown. Prefers the friendly enumNames, falls back to the raw enum values.
+// A choice setting with no help text still needs a cell.
 func enumHint(p paramProp) string {
 	names := p.EnumNames
 	if len(names) == 0 {
@@ -442,11 +408,7 @@ type settingRow struct {
 	def      string
 }
 
-// settingRows turns the schema properties into display rows, hiding the internal
-// base_url test seam and ordering them the way a reader scans: required first,
-// then optional, advanced (x_advanced) last, alphabetical within each band. The
-// display name is the manifest title (or a prettified key) so the table never
-// shows a bare param id — matching the friendly labels the Inputs table uses.
+// Hides the x_* extensions, which are editor machinery rather than settings.
 func settingRows(props map[string]paramProp, required map[string]bool) []settingRow {
 	var rows []settingRow
 	for name, p := range props {
@@ -485,8 +447,6 @@ var forcedAdvanced = map[string]bool{
 	"token":      true,
 }
 
-// specialNames maps a few internal param keys that lack a manifest title (or
-// whose title would prettify awkwardly) to a reader-friendly label.
 var specialNames = map[string]string{
 	"timeout_ms": "Timeout",
 	"api_key":    "API key",
@@ -497,9 +457,6 @@ var specialNames = map[string]string{
 	"sql":        "SQL",
 }
 
-// displayName is the reader-facing setting label: the manifest title when set,
-// else a special-cased or prettified version of the raw key — never the bare
-// snake_case id.
 func displayName(key, title string) string {
 	if t := strings.TrimSpace(title); t != "" {
 		return t
@@ -555,12 +512,7 @@ func frontMatter(b *strings.Builder, title, icon string) {
 	b.WriteString("<!-- Generated by cmd/docsgen from step manifests. Do not edit by hand. -->\n\n")
 }
 
-// groupBrand is the vendor mark shared by a group's drops (the first BrandLogo).
-// groupName splits every branded drop into a vendor group (by Integration) or a
-// standalone branded group (by Label, e.g. RSS), so any group that still lands
-// in a category bucket (Network & HTTP, Files, …) has only unbranded primitives
-// — no BrandLogo to inherit. Hence returning the first BrandLogo can't leak a
-// lone member's logo onto a category group.
+// The first BrandLogo in the group; an integration has no record of its own.
 func groupBrand(drops []core.Manifest) string {
 	for _, m := range drops {
 		if m.BrandLogo != "" {
@@ -581,23 +533,8 @@ func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// mdSafe escapes "<" in a prose string, outside inline code spans, so a literal
-// placeholder like "<place>" survives as text instead of being read as an HTML
-// tag. Escaping only outside code spans matters because a renderer already
-// treats span content as raw text, and "&lt;" there would show literally.
-//
-// This is deliberately renderer-independent. Today the only consumer is the
-// docs SPA (web/src/docs/Markdown.tsx: react-markdown, no rehype-raw), which
-// escapes raw HTML itself, so "<place>" would survive unescaped too. The escape
-// stays because "&lt;place>" is also correct in a renderer that DOES pass HTML
-// through, and the generated catalog is plain Markdown that anything may read.
-//
-// What was removed: this also escaped "{{" as "&#123;&#123;", because the docs
-// were built with VitePress and Vue read "{{x}}" as an interpolation. Nothing
-// compiles these pages through Vue any more, so the entities were noise in the
-// source — 24 of them, all in Go-template prose like "{{.name}} pulls a field"
-// — for output that renders identically either way. Verified against the real
-// renderer before removing.
+// A literal "<" in prose would otherwise be read as HTML by the Markdown
+// renderer; inside a code span it must be left alone.
 func mdSafe(s string) string {
 	var b strings.Builder
 	inCode := false
@@ -622,8 +559,6 @@ func emptyParams(raw json.RawMessage) bool {
 	return s == "" || s == "{}"
 }
 
-// escapeCell keeps a description safe inside a Markdown table cell (pipes and
-// newlines would break the row).
 func escapeCell(s string) string {
 	s = mdSafe(oneLine(s))
 	return strings.ReplaceAll(s, "|", "\\|")

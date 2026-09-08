@@ -33,13 +33,7 @@ func (h *HTTPGateway) platformAdminAPI() *platformAdminAPI {
 	return &platformAdminAPI{auditor: h.auditor(), adminCheck: h.admins(), svc: h.svc, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, PlatformAdminGrants: h.PlatformAdminGrants, DropSwitches: h.DropSwitches}
 }
 
-// Platform-admin moderation surface: the cross-tenant tools a SaaS
-// operator (platform:admin) uses to keep the deployment healthy —
-// suspend/ban/delete misbehaving users and orgs, and a global/per-org
-// killswitch for individual drops. All handlers gate on platform:admin
-// (not the per-org organization:admin) and write an audit event. The
-// state they flip is enforced elsewhere: the auth ModerationGate (lockout),
-// SubmitGraph (org flow halt), and the engine resolver (drop killswitch).
+// Cross-tenant tools; every route here is gated on platform:admin.
 
 type platformUserDTO struct {
 	Email            string     `json:"email"`
@@ -56,10 +50,8 @@ type platformUserDTO struct {
 }
 
 type platformOrgDTO struct {
-	Tenant      string `json:"tenant"`
-	DisplayName string `json:"display_name"`
-	// Icon is the org's uploaded logo (a data: URL) or empty — the UI
-	// renders an <img> when present, a monogram tile otherwise.
+	Tenant        string     `json:"tenant"`
+	DisplayName   string     `json:"display_name"`
 	Icon          string     `json:"icon,omitempty"`
 	Subdomain     string     `json:"subdomain,omitempty"`
 	Status        string     `json:"status"`
@@ -78,9 +70,7 @@ type platformDropDTO struct {
 	BrandLogo        string   `json:"brand_logo,omitempty"`
 	GloballyDisabled bool     `json:"globally_disabled"`
 	DisabledTenants  []string `json:"disabled_tenants,omitempty"`
-	// OwnedByTenants is set only for a tenant runner's drop, naming the orgs
-	// that registered it. Empty for a built-in, which every org shares — so
-	// the page can say whose machine a step belongs to before switching it off.
+	// Only for a tenant runner's drop: an instance-wide one belongs to nobody.
 	OwnedByTenants []string `json:"owned_by_tenants,omitempty"`
 	Reason         string   `json:"reason,omitempty"`
 }
@@ -101,9 +91,7 @@ func decodeModerationBody(r *http.Request) moderationBody {
 	return b
 }
 
-// requirePlatform is the shared gate + nil-store guard for these
-// handlers. Returns false (after writing the error) when the caller
-// isn't a platform admin or the user store isn't configured.
+// Shared, so no route here can forget the gate.
 func (h *platformAdminAPI) requirePlatform(rw http.ResponseWriter, p core.Principal) bool {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
@@ -244,10 +232,6 @@ func (h *platformAdminAPI) platformUnsuspendUser(rw http.ResponseWriter, r *http
 	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
 }
 
-// platformVerifyUser marks an account's email as verified without the user
-// clicking the emailed link — a support escape hatch for cases the normal
-// flow can't cover (a bounced verification mail, a mailer-less deployment).
-// Idempotent: verifying an already-verified account is a no-op success.
 func (h *platformAdminAPI) platformVerifyUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
@@ -272,10 +256,6 @@ func (h *platformAdminAPI) platformVerifyUser(rw http.ResponseWriter, r *http.Re
 	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
 }
 
-// platformGrantAdmin grants the cross-tenant platform:admin role to an existing
-// account via the runtime grant store (the mutable counterpart to the
-// DAZYFLOW_PLATFORM_ADMINS env allowlist). The role is stamped at session issue,
-// so we drop the target's live sessions to force a re-auth that picks it up.
 func (h *platformAdminAPI) platformGrantAdmin(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
@@ -307,11 +287,6 @@ func (h *platformAdminAPI) platformGrantAdmin(rw http.ResponseWriter, r *http.Re
 	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
 }
 
-// platformRevokeAdmin removes a runtime platform:admin grant. It refuses an
-// env-allowlist admin (elevatePlatformAdmin would re-grant them on next login —
-// remove the email from DAZYFLOW_PLATFORM_ADMINS and restart instead) and
-// refuses self-revoke (lockout foot-gun). Dropping the target's sessions makes
-// the revoke take effect on their next request rather than at session expiry.
 func (h *platformAdminAPI) platformRevokeAdmin(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
@@ -350,9 +325,6 @@ func (h *platformAdminAPI) platformRevokeAdmin(rw http.ResponseWriter, r *http.R
 	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant])})
 }
 
-// platformBanUser suspends the account AND blocklists the email (or its
-// whole domain) so the person can't simply re-register. The account data
-// is kept — use delete (the GDPR erase endpoint) to remove it entirely.
 func (h *platformAdminAPI) platformBanUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requirePlatform(rw, p) {
 		return
@@ -393,10 +365,6 @@ func (h *platformAdminAPI) platformBanUser(rw http.ResponseWriter, r *http.Reque
 	writeJSON(rw, http.StatusOK, map[string]any{"user": h.toPlatformUserDTO(u, h.tenantNames(r.Context(), []string{u.Tenant})[u.Tenant]), "blocked": value})
 }
 
-// guardUserModeration loads the target user and refuses the foot-guns:
-// acting on yourself, or on another platform admin (the env allowlist
-// can't be edited here, and suspending one in the DB would lock out a
-// fellow operator). Writes the error and returns ok=false on refusal.
 func (h *platformAdminAPI) guardUserModeration(rw http.ResponseWriter, ctx context.Context, p core.Principal, email string) (auth.User, bool) {
 	if email == "" {
 		writeJSONError(rw, http.StatusBadRequest, "email required")
@@ -424,12 +392,6 @@ func (h *platformAdminAPI) revokeSubjectSessions(ctx context.Context, subject st
 	}
 }
 
-// invalidateModeration drops the gate's memo of a subject's / a tenant's
-// lockout state, so a status flip written just above is enforced on the
-// very next request on THIS replica rather than after the memo window.
-// Other replicas re-read within that window; this mirrors how a sign-out
-// invalidates the session cache locally and lags elsewhere. Either
-// argument may be empty. No-op when the gate has caching turned off.
 func (h *platformAdminAPI) invalidateModeration(subject, tenant string) {
 	if g, ok := h.svc.Auth.(*auth.ModerationGate); ok {
 		g.Invalidate(subject, tenant)
@@ -513,8 +475,6 @@ func (h *platformAdminAPI) platformGetOrg(rw http.ResponseWriter, r *http.Reques
 	tenant := strings.TrimSpace(r.PathValue("tenant"))
 	pr, err := h.Profiles.GetOrgProfile(r.Context(), tenant)
 	if err != nil {
-		// No profile row is normal for a never-renamed org — synthesize a
-		// minimal active profile so the detail page still resolves.
 		pr = auth.OrgProfile{Tenant: tenant, DisplayName: tenant, Status: auth.StatusActive}
 	}
 	resp := map[string]any{
@@ -541,8 +501,6 @@ func (h *platformAdminAPI) platformUnsuspendOrg(rw http.ResponseWriter, r *http.
 	h.setOrgSuspended(rw, r, p, false, false)
 }
 
-// platformBanOrg suspends the org and blocklists every current member's
-// email so they can't re-register fresh accounts.
 func (h *platformAdminAPI) platformBanOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	h.setOrgSuspended(rw, r, p, true, true)
 }
@@ -652,11 +610,6 @@ func (h *platformAdminAPI) platformListDrops(rw http.ResponseWriter, r *http.Req
 		writeJSONError(rw, http.StatusNotImplemented, "step killswitch not configured")
 		return
 	}
-	// AllManifests, not Manifests: this page is instance-wide and is the only
-	// surface that can switch a drop off. A tenant's runner drops are keyed by
-	// (tenant, id) and so are absent from the unscoped map by construction —
-	// which left a platform admin with no way to disable a misbehaving one,
-	// even though DropGate would have enforced a switch on that id.
 	mp, ok := h.svc.Engine.Resolver.(interface {
 		AllManifests() (map[string]core.Manifest, map[string][]string)
 	})
@@ -700,8 +653,6 @@ func (h *platformAdminAPI) platformListDrops(rw http.ResponseWriter, r *http.Req
 	writeJSON(rw, http.StatusOK, map[string]any{"drops": out})
 }
 
-// platformDisableDrop switches a drop off, globally (no tenant in body)
-// or for a single org. The engine resolver refuses it on the next run.
 func (h *platformAdminAPI) platformDisableDrop(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {
 		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
@@ -873,8 +824,6 @@ func (h *platformAdminAPI) platformPutEntitlement(rw http.ResponseWriter, r *htt
 		"effective":   h.svc.effectiveLimits(r.Context(), tenant),
 	})
 }
-
-// cross-tenant invite
 
 func (h *platformAdminAPI) platformInviteMember(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !isPlatformAdmin(p) {

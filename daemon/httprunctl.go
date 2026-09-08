@@ -79,21 +79,7 @@ func (h *runCtlAPI) listDecidedApprovals(rw http.ResponseWriter, r *http.Request
 	writeJSON(rw, http.StatusOK, map[string]any{"approvals": approvals})
 }
 
-// approveAuthed is the bearer-token-authenticated approval path used
-// by the inbox UI. The principal's identity is trusted directly — no
-// HMAC token to validate, because by getting here they've already
-// proven workspace membership through the API key chain.
-//
-// The HMAC-based /approve/{runID}/{nodeID} endpoint stays available
-// for the email/Slack notification flow where the approver doesn't
-// have a session.
-//
-// Two callers, one route, and the policy differs by credential KIND rather
-// than by permission (the same split deleteFlowMe makes): a session is a
-// person working the inbox and always decides, while an API key is a script
-// and decides only a step that opted in with `allow_api`. Workspace
-// membership alone is too weak a gate for the step whose whole purpose is
-// putting a human in the way.
+// The authenticated path, as against the signed one-click link.
 func (h *runCtlAPI) approveAuthed(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("runID")
 	nodeID := r.PathValue("nodeID")
@@ -117,12 +103,7 @@ func (h *runCtlAPI) approveAuthed(rw http.ResponseWriter, r *http.Request, p cor
 				"A human can always decide it from the Approvals inbox.")
 		return
 	}
-	// Always attribute the approval to the authenticated principal — never a
-	// client-supplied ?approver=. This path has a proven identity (the API-key
-	// chain), so honoring a query param would let a valid caller forge who
-	// approved in both the audit log and the resumed node's record. (The
-	// unauthenticated HMAC /approve path is different: there the approver is
-	// supplied because there's no session identity to trust.)
+	// Attributed to the AUTHENTICATED principal, never a caller-supplied name.
 	if err := h.svc.Approve(r.Context(), runID, nodeID, ApprovalDecision{
 		Decision: decision,
 		Approver: p.Subject,
@@ -144,10 +125,7 @@ func (h *runCtlAPI) approveAuthed(rw http.ResponseWriter, r *http.Request, p cor
 	writeJSON(rw, http.StatusOK, map[string]string{"status": "resumed", "decision": decision})
 }
 
-// approvalNeedsHuman reads the opt-in off the graph the run pinned at submit.
-// A payload that is missing or unreadable answers false, leaving the request
-// to the normal path — which needs an awaiting record to do anything, so a run
-// whose graph cannot be read still decides nothing.
+// Off the graph the run PINNED, not HEAD: an edit must not open a live gate.
 func approvalNeedsHuman(runRec core.JobRecord, nodeID string) bool {
 	if len(runRec.GraphPayload) == 0 {
 		return false
@@ -187,9 +165,7 @@ func (h *runCtlAPI) cancelRun(rw http.ResponseWriter, r *http.Request, p core.Pr
 	writeJSON(rw, http.StatusOK, map[string]string{"status": "cancelled"})
 }
 
-// resumeRun continues a run paused at a breakpoint (#12). Body {"step":true}
-// advances one node and pauses again; otherwise the run continues to the
-// next breakpoint or completion.
+// step=true advances one node instead of continuing.
 func (h *runCtlAPI) resumeRun(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("runID")
 	var body struct {
@@ -248,18 +224,7 @@ func (h *runCtlAPI) runGraph(rw http.ResponseWriter, r *http.Request, p core.Pri
 	writeJSON(rw, http.StatusAccepted, map[string]string{"job_id": runID})
 }
 
-// testTrigger runs a webhook-triggered flow with a synthetic payload so
-// a user can verify the flow end-to-end without wiring up an external
-// caller (their website form, Zapier, curl, …). The request body is the
-// sample payload; we feed it through the exact same seed-building path a
-// real /trigger hit uses (buildWebhookSeed), so webhook_input nodes
-// light up identically — closing the "Run button does nothing useful on
-// a webhook flow" gap and the documented sampleNode webhook limitation.
-//
-// Unlike the public /trigger listener (bearer-secret auth, system
-// principal), this runs under the caller's own token + graph:run, so it
-// respects normal flow visibility and shows up in the run list like any
-// other run.
+// A synthetic payload, so an author can test without a real delivery.
 func (h *runCtlAPI) testTrigger(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant := r.PathValue("tenant")
 	workspace := r.PathValue("workspace")
@@ -305,27 +270,9 @@ func (h *runCtlAPI) testTrigger(rw http.ResponseWriter, r *http.Request, p core.
 	writeJSON(rw, http.StatusAccepted, map[string]string{"job_id": runID})
 }
 
-// sampleNode runs a partial graph that ends at the requested nodeID.
-// The submitted run contains only nodeID + its transitive predecessors
-// — every other node and every edge that would lead out of the subset
-// is dropped before submission. This lets a graph author "preview"
-// what one node emits without firing downstream side effects.
-//
-// Identity is preserved end-to-end: the same graph ID, tenant, and
-// workspace are reused, so the run shows up in the normal RunList
-// (filtering "sample vs production" runs is a follow-up). Authz
-// flows through SubmitGraph unchanged — sampling a node you can't
-// run is rejected at the same gate as a full run would be.
-//
-// Limitations called out for V1: webhook_input nodes in the subset
-// will fail standalone with code=no_trigger_data (no body was POSTed
-// to the webhook listener for this run). Users on a webhook flow
-// should hit the trigger via curl; "sample with a synthetic body"
-// is a separate follow-up.
-// slackEvents dispatches a Slack Events API POST to the configured
-// handler. Returns 501 if the handler isn't wired (so a misconfigured
-// deployment surfaces clearly instead of silently rejecting on bad
-// signature).
+// A partial run ending at one node, which keeps the same dispatch rules as the
+// full graph — otherwise "sample this step" would behave differently from
+// running the flow.
 func (h *runCtlAPI) slackEvents(rw http.ResponseWriter, r *http.Request) {
 	if h.SlackEvents == nil {
 		http.Error(rw, "Slack events endpoint not configured (set --slack-signing-secret on dzd)", http.StatusNotImplemented)

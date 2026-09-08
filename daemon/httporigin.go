@@ -22,12 +22,7 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 			}()
 		}
 		origin := r.Header.Get("Origin")
-		// Vary on Origin unconditionally. The ACAO value below is
-		// origin-dependent, so announcing it only on the matching branch let a
-		// shared cache store one origin's response — complete with its
-		// Access-Control-Allow-Origin — and replay it to a different origin.
-		// The header has to describe how the response varies whether or not
-		// this particular request matched.
+		// Unconditionally: the ACAO value varies, so a shared cache must not reuse it.
 		rw.Header().Set("Vary", "Origin")
 		switch {
 		case allowCreds && origin != "" && h.originAllowed(origin):
@@ -36,12 +31,7 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 		case !allowCreds:
 			rw.Header().Set("Access-Control-Allow-Origin", "*")
 		default:
-			// Credentialed mode with a missing or disallowed Origin. Emit no
-			// ACAO at all. The previous fallback echoed the AllowedOrigins list
-			// joined by commas, which is not a valid ACAO value (the grammar
-			// admits a single origin or "*"), so no browser ever accepted it —
-			// it only muddied caches. A non-browser client (dzctl, curl) never
-			// reads the header; a browser correctly refuses the read.
+			// Emit no CORS headers at all rather than a header the browser will reject.
 		}
 		rw.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		rw.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")
@@ -70,29 +60,10 @@ func (h *HTTPGateway) appCSP() string {
 	return h.csp
 }
 
-// buildAppCSP assembles the policy. Each directive is tied to something the
-// built bundle actually does:
-//
-//   - script-src 'self' — web/dist/index.html loads exactly one external
-//     module script and no inline script, so no 'unsafe-inline' is needed.
-//     This is the directive that matters; keep it inline-free.
-//   - style-src ... 'unsafe-inline' — the app uses ~550 React style={{…}}
-//     props, which are inline style attributes. Unavoidable without a
-//     rewrite, and far less dangerous than inline script.
-//   - img-src data: blob: — the CSS inlines small assets as data: URIs, and
-//     generated previews/downloads use blob:. Plus tileOrigin: the editor's
-//     map picker loads raster tiles cross-origin (see mapconfig.go).
-//   - connect-src 'self' + geocoderOrigin — the JSON API and SSE are
-//     same-origin; the map picker's place search is not. Nothing else in the
-//     bundle fetches cross-origin.
-//   - frame-ancestors 'none' — the modern equivalent of the X-Frame-Options
-//     DENY set above; both are sent so older browsers are covered too.
-//   - form-action 'self', base-uri 'self', object-src 'none' — close the
-//     usual injection escape hatches.
-//
-// tileOrigin and geocoderOrigin are "" when the configured URL is same-origin
-// (a deployment proxying tiles under its own host) or unusable, in which case
-// the directive is left at 'self' — never widened by accident.
+// Each directive is tied to something the app actually does; widening one is a
+// decision, not a convenience. img-src carries `data:` because every brand mark
+// is inlined, which is what lets third-party logos render without a third-party
+// request.
 func buildAppCSP(tileOrigin, geocoderOrigin string) string {
 	imgSrc := "'self' data: blob:"
 	if tileOrigin != "" {
@@ -115,19 +86,13 @@ func buildAppCSP(tileOrigin, geocoderOrigin string) string {
 		"frame-ancestors 'none'"
 }
 
-// urlBuilder answers "what origin did this request arrive on", which is all a
-// handler needs to build a link back to itself. Kept narrow deliberately: the
-// proxy-header gate is a security decision and lives in exactly one place.
+// The origin this request ARRIVED on, which is not the configured base URL.
 type urlBuilder struct {
 	svc        *Service
 	trustProxy bool
 }
 
-// requestIsHTTPS reports whether the request reached the user over TLS.
-// Directly: r.TLS is set. Behind a TLS-terminating reverse proxy the
-// connection to dzd is plain HTTP, so we consult X-Forwarded-Proto —
-// but only when TrustProxyHeaders is on, since an untrusted client
-// could otherwise forge it to flip on the Secure cookie flag.
+// Behind a proxy the listener is plaintext, so the forwarded header decides.
 func (u urlBuilder) requestIsHTTPS(r *http.Request) bool {
 	if r.TLS != nil {
 		return true
@@ -138,27 +103,14 @@ func (u urlBuilder) requestIsHTTPS(r *http.Request) bool {
 	return false
 }
 
-// originAllowed reports whether a browser Origin header is trusted for
-// CORS + CSRF. An origin is allowed if it exactly matches one of the
-// configured AllowedOrigins, or — when WildcardDomain is set — if it is
-// a subdomain of that domain (e.g. "https://acme.dazyflow.app" against
-// WildcardDomain "dazyflow.app"). The Origin header is set by the
-// browser and not forgeable by page script, so suffix-matching the host
-// is safe; "evil-dazyflow.app" doesn't end in ".dazyflow.app" so it
-// won't match. The apex itself ("https://dazyflow.app") is intentionally
-// NOT matched here — it carries a scheme/port we want pinned, so it must
-// be listed explicitly in AllowedOrigins like any other exact origin.
+// Credentialed CORS: a wildcard is not permitted, so this must be exact.
 func (h *HTTPGateway) originAllowed(origin string) bool {
 	for _, a := range h.AllowedOrigins {
 		if a == origin {
 			return true
 		}
 	}
-	// Only honour the wildcard if it's specific enough to be safe. A
-	// single-label value like "com" would suffix-match every ".com" origin —
-	// catastrophic — so a misconfigured domain trusts nobody rather than
-	// everybody. cmd/dzd also rejects such a value at boot (fail-loud); this
-	// is the defense-in-depth backstop on the request path.
+	// A wildcard must be specific enough that it cannot match the whole internet.
 	if IsValidWildcardDomain(h.WildcardDomain) {
 		if u, err := url.Parse(origin); err == nil {
 			if hostIsSubdomainOf(u.Hostname(), h.WildcardDomain) {
@@ -185,13 +137,7 @@ func isOrgSubdomainHost(host, wildcardDomain string) bool {
 	return hostIsSubdomainOf(host, wildcardDomain)
 }
 
-// IsValidWildcardDomain reports whether d is specific enough to use as a
-// CORS/CSRF subdomain-suffix match. It requires at least two non-empty labels
-// (one dot), so "dazyflow.app" is accepted but a bare public suffix like "com"
-// — which would trust every ".com" origin — is rejected. This is a coarse
-// label-count guard, not a public-suffix-list check: a value like "co.uk"
-// passes the count but is still a registry suffix, so operators must not set
-// one. Empty d (wildcard disabled) returns false.
+// At least two labels, or "*.com" would allow every site.
 func IsValidWildcardDomain(d string) bool {
 	d = strings.Trim(strings.TrimSpace(strings.ToLower(d)), ".")
 	if d == "" {

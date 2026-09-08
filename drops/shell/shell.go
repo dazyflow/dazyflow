@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package shell runs a command in a workspace-relative directory and streams its
-// output: the build/test step in CI-shaped pipelines, and the escape hatch when no
-// first-class integration covers what a user wants.
+// Runs arbitrary host commands as the daemon's user, bypassing the scripted-drop
+// sandbox — a full RCE primitive on a multi-tenant deployment, so it is OFF
+// unless the operator opts in with DAZYFLOW_ENABLE_SHELL.
 package shell
 
 import (
@@ -70,10 +70,7 @@ func init() {
 				{Port: "path", Label: "Working directory"},
 			},
 			Outputs: []core.Port{
-				// Only the friendly scalars are declared as ports. The full structured result
-				// is still EMITTED under "meta", so run records keep it for debugging, but an
-				// undeclared output cannot be wired and does not clutter the card. Branch on
-				// exit_code for fail/notify paths.
+				// The full result is still emitted under "meta"; an undeclared port cannot be wired.
 				{Port: "stdout", Label: "Standard output", MIME: []string{"text/plain"}},
 				{Port: "stderr", Label: "Standard error", MIME: []string{"text/plain"}},
 				{Port: "exit_code", Label: "Exit code", MIME: []string{"text/plain"}},
@@ -103,11 +100,9 @@ const (
 	defaultMaxOutputBytes = 1024 * 1024
 )
 
-// shellEnabled is FAIL-CLOSED: only an explicit affirmative turns it on, so
-// every other value — including anything unrecognized like "disabled" or a typo —
-// leaves this host-RCE primitive OFF. The earlier "anything non-negative enables"
-// logic failed OPEN, silently arming remote code execution for an operator who
-// wrote DAZYFLOW_ENABLE_SHELL=disabled.
+// FAIL-CLOSED: only an explicit affirmative enables it. The earlier
+// "anything non-negative" logic failed OPEN, arming RCE for an operator who wrote
+// DAZYFLOW_ENABLE_SHELL=disabled.
 func shellEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("DAZYFLOW_ENABLE_SHELL"))) {
 	case "1", "true", "yes", "on":
@@ -117,14 +112,9 @@ func shellEnabled() bool {
 	}
 }
 
-// scrubbedEnv always removes every DAZYFLOW_* variable, so a command cannot read
-// the daemon's own secrets out of its environment. CI ergonomics survive: PATH,
-// HOME, toolchain vars all pass through — only the app's own namespace goes.
-//
-// DAZYFLOW_SHELL_ENV_ALLOW opts into least privilege instead: the command sees
-// ONLY the named variables plus a minimal safe base. That is for boxes whose
-// daemon environment also holds THIRD-PARTY secrets (AWS_*,
-// GOOGLE_APPLICATION_CREDENTIALS) that the prefix scrub would not catch.
+// Always strips DAZYFLOW_*, so a command cannot read the daemon's own secrets.
+// DAZYFLOW_SHELL_ENV_ALLOW narrows further, for hosts whose environment also
+// holds third-party credentials the prefix scrub would not catch.
 func scrubbedEnv() []string {
 	allow := parseShellEnvAllow(os.Getenv("DAZYFLOW_SHELL_ENV_ALLOW"))
 	src := os.Environ()
@@ -178,10 +168,8 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 			relPath = input.Ref
 		}
 	}
-	// Resolve the working directory THROUGH an os.Root handle rather than by
-	// string-cleaning: cleaning never touches the filesystem, so a symlink planted
-	// inside the workspace and pointing out of it was accepted and then followed by
-	// cmd.Dir, running the command outside the sandbox.
+	// THROUGH an os.Root handle: string-cleaning never touches the filesystem, so a
+	// symlink planted inside the workspace ran the command outside the sandbox.
 	workdir, cleanRel, err := sandbox.ResolveDir(job.WorkspaceRoot, relPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -201,12 +189,9 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 	cmd := exec.CommandContext(runCtx, cmdName, args...)
 	cmd.Dir = workdir
 	cmd.Env = scrubbedEnv()
-	// On timeout, tear down the WHOLE process group: pty.Start makes the command a
-	// session leader, so killing the group reaps grandchildren it backgrounded that a
-	// bare Process.Kill would orphan to keep running on the host after the node
-	// "finished". The pgid==pid guard is a hard interlock — signal a group ONLY when
-	// the child genuinely leads its own — so a negative-PID kill can never escape to
-	// the daemon's own group. WaitDelay backstops a child that ignores the signal.
+	// The WHOLE process group, or a backgrounded grandchild outlives the node. The
+	// pgid==pid guard is a hard interlock so a negative-PID kill cannot escape to the
+	// daemon's own group.
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return nil
@@ -233,9 +218,7 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 
 	doneRead := make(chan struct{})
 	go func() {
-		// Deferred so a panic in the pump cannot leave Execute blocked forever on
-		// <-doneRead, and the recover keeps a pump panic from killing the daemon — the
-		// engine's recover only covers the calling goroutine.
+		// Deferred, or a panic in the pump leaves Execute blocked on <-doneRead for ever.
 		defer close(doneRead)
 		defer func() {
 			if r := recover(); r != nil {
@@ -291,15 +274,10 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}, nil
 }
 
-// maxLogLineBytes: a longer line is split into consecutive chunks rather than
-// dropped, so memory stays bounded without losing output.
 const maxLogLineBytes = 64 * 1024
 
-// pumpStream uses bufio.Reader.ReadSlice rather than bufio.Scanner: a Scanner
-// stops permanently on a token over its max size, silently dropping the rest of
-// the output while the exit code reports success. ReadSlice reports that as a
-// non-terminal ErrBufferFull, so an over-long line is emitted in chunks and
-// reading continues. Lines arrive CRLF-terminated off the pty.
+// ReadSlice, not Scanner: a Scanner stops permanently on an over-long token,
+// silently dropping the rest of the output while the exit code reports success.
 func pumpStream(src io.Reader, dst *boundedBuffer, progress chan<- core.Progress, job core.Job, stream string) {
 	r := bufio.NewReaderSize(src, maxLogLineBytes)
 	for {
@@ -329,21 +307,10 @@ func trimEOL(b []byte) []byte {
 
 const maxTimeoutMs = int(math.MaxInt64 / int64(time.Millisecond))
 
-// resolveTimeoutMs is the real enforcement: the ParamsSchema's "minimum" is
-// advisory, since nothing validates a job's params against it before Execute.
-//
-// Non-positive falls back to the default — context.WithTimeout with a zero
-// duration is already expired, killing the command the instant it starts, and
-// unlike the daemon's secondsToDuration "no timeout" is not an option here, a
-// shell step without a deadline pinning a worker indefinitely.
-//
-// Over-large clamps: time.Duration is int64 NANOSECONDS, so a big millisecond
-// count wraps NEGATIVE, turning a request for an enormous timeout into an
-// immediate kill. Reachable by typing a long run of digits.
-//
-// No ceiling beyond the overflow bound: the per-run policy limit is the graph
-// timeout, and duplicating a lower cap here would break legitimately long
-// builds.
+// The real enforcement: nothing validates a job's params against the schema
+// before Execute. Non-positive would kill the command instantly, and an
+// over-large millisecond count overflows int64 nanoseconds and wraps NEGATIVE —
+// turning a huge timeout into an immediate kill.
 func resolveTimeoutMs(n int) int {
 	if n <= 0 {
 		return defaultTimeoutMs
@@ -354,14 +321,8 @@ func resolveTimeoutMs(n int) int {
 	return n
 }
 
-// resolveMaxOutputBytes has to be enforced HERE, not by the ParamsSchema's
-// "minimum": the schema drives the UI form, the docs and flowgen, but nothing
-// validates a job's params against it before Execute — there is no JSON-schema
-// validator in the daemon at all.
-//
-// It matters because a non-positive value reaches boundedBuffer as "no limit" and
-// hands a runaway command an unbounded in-memory buffer, exactly the OOM the cap
-// prevents. Someone writing 0 far more likely means "leave it alone".
+// Enforced HERE for the same reason: a non-positive value reaches boundedBuffer
+// as "no limit" and hands a runaway command an unbounded buffer.
 func resolveMaxOutputBytes(n int) int {
 	if n <= 0 {
 		return defaultMaxOutputBytes
@@ -369,9 +330,7 @@ func resolveMaxOutputBytes(n int) int {
 	return n
 }
 
-// boundedBuffer discards the remainder so a runaway command cannot OOM the
-// daemon. A non-positive limit disables the cap, a convenience for tests;
-// executeShell never passes one.
+// Discards the remainder; a non-positive limit disables the cap, for tests only.
 type boundedBuffer struct {
 	bytes.Buffer
 	limit int

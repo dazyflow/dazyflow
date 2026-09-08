@@ -15,56 +15,28 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Per-(tenant, external host) outbound pacing. On a HOSTED multi-tenant
-// deployment the polling/connector fleet shares egress IPs and a single
-// third-party API's rate budget across every tenant, so one tenant's burst
-// — a 1000-item for_each, a tight poll loop — can exhaust a partner API's
-// quota or get the platform's egress IP throttled for everyone. The SSRF
-// guard and egress allowlist bound WHERE calls go; this bounds HOW FAST.
-//
-// Three controls per (tenant, host) bucket:
-//   - a token bucket paces steady throughput (rate) with a short burst,
-//   - a concurrency cap bounds simultaneous in-flight calls (so a fan-out
-//     can't open hundreds of sockets to one host at once), and
-//   - a cooldown set from an observed 429/Retry-After / RateLimit-Reset
-//     stalls the bucket until the server's window resets.
-//
-// Because every connector call funnels through Acquire, a fanned step that
-// issues one call per item is drip-paced for free — bounding fan-out by
-// RATE, not just the engine's blunt item-count cap.
+// On a hosted instance one tenant's flow can otherwise exhaust a third party's
+// rate limit for everyone, so pacing is per (tenant, host).
 const (
-	// Conservative defaults, per (tenant, host). Tuned to PACE bursts, not
-	// to match any specific API's ceiling (which we can't know) — a steady
-	// few-per-second with a short burst smooths a fan-out without throttling
-	// ordinary interactive flows. Operators raise/lower via env (cmd/dzd).
+	// Tuned to PACE a burst, not to throttle ordinary use.
 	defaultEgressRatePerMin  = 300 // 5/s steady
 	defaultEgressBurst       = 60  // absorbs a modest fan-out before pacing
 	defaultEgressConcurrency = 8   // simultaneous in-flight calls per host
 
-	// maxEgressBuckets bounds the bucket map against a flood of distinct
-	// (tenant, host) pairs. When full we evict the least-recently-used idle
-	// bucket — same policy as the auth limiter.
+	// The map itself is the memory-exhaustion vector.
 	maxEgressBuckets = 50_000
 
-	// maxCooldown caps how long a single Retry-After / Reset can stall a
-	// host, so a hostile or buggy upstream that returns "Retry-After: 31536000"
-	// can't wedge a tenant's calls to that host for a year.
+	// A hostile or broken server must not be able to stall a tenant indefinitely.
 	maxCooldown = time.Hour
 
 	fallbackCooldown = 5 * time.Second
 
-	// concPollInterval is how often Acquire re-checks a full concurrency
-	// slot. Releases are not event-signalled (keeping the lock discipline
-	// simple); a short poll is fine because token pacing dominates the wait.
+	// How often a full slot set is re-checked.
 	concPollInterval = 25 * time.Millisecond
 
-	// maxAcquireSleep caps a single wait nap so a long token/cooldown wait
-	// still re-checks ctx cancellation and a freshly-released slot promptly.
 	maxAcquireSleep = 250 * time.Millisecond
 
-	// epochThreshold distinguishes a delta-seconds Reset value from an
-	// absolute unix-epoch one (GitHub's X-RateLimit-Reset). Anything past
-	// this many seconds can't be a sane delta, so treat it as an epoch.
+	// Servers send Reset either way, with nothing to distinguish them but size.
 	epochThreshold = 100_000_000
 )
 
@@ -116,33 +88,15 @@ func SetEgressRateLimit(perMin, burst, conc int) {
 	l.rate = float64(perMin) / 60.0 // <=0 → disabled (see Acquire)
 	l.burst = float64(burst)
 	l.conc = conc
-	// Drop existing buckets so the new policy applies cleanly and stale
-	// cooldowns from the old policy don't linger.
 	l.buckets = make(map[string]*egressBucket)
 }
 
-// AcquireEgress reserves one outbound slot for the (tenant, host) of rawURL,
-// blocking — while honoring ctx — until a token is free, a concurrency slot
-// is open, and any active cooldown for that host has elapsed. The returned
-// release MUST be called once the call completes (defer it) to free the
-// concurrency slot. On ctx cancellation it returns ctx.Err() and a no-op
-// release.
-//
-// tenant is resolved from ctx (core.TenantFromContext); an empty tenant
-// shares one bucket per host, which is correct for the in-process / single-
-// tenant path.
+// The caller MUST release, or the slot leaks for the process's life.
 func AcquireEgress(ctx context.Context, rawURL string) (func(), error) {
 	return egressLimit.acquire(ctx, limiterKey(ctx, rawURL))
 }
 
-// ObserveEgressResponse records rate-limit signals from a completed outbound
-// call so subsequent calls to the same (tenant, host) self-pace:
-//   - a 429/503 sets a cooldown from Retry-After / RateLimit-Reset (or a
-//     small fallback) AND feeds the delay to the engine's retry scheduler
-//     via the ctx RetryHint, so the requeue waits the server-asked interval.
-//   - a 2xx that reports the budget is now exhausted (RateLimit-Remaining: 0)
-//     proactively cools the host until its window resets, so the NEXT call
-//     doesn't earn a 429.
+// A 429 here is what sets the cooldown the NEXT call waits out.
 func ObserveEgressResponse(ctx context.Context, rawURL string, status int, header http.Header) {
 	egressLimit.observe(ctx, limiterKey(ctx, rawURL), status, header)
 }
@@ -225,9 +179,7 @@ func (l *egressLimiter) observe(ctx context.Context, key string, status int, hea
 			d = fallbackCooldown
 		}
 		l.penalize(key, d, now)
-		// Tell the worker's retry scheduler to wait the server-asked interval
-		// rather than the blind exponential backoff. No-op when no hint is on
-		// ctx (the in-process / non-worker path).
+		// So the retry happens one layer up, where it costs no worker time.
 		core.SetRetryAfter(ctx, d)
 		return
 	}
@@ -282,9 +234,7 @@ func (l *egressLimiter) gcLocked(now time.Time) {
 	}
 }
 
-// evictOldestLocked removes the least-recently-touched bucket that has no
-// in-flight calls, to make room at the cap. Never evicts a bucket with live
-// calls (its inflight count is load-bearing). Caller holds l.mu.
+// Never evicts a bucket with work in flight.
 func (l *egressLimiter) evictOldestLocked() {
 	var oldestKey string
 	var oldest time.Time
@@ -302,9 +252,7 @@ func (l *egressLimiter) evictOldestLocked() {
 	}
 }
 
-// retryAfter derives the server-requested wait from a 429/503 response.
-// Retry-After (delta-seconds or HTTP-date) wins; otherwise a RateLimit-Reset
-// header. Zero when nothing usable is present. Capped at maxCooldown.
+// Accepts both the seconds and the HTTP-date forms.
 func retryAfter(h http.Header, now time.Time) time.Duration {
 	if h == nil {
 		return 0

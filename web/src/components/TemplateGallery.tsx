@@ -26,10 +26,8 @@ import { ErrorNotice } from "./ui/ErrorNotice";
 import { Loading } from "./ui/Loading";
 
 
-// SHARED_NTFY_PLACEHOLDER is the topic an ntfy template would ship with.
-// It's a guessable, world-readable shared topic, so applyTemplate swaps it
-// for an unguessable per-fork topic on fork (see the nodes map below).
-// Kept for forward-compat with any ntfy template re-added to the gallery.
+// A shared topic anyone could subscribe to, so a fork must be given its own
+// before it can send anything private.
 const SHARED_NTFY_PLACEHOLDER = "my-daily-hello";
 
 export function TemplateGallery() {
@@ -40,19 +38,13 @@ export function TemplateGallery() {
   const [templates, setTemplates] = useState<TemplateSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // template id currently being forked
-  // providers is the OAuth catalog for this install. null = not loaded
-  // yet (or feature unavailable on this hosted box, which the daemon
-  // signals with 501). When the catalog is empty/null, OAuth-needing
-  // templates are flagged as admin-blocked so a non-tech buyer doesn't
-  // fork into a setup that can't run end-to-end.
+  // null means not loaded yet, which is not the same as "none configured".
   const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(
     null,
   );
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryFilter = searchParams.get("category");
-  // ?template=<id> is a tighter focus than category: a deep-link can open
-  // the gallery on one template instead of a category list it would
-  // otherwise be buried in. Takes precedence over category.
+  // A deep link opens one template directly, past the category filter.
   const templateFilter = searchParams.get("template");
   const autoStart = searchParams.get("start");
 
@@ -98,12 +90,7 @@ export function TemplateGallery() {
     setError(null);
     try {
       const tplGraph: Graph = await api.loadTemplateGraph(tpl.graph_file);
-      // Generate a fresh ID — keep a human-readable slug from the
-      // template ID plus a short suffix so multiple forks of the same
-      // template don't collide. crypto.randomUUID() is collision-resistant
-      // (the old Math.random slug could repeat and silently overwrite an
-      // existing fork via the saveGraph PUT); take the first UUID segment
-      // for a short, readable suffix.
+      // A fresh id: a fork must not collide with the template it came from.
       const suffix = crypto.randomUUID().slice(0, 8);
       const newID = `${tpl.id}-${suffix}`;
       const cloned: Graph = {
@@ -112,27 +99,10 @@ export function TemplateGallery() {
         tenant: activeTenant,
         workspace: activeWorkspace,
         owner: "",
-        // The flow's OUTPUT language: what its hosted form says to visitors
-        // ("Submit", "Thanks!"), and what steps that spell out words write.
-        // Empty means English, so a Swedish owner forking a template used to
-        // publish an English form to their Swedish customers without ever
-        // being shown a language control. Stamp the forker's own language, the
-        // same way the time zone below is stamped. A template that names a
-        // language deliberately keeps it, and the owner can change it in
-        // Settings → General.
+        // What the fork's hosted form says to visitors, not the forker's UI language.
         language: tplGraph.language || primaryLanguage(i18n.language),
         name: templateTitle(tpl, i18n.language),
-        // Per-fork personalisation of nodes that ship a placeholder default:
-        //  - cron_trigger: stamp the forker's time zone. Templates are
-        //    zone-neutral (a shared "0 9 * * *" means 9am wherever you are),
-        //    so the fork is where it gets personalised — otherwise both the
-        //    schedule and its fired_at would run in UTC.
-        //  - ntfy: stamp a unique topic. ntfy topics are world-readable —
-        //    anyone who knows the topic can read (and publish to) it — and
-        //    templates ship a shared placeholder topic, so every fork would
-        //    otherwise push to (and receive) the same global ntfy.sh topic.
-        //    Give each fork an unguessable topic; the user can still change
-        //    it in the editor.
+        // A placeholder default must be replaced per fork, or every fork shares it.
         nodes: (tplGraph.nodes ?? []).map((n) => {
           if (n.module === "cron_trigger") {
             const tz = (n.params as { tz?: unknown } | undefined)?.tz;
@@ -173,20 +143,11 @@ export function TemplateGallery() {
     }
   };
 
-  // Auto-start: copy ?start=<id> as soon as the list resolves, once per mount.
-  // The ref (not state) is what makes it once — a re-render mid-copy must not
-  // fire a second saveGraph, and going Back to this URL should not silently
-  // mint another flow, so we also strip the param as we go. An id the index
-  // doesn't know is ignored: the user just sees the normal gallery.
+  // Once per mount, or a re-render forks the template again.
   const started = useRef(false);
   useEffect(() => {
     if (!autoStart || started.current || !templates) return;
-    // The workspace, not just the token, is what applyTemplate needs. The
-    // template index is a static fetch and resolves well before the identity
-    // bootstrap, so gating on `token` alone fired this on a cold load with
-    // activeTenant still "" — and the user's very first action reported
-    // "not signed in" while signed in. Waiting costs nothing: the effect
-    // re-runs when the bootstrap lands.
+    // The workspace resolves on a separate async path from the token.
     if (!token || !activeTenant || !activeWorkspace) return;
     const tpl = templates.find((x) => x.id === autoStart);
     started.current = true;
@@ -332,15 +293,7 @@ export function TemplateGallery() {
   );
 }
 
-// oauthBlockedIntegrations names the template-listed integrations
-// whose OAuth provider isn't enabled on this install. For each entry
-// in the template's `integrations` array we look up the corresponding
-// OAuth provider; if the provider exists AND isn't in the available
-// set, we surface the integration's display name ("Gmail", "Slack")
-// — not the provider key — because that's what the user already sees
-// in the card's brand-logo row, so the message lines up. Integrations
-// with no OAuth mapping (postgres, sqlite, webhook, ...) are skipped
-// here; the editor's pre-run banner covers the secret-store side.
+// A template needing an integration the operator disabled cannot be forked.
 function oauthBlockedIntegrations(
   integrationSlugs: string[],
   availableProviders: Set<string>,

@@ -95,10 +95,6 @@ func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.
 	cleanRel := core.GitCheckoutRel(job.GraphID, job.NodeID)
 	dst := filepath.Join(job.WorkspaceRoot, cleanRel)
 
-	// Refuse before dialing when the org has no budget left at all — a
-	// clone that cannot possibly fit shouldn't cost a transfer. See
-	// quota.go for why enforcement here is pre-flight + rollback rather
-	// than the reservation file_write takes.
 	if job.QuotaLimit > 0 && job.QuotaUsed >= job.QuotaLimit {
 		return params.Err(job, "quota_exceeded", fmt.Sprintf(
 			"this organization is at its %d-byte storage limit (%d used); free space before checking out a repository",
@@ -141,36 +137,17 @@ func executeGitCheckout(ctx context.Context, job core.Job, progress chan<- core.
 	}, nil
 }
 
-// guardRepoURL enforces the SSRF/egress policy on a tenant-supplied repo
-// URL before go-git is allowed to dial it. go-git's default transport
-// registry still serves http://, git://, and file:// (only the
-// marketplace's https transport is overridden daemon-side), so without
-// this a tenant could clone file:///etc/passwd (host-file read),
-// git://internal-host/... (internal git daemon), or
-// http://169.254.169.254/... (cloud metadata) — the same SSRF class the
-// net drops already guard. Only https and ssh are permitted, and the
-// resolved host is run through the shared SSRF pre-flight
-// (hfnet.CheckDialHost: refuses loopback/private/link-local) plus the
-// operator egress allowlist (hfnet.EgressAllowed). The pre-flight is a
-// resolve-then-check (a rebinding window remains, like the SMTP/MySQL
-// drops, since go-git exposes no dial hook), but it closes the common
-// "point me at an internal host or a local file" case. When the operator
-// has opted into private egress, the net helpers no-op, matching the
-// http drops.
+// The repo URL is tenant-supplied, so it gets the same guard a step's call does.
 func guardRepoURL(ctx context.Context, rawURL string) error {
 	raw := strings.TrimSpace(rawURL)
 	if raw == "" {
 		return fmt.Errorf("url is required")
 	}
-	// scp-like ssh syntax (git@host:path) carries no scheme and trips
-	// url.Parse ("first path segment cannot contain colon"), so detect
-	// and SSRF-check it before parsing.
+	// scp-like syntax carries no scheme, so it must be normalised before parsing.
 	if !strings.Contains(raw, "://") {
 		if host, ok := scpLikeHost(raw); ok {
 			return hfnet.CheckDialHost(host)
 		}
-		// No scheme and not scp-like ⇒ a local-filesystem path; refuse
-		// it the same as file://.
 		return fmt.Errorf("repo URL scheme not allowed (use https:// or ssh://)")
 	}
 	u, err := url.Parse(raw)
@@ -208,34 +185,13 @@ func scpLikeHost(s string) (string, bool) {
 	return hostPart, true
 }
 
-// openOrClone returns the repository at dst — opening it when the
-// directory already holds a git repo (and fetching + updating the working
-// tree), or cloning fresh when it does not. mode reports which path was
-// taken, so callers can surface it in metadata and shape error codes
-// accordingly.
-//
-// ref (a branch, tag, or commit SHA; empty for the default branch) is
-// honoured on both paths. On a fresh clone it is pushed into the clone
-// itself via ReferenceName so that (a) a non-default branch is fetched and
-// checked out — go-git's post-clone ResolveRevision never expands a bare
-// branch name to refs/remotes/origin/<name>, so a separate checkout of one
-// would fail — and (b) a shallow clone targets the requested ref instead
-// of the default branch, which is the only thing depth would otherwise
-// fetch. A commit SHA can't be a ReferenceName, so it forces a full clone
-// (depth is meaningless for an arbitrary commit) and a detached checkout.
-//
-// When dst exists but is not a git repo we refuse rather than wipe it —
-// the sandbox holds workspace data the user owns, and silently
-// overwriting it would be hostile.
+// A re-run fetches and resets rather than re-cloning, which is the cache.
 func openOrClone(ctx context.Context, dst, url, ref string, depth int, progress chan<- core.Progress, job core.Job) (*gogit.Repository, string, error) {
 	info, statErr := os.Stat(dst)
 	if statErr != nil && !os.IsNotExist(statErr) {
 		return nil, "stat_failed", statErr
 	}
-	// Resolve auth once from the selected git credential. For ssh:// and
-	// git@host: URLs this is the SSH key + a strict host-key callback; for
-	// https:// it's basic auth from the access token (PAT), or nil for a
-	// public repo (unchanged behaviour).
+	// Resolved once: the credential must not be re-read per operation.
 	auth, authErr := authForURL(ctx, job, url)
 	if authErr != nil {
 		return nil, "git_auth_failed", authErr
@@ -260,8 +216,6 @@ func openOrClone(ctx context.Context, dst, url, ref string, depth int, progress 
 		if fetchErr != nil && fetchErr != gogit.NoErrAlreadyUpToDate {
 			return nil, "fetch_failed", fetchErr
 		}
-		// A fetch only moves remote-tracking refs; bring the working tree up
-		// to date too, or a re-run silently returns the stale checkout.
 		if ref != "" {
 			if err := checkout(repo, ref); err != nil {
 				return nil, "checkout_failed", err
@@ -280,8 +234,6 @@ func openOrClone(ctx context.Context, dst, url, ref string, depth int, progress 
 	switch {
 	case ref == "":
 	case sha:
-		// A commit SHA can't be a ReferenceName and may live anywhere in
-		// history, so it always needs a full clone; depth can't help.
 		if shallow {
 			opts.Depth = 0
 			emitLogProgress(progress, job, "git", "ignoring depth: a commit SHA needs full history")
@@ -347,11 +299,7 @@ func remoteRefName(ctx context.Context, url, ref string, auth gogittransport.Aut
 	}
 }
 
-// checkout moves the working tree to ref, handling the case go-git's
-// post-clone resolution misses: a remote-tracking branch with no local
-// branch yet. For such a ref it creates (or fast-forwards) a local branch
-// at the freshly-fetched remote tip; otherwise it resolves the ref as a
-// tag, qualified ref, or commit SHA and checks it out detached.
+// go-git resolves a branch and a tag differently, so both are tried.
 func checkout(repo *gogit.Repository, ref string) error {
 	wt, err := repo.Worktree()
 	if err != nil {

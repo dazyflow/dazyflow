@@ -15,33 +15,13 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
-// errTooManyRows is the sentinel the conn query implementations return
-// when an uncapped result set exceeds the shared row ceiling. runQuery*
-// maps it back to the "too_many_rows" error code the query drops
-// reported before the consolidation (other db errors map to "db").
+// The sentinel a query returns when its result exceeds the row ceiling.
 var errTooManyRows = errors.New("too many rows")
 
-// dialect.go holds the SQL-flavor abstraction the three database
-// backends (SQLite, Postgres, MySQL) share. Each backend's query /
-// insert / upsert drops once carried a near-identical skeleton —
-// connect, optionally CREATE TABLE, run the batch in one transaction,
-// report the count — differing only in:
-//
-//   - how a connection is obtained (sqlite file via os.Root, pgx pool,
-//     database/sql handle),
-//   - placeholder syntax (? vs $N),
-//   - identifier quoting (" vs `),
-//   - the conflict/duplicate-key upsert clause.
-//
-// A dialect captures the SQL differences; a conn abstracts the two
-// driver families (pgx vs database/sql) behind a single Exec/Query/tx
-// surface. The executeQuery / executeInsert / executeUpsert functions
-// below hold the shared skeleton so each backend file is just a dialect
-// plus its connection wiring.
+// The SQL-flavour abstraction the three database drops share, so a query is
+// written once and the per-engine differences live in one place.
 
 type dialect interface {
-	// quote returns ident wrapped in the dialect's identifier quoting,
-	// with the embedded quote char doubled to escape it.
 	quote(ident string) string
 	placeholder(i int) string
 	upsertClause(conflictCols, updateCols []string) string
@@ -72,10 +52,6 @@ func insertSQL(d dialect, table string, headers []string, tail string) string {
 	return stmt
 }
 
-// createTableSQL renders CREATE TABLE IF NOT EXISTS sized to headers,
-// defaulting each column to TEXT unless column_types overrides it, with
-// an optional trailing UNIQUE(conflictCols) constraint. table is already
-// qualified+quoted by the caller.
 func createTableSQL(d dialect, table string, headers []string, colTypes map[string]string, uniqueCols []string) string {
 	cols := make([]string, len(headers))
 	for i, h := range headers {
@@ -92,11 +68,6 @@ func createTableSQL(d dialect, table string, headers []string, colTypes map[stri
 	return fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s)", table, body)
 }
 
-// sqliteEnsureTable issues a CREATE TABLE IF NOT EXISTS sized to
-// headers against a raw *sql.DB. The dialect-driven runInsert /
-// runUpsert path doesn't need it, but the Collections store calls it
-// directly (it manages its own schema-evolution dance around the
-// create) so it stays as a small standalone helper.
 func sqliteEnsureTable(db *sql.DB, table string, headers []string, colTypes map[string]string) error {
 	stmt := createTableSQL(sqliteDialect{}, quoteIdent(table), headers, colTypes, nil)
 	if _, err := db.Exec(stmt); err != nil {
@@ -105,25 +76,12 @@ func sqliteEnsureTable(db *sql.DB, table string, headers []string, colTypes map[
 	return nil
 }
 
-// conn abstracts the two driver families. SQLite and MySQL wrap a
-// *sql.DB; Postgres wraps a *pgxpool.Pool. The generic execute*
-// functions only need: run one statement, run a SELECT and collect
-// rows, and run a batch of bound statements in a single transaction.
 type conn interface {
 	exec(ctx context.Context, sql string) error
-	// query runs sql with args and returns the column names and every
-	// row as a {column: value} map, applying the limit / row-ceiling
-	// guard shared by the three query drops. limit==0 means no
-	// user-imposed cap (the ceiling still applies).
 	query(ctx context.Context, sql string, args []any, limit int) (cols []string, rows []map[string]any, err error)
-	// execBatch runs stmt once per row inside one transaction, binding
-	// the row's values in header order; the whole batch commits or rolls
-	// back. Returns the number of rows processed.
 	execBatch(ctx context.Context, stmt string, headers []string, rows []map[string]any, verb string) (int, error)
 }
 
-// bindArgs pulls a row's values in header order. A missing/absent key
-// binds nil, which both drivers map to SQL NULL.
 func bindArgs(headers []string, row map[string]any) []any {
 	args := make([]any, len(headers))
 	for j, h := range headers {
@@ -132,17 +90,11 @@ func bindArgs(headers []string, row map[string]any) []any {
 	return args
 }
 
-// queryGuard appends rec to out, enforcing the user limit and the shared
-// row ceiling. It returns the updated slice, whether iteration should
-// stop (user limit reached), and an error when the ceiling is exceeded.
 func queryGuard(out []map[string]any, rec map[string]any, limit int) ([]map[string]any, bool, error) {
 	out = append(out, rec)
 	if limit > 0 && len(out) >= limit {
 		return out, true, nil
 	}
-	// limit==0 means "no user-imposed cap" — but the whole result set is
-	// buffered in memory, so an unbounded SELECT would OOM the daemon.
-	// Fail fast at the shared row ceiling rather than letting it grow.
 	if len(out) > limits.MaxRows() {
 		return out, false, errTooManyRows
 	}
@@ -252,10 +204,6 @@ func runUpsert(ctx context.Context, job core.Job, d dialect, c conn, table strin
 	if len(ri.rows) == 0 {
 		return countResult(job, "processed", 0), nil
 	}
-	// Decide the final update set:
-	//   - explicit []        → DO NOTHING
-	//   - explicit non-empty → use those (validated upstream)
-	//   - absent             → derive (headers minus conflict_columns)
 	if !updateColsExplicit {
 		updateCols = subtract(ri.headers, conflictCols)
 	}

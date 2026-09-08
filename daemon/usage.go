@@ -11,33 +11,17 @@ import (
 	"time"
 )
 
-// Usage metering (T3 / Phase 3): per-tenant counts of graph runs and
-// node executions, bucketed by calendar month (UTC). The counters are
-// the raw material for the usage page today and for Stripe plan gates
-// later ("free tier: 100 runs/month").
-//
-// Buckets are keyed "YYYY-MM" rather than reset in place: a billing-day
-// boundary (tenants whose cycle starts mid-month) can be layered on at
-// query time once plans carry a billing anchor — the writes don't change.
-//
-// Recording is best-effort by contract: callers MUST NOT fail a run or a
-// node completion because metering failed. Implementations return the
-// error for logging only.
+// Per-tenant counts of graph runs and node executions.
 
 type UsageCounters struct {
 	Period         string `json:"period"` // "2026-06" (UTC month)
 	GraphRuns      int64  `json:"graph_runs"`
 	NodeExecutions int64  `json:"node_executions"`
-	// SkippedRuns counts scheduled fires the run-cap gate refused this
-	// month — otherwise an invisible, log-only event. Surfaced so a capped
-	// tenant learns why their schedules stopped.
+	// Refused fires are counted, or an org over its cap looks simply idle.
 	SkippedRuns int64 `json:"skipped_runs"`
 }
 
-// UsageStore records and reads per-tenant usage. Implementations must be
-// safe for concurrent use (every worker goroutine records through one
-// store) and increments must be atomic across replicas for the Postgres
-// backend.
+// Implementations must be safe for concurrent use.
 type UsageStore interface {
 	AddRun(ctx context.Context, tenant string, now time.Time) error
 	AddNodeExecutions(ctx context.Context, tenant string, n int, now time.Time) error
@@ -45,26 +29,13 @@ type UsageStore interface {
 	Usage(ctx context.Context, tenant string, months int) ([]UsageCounters, error)
 }
 
-// runReleaser is an optional UsageStore extension that gives back a reserved
-// run. The reservation happens BEFORE the run is written, because the cap
-// check and the increment have to be one atomic step or concurrent
-// submissions at the limit all pass — but that leaves a window where the
-// write then fails and the tenant has been charged for a run that does not
-// exist anywhere. Releasing closes it.
-//
-// Best-effort by nature: whatever broke the run's write may well have broken
-// this too. Worth having anyway — a jobs-table conflict with a healthy usage
-// table is exactly the case it recovers, and over-counting somebody's monthly
-// allowance is not a rounding error to them.
+// Gives back a reservation when the submission that took it then failed.
 type runReleaser interface {
 	ReleaseRun(ctx context.Context, tenant string, now time.Time) error
 }
 
-// runReserver is an optional UsageStore extension: atomically count a run only
-// if the tenant is still under its monthly cap. The real stores (Mem, Pg)
-// implement it so the run-cap gate is a single atomic check-and-increment
-// rather than a racy read-then-add that lets concurrent submissions at the
-// limit all pass. A store without it falls back to the racy path in reserveRun.
+// Atomic: a gap between the cap check and the increment lets two concurrent
+// submissions both pass a cap with one slot left.
 type runReserver interface {
 	AddRunIfUnder(ctx context.Context, tenant string, now time.Time, limit int) (admitted bool, err error)
 }
@@ -115,9 +86,7 @@ func (m *MemUsageStore) AddRunIfUnder(_ context.Context, tenant string, now time
 	return true, nil
 }
 
-// ReleaseRun implements runReleaser. Floored at zero: a release without a
-// matching reserve must not push a bucket negative and make the Usage page
-// nonsense.
+// Floored at zero: a release without a matching reserve must not go negative.
 func (m *MemUsageStore) ReleaseRun(_ context.Context, tenant string, now time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -156,15 +125,7 @@ func (m *MemUsageStore) Usage(_ context.Context, tenant string, months int) ([]U
 	return out, nil
 }
 
-// BufferedUsage batches node-execution counts in memory and flushes
-// them to the inner store on an interval. Without it every executed
-// node attempt is a synchronous upsert against the SAME (tenant, month)
-// row — a lock-contention point once many workers serve one busy
-// tenant. Runs pass through unbatched (they're far rarer, and the run
-// gate reads them); reads flush first so the gate and the Usage page
-// never lag behind by more than the in-flight call. Losing one unflushed
-// window on crash is within the metering's documented best-effort
-// contract.
+// Node counts are high-frequency, so they are batched rather than written per step.
 type BufferedUsage struct {
 	inner UsageStore
 
@@ -180,11 +141,7 @@ func (b *BufferedUsage) AddRun(ctx context.Context, tenant string, now time.Time
 	return b.inner.AddRun(ctx, tenant, now)
 }
 
-// AddRunIfUnder forwards to the inner store's atomic reserve. Runs are never
-// buffered (the comment above: they're rare and the gate reads them), so this
-// is a straight passthrough; a non-reserver inner falls back to read-then-add.
-// ReleaseRun implements runReleaser by delegating; a buffered store that
-// cannot release simply does not, and the reservation stands.
+// Runs are never buffered: the cap has to be authoritative at submit time.
 func (b *BufferedUsage) ReleaseRun(ctx context.Context, tenant string, now time.Time) error {
 	if rl, ok := b.inner.(runReleaser); ok {
 		return rl.ReleaseRun(ctx, tenant, now)
@@ -218,9 +175,7 @@ func (b *BufferedUsage) AddNodeExecutions(_ context.Context, tenant string, n in
 }
 
 func (b *BufferedUsage) Usage(ctx context.Context, tenant string, months int) ([]UsageCounters, error) {
-	// Flush first so reads never lag by more than the in-flight call. A
-	// failed flush already re-queued its counts; the read proceeds on
-	// whatever the inner store has.
+	// Flush first, or a read lags behind what has already been counted.
 	_ = b.Flush(ctx)
 	return b.inner.Usage(ctx, tenant, months)
 }
@@ -245,7 +200,6 @@ func (b *BufferedUsage) Flush(ctx context.Context) error {
 	return firstErr
 }
 
-// snapshot drains the pending map under the lock.
 func (b *BufferedUsage) snapshot() map[string]int {
 	b.mu.Lock()
 	defer b.mu.Unlock()

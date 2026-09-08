@@ -101,25 +101,7 @@ func NewPgAuditLog(ctx context.Context, pool *pgxpool.Pool) (*PgAuditLog, error)
 	return &PgAuditLog{pool: pool}, nil
 }
 
-// Prune deletes audit rows older than the cutoff in bounded batches so a
-// large backlog doesn't lock the table in one statement. Returns the
-// total deleted. olderThan <= 0 is a no-op (retention disabled).
-//
-// AUTHORISATIONS ARE EXEMPT. Retention exists to stop routine chatter — key
-// reads, config edits, sign-ins — accumulating forever, and for that a window
-// is right. An approval is a different kind of record: it is the answer to
-// "who authorised this", and that question is characteristically asked long
-// after the fact, during an incident review or when someone asks who signed
-// off on the change that broke something. Pruning it puts an expiry on the
-// one entry nobody wants expired: at the Pro tier's 90 days the record of a
-// production deploy is gone within a quarter, and on Free within a week.
-//
-// Keeping them costs nothing worth counting — an approval is a deliberate
-// human act, so the volume is bounded by how often people click, not by
-// traffic. And it does not undercut erasure: a user erasure pseudonymises the
-// actor on these rows rather than deleting them (see gdpr_coverage_test), so
-// the authorisation survives while the person stops being identifiable, which
-// is the outcome both rules actually want.
+// Bounded batches, so a large backlog does not lock the table in one statement.
 func (p *PgAuditLog) Prune(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
 	if olderThan <= 0 {
 		return 0, nil
@@ -202,22 +184,11 @@ func (p *PgAuditLog) List(ctx context.Context, q core.AuditQuery) ([]core.AuditE
 	return out, rows.Err()
 }
 
-// audit records an administrative action. Best-effort: a write failure is
-// logged but never fails the user action being audited, and a nil Audit
-// store (auditing disabled) is a no-op.
-// auditFieldLimit caps a single audit field. A caller-supplied value (a tried
-// email, a flow id) shouldn't be able to bloat the trail.
+// Best-effort: a failed audit write must never fail the action being audited.
 const auditFieldLimit = 512
 
-// sanitizeAuditField strips control characters from a value destined for the
-// audit trail and caps its length.
-//
-// The failed-sign-in path records the email the caller TYPED — it has to, that
-// address is the whole signal for credential-stuffing detection — and at that
-// point nothing has validated it. A newline in that value forges a second,
-// fake line in a compliance-relevant log, which is exactly the log-injection
-// A.8.15 asks us to prevent. Sanitizing at the sink covers every caller
-// rather than relying on each one to remember.
+// An audit line is read in a terminal, so a control character in it can forge
+// what the operator sees.
 func sanitizeAuditField(v string) string {
 	if v == "" {
 		return v
@@ -243,9 +214,7 @@ func sanitizeAuditField(v string) string {
 	return out
 }
 
-// auditor writes audit events. It is the entire dependency a handler needs in
-// order to audit, so a domain handler takes one of these rather than the whole
-// gateway.
+// The entire dependency a handler needs, so handlers stay testable.
 type auditor struct{ log core.AuditLog }
 
 func (a auditor) audit(ctx context.Context, p core.Principal, action, target, detail string) {
@@ -264,22 +233,7 @@ func (a auditor) audit(ctx context.Context, p core.Principal, action, target, de
 	}
 }
 
-// auditAuth records an authentication-lifecycle event — sign-in, sign-out,
-// signup, and the MFA legs (ISO/IEC 27001:2022 A.8.15/A.8.16: detection of
-// anomalous sign-in activity such as credential stuffing).
-//
-// It differs from audit() in two ways. First, the actor is an email rather
-// than a resolved principal — a *failed* sign-in has no principal yet, only
-// the address that was tried. Second, the caller's source IP is appended to
-// Detail so a burst of failures from one IP is visible in the trail.
-//
-// Tenant is best-effort: it's the user's tenant on a successful sign-in, but
-// empty on a pre-auth failure — we don't resolve (and so don't reveal)
-// whether the attempted email maps to a tenant. Failed-login events
-// therefore land in the platform-level trail (a platform admin querying
-// ?tenant=) rather than a specific tenant's view. Best-effort like audit():
-// a write failure is logged, never blocking the auth path; a nil store is a
-// no-op.
+// The authentication lifecycle, which is the trail an incident is read from.
 func (a auditor) auditAuth(ctx context.Context, r *http.Request, tenant, actor, action, detail string) {
 	if a.log == nil {
 		return
@@ -311,9 +265,7 @@ func (h *auditAPI) listAudit(rw http.ResponseWriter, r *http.Request, p core.Pri
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
-	// Force-scoped to the caller's own tenant — an admin can't read
-	// another tenant's trail. (Cross-tenant inspection for a platform
-	// super-admin is a future refinement.)
+	// Force-scoped: an admin cannot read another tenant's trail.
 	events, err := h.Audit.List(r.Context(), core.AuditQuery{
 		Tenant: p.Tenant,
 		Limit:  queryInt(r, "limit", defaultAuditLimit),

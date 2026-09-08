@@ -1,16 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package caldavutil holds the CalDAV connection dance shared by the Calendar
-// drops (drops/caldav — list events, create an event) and the "Test
-// connection" verifier behind the integration page. Sibling to smtputil,
-// imaputil and sftputil, split out for the same reason: how a calendar is
-// discovered and which URL is actually talked to must NOT drift between
-// running a flow and testing the credentials that flow will use.
-//
-// CalDAV is the vendor-neutral calendar: Fastmail, mailbox.org, iCloud,
-// Nextcloud and a Radicale box of your own all speak it, so one connector
-// reaches every calendar that isn't Google's.
+// The CalDAV connection dance shared by the Calendar drops.
 package caldavutil
 
 import (
@@ -29,23 +20,14 @@ import (
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
-// defaultTimeout bounds a request when the caller sets none.
 const defaultTimeout = 30 * time.Second
 
 type Config struct {
-	// URL is whatever the provider told the user to use. It may be a
-	// discovery root ("https://caldav.fastmail.com/"), a principal, a
-	// calendar-home collection, or one calendar's own path — resolveCalendar
-	// copes with all of them, because a user cannot be expected to know
-	// which of those they were handed.
+	// Whatever the provider told the user: a principal, a home set, or a calendar.
 	URL      string
 	Username string
 	Password string
 
-	// Calendar names which calendar to use when the URL points at a
-	// collection holding several. A display name ("Work") or a path both
-	// work. Empty means "the only one", which is an error when there are
-	// several — silence would be worse.
 	Calendar string
 }
 
@@ -72,12 +54,6 @@ func ConfigFromConn(conn map[string]string) (Config, error) {
 	return cfg, nil
 }
 
-// Client builds a CalDAV client for cfg.
-//
-// The transport is the shared SafeHTTPClient, so every request carries the
-// SSRF guard and the operator's private-egress setting — without it a
-// tenant-supplied URL could point the client, and the basic-auth header it
-// sends, at cloud metadata or an internal host.
 func Client(cfg Config, timeout time.Duration) (*caldav.Client, error) {
 	if timeout <= 0 {
 		timeout = defaultTimeout
@@ -91,16 +67,7 @@ func Client(cfg Config, timeout time.Duration) (*caldav.Client, error) {
 	return c, nil
 }
 
-// ResolveCalendar works out which collection path to read and write.
-//
-// CalDAV discovery is the part users cannot be asked to do by hand. Providers
-// hand out wildly different URLs — Fastmail a root, Nextcloud a per-user
-// principal, iCloud a numeric home set — and the protocol expects a client to
-// walk from whatever it was given to the calendar collections underneath.
-// So: try the URL as a calendar home set first, then find the principal and
-// its home set, and only then give up. Whatever succeeds, the result is a
-// concrete collection path the query and the write both use, which is what
-// keeps the verifier honest about what a run will do.
+// Which collection path to read and write, given any of those three shapes.
 func ResolveCalendar(ctx context.Context, c *caldav.Client, cfg Config) (path string, err error) {
 	cals, err := discover(ctx, c, cfg)
 	if err != nil {
@@ -114,9 +81,7 @@ func ResolveCalendar(ctx context.Context, c *caldav.Client, cfg Config) (path st
 		if len(cals) == 1 {
 			return cals[0].Path, nil
 		}
-		// Naming them is the whole value of this error: the fix is to copy one
-		// into the Calendar field, and a bare "ambiguous" would leave the user
-		// guessing at spellings.
+		// Naming the calendars IS the fix: the user copies one of them.
 		return "", fmt.Errorf("this account has %d calendars (%s) — put the one you want in the Calendar field", len(cals), strings.Join(names(cals), ", "))
 	}
 	for _, cal := range cals {
@@ -131,8 +96,6 @@ func discover(ctx context.Context, c *caldav.Client, cfg Config) ([]caldav.Calen
 	if cals, err := c.FindCalendars(ctx, cfg.URL); err == nil && len(cals) > 0 {
 		return cals, nil
 	}
-	// 2. Ask the server who we are, then where its calendars live. This is
-	//    the path every major provider actually needs.
 	principal, err := c.FindCurrentUserPrincipal(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%s didn't accept the login, or isn't a CalDAV server — check the address and credentials (%w)", cfg.URL, err)
@@ -160,11 +123,6 @@ func names(cals []caldav.Calendar) []string {
 	return out
 }
 
-// Verify is the "Test connection" probe: sign in, discover the calendars, and
-// confirm the configured one is among them — without reading a single event.
-// The calendar name is included because it is the field most likely to be
-// quietly wrong, and a mistyped one otherwise fails per-run, deep inside a
-// flow, where nothing points back at the integration page.
 func Verify(ctx context.Context, cfg Config) error {
 	c, err := Client(cfg, defaultTimeout)
 	if err != nil {
@@ -174,16 +132,7 @@ func Verify(ctx context.Context, cfg Config) error {
 	return err
 }
 
-// FindEventPath locates the collection path an event with this UID lives at,
-// or "" when the calendar has no such event.
-//
-// Two attempts, cheapest first. An event this integration created sits at a
-// path built from its own UID, so a direct GET finds it in one request. An
-// event created by anything else — a person in their calendar app, which is
-// the realistic case for cancelling a booking — sits wherever that client put
-// it, so the fallback asks the server to find it by UID. Guessing only the
-// first would make the steps work on our own events and quietly fail on
-// everyone else's.
+// A UID is unique within a calendar by the RFC, but not across calendars.
 func FindEventPath(ctx context.Context, c *caldav.Client, dir, uid string) (string, error) {
 	if uid == "" {
 		return "", errors.New("no event id given")
@@ -209,9 +158,7 @@ func FindEventPath(ctx context.Context, c *caldav.Client, dir, uid string) (stri
 	if err != nil {
 		return "", fmt.Errorf("couldn't look the event up: %w", err)
 	}
-	// A UID is unique within a calendar by the RFC, but a server that
-	// implements the filter loosely can answer with near-misses — so the
-	// match is confirmed against the returned data rather than trusted.
+	// A server exposing several calendars can still answer twice.
 	for _, obj := range objects {
 		if obj.Data == nil {
 			continue
@@ -225,8 +172,5 @@ func FindEventPath(ctx context.Context, c *caldav.Client, dir, uid string) (stri
 	return "", nil
 }
 
-// EventPath is where this integration writes an event: the UID plus ".ics"
-// under the calendar collection. Exported so create, update and delete agree
-// — an update that guessed a different path would leave a second copy behind
-// instead of replacing the first.
+// Where THIS integration writes; another client may name the file differently.
 func EventPath(dir, uid string) string { return path.Join(dir, uid+".ics") }

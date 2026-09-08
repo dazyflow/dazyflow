@@ -1,9 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package notify houses notification modules — channels a graph can use
-// to report on its own outcome (email today; chat/Slack would slot in
-// alongside).
 package notify
 
 import (
@@ -54,11 +51,6 @@ func init() {
 			},
 			ExecutionModel: core.ExecutionBatch,
 			ProcessModel:   core.ProcessLongLived,
-			// The mail server (host/port/security/login/sender) is a per-tenant
-			// ConnectionFields bundle configured once on the integration page,
-			// not typed on every node — the engine injects it into each node's
-			// params at run time (injectConnectionDefaults), exactly like Home
-			// Assistant's URL+token. So flows carry only the per-message fields.
 			ConnectionFields: []core.ConnectionField{
 				{Key: "host", Label: "Mail server", Required: true, Placeholder: "smtp.example.com"},
 				{Key: "port", Label: "Port", Placeholder: "587 (STARTTLS) or 465 (SSL/TLS)"},
@@ -92,14 +84,9 @@ func init() {
 				}`,
 			),
 			Idempotent: false,
-			// SMTP send has no idempotency mechanism, so a retried send
-			// delivers the email twice. This drop is a terminal leaf the
-			// engine auto-retries on backoff, so retries must be off here.
+			// SMTP has no idempotency mechanism, so a retried send delivers twice.
 			RetryPolicy: core.RetryNever,
-			// A non-idempotent external write: opt into engine-side dedupe so an
-			// expired-lease reclaim or crash recovery replays the recorded result
-			// instead of firing the write a second time. Matches the other
-			// send-style drops (discord/gmail/sheets/twilio/klarna/nshift/elks).
+			// Engine-side dedupe, so a reclaimed lease does not send the mail twice.
 			DedupeWrites: true,
 		},
 		Execute: executeEmail,
@@ -116,13 +103,7 @@ func splitRecipients(s string) []string {
 	return out
 }
 
-// dedupeRecipients flattens To/CC/BCC into the envelope recipient list, keeping
-// the first mention of each address and its original spelling. Comparison is on
-// the parsed address, lower-cased, so "Ada <a@x.test>" and "a@x.test" are one
-// recipient — an address that doesn't parse falls back to its trimmed,
-// lower-cased text. Deliberately case-insensitive on the local part too: the
-// RFC allows a server to treat "A@x" and "a@x" as different mailboxes, but no
-// real provider does, and mailing a person twice is the worse failure.
+// One envelope entry per address, or a duplicate is delivered twice.
 func dedupeRecipients(lists ...[]string) []string {
 	total := 0
 	for _, l := range lists {
@@ -146,10 +127,7 @@ func dedupeRecipients(lists ...[]string) []string {
 	return out
 }
 
-// smtpPort resolves the mail-server port. ConnectionFields inject it as a
-// string ("587"); an absent one means 587, the STARTTLS default. A value that
-// is not a usable number is reported, not silently replaced by the default —
-// mail delivered on the wrong port fails in a way nothing here would explain.
+// Injected as a string, so it has to be parsed rather than asserted.
 func smtpPort(job core.Job) (int, error) {
 	raw, present := job.Params["port"]
 	if !present {
@@ -170,9 +148,6 @@ func smtpPort(job core.Job) (int, error) {
 }
 
 func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	// host/port/security/login/sender come from the per-tenant connection the
-	// engine injected into params (ConnectionFields). An empty host means the
-	// tenant hasn't connected Email yet — say so, pointing at the right page.
 	host := strings.TrimSpace(params.StringDefault(job.Params, "host", ""))
 	if host == "" {
 		return params.Err(job, "not_connected", "Email isn't connected — set up your mail server on the Email integration page"), nil
@@ -185,13 +160,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 		return params.Err(job, "not_connected", "no sender address — set the From address on the Email integration page"), nil
 	}
 
-	// to / subject / body each take their value from the matching input port
-	// when one is wired, otherwise from the param (the "input overrides param"
-	// pattern). A non-text value wired into To or Subject is a mistake we
-	// reject.
-	// To is a comma-separated string. A value in some other shape is named as
-	// such rather than reported as missing, which is what it looks like once
-	// the string read comes back empty.
+	// A wired port overrides the param.
 	if raw, present := job.Params["to"]; present {
 		if _, ok := raw.(string); !ok {
 			return params.Err(job, "bad_param", "'to' must be one comma-separated string of addresses, e.g. \"a@x.test, b@x.test\""), nil
@@ -207,9 +176,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 		return params.Err(job, "bad_param", "'to' is required — set it or connect the 'To' input"), nil
 	}
 
-	// CC and BCC are param-only (comma-separated). CC rides a visible header;
-	// BCC must NOT appear in any header (or it isn't blind) — it's added to the
-	// SMTP envelope recipients only, below.
+	// CC rides a visible header; BCC rides the envelope only.
 	cc := splitRecipients(params.StringDefault(job.Params, "cc", ""))
 	bcc := splitRecipients(params.StringDefault(job.Params, "bcc", ""))
 
@@ -267,9 +234,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}
 
 	addr := net.JoinHostPort(host, fmt.Sprint(port))
-	// SSRF guard: the SMTP host is a tenant-supplied param, so refuse
-	// private/loopback/link-local targets (internal services, metadata)
-	// unless the operator opted into private egress.
+	// The SMTP host is a tenant-supplied param.
 	if err := hfnet.CheckDialHost(addr); err != nil {
 		return params.Err(job, "ssrf_blocked", err.Error()), nil
 	}
@@ -281,13 +246,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 		return params.Err(job, "not_connected", "mail server login is incomplete: "+aerr.Error()), nil
 	}
 
-	// Every recipient — To, CC and BCC — must be in the SMTP envelope (RCPT
-	// TO), since that, not the headers, decides who the server delivers to.
-	// BCC is here but absent from the headers, which is what keeps it blind.
-	// De-duplicated: the same address in two fields is one person, and a
-	// server that doesn't collapse repeated RCPTs itself delivers them a copy
-	// per mention. To wins the position, so the headers stay the source of
-	// truth for who is visibly addressed.
+	// Every recipient must be in the envelope, or it is simply not delivered.
 	rcpts := dedupeRecipients(to, cc, bcc)
 
 	params.EmitProgress(progress, job, 0.3, "dial "+addr)
@@ -302,9 +261,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 		"from": fromHeader,
 		"to":   to,
 		"cc":   cc,
-		// BCC is blind by design: it rides the SMTP envelope only and is
-		// stripped from the headers. Surfacing the addresses in the persisted,
-		// downstream-wireable meta would defeat that — expose only the count.
+		// Blind by design: envelope only, never a header.
 		"bcc_count":  len(bcc),
 		"subject":    subject,
 		"bytes_sent": len(msg),
@@ -318,14 +275,7 @@ func executeEmail(ctx context.Context, job core.Job, progress chan<- core.Progre
 	}, nil
 }
 
-// buildMessage assembles the RFC 822 message. fromHeader is the header form of
-// the sender, so it may carry a display name ("Reports <r@example.com>");
-// fromAddr is the bare address, which also goes to smtputil.Send as the
-// envelope and supplies the Message-ID's domain. Address headers are stripped
-// of CR/LF to defeat header injection; the subject is MIME-word encoded;
-// multipart/mixed is used only when attachments exist (same shape as gmail
-// send's buildRFC822). BCC is deliberately NOT a header — blind copies ride
-// the SMTP envelope only (see executeEmail), so they stay hidden.
+// fromHeader is the display form; the envelope carries the bare address.
 func buildMessage(fromHeader, fromAddr string, to, cc []string, subject, body, bodyContentType string, atts []mailmsg.Attachment) []byte {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "From: %s\r\n", mailmsg.StripCRLF(fromHeader))
@@ -333,17 +283,8 @@ func buildMessage(fromHeader, fromAddr string, to, cc []string, subject, body, b
 	if len(cc) > 0 {
 		fmt.Fprintf(&sb, "Cc: %s\r\n", mailmsg.StripCRLF(strings.Join(cc, ", ")))
 	}
-	// RFC 2047 encoded-word — non-ASCII subjects must not ride as raw
-	// UTF-8 bytes in a header, or receiving clients mojibake them.
 	fmt.Fprintf(&sb, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
-	// Date + Message-ID: required by RFC 5322, and the pair every downstream
-	// MTA uses to collapse a retried submission into ONE delivery. Sending
-	// without them is what made this drop's mail arrive twice — a relay
-	// re-queue (timeout, greylisting) had nothing to de-duplicate on, and a
-	// relay that mints its own fresh ID per attempt made the copies look like
-	// two different messages. The Gmail drop can omit them because Google's
-	// API stamps both server-side; raw SMTP has no such backstop. Shared with
-	// the operator's Mailer via smtputil so the two can't drift again.
+	// Required by RFC 5322; without them a message is a common spam signal.
 	fmt.Fprintf(&sb, "Date: %s\r\n", smtputil.DateHeader(time.Now()))
 	fmt.Fprintf(&sb, "Message-ID: %s\r\n", smtputil.NewMessageID(fromAddr))
 	sb.WriteString("MIME-Version: 1.0\r\n")

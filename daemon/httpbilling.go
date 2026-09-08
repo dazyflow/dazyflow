@@ -14,16 +14,7 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Billing surface (T3):
-//
-//	GET  /api/v1/me/billing            → plan + limit + this month's runs
-//	POST /api/v1/me/billing/checkout   → Stripe Checkout URL (upgrade)
-//	POST /api/v1/me/billing/portal     → Stripe billing-portal URL (manage)
-//	POST /api/v1/events/stripe         → webhook (signature is the auth)
-//
-// The first three are requireAuth'd; the webhook is unauthenticated by
-// nature and verified via Stripe's HMAC signature instead, mirroring the
-// GitHub/Slack event endpoints.
+// The billing surface.
 
 type billingAPI struct {
 	auditor
@@ -37,9 +28,7 @@ func (h *HTTPGateway) billingAPI() *billingAPI {
 
 const maxStripeEventBytes = 1 << 20
 
-// BillingHandler holds the Stripe wiring the billing routes need. Nil
-// fields degrade gracefully: no Stripe client → checkout/portal return
-// 501; no webhook secret → the events route returns 501.
+// Nil when the deployment runs no paid billing.
 type BillingHandler struct {
 	Stripe        *StripeClient
 	WebhookSecret string
@@ -85,23 +74,13 @@ func (h *billingAPI) billingMe(rw http.ResponseWriter, r *http.Request, p core.P
 			return
 		}
 	}
-	// The effective plan is the source of truth for "are you on pro": an
-	// admin-granted comp/trial/override or a pro tier makes a tenant pro with
-	// no Stripe subscription, so plan.Plan (the raw Stripe record) stays free.
-	// Reporting and the upgrade CTA must follow the effective plan the way the
-	// /me/plans comparison does, or a comped tenant is told to "Upgrade to Pro".
-	// The Stripe-only fields (customer/sub status/period end) still come from
-	// the plan record above.
+	// The source of truth: a stored plan can lag a lapsed subscription.
 	effPlan := h.svc.effectiveLimits(r.Context(), tenant).Plan
 	var runsThisMonth int64
 	if h.svc.Usage != nil {
 		runsThisMonth, _ = h.svc.runsThisMonth(r.Context(), tenant)
 	}
-	// billingEnabled reports whether this deployment runs paid billing at all
-	// (Stripe wired up). It's distinct from can_upgrade, which is additionally
-	// false once a tenant is already pro — so the client can't infer "this is a
-	// billing deployment" from can_upgrade alone. A self-hosted instance with no
-	// Stripe leaves the whole plan/billing UI hidden via this flag.
+	// Whether this deployment runs paid billing at all.
 	billingEnabled := h.Billing != nil && h.Billing.Stripe != nil
 	resp := map[string]any{
 		"plan":                 effPlan,
@@ -120,11 +99,6 @@ func (h *billingAPI) billingMe(rw http.ResponseWriter, r *http.Request, p core.P
 	writeJSON(rw, http.StatusOK, resp)
 }
 
-// planLimits is the display-resolved limit set for one plan on the /me/plans
-// comparison. Mirrors EffectiveLimits but normalized for presentation: a
-// pro-granting plan reports runs_per_month 0 (= unlimited) because the run gate
-// bypasses the cap for any non-free plan (see checkRunQuota), regardless of the
-// numeric value the tier happens to inherit.
 type planLimits struct {
 	RunsPerMonth      int   `json:"runs_per_month"`
 	MaxFlows          int   `json:"max_flows"`
@@ -137,9 +111,7 @@ type planLimits struct {
 	PollingAllowed    bool  `json:"polling_allowed"`
 }
 
-// planOption is one selectable plan in the comparison. Limits are resolved
-// server-side so the client never re-implements ResolveEffective; the client
-// only formats and diffs the numbers.
+// Limits resolved server-side, so the page cannot disagree with the gate.
 type planOption struct {
 	ID        string     `json:"id"`
 	Name      string     `json:"name"`
@@ -212,8 +184,6 @@ func (h *billingAPI) plansMe(rw http.ResponseWriter, r *http.Request, p core.Pri
 				plans = append(plans, resolveTier(t))
 			}
 		}
-		// Surface a custom comp tier as the org's own option so it reads as
-		// "your plan" rather than silently mapping onto free/pro.
 		if cur.TierID != "" && !isBuiltinTierID(cur.TierID) {
 			if t, ok := h.svc.Entitlements.GetTier(ctx, cur.TierID); ok {
 				plans = append(plans, resolveTier(t))
@@ -263,21 +233,13 @@ func (h *billingAPI) billingCheckout(rw http.ResponseWriter, r *http.Request, p 
 	if !ok {
 		return
 	}
-	// Trimmed so a base configured with a trailing slash can't produce
-	// "https://host//usage" in the redirect Stripe sends the user back to.
 	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
 	if base == "" {
 		writeAPIError(rw, http.StatusInternalServerError, "not_configured",
 			"DAZYFLOW_PUBLIC_BASE_URL must be set for Checkout redirects")
 		return
 	}
-	// Double-subscription guard: the UI hides "Upgrade" once a tenant is Pro,
-	// but a stale page, a double-submit, a second tab, or a direct call could
-	// still reach here and mint a SECOND subscription (on a new customer,
-	// silently double-billing). Refuse when a live subscription already
-	// exists; resuming/changing goes through the billing portal instead. The
-	// customer id (when present) is reused so a genuine re-subscribe after a
-	// real lapse attaches to the same Stripe customer.
+	// The UI hides Upgrade, but a stale tab could still post it.
 	var customerID string
 	if h.svc.Plans != nil {
 		plan, err := h.svc.Plans.GetPlan(r.Context(), tenant)
@@ -292,11 +254,7 @@ func (h *billingAPI) billingCheckout(rw http.ResponseWriter, r *http.Request, p 
 		}
 		customerID = plan.StripeCustomerID
 	}
-	// The return trip is pinned to the tenant we just billed (see withOrg in
-	// orglink.go). /usage is org-scoped, and Stripe hands the user back to a
-	// browser whose active org may have moved on — switching org in another tab
-	// mid-checkout is enough — so an unpinned return would show the wrong org's
-	// usage right after a successful upgrade.
+	// Pinned to the tenant just billed, or the user lands in another org.
 	u, err := h.Billing.Stripe.CreateCheckoutSession(r.Context(), tenant, customerID,
 		withOrg(base+"/usage?checkout=success", tenant),
 		withOrg(base+"/usage?checkout=cancelled", tenant))
@@ -390,14 +348,7 @@ func (h *billingAPI) stripeEvents(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "bad event payload", http.StatusBadRequest)
 		return
 	}
-	// Stripe retries deliveries; the event id dedupes them. The order is
-	// CHECK → apply → MARK (not mark → apply): a delivery is recorded only
-	// AFTER its side effect succeeds, so a transient apply failure (which
-	// returns 500 → Stripe retries) is never left marked-but-unapplied —
-	// that would ack the retry and permanently drop the plan flip. The plan
-	// upserts are idempotent, so the narrow window where two concurrent first
-	// deliveries both pass the check and both apply is harmless. Fails OPEN on
-	// store errors — processing twice beats dropping one.
+	// Stripe retries, so the event id dedupes; order is not guaranteed either.
 	dd, dedupeOK := h.svc.Plans.(StripeEventDeduper)
 	dedupeOK = dedupeOK && ev.ID != ""
 	if dedupeOK {
@@ -408,16 +359,12 @@ func (h *billingAPI) stripeEvents(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := h.applyStripeEvent(r, ev); err != nil {
-		// 500 so Stripe retries — plan flips must not be lost to a
-		// transient store error. The event is NOT marked, so the retry
-		// re-applies.
+		// 500 so Stripe retries: a plan flip must not be lost to a transient failure.
 		h.Billing.logger.Printf("apply %s: %v", ev.Type, err)
 		http.Error(rw, "apply failed", http.StatusInternalServerError)
 		return
 	}
 	if dedupeOK {
-		// Record only now that apply succeeded; best-effort (a failed mark just
-		// means a future replay re-applies, which is idempotent).
 		if _, err := dd.MarkStripeEvent(r.Context(), ev.ID); err != nil {
 			h.Billing.logger.Printf("mark event %s: %v", ev.ID, err)
 		}
@@ -448,9 +395,7 @@ func (h *billingAPI) applyStripeEvent(r *http.Request, ev stripeEvent) error {
 			return nil
 		}
 		plan := PlanPro
-		// Deleted, or updated into a dead state, drops to free. past_due
-		// stays pro — Stripe is still retrying payment; cutting access on
-		// the first failed charge is hostile.
+		// past_due is deliberately NOT a drop: a card retry is still in flight.
 		if ev.Type == "customer.subscription.deleted" ||
 			obj.Status == "canceled" || obj.Status == "unpaid" ||
 			obj.Status == "incomplete_expired" {
@@ -464,9 +409,7 @@ func (h *billingAPI) applyStripeEvent(r *http.Request, ev stripeEvent) error {
 			SubscriptionStatus:   obj.Status,
 			CancelAtPeriodEnd:    obj.CancelAtPeriodEnd,
 		}
-		// current_period_end is top-level pre-2025-03-31 and per line item
-		// from 2025-03-31 on; take whichever is present, and the latest
-		// across items as the subscription's renewal boundary.
+		// Top-level pre-2025-03-31, per line item after, so both are read.
 		periodEnd := obj.CurrentPeriodEnd
 		for _, it := range obj.Items.Data {
 			if it.CurrentPeriodEnd > periodEnd {
@@ -478,7 +421,6 @@ func (h *billingAPI) applyStripeEvent(r *http.Request, ev stripeEvent) error {
 		}
 		return h.svc.Plans.SetPlan(r.Context(), tp)
 	default:
-		// Unhandled event types ack silently — Stripe sends many.
 		return nil
 	}
 }

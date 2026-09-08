@@ -10,8 +10,6 @@ import type { ReferenceCtx } from "./SchemaForm";
 import { columnsOfRows } from "../../lib/rowColumns";
 import { ICON } from "../../icons";
 
-// GripIcon is the 6-dot drag gripper (mirrors hazydo's task-row handle): two
-// columns of three dots, the conventional "pick me up here" affordance.
 function GripIcon() {
   return (
     <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
@@ -25,15 +23,7 @@ function GripIcon() {
   );
 }
 
-// TableColumn mirrors one entry of the drop's `columns` param: `key` is the row
-// field the cells come from, `label` is what the header says. They differ only
-// once the user renames a column.
-//
-// Keeping them apart is the whole point of this type. Renaming used to write
-// the new name into `columns` as the key, which is what the drop reads its
-// cells by — so a renamed column rendered a correct-looking header over an
-// entirely empty column. The rename now changes the label and leaves the key
-// alone.
+// Mirrors one entry of the drop's `columns` param.
 type TableColumn = { key: string; label: string };
 
 function asColumnList(v: unknown): TableColumn[] {
@@ -55,9 +45,7 @@ function asColumnList(v: unknown): TableColumn[] {
   return out;
 }
 
-// toParam writes the leanest shape that carries the meaning: a plain string for
-// a column still headed by its own name, an object only for a renamed one. So a
-// flow that never renames anything keeps the exact param it had before.
+// The leanest shape that carries the meaning, so a saved graph stays readable.
 function toParam(cols: TableColumn[]): unknown[] {
   return cols.map((c) => (c.label === c.key ? c.key : { column: c.key, label: c.label }));
 }
@@ -91,31 +79,10 @@ function arrayMove<T>(arr: T[], from: number, to: number): T[] {
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
-// How far (px) a row must be swiped sideways before release deletes it.
 const SWIPE_DELETE_PX = 72;
 const AXIS_LOCK_PX = 8;
 
-// RenderTableColumns is the full column editor for a render_table step's
-// `columns` param — it replaces the raw array field entirely (that param is
-// omitted from the Inspector's Advanced section), so everything happens here.
-//
-// One list holds everything: shown columns on top — drag the grip to reorder,
-// tap a column to edit it, swipe it aside to hide it — then a row to add a new
-// column, then any hidden columns (dimmed, tap to bring back). Columns are
-// seeded from discovery (the step's last run, plus the upstream producer's
-// declared fields) but fully editable, so a table can be built by hand before
-// the step has ever run.
-//
-// A row is a PAIR: the data column, and optionally the heading to show over it.
-// The heading used to be a separate params field, which put the two halves of
-// one decision in two places — you added a column here and renamed it over
-// there, with nothing on screen connecting them. They are one row now: the
-// custom name sits in the same row you type the column into, empty by default,
-// and empty means "use the column's own name".
-//
-// Drag and swipe are hand-rolled on pointer events: the dragged row tracks the
-// finger 1:1, grip-drag is locked to vertical, and the row body owns the
-// horizontal swipe — so the gestures never fight and there's no clone drift.
+// The column editor for a render_table step.
 export function RenderTableColumns({
   params,
   onApply,
@@ -146,8 +113,6 @@ export function RenderTableColumns({
   const [addLabel, setAddLabel] = useState("");
   const [editLabel, setEditLabel] = useState("");
   const addRowRef = useRef<HTMLDivElement | null>(null);
-  // True during any live interaction (gesture or rename) — guards the resync
-  // effect so an async column fetch can't yank the list mid-edit.
   const busy = useRef(false);
   const listRef = useRef<HTMLUListElement | null>(null);
 
@@ -157,8 +122,6 @@ export function RenderTableColumns({
   const flowId = references?.flowId;
   const nodeId = references?.nodeId;
 
-  // Upstream producer's declared fields — known without a run for sources that
-  // can introspect (Sheets header, form fields, …); empty otherwise.
   useEffect(() => {
     if (!refToken || !flowId || !nodeId) {
       setSchemaCols([]);
@@ -174,18 +137,7 @@ export function RenderTableColumns({
     };
   }, [refToken, tenant, ws, flowId, nodeId]);
 
-  // Exact columns from the last run — works for ANY producer once it has run,
-  // which is the point: the declared-fields probe above only answers for a
-  // handful of introspectable sources (a form, a spreadsheet), so for a JSON
-  // step, a query or an HTTP call this is the only source there is.
-  //
-  // It reads the PRODUCER's output. Reading this node's own resolved input is
-  // the obvious thing and it never works: node records are enqueued with a Job
-  // carrying only the graph and node id, the engine assembles the inputs in
-  // memory when it executes, and nothing writes them back — so the field is
-  // always empty and the editor's "run it once" advice could never come true.
-  //
-  // Skipped when the parent already handed us live rows from the run stream.
+  // The last run's actual columns beat any static guess at what a producer emits.
   useEffect(() => {
     const src = rowsSource;
     if (upstreamRows?.length || !token || !currentRunID || !src) {
@@ -203,17 +155,12 @@ export function RenderTableColumns({
   }, [token, currentRunID, rowsSource, upstreamRows]);
 
   const paramCols = useMemo(() => asColumnList(params.columns), [params.columns]);
-  // Best source first: the rows the producer just emitted, then the same rows
-  // read back off the stored run, then whatever the producer could declare
-  // without running. uniq keeps the earliest position for a column named by
-  // more than one, so the order is the producer's own.
+  // Best source first, falling back as each becomes unavailable.
   const liveCols = useMemo(() => columnsOfRows(upstreamRows), [upstreamRows]);
   const discovered = useMemo(
     () => uniq(liveCols, runCols, schemaCols),
     [liveCols, runCols, schemaCols],
   );
-  // Shown columns: the saved set if the user has curated one (authoritative, so
-  // hidden/renamed columns stick), else every discovered column in data order.
   const shown = useMemo(
     () => (paramCols.length > 0 ? paramCols : discovered.map((c) => ({ key: c, label: c }))),
     [paramCols, discovered],
@@ -227,15 +174,11 @@ export function RenderTableColumns({
     if (!busy.current) setOrder(shown);
   }, [shown]);
 
-  // Persist the shown order to `columns`, but only when it differs from what's
-  // saved, so merely opening the editor never pins the set.
   const persist = (next: TableColumn[]) => {
     if (!sameColumns(next, paramCols)) onApply({ columns: toParam(next) });
   };
 
   const hide = (key: string) => {
-    // Keep at least one column: an empty `columns` means "show every column" at
-    // the drop, so removing the last one would paradoxically show them all.
     if (order.length <= 1) return;
     const next = order.filter((c) => c.key !== key);
     setOrder(next);
@@ -283,8 +226,6 @@ export function RenderTableColumns({
     setEditing(null);
     if (!editingKey) return;
     if (!key) return;
-    // Re-pointing a row at a column another row already has would give the
-    // table the same column twice.
     if (key !== editingKey && order.some((c) => c.key === key)) return;
     const next = order.map((c) =>
       c.key === editingKey ? { key, label: label || key } : c,
@@ -380,18 +321,7 @@ export function RenderTableColumns({
     else if (s.axis === "") startEdit(col); // a tap (no drag) renames the header
   };
 
-  // Whatever is still being typed when this panel goes away.
-  //
-  // Blur alone is not enough, and the gap is not a corner case: clicking the
-  // canvas is how you leave a panel, and React Flow calls preventDefault on the
-  // pane's mousedown so it can start a drag — which means focus never leaves the
-  // box, no blur fires, and the click then deselects the step and unmounts this
-  // whole editor. React does not fire blur on unmount either. A name typed into
-  // the box and left that way was simply discarded.
-  //
-  // Held in a ref so the cleanup runs the LATEST version rather than the one
-  // captured when the effect was registered. onApply reaches the Inspector,
-  // which is still mounted — only this child is going.
+  // Flushed on unmount, or an in-progress edit is silently lost.
   const flushPending = useRef<() => void>(() => {});
   flushPending.current = () => {
     if (editing) commitEdit();

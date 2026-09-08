@@ -25,11 +25,9 @@ import (
 
 type RemoteDescriptor struct {
 	ID string
-	// Tenant owns this remote, and the catalog is keyed by (tenant, id) so another
-	// tenant's lookup cannot return it even by mistake. That matters more than
-	// ordinary scoping: by the time the engine hands a Job to a transport, Params
-	// carry RESOLVED secrets, so a reachable-by-anyone remote is a place one org's
-	// secrets could be sent by another org's flow. Required.
+	// Keyed by (tenant, id), so another tenant's lookup cannot return it. A Job
+	// reaching a transport carries RESOLVED secrets, so a reachable-by-anyone remote
+	// is a place one org's secrets could be sent by another org's flow.
 	Tenant      string
 	Endpoint    string
 	Insecure    bool // explicit opt-in to cleartext for dev/test
@@ -37,9 +35,7 @@ type RemoteDescriptor struct {
 	RecvTimeout time.Duration
 }
 
-// defaultRemoteRecvTimeout is generous: it must accommodate a node doing real
-// work between progress events. The point is to bound an infinite hang, not to
-// police slowness.
+// Bounds an infinite hang, not slowness.
 const defaultRemoteRecvTimeout = 5 * time.Minute
 
 type RemoteTLS struct {
@@ -50,9 +46,7 @@ type RemoteTransport struct {
 	Descriptor RemoteDescriptor
 	manifest   core.Manifest
 	dropID     string
-	// No connection here on purpose: it belongs to the CATALOG, one per runner
-	// shared across its drops. A per-drop conn would be closed twelve times for a
-	// runner serving twelve drops.
+	// The connection is the CATALOG's, one per runner, shared across its drops.
 	client nodepb.NodeServiceClient
 }
 
@@ -64,15 +58,9 @@ func (t *RemoteTransport) Execute(ctx context.Context, job core.Job, progress ch
 		return core.Result{}, fmt.Errorf("marshal job: %w", err)
 	}
 	pbJob.DropId = t.dropID
-	// Idle watchdog. A node server that accepts the stream then goes silent would
-	// pin this worker until the lease expires, and the reclaim re-executes the node
-	// — remote drops carry no write dedupe, so that is a duplicated side effect and
-	// this is a correctness bound, not just a liveness one.
-	//
-	// It bounds the GAP between events, so a node legitimately running for hours
-	// stays alive while it keeps emitting progress. Cancelling our own derived
-	// context keeps the policy client-side: keepalive pings below a server's
-	// MinTime earn a GOAWAY, breaking conforming servers to catch broken ones.
+	// A node server that goes silent would pin this worker until the lease expires,
+	// and the reclaim re-executes — remote drops carry no write dedupe, so that is a
+	// duplicated side effect. Bounds the GAP between events, not the total.
 	idle := t.Descriptor.RecvTimeout
 	if idle <= 0 {
 		idle = defaultRemoteRecvTimeout
@@ -118,38 +106,24 @@ func (t *RemoteTransport) Execute(ctx context.Context, job core.Job, progress ch
 	}
 }
 
-// Close is deliberately a no-op: a transport is per-DROP and the connection is
-// per-RUNNER, so closing here would take twelve working drops down with the one
-// being discarded. RemoteCatalog.Close owns them. Kept rather than deleted
-// because core.Transport's optional-closer shape is what callers type-assert
-// for, and answering nil is how this says "not mine to close".
+// Per-DROP transport, per-RUNNER connection: closing here kills its siblings.
 func (t *RemoteTransport) Close() error { return nil }
 
 type RemoteCatalog struct {
 	DialTimeout time.Duration
-	// Reserved refuses an id the instance-wide catalog already owns. NodeResolver
-	// prefers Native but ManifestsForTenant adds Remote AFTER it, so a remote
-	// declaring `http_request` would put its manifest in the palette and in
-	// validation while every run executed the built-in — nothing errors, and the
-	// author reads a step description that does not describe what runs. Nil disables
-	// the check, which is what a harness with no native registry wants.
+	// NodeResolver prefers Native but ManifestsForTenant adds Remote after it, so a
+	// remote declaring `http_request` would describe one step while runs executed
+	// another.
 	Reserved func(id string) bool
 
 	mu    sync.RWMutex
 	nodes map[remoteKey]*RemoteTransport
-	// One connection per runner, held here rather than on the per-drop transports,
-	// which would otherwise each close the same conn.
 	conns map[runnerKey]*grpc.ClientConn
 }
 
-// listManifests falls back to the single-drop GetManifest for a server built
-// before ListManifests existed. The fallback is the point: a runner's binary is
-// not the daemon's to update, which is exactly the argument for not breaking the
-// servers already written against the old method.
-//
-// Invoked by name rather than through a generated stub because GetManifest is
-// gone from the .proto and should stay gone from what new servers are ASKED to
-// implement. The messages are wire-compatible.
+// A runner's binary is not the daemon's to update, so an upgraded daemon must not
+// refuse every server written against the old method. Invoked by name because
+// GetManifest is gone from the .proto and should stay gone.
 func listManifests(ctx context.Context, conn *grpc.ClientConn, client nodepb.NodeServiceClient) ([]*nodepb.Manifest, error) {
 	res, err := client.ListManifests(ctx, &nodepb.ListManifestsRequest{})
 	if err == nil {
@@ -160,8 +134,6 @@ func listManifests(ctx context.Context, conn *grpc.ClientConn, client nodepb.Nod
 	}
 	var one nodepb.Manifest
 	if ferr := conn.Invoke(ctx, legacyGetManifestMethod, &nodepb.ListManifestsRequest{}, &one); ferr != nil {
-		// Report the ORIGINAL error: the fallback's own would send the reader after a
-		// method we no longer publish.
 		return nil, err
 	}
 	return []*nodepb.Manifest{&one}, nil
@@ -259,9 +231,7 @@ func (c *RemoteCatalog) Register(desc RemoteDescriptor) error {
 		}
 	}
 
-	// Two remotes in one tenant declaring the same drop id would resolve by
-	// registration order — silent, and not something anyone can reason about. This
-	// check was dropped while ids carried runner/<remote>/ and could not collide.
+	// Otherwise resolution is by registration order — silent, and unreasonable about.
 	for k := range transports {
 		if _, taking := stale[k]; taking {
 			continue
@@ -273,8 +243,6 @@ func (c *RemoteCatalog) Register(desc RemoteDescriptor) error {
 		}
 	}
 
-	// Nothing above has mutated the catalog, so a refusal leaves the previous
-	// registration intact rather than half-removed.
 	if old, ok := c.conns[rk]; ok {
 		_ = old.Close()
 	}
@@ -288,10 +256,7 @@ func (c *RemoteCatalog) Register(desc RemoteDescriptor) error {
 	return nil
 }
 
-// Get matches NOTHING for an empty tenant — not "any tenant", not a global
-// namespace. A context with no tenant is a background task or a test that forgot,
-// and failing closed makes a missing WithTenant an unresolvable module rather
-// than silent cross-tenant reach.
+// Failing closed makes a missing WithTenant an unresolvable module, not reach.
 func (c *RemoteCatalog) Get(tenant, id string) (core.Transport, bool) {
 	if tenant == "" {
 		return nil, false
@@ -333,10 +298,7 @@ func (c *RemoteCatalog) ManifestsFor(tenant string) map[string]core.Manifest {
 	return out
 }
 
-// AllManifests is deliberately NOT a catalog anyone routes on: an id can belong
-// to several tenants and this flattens them. It exists for the instance-wide
-// killswitch page, without which a misbehaving tenant-runner drop is absent from
-// the only surface that could switch it off.
+// NOT for routing: it flattens tenants, which is what remoteKey prevents.
 func (c *RemoteCatalog) AllManifests() (map[string]core.Manifest, map[string][]string) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -363,8 +325,6 @@ func (c *RemoteCatalog) Close() error {
 	return nil
 }
 
-// credentialsForDescriptor refuses to default to plaintext — a caller must set
-// Insecure explicitly.
 func credentialsForDescriptor(desc RemoteDescriptor) (credentials.TransportCredentials, error) {
 	if desc.TLS != nil && desc.TLS.Config != nil {
 		return credentials.NewTLS(desc.TLS.Config), nil
@@ -517,14 +477,8 @@ func inlineOnlyInputs(m core.Manifest) core.Manifest {
 	return m
 }
 
-// refuseInlineOnlyFileRefs is driven by the MANIFEST rather than the transport,
-// which is the point: applied per-transport, a native drop declaring InlineOnly
-// was never checked and ran its script with empty stdin, while a co-located gRPC
-// module that never declared it had every file input refused anyway.
-//
-// Refused BEFORE the step runs, and with the real reason: otherwise the runner
-// receives a path into a filesystem it cannot see and reports a missing-file
-// error the org will reasonably read as their own bug.
+// By MANIFEST, not transport: applied per-transport, a native drop declaring
+// InlineOnly was never checked and ran its script with empty stdin.
 func refuseInlineOnlyFileRefs(m core.Manifest, input map[string]core.Ref) error {
 	for _, port := range m.Inputs {
 		if !port.InlineOnly {
@@ -541,10 +495,8 @@ func refuseInlineOnlyFileRefs(m core.Manifest, input map[string]core.Ref) error 
 	return nil
 }
 
-// RunnerCategories omits "trigger" deliberately. A trigger is a graph ENTRY
-// POINT — polled by the scheduler, dispatched to by the webhook router — and none
-// of that machinery reaches a remote process, so a runner claiming to be one
-// would produce a flow that looks startable and never fires.
+// No "trigger": none of the scheduler or webhook machinery reaches a remote
+// process, so a runner claiming to be one looks startable and never fires.
 var RunnerCategories = map[string]bool{
 	"ai":             true,
 	"external":       true,
@@ -556,9 +508,7 @@ var RunnerCategories = map[string]bool{
 	"transformation": true,
 }
 
-// runnerCategory coerces rather than refuses: an unavailable category is a
-// cosmetic mistake, and failing the registration would take a working runner
-// offline over a typo in a presentation field.
+// Coerced, or a typo in a presentation field takes a working runner offline.
 func runnerCategory(declared string) string {
 	if RunnerCategories[declared] {
 		return declared

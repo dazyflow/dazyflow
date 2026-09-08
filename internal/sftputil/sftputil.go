@@ -1,16 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package sftputil holds the SSH/SFTP connection dance shared by the SFTP
-// drops (drops/sftpfiles — list, download, upload) and the "Test connection"
-// verifier behind the SFTP integration page. Sibling to smtputil and
-// imaputil, split out for the same reason: how a host key is checked and
-// which auth method is offered must NOT drift between running a flow and
-// testing the credentials that flow will use.
-//
-// SFTP is the file-transfer protocol that corporate integration actually runs
-// on — bank files, payroll, EDI, supplier catalogues — and it is a protocol
-// rather than a vendor, so one connector reaches every server that speaks it.
+// The SSH/SFTP connection dance shared by the SFTP drops.
 package sftputil
 
 import (
@@ -32,12 +23,8 @@ import (
 )
 
 const (
-	// DefaultPort is SSH's port; SFTP is a subsystem of SSH, not a protocol
-	// with a port of its own.
 	DefaultPort = 22
 
-	// defaultDeadline bounds a whole connection's I/O when the caller's
-	// context carries no deadline.
 	defaultDeadline = 60 * time.Second
 )
 
@@ -46,8 +33,6 @@ type Config struct {
 	Port     int
 	Username string
 
-	// Password and PrivateKey are alternative auth methods; at least one must
-	// be set. A key is offered before a password when both are.
 	Password   string
 	PrivateKey string
 	Passphrase string
@@ -71,10 +56,7 @@ func ParsePort(s string) (int, error) {
 	return DefaultPort, nil
 }
 
-// ConfigFromConn builds a Config from a stored connection map — the shape a
-// connection verifier is handed. Validation is front-loaded here for the
-// fields whose failure would otherwise surface as an opaque protocol error
-// much later, mid-run.
+// The shape connection injection delivers.
 func ConfigFromConn(conn map[string]string) (Config, error) {
 	cfg := Config{
 		Host:        strings.TrimSpace(conn["host"]),
@@ -103,9 +85,6 @@ func ConfigFromConn(conn map[string]string) (Config, error) {
 	return cfg, nil
 }
 
-// Client is a logged-in SFTP session plus the two things the sftp package
-// does not own: the socket (so a cancelled context can break an in-flight
-// transfer) and the watcher goroutine doing that. Always Close() it.
 type Client struct {
 	*sftp.Client
 
@@ -114,8 +93,6 @@ type Client struct {
 	stopWatch func()
 }
 
-// Close tears the session down. Best-effort throughout: the socket has to be
-// released whatever the SFTP or SSH layer thinks. Safe to call twice.
 func (c *Client) Close() {
 	if c == nil {
 		return
@@ -138,10 +115,7 @@ func (c *Client) Close() {
 	}
 }
 
-// authMethods offers a private key first, then a password. Order matters:
-// a server configured for keys often also accepts passwords for a different
-// account, and offering the key first means the intended credential is the
-// one that authenticates.
+// Key first: a server that accepts both should not be handed the password.
 func authMethods(cfg Config) ([]ssh.AuthMethod, error) {
 	var out []ssh.AuthMethod
 	if key := strings.TrimSpace(cfg.PrivateKey); key != "" {
@@ -166,20 +140,7 @@ func authMethods(cfg Config) ([]ssh.AuthMethod, error) {
 	return out, nil
 }
 
-// hostKeyCallback builds strict host-key verification, plus the host-key
-// algorithms to advertise.
-//
-// There is deliberately NO "accept any host key" path. Over SSH that is
-// silent MITM: an attacker who can answer for the address gets the password
-// or a signature, and the transfer besides. drops/git takes the same line.
-//
-// Unlike git, though, there is no useful set of keys to bundle — a tenant's
-// SFTP server is theirs, so its key can only come from them. That would
-// normally mean asking a non-technical user to paste a known_hosts line
-// before anything works at all, which is why an "SHA256:…" fingerprint is
-// accepted as the friendlier equivalent, and why the unconfigured case
-// (learnHostKey) fails with the server's ACTUAL fingerprint in the message
-// for them to copy. Fail closed, but say exactly what to paste.
+// STRICT: an unpinned host key is refused, never trusted on first use.
 func hostKeyCallback(cfg Config) (cb ssh.HostKeyCallback, algos []string, err error) {
 	if kh := strings.TrimSpace(cfg.KnownHosts); kh != "" {
 		db, err := knownHostsDB(kh)
@@ -223,25 +184,13 @@ func fingerprintCallback(want string) ssh.HostKeyCallback {
 	}
 }
 
-// learnHostKey never accepts. It reads the key the server offered and refuses
-// with it quoted, so the fix is a copy and paste rather than a hunt for
-// ssh-keyscan. The connection is torn down before authentication, so no
-// credential reaches an unverified host.
+// Never accepts: it reports the key so a human can pin it deliberately.
 func learnHostKey(cfg Config) ssh.HostKeyCallback {
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 		return fmt.Errorf("%s hasn't been verified yet: its SSH key is %s. Copy that into \"Host key fingerprint\" on the SFTP page to accept it — check it against what your provider published, or against `ssh-keyscan %s`, before you do", cfg.Host, ssh.FingerprintSHA256(key), cfg.Host)
 	}
 }
 
-// Dial opens an SSH connection, verifies the host key, authenticates, and
-// starts an SFTP session. The caller owns Close() of the returned client.
-//
-// The dialer carries the shared SSRF Control hook, so the IP actually
-// connected to is re-checked at dial time on the resolved address — without
-// it a tenant-supplied hostname passes the CheckDialHost pre-flight on a
-// public IP and then re-resolves to loopback/private/metadata at connect time
-// (DNS rebinding), which here would hand the server credentials to the
-// rebind target. Same guard the SMTP, IMAP, DB and MQTT paths carry.
 func Dial(ctx context.Context, cfg Config) (*Client, error) {
 	if cfg.Host == "" {
 		return nil, errors.New("no SFTP server configured")
@@ -271,12 +220,7 @@ func Dial(ctx context.Context, cfg Config) (*Client, error) {
 		_ = conn.SetDeadline(time.Now().Add(defaultDeadline))
 	}
 
-	// Neither x/crypto/ssh nor pkg/sftp takes a context, so cancellation has
-	// to arrive as a dead socket. Without this a cancelled run — and the
-	// adversarial cancelled-context sweep in drops/invariants_test.go — would
-	// block until the deadline instead of returning promptly. The watcher
-	// waits on its own channel as well as ctx, so an ordinary Close doesn't
-	// race the deadline to now.
+	// Neither library takes a context, so cancellation arrives as a deadline.
 	closed := make(chan struct{})
 	var once sync.Once
 	stopWatch := func() { once.Do(func() { close(closed) }) }
@@ -302,9 +246,7 @@ func Dial(ctx context.Context, cfg Config) (*Client, error) {
 	}
 	sshClient := ssh.NewClient(sshConn, chans, reqs)
 
-	// The transfer itself has no deadline: a large file legitimately takes
-	// longer than the handshake, and the step's own timeout plus the ctx
-	// watcher above are what bound it.
+	// No deadline on the transfer: a large file legitimately takes a long time.
 	_ = conn.SetDeadline(time.Time{})
 
 	sftpClient, err := sftp.NewClient(sshClient)
@@ -334,11 +276,7 @@ func sshError(cfg Config, err error) error {
 	}
 }
 
-// Verify is the "Test connection" probe: connect, authenticate, and stat the
-// configured folder — then hang up without transferring anything. The folder
-// is included because it is the field most likely to be quietly wrong, and a
-// mistyped path otherwise fails per-run, deep inside a flow, where nothing
-// points back at the integration page.
+// The "Test connection" probe.
 func Verify(ctx context.Context, cfg Config) error {
 	c, err := Dial(ctx, cfg)
 	if err != nil {

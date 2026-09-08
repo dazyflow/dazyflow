@@ -117,9 +117,8 @@ func executeSFTPList(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 		return emitOnlyNew(ctx, job, dir, rows, limit), nil
 	}
 
-	// Oldest-first, so a cap keeps the OLDEST — a feed should be worked
-	// through in order, and the newest file is the one that will still be
-	// there next run.
+	// Oldest-first, so a cap keeps the OLDEST: a feed must be worked in arrival
+	// order, or the newest files push the backlog permanently behind the watermark.
 	if len(rows) > limit {
 		rows = rows[:limit]
 	}
@@ -138,41 +137,20 @@ func listResult(job core.Job, rows []map[string]any) core.Result {
 	}
 }
 
-// watermark is the "only new since last run" position for a folder: the
-// newest modified time already emitted, plus the names emitted AT exactly
-// that time.
-//
-// The name set is the part that isn't obvious, and the reason this isn't just
-// a timestamp. SFTP reports modification times in whole seconds, and a feed
-// drops twenty files in the same second. With a bare "newer than" comparison,
-// a poll that runs between two files of one batch records their shared second
-// and then skips every straggler — the files exist, the flow never sees them,
-// and nothing reports a problem. Remembering the boundary second's names
-// closes that, and stays small: only the newest second's worth is ever held.
+// The position for a folder: modification time plus name, to break ties.
 type watermark struct {
 	newest time.Time
 	names  map[string]bool
 
-	// baseline means this run must not emit anything — it is the first run,
-	// so it records where the folder is up to and stops.
 	baseline bool
 }
 
-// cursorName is the per-(flow, node, folder) watermark key. The folder is
-// part of it because pointing a step at another folder is a different
-// position, and inheriting the old one would skip files.
+// The folder is part of the key, or switching folders reuses a foreign position.
 func cursorName(job core.Job, dir string) string {
 	return fmt.Sprintf("cursor.sftp_list.%s.%s.%s", job.GraphID, job.NodeID, dir)
 }
 
-// readWatermark loads the stored position. Anything unparseable is treated as
-// absent, which re-baselines: the value will not heal itself, and there is
-// genuinely no position to resume from.
-//
-// A failed READ is different and returns an error. The position is probably
-// intact and readable next time, so re-baselining over it would throw away a
-// perfectly good watermark — and with it every file that arrived in the
-// meantime.
+// Anything unparseable re-baselines rather than guessing a position.
 func readWatermark(ctx context.Context, job core.Job, dir string) (*watermark, error) {
 	mark := &watermark{names: map[string]bool{}}
 	stored, err := cursor.Read(ctx, job.Tenant, cursorName(job, dir))
@@ -198,24 +176,11 @@ func readWatermark(ctx context.Context, job core.Job, dir string) (*watermark, e
 	return mark, nil
 }
 
-// emitOnlyNew filters to files that appeared since the last run, advances the
-// watermark, and emits.
-//
-// First run: record the position and emit NOTHING, so a flow published
-// against a folder holding a year of statements starts from "now" rather than
-// replaying the archive into a step that files or pays things. Mirrors
-// imap_search_messages and gmail_search_messages.
-//
-// A nothing-new run emits no output ports at all, so downstream edges go
-// dormant and the rest of the flow is skipped — an empty poll is a non-event,
-// not an empty list. The cursor write is best-effort/at-least-once: a failed
-// write means at worst the next run re-emits this batch, never a silent drop.
+// At-least-once: a failed cursor write re-emits, never silently drops.
 func emitOnlyNew(ctx context.Context, job core.Job, dir string, rows []map[string]any, limit int) core.Result {
 	mark, rerr := readWatermark(ctx, job, dir)
 	if rerr != nil {
-		// Without the stored position, "which files are new" is unanswerable.
-		// Baselining instead would record every file now present as already
-		// handled, so anything uploaded since the last run is never picked up.
+		// Without the stored position the question is unanswerable, so it must fail.
 		return cursor.FailRead(job, rerr)
 	}
 
@@ -232,8 +197,6 @@ func emitOnlyNew(ctx context.Context, job core.Job, dir string, rows []map[strin
 			case t.After(mark.newest):
 				fresh = append(fresh, row)
 			case t.Equal(mark.newest) && !mark.names[name]:
-				// Same second as the boundary, not seen yet — the straggler
-				// case the name set exists for.
 				fresh = append(fresh, row)
 			}
 		}
@@ -242,12 +205,8 @@ func emitOnlyNew(ctx context.Context, job core.Job, dir string, rows []map[strin
 		}
 	}
 
-	// The position advances to the newest file PRESENT, not the newest
-	// emitted, so a baseline run (or a limit that held some back) still can't
-	// replay what it skipped... except that holding files back is exactly
-	// when we must NOT advance past them. So: advance to the newest file we
-	// actually emitted, or — on a baseline run, where nothing was emitted —
-	// to the newest file present.
+	// To the newest file PRESENT, not the newest emitted: a file above the cap would
+	// otherwise be re-offered for ever.
 	next, names := mark.newest, mark.names
 	source := fresh
 	if mark.baseline {
@@ -287,9 +246,7 @@ func emitOnlyNew(ctx context.Context, job core.Job, dir string, rows []map[strin
 func formatWatermark(newest time.Time, names map[string]bool) string {
 	list := make([]string, 0, len(names))
 	for n := range names {
-		// A comma in a filename would split one name into two on read. Such a
-		// name is legal on most servers, so it is normalised rather than
-		// trusted — the worst case then is re-emitting that one file.
+		// A comma in a filename would split one name into two on read.
 		list = append(list, strings.ReplaceAll(n, ",", "_"))
 	}
 	sortStrings(list)

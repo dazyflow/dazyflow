@@ -40,21 +40,10 @@ import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 
-// An open ticket re-fetches itself so a reply from the other party shows up
-// without a manual reload. It polls on the `watched` tier (see lib/timing) —
-// responsive enough for a chat without hammering the API. The nav badge in
-// AppShell counts the same tickets on the slower `background` tier, since that
-// one only drives a number.
+// Polled while open, so a reply from the other party appears without a refresh.
 
-// SupportTickets.tsx is the native ticket + chat surface (Phase 2 of the Support
-// feature). Three views share one file because they share most of the chat UI:
-//   - SupportTickets: an org member's own list of tickets + "New ticket".
-//   - SupportQueue:   the support agent's dashboard over the cross-org queue —
-//                     stat tiles that double as filters, plus per-row claim.
-//   - TicketThread:   one ticket's conversation, reused by user + agent via the
-//                     `mode` prop (which decides the API calls + affordances).
-// Everything a user types is secret-scrubbed server-side before it is stored, and
-// the user-facing responses omit which support agent owns or answered a ticket.
+// One component serving TWO audiences: an org sees only its own tickets, an agent
+// the cross-org queue. Every read has to say which.
 
 
 function useStatusLabel() {
@@ -154,17 +143,7 @@ export function SupportTickets() {
   );
 }
 
-// NewTicketModal files a fresh ticket. Picking a flow is optional but strongly
-// worth it: the server then auto-attaches a redacted diagnostic bundle, which is
-// what lets support diagnose WITHOUT asking for a live read-only grant. The
-// RunDetail failure banner reaches the same endpoint via ReportProblemModal,
-// where the flow + run are already known; here the user picks from their flows.
-//
-// We also look up that flow's most recent FAILED run and attach it, because a
-// bundle with a run snapshot carries the per-step outcome and error code — the
-// difference between "here's my flow" and "here's my flow and how it broke".
-// Best effort: no failed run (or a lookup error) just means a structure-only
-// bundle, never a blocked filing.
+// Attaching a flow attaches a redacted bundle, which is what makes it diagnosable.
 function NewTicketModal({ onClose, onCreated }: { onClose: () => void; onCreated: (t: Ticket) => void }) {
   const { t } = useTranslation();
   const { token, activeTenant, activeWorkspace } = useAuth();
@@ -379,8 +358,6 @@ export function SupportQueue() {
     }
   };
 
-  // Free text is matched client-side over the loaded page: the queue API filters
-  // on status and ownership, not text, and the page is bounded server-side.
   const q = query.trim().toLowerCase();
   const visible = q
     ? tickets.filter((tk) =>
@@ -631,18 +608,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
     void load();
   }, [load]);
 
-  // Tell the server this thread was opened, so the reminder sweep can tell
-  // "hasn't answered" from "hasn't even looked" — the difference between a
-  // useful nudge and mail to someone who is already up to date.
-  //
-  // Once per mount, deliberately, and NOT on every poll: the read time only
-  // has to be later than the newest message for the sweep to consider it seen,
-  // so re-stamping it every few seconds would be writes for nothing. A reply
-  // arriving while the thread sits open is covered by the next mount — and by
-  // the threshold, which is hours.
-  //
-  // Best-effort: failing to record a read costs at worst one extra reminder,
-  // which is not worth an error in front of someone trying to read a ticket.
+  // So the nudge sweep can tell "hasn't answered" from "hasn't looked".
   useEffect(() => {
     if (!token || !id) return;
     const mark = mode === "agent" ? api.markSupportTicketRead : api.markMyTicketRead;
@@ -651,10 +617,6 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
     });
   }, [token, id, mode]);
 
-  // Poll while the thread is open so a reply from the other party appears
-  // without a manual reload. Silent (no spinner) — load() only sets error on a
-  // hard failure. Draft state is separate, so a poll never clobbers what the
-  // user is typing.
   useEffect(() => {
     const iv = window.setInterval(() => void load(), POLL.watched);
     return () => window.clearInterval(iv);
@@ -664,28 +626,14 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [view?.messages.length]);
 
-  // "Did they see my answer?" — shown to the agent, on the newest support
-  // message only.
-  //
-  // Only the newest, because the receipt is per THREAD, not per message: it
-  // records when the customer last opened the ticket. Every support message
-  // older than it has been read too, but tagging them all turns a signal into
-  // wallpaper, and the one that decides what an agent does next is the last.
-  //
-  // Agent side only, deliberately. The mirror of this — telling the customer
-  // support has opened their ticket and not replied — is a stopwatch on the
-  // desk rather than an answer to a question, so the customer's view strips
-  // that timestamp entirely (ticketForUser in daemon/ticket_routes.go).
+  // Only on the newest support message: an older one tells the agent nothing.
   const receiptOn =
     mode === "agent"
       ? [...(view?.messages ?? [])]
           .reverse()
           .find((m) => m.author_kind === "support")?.id
       : undefined;
-  // A ticket with NO receipt at all tells us nothing — it predates read
-  // tracking, or was filed through the API rather than the UI. Saying "not
-  // read yet" there would be a confident guess, so the indicator is absent
-  // instead: no badge means no information, not bad news.
+  // No receipt at all predates read tracking, so it must not read as "unseen".
   const customerRead: Receipt | undefined = (() => {
     if (!receiptOn || !view?.ticket.user_read_at) return undefined;
     const msg = view.messages.find((m) => m.id === receiptOn);
@@ -738,8 +686,6 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
     }
   };
 
-  // Claim ("me") or release ("") the ticket. Assignment is internal to the
-  // support side — the customer's view never shows it.
   const assign = async (assignee: string) => {
     if (!token) return;
     setBusy(true);
@@ -767,8 +713,6 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
   if (!view) return null;
   const tk = view.ticket;
   const closed = tk.status === "resolved" || tk.status === "closed";
-  // Ownership only exists on the support side; the user surface never receives
-  // assigned_to (the server strips it), so `owner` is always "" in user mode.
   const owner = tk.assigned_to ?? "";
   const mine = owner !== "" && owner === (me?.subject ?? "");
 
@@ -914,8 +858,6 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
   );
 }
 
-// BundleModal fetches + renders the redacted diagnostic bundle attached to a
-// ticket. Lazy: it only calls the API when opened.
 function BundleModal({ ticketId, mode, onClose }: { ticketId: string; mode: "user" | "agent"; onClose: () => void }) {
   const { t } = useTranslation();
   const { token } = useAuth();
@@ -997,17 +939,7 @@ function ChatBubble({
     );
   }
   const mine = mode === "agent" ? m.author_kind === "support" : m.author_kind === "user";
-  // Who it is FROM is about the person. "support.fromYou" was already here and
-  // already meant this, but it only applied when the server sent no author —
-  // which it always does, so every one of your own messages was headed with
-  // your own email address back at you.
-  //
-  // Matched on identity rather than on `mine`, because the two are not the
-  // same thing on the agent side: every support reply is "mine" for
-  // alignment, and labelling a colleague's "You" would be a lie about who
-  // said it. The customer still never learns which agent replied — a support
-  // message that isn't yours falls through to the generic "Support", which is
-  // the same thing their view showed before.
+  // Whose message it is, not which side the viewer is on.
   const who =
     m.author && me?.subject && m.author === me.subject
       ? t("support.fromYou")

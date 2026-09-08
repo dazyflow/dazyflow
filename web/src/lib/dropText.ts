@@ -7,19 +7,9 @@ import type { Manifest } from "../types";
 type LabelledDrop = Pick<Manifest, "label"> &
   Partial<Pick<Manifest, "id" | "subtitle" | "description">>;
 
-// descriptionFingerprint is a 32-bit FNV-1a over Unicode code points, hex,
-// zero-padded to 8 chars. Descriptions are paragraphs, so unlike the short
-// strings above they are keyed by DROP ID rather than by their English text —
-// duplicating 53k characters of prose to use it as a key would be unreadable
-// and whitespace-fragile. The fingerprint restores what natural keys gave for
-// free: each translation records the fingerprint of the English it was made
-// from, and a paragraph edited on the Go side no longer matches, so the reader
-// falls back to the new English instead of reading a stale Swedish paragraph.
-//
-// Mirror in any language (this is how the recorded values were produced):
-//   h = 2166136261
-//   for cp in text:  h = ((h ^ cp) * 16777619) & 0xFFFFFFFF
-//   "%08x" % h
+// The fingerprint a translation records, so a reworded English paragraph makes
+// the stale translation visible instead of silently reverting a reader to
+// English.
 export function descriptionFingerprint(text: string): string {
   let h = 0x811c9dc5;
   for (const ch of text) {
@@ -104,22 +94,14 @@ export function dropDescription(drop: LabelledDrop, lang?: string): string {
   return entry.en === descriptionFingerprint(desc) ? entry.sv : desc;
 }
 
-// portLabel localizes one wiring pin's name. Takes the label rather than the
-// Port so callers can pass the manifest's label or their own fallback (the port
-// id) without unpacking twice.
+// Takes the label, not the id: the id is not what a reader sees.
 export function portLabel(label: string, lang?: string): string {
   if (!label) return "";
   const v = vocabularyFor(lang);
   return v?.ports[label] ?? label;
 }
 
-// The params-schema surface: one resolver per kind of string, all sharing the
-// same contract as portLabel — pass the English the manifest carries, get the
-// reader's language back, or that same English when there is no translation.
-// Kept as separate functions rather than one `localize(kind, s)` so a call site
-// reads as what it renders, and so a missing translation in one surface can't
-// be masked by a hit in another (a field titled "Status" and a dropdown option
-// "Status" are different strings to a translator even when they match today).
+// One resolver per kind of string, so a missing translation degrades the same way.
 export function fieldTitle(title: string, lang?: string): string {
   if (!title) return "";
   return vocabularyFor(lang)?.fieldTitles[title] ?? title;
@@ -135,19 +117,8 @@ export function enumLabel(label: string, lang?: string): string {
   return vocabularyFor(lang)?.enums[label] ?? label;
 }
 
-// enumOptionLabel and enumValueLabel are the ONLY two ways a dropdown value
-// should reach a screen. Both wrap enumLabel above; they exist because the
-// mapping was open-coded in five places (three in SchemaForm, two in
-// NodeCard) and the surface that had NOT open-coded it — a read-only enum on
-// a node card — spent its life printing the stored identifier. So a canvas
-// node read "not_equals" while the Inspector beside it read "does not equal",
-// and nothing was wrong enough anywhere to notice.
-//
-// The two shapes are genuinely different and mixing them is the mistake worth
-// preventing: building the list of options maps by INDEX (you are walking
-// schema.enum), while showing what is currently set maps by VALUE (you have a
-// stored string and need its label). enumValueLabel does the lookup so no
-// caller has to remember which it is holding.
+// The ONLY two ways a dropdown value reaches a screen, so a value translated in
+// one place cannot appear untranslated in the other.
 
 export function enumOptionLabel(
   schema: { enum?: unknown[]; enumNames?: string[] } | undefined,
@@ -175,16 +146,7 @@ export function connectionText(text: string, lang?: string): string {
   return vocabularyFor(lang)?.connections[text] ?? text;
 }
 
-// splitConnectionNote splits a single-secret drop's connection note into the
-// two things the Apps page renders from it: the field's LABEL and an example
-// value for its placeholder. "Anthropic API key (sk-ant-…)." becomes
-// { label: "Anthropic API key", example: "sk-ant-…" }; a note with no
-// parenthetical is all label.
-//
-// It lives here, beside connectionText, because the label half is localized
-// and the coverage guard has to reproduce the same split to know which half
-// needs a translation — two copies of this regex would drift apart, and the
-// half nobody noticed would be the one that stopped matching the vocabulary.
+// The note carries two sentences with different jobs.
 export function splitConnectionNote(note: string): {
   label: string;
   example: string;
@@ -217,11 +179,7 @@ export function integrationName(name: string, lang?: string): string {
   return vocabularyFor(lang)?.appNames[name] ?? name;
 }
 
-// dropLabelIsDefault reports whether `label` is still just the drop's name —
-// in the catalog's English, in any language we translate into, or the bare
-// module id the editor uses before the catalog arrives. The editor asks this
-// before re-deriving a node's display name, so switching language renames the
-// cards a user never touched while leaving a hand-typed name alone.
+// A default label must not be persisted, or it freezes in one language.
 export function dropLabelIsDefault(
   drop: LabelledDrop & { id?: string },
   label: string,
@@ -234,11 +192,6 @@ export function dropLabelIsDefault(
   return false;
 }
 
-// dropCategoryLabel renders the category chip. Resolution is language map →
-// English map → the raw value, so an unmapped locale still reads as product
-// copy instead of falling all the way through to an engine enum. A category
-// the maps don't know is shown as-is, which is the right failure mode: a new
-// engine category surfaces visibly instead of silently rendering blank.
 export function dropCategoryLabel(category: string, lang?: string): string {
   if (!category) return "";
   const v = vocabularyFor(lang);

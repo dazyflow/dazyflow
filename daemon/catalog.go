@@ -1,13 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package-internal handlers for the /api/v1/catalog/* and /api/v1
-// discovery surface — the self-describing entry points an LLM agent
-// (or a curl-wielding human) hits before composing flows. They wrap
-// the existing module registry; the spec lives in openapi.yaml and
-// is served verbatim (converted to JSON once at startup) from
-// /api/v1/openapi.json.
-
 package daemon
 
 import (
@@ -28,9 +21,7 @@ type catalogAPI struct {
 	auditor
 	svc    *Service
 	whoami func(rw http.ResponseWriter, r *http.Request, p core.Principal)
-	// noCompression mirrors the gateway's opt-out, for the handlers that
-	// encode their own cached body: when it is set the streaming
-	// middleware is not installed and nothing else would honour it.
+	// Mirrors the gateway's opt-out for already-compressed payloads.
 	noCompression bool
 }
 
@@ -41,10 +32,7 @@ func (h *HTTPGateway) catalogAPI() *catalogAPI {
 //go:embed openapi.yaml
 var openapiYAML []byte
 
-// openapiJSON is the parsed OpenAPI spec, marshalled to JSON once at
-// init time so the /api/v1/openapi.json route serves cached bytes
-// without re-parsing on every hit. Set at startup; nil indicates the
-// embedded spec was unparseable (we panic in init to fail loud).
+// Marshalled once at startup: it is served on every schema request.
 var openapiJSON []byte
 
 func init() {
@@ -97,10 +85,7 @@ func jsonStringOf(v any) string {
 	return strings.Trim(string(b), `"`)
 }
 
-// IntegrationSummary is the wire shape for the integrations list. It
-// groups all manifests that share Manifest.Integration into one
-// catalog entry — a non-tech owner looking at "Slack" sees one card,
-// not six.
+// The list shape; the per-integration page carries the rest.
 type IntegrationSummary struct {
 	ID        string `json:"id"`
 	Label     string `json:"label"`
@@ -111,20 +96,12 @@ type IntegrationSummary struct {
 	Icon      string `json:"icon,omitempty"`
 }
 
-// Integration is the full per-integration page: who provides it, what
-// drops it exposes, how it authenticates. The auth.kind is inferred
-// from drop params (oauth providers referenced, secret placeholders)
-// rather than carried as a separate manifest field — keeps the
-// integration as a derived view rather than a parallel data model.
 type Integration struct {
 	IntegrationSummary
 	Drops []IntegrationDrop `json:"drops"`
 	Links map[string]string `json:"links,omitempty"`
 }
 
-// IntegrationDrop is the slim drop entry inside an Integration. The
-// role is derived from the drop's category: "trigger" → trigger,
-// otherwise "action" (or "transformation" if category=transformation).
 type IntegrationDrop struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
@@ -334,16 +311,8 @@ type integrationGroup struct {
 	dropCategories []string
 }
 
-// integrationSummaries gives each integration a one-line blurb for the
-// catalog list and the per-integration page (IntegrationSummary.Summary),
-// which the LLM-facing API surfaces. Keyed by the exact Manifest.Integration
-// label the drops set (the same string collectCatalog groups on); the
-// synthetic "standard-library" key covers drops with no Integration.
-//
-// This is the Go/API counterpart to the web's integrationMeta.ts (the richer
-// prose the Apps UI renders). The two are deliberately separate — different
-// consumers, different surfaces — and kept short here so they don't drift far;
-// a missing key just yields an empty Summary, which the API omits.
+// Curated in the app rather than on the manifest, so it can be translated and
+// edited without releasing a drop.
 var integrationSummaries = map[string]string{
 	"Stripe":           "Take payments and react to them — create customers, send invoices and payment links, issue refunds, and trigger flows on succeeded or failed charges and canceled subscriptions.",
 	"Slack":            "Post messages to your workspace, and trigger flows when your bot is @-mentioned.",
@@ -411,11 +380,7 @@ func (h *catalogAPI) collectCatalog(ctx context.Context, p core.Principal) (
 		if g.Icon == "" {
 			g.Icon = m.Icon
 		}
-		// An integration an ORG created has no curated blurb and never will —
-		// integrationSummaries is a table in this repo. So a manifest may carry
-		// the prose itself, and the first module that does speaks for the group.
-		// Curated text still wins: it is translated and edited without a release,
-		// which is exactly what a first-party integration wants.
+		// An ORG's own integration has no curated blurb: only that org can write it.
 		if g.Summary == "" {
 			g.Summary = m.IntegrationDescription
 		}
@@ -431,8 +396,6 @@ func (h *catalogAPI) collectCatalog(ctx context.Context, p core.Principal) (
 	}
 	groups = make([]integrationGroup, 0, len(byInteg))
 	for _, g := range byInteg {
-		// Drops within an integration are sorted alphabetically by label
-		// so the LLM sees a stable order; the UI may resort.
 		sort.Slice(g.Drops, func(i, j int) bool { return g.Drops[i].Label < g.Drops[j].Label })
 		groups = append(groups, *g)
 	}
@@ -449,10 +412,6 @@ func (h *catalogAPI) meHandler(rw http.ResponseWriter, r *http.Request, p core.P
 	h.whoami(rw, r, p)
 }
 
-// listMyAPIKeysHandler is GET /api/v1/me/api-keys — the caller's own
-// keys. Today the underlying store doesn't index by subject, so we
-// list the tenant and filter; a future indexing improvement on
-// AdminKeyStore lands here without changing the wire shape.
 func (h *catalogAPI) listMyAPIKeysHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.svc.AdminKeys == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "api key admin not configured")
@@ -478,10 +437,6 @@ func (h *catalogAPI) listMyAPIKeysHandler(rw http.ResponseWriter, r *http.Reques
 	writeJSON(rw, http.StatusOK, map[string]any{"items": mine})
 }
 
-// issueMyAPIKeyHandler is POST /api/v1/me/api-keys — the self-issue
-// path used by the Connect MCP modal. No organization:admin required; the
-// service caps requested permissions to a subset of the caller's
-// own. Returns the secret exactly once.
 func (h *catalogAPI) issueMyAPIKeyHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	params, ok := decodeRequestJSONOptional[SelfIssueAPIKeyParams](rw, r)
 	if !ok {
@@ -489,10 +444,7 @@ func (h *catalogAPI) issueMyAPIKeyHandler(rw http.ResponseWriter, r *http.Reques
 	}
 	issued, err := h.svc.IssueOwnAPIKey(r.Context(), p, params)
 	if err != nil {
-		// Permission overflow is a 403 (caller-attributable). Everything
-		// else maps via the legacy adminError helper for now — it still
-		// writes the old {"error":"..."} string shape, which the web UI
-		// reads. Migrating adminError lives in the gateway-wide rewrite.
+		// A permission overflow is the caller's fault, so 403 rather than 500.
 		if strings.Contains(err.Error(), "exceeds caller's own permissions") {
 			writeAPIError(rw, http.StatusForbidden, "permission_denied", err.Error())
 			return
@@ -504,10 +456,6 @@ func (h *catalogAPI) issueMyAPIKeyHandler(rw http.ResponseWriter, r *http.Reques
 	writeJSON(rw, http.StatusCreated, issued)
 }
 
-// revokeMyAPIKeyHandler is DELETE /api/v1/me/api-keys/{id} — caller
-// revokes their own key. The revoke path on AdminKeys works for any
-// key id, so we look up the key first and confirm subject match
-// before delegating.
 func (h *catalogAPI) revokeMyAPIKeyHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	id := r.PathValue("id")
 	if h.svc.AdminKeys == nil {

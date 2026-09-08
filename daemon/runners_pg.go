@@ -14,23 +14,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// isPgUniqueViolation reports whether err is Postgres' unique_violation
-// (SQLSTATE 23505). RedeemToken leans on it to turn an open token's INSERT into
-// an already-registered name into ErrRunnerNameTaken, rather than reading the
-// raw driver error.
+// Postgres' unique_violation, which is how a name race surfaces.
 func isPgUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
-// PgRunnerStore is the durable RunnerStore.
-//
-// A registration has to outlive the daemon. The agent keeps its credential on
-// disk and presents it forever; if the daemon forgot every runner on restart,
-// every agent's next poll would be answered "you are not registered" — which
-// the agent correctly treats as terminal, because that is what deletion looks
-// like. The in-memory store is therefore only usable for tests: a restart with
-// it would decommission the whole fleet.
 type PgRunnerStore struct {
 	pool *pgxpool.Pool
 }
@@ -42,7 +31,6 @@ func NewPgRunnerStore(ctx context.Context, pool *pgxpool.Pool) (*PgRunnerStore, 
 	return &PgRunnerStore{pool: pool}, nil
 }
 
-// runnerColumns is the select list every read shares, in Runner field order.
 const runnerColumns = `tenant, name, labels, version, last_seen, created_by, created_at`
 
 func scanRunner(row pgx.Row) (Runner, error) {
@@ -59,11 +47,7 @@ func scanRunner(row pgx.Row) (Runner, error) {
 }
 
 func (s *PgRunnerStore) MintToken(ctx context.Context, tenant, createdBy, name string, hash []byte, expires time.Time) error {
-	// Sweep tokens that are long past usable while we are here. They are
-	// write-once and read once, so nothing else would ever collect them, and a
-	// token minted every time someone adds a machine accumulates forever. The
-	// day of slack keeps a just-expired token around long enough to still
-	// produce its "this has expired" answer rather than "unknown".
+	// Swept opportunistically: no janitor goroutine.
 	if _, err := s.pool.Exec(ctx,
 		`DELETE FROM runner_tokens WHERE expires_at < now() - interval '1 day'`); err != nil {
 		return err
@@ -74,12 +58,7 @@ func (s *PgRunnerStore) MintToken(ctx context.Context, tenant, createdBy, name s
 	return err
 }
 
-// RedeemToken spends the token and writes the runner in one transaction.
-//
-// Both halves must land together. Spending without registering would burn
-// someone's only token and leave them nothing; registering without spending
-// would make the token reusable, which is the property that makes a token safe
-// to paste into a terminal in the first place.
+// One transaction, or a spent token could leave no runner behind.
 func (s *PgRunnerStore) RedeemToken(ctx context.Context, tokenHash []byte, r Runner, credHash []byte) (Runner, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -87,11 +66,8 @@ func (s *PgRunnerStore) RedeemToken(ctx context.Context, tokenHash []byte, r Run
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// The UPDATE is the claim: `used_at IS NULL` in the WHERE clause means two
-	// agents racing on one token cannot both win, because the second finds no
-	// row to update. Expiry is checked here too, so an expired token and a
-	// spent one are indistinguishable to the caller — deliberately, since
-	// telling them apart helps someone probing for a live token.
+	// The UPDATE is the claim: `used_at IS NULL` in the WHERE means two concurrent
+	// redemptions cannot both win.
 	var tenant, createdBy, tokenName string
 	err = tx.QueryRow(ctx, `
 		UPDATE runner_tokens
@@ -105,43 +81,20 @@ func (s *PgRunnerStore) RedeemToken(ctx context.Context, tokenHash []byte, r Run
 		return Runner{}, err
 	}
 
-	// Enforce the token's name scoping. A violation returns before commit, so
-	// the deferred Rollback un-does the "used" mark above — a mistyped --name
-	// or a collision leaves the token usable rather than spending it on a
-	// mistake the operator can simply fix and retry.
-	//
-	// A pinned token registers only its own name. An open token (tokenName
-	// == "") registers only a name no runner holds yet — enforced below by a
-	// plain INSERT whose unique-violation on (tenant, name) is the collision,
-	// rather than an upsert that would silently overwrite the live runner and
-	// retire its credential.
+	// Returns before commit, so a rejected redemption does not spend the token.
 	if tokenName != "" && r.Name != tokenName {
 		return Runner{}, ErrRunnerNameMismatch
 	}
 
-	// The tenant comes from the token, never from the caller.
 	r.Tenant = tenant
 	r.CreatedBy = createdBy
-	// A nil slice reaches Postgres as NULL, and the column is NOT NULL. Every
-	// path through Runners.Register normalises labels first and so never sends
-	// nil — but the store must not depend on its caller for that, and the
-	// memory store accepts nil, so leaving it would make the two disagree.
+	// A nil slice reaches Postgres as NULL, and the column is NOT NULL.
 	labels := r.Labels
 	if labels == nil {
 		labels = []string{}
 	}
 
-	// A pinned token may REPLACE the machine it names — that is how a rebuilt
-	// host comes back. Overwriting cred_hash on the same row is what retires
-	// the old credential: the unique index means one row holds one credential,
-	// so there is no orphan left to clean up. created_at is left out of the SET
-	// list so the machine keeps the date it first appeared.
-	//
-	// An open token may NOT replace: it inserts, and a name already taken is a
-	// unique-violation the caller sees as ErrRunnerNameTaken. The two SQL
-	// statements differ only in the ON CONFLICT clause, which is precisely the
-	// permission that separates "bring a new machine in" from "take an existing
-	// one over".
+	// How a rebuilt machine re-registers under its own name.
 	const insertReplacing = `
 		INSERT INTO tenant_runners
 		    (tenant, name, labels, cred_hash, version, last_seen, created_by)
@@ -167,8 +120,6 @@ func (s *PgRunnerStore) RedeemToken(ctx context.Context, tokenHash []byte, r Run
 	if err != nil {
 		if isPgUniqueViolation(err) {
 			// Open token, name already registered: reject rather than clobber.
-			// Returning before commit preserves the token for a retry under a
-			// free name.
 			return Runner{}, ErrRunnerNameTaken
 		}
 		return Runner{}, err
@@ -179,8 +130,6 @@ func (s *PgRunnerStore) RedeemToken(ctx context.Context, tokenHash []byte, r Run
 	return stored, nil
 }
 
-// RunnerByCredential resolves a credential and records the check-in in the same
-// statement, because every poll does both and "online" is derived from it.
 func (s *PgRunnerStore) RunnerByCredential(ctx context.Context, credHash []byte, seenAt time.Time) (Runner, error) {
 	r, err := scanRunner(s.pool.QueryRow(ctx, `
 		UPDATE tenant_runners
@@ -188,8 +137,6 @@ func (s *PgRunnerStore) RunnerByCredential(ctx context.Context, credHash []byte,
 		 WHERE cred_hash = $1
 		 RETURNING `+runnerColumns, credHash, seenAt))
 	if err != nil {
-		// A credential that resolves to nothing is one whose runner was
-		// deleted. The agent is told to re-register rather than retry.
 		if isPgNoRows(err) {
 			return Runner{}, ErrBadRunnerCredential
 		}
@@ -230,14 +177,8 @@ func (s *PgRunnerStore) Get(ctx context.Context, tenant, name string) (Runner, e
 	return r, nil
 }
 
-// SetLabels replaces the label array on one row.
-//
-// RETURNING rather than a second SELECT: the caller wants the updated runner,
-// and doing it in one statement means the answer cannot be another admin's
-// concurrent edit.
+// REPLACES the array; it does not merge.
 func (s *PgRunnerStore) SetLabels(ctx context.Context, tenant, name string, labels []string) (Runner, error) {
-	// An empty array, not NULL: the column is NOT NULL DEFAULT '{}', and a
-	// machine with no labels is the ordinary state of one targeted by name.
 	if labels == nil {
 		labels = []string{}
 	}
@@ -266,12 +207,7 @@ func (s *PgRunnerStore) Delete(ctx context.Context, tenant, name string) error {
 	return nil
 }
 
-// DeleteByTenant removes an org's runners and its unspent registration tokens
-// in one transaction, returning the number of runners removed.
-//
-// One transaction because the two halves are one revocation: tokens gone but
-// runners left is a fleet nobody can re-register, and runners gone but tokens
-// left is a live credential for an erased org.
+// Unspent tokens go too, or a deleted org's token still registers a machine.
 func (s *PgRunnerStore) DeleteByTenant(ctx context.Context, tenant string) (int, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -324,6 +260,4 @@ func nullTime(t time.Time) *time.Time {
 	return &t
 }
 
-// compile-time check that the durable store satisfies the interface the API
-// and dispatcher use, so a drift in either is a build failure.
 var _ RunnerStore = (*PgRunnerStore)(nil)

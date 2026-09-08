@@ -3,16 +3,9 @@
 
 import type { Graph } from "../types";
 
-// Undo/redo for the flow editor, as whole-document snapshots rather than a
-// command stack. A command stack needs an inverse for every field the document
-// grows (nodes, edges, frames, params, breakpoints, triggers, visibility, name,
-// icon, description, timeout, …) and a missing inverse is silent corruption.
-// Snapshots reuse the serializer/deserializer saving already depends on
-// (buildGraph / hydrateGraph), so anything saveable is undoable for free, and
-// graphs are small (600 B to 5 KB). The server's version snapshots are the
-// wrong cadence: SaveCoalescing amends the previous commit inside a 90-second
-// window, destroying the intermediate states, and restoring would write a new
-// commit into the very history the coalescing keeps readable.
+// Whole-document snapshots rather than a command stack: the editor mutates state
+// from many places, and a command per mutation would drift from what actually
+// changed. A snapshot is always accurate.
 
 /** A document snapshot: the editable graph, with server-lifecycle fields excluded. */
 export type HistoryDoc = Graph;
@@ -100,8 +93,6 @@ export function classifyDelta(prev: HistoryDoc | null, next: HistoryDoc): DeltaK
   const prevNodes = prev.nodes ?? [];
   const nextNodes = next.nodes ?? [];
 
-  // Same node ids in the same order, and everything except positions equal →
-  // a drag.
   if (
     prevNodes.length === nextNodes.length &&
     prevNodes.every((n, i) => n.id === nextNodes[i].id) &&
@@ -160,8 +151,6 @@ function coalescible(a: DeltaKind, b: DeltaKind): boolean {
     case "meta":
       return b.kind === "meta" && a.field === b.field;
     default:
-      // "structure" never coalesces: two deletes are two undo steps, which is
-      // what a user expects. "none" never reaches here.
       return false;
   }
 }

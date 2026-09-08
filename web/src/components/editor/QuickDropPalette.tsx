@@ -26,35 +26,19 @@ type Props = {
   drops: Manifest[];
   onClose: () => void;
   onPick: (drop: Manifest) => void;
-  // suggested, when non-empty, pins a "Suggested" group at the top of the
-  // list (above the full catalog) while the search box is empty — drops the
-  // workspace has historically wired in this position. Ignored once the user
-  // starts typing, when the ranked search takes over. The caller is
-  // responsible for ordering; we render them as given.
+  // Pinned above the ranked list, and removed from it so nothing appears twice.
   suggested?: Manifest[];
   placeholder?: string;
-  // onShowAll, when set, renders an escape hatch that widens the list from a
-  // filtered subset (entry points) back to every drop — so a flow that wants
-  // no trigger (manual-only) isn't boxed in.
   onShowAll?: () => void;
 };
 
-// Match describes one ranked search hit. Score is higher-is-better so the
-// list is sorted descending. Ties break by integration then label so the
-// ordering is stable as the user types.
+// Higher is better.
 type Match = {
   drop: Manifest;
   score: number;
 };
 
-// pendingHistoryPop holds a deferred history.back() scheduled when the
-// palette closes. It lives at module scope so React StrictMode's
-// dev-only mount→unmount→mount probe can cancel it on remount: the
-// cleanup schedules the back() on a macrotask, and the immediate
-// remount clears it before it runs. Without this, the cleanup's
-// synchronous back() fired a popstate that the remounted listener
-// caught as a "Back" and closed the palette instantly. Only one palette
-// is ever mounted, so a single shared handle is safe.
+// Deferred so the pop runs after React has finished unmounting.
 let pendingHistoryPop: ReturnType<typeof setTimeout> | null = null;
 
 export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAll, suggested }: Props) {
@@ -67,12 +51,7 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
-  // Make the device/browser Back button close the palette instead of
-  // navigating away from the editor. We push a throwaway history entry
-  // on open; Back pops it and we treat that as "close". Closing by any
-  // other route (Esc, pick, backdrop) pops our entry back off so the
-  // next real Back behaves normally. Matters most for the fullscreen
-  // mobile variant, where Back is the instinctive way to dismiss it.
+  // So Back closes the palette rather than leaving the editor.
   useEffect(() => {
     if (pendingHistoryPop) {
       clearTimeout(pendingHistoryPop);
@@ -85,13 +64,7 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
     window.addEventListener("popstate", onPop);
     return () => {
       window.removeEventListener("popstate", onPop);
-      // If we're unmounting for a reason OTHER than the Back-button pop
-      // (Esc/pick/backdrop), our pushed entry is still on top — remove
-      // it. Defer to a macrotask so a StrictMode remount (which runs
-      // synchronously right after this cleanup) can cancel it above;
-      // otherwise the back()'s popstate would be caught by the new
-      // listener and close the palette the instant it opened. After a
-      // real Back pop the marker is already gone, so we skip it.
+      // Unmounting for any other reason must undo the history entry we pushed.
       if (window.history.state?.dazyPalette) {
         pendingHistoryPop = setTimeout(() => {
           pendingHistoryPop = null;
@@ -101,14 +74,7 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
     };
   }, []);
 
-  // Build the ranked match list. When the query is empty we still want a
-  // useful default ordering — surface drops alphabetically by integration
-  // so the list is browsable rather than random.
-  // Returns the flat ranked row list plus how many of its leading entries
-  // are "suggested" — so the render can drop a group subheader before row 0
-  // and before the first non-suggested row. Keeping it one flat array means
-  // arrow-key nav (which indexes into `matches`) crosses the boundary for
-  // free.
+  // An empty query still shows a useful list rather than nothing.
   const { matches, suggestedCount } = useMemo<{
     matches: Match[];
     suggestedCount: number;
@@ -129,9 +95,7 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
         if (ai !== bi) return ai.localeCompare(bi);
         return dropLabel(a, lang).localeCompare(dropLabel(b, lang), lang);
       });
-      // Pin suggestions on top (in caller order) and drop them from the main
-      // list so they don't appear twice. Suggestions are advisory, so only
-      // include ones actually present in `drops` (the MIME-filtered set).
+      // Dropped from the main list so nothing appears twice.
       const sug = (suggested ?? []).filter((d) =>
         drops.some((x) => x.id === d.id),
       );
@@ -164,17 +128,12 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
     return { matches: hits, suggestedCount: 0 };
   }, [drops, query, suggested, lang]);
 
-  // Reset the highlight whenever the result set changes — otherwise an
-  // index that was valid for an earlier query can point past the end of
-  // a now-shorter list.
+  // Or the highlight points at a row that is no longer there.
   useEffect(() => {
     setActive(0);
   }, [query]);
 
-  // Focus the search input on open and restore focus to whatever was focused
-  // before (the canvas, a toolbar button) when the palette closes — so a
-  // keyboard user isn't dumped back at the top of the document. The palette is
-  // a transient overlay, mounted only while open, so this runs once per open.
+  // Focus is restored on close, or the keyboard user is stranded.
   useEffect(() => {
     const prevFocused = document.activeElement as HTMLElement | null;
     inputRef.current?.focus();
@@ -211,7 +170,6 @@ export function QuickDropPalette({ drops, onClose, onPick, placeholder, onShowAl
       if (e.key === "Enter") {
         e.preventDefault();
         const hit = matches[active];
-        // A platform-disabled drop is shown for awareness but can't be added.
         if (hit && !hit.drop.disabled && !hit.drop.unavailable) onPick(hit.drop);
         return;
       }
@@ -326,11 +284,6 @@ function QuickRow({
 }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
-  // Not pickable, for one of two reasons. Either a platform admin switched
-  // this drop off, or its provider is registered but unreachable — an MCP
-  // server that is down. Both stay in the list for awareness, greyed-out:
-  // vanishing from the palette is what makes an author think a step they used
-  // yesterday never existed.
   const unavailable = !!drop.unavailable;
   const disabled = !!drop.disabled || unavailable;
   return (
@@ -343,9 +296,6 @@ function QuickRow({
       data-qp-index={index}
       onMouseMove={onHover}
       onMouseDown={(e) => {
-        // mousedown rather than click: click would fire after mouseup,
-        // which can race the backdrop's mousedown-to-close handler when
-        // a drag selection ends inside the row.
         e.preventDefault();
         if (!disabled) onPick();
       }}
