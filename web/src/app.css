@@ -1982,23 +1982,6 @@
   margin: var(--space-2) 0 var(--space-3);
   font-size: var(--text-sm);
 }
-.integration-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-  font-size: var(--text-xs);
-}
-.integration-card-state {
-  white-space: nowrap;
-}
-.integration-card-state.on {
-  color: var(--success);
-}
-.integration-card-state.ailing {
-  color: var(--warning);
-}
 .integrations-pager {
   display: flex;
   flex-wrap: wrap;
@@ -2018,73 +2001,91 @@
 }
 .integration-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: var(--space-3);
 }
 .integration-card {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  text-align: center;
   gap: var(--space-2);
+  height: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--r-3);
-  padding: var(--space-4);
+  border-radius: var(--r-4);
+  padding: var(--space-5) var(--space-4) var(--space-4);
   cursor: pointer;
+  box-shadow: var(--shadow);
   transition:
-    border-color 120ms,
-    transform 120ms;
+    transform var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out);
 }
 .integration-card:hover {
+  transform: translateY(-4px);
   border-color: var(--accent);
-  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg);
 }
-.integration-card-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-.integration-card-head h2 {
-  margin: 0;
-  font-size: var(--text-lg);
-  /* Single line, or a long name wraps and shifts the row height. */
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* The mark is the anchor of the card, so the connected dot rides its corner
+   rather than taking a column of its own. */
+.integration-card-mark {
+  position: relative;
+  display: inline-flex;
+  margin-bottom: var(--space-1);
 }
 .integration-card-dot {
-  margin-left: auto;
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.integration-card-logo,
+.integration-card-fallback-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--r-2);
+  object-fit: contain;
 }
 .integration-card-logo {
-  width: 32px;
-  height: 32px;
-  border-radius: 4px;
-  background: var(--surface-2);
   padding: var(--space-1);
-  object-fit: contain;
-  flex-shrink: 0;
+  background: var(--surface-2);
 }
 .integration-card-fallback-icon {
-  width: 32px;
-  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
   background: var(--surface-2);
   color: var(--muted);
 }
+.integration-card h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+  line-height: 1.25;
+}
 .integration-card-desc {
   margin: 0;
-  font-size: var(--text-md);
+  font-size: var(--text-sm);
   color: var(--muted);
   line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  min-height: 4.5em;
+}
+/* Pins the state to the bottom edge however short the description runs, so a
+   row of cards keeps one baseline. */
+.integration-card-state {
+  margin-top: auto;
+  padding-top: var(--space-2);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.integration-card-state.on {
+  color: var(--success);
+}
+.integration-card-state.ailing {
+  color: var(--warning);
 }
 .connections {
   margin: var(--space-4) 0 var(--space-6);

@@ -143,7 +143,7 @@ describe("Swedish port labels", () => {
 });
 
 describe("Swedish integration prose", () => {
-  const fields = ["description", "technical_notes"] as const;
+  const fields = ["description", "tagline", "technical_notes"] as const;
   const english = (slug: string, field: (typeof fields)[number]) =>
     (integrationMeta[slug]?.[field] ?? "").trim();
   const expected = Object.keys(integrationMeta).flatMap((slug) =>

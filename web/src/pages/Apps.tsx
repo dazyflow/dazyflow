@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
 import { explainApiError } from "../lib/explainApiError";
 import { useAuth } from "../auth";
-import { DropIcon, ICON, iconFor, isBrandedIcon } from "../icons";
+import { DropIcon, ICON, iconFor } from "../icons";
 import {
   connectionText,
   integrationName,
@@ -112,7 +112,7 @@ export function Apps() {
     const out = new Map<string, string>();
     for (const g of groups) {
       const name = groupDisplayName(g.slug, g.meta.name, t, i18n.language);
-      const parts = [name, g.slug, g.meta.description];
+      const parts = [name, g.slug, g.meta.tagline ?? "", g.meta.description];
       for (const d of g.drops) {
         parts.push(dropLabel(d, i18n.language), d.id, dropSubtitle(d, i18n.language) ?? "");
       }
@@ -365,7 +365,7 @@ function IntegrationCard({
   needsSetup,
 }: {
   slug: string;
-  meta: { name: string; description: string; brand_logo?: string };
+  meta: { name: string; tagline?: string; description: string; brand_logo?: string };
   drops: Manifest[];
   connected: boolean;
   ailing: boolean;
@@ -375,14 +375,13 @@ function IntegrationCard({
   const brandLogo = meta.brand_logo ?? drops.find((d) => d.brand_logo)?.brand_logo;
   const headerDrop = drops[0];
   const HeaderIcon = headerDrop ? iconFor(headerDrop.icon, headerDrop.category) : Box;
-  const headerBranded = isBrandedIcon(headerDrop?.icon);
   return (
     <Link
       to={`/apps/${encodeURIComponent(slug)}`}
       style={{ textDecoration: "none", color: "inherit" }}
     >
       <div className="integration-card">
-        <div className="integration-card-head">
+        <span className="integration-card-mark">
           {brandLogo ? (
             <img
               src={brandLogo}
@@ -392,12 +391,9 @@ function IntegrationCard({
             />
           ) : (
             <span className="integration-card-fallback-icon">
-              <HeaderIcon size={headerBranded ? 22 : 18} strokeWidth={2.2} />
+              <HeaderIcon size={26} strokeWidth={1.9} />
             </span>
           )}
-          <h2>
-            {groupDisplayName(slug, meta.name, t, i18n.language)}
-          </h2>
           {connected && (
             <span
               className={
@@ -410,25 +406,28 @@ function IntegrationCard({
               }
             />
           )}
-        </div>
+        </span>
+        <h2>{groupDisplayName(slug, meta.name, t, i18n.language)}</h2>
         <p className="integration-card-desc">
-          {integrationProse(`${slug}.description`, meta.description, i18n.language)}
+          {integrationProse(`${slug}.tagline`, meta.tagline ?? meta.description, i18n.language)}
         </p>
-        <div className="integration-card-foot muted">
-          <span>{t("integrations.stepCount", { count: drops.length })}</span>
-          {/* Only the states worth acting on are named. "Ready to use" on an app
-              that needs no setup is a label on every second card, saying nothing
-              — the absence of a warning is the message there. */}
-          {ailing ? (
-            <span className="integration-card-state ailing">
-              {t("integrations.statusAiling")}
-            </span>
-          ) : connected ? (
-            <span className="integration-card-state on">{t("integrations.connectedTip")}</span>
-          ) : needsSetup ? (
-            <span className="integration-card-state">{t("integrations.needsSetupHead")}</span>
-          ) : null}
-        </div>
+        {/* Only the states worth acting on are named. "Ready to use" on an app
+            that needs no setup is a label on every second card, saying nothing.
+            The step count went with the redesign: it is scale, not a reason to
+            click, and it made every card read like a spec sheet. */}
+        {ailing ? (
+          <span className="integration-card-state ailing">
+            {t("integrations.statusAiling")}
+          </span>
+        ) : connected ? (
+          <span className="integration-card-state on">
+            {t("integrations.connectedTip")}
+          </span>
+        ) : needsSetup ? (
+          <span className="integration-card-state">
+            {t("integrations.needsSetupHead")}
+          </span>
+        ) : null}
       </div>
     </Link>
   );
@@ -1535,7 +1534,7 @@ function buildGroups(all: Manifest[]) {
   }
   const out: Array<{
     slug: string;
-    meta: { name: string; description: string; brand_logo?: string };
+    meta: { name: string; tagline?: string; description: string; brand_logo?: string };
     drops: Manifest[];
   }> = [];
   const seen = new Set<string>();

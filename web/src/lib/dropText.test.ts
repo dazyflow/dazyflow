@@ -297,12 +297,12 @@ describe("the params-schema surface", () => {
 
   it("translates an app's name where it is generic English", () => {
     expect(integrationName("Mailbox", "sv")).toBe("Brevlåda");
-    expect(integrationName("Mailbox (IMAP)", "sv")).toBe("Brevlåda (IMAP)");
+    expect(integrationName("Read email", "sv")).toBe("Läs mejl");
     expect(integrationName("Collections", "sv")).toBe("Samlingar");
     expect(integrationName("Slack", "sv")).toBe("Slack");
     expect(integrationName("Google Sheets", "sv")).toBe("Google Sheets");
     expect(integrationName("", "sv")).toBe("");
-    expect(integrationName("Mailbox (IMAP)", "en")).toBe("Mailbox (IMAP)");
+    expect(integrationName("Read email", "en")).toBe("Read email");
   });
 
   it("splits a connection note into the label it localizes and its example", () => {

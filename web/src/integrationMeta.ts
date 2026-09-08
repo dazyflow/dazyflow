@@ -20,6 +20,7 @@
 
 export type IntegrationMeta = {
   name: string;
+  tagline: string;
   description: string;
   technical_notes?: string;
   docs_url?: string;
@@ -114,6 +115,7 @@ export function oauthProviderDisplay(name: string): OAuthProviderMeta {
 export const integrationMeta: Record<string, IntegrationMeta> = {
   slack: {
     name: "Slack",
+    tagline: "Post to your team's channels, and let a message kick off work.",
     description:
       "Send messages from your flows, and trigger flows when someone @-mentions your bot. Connect a workspace once and your bot can post to any channel it's a member of — useful for alerts, daily reports, or simple back-and-forth bots that turn chat messages into action.",
     technical_notes:
@@ -123,6 +125,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   gmail: {
     name: "Gmail",
+    tagline: "Send mail, and start a flow the moment one arrives.",
     description:
       "Send email, search your inbox, and read full message bodies. The classic use case: react to incoming emails as they arrive — pair the search step with a polling trigger and the flow remembers which messages it has already processed, so reruns don't repeat work.",
     technical_notes:
@@ -132,6 +135,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   "google-sheets": {
     name: "Google Sheets",
+    tagline: "Read and add rows, so a spreadsheet keeps itself up to date.",
     description:
       "Read rows from a spreadsheet, and append rows to it. Use it to keep a Sheet in sync with a database, log incoming events for non-technical teammates to inspect, or pull a reference table into other flows.",
     technical_notes:
@@ -141,6 +145,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   "google-forms": {
     name: "Google Forms",
+    tagline: "Turn every form response into something that happens automatically.",
     description:
       "Fire a flow when a Google Form gets new responses, each keyed by its question title — connect it straight into a Sheets append to log submissions, or into any step that takes records.",
     technical_notes:
@@ -150,6 +155,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   "google-calendar": {
     name: "Google Calendar",
+    tagline: "Put events on the calendar, and see what's coming up.",
     description:
       "Create calendar events, and list what's coming up. Drop a meeting onto a calendar when a flow fires, turn an incoming booking into an event, or pull the day's schedule into a morning summary.",
     technical_notes:
@@ -159,6 +165,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   "google-drive": {
     name: "Google Drive",
+    tagline: "Fetch, store and share files without opening a folder.",
     description:
       "List, download, and upload files in Google Drive. Fetch a file to email as an attachment, archive an incoming document, pull a Doc or Sheet out as a PDF, or drop generated files back into a folder for your team.",
     technical_notes:
@@ -168,6 +175,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   github: {
     name: "GitHub",
+    tagline: "Open issues, leave comments, and react to what lands in your repo.",
     description:
       "Create issues, comment on existing ones, and trigger flows on push or new-PR events. Common patterns: route an incoming alert into a tracked issue, post a deploy notification when commits land on main, kick off a triage flow when a contributor opens a PR.",
     technical_notes:
@@ -177,6 +185,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   notion: {
     name: "Notion",
+    tagline: "Keep pages and databases current without the copy-and-paste.",
     description:
       "Create pages, and query databases. Mirror Notion content into a database for analytics, react to new entries by polling, or write structured data from a flow into a project tracker without anyone leaving Notion.",
     technical_notes:
@@ -186,6 +195,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   fortnox: {
     name: "Fortnox",
+    tagline: "Handle invoices and customers in your accounting, hands off.",
     description:
       "Manage customers and invoices in Fortnox, Sweden's leading accounting platform for small businesses. Create a customer from a signup, raise an invoice for them, and pick who to bill from a searchable list of your existing customers. Poll invoices by status to build a flow that reacts to newly paid invoices — a thank-you email, a fulfilment step — or chases overdue ones.",
     technical_notes:
@@ -195,6 +205,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   spotify: {
     name: "Spotify",
+    tagline: "Look up tracks and albums, and see what's playing.",
     description:
       "Read what a connected Spotify account follows. The artists someone follows come out as a plain list of records — name, genres, a link to open each one — so a flow can work from the music they actually listen to instead of a watch list kept by hand: check it against a concert search, log it to a sheet, or mail a weekly digest of what's new.",
     technical_notes:
@@ -204,6 +215,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   ticketmaster: {
     name: "Ticketmaster",
+    tagline: "Find events and shows near you, as soon as they go on sale.",
     description:
       "Search live events — concerts, matches, shows — by artist, city and date, and get one tidy row each with the venue, the date and a link to the tickets. Or watch a search and let the flow tell you when something new is announced: a tour date, a second night, a support slot. Pair it with Spotify to turn the artists someone follows into a gig list that keeps itself up to date.",
     technical_notes:
@@ -213,6 +225,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   stripe: {
     name: "Stripe",
+    tagline: "Follow payments, customers and subscriptions as they happen.",
     description:
       "React to payments the moment they happen — succeeded, failed, or a subscription canceled — and act on them: create a customer, email an invoice, hand out a payment link, or issue a refund. Build a dunning flow that chases a failed charge, a welcome sequence on a customer's first payment, or an instant alert when someone churns.",
     technical_notes:
@@ -222,6 +235,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   klarna: {
     name: "Klarna",
+    tagline: "Keep track of the orders and payments from your checkout.",
     description:
       "Handle your Klarna orders straight from a flow. Klarna is the Nordic 'buy now, pay later' checkout, and this is the back-office side of it: look an order up, take the payment when the goods ship (in full or in part), and refund a return. Pair the refund with an approval step for the classic 'nod in Slack, then refund' flow, or check an order's status before you act on it.",
     technical_notes:
@@ -231,6 +245,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   openweather: {
     name: "OpenWeather",
+    tagline: "Current conditions and the forecast, anywhere in the world.",
     description:
       "Read the weather for any point on the map. Give a step a coordinate — typed in, or connected from a geocode, a form field, or a device's GPS — and get the current conditions (a one-line summary, the temperature, and a Clear/Rain/Snow word you can branch on) or a 5-day forecast. Build a 'text me if it'll rain tomorrow' flow, a morning briefing, or a frost alert for the greenhouse.",
     technical_notes:
@@ -240,6 +255,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   openstreetmap: {
     name: "OpenStreetMap",
+    tagline: "Turn an address into a location, and a location into an address.",
     description:
       "Work with places and coordinates. The Location step lets you pick a point on a map (or look up a city/address) and emit its coordinate; Reverse geocode turns a coordinate back into a place name. Pairs naturally with OpenWeather — pick or look up a spot, then connect the coordinate into a weather lookup.",
     technical_notes:
@@ -249,6 +265,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   "open-meteo": {
     name: "Open-Meteo",
+    tagline: "Free weather forecasts and history, no account needed.",
     description:
       "Read the weather for any point on the map — free for personal, non-commercial use with no account or API key. Give a step a coordinate — typed in, or connected from a geocode, a form field, or a device's GPS — and get the current conditions (a one-line summary, the temperature, and a Clear/Rain/Snow word you can branch on) or a multi-day forecast. Build a 'text me if it'll rain tomorrow' flow, a morning briefing, or a frost alert for the greenhouse. For commercial use, add an API key and it switches to Open-Meteo's paid endpoint.",
     technical_notes:
@@ -258,6 +275,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   smhi: {
     name: "SMHI",
+    tagline: "Official Swedish forecasts and warnings, straight from SMHI.",
     description:
       "Free Nordic weather from Sweden's meteorological institute — no account or API key. Give the SMHI Weather steps a coordinate (pick it with a Location step) and get the current conditions or a multi-day forecast for any point in the Nordic region and the surrounding area, in metric units.",
     technical_notes:
@@ -266,12 +284,14 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     brand_logo: "/brands/smhi.svg",
   },
   webhook: {
-    name: "Outgoing webhooks",
+    name: "Send a webhook",
+    tagline: "Tell another service something happened, the moment it does.",
     description:
-      "Send a notification to any URL — Slack incoming-webhook URLs, Discord, Teams, PagerDuty, or your own custom receiver. Reach for this when the service doesn't have a dedicated connector here, or when you want the simplest possible 'fire-and-forget' delivery.",
+      "Ping another system the moment something happens — a Slack or Discord channel, Teams, PagerDuty, or a receiver of your own. The simplest way to tell something else that a flow got somewhere.",
   },
   postgres: {
     name: "Postgres",
+    tagline: "Read and write your Postgres database from a flow.",
     description:
       "Insert, upsert, and query rows against a Postgres database. Pair it with the Sheets, Excel, or webhook steps to keep your database in sync with whatever source of truth your team uses.",
     technical_notes:
@@ -281,6 +301,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   mysql: {
     name: "MySQL",
+    tagline: "Read and write your MySQL database from a flow.",
     description:
       "Insert, upsert, and query rows against MySQL or MariaDB. Works the same way as Postgres — keep a database in sync with a spreadsheet, load a cleaned-up file into it, or pull a reference table into your flows.",
     technical_notes:
@@ -290,6 +311,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   sqlite: {
     name: "SQLite",
+    tagline: "A small, file-based database for the lists your flows keep.",
     description:
       "Insert, upsert, and query rows against a SQLite file in your workspace. Great fit for per-tenant scratch databases, prototyping flows before provisioning a real DB, or holding a small reference table next to your other workspace files.",
     technical_notes:
@@ -299,6 +321,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   excel: {
     name: "Excel",
+    tagline: "Read a workbook, and write new rows back into it.",
     description:
       "Read .xlsx workbooks into rows, and write rows back out as a fresh workbook. Useful when someone drops a file into the workspace and you want to clean it, join it against a reference table, or load it into a real database.",
     technical_notes:
@@ -306,48 +329,55 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     brand_logo: "/brands/excel.svg",
   },
   email: {
-    name: "Email (SMTP)",
+    name: "Send email",
+    tagline: "Send an email to anyone, with attachments if you need them.",
     description:
-      "Send email through an SMTP server you configure. Pick this when you've got a shared mailbox or a transactional provider with SMTP relay (SendGrid, SES, Postmark), and you'd rather configure a server than walk through OAuth.",
+      "Send email from your own mail account: a daily summary, an alert, or a reply an earlier step wrote. Attach files the flow produced along the way, and send one per recipient from a list.",
     technical_notes:
       "The mail server — host, port, security (STARTTLS on 587 / implicit TLS on 465 / none), username, password and From address — is configured once here and injected into every Email step at run time; the password is held in the encrypted secret store. Use 'Test connection' to confirm the server and login before saving.",
   },
   mailbox: {
-    name: "Mailbox (IMAP)",
+    name: "Read email",
+    tagline: "Watch an inbox, and act on what arrives.",
     description:
-      "Read a mail account over IMAP: search a folder for the mail you care about and hand each match to the rest of your flow. This is the other half of Email (SMTP), which can only send — SMTP has no way to list or search a mailbox, so anything that reacts to mail arriving comes through here. Works with Fastmail, mailbox.org, Migadu, iCloud, a Dovecot box of your own, and Gmail with an app password — no OAuth app to register, no verification to pass.",
+      "Watch a mailbox and act on what arrives. Search a folder for the mail you care about — from a particular sender, unread only, the last few days — and hand each message to the rest of your flow. Works with Fastmail, iCloud, your own server, and Gmail with an app password.",
     technical_notes:
       "The mail account — server, port, security (implicit TLS on 993 / STARTTLS on 143 / none), username, password and default folder — is configured once here and injected into every Mailbox step at run time; the password is held in the encrypted secret store. Deliberately separate from the Email (SMTP) connection, since the two use different hosts. Reads use EXAMINE and BODY.PEEK, so a search never marks mail read. 'Only new since last run' tracks the folder's own UIDVALIDITY and UID rather than a timestamp, so a published poll acts on each email exactly once and recovers cleanly if the folder is ever recreated. Use 'Test connection' to confirm the server, login and folder name before saving. Note that Microsoft 365 has disabled password logins for IMAP: it needs OAuth, which this connection does not yet do.",
   },
   calendar: {
-    name: "Calendar (CalDAV)",
+    name: "Calendar (any provider)",
+    tagline: "Create and read events on any calendar you already use.",
     description:
-      "Read and write a calendar that isn't Google's — Fastmail, mailbox.org, iCloud, Nextcloud, or a Radicale box you run yourself. CalDAV is what nearly every calendar except Google's speaks, so the reminder and booking flows stop being Google-only: list tomorrow's bookings and text everyone, or put an intro call on the calendar straight from a form submission.",
+      "Read and write a calendar that isn't Google's — Fastmail, iCloud, Nextcloud, or one you run yourself. List tomorrow's bookings and message everyone, or put a call in the diary straight from a form.",
     technical_notes:
       "The account — server address, username and password (or an app password on a provider with two-factor sign-in) — is configured once here and injected into every Calendar step at run time; the password is held in the encrypted secret store. The address can be a discovery root, a principal, or one calendar's own path: the client walks from whatever your provider published to the calendar collections underneath, because no user can be expected to know which of those they were handed. If the account holds several calendars, name the one you want — Test connection lists them for you if you don't. Events come out in the same shape the Google Calendar step emits, so a flow moves between the two by swapping the step. Time windows accept the same relative forms (\"tomorrow\", \"+7d\", \"tomorrow+9h\"), resolved in the timezone you set.",
   },
   pdf: {
     name: "PDF",
+    tagline: "Make a PDF, or pull the text and pages out of one.",
     description:
       "Work on PDF files themselves — combine several into one, split one into several, read how many pages it has. Local operations on files already in your workspace: no account to connect, no credentials, and nothing leaves the machine. The natural end of a filing flow is one file for the accountant rather than forty, and that's this.",
     technical_notes:
       "Backed by pdfcpu, in-process and pure Go — no external binary, no browser engine, and about 3 MB on the daemon binary. Deliberately NOT text extraction: pdfcpu doesn't do it, and the pure-Go alternatives manage simple text-layer documents and fall over on a real invoice with a table and embedded fonts. To read what a PDF SAYS, connect it to an AI step's Files input instead — the model reads the rendered pages, so a scan works as well as a text PDF. Every step here checks the %PDF header before handing bytes to the parser, so the wrong file wired in reports itself rather than surfacing as a corrupt-document error. Splitting is capped at 200 pieces and each step at 32 MiB of input, so a mis-wired step can't fill the run's scratch area.",
   },
   sftp: {
-    name: "SFTP",
+    name: "File server",
+    tagline: "Move files to and from a server your team already uses.",
     description:
-      "Move files to and from an SFTP server — a bank's drop box, a supplier's feed, a server you run yourself. This is where a lot of corporate integration still actually happens: a file lands at 03:00 and something has to pick it up. Pick this over Upload to Drive when the other side hands you an address and an account rather than an app to connect, or when the files shouldn't pass through anyone else's cloud.",
+      "Move files to and from a file server (SFTP). This is how a lot of business still works: a supplier or a bank drops a file overnight, and something has to pick it up, read it and act on it.",
     technical_notes:
       "The server — address, port, username, and either a password or an SSH private key — is configured once here and injected into every SFTP step at run time; the password and key are held in the encrypted secret store. Host-key verification has no default and cannot be turned off: paste the server's \"SHA256:…\" fingerprint (or a known_hosts line), and until you do, Test connection fails with the fingerprint the server actually offered so you can check it and copy it in. Accepting any key would make a silent man-in-the-middle possible, and the credentials are what it would collect. 'Only new since last run' on List files tracks the newest modified time plus the names sharing that second, so a feed that drops twenty files inside one second doesn't lose the stragglers. One server per connection — a second one (a bank and a supplier, say) isn't supported yet.",
   },
   ntfy: {
     name: "ntfy",
+    tagline: "Send a push notification straight to your phone.",
     description:
       "Push notifications to your phone via ntfy.sh or a self-hosted ntfy server. Quick to set up — no app to install, just subscribe to a topic — so it's a great fit for ops alerts that need to reach someone fast.",
     docs_url: "https://docs.ntfy.sh/",
   },
   nshift: {
     name: "nShift",
+    tagline: "Book shipments, and follow parcels on their way.",
     description:
       "Book parcel shipments with your carriers and get the tracking numbers back. nShift (formerly Unifaun/Consignor) sits in front of the carriers — PostNord, DHL, Bring, Schenker and the rest — so one connection covers all of them. The natural flow is: an order is marked shipped, book the consignment, then text or email the customer the tracking link. You can also look a shipment up again, or delete one you booked by mistake.",
     technical_notes:
@@ -357,6 +387,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   roaring: {
     name: "Roaring",
+    tagline: "Look up Swedish companies and their official details.",
     description:
       "Look a company up by its organisation number and get back who they actually are — registered name, status, address and tax details. The everyday use is enriching a lead or an order: a form gives you an org number, this turns it into a real company record you can file in the CRM, or check the status of before you extend credit. If you only have a name, search first to find the org number, then enrich each match.",
     technical_notes:
@@ -366,6 +397,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   twilio: {
     name: "Twilio",
+    tagline: "Send a text message anywhere in the world.",
     description:
       "Send SMS text messages to any phone, straight from a flow. Reach for it when an alert needs to land in someone's pocket — an order-shipped or appointment reminder to a customer, a verification code, an on-call page, or a heads-up the moment a trigger fires.",
     technical_notes:
@@ -375,6 +407,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   "46elks": {
     name: "46elks",
+    tagline: "Send Swedish text messages, and make calls.",
     description:
       "Send SMS text messages straight from a flow via 46elks, a Swedish messaging provider popular across the Nordics. Send from an alphanumeric sender name (like \"Acme\") for one-way alerts — order updates, reminders, verification codes — or from one of your 46elks numbers when you want the recipient to be able to reply. A dry-run switch lets you validate a message without sending or being billed.",
     technical_notes:
@@ -384,6 +417,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   discord: {
     name: "Discord",
+    tagline: "Post to a server, and react to what people write.",
     description:
       "Post messages into a Discord channel from a flow — a deploy-finished ping, a build-broke alert, a daily summary, or a heads-up to your team the moment something happens. Set the sender name and avatar per message if you like.",
     technical_notes:
@@ -393,6 +427,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   mqtt: {
     name: "MQTT",
+    tagline: "Talk to sensors and devices in real time.",
     description:
       "Publish messages to an MQTT broker — the lightweight backbone of most home-automation and IoT setups. Flip a smart light, push a command to a device, or broadcast a status update that anything subscribed to the topic picks up.",
     technical_notes:
@@ -402,6 +437,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   "home-assistant": {
     name: "Home Assistant",
+    tagline: "Control your home, and let your home start your flows.",
     description:
       "Control your smart home and react to what it's doing. Turn on lights, lock a door, set the thermostat, or run a scene — and start a flow automatically the moment a device's state changes, like a door opening or a sensor tripping.",
     technical_notes:
@@ -410,14 +446,16 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     brand_logo: "/brands/homeassistant.svg",
   },
   http: {
-    name: "HTTP",
+    name: "Web request",
+    tagline: "Call any service on the web, even one without a ready-made app.",
     description:
-      "Make HTTP requests to any API. Use this for services that don't have a dedicated connector here yet — slot in the URL, set headers if you need auth, and the response body comes back as the step's output.",
+      "Reach a service on the web that doesn't have its own app here yet. Give it an address, and what comes back becomes a step the rest of your flow can build on.",
     technical_notes:
       "SSRF protection blocks loopback, RFC1918, link-local (incl. AWS instance metadata at 169.254.169.254). Configurable body-size cap, status-code filter, and request timeout. JSON / text MIME detection on the response.",
   },
   claude: {
     name: "Claude",
+    tagline: "Write, summarise and make sense of text with Claude.",
     description:
       "Run prompts through Claude, Anthropic's AI assistant. Useful for summarising text from an earlier step, classifying inputs, generating responses, or any spot in your flow where you want a language model in the loop.",
     technical_notes:
@@ -426,6 +464,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   chatgpt: {
     name: "ChatGPT",
+    tagline: "Draft, classify and answer questions with ChatGPT.",
     description:
       "Run prompts through ChatGPT, OpenAI's AI assistant. Use it the same way as Claude — summarise text, classify inputs, extract fields, or draft replies — wherever you'd rather use an OpenAI model.",
     technical_notes:
@@ -434,6 +473,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   gemini: {
     name: "Gemini",
+    tagline: "Work through text and images with Google's Gemini.",
     description:
       "Run prompts through Gemini, Google's AI model. Use it the same way as Claude or ChatGPT — summarise text, classify inputs, extract fields, draft replies — wherever you would rather use a Google model, or already have a Google AI Studio key.",
     technical_notes:
@@ -442,6 +482,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   ollama: {
     name: "Ollama",
+    tagline: "Run an AI model on your own machine, where nothing leaves it.",
     description:
       "Run prompts through a model on hardware you control — your own machine or a server you host — instead of a cloud account. Use it the same way as Claude or ChatGPT: summarise text, classify inputs, extract fields, draft replies. Reach for it when the text should not leave your infrastructure, or when you would rather not pay per request.",
     technical_notes:
@@ -450,6 +491,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   git: {
     name: "Git",
+    tagline: "Read a repository, and commit back to it from a flow.",
     description:
       "Clone repositories and check out branches inside your workspace. Reach for it when a flow needs to inspect source code, pull templates from a known repo, or stage files before another step works on them.",
     technical_notes:
@@ -457,11 +499,13 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   collections: {
     name: "Collections",
+    tagline: "Save records now, and pick them up later.",
     description:
       "Save rows to a built-in collection with no setup, then query them back — it's the storage behind the in-app Collections page. Reach for it to collect a flow's output for review, build a lightweight dashboard, or keep running totals without provisioning a real database.",
   },
   mcp: {
     name: "MCP servers",
+    tagline: "Bring in tools from any MCP server you connect.",
     description:
       "Steps that come from an MCP server your organisation added, rather than from a connector we wrote. Point Dazyflow at a server's address in Admin → MCP servers and every tool it publishes appears here as a step — nothing to install, and no connector to wait for. The server keeps its own credential, so these steps need no separate connection.",
     technical_notes:
@@ -469,6 +513,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   "standard-library": {
     name: "Standard library",
+    tagline: "The everyday building blocks every flow is made of.",
     description:
       "Everything that isn't a particular app: the pieces you join the apps together with. Send a flow down one path or another, repeat a step for every row, pause for someone to approve, wait a while, read and write files, tidy up a list (sort it, drop duplicates, group it, do the sums), read and write your own database, and start a flow on a schedule or when something calls in.",
   },
