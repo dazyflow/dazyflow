@@ -18,21 +18,16 @@ import (
 	"github.com/dazyflow/dazyflow/internal/maillang"
 )
 
-// Platform signup-invites. On a deployment with self-serve signup
-// disabled (EnableSignup=false), a platform owner still needs a way to
-// onboard specific people without flipping signup on for the whole
-// internet. A signup-invite is exactly that: the owner names an email,
-// the daemon emails that address a /signup link with the email
-// pre-filled, and the recipient just sets a password. The resulting
-// account is an ordinary self-serve account — its OWN tenant and the
-// default signup roles — not a membership in the owner's org (that's
-// what the org-invite flow in httporgs.go is for).
+// Platform signup-invites. With self-serve signup disabled, a platform owner
+// still needs a way to onboard specific people without opening signup to the
+// whole internet: the owner names an email, the daemon sends a /signup link with
+// the email pre-filled, and the recipient sets a password. The resulting account
+// is an ordinary self-serve one — its OWN tenant and the default signup roles —
+// not a membership in the owner's org, which is what httporgs.go is for.
 //
 // Storage piggybacks on the invitations store via the SignupInviteTenant
-// sentinel (see auth/invitation.go), so signup-invites inherit its TTL,
-// audit, and GDPR erasure. The signUp gate (httpsignup.go) is what
-// actually consumes the token; these handlers only mint, list, and
-// revoke them.
+// sentinel, so signup-invites inherit its TTL, audit and GDPR erasure. The
+// signUp gate consumes the token; these handlers only mint, list and revoke.
 
 const signupInviteTTL = 14 * 24 * time.Hour
 

@@ -3,16 +3,14 @@
 
 import type { DescriptionMap } from "../../lib/dropText";
 
-// Swedish prose for the Apps pages: each integration's friendly description
-// and its collapsible technical notes.
+// Swedish prose for the Apps pages: each integration's friendly description and
+// its collapsible technical notes.
 //
 // Keys are '<slug>.description' and '<slug>.technical_notes'. `en` is the
-// descriptionFingerprint of the English
-// in integrationMeta.ts that each translation was made from — same drift guard
-// as the drop descriptions: edit the English there and the reader falls back
-// to it instead of reading a stale Swedish paragraph. That matters more here
-// than elsewhere, because this English lives in the frontend and changes
-// without a catalog rebuild.
+// descriptionFingerprint of the English in integrationMeta.ts each translation
+// was made from — the same drift guard as the drop descriptions, and it matters
+// more here, because this English lives in the frontend and changes without a
+// catalog rebuild.
 //
 // Product names, env vars, scopes, endpoints and header names stay English:
 // they are what the reader will type into a dashboard or grep for in a log.

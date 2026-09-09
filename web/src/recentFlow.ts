@@ -8,17 +8,15 @@
 const KEY = "dazyflow.lastFlow";
 
 // userScope builds the per-(account, org) suffix for client-side recall keys
-// (last flow, has-flows hint). localStorage is shared by every account AND
-// every org that signs in on this browser, so the suffix combines the subject
-// with the ACTIVE tenant. Two leaks this prevents:
-//   - across accounts: an unscoped key offered one user's "pick up where you
-//     left off" card to the next user on a shared browser.
-//   - across orgs: keying on the principal's HOME tenant (me.tenant) instead
-//     of the active org meant switching org still surfaced the previous org's
-//     flow — its ids/flows don't even exist in the new org.
-// Pass the active tenant (auth context), not me.tenant. Empty while either the
-// tenant or subject is unknown; callers treat that as "no recall" rather than
-// falling back to a shared key.
+// (last flow, has-flows hint). localStorage is shared by every account AND every
+// org that signs in on this browser, so the suffix combines the subject with the
+// ACTIVE tenant. That prevents two leaks: an unscoped key offered one user's
+// "pick up where you left off" card to the next user on a shared browser, and
+// keying on the principal's HOME tenant meant switching org still surfaced the
+// previous org's flow, whose ids don't exist in the new one.
+//
+// Pass the active tenant, not me.tenant. Empty while either is unknown; callers
+// treat that as "no recall" rather than falling back to a shared key.
 export function userScope(
   tenant: string | undefined,
   subject: string | undefined,

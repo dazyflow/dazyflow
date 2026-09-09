@@ -7,17 +7,17 @@ import type { StepSourceUsage } from "../../types";
 // The sentence next to the Remove button on a step-source admin page.
 //
 // Four states, because there are four genuinely different situations and both
-// pages used to render one sentence for all of them ("flows using its steps
-// will stop running") whether or not any flow did. That is a warning nobody
-// can act on, and it made cleaning up a source added by mistake feel dangerous.
+// pages used to render one sentence for all of them ("flows using its steps will
+// stop running") whether or not any flow did — a warning nobody can act on,
+// which made cleaning up a source added by mistake feel dangerous.
 //
 // Shared by MCP servers and web APIs rather than copied: they ask the same
-// question of the same scan, and the interesting states here are the easy ones
-// to get wrong — a failed lookup must not read as "safe to delete", and a
-// count of flows the admin cannot see must not render as an empty list.
+// question of the same scan, and the states easiest to get wrong are the ones
+// that matter — a failed lookup must not read as "safe to delete", and a count
+// of flows the admin cannot see must not render as an empty list.
 //
-// `ns` is the i18n namespace of the page using it ("mcp", "webapi"), which
-// owns the wording; the shape of the decision lives here.
+// `ns` is the i18n namespace of the page using it, which owns the wording; the
+// shape of the decision lives here.
 export function StepSourceRemoveWarning({
   usage,
   ns,

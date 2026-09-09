@@ -91,21 +91,19 @@ func executeDelay(ctx context.Context, job core.Job, progress chan<- core.Progre
 
 	total := time.Duration(ms) * time.Millisecond
 
-	// A wait is pure waiting, and a worker is a serial claim → process loop
-	// out of a small pool — so sleeping here holds one of the daemon's few
-	// execution slots for the whole duration, and enough Waits in one flow
-	// stall every tenant. Hand the slot back instead and ask to be re-claimed
-	// at the deadline.
+	// A wait is pure waiting, and a worker is a serial claim → process loop out of
+	// a small pool — so sleeping here holds one of the daemon's few execution slots
+	// for the whole duration, and enough Waits in one flow stall every tenant. Hand
+	// the slot back instead and ask to be re-claimed at the deadline.
 	//
 	// The deadline is anchored on when the step became due, not on when this
 	// attempt started: the anchor survives the requeue, so the re-execution
-	// after the horizon passes computes the same deadline, finds no time left
-	// and finishes. Anchoring on now would restart the wait every hop.
+	// computes the same deadline and finishes. Anchoring on now would restart the
+	// wait every hop.
 	//
-	// Short waits stay inline either way — a sub-second pause is not worth a
-	// store write and a re-claim, and it cannot starve anything. So does any
-	// wait with no anchor: that means no job record is behind this step (a
-	// loop body, a unit harness) and nothing would ever resume a deferral.
+	// Short waits stay inline — not worth a store write and a re-claim, and they
+	// cannot starve anything. So does any wait with no anchor: no job record is
+	// behind the step, so nothing would ever resume a deferral.
 	anchor, deferrable := core.NodeEnqueuedAt(ctx)
 	deadline := time.Now().Add(total)
 	if deferrable {

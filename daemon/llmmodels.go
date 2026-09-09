@@ -15,25 +15,23 @@ import (
 
 // Live model catalogs for the AI steps.
 //
-// A model picker built from a list compiled into the binary is wrong twice
-// over: it cannot offer a model the vendor published after the release, and it
-// goes on offering one the vendor has withdrawn. The second is the worse half,
-// because it fails at run time inside someone's flow rather than at the moment
-// they pick. Gemini did exactly that — a model stayed in the catalog while
-// being closed to new keys.
+// A model picker built from a list compiled into the binary is wrong twice over:
+// it cannot offer a model the vendor published after the release, and it goes on
+// offering one the vendor has withdrawn — which fails at run time inside
+// someone's flow rather than at the moment they pick. Gemini did exactly that.
 //
 // So a provider that can be asked (llm.ProviderInfo.ListModels) is asked, per
-// tenant, because availability follows the credential and not the deployment.
-// Three properties matter more than freshness here:
+// tenant, because availability follows the credential. Three properties matter
+// more than freshness:
 //
-//   - The palette never waits. listDrops runs on every editor render; a vendor
-//     round trip on that path would put someone else's outage in the way of
+//   - The palette never waits. listDrops runs on every editor render, so a
+//     vendor round trip there would put someone else's outage in the way of
 //     opening a flow. A miss serves the compiled-in list and refreshes behind
-//     the request, so the answer is right from the second render on.
-//   - A failure is cached too, briefly. Without that, a tenant with a dead
-//     connection re-asks on every keystroke of the palette search.
-//   - A failure is never louder than the fallback it replaces. Nothing here
-//     surfaces an error: the picker simply shows what it showed before.
+//     the request.
+//   - A failure is cached too, briefly, or a tenant with a dead connection
+//     re-asks on every keystroke of the palette search.
+//   - A failure is never louder than the fallback: the picker simply shows what
+//     it showed before.
 const (
 	modelCacheTTL    = 15 * time.Minute
 	modelCacheErrTTL = 2 * time.Minute

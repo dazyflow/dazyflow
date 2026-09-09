@@ -1,23 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// orgFromHost derives the org slug encoded in a per-org subdomain host.
-// When the deployment sets a wildcard domain (e.g. "dazyflow.app"), a
-// visit to "acme.dazyflow.app" should preselect org=acme on the sign-in
-// page. This maps the browser hostname to that slug, or "" when the host
-// isn't a usable org subdomain.
+// orgFromHost derives the org slug encoded in a per-org subdomain host. When the
+// deployment sets a wildcard domain, a visit to "acme.dazyflow.app" should
+// preselect org=acme on the sign-in page.
 //
-// Returns "" (no org) when:
-//   - no wildcard domain is configured,
-//   - the host is the apex itself ("dazyflow.app"),
-//   - the label is multi-level ("a.b.dazyflow.app") — only single-label
-//     subdomains map to an org,
-//   - the label isn't a valid DNS-ish slug, or
-//   - the label is a reserved name we never hand out to an org.
+// Returns "" (no org) when: no wildcard domain is configured, the host is the
+// apex itself, the label is multi-level (only single-label subdomains map to an
+// org), the label isn't a valid DNS-ish slug, or the label is reserved.
 //
-// Reserved labels are the infrastructure/marketing hosts a wildcard
-// record would otherwise capture. They simply don't resolve to an org,
-// so the sign-in page falls back to its no-org behaviour for them.
+// Reserved labels are the infrastructure/marketing hosts a wildcard record would
+// otherwise capture; they fall back to the sign-in page's no-org behaviour.
 const RESERVED = new Set([
   "www",
   "app",

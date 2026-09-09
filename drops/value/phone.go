@@ -17,20 +17,16 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// phone.go is a typed source field, the phone-number sibling of url.go: the
-// Text drop's inline-or-wire ergonomics, constrained to a phone number and
-// normalized to E.164. Like url it declares an input port (so the number can be
-// computed upstream) and VALIDATES at run time, failing the node on a bad
-// number (bad_param) rather than emitting a `valid` boolean — a malformed
-// number is a mistake to surface at the field, not a value to thread onward.
+// phone.go is a typed source field, the phone-number sibling of url.go: the Text
+// drop's inline-or-wire ergonomics, constrained to a phone number and normalized
+// to E.164. It declares an input port so the number can be computed upstream,
+// and VALIDATES at run time, failing the node (bad_param) rather than emitting a
+// `valid` boolean — a malformed number is a mistake to surface at the field.
 //
-// Unlike url (which rides net/url from the stdlib), real phone parsing needs
-// libphonenumber's metadata — region-aware parsing of local formats
-// ("070-123 45 67" → +46701234567) and true validity (not just digit shape) —
-// so this drop depends on github.com/nyaruka/phonenumbers. The `default_region`
-// param (SE by default, matching the Nordic focus) is the region assumed when
-// the number isn't already in +international form; it's ignored for a number
-// that already starts with +.
+// Unlike url, which rides net/url, real phone parsing needs libphonenumber's
+// metadata: region-aware parsing of local formats and true validity, not just
+// digit shape. `default_region` (SE by default) is the region assumed when the
+// number isn't already in +international form, and is ignored when it is.
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{

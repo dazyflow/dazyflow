@@ -25,20 +25,17 @@ function rank(
   return out;
 }
 
-// suggestNextDrops ranks the drops to surface in the editor's "Suggested"
-// group when the user drags off a port.
+// suggestNextDrops ranks the drops to surface in the editor's "Suggested" group
+// when the user drags off a port.
 //
-// `fromOutput` reflects which handle was grabbed: an output (source) handle
-// ranks DOWNSTREAM modules (entries whose `from` is the dragged module); an
-// input (target) handle ranks UPSTREAM ones (`to` is the dragged module).
-// `srcPort` is the dragged port id: entries whose port on the dragged side
-// matches it are preferred, so a drop with several distinct outputs (a
-// router's matched/unmatched) suggests the right next step per pin. If no
-// entry matches the exact port, it falls back to any-port entries for the
-// module — so a single-output drop, or a port that's simply never been
-// wired before, still gets module-level suggestions. Candidates are
-// intersected with `allowed` (MIME-compatible) so a suggestion can always
-// actually wire. Returns [] when nothing qualifies.
+// `fromOutput` reflects which handle was grabbed: an output handle ranks
+// DOWNSTREAM modules, an input handle ranks UPSTREAM ones. Entries whose port on
+// the dragged side matches `srcPort` are preferred, so a router suggests the
+// right next step per pin; failing that, any-port entries for the module keep a
+// single-output drop, or a port never wired before, from suggesting nothing.
+//
+// Candidates are intersected with `allowed` (MIME-compatible) so a suggestion
+// can always actually wire. Returns [] when nothing qualifies.
 export function suggestNextDrops(
   adjacency: DropAdjacency[],
   srcModule: string,

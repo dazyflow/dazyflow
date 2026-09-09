@@ -11,21 +11,19 @@ import (
 // orglink.go builds the UI links the daemon mails out.
 //
 // The web app's routes carry no org segment — the active org is browser state
-// (localStorage) plus the session's server-side scope. So a link to an
-// org-scoped resource is ambiguous on its own: it opens against whichever org
-// the recipient's browser last used, and for anyone who belongs to more than
-// one that is usually the wrong one. The tenant-scoped loaders then answer
-// "not found", which reads to the user as the run or ticket having vanished.
+// plus the session's server-side scope — so a link to an org-scoped resource
+// opens against whichever org the recipient's browser last used. For anyone in
+// more than one org that is usually the wrong one, and the tenant-scoped loaders
+// then answer "not found", which reads as the run or ticket having vanished.
 //
-// withOrg pins the org onto such a link. The app honours the param on boot —
-// re-scoping the session when needed and then landing on the deep-linked page
-// (see web/src/lib/orgDeepLink.ts). An org the recipient can't act in is
-// ignored client-side, so pinning it is never a way to reach something.
+// withOrg pins the org onto such a link; the app honours the param on boot,
+// re-scoping the session and then landing on the deep-linked page. An org the
+// recipient can't act in is ignored client-side, so pinning is never a way to
+// reach something.
 //
-// Only pin an org on links to resources that are actually tenant-scoped. The
-// support AGENT queue, for instance, resolves tickets cross-tenant by design
-// (loadTicketForAgent), so pinning the filing org there would try to move the
-// agent out of their own org for no reason.
+// Only pin an org on links to resources that are actually tenant-scoped: the
+// support AGENT queue resolves tickets cross-tenant by design, so pinning the
+// filing org there would move the agent out of their own org for no reason.
 
 // orgQueryParam is the query key the app reads to select an org. The sign-in
 // page reads the same key for the unauthenticated case, and

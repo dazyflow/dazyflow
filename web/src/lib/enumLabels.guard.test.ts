@@ -3,19 +3,17 @@
 
 // The UI must render a dropdown's LABEL, never its stored value.
 //
-// `enum` values are API vocabulary — "not_equals", "in_range", "fixed_line".
-// `enumNames` is what a person reads. The Go side already insists every enum
-// carries labels (drops/enum_labels_test.go); this is the other half of that
-// bargain, and it went unheld for a long time: the mapping was open-coded in
-// five places, and the one surface that had NOT open-coded it — a read-only
-// enum on a node card — printed the identifier. A canvas node read
-// "not_equals" while the Inspector beside it read "does not equal", each
-// internally consistent, neither obviously broken.
+// `enum` values are API vocabulary — "not_equals", "in_range"; `enumNames` is
+// what a person reads. The Go side already insists every enum carries labels
+// (drops/enum_labels_test.go); this is the other half of that bargain, and it
+// went unheld: the mapping was open-coded in five places, and the one surface
+// that had not open-coded it printed the identifier, so a canvas node read
+// "not_equals" while the Inspector beside it read "does not equal".
 //
-// So the rule is now structural rather than remembered: `enumNames` is read
-// in exactly one module, and every screen goes through its two helpers. A
-// sixth open-coded copy is the thing this catches, because a sixth copy is
-// how the fifth one came to be wrong.
+// So the rule is structural rather than remembered: `enumNames` is read in
+// exactly one module and every screen goes through its two helpers. A sixth
+// open-coded copy is what this catches, because a sixth copy is how the fifth
+// came to be wrong.
 
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";

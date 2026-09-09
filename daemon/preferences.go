@@ -22,22 +22,16 @@ func (h *HTTPGateway) preferencesAPI() *preferencesAPI {
 	return &preferencesAPI{auditor: h.auditor(), svc: h.svc, Users: h.Users}
 }
 
-// Account preferences live under /me/preferences (authenticated; the
-// caller acts on their own account). Two concerns share the surface:
+// Account preferences live under /me/preferences (the caller acts on their own
+// account). Two concerns share the surface: operational notifications the user
+// may turn off (flow-failure email), and interface preferences that roam with
+// the account (theme, language) rather than living in one browser's
+// localStorage. Transactional and security mail is NOT governed here — it always
+// sends.
 //
-//   - Operational notifications the user may turn off (flow-failure
-//     email). Transactional/security mail (verification, password
-//     reset) is NOT governed here — it always sends.
-//   - Interface preferences that roam with the account (theme,
-//     language) so they follow the user across devices instead of
-//     living only in one browser's localStorage.
-//
-// PUT is a PARTIAL update: only the fields present in the body change.
-// The three settings are edited from independent UI controls (the
-// notification toggle, the theme picker, the language select), so a
-// full-replace PUT would have each control clobber the others. Absent
-// (nil) fields are left untouched; the response always echoes the full
-// resolved state.
+// PUT is a PARTIAL update. The three settings are edited from independent UI
+// controls, so a full-replace PUT would have each control clobber the others.
+// Absent fields are left untouched; the response echoes the full resolved state.
 
 func prefsEmail(p core.Principal) string { return p.Subject }
 

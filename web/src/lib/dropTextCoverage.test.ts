@@ -4,18 +4,16 @@
 // Coverage guards on the Swedish drop vocabulary.
 //
 // Unlike i18n/*.json, where a missing key renders loudly as the key name, every
-// lookup in dropText.ts falls back to the English it was handed, so a MISSING
+// lookup in dropText.ts falls back to the English it was handed — so a MISSING
 // translation (drop added, never translated) or a STALE one (English reworded,
-// fingerprint no longer matches) renders perfectly good English and nothing
-// says so. Both are checked here, for descriptions and for SV_PORTS, since a
-// pin label is the one drop string a reader meets without opening anything.
-// The allowlist below holds the labels that genuinely read the same in
-// Swedish; each new one has to be argued for once.
+// fingerprint no longer matches) renders perfectly good English and nothing says
+// so. Both are checked here, for descriptions and for SV_PORTS, since a pin
+// label is the one drop string a reader meets without opening anything.
 //
-// Every OTHER surface — the step's name, its params_schema, its connection
-// card — is guarded the same way at the bottom of this file. It was counted
-// first, as the note that stood here suggested: 207 strings were reaching a
-// Swedish reader in English.
+// The allowlist below holds the labels that genuinely read the same in Swedish;
+// each new one has to be argued for once. Every other surface — the step's name,
+// its params_schema, its connection card — is guarded the same way at the bottom
+// of this file.
 import { describe, expect, it } from "vitest";
 import catalog from "../i18n/drops/catalog.json";
 import {
@@ -172,20 +170,16 @@ describe("Swedish integration prose", () => {
   });
 });
 
-// The rest of the drop vocabulary: the step's own name and action line, the
-// app it belongs to, every string its params_schema puts in the Inspector, the
-// connection card on its app page, and the "keeps state" copy on the card.
+// The rest of the drop vocabulary: the step's own name and action line, the app
+// it belongs to, every string its params_schema puts in the Inspector, the
+// connection card on its app page, and the "keeps state" copy.
 //
-// These went unguarded on the argument quoted at the top of this file — "if one
-// of those is also mostly covered, the way to find out is to count it". Counted:
-// 127 field-help paragraphs, 25 field titles, 24 connection strings and 31 of
-// the names, dropdown options and keeps-state lines were reaching a Swedish
-// reader in English. Some were whole
-// drop families added after the last translation pass (Calendar, Mailbox, SFTP,
-// PDF, the JSON/XML/YAML writers); 38 were translations orphaned in one go when
-// the English was reworded from 'wire' to 'connect', which is exactly the
-// failure the fingerprint guard was built for and exactly the one a natural-key
-// map cannot see by itself.
+// These went unguarded on the argument that they were probably already covered.
+// Counted, 207 strings were reaching a Swedish reader in English — whole drop
+// families added after the last translation pass, plus 38 translations orphaned
+// in one go when the English was reworded from 'wire' to 'connect', which is
+// exactly what the fingerprint guard is for and what a natural-key map cannot
+// see by itself.
 //
 // A string is EXPECTED to fall through in four cases, and each list below says
 // which. Adding an entry is a decision, not a to-do: if you cannot say which of

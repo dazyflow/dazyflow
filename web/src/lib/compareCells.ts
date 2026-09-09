@@ -4,30 +4,18 @@
 // Ordering for a table cell whose type nobody declared.
 //
 // Mirrors compareCells in drops/transform/sort_rows.go, and for the same
-// reason: the values arrive as strings. A collection's store is all TEXT, and
-// rows that came from a spreadsheet or a CSV are strings whatever they look
-// like — so a plain string compare puts "10" before "9", which is the one
-// ordering a reader will not accept from a column of numbers.
+// reason: the values arrive as strings. A collection's store is all TEXT, so a
+// plain string compare puts "10" before "9".
 //
-// The rules, in order:
+// Blanks sort first in BOTH directions — a row with no value has no place in
+// the ordering, and pinning that end means flipping the direction doesn't
+// shuffle blanks through the rows you're reading. Then numbers numerically,
+// booleans false-first, everything else by locale-aware string compare.
 //
-//   blank (null / undefined / "")  first, in BOTH directions. A row with no
-//                                  value hasn't got a place in the ordering;
-//                                  parking it at one end keeps it from
-//                                  drifting into the middle of the data, and
-//                                  keeping that end fixed means flipping the
-//                                  direction doesn't shuffle the blanks
-//                                  through the rows you're reading. Same rule
-//                                  the Sort rows step applies.
-//   both numeric                   numeric compare, including string-encoded
-//                                  numbers ("10" > "9").
-//   both boolean                   false before true.
-//   otherwise                      locale-aware string compare.
-//
-// The last rule is the one deliberate difference from the Go comparator, which
-// compares bytes. This one sorts what a person is reading, so "Åsa" belongs
-// after "Anna" rather than after "Z" — and `numeric: true` additionally orders
-// "item2" before "item10", which byte order gets wrong.
+// That last rule is the one deliberate difference from the Go comparator, which
+// compares bytes: this one sorts what a person is reading, so "Åsa" belongs
+// after "Anna" rather than after "Z", and `numeric: true` orders "item2" before
+// "item10".
 
 // asNumber returns the numeric value of v when it is a number or a string that
 // is entirely a number. A string with trailing text ("12 kr") is NOT numeric:

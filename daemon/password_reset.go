@@ -21,23 +21,19 @@ import (
 	"github.com/dazyflow/dazyflow/internal/maillang"
 )
 
-// Password reset. Active only where a transactional mailer AND a public
-// base URL are configured (the link must be clickable from an inbox);
-// elsewhere /auth/forgot-password still reports success but sends
-// nothing, so the UI copy ("if an account exists, we've emailed a link")
-// stays honest without revealing whether the deployment can even mail.
+// Password reset. Active only where a transactional mailer AND a public base URL
+// are configured (the link must be clickable from an inbox); elsewhere
+// /auth/forgot-password still reports success but sends nothing, so the UI copy
+// stays honest without revealing whether the deployment can mail at all.
 //
-// The token rides on the user record as a SHA-256 hash + short expiry —
-// no extra store — exactly like email verification (email_verification.go).
-// Two security properties shape the flow:
+// The token rides on the user record as a SHA-256 hash + short expiry — no extra
+// store — exactly like email verification. Two security properties shape the
+// flow:
 //
-//   - Non-enumerating: forgot-password ALWAYS returns 200 and reset
-//     errors are uniform ("invalid or expired"), so neither endpoint
-//     can be mined to learn which emails have accounts.
-//   - Sign out everywhere: a successful reset revokes every existing
-//     session for the account. A reset is the user's lever against a
-//     thief who still holds a live cookie, so leaving old sessions alive
-//     would defeat the point.
+//   - Non-enumerating: forgot-password ALWAYS returns 200 and reset errors are
+//     uniform, so neither endpoint can be mined for which emails have accounts.
+//   - Sign out everywhere: a reset is the user's lever against a thief who still
+//     holds a live cookie, so it revokes every existing session.
 
 const resetTokenTTL = 1 * time.Hour
 

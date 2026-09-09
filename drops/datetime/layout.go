@@ -15,22 +15,19 @@ import (
 //
 // Go's own layouts are a reference date ("2006-01-02") rather than tokens, and
 // exposing that as the format field failed in the two ways a person actually
-// types. `YYYY-MM-DD` — the spelling everyone reaches for, and the one this
-// drop's own example title uses — is not a layout, so time.Format echoed it
-// verbatim: no error, the literal text "YYYY-MM-DD" in the email. And any
-// literal word sharing letters with the reference date was silently rewritten,
-// so "Due Monday 2 January" rendered as "Due Thursday 27 August".
+// types. `YYYY-MM-DD` is not a layout, so time.Format echoed it verbatim into
+// the email; and any literal word sharing letters with the reference date was
+// silently rewritten, so "Due Monday 2 January" rendered as "Due Thursday 27
+// August".
 //
-// So a custom format is rendered token by token here instead of being
-// translated into a Go layout: only what the table below matches is
-// substituted, everything else is copied out untouched, and an unrecognised
-// run of letters is an ERROR rather than output. Translating to a Go layout
-// could not fix the second bug — the literal text in the translated layout
-// would still go through time.Format and still be eaten.
+// So a custom format is rendered token by token here rather than translated into
+// a Go layout: only what the table matches is substituted, everything else is
+// copied out untouched, and an unrecognised run of letters is an ERROR. A
+// translated layout could not fix the second bug — its literal text would still
+// go through time.Format and still be eaten.
 //
-// The vocabulary is the LDML/moment one (YYYY, MM, DD, HH, mm, ss), because
-// that is what spreadsheets, most date pickers and most other automation tools
-// use, so it is the one a user has already met.
+// The vocabulary is the LDML/moment one (YYYY, MM, DD, HH, mm, ss), because that
+// is what spreadsheets, date pickers and other automation tools use.
 
 type formatToken struct {
 	tok    string

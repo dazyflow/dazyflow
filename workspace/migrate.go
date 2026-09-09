@@ -29,18 +29,13 @@ type MigrateResult struct {
 // Migrate copies every flow in src into dst, preserving each revision's id,
 // author, message, timestamp and label, and re-pointing the environments.
 //
-// Revision IDS ARE CARRIED OVER, which is what makes the migration safe to run
-// against a live install: anything already holding a revision id — a published
-// pointer, a link in someone's tab, a rollback the user is about to do — still
-// resolves afterwards.
+// Revision ids are carried over, which is what makes this safe to run against a
+// live install: a published pointer, a link in someone's tab or a rollback in
+// progress still resolves afterwards.
 //
-// Only flows that currently exist are moved. A flow deleted before the
-// migration keeps its history in the git workspace and does not come across;
-// the git directory is the archive for those, which is a reason to keep it
-// rather than delete it the moment the migration succeeds.
-//
-// dst must be Postgres-backed. Idempotent per revision, so a failed run can be
-// repeated.
+// Only flows that currently exist are moved — a flow deleted beforehand keeps
+// its history in the git workspace, which is a reason to archive that directory
+// rather than delete it. dst must be Postgres-backed. Idempotent per revision.
 func Migrate(ctx context.Context, dst, src *Store) (MigrateResult, error) {
 	var res MigrateResult
 	pg, ok := dst.b.(*pgBackend)
@@ -153,16 +148,12 @@ func (r *VerifyResult) flag(graphID, format string, args ...any) {
 
 // VerifyMigration compares dst against src flow by flow — current content,
 // published pointer, every revision's id and content, and labels — and reports
-// every difference.
+// every difference, so "is it safe to delete the git workspaces now?" has an
+// answer other than hoping.
 //
-// It exists so that "is it safe to delete the git workspaces now?" has an
-// answer other than hoping. Run it after migrating; an empty issue list means
-// every flow that still EXISTS came across intact.
-//
-// What it deliberately cannot tell you: a flow deleted before the migration is
-// not in the source's flow list either, so its history lives on only in the git
-// directory. That is the reason to archive that directory rather than delete
-// it, even on a clean verification.
+// An empty issue list means every flow that still EXISTS came across intact. A
+// flow deleted before the migration is not in the source's list either, so its
+// history lives on only in the git directory.
 func VerifyMigration(ctx context.Context, dst, src *Store) (VerifyResult, error) {
 	var res VerifyResult
 	srcIDs, err := src.ListGraphs()

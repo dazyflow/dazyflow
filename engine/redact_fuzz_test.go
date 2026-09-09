@@ -10,21 +10,18 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// The data-leak guard: for an arbitrary
-// resolved-secret value scattered across every field redactResult is
-// contracted to scrub — the output Ref string, the Inline value (plain
-// string, []byte, nested map KEYS and values, and slice elements at any
-// depth), and the error Message/Details — no occurrence of the plaintext may
-// survive redaction. The example-based tests in redact_test.go pin specific
-// shapes; this explores arbitrary secret values and surrounding bytes to find
-// a placement or boundary they miss.
+// The data-leak guard: for an arbitrary resolved-secret value scattered across
+// every field redactResult is contracted to scrub — the output Ref string, the
+// Inline value (plain string, []byte, nested map keys and values, slice elements
+// at any depth) and the error Message/Details — no occurrence of the plaintext
+// may survive. redact_test.go pins specific shapes; this explores arbitrary
+// values and surrounding bytes to find a placement they miss.
 //
 // The assertion uses an *independent* walker (redactionSurfaces) as its oracle
-// rather than re-using redactValue, so a bug in the code under test can't hide
+// rather than re-using redactValue, so a bug in the code under test cannot hide
 // the leak from the check. The walker visits exactly the contracted surfaces —
-// not Ref.MIME, the output port key, or Error.Code, which redaction
-// deliberately leaves untouched (controlled identifiers, not user data) and
-// which would otherwise read as false-positive "leaks".
+// not Ref.MIME, the output port key or Error.Code, which redaction deliberately
+// leaves untouched and which would otherwise read as false-positive leaks.
 func FuzzRedactResult_NoSecretSurvives(f *testing.F) {
 	for _, s := range []string{
 		"sk_live_supersecret",

@@ -3,24 +3,17 @@
 
 import type { ReactNode, SVGProps } from "react";
 
-// ServiceIcon renders a third-party service's icon (sign-in providers,
-// OAuth connectors). Where a service has its real logo wired up via the
-// `glyph` field below it shows that; otherwise it falls back to a
-// placeholder monogram tile. Both are real SVGs shaped like the
-// lucide/brand icons elsewhere, so swapping a monogram for a logo never
-// touches call sites — just add a `glyph` to the service's registry entry.
-//
-// The monogram fallback reads at a glance as a tinted rounded tile with
-// the service's initial, which keeps still-unwired admin surfaces
-// consistent and text-light: the icon carries the identity, not a label
-// beside it.
+// ServiceIcon renders a third-party service's icon (sign-in providers, OAuth
+// connectors): its real logo where the registry entry below has a `glyph`,
+// otherwise a placeholder monogram tile. Both are real SVGs shaped like the
+// lucide/brand icons elsewhere, so swapping a monogram for a logo never touches
+// call sites.
 //
 // Two homes for brand art, by design — keep them separate:
 //   • Inline `glyph` here — for the admin OAuth/SSO surfaces, where the
-//     component renders inline (monogram fallback, `size`/props spreading,
-//     no extra request for a tiny icon). New service icons go here.
-//   • /public/brands/*.svg — URL-referenced logos for the connector drops
-//     (a drop manifest's brandLogo points at one).
+//     component renders inline with no extra request for a tiny icon. New
+//     service icons go here.
+//   • /public/brands/*.svg — URL-referenced logos for the connector drops.
 // Don't mirror a logo into both; pick the home that matches the surface.
 
 type ServiceMeta = {

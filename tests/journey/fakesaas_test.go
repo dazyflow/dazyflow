@@ -3,15 +3,14 @@
 
 package journey
 
-// fakeSaaS is one HTTP server standing in for every outside service the
-// scenario corpus talks to, plus a tiny SMTP server for the mail step.
+// fakeSaaS is one HTTP server standing in for every outside service the scenario
+// corpus talks to, plus a tiny SMTP server for the mail step.
 //
-// It is deliberately STATEFUL. A flow that marks a spreadsheet row done must
-// see that row as done on its next run, or "nothing happens twice" is
-// untestable — which is the property most worth proving and the most damaging
-// to get wrong (a customer texted twice, an invoice raised twice). The sheet
-// here is a real in-memory sheet: values.get returns what values:batchUpdate
-// wrote.
+// It is deliberately STATEFUL. A flow that marks a spreadsheet row done must see
+// that row as done on its next run, or "nothing happens twice" is untestable —
+// and that is the property most worth proving and most damaging to get wrong.
+// The sheet here is a real in-memory sheet: values.get returns what
+// values:batchUpdate wrote.
 //
 // Every service records what it received, so a test asserts on what the world
 // actually saw rather than on the run's own status.

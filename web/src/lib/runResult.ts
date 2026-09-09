@@ -125,19 +125,17 @@ export function resultFilename(view: ResultView, flow: string): string {
 // pickResultNode chooses whose output the Result panel shows, or null when the
 // run has no value to lead with.
 //
-// Prefer a step at the end of the flow, so intermediate plumbing isn't
-// mistaken for the answer; fall back to the last step that produced anything
-// inline, which is the same node in a linear flow and the only option when the
-// graph can't be loaded (a deleted flow).
+// Prefer a step at the end of the flow, so intermediate plumbing isn't mistaken
+// for the answer; fall back to the last step that produced anything inline,
+// which is the same node in a linear flow and the only option when the graph
+// can't be loaded.
 //
-// The exception is the reason this is a function rather than an expression: a
-// flow whose end step emitted a FILE has no inline value at the end, and the
-// fallback then reaches backwards past it and presents an upstream step's
-// value as "the result". On a flow that reads a literal, converts it and
-// writes a CSV, that means the panel showed the flow's own INPUT — directly
-// above a Files panel holding the actual output. When the end of the flow
-// produced a file, the file is the result, and the Files panel is what names
-// it.
+// The exception is why this is a function rather than an expression: a flow
+// whose end step emitted a FILE has no inline value there, and the fallback then
+// reaches backwards and presents an upstream step's value as "the result" — on a
+// read-convert-write flow, the panel showed the flow's own INPUT above a Files
+// panel holding the actual output. When the end of the flow produced a file, the
+// file is the result.
 export function pickResultNode(
   nodes: JobRecord[],
   edges: Edge[] | undefined,

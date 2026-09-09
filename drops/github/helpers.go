@@ -1,22 +1,17 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package github hosts the GitHub launch connector — fourth T1
-// stop after Slack, Gmail, and Sheets. Three action drops cover
-// the common Zapier-shape patterns:
+// Package github hosts the GitHub connector. Three action drops cover the common
+// patterns:
 //
 //	github_create_issue  — open a new issue on a repo
 //	github_list_issues   — query issues (pairs with poll_trigger for
 //	                       "fire on new issue" workflows)
 //	github_add_comment   — comment on an issue or PR
 //
-// Webhook-driven triggers (`github_on_push`, `github_on_new_pr`)
-// are queued separately — they need the same shape of work as
-// slack_on_mention: HMAC-SHA256 signature verification against the
-// webhook secret, plus tenant routing by installation/repo. v1
-// here ships the action drops, which unlock both manual workflows
-// and "every 5 min: list issues since cursor → fire" composition
-// with poll_trigger.
+// Webhook-driven triggers are queued separately: they need the same shape of
+// work as slack_on_mention — HMAC-SHA256 signature verification against the
+// webhook secret, plus tenant routing by installation/repo.
 package github
 
 import (

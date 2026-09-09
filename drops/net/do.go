@@ -19,17 +19,15 @@ const defaultMaxResponseBytes = 16 << 20 // 16 MiB
 // Do runs one guarded outbound HTTP call — the shared epilogue every connector
 // needs, factored out of the dozen near-identical `<vendor>Do` helpers. It:
 //   - bounds the request with a timeout (timeoutMS; <=0 falls back to 30s),
-//   - runs the SSRF dial guard + egress allowlist (EgressAllowedFor): URLs can
-//     be tenant-supplied via base_url params, so a bearer token / API key must
-//     not be exfiltrable to a loopback/private/link-local or off-allowlist host,
+//   - runs the SSRF dial guard + egress allowlist: URLs can be tenant-supplied
+//     via base_url params, so a bearer token must not be exfiltrable to a
+//     loopback/private/link-local or off-allowlist host,
 //   - caps the response body at maxBytes so a hostile or buggy upstream can't
-//     OOM the daemon (rejected with an error whose message contains "exceeds").
+//     OOM the daemon (the error message contains "exceeds").
 //
-// It returns the status, the capped body, and the response header, and
-// deliberately does NOT interpret the result: vendor error shapes and
-// pagination headers differ, so the caller classifies. Callers supply their own
-// auth/content-type/idempotency via headers and their per-API maxBytes. This is
-// the connector sibling of llmtask.PostJSON.
+// It returns the status, the capped body and the response header, and
+// deliberately does NOT interpret the result: vendor error shapes and pagination
+// headers differ, so the caller classifies.
 func Do(ctx context.Context, method, url string, headers map[string]string, body []byte, timeoutMS, maxBytes int) (int, []byte, http.Header, error) {
 	if timeoutMS <= 0 {
 		timeoutMS = 30000

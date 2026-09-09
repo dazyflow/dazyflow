@@ -115,17 +115,17 @@ type cachedRun struct {
 }
 
 // RunCache holds that for recent runs. A run's payload is immutable once
-// submitted, so the only staleness risk would be a caller mutating the
-// returned graph — nothing on the run path does; every consumer reads it.
+// submitted, so the only staleness risk would be a caller mutating the returned
+// graph — every consumer on the run path reads it.
 //
 // Share one across a process's workers (WorkerConfig.Runs): a run's steps land
-// on whichever worker is free, so per-worker caches each re-read the run
-// record once — on a fleet of many workers that is a read per step.
+// on whichever worker is free, so per-worker caches each re-read the run record
+// once, which on a large fleet is a read per step.
 //
-// The window has to span every run the fleet has IN FLIGHT, not just the few
-// a worker is advancing: under a backlog the queue interleaves orgs, so
+// The window has to span every run the fleet has IN FLIGHT, not just the few a
+// worker is advancing: under a backlog the queue interleaves orgs, so
 // consecutive steps on one worker belong to different runs and a small window
-// misses on every step. Each miss is a round trip AND a re-parse of the whole
+// misses on every one. Each miss is a round trip AND a re-parse of the whole
 // flow JSON. A window that large is only affordable because the parses are
 // deduplicated — see graphs below.
 type RunCache struct {

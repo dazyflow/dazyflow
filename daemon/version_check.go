@@ -26,21 +26,19 @@ func (h *HTTPGateway) versionAPI() *versionAPI {
 	return &versionAPI{UpdateURL: h.UpdateURL}
 }
 
-// Version self-check — the System section of the platform admin page asks
-// "is there a newer release than the one I'm running?" and, if so, shows
-// the operator the one-line CLI command to upgrade.
+// Version self-check — the System section of the platform admin page asks "is
+// there a newer release than the one I'm running?" and, if so, shows the
+// one-line CLI command to upgrade.
 //
 //	GET /api/v1/admin/version — platform:admin only
 //
-// The "latest version" question has a public answer: the canonical
-// deployment always runs the newest release, and it already publishes its
-// build version on the unauthenticated GET /api/v1 descriptor. So we just
-// fetch that and compare — no git-host coupling, no token, works for any
-// operator. The upstream URL is configurable (DAZYFLOW_UPDATE_URL) and the
-// check fires only when an admin opens the page (never in the background),
-// so it isn't a silent phone-home. Empty URL disables it. The result is
-// cached process-wide so a refreshing admin can't amplify requests against
-// the canonical instance.
+// The question has a public answer: the canonical deployment always runs the
+// newest release and already publishes its build version on the unauthenticated
+// GET /api/v1 descriptor, so this fetches that and compares — no git-host
+// coupling, no token. The upstream URL is configurable (DAZYFLOW_UPDATE_URL, and
+// empty disables it) and the check fires only when an admin opens the page, so
+// it is not a silent phone-home. The result is cached process-wide so a
+// refreshing admin cannot amplify requests against the canonical instance.
 
 const DefaultUpdateURL = "https://dazyflow.r8.rs/api/v1"
 

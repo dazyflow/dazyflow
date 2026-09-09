@@ -12,30 +12,19 @@ import (
 )
 
 // The passthrough pin is added to every drop that doesn't opt out
-// (core.WithPassthrough), and on a ROUTER that is a correctness bug rather
-// than a cosmetic one. `pass` is re-emitted whenever the node SUCCEEDS,
-// regardless of which port the payload actually took — so a node wired to a
-// router's pass pin fires on every branch at once, punching a hole straight
-// through the routing the author drew. Manifest.NoPassthrough says so:
+// (core.WithPassthrough), and on a ROUTER that is a correctness bug: `pass` is
+// re-emitted whenever the node SUCCEEDS, regardless of which port the payload
+// took, so a node wired to a router's pass pin fires on every branch at once —
+// punching a hole through the routing the author drew.
 //
-//	pure routers (Branch): pass is emitted on every success regardless of
-//	which port the payload took, so a node wired to it fires on BOTH
-//	branches — punching a hole straight through the routing.
+// NoPassthrough says so, but it is a hand-set bool: a new routing drop that
+// forgot it would ship with that hole and every existing test would pass.
 //
-// Nothing enforced that. NoPassthrough is a hand-set bool, a new routing drop
-// that forgot it would ship with that hole, and every existing test would pass
-// — the flow just quietly runs both branches.
-//
-// A complete guard is not available: "these two output ports are mutually
-// exclusive" is not derivable from a manifest, and split_rows proves the
-// naive reading wrong (matched/unmatched look like a router's ports, but it
-// emits BOTH halves on every run, so the pin is right there). So this settles
-// for two checks that between them cover the realistic mistakes:
-//
-//  1. the drops that opt out today still do — the regression case, someone
-//     refactoring a manifest and dropping the flag;
-//  2. nothing NEW appears with exclusive-looking output ports and no flag —
-//     the new-router case, which is the one that would actually ship broken.
+// A complete guard is not available — "these two output ports are mutually
+// exclusive" is not derivable from a manifest, and split_rows emits BOTH halves
+// on every run despite looking like a router. So this settles for two checks:
+// the drops that opt out today still do, and nothing NEW appears with
+// exclusive-looking output ports and no flag.
 
 var routersMustOptOut = []string{
 	// Routers: the payload leaves by one port, never both.

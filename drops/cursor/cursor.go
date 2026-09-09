@@ -41,25 +41,17 @@ func SetStore(r Reader, w Writer) {
 	reader, writer = r, w
 }
 
-// Read returns the stored position. Three outcomes, and telling them apart is
-// the whole point of this signature:
+// Read returns the stored position. Telling the three outcomes apart is the
+// whole point of this signature:
 //
 //	("", nil)   nothing stored yet — a genuine first run. Baseline from here.
 //	(v,  nil)   the stored position.
 //	("", err)   the position could NOT be determined.
 //
-// A caller must never treat the third case as the first. Read used to fold
-// them together and return "" for both, which every dedupe drop then read as
-// "first run": one transient store hiccup made a poller re-baseline to
-// whatever was in front of it — silently marking as seen everything that had
-// arrived since the last successful poll, emitting nothing, and reporting
-// success. The mail, feed items or files in that window were skipped
-// permanently, because the overwritten watermark said they had been handled.
-//
-// Failing the step instead loses nothing: the stored position is left exactly
-// as it was, so the next poll resumes from it. That is the asymmetry to keep
-// in mind — a failed READ must abort before writing, while a failed WRITE is
-// safe (at worst the next run re-emits the same batch).
+// A caller must never treat the third case as the first: re-baselining on a
+// transient store failure silently marks everything that arrived since the last
+// poll as seen, and the overwritten watermark makes that permanent. Failing the
+// step instead loses nothing — the stored position stays as it was.
 func Read(ctx context.Context, tenant, name string) (string, error) {
 	mu.RLock()
 	r := reader
@@ -79,19 +71,10 @@ func FailRead(job core.Job, err error) core.Result {
 // its FIRST position — the baseline run that records where to start watching
 // and deliberately emits nothing.
 //
-// Only the baseline write is worth failing on, and the difference from a
-// steady-state write is the whole reason this exists:
-//
-//   - Steady state: the batch has already gone downstream. A failed write
-//     means the next run re-emits it, which is at-least-once and safe, so
-//     every drop ignores that error on purpose.
-//
-//   - Baseline: nothing was emitted, and nothing is recorded. The next run is
-//     therefore ALSO a first run, which baselines again. A write that keeps
-//     failing parks the flow in "first run" for ever — it emits nothing, ever,
-//     and each run looks like a successful empty poll. Failing costs nothing
-//     here (there is no batch to discard) and is the only signal the flow is
-//     not actually watching anything.
+// Only the baseline write is worth failing on. A failed steady-state write is
+// at-least-once and safe, but a baseline that keeps failing parks the flow in
+// "first run" for ever: it emits nothing, and every run looks like a successful
+// empty poll.
 func FailBaseline(job core.Job, err error) core.Result {
 	return fail(job,
 		"cursor_baseline_failed",

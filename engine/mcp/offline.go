@@ -10,11 +10,11 @@ import (
 
 // A server that will not connect, still described.
 //
-// A tool's manifest is what tells the editor the step's PORTS. Take it away and a
-// flow wiring a value into `mcp:vendor:create_issue`'s `title` has an edge
-// pointing at a port nobody can see — the card falls back to a bare in/out pair
-// and the wiring looks lost. Nothing on disk changed, but one careless save in
-// that state would make it so.
+// A tool's manifest is what tells the editor the step's PORTS. Take it away and
+// a flow wiring a value into an MCP step's `title` has an edge pointing at a
+// port nobody can see — the card falls back to a bare in/out pair and the wiring
+// looks lost. Nothing on disk changed, but one careless save in that state would
+// make it so.
 //
 // So a failed handshake keeps its tools, from the last list the server was seen
 // publishing, with every manifest stamped Unavailable. What does NOT survive is

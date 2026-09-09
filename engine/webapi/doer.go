@@ -12,17 +12,13 @@ import (
 // Doer performs one guarded outbound HTTP call. The signature is drops/net.Do's,
 // exactly, so cmd/dzd can wire that function in as-is.
 //
-// INJECTED rather than imported, and this is not a preference: drops/net
-// imports engine, so engine/webapi importing drops/net is an import cycle. The
-// design note said "executor over drops/net.Do" and was wrong about how — the
-// same wrongness engine/mcp already worked around for its SSRF dial guard
-// (mcp.SetDialControl, wired at cmd/dzd/main.go:979). Same hook pattern, same
-// reason, one more caller.
+// INJECTED rather than imported, because drops/net imports engine, so importing
+// it here would be a cycle — the same hook pattern engine/mcp already uses for
+// its SSRF dial guard.
 //
 // What the daemon's Do brings, and what a hand-rolled http.Client here would
 // silently drop: the SSRF dial guard, the per-tenant egress allowlist, the
-// per-(tenant, host) rate limit and 429 cooldown, and a response cap. Those are
-// the reasons this package must not own an http.Client of its own.
+// per-(tenant, host) rate limit and 429 cooldown, and a response cap.
 type Doer func(ctx context.Context, method, url string, headers map[string]string, body []byte, timeoutMS, maxBytes int) (int, []byte, http.Header, error)
 
 var doerHook atomic.Pointer[Doer]

@@ -6,16 +6,15 @@ package daemon
 // Driving the flow generator by hand — no API key, no vendor call.
 //
 // manualProvider stands in for the model: each turn it writes the exact prompt
-// the generator would have sent to a file and looks for a reply file written
-// by whoever (or whatever) is playing the model. A missing reply stops the run
-// with a message naming the file to write, so the loop can be walked one turn
-// at a time and resumed.
+// the generator would have sent to a file and looks for a reply file written by
+// whoever is playing the model. A missing reply stops the run with a message
+// naming the file to write, so the loop can be walked one turn at a time.
 //
-// This exists for two reasons. It lets the eval run against any model — or any
-// person — without wiring a vendor key into the test environment. And it makes
-// the generator's own scaffolding inspectable: the prompt, the catalog rows and
-// the describe_drop text are what the model actually has to work from, so
-// reading them is how you find out whether they're enough.
+// It lets the eval run against any model — or any person — without a vendor key
+// in the test environment, and it makes the generator's own scaffolding
+// inspectable: the prompt, the catalog rows and the describe_drop text are what
+// the model has to work from, so reading them is how you find out whether they
+// are enough.
 //
 //	FLOWGEN_MANUAL_DIR=.flowgen-manual go test ./daemon -run TestFlowGenManual -v
 //

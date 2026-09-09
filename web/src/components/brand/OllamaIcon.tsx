@@ -3,22 +3,20 @@
 
 import type { SVGProps } from "react";
 
-// OllamaIcon renders Ollama's llama mark, traced from the logo Ollama serves
-// at ollama.com/public/ollama.png. Shaped like a LucideIcon so it slots into
-// the iconFor() registry, alongside ClaudeIcon and OpenAIIcon.
+// OllamaIcon renders Ollama's llama mark, traced from the logo Ollama serves at
+// ollama.com/public/ollama.png. Shaped like a LucideIcon so it slots into the
+// iconFor() registry, alongside ClaudeIcon and OpenAIIcon.
 //
 // Two things differ from its siblings, both on purpose:
 //
 //   - It defaults to currentColor rather than a brand hue. The mark is
 //     monochrome and Ollama's own is black, which would disappear against the
-//     dark theme; inheriting the text colour is what keeps it legible in both.
-//   - The path is straight-line segments, not curves. It came from a raster
-//     source, so the outline is a traced contour simplified until the shape
-//     stopped changing at icon sizes. At the 16-24px this renders at the
-//     facets are not resolvable; do not "smooth" it by hand-editing points.
+//     dark theme.
+//   - The path is straight-line segments, not curves: it came from a raster
+//     source and was simplified until the shape stopped changing at icon sizes.
+//     At 16-24px the facets are not resolvable, so do not "smooth" it by hand.
 //
-// If Ollama ever publishes a vector mark, replace the path wholesale rather
-// than editing this one.
+// If Ollama ever publishes a vector mark, replace the path wholesale.
 type Props = SVGProps<SVGSVGElement> & {
   size?: number | string;
   color?: string;

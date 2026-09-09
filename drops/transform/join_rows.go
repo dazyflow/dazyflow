@@ -297,18 +297,15 @@ func requireColumns(side string, headers []string, rows []map[string]any, needed
 	return nil
 }
 
-// mergeRow emits one output row from a (left, right) pair. Either may
-// be nil. Columns from the absent side are still PRESENT in the map
-// (with nil values) so every output row carries the full header set —
-// SQL's "NULL columns are part of the tuple" semantics, and the
-// shape downstream consumers like compute_rows / CEL filters expect
-// (a missing key vs a present-nil key would behave differently for
-// `row.country != null`-style checks).
+// mergeRow emits one output row from a (left, right) pair; either may be nil.
+// Columns from the absent side are still PRESENT in the map with nil values, so
+// every output row carries the full header set — SQL's "NULL columns are part of
+// the tuple" semantics, and what downstream CEL filters expect, since a missing
+// key and a present-nil key behave differently for `row.country != null`.
 //
-// When one side is nil, the join-key columns get reconstituted from
-// whichever side is present so the row still carries the joined-on
-// values under the LEFT's column names — same trick a SQL full
-// outer join uses.
+// When one side is nil the join-key columns are reconstituted from whichever
+// side is present, so the row still carries the joined-on values under the
+// LEFT's column names — the same trick a SQL full outer join uses.
 func mergeRow(left, right map[string]any, leftHeaders []string, rightOut map[string]string, leftKeys, rightKeys []string) map[string]any {
 	out := make(map[string]any, len(leftHeaders)+len(rightOut))
 	if left != nil {

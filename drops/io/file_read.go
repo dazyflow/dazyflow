@@ -54,19 +54,16 @@ func init() {
 	})
 }
 
-// executeFileRead validates path inside the workspace sandbox and emits a
-// Ref pointing to the file. Default mode produces a workspace-relative
-// path that downstream native modules re-resolve via os.Root.
+// executeFileRead validates path inside the workspace sandbox and emits a Ref
+// pointing to the file. Default mode produces a workspace-relative path that
+// downstream native modules re-resolve via os.Root; ".." and absolute paths fail
+// with sandbox_escape.
 //
-// When the "inline" param is true the file's contents are embedded
-// directly in Ref.Inline — required for handoff to remote (gRPC) modules
-// that don't share the workspace filesystem. Text MIMEs (text/*,
-// application/json, application/csv) are inlined as strings to survive
-// the JSON wrapping that gRPC transport applies; other MIMEs are
-// inlined as []byte and end up base64-encoded across the wire (callers
-// must base64-decode on receipt — a known wart).
-//
-// Attempts to escape via ".." or absolute paths fail with sandbox_escape.
+// With the "inline" param the contents are embedded in Ref.Inline instead —
+// required for handoff to remote (gRPC) modules that don't share the workspace
+// filesystem. Text MIMEs are inlined as strings to survive the JSON wrapping
+// gRPC applies; other MIMEs are inlined as []byte and end up base64-encoded
+// across the wire, which callers must decode on receipt (a known wart).
 func executeFileRead(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	path, err := params.String(job.Params, "path")
 	if err != nil {

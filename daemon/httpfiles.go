@@ -27,11 +27,10 @@ func (h *HTTPGateway) filesAPI() *filesAPI {
 	return &filesAPI{svc: h.svc, logger: h.logger}
 }
 
-// httpfiles exposes the persistent workspace sandbox (<base>/<tenant>/
-// <workspace>/) as a browsable, manageable filesystem — the read/manage
-// half of the surface httpupload.go already writes to. All paths are
-// confined by os.Root (the same primitive upload uses), so a client path
-// can never escape the workspace.
+// httpfiles exposes the persistent workspace sandbox as a browsable, manageable
+// filesystem — the read/manage half of the surface httpupload.go writes to. All
+// paths are confined by os.Root, so a client path can never escape the
+// workspace.
 //
 // Routes (registered in httpgateway.go):
 //
@@ -42,9 +41,8 @@ func (h *HTTPGateway) filesAPI() *filesAPI {
 //	POST   …/files/mkdir   {path}    create a directory          (graph:edit)
 //	POST   …/files/rename  {from,to} move/rename                 (graph:edit)
 //
-// The per-run ephemeral scratch directory (.scratch) is internal plumbing
-// reclaimed when a run ends, so it is hidden from listings and protected
-// from mutation — browsing or deleting it would only confuse users and
+// The per-run ephemeral scratch directory (.scratch) is hidden from listings and
+// protected from mutation: browsing it would only confuse users, and deleting it
 // could break in-flight runs.
 
 type fileEntry struct {

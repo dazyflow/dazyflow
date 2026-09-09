@@ -24,26 +24,21 @@ var (
 // ReplayRun re-runs a finished run from the start, feeding the flow's trigger
 // step the data the original run was started with. Returns the new run's ID.
 //
-// Why this needs its own entry point rather than "submit the flow again": a
-// flow started by an inbound delivery — a POST to its /trigger URL, a hosted
-// form submission, a provider event (Slack mention, GitHub push, Stripe
-// payment) — begins at a step whose data arrived WITH that request. Nothing
-// re-derives it; the trigger drops' own Execute deliberately errors with
-// no_trigger_data ("nothing was sent to this flow"). So re-submitting the flow
-// produced a run that died on its first step, which is what "replay" used to
-// do for every webhook-triggered run.
+// It needs its own entry point rather than "submit the flow again" because a
+// flow started by an inbound delivery begins at a step whose data arrived WITH
+// that request. Nothing re-derives it — the trigger drops' Execute deliberately
+// errors with no_trigger_data — so re-submitting produced a run that died on its
+// first step.
 //
-// The delivery is still on record, though: the trigger path pre-completes the
-// trigger node with the request body/headers as its result (see
-// buildWebhookSeed → SubmitGraphWithSeed), so the original run's node record
-// holds that exact payload. Replay re-seeds it into the new run and lets every
-// other step execute normally — side effects included, which is why the UI
-// gates the button behind a confirm.
+// The delivery is still on record: the trigger path pre-completes the trigger
+// node with the request body and headers as its result, so the original run's
+// node record holds that exact payload. Replay re-seeds it and lets every other
+// step execute normally — side effects included, which is why the UI gates the
+// button behind a confirm.
 //
-// The flow definition is the CURRENT one, matching the editor's Run button and
-// the previous behaviour of this button: the point of replaying a failed
-// delivery is usually "I fixed the flow, put that payload through it again".
-// Only the trigger data comes from the old run.
+// The flow definition is the CURRENT one, matching the editor's Run button: the
+// point of replaying a failed delivery is usually "I fixed the flow, put that
+// payload through it again". Only the trigger data comes from the old run.
 func (s *Service) ReplayRun(ctx context.Context, p core.Principal, runID string) (string, error) {
 	rec, err := s.GetJob(ctx, p, runID)
 	if err != nil {

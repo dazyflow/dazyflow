@@ -4,27 +4,20 @@
 import type { SVGProps } from "react";
 import { useId } from "react";
 
-// GeminiIcon renders Google's Gemini spark. Shaped like a LucideIcon so it
-// slots into the iconFor() registry, alongside ClaudeIcon, OpenAIIcon and
-// OllamaIcon.
+// GeminiIcon renders Google's Gemini spark. Shaped like a LucideIcon so it slots
+// into the iconFor() registry, alongside ClaudeIcon, OpenAIIcon and OllamaIcon.
 //
-// It is a REDRAW of the mark, not the file. The published SVG
-// (web/public/brands/gemini.svg, kept verbatim for the docs) paints the spark
-// by masking a stack of eleven Gaussian-blurred colour blobs — a soft
-// multi-hue glow at full size. Two reasons that file is not what this renders:
+// It is a REDRAW of the mark, not the file. The published SVG (kept verbatim for
+// the docs) paints the spark by masking eleven Gaussian-blurred colour blobs,
+// and that does not survive here: at 16-24px every blur radius is larger than
+// the icon, so the glow collapses into a flat smear at the cost of eleven filter
+// primitives per instance — and the filters and mask are referenced by
+// document-wide id, so a component rendered many times on one page resolves the
+// later copies against the first one's filters.
 //
-//   - At the 16-24px this component draws at, every blur radius is larger than
-//     the icon. The glow collapses into a flat smear and costs eleven filter
-//     primitives per instance to do it.
-//   - Those filters and the mask are referenced by document-wide id. A React
-//     component renders many times on one page (a palette, a node card, a
-//     catalog row), and duplicate ids make the later copies resolve against
-//     the first one's filters.
-//
-// So the outline path is the mask's own spark, filled with the same
-// #4893FC → #969DFF → #BD99FE gradient the file's paint0 defines. The id that
-// remains is scoped per instance with useId(), which is the same collision the
-// second point describes, solved rather than avoided.
+// So the outline path is the mask's own spark, filled with the gradient the
+// file's paint0 defines. The id that remains is scoped per instance with
+// useId().
 type Props = SVGProps<SVGSVGElement> & {
   size?: number | string;
   color?: string;

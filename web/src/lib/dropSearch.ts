@@ -11,25 +11,22 @@ import {
 
 // Swedish → catalog vocabulary.
 //
-// The drop catalog is authored in English (label, subtitle, integration and
-// tags come off core.Manifest), so instead of translating every manifest the
-// QUERY is translated: each token expands through the table into English terms
-// that occur in the catalog. An alias hit scores a shade below a literal hit
-// (ALIAS_WEIGHT), so aliases can add results but never reorder English ones.
-// The table applies in every locale, since Swedish users often run the English
-// UI and none of these words collide with English catalog text.
+// The drop catalog is authored in English, so instead of translating every
+// manifest the QUERY is translated: each token expands through the table into
+// English terms that occur in the catalog. An alias hit scores a shade below a
+// literal one (ALIAS_WEIGHT), so aliases can add results but never reorder
+// English ones. The table applies in every locale, since Swedish users often run
+// the English UI.
 //
 // The table itself lives in Go (internal/svsearch) and dropSearchAliases.ts is
-// generated from it, because the server-side search behind search_drops and the
-// MCP list_drops tool needs the same vocabulary. It used to live here, which
-// meant a Swedish word added for someone searching this palette did nothing for
-// the same person asking the AI to build the flow.
+// generated from it, because search_drops and the MCP list_drops tool need the
+// same vocabulary — a Swedish word added for this palette should also work when
+// the same person asks the AI to build the flow.
 //
 // The two sides deliberately differ in POLICY, not vocabulary: this one expands
-// every token, so "fakt" reaches "faktura" while someone is still typing, while
-// the Go side expands only a token the catalogue cannot answer literally —
-// there is nothing being typed there, and eager expansion reordered English
-// results ("check" reaches the Swedish "checksumma").
+// every token, so "fakt" reaches "faktura" mid-typing, while the Go side expands
+// only a token the catalogue cannot answer literally — nothing is being typed
+// there, and eager expansion reordered English results.
 
 // fold normalizes a term for alias lookup: lowercase, Swedish and common
 // accented vowels folded to ASCII, and every separator dropped — so "E-post",

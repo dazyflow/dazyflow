@@ -10,22 +10,19 @@ import (
 	"time"
 )
 
-// OrgAuthConfig is the per-tenant sign-in policy. Today it carries
-// Google Workspace SSO config; future providers (Microsoft Entra,
-// Okta, SAML) extend the same record.
+// OrgAuthConfig is the per-tenant sign-in policy. Today it carries Google
+// Workspace SSO config; future providers extend the same record.
 //
-// GoogleClientSecret is plaintext ON THIS STRUCT but must never be
-// persisted that way. daemon.EncryptedOrgAuthStore decorates every
-// OrgAuthStore and keeps the secret in the per-tenant encrypted secret
-// store, writing an empty string to the org_auth column — so a database
-// dump exposes no client secrets. Implementations of this interface should
-// therefore treat the field as "whatever the decorator handed me" and not
-// assume the column is the system of record.
+// GoogleClientSecret is plaintext ON THIS STRUCT but must never be persisted
+// that way: daemon.EncryptedOrgAuthStore decorates every OrgAuthStore and keeps
+// the secret in the per-tenant encrypted secret store, writing an empty string
+// to the org_auth column, so a database dump exposes no client secrets. An
+// implementation should treat the field as "whatever the decorator handed me"
+// rather than assume the column is the system of record.
 //
-// WorkspaceDomain restricts which Google accounts can sign into this
-// org: the hd= claim on Google's response must match. Empty means
-// any Google account whose email matches a member of the org may
-// sign in (less strict, useful for personal-Gmail-using small teams).
+// WorkspaceDomain restricts which Google accounts can sign into this org — the
+// hd= claim must match. Empty means any Google account whose email matches a
+// member of the org may sign in.
 type OrgAuthConfig struct {
 	Tenant                string    `json:"tenant"`
 	GoogleClientID        string    `json:"google_client_id"`

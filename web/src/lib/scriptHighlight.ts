@@ -1,15 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// A tiny, dependency-free highlighter for the scripts a flow sends to one of
-// the org's own machines (the Run on your machine step). One scanner,
-// parameterised per language, emitting tokens the editor renders as <span>s.
+// A tiny, dependency-free highlighter for the scripts a flow sends to one of the
+// org's own machines (the Run on your machine step). One scanner, parameterised
+// per language, emitting tokens the editor renders as <span>s.
 //
-// It is NOT a parser and never judges validity. A script is written for a
-// machine this browser cannot see, running an interpreter it cannot inspect, so
-// there is nothing here to validate against — the value is purely that a wall
-// of monospace text becomes readable while typing: comments recede, strings and
-// keywords separate, and a ${secret.…} reference is visibly not shell syntax.
+// It is NOT a parser and never judges validity: the script runs on a machine
+// this browser cannot see. The value is purely that a wall of monospace becomes
+// readable while typing — comments recede, strings and keywords separate, and a
+// ${secret.…} reference is visibly not shell syntax.
 //
 // The language set matches the step's "Run it with" dropdown, because that is
 // the only thing that says what the text in the box IS. A shell script and a

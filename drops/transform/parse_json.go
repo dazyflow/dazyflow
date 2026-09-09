@@ -88,19 +88,17 @@ func executeParseJSON(_ context.Context, job core.Job, _ chan<- core.Progress) (
 
 	rows, err := rowsFromValue(value)
 	if err != nil {
-		// A path is an explicit instruction to dig to one place, and what sits
-		// there is very often a scalar — a version string, an id, a count. To
-		// fail the whole step for that is wrong twice over: the caller got
-		// exactly what they asked for, and the `value` pin that exists to
-		// carry it was unreachable, because rows are built first. So a dug
-		// value that isn't row-shaped yields EMPTY rows and a populated value.
+		// A path is an explicit instruction to dig to one place, and what sits there
+		// is very often a scalar — a version string, an id, a count. Failing the step
+		// for that is wrong twice over: the caller got exactly what they asked for,
+		// and the `value` pin that exists to carry it was unreachable because rows are
+		// built first. So a dug value that isn't row-shaped yields EMPTY rows and a
+		// populated value.
 		//
-		// Only with a path, though. Without one, "the JSON you handed me is
-		// not row-shaped" is a genuine mistake — an AI step that returned
-		// prose, an API that answered with a bare string — and it still fails
-		// rather than handing back zero rows for someone to discover three
-		// steps later. Asking for a scalar is a choice; being given one is a
-		// surprise.
+		// Only with a path, though. Without one, "the JSON you handed me is not
+		// row-shaped" is a genuine mistake and still fails, rather than handing back
+		// zero rows for someone to discover three steps later. Asking for a scalar is
+		// a choice; being given one is a surprise.
 		if !dug {
 			return params.Err(job, "not_tabular", err.Error()), nil
 		}

@@ -7,23 +7,20 @@ import type { DescriptionMap } from "../lib/dropText";
 //
 // The gallery was the last customer-facing view still reading English straight
 // off the wire: its chrome translated, and then every card's title, one-liner
-// and group heading came from web/public/templates/index.json and rendered as
-// authored. A page whose buttons are Swedish and whose content is not reads
-// worse than either would alone.
+// and group heading came from templates/index.json and rendered as authored.
 //
 // Same shape and same drift guard as the drop catalog (see dropText.ts): keyed
 // by '<template id>.title' / '<template id>.use_case', with `en` holding the
 // descriptionFingerprint of the English the translation was made from. Reword
 // the English in index.json and the reader gets the new English rather than a
 // Swedish sentence about something else — visibly untranslated beats silently
-// wrong, and index.json is a data file that changes without anyone opening
-// this one.
+// wrong, and index.json changes without anyone opening this file.
 //
 // To refresh an entry: retranslate, then recompute the fingerprint with the
 // FNV-1a walk documented in i18n/drops/descriptions.sv.ts.
 //
-// Product names stay English — Slack is Slack, Stripe is Stripe, Drive is
-// Drive — because that is what the reader will click on in the other tab.
+// Product names stay English — Slack is Slack, Stripe is Stripe — because that
+// is what the reader will click on in the other tab.
 export const SV_TEMPLATE_PROSE: DescriptionMap = {
   "try-it-now.title": {
     en: "230a3829",

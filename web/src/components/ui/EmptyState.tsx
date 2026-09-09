@@ -9,13 +9,10 @@ const GLYPH = 28;
 // EmptyState is the placeholder for a list, page or panel with nothing in it
 // yet: a glyph, a heading, one sentence, and the action that fills it.
 //
-// Five surfaces built this by hand under four different class families —
-// `.admin-empty`, `.flow-empty`, `.trigger-empty`, `.approvals-empty` — and had
-// drifted into three separate looks for the same state: a dashed placeholder box
-// on the API-keys and users pages, a solid card with a shadow on the flow list
-// and the approvals inbox, and a borderless block floating in the triggers
-// dialog. The shared look is the dashed one, because a dashed outline says
-// "waiting to be filled" and a solid card says "here is some content".
+// Five surfaces built this by hand under four class families and had drifted
+// into three looks for the same state. The shared look is the dashed one,
+// because a dashed outline says "waiting to be filled" where a solid card says
+// "here is some content".
 //
 // `title` is optional: a no-search-results state has nothing to add above the
 // one line explaining itself, and a heading there would just repeat it.

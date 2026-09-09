@@ -2,26 +2,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Swedish vocabulary for the params-schema surface: the labels, help text and
-// dropdown options the Inspector form renders from each drop's
-// params_schema, plus the connection fields on the Apps pages and the
-// keeps-state copy on a node card.
+// dropdown options the Inspector renders from each drop's params_schema, plus
+// the connection fields on the Apps pages and the keeps-state copy on a card.
 //
 // Natural keys — the English string itself — for the same reason as the labels
 // in dropText.ts: an English string reworded on the Go side stops matching and
-// falls back to the new English, instead of showing a stale translation. These
-// are all sentences or shorter (the longest is under 400 characters), so no
-// fingerprint indirection is needed; the key IS the fingerprint.
+// falls back to the new English rather than showing a stale translation. These
+// are all sentences or shorter, so the key IS the fingerprint.
 //
 // Left untranslated on purpose (the fallback returns them verbatim):
 //   - anything identical in Swedish ("Status", "SQL", "Metadata", "HTML")
 //   - product and model names ("GPT-4o", "Claude Sonnet 4.6")
-//   - literal example values and placeholders (smtp.example.com, sk-ant-…,
-//     eu-playground, "nominatim (default)") — those are things to type, not
-//     read, so translating them would be actively wrong.
+//   - literal example values and placeholders (smtp.example.com, sk-ant-…) —
+//     things to type, not read, so translating them would be actively wrong.
 //
 // Identifiers inside prose stay English for the same reason: 'mode', `row`,
-// conflict_columns and STRIPE_API_KEY are what the user types and what the
-// service returns.
+// conflict_columns and STRIPE_API_KEY are what the user types.
 
 export const SV_FIELD_TITLES: Record<string, string> = {
   "Rules": "Regler",

@@ -1,30 +1,23 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package klarna hosts the native Klarna connector — the Nordic buy-now-pay-later
-// giant. The shipped drops are a thin first vertical over Klarna's Order
-// Management API: look up an order (klarna_get_order), capture it when the goods
-// ship (klarna_capture_order), and refund it (klarna_refund_order). That's the
-// post-purchase back-office loop a workflow tool actually automates; the
+// Package klarna hosts the native Klarna connector. The drops are a thin first
+// vertical over Klarna's Order Management API: look up an order, capture it when
+// the goods ship, refund it — the post-purchase back-office loop. The
 // checkout/session flow needs a browser SDK and isn't a server-side fit.
 //
-// Auth is Klarna's HTTP Basic scheme: an API username (a UID like "PK…") as the
-// user and a shared secret as the password. Like 46elks and Stripe this is a
-// static-credential connector — no daemon-side OAuth provider or token lookup.
-// The username + password + region are a per-tenant service connection
-// (Manifest.ConnectionFields), set once on the Apps page and injected into each
-// action's job at run time, so credentials never live in the graph. This mirrors
-// ntfy / Home Assistant / SMTP / 46elks.
+// Auth is Klarna's HTTP Basic scheme (API username + shared secret), so like
+// 46elks and Stripe this is a static-credential connector: the username,
+// password and region are a per-tenant service connection set once on the Apps
+// page and injected at run time, never living in the graph.
 //
-// Klarna is region-hosted: credentials are bound to one data region AND to
-// production vs. the playground sandbox, each a distinct API host. The region is
-// therefore part of the connection (regionBase maps it to a host), defaulting to
-// the EU playground so a half-configured connection hits the sandbox rather than
-// moving real money.
+// Klarna is region-hosted, and credentials are bound to one data region AND to
+// production vs the playground sandbox, each a distinct host. The region is part
+// of the connection (regionBase maps it to a host), defaulting to the EU
+// playground so a half-configured connection cannot move real money.
 //
-// Klarna has no webhooks on this API, so event reactions ("new captured order")
-// compose the same way the Stripe/Fortnox connectors document: a poll trigger
-// driving klarna_get_order (or a future list source) → for_each.
+// Klarna has no webhooks on this API, so event reactions compose as a poll
+// trigger driving klarna_get_order → for_each.
 package klarna
 
 import (

@@ -17,18 +17,15 @@ import (
 	"sync/atomic"
 )
 
-// Metrics is a tiny in-process metrics registry for the cumulative
-// series the pull-on-scrape gauges in httpmetrics.go can't express: HTTP
-// request rate/errors/duration (RED) and per-node execution latency.
-// Hand-rolled to match the rest of /metrics (no client_golang
-// dependency). All observe paths are safe for concurrent callers — the
-// hot increments are atomic; the mutex only guards lazy creation of a
-// new label set, so after warmup it's contention-free.
+// Metrics is a tiny in-process metrics registry for the cumulative series the
+// pull-on-scrape gauges in httpmetrics.go can't express: HTTP request
+// rate/errors/duration and per-node execution latency. Hand-rolled to match the
+// rest of /metrics, with no client_golang dependency.
 //
-// Cardinality is deliberately bounded: HTTP counters key on
-// (method, code) and the duration histogram on method; node latency
-// keys on terminal status. None of these are caller-controlled, so the
-// series count stays small and stable.
+// All observe paths are safe for concurrent callers — the hot increments are
+// atomic and the mutex only guards lazy creation of a new label set, so after
+// warmup it is contention-free. Cardinality is deliberately bounded and none of
+// the label values are caller-controlled, so the series count stays small.
 type Metrics struct {
 	mu       sync.Mutex
 	httpReqs map[string]*atomic.Int64 // key: method + "\x00" + statusCode

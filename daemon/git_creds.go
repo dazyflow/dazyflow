@@ -17,13 +17,12 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Git credentials are named, per-org auth bundles a git_checkout node selects
-// by `account` — the same "configure once, pick per node" model the OAuth
-// connectors use. One credential can carry an SSH key (for git@/ssh:// URLs)
-// and/or an HTTPS access token / PAT (for https:// URLs), so a single
-// "github" credential works for the repo whichever way it's cloned. They live
-// in the per-tenant encrypted store under a reserved prefix (shared tenant
-// DEK), and never appear on the user Credentials page.
+// Git credentials are named, per-org auth bundles a git_checkout node selects by
+// `account` — the same "configure once, pick per node" model the OAuth connectors
+// use. One credential can carry an SSH key (for git@/ssh:// URLs) and/or an
+// HTTPS token (for https:// URLs), so a single "github" credential works for the
+// repo whichever way it is cloned. They live in the per-tenant encrypted store
+// under a reserved prefix and never appear on the Credentials page.
 //
 //	gitcred.<account>.private_key   (ssh; optional)
 //	gitcred.<account>.passphrase    (ssh; optional)

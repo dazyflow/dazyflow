@@ -333,24 +333,19 @@ export function App() {
 
 const HAS_FLOWS_KEY = "dazyflow.hasFlows";
 
-// RootRedirect decides where a logged-in user lands on the bare root.
-// Three branches:
-//   - A query string means "intentional deep-link" → /flows
-//     (preserves ?run=… etc).
-//   - A sticky localStorage flag from a previous session means the
-//     user already has flows → /flows. Skips the wizard on every
-//     return visit instead of forcing it.
-//   - Otherwise (no flag yet), default to /welcome — the first-run
-//     wizard is the right surface for someone with no flows yet.
 // SupportRoot renders the right /support landing per role: a support agent sees
 // their flow-view home (grant-gated redacted views); everyone else sees their
-// own tickets. Keeping both at /support means upstream's back-links (Support
-// FlowView → /support) and the user's ticket links all resolve unchanged.
+// own tickets. Keeping both at /support means the back-links from Support
+// FlowView and the user's ticket links all resolve unchanged.
 function SupportRoot() {
   const { hasPerm } = useAuth();
   return hasPerm("support:agent") ? <SupportAgentHome /> : <SupportTickets />;
 }
 
+// RootRedirect decides where a logged-in user lands on the bare root: a query
+// string means an intentional deep-link (→ /flows, preserving it), a sticky
+// localStorage flag from a previous session means they already have flows (→
+// /flows, skipping the wizard on every return visit), and otherwise /welcome.
 function RootRedirect() {
   const loc = useLocation();
   const { me, token, activeTenant, activeWorkspace } = useAuth();

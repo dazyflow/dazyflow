@@ -68,18 +68,14 @@ func (b *BuiltinProvider) Get(ctx context.Context, name string) (string, error) 
 	return v, nil
 }
 
-// scopedName validates that `name` is of the form `<tenant>.<key>`
-// where tenant matches the caller's tenant from context, and returns
-// the full string (with the prefix intact) for the downstream lookup.
-// Used by builtin:// when Namespaced=true to enforce
-// per-tenant ACL on shared secret stores.
+// scopedName validates that `name` is of the form `<tenant>.<key>` where tenant
+// matches the caller's tenant from context, and returns the full string with the
+// prefix intact for the downstream lookup. Used by builtin:// when Namespaced is
+// true, to enforce per-tenant ACL on shared secret stores.
 //
-// Returns a clear error in three cases:
-//   - no tenant in context (the resolver was called outside a job —
-//     tenant-scoped reads only make sense with a tenant identity)
-//   - name doesn't contain a dot (no tenant prefix to verify)
-//   - tenant prefix doesn't match the caller's tenant (cross-tenant
-//     access attempt — the actual security check)
+// Errors when there is no tenant in context (the resolver was called outside a
+// job), when name has no dot to carry a prefix, and — the actual security check
+// — when the prefix doesn't match the caller's tenant.
 func scopedName(ctx context.Context, name, scheme string) (string, error) {
 	tenant, ok := core.TenantFromContext(ctx)
 	if !ok || tenant == "" {

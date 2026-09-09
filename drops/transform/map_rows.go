@@ -78,20 +78,17 @@ type mapSpec struct {
 	filterIn  map[string][]any
 }
 
-// executeMapRows applies a static row-transformation spec. The order
-// of operations is fixed (filter → select/drop → default → rename)
-// and ALL operation keys refer to INPUT column names — rename
-// happens last and only affects the output, so an entry like
-// `filter_eq: {status: "active"}` always means "the input column
-// named status", not whatever you renamed it to.
+// executeMapRows applies a static row-transformation spec. The order of
+// operations is fixed (filter → select/drop → default → rename) and ALL
+// operation keys refer to INPUT column names, since rename happens last and only
+// affects the output — so `filter_eq: {status: "active"}` always means the input
+// column named status.
 //
-// This is the explicit no-expression-language design: less power
-// than a full eval but no sandboxing concern, no surprises around
-// scope, and the params schema is itself a contract. When the
-// expressive ceiling becomes the bottleneck (string concat,
-// arithmetic, conditional defaults), the right answer is a sibling
-// `compute_rows` drop backed by CEL or similar — not turning this
-// one into a partial expression evaluator.
+// This is the explicit no-expression-language design: less power than a full
+// eval, but no sandboxing concern, no surprises around scope, and the params
+// schema is itself a contract. When the expressive ceiling becomes the
+// bottleneck the answer is the sibling compute_rows drop, not turning this one
+// into a partial expression evaluator.
 func executeMapRows(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	rows, inputHeaders, errRes, ok := loadRowsAndHeaders(job)
 	if !ok {

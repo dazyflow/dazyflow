@@ -8,18 +8,15 @@ import (
 	"sync"
 )
 
-// LogTail tees the process's log stream. It is an io.Writer meant to sit
-// behind the standard logger (via log.SetOutput(io.MultiWriter(os.Stderr,
-// tail))): every write still reaches stderr, and a copy is split into lines,
-// retained in a bounded ring buffer, and fanned out to live subscribers.
+// LogTail tees the process's log stream. It is an io.Writer meant to sit behind
+// the standard logger (log.SetOutput(io.MultiWriter(os.Stderr, tail))): every
+// write still reaches stderr, and a copy is split into lines, retained in a
+// bounded ring buffer, and fanned out to live subscribers.
 //
-// Why tee in-process rather than read a log file or journald: dzd logs only
-// to stderr (there is no log file), and the production container runs
-// unprivileged — it can't read the docker socket or the systemd journal. So
-// the deployment-agnostic way to expose "the real system log" to a platform
-// admin is to capture exactly what the daemon emits, from the moment the tee
-// is installed onward. The ring buffer gives a new viewer recent history;
-// subscribers get every line live.
+// Teeing in-process rather than reading a log file or journald, because dzd logs
+// only to stderr and the production container runs unprivileged — it can read
+// neither the docker socket nor the systemd journal. The ring buffer gives a new
+// viewer recent history; subscribers get every line live.
 type LogTail struct {
 	mu      sync.Mutex
 	buf     []string

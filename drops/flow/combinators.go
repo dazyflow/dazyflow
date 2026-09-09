@@ -12,22 +12,18 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// Boolean combinators — AND / OR / NOT — the missing third of the Unreal
-// Blueprint "logic" set. The comparison operators in operators.go PRODUCE
-// booleans (A > B); these COMBINE them, so "A > 10 AND B < 5" no longer needs
-// nested Branches — wire both Compare results into an AND and feed its Yes/No output
-// into a single Branch.condition.
+// Boolean combinators — AND / OR / NOT — the missing third of the Blueprint
+// "logic" set. The comparison operators in operators.go PRODUCE booleans; these
+// COMBINE them, so "A > 10 AND B < 5" no longer needs nested Branches.
 //
 // Like the comparison primitives they sit in the "logic" category, emit a
-// boolean on the Yes/No output, and are pure predicates (NoPassthrough). Every input is
-// coerced through asBool (branch.go), the same coercion Branch.condition uses,
-// so a combinator reads a Compare result, a raw bool, or the truthy
-// strings/numbers asBool accepts — one coercion for the whole package, no
-// drift.
+// boolean, and are pure predicates (NoPassthrough). Every input is coerced
+// through asBool (branch.go), the same coercion Branch.condition uses, so there
+// is one coercion for the whole package and no drift.
 //
-// AND/OR are variadic (wire two or more boolean pins, like Merge's fan-in);
-// NOT is unary. None take literal params: a combinator's whole job is to fold
-// upstream booleans, so there's nothing to type on the node.
+// AND/OR are variadic (wire two or more boolean pins, like Merge's fan-in); NOT
+// is unary. None take literal params: a combinator's whole job is to fold
+// upstream booleans.
 
 func init() {
 	registerCombinator(combinatorSpec{

@@ -1301,16 +1301,14 @@ func backlogServer(t *testing.T, ids []string, dateByID map[string]string) *http
 
 // #5, the silent one: more email arrived than max_results. messages.list hands
 // back the NEWEST max_results, so emitting those and advancing the watermark to
-// the newest of them puts everything older permanently behind the watermark —
-// gone, on a green run. The poll must drain from the OLDEST end instead, so a
-// burst is delayed across polls rather than truncated.
+// the newest of them puts everything older permanently behind it — gone, on a
+// green run. The poll must drain from the OLDEST end instead, so a burst is
+// delayed across polls rather than truncated.
 //
-// The assertion is the invariant rather than per-poll batch sizes: polling
-// until it goes quiet must yield every email exactly once, in arrival order,
-// and must terminate. (Batch sizes are not exactly max_results every time —
-// the second-granular `after:` bound brings the boundary email back, where the
-// millisecond filter drops it, costing one slot. Correct, and not worth
-// freezing into a test.)
+// The assertion is the invariant rather than per-poll batch sizes: polling until
+// it goes quiet must yield every email exactly once, in arrival order, and must
+// terminate. Batch sizes are not exactly max_results every time, because the
+// second-granular `after:` bound brings the boundary email back.
 func TestGmailSearch_OnlyNew_BacklogDrainsOldestFirst(t *testing.T) {
 	store := memCursor(t)
 	name := "acme|cursor.gmail_search.g1.n1"

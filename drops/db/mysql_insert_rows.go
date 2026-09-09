@@ -73,18 +73,14 @@ func init() {
 	})
 }
 
-// executeMySQLInsertRows mirrors postgres_insert_rows for the MySQL
-// world. Three notable syntactic differences:
+// executeMySQLInsertRows mirrors postgres_insert_rows for MySQL. Three
+// syntactic differences: backtick identifier quoting, ? placeholders, and no
+// schema concept — the database lives in the DSN, so there is no `schema` param.
 //
-//   - identifier quoting uses backticks: `col` not "col"
-//   - placeholders are ?, not $1/$2/...
-//   - no schema concept; the database lives in the DSN, so there's no
-//     `schema` param to qualify the table name
-//
-// Connection pooling: routed through defaultMySQLRegistry which caches
-// *sql.DB handles per (tenant, dsn). *sql.DB is already a connection
-// pool internally; caching the handle avoids per-job Ping + auth and
-// keeps connection re-use across drops in the same workspace.
+// Connections route through defaultMySQLRegistry, which caches *sql.DB handles
+// per (tenant, dsn). *sql.DB is already a pool internally; caching the handle
+// avoids a per-job Ping + auth and keeps connections re-used across drops in the
+// same workspace.
 func executeMySQLInsertRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	dsn, err := params.String(job.Params, "dsn")
 	if err != nil {

@@ -75,18 +75,15 @@ func init() {
 				"required":["summary","start","end"]
 			}`),
 			Idempotent: false,
-			// events.insert is a non-idempotent POST (a retry creates a
-			// second event). No RetryPolicy is set, so the engine only
-			// retries this via an explicit OnErrorRetry edge — not the
-			// auto-backoff path — so we leave the policy unset rather than
-			// forcing RetryNever. If auto-retry is ever wanted here, thread
-			// a request id (events.insert accepts a client-supplied id)
-			// before turning on backoff.
-			// A non-idempotent external write: opt into engine-side dedupe so an
-			// expired-lease reclaim or crash recovery replays the recorded result
-			// instead of firing the write a second time. Independent of
-			// RetryPolicy — dedupe covers re-execution of the SAME job record,
-			// which a reclaim causes regardless of the retry setting.
+			// events.insert is a non-idempotent POST, so no RetryPolicy is set: the
+			// engine retries it only via an explicit OnErrorRetry edge, never the
+			// auto-backoff path. Threading a client-supplied request id would be the
+			// prerequisite for turning backoff on.
+			//
+			// DedupeWrites is independent of that — it covers re-execution of the SAME
+			// job record, which an expired-lease reclaim or crash recovery causes
+			// regardless of the retry setting, and replays the recorded result instead
+			// of firing the write again.
 			DedupeWrites: true,
 		},
 		Execute: executeCreateEvent,

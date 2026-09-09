@@ -13,16 +13,14 @@ import (
 // The whole-string `scheme://NAME` reference is an AUTHOR-written credential
 // injection. It must be matched against the raw param only — never against the
 // output of ${upstream.…} / ${item.…} substitution, which carries data the flow
-// ingested from the outside world (webhook bodies, HTTP responses, form fields,
-// spreadsheet cells).
+// ingested from the outside world.
 //
 // Resolving it post-substitution let anyone who could influence that data read
-// any secret in the organization by supplying the literal text
-// "secret://NAME" — connection credentials (conn.<slug>.<field>) included, and
-// via the vault:// / aws:// / gcp:// schemes registered into the same provider
-// map, the tenant's cloud secret managers too. Redaction did not contain it:
-// the drop receives the plaintext in its params regardless of what the
-// persisted Result shows.
+// any secret in the organization by supplying the literal text "secret://NAME" —
+// connection credentials included, and through the vault:// / aws:// / gcp://
+// schemes the tenant's cloud secret managers too. Redaction did not contain it:
+// the drop receives the plaintext in its params regardless of what the persisted
+// Result shows.
 //
 // These tests pin the boundary. See resolveString.
 

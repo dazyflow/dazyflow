@@ -10,19 +10,17 @@ import (
 )
 
 // x_visible_when hides a param until a sibling param has a particular value —
-// the Date & time step's Custom format field, which is noise until Format is
-// set to Custom.
+// the Date & time step's Custom format field, which is noise until Format is set
+// to Custom.
 //
 // It is a pointer between two params written as a string, so nothing but this
 // test connects the two ends. Misspell the sibling name or its value and the
 // field simply never appears again: no error, no warning, and the form looks
-// exactly like a field that was deliberately removed. That is the failure this
-// guards, and it is the kind that ships.
+// exactly like a field that was deliberately removed.
 //
-// Also checked: a conditional field must not be in `required`. The form would
-// hide it while the config checklist demanded it, leaving a red node with
-// nothing to fill in. Conditional requirements belong in the drop's own
-// Execute, which can say "Format is Custom but no format is set".
+// Also checked: a conditional field must not be in `required`, or the form hides
+// it while the config checklist demands it. Conditional requirements belong in
+// the drop's own Execute.
 type visibilitySchema struct {
 	Required   []string `json:"required"`
 	Properties map[string]struct {

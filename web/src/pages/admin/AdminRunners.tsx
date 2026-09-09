@@ -216,19 +216,17 @@ export function InstallCommand({
   const [copied, setCopied] = useState(false);
 
   // The daemon serves runner.sh with its address already substituted, so the
-  // command carries only the token. window.location is the right source for it
-  // here: this page is being served by the very daemon the agent will call back
-  // to.
+  // command carries only the token, and window.location is the right source for
+  // it: this page is served by the very daemon the agent will call back to.
   //
   // --service is included rather than offered. A runner that stops when the
   // terminal closes is almost never what an organisation wants, and it fails
-  // silently — the machine simply stops appearing, days later, with nothing to
-  // point at. Someone who genuinely wants a foreground agent can drop the flag;
-  // the far more common mistake is not knowing it existed.
+  // silently — the machine simply stops appearing, days later. Someone who wants
+  // a foreground agent can drop the flag.
+  //
   // A pinned token (one minted to replace a specific machine) carries --name,
-  // because the token registers only that name and the agent otherwise defaults
-  // to the machine's hostname — which need not match. An open token omits it
-  // and the hostname stands.
+  // because the token registers only that name while the agent otherwise
+  // defaults to the machine's hostname. An open token omits it.
   const command =
     `curl -fsSL ${window.location.origin}/runner.sh | sh -s -- ` +
     `--token ${token.token}` +

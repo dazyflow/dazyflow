@@ -2,23 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package ticketmaster hosts the Ticketmaster Discovery API connector: search
-// live events, and a polled trigger that fires when one shows up that the flow
-// has not seen before.
+// live events, and a polled trigger that fires when one shows up the flow has
+// not seen before.
 //
-// It exists to finish the Spotify connector's sentence. Spotify has no events
-// data in its Web API and never has, so "tell me when someone I follow plays
-// near me" composes as spotify_followed_artists → this search → notify.
+// It finishes the Spotify connector's sentence — Spotify has no events data, so
+// "tell me when someone I follow plays near me" composes as
+// spotify_followed_artists → this search → notify.
 //
-// Auth is a single per-tenant ConnectionField — the Discovery API key — set
-// once on the Apps page rather than typed on every node, the same shape as the
-// OpenWeather and nShift connectors. Ticketmaster takes the key as an `apikey`
-// QUERY parameter, not a header, so no error message here ever quotes the
-// request URL.
+// Auth is a single per-tenant ConnectionField, set once on the Apps page.
+// Ticketmaster takes the key as an `apikey` QUERY parameter, not a header, so no
+// error message here ever quotes the request URL.
 //
-// What it does and does not cover: Discovery is ticketing inventory, not a
-// listings database. Events sold through Ticketmaster and its family
-// (TicketWeb, Universe, Frontgate, resale) are in it; a club show sold via
-// DICE, Tickster or Billetto is not, and no query will make it appear.
+// Discovery is ticketing inventory, not a listings database: events sold through
+// Ticketmaster and its family are in it, a club show sold via DICE or Tickster
+// is not, and no query will make it appear.
 package ticketmaster
 
 import (

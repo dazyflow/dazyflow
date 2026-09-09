@@ -3,19 +3,17 @@
 
 // Package geoloc holds the coordinate, unit and formatting helpers the
 // location/weather connectors carried as copy-pasted boilerplate: parsing and
-// range-checking a "lat,lon" string, resolving the Coordinate input against
-// the Latitude/Longitude params, the display symbols for a units value, the
-// two number formats a human summary uses, and the SSRF/transport prologue of
-// every httpFailure epilogue.
+// range-checking a "lat,lon" string, resolving the Coordinate input against the
+// Latitude/Longitude params, the display symbols for a units value, the two
+// number formats a human summary uses, and the SSRF/transport prologue of every
+// httpFailure epilogue.
 //
 // It lives under drops/internal/ so only sibling connector packages import it.
-// weather (OpenWeather), openmeteo (Open-Meteo), smhi and geo (OpenStreetMap)
-// each kept their own copy of these — the bodies and the user-facing error
-// strings never diverged, so they live here once. The strings are part of the
-// contract: connector tests assert on them, so keep them verbatim.
+// The user-facing error strings are part of the contract — connector tests
+// assert on them, so keep them verbatim.
 //
-// What stays per-connector is anything provider-shaped: which host to dial,
-// how the provider spells its units query, which status codes get a bespoke
+// What stays per-connector is anything provider-shaped: which host to dial, how
+// the provider spells its units query, which status codes get a bespoke
 // message, and the weather-code tables (WMO vs Wsymb2).
 package geoloc
 
@@ -176,17 +174,13 @@ const probeBodyCap = 1 << 16
 const probeTimeout = 10 * time.Second
 
 // Probe performs the one-shot GET a connection verifier uses to check
-// credentials, returning the status and a capped body. Egress policy is
-// checked before dialing and the dial goes through the same SSRF-guarded
-// client as every other connector, so a verifier can't be used to reach an
-// address a drop couldn't.
+// credentials, returning the status and a capped body. Egress policy is checked
+// before dialing and the dial goes through the same SSRF-guarded client as
+// every other connector, so a verifier can't reach an address a drop couldn't.
 //
-// label is the human service name used in the dial-failure message ("could not
-// reach OpenWeather: …"); an egress refusal is returned verbatim, since it
-// already explains itself and reaches the Apps page unchanged.
-//
-// A non-2xx status is NOT an error — it comes back as a status for the caller
-// to interpret, since what a 401 means differs per provider.
+// label is the human service name used in the dial-failure message; an egress
+// refusal is returned verbatim, since it already explains itself. A non-2xx
+// status is NOT an error — what a 401 means differs per provider.
 func Probe(ctx context.Context, label, url string) (status int, body []byte, err error) {
 	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
 		return 0, nil, err

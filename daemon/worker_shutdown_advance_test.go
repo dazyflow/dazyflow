@@ -16,16 +16,14 @@ import (
 
 // Once a node reaches a definite outcome, every write that ADVANCES the run —
 // the terminal record, the dependent dispatch, the completion check — must be
-// detached from the claim context. If a SIGTERM lands between the terminal
-// write and the dispatch, the node ends terminal with its dependents never
-// enqueued, and ReapStuckGraphRuns cannot recover that: maybeCompleteGraph
-// bails on a MISSING node record, so the run sits in "running" forever with no
-// transition left to re-fire it.
+// detached from the claim context. If a SIGTERM lands between the terminal write
+// and the dispatch, the node ends terminal with its dependents never enqueued,
+// and ReapStuckGraphRuns cannot recover that: maybeCompleteGraph bails on a
+// MISSING node record, so the run sits in "running" forever.
 //
-// processNodeJob's main terminal path always got this right. The disabled-node
-// skip path and failNode did not — they dispatched on the live claim ctx. These
-// tests drive both paths with an already-cancelled context, which is the
-// shutdown race made deterministic.
+// processNodeJob's main terminal path always got this right; the disabled-node
+// skip path and failNode did not. These tests drive both with an
+// already-cancelled context, which is the shutdown race made deterministic.
 
 type ctxHonoringStore struct {
 	*jobstore.Memory

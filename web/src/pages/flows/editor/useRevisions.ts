@@ -12,15 +12,14 @@ import type { Graph, Revision } from "../../../types";
 // The load-bearing idea is that a preview is READ-ONLY. It puts an old revision
 // on the canvas without touching HEAD, and the rest of the editor is gated on
 // `previewRef` to respect that — autosave refuses to write, the publish switch
-// goes unavailable, and the canvas becomes uneditable. That is why previewRef is
-// returned rather than kept private: three other clusters read it.
+// goes unavailable, the canvas becomes uneditable — which is why previewRef is
+// returned rather than kept private.
 //
-// FlowEditorRevisions.test.tsx pins the behaviours worth keeping, including the
-// one that matters most and is easiest to lose: leaving a preview must clear it
-// EVEN IF reloading HEAD fails, or a transient network error strands the editor
-// read-only with no way out.
+// The behaviour easiest to lose, pinned in FlowEditorRevisions.test.tsx: leaving
+// a preview must clear it EVEN IF reloading HEAD fails, or a transient network
+// error strands the editor read-only with no way out.
 //
-// What it does not own: the canvas. Putting a graph on screen is `hydrateGraph`,
+// Not owned here: the canvas. Putting a graph on screen is `hydrateGraph`,
 // handed in, because the graph belongs to the component.
 
 export interface UseRevisionsArgs {

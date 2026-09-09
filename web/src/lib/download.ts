@@ -4,16 +4,14 @@
 // Saving a file the app has already fetched.
 //
 // Every download here is data the browser holds in memory, not a URL it can be
-// pointed at: the endpoints need the Authorization header, which a plain
-// `<a href="/api/v1/…">` cannot send, and the CSV is built client-side from the
-// rows on screen and doesn't exist server-side at all. So the file is assembled
-// into a blob, handed to a transient object URL, and clicked.
+// pointed at: the endpoints need the Authorization header, which a plain anchor
+// cannot send, and the CSV is built client-side and doesn't exist server-side at
+// all. So the file is assembled into a blob, handed to a transient object URL,
+// and clicked.
 //
-// This lived in three places — the org export, the collections CSV, and then a
-// third copy wanted it for the account export. The dance has a
-// leak-if-you-forget step (revokeObjectURL) and a needs-to-be-in-the-document
-// step (Firefox ignores a click on a detached anchor), which is exactly the
-// shape of thing that should exist once.
+// It exists once because the dance has a leak-if-you-forget step
+// (revokeObjectURL) and a needs-to-be-in-the-document step (Firefox ignores a
+// click on a detached anchor).
 
 // downloadBlob saves bytes the app already holds. The two callers that reach
 // for it hold a Blob rather than a string — a file fetched from the workspace

@@ -8,8 +8,8 @@ import {
   type ReactNode,
 } from "react";
 
-// Button is the single component for clickable actions. Appearance follows
-// what the action does (variant), never a hand-picked class at the call site.
+// Button is the single component for clickable actions. Appearance follows what
+// the action does (variant), never a hand-picked class at the call site.
 //
 //   variant: primary   the one affirmative action on a surface (at most one per view)
 //            secondary neutral (default)
@@ -20,16 +20,15 @@ import {
 //   size:    md (default) | sm (dense toolbars, chips) | icon (square; needs aria-label or title)
 //
 // Modifiers are props: `icon`, `collapseLabel`, `block`, `loading`, `filled`.
-// `filled` applies only to danger and makes it solid, for the moment a
-// destructive action IS the affirmative one (a dialog's final confirm, the
-// Stop that replaces Run). `variant="ghost" className="danger"` is the one
-// sanctioned compound (`.ghost.danger` in app.css): a quiet inline destructive
-// icon with no border, used by row-level delete icons. It is not a bypass.
+// `filled` applies only to danger, for the moment a destructive action IS the
+// affirmative one (a dialog's final confirm, the Stop that replaces Run).
+// `variant="ghost" className="danger"` is the one sanctioned compound, for
+// row-level delete icons; it is not a bypass.
 //
-// Selectable state (the `.active` family: tabs, chips, theme options) is not an
-// action and lives outside this component. Emitted class names mirror the
-// variant/size names so contextual CSS keeps matching, and `btn` is always
-// present so <ButtonLink> anchors share the chrome.
+// Selectable state (the `.active` family) is not an action and lives outside
+// this component. Emitted class names mirror the variant/size names so
+// contextual CSS keeps matching, and `btn` is always present so <ButtonLink>
+// anchors share the chrome.
 
 type ButtonVariant =
   | "primary"

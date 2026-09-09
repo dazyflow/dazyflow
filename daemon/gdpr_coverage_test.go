@@ -14,16 +14,15 @@ import (
 
 // This file is the anti-drift guard on the GDPR erasure cascade (Art. 17).
 //
-// The cascade has been wrong twice in the same way, and both times it was
-// invisible: a feature added a tenant-scoped table, nobody thought about
-// erasure, and deleteOrgData went on reporting success while the org's rows
-// stayed in Postgres. Nothing failed, because a cascade that misses a table
-// looks exactly like a cascade that does not need it.
+// The cascade has been wrong twice in the same way, and both times invisibly: a
+// feature added a tenant-scoped table, nobody thought about erasure, and
+// deleteOrgData went on reporting success while the org's rows stayed in
+// Postgres. A cascade that misses a table looks exactly like one that does not
+// need it.
 //
-// So the disposition is declared here rather than inferred. Every table with a
-// tenant column must appear in tenantTableDisposition; a new one fails this
-// test until someone writes down what happens to it on erasure. The point is
-// not the map — it is that adding a table forces the question to be answered.
+// So the disposition is declared rather than inferred: every table with a tenant
+// column must appear in tenantTableDisposition, and a new one fails this test
+// until someone writes down what happens to it on erasure.
 
 type erasureDisposition int
 

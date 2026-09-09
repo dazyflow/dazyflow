@@ -6,18 +6,16 @@ import { useTranslation } from "react-i18next";
 import { Secrets } from "./Secrets";
 import { AdminSecretManager } from "./AdminSecretManager";
 
-// AdminSecrets is the org's credential home, reached from Admin → Secrets.
-// It groups the two closely-related surfaces under one destination using
-// the Flow-settings underline tabs (.settings-tabs):
+// AdminSecrets is the org's credential home, reached from Admin → Secrets. It
+// groups two closely-related surfaces under one destination using the
+// Flow-settings underline tabs:
 //   - Values:  the tenant ${secret.NAME} vault (Secrets)
 //   - Secret manager: bring-your-own Vault/AWS/GCP (AdminSecretManager)
-// Org secret values used to live in the Connections hub; they're org-scoped
-// config, so they belong with the org settings, next to the external
-// secret-manager config rather than alongside the app catalog.
 //
-// The active tab rides in ?tab= so deep links land right, and the editor's
-// "set up this credential" link (/admin/secrets?focus=NAME) reaches the
-// Values tab with its ?focus= intact.
+// Org secret values used to live in the Connections hub, but they are org-scoped
+// config, so they belong beside the external secret-manager config rather than
+// alongside the app catalog. The active tab rides in ?tab= so deep links land
+// right, and the editor's "set up this credential" link keeps its ?focus=.
 export function AdminSecrets() {
   const { t } = useTranslation();
   const [params, setParams] = useSearchParams();

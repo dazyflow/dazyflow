@@ -3,33 +3,23 @@
 
 // The flow's SETTINGS — everything on a Graph that isn't its structure.
 //
-// This list exists because the editor had two of them, and they disagreed.
-// FlowEditor rebuilds the document it saves from its own React state (the
-// canvas is the truth for steps and wires), and the settings modal, which
-// edits graph-level fields, passes them as overrides — because a setState a
-// few lines earlier has not applied yet, so reading state would save the
-// PREVIOUS value. Both lists were written by hand, and both were incomplete:
-// the flow's language went missing from each, and failure_notify from one, so
-// setting a failure webhook worked until the next canvas edit and setting a
-// language never worked at all.
-//
-// One list, checked by the compiler. Add a field to Graph and TypeScript names
-// it below until you decide which side it belongs on.
+// The editor needs this list twice: FlowEditor rebuilds the document it saves
+// from its own React state (the canvas is the truth for steps and wires), and
+// the settings modal passes graph-level fields as overrides, because a setState
+// a few lines earlier has not applied yet. Two hand-written lists drifted — a
+// failure webhook survived until the next canvas edit, a language never saved
+// at all — so this one is checked by the compiler instead.
 import type { Graph } from "../types";
 
-// NotSettings are the keys this module deliberately does not carry, each for a
-// reason:
+// NotSettings are the keys this module deliberately does not carry:
 //
 //	id / tenant / workspace / version   the flow's identity, not a setting
 //	nodes / edges / frames              the canvas, rebuilt from editor state
-//	triggers                            graph-level triggers need their own
-//	                                    empty→undefined handling at the call
-//	                                    site, so they stay explicit
-//	owner                               set by the daemon on first save and
-//	                                    never editable here
-//	disabled                            the pause switch, which the editor
-//	                                    holds as its own state and writes only
-//	                                    when true (omitempty drops false)
+//	triggers                            need their own empty→undefined handling
+//	                                    at the call site, so they stay explicit
+//	owner                               set by the daemon on first save
+//	disabled                            the pause switch, editor state, written
+//	                                    only when true (omitempty drops false)
 type NotSettings =
   | "id"
   | "version"

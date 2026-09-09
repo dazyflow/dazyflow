@@ -247,19 +247,18 @@ func (s *PgBundleStore) DeleteByTenant(ctx context.Context, tenant string) (int,
 }
 
 // Prune deletes bundles past the retention window, oldest first. A bundle is a
-// snapshot taken to answer one ticket, so past retention with nothing pointing at
-// it, it is pure storage cost.
+// snapshot taken to answer one ticket, so past retention with nothing pointing
+// at it, it is pure storage cost.
 //
 // A bundle referenced by ANY ticket is kept, whatever that ticket's status.
-// Sparing only bundles whose ticket was still open broke the pairing, because the
-// two prunes key on different timestamps — a bundle on created_at, a ticket on
-// updated_at — so a ticket filed 13 months ago and resolved last week stayed while
-// its bundle was swept, and "View diagnostic" 404'd for customer and agent alike.
+// Sparing only bundles whose ticket was still open broke the pairing, because
+// the two prunes key on different timestamps — a bundle on created_at, a ticket
+// on updated_at — so a ticket filed 13 months ago and resolved last week stayed
+// while its bundle was swept, and "View diagnostic" 404'd.
 //
 // The invariant instead: a bundle outlives every ticket referencing it. The
 // ticket's own retention decides when the pair goes, and since the sweep prunes
-// tickets first, the freed bundle is collected in the same pass. A bundle no
-// ticket references still ages out on its own.
+// tickets first, the freed bundle is collected in the same pass.
 func (s *PgBundleStore) Prune(ctx context.Context, olderThan time.Duration, batch int) (int, error) {
 	if olderThan <= 0 {
 		return 0, nil

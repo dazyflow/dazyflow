@@ -21,12 +21,11 @@ import (
 //
 //	POST /api/v1/auth/signup    {email, password} → {token, subject, tenant, …}
 //
-// A new user gets a random tenant ID (usr_<hex>, so the email is not leaked
-// into URLs or logs), a default workspace named "main", the `editor` and
+// A new user gets a random tenant ID (usr_<hex>, so the email is not leaked into
+// URLs or logs), a default workspace named "main", the `editor` and
 // `tenant_owner` roles, and an immediately-issued session matching the signin
-// endpoint's cookie + token shape. Anti-abuse is the per-IP auth rate limit
-// plus email verification (when DAZYFLOW_SMTP_URL + PUBLIC_BASE_URL are set);
-// there is no captcha or plan selection.
+// endpoint's cookie + token shape. Anti-abuse is the per-IP auth rate limit plus
+// email verification; there is no captcha or plan selection.
 //
 // With `EnableSignup` false the endpoint returns 501, except for emails in
 // DAZYFLOW_PLATFORM_ADMINS, so a fresh instance can bootstrap its first

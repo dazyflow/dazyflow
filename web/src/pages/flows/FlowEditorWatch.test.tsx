@@ -5,14 +5,12 @@
 //
 // The watch is an SSE stream the editor reads off a fetch body, and it used to
 // be one-shot: watchFlow resolves when the body ends, nothing retried, and the
-// effect's deps only cover a flow/auth change. So any drop — a laptop
-// sleeping, a network change, a phone backgrounding the tab — left that window
-// permanently deaf while its canvas went on looking live. The 25s server ping
-// defends against idle proxy timeouts and none of those.
+// effect's deps only cover a flow/auth change. So any drop — a laptop sleeping,
+// a network change, a phone backgrounding the tab — left that window permanently
+// deaf while its canvas went on looking live.
 //
 // Silence is the whole failure mode, which is what makes these tests worth
-// having: nothing about a stalled watch is visible from the outside, so the
-// only way it stays fixed is a test that watches for the retry itself.
+// having: nothing about a stalled watch is visible from the outside.
 
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { render, waitFor, act } from "@testing-library/react";

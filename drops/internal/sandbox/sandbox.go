@@ -16,17 +16,13 @@ import (
 const Scheme = "scratch://"
 
 // WorkspaceScheme is an optional, redundant spelling of "workspace-relative".
-// A bare path is the canonical form — it is what the editor's workspace-path
-// widget writes and what the drops emit in their output refs — but this prefix
-// was in several step examples, so flows built by copying one carry it.
+// A bare path is the canonical form, but this prefix was in several step
+// examples, so flows built by copying one carry it.
 //
-// It is stripped here rather than ignored because ignoring it was silent and
-// wrong: nothing resolved the prefix, so "workspace://reports/x.csv" cleaned
-// to the relative path "workspace:/reports/x.csv" and the step wrote a file
-// into a directory literally named "workspace:" — reporting success, in a
-// place the author never asked for and the Files page shows as junk. Only
-// drops/excel stripped it, so the same path worked there and misfired
-// everywhere else.
+// It is stripped rather than ignored because ignoring it was silent and wrong:
+// nothing resolved the prefix, so "workspace://reports/x.csv" cleaned to
+// "workspace:/reports/x.csv" and the step wrote into a directory literally named
+// "workspace:", reporting success.
 const WorkspaceScheme = "workspace://"
 
 func Resolve(job core.Job, p string) (root, rel string, err error) {
@@ -79,16 +75,15 @@ func containsAny(s string, parts ...string) bool {
 	return false
 }
 
-// Rel cleans a workspace-relative path and rejects absolute paths and
-// "../" escapes, so a caller can safely join the result against a root
-// directory. "" normalizes to ".".
+// Rel cleans a workspace-relative path and rejects absolute paths and "../"
+// escapes, so a caller can safely join the result against a root directory. ""
+// normalizes to ".".
 //
 // Prefer OpenRoot: it is enforced by the kernel-level *os.Root and closes
-// symlink traversal too. Rel exists for the callers that genuinely cannot
-// use a root handle — os/exec's cmd.Dir and go-git both demand a real
-// absolute path — and lived as a duplicated copy in the shell and git drops
-// until this became the single definition. Two copies of a
-// security-relevant path cleaner is exactly the thing that drifts.
+// symlink traversal too. Rel exists for the callers that cannot use a root
+// handle — os/exec's cmd.Dir and go-git demand a real absolute path — and is the
+// single definition, because two copies of a security-relevant path cleaner
+// drift.
 func Rel(rel string) (string, error) {
 	rel = strings.TrimSpace(rel)
 	if rel == "" {
@@ -104,19 +99,17 @@ func Rel(rel string) (string, error) {
 	return cleaned, nil
 }
 
-// ResolveDir validates rel against root and returns an absolute directory
-// path that is guaranteed to be inside root — with symlinks resolved.
+// ResolveDir validates rel against root and returns an absolute directory path
+// guaranteed to be inside root, with symlinks resolved.
 //
-// Rel alone is a STRING check: it stops "../etc" but happily accepts
-// "link/x" where "link" is a symlink inside the workspace pointing out of
-// it, because cleaning the path never touches the filesystem. Opening the
-// path through *os.Root makes the kernel refuse a traversal that leaves
-// root, and the returned name comes from the opened handle, so what the
-// caller passes to cmd.Dir is the real, verified location.
+// Rel alone is a STRING check: it stops "../etc" but accepts "link/x" where
+// "link" is a symlink pointing out of the workspace, because cleaning a path
+// never touches the filesystem. Opening through *os.Root makes the kernel refuse
+// the traversal, and the returned name comes from the opened handle.
 //
-// Intended for callers that need a path rather than a handle (cmd.Dir,
-// go-git). The directory must already exist. Returns the absolute directory
-// plus the cleaned relative path, which callers report back to the user.
+// For callers that need a path rather than a handle (cmd.Dir, go-git). The
+// directory must already exist; the cleaned relative path is returned too,
+// because callers report it back to the user.
 func ResolveDir(root, rel string) (dir, cleanRel string, err error) {
 	cleaned, err := Rel(rel)
 	if err != nil {

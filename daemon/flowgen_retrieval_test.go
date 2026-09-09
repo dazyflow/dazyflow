@@ -3,20 +3,19 @@
 
 package daemon
 
-// A retrieval eval for the step catalogue: plain-language asks against the
-// step each one has to reach.
+// A retrieval eval for the step catalogue: plain-language asks against the step
+// each one has to reach.
 //
 // This is the layer under tests/usecases/README.md. That corpus scores whole
-// drafts and needs a vendor key; this one needs nothing, because the question
-// is narrower — when the model searches the catalogue with the words a person
-// actually used, does the right step come back near the top? Everything
-// downstream depends on it: a step the model cannot find is a step it will not
-// wire, and the failure looks like a stupid model rather than a search that
-// answered badly.
+// drafts and needs a vendor key; this one needs nothing, because the question is
+// narrower — when the model searches the catalogue with the words a person
+// actually used, does the right step come back near the top? A step the model
+// cannot find is a step it will not wire, and the failure looks like a stupid
+// model rather than a search that answered badly.
 //
-// Every ask is written in the USER's vocabulary, deliberately not the drop's.
-// An ask that only passes because it quotes the summary it is meant to find
-// proves nothing.
+// Every ask is written in the USER's vocabulary, deliberately not the drop's: an
+// ask that only passes because it quotes the summary it is meant to find proves
+// nothing.
 
 import (
 	"sort"
@@ -252,17 +251,16 @@ func TestRetrieval_CasesNameRealSteps(t *testing.T) {
 // Swedish asks against an English catalogue.
 //
 // The catalogue is authored in English on purpose — it is the contract the API,
-// the MCP tools and the generator are all grounded on (web/src/i18n/drops/sv.ts
-// says so), and only the human UI localises. The editor's step palette copes by
-// translating the QUERY through a Swedish alias table with inflection stripping
-// (web/src/lib/dropSearch.ts); this side has no equivalent, so Swedish retrieval
-// is weak and the floors below say so rather than pretending otherwise.
+// the MCP tools and the generator are grounded on, and only the human UI
+// localises. The editor's palette copes by translating the QUERY through a
+// Swedish alias table (web/src/lib/dropSearch.ts); this side has no equivalent,
+// so Swedish retrieval is weak and the floors below say so.
 //
 // What must NOT happen is a confidently wrong answer. Before the id-substring
-// floor, Swedish function words matched inside English ids — "min" ("my") hit
-// ge-min-i and "en" ("a") hit builtin_store_app-en-d and caldav_create_ev-en-t —
-// so four unrelated Swedish asks came back with the same irrelevant block. An
-// empty result the model can act on beats a plausible wrong one it cannot.
+// floor, Swedish function words matched inside English ids — "min" hit ge-min-i,
+// "en" hit builtin_store_app-en-d — so unrelated asks returned the same
+// irrelevant block. An empty result the model can act on beats a plausible wrong
+// one it cannot.
 var swedishCases = []retrievalCase{
 	// Brand names first: the same word in both languages, so these worked even
 	// before the vocabulary was shared.

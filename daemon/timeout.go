@@ -56,18 +56,14 @@ func (s *Service) effectiveGraphTimeout(g core.Graph) time.Duration {
 	return d
 }
 
-// startGraphTimeoutWatchdog launches a goroutine that auto-cancels
-// runID after timeout if the run hasn't reached a terminal state by
-// then. Returns immediately; the goroutine exits early when it sees a
-// Terminal bus event, so a fast-completing run doesn't keep a timer
-// alive for nothing.
+// startGraphTimeoutWatchdog launches a goroutine that auto-cancels runID after
+// timeout if the run hasn't reached a terminal state by then. Returns
+// immediately; the goroutine exits early on a Terminal bus event, so a
+// fast-completing run doesn't keep a timer alive for nothing.
 //
-// Watchdogs do NOT survive a dzd restart — a deployment that needs
-// crash-safe enforcement should also wire a periodic sweep at startup.
-// Out of scope for v1: nothing has asked for it, and the orphaned-graph-run
-// reaper (DAZYFLOW_REAP_INTERVAL)
-// already closes the runs a crash strands, just without honouring their
-// per-graph timeout.
+// Watchdogs do NOT survive a dzd restart. The orphaned-graph-run reaper already
+// closes the runs a crash strands, just without honouring their per-graph
+// timeout; crash-safe enforcement would need a periodic sweep at startup.
 func (s *Service) startGraphTimeoutWatchdog(runID, tenant, workspace string, timeout time.Duration) {
 	if timeout <= 0 {
 		return

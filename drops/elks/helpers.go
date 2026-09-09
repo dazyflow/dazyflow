@@ -2,19 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package elks hosts the native 46elks connector (elks_send_sms) — a Swedish
-// SMS/voice API popular across the Nordics. Auth is 46elks' HTTP Basic scheme
-// (API username as the user, API password as the password), resolved from the
-// `api_username` / `api_password` params, which default to
-// ${secret.ELKS_API_USERNAME} / ${secret.ELKS_API_PASSWORD} so a fresh node
-// works as soon as those secrets exist. It calls the 46elks REST API directly
-// (form-encoded POST), mirroring the twilio connector — the SMS send is a
-// single endpoint, so there's nothing to gain from an SDK.
+// SMS/voice API popular across the Nordics. Auth is 46elks' HTTP Basic scheme,
+// resolved from the `api_username` / `api_password` params, which default to the
+// matching ${secret.…} references so a fresh node works as soon as those secrets
+// exist. It calls the REST API directly (form-encoded POST) — the send is a
+// single endpoint, so an SDK would buy nothing.
 //
-// This is a static-credential connector: unlike the OAuth connectors (fortnox,
-// google, slack), it needs no daemon-side provider entry or token lookup. The
-// username + password are a per-tenant service connection (ConnectionFields),
-// set once on the Apps page and injected into the job at run time — the same
-// shape as ntfy / Home Assistant / SMTP.
+// A static-credential connector: no daemon-side provider entry or token lookup.
+// The username + password are a per-tenant service connection set once on the
+// Apps page and injected at run time, the same shape as ntfy / Home Assistant.
 package elks
 
 import (

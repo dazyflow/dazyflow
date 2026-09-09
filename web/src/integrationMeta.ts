@@ -1,22 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Per-integration prose for the /apps/:slug pages. Slugs
-// are the lowercased Manifest.integration string with spaces
-// replaced by hyphens (e.g. "Google Sheets" → "google-sheets").
-// Drops without an Integration field land under "standard-library".
+// Per-integration prose for the /apps/:slug pages. Slugs are the lowercased
+// Manifest.integration string with spaces replaced by hyphens; drops without an
+// Integration field land under "standard-library".
 //
 // Two-layer prose by design:
-//   - description: friendly, scannable, action-oriented — what the
-//     reader can BUILD with this integration. No protocol names,
-//     no flag references, no SDK trivia. Safe for non-technical
-//     trial users.
-//   - technical_notes: optional, collapsible. Carries the OAuth
-//     scope / HMAC scheme / API version / pool config / env-var
-//     names a developer needs when configuring or debugging.
+//   - description: friendly, scannable, action-oriented — what the reader can
+//     BUILD with this integration. No protocol names, no flag references, no SDK
+//     trivia. Safe for non-technical trial users.
+//   - technical_notes: optional, collapsible. The OAuth scope / HMAC scheme /
+//     API version / env-var names a developer needs when debugging.
 //
-// Missing slugs degrade gracefully — the detail page still renders
-// from the drop manifests; the intro section is omitted.
+// Missing slugs degrade gracefully — the detail page still renders from the drop
+// manifests, without the intro section.
 
 export type IntegrationMeta = {
   name: string;

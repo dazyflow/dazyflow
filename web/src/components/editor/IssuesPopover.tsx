@@ -10,17 +10,15 @@ import { useAnchoredPop } from "../ui/useAnchoredPop";
 // The editor's two issue affordances: an Errors button and a Warnings button,
 // each opening an anchored panel listing what it counts.
 //
-// Every one of these messages used to be a banner stacked over the canvas
-// (.editor-banner-stack). That put the flow's own steps behind a column of
-// prose exactly when the author was working on them, and a six-second
-// explanation of a refused wire covered the wire it was about. The count on
-// the button is the standing signal; the words are one click away.
+// These messages used to be banners stacked over the canvas, which put the
+// flow's own steps behind a column of prose exactly when the author was working
+// on them — a six-second explanation of a refused wire covered the wire it was
+// about. The count on the button is the standing signal; the words are one click
+// away.
 //
 // Controlled from the editor rather than self-managed, because opening is not
-// always the user's doing: a refused connection opens the Warnings panel by
-// itself (the message answers something the author just tried, so it has to
-// arrive without being asked for), and both panels close themselves when their
-// last row goes away.
+// always the user's doing: a refused connection opens the Warnings panel itself,
+// and both panels close when their last row goes away.
 export type IssueKind = "error" | "warning";
 
 export function IssuesButton({

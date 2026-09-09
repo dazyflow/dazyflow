@@ -12,29 +12,23 @@ import (
 )
 
 // The one-value spray in harness_test.go puts the SAME nasty value into every
-// common param at once. That works for drops whose params are largely
-// independent, but it systematically under-covers CONNECTOR drops: they
-// validate a required param early (a URL, an API key, a channel), reject the
-// nasty value there, and return before any of their HTTP-building, response-
-// parsing or output-shaping code runs. So the adversarial corpus never
-// actually reached the code paths most likely to mishandle it.
+// common param at once. That works for drops whose params are independent, but
+// it systematically under-covers CONNECTOR drops: they validate a required param
+// early, reject the nasty value there, and return before any HTTP-building,
+// response-parsing or output-shaping code runs.
 //
-// This sweep fixes that by starting from a drop's own worked example — a
-// VALID baseline, which every drop is required to ship (see
-// examples_contract_test.go) — and corrupting exactly one param at a time.
-// Every other param stays valid, so validation of those passes and execution
-// proceeds deeper into the drop before meeting the hostile value.
+// This sweep starts instead from a drop's own worked example — a VALID baseline
+// every drop is required to ship — and corrupts exactly one param at a time, so
+// execution proceeds deeper before meeting the hostile value.
 //
-// It asserts the same system-safety contract as the other sweeps (no panic,
-// no hang, Result contract honoured) plus the output-port contract, which is
-// how it also covers the drops the port check in output_contract_test.go
-// could never reach: that check only asserts on StatusOK runs, and a
-// connector never reaches StatusOK under the spray.
+// It asserts the same system-safety contract as the other sweeps (no panic, no
+// hang, Result contract honoured) plus the output-port contract, which is how it
+// covers what output_contract_test.go cannot: that check only asserts on
+// StatusOK runs, and a connector never reaches StatusOK under the spray.
 //
-// Connector drops still won't make a real network call here (no credentials,
-// no reachable host), so the deepest layers stay out of reach — but
-// param-handling, template rendering and error-shaping now get exercised
-// with hostile input instead of being skipped.
+// Connector drops still make no real network call here, so the deepest layers
+// stay out of reach — but param handling, template rendering and error shaping
+// now get exercised with hostile input.
 
 func baselineParams(m core.Manifest) map[string]any {
 	for _, ex := range m.Examples {

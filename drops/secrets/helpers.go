@@ -1,20 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package secrets contains drops that interact with the encrypted
-// secret store. The companion read path is template substitution —
-// anywhere a string param accepts `${secret.name}`,
-// the engine resolves it before Execute, so a dedicated read drop
-// would be redundant. This package only ships the symmetric write
-// surface (`secret_set`) and any future tenant-state writers.
+// Package secrets contains drops that interact with the encrypted secret store.
+// The companion read path is template substitution — anywhere a string param
+// accepts `${secret.name}` the engine resolves it before Execute — so a
+// dedicated read drop would be redundant, and this package ships only the
+// symmetric write surface.
 //
-// Cross-cutting hook: the secret-store implementation lives in
-// daemon/encrypted_secrets.go; importing it here would invert the
-// dependency direction (integrations is meant to be importable by
-// daemon, not the other way around). Instead, dzd calls
-// SetSecretWriter at startup with a closure that calls
-// EncryptedSecrets.Put — mirroring the Slack/Gmail SetTokenLookup
-// pattern.
+// The store implementation lives in daemon/encrypted_secrets.go, and importing
+// it here would invert the dependency direction, so dzd calls SetSecretWriter at
+// startup with a closure — mirroring the Slack/Gmail SetTokenLookup pattern.
 package secrets
 
 import (

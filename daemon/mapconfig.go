@@ -4,20 +4,19 @@
 package daemon
 
 // Editor map configuration: which tile server and which Nominatim-compatible
-// geocoder the flow editor's map picker (web GeoPointField, the widget behind
-// a param with format:"geo-point") talks to.
+// geocoder the flow editor's map picker (the widget behind a param with
+// format:"geo-point") talks to.
 //
-// This is DESIGN-TIME only and separate from the `geo` drop's run-time
-// backends (drops/geo, DAZYFLOW_GEOCODER + friends): the picker always speaks
-// Nominatim's /search?format=jsonv2, whereas a tenant's runs may use Photon or
-// LocationIQ. The two are configured independently so pointing runs at
-// LocationIQ doesn't drag the editor's map along with it.
+// DESIGN-TIME only, and separate from the `geo` drop's run-time backends: the
+// picker always speaks Nominatim's /search?format=jsonv2, whereas a tenant's
+// runs may use Photon or LocationIQ. Configuring them independently means
+// pointing runs at LocationIQ does not drag the editor's map along.
 //
-// Both values are read by the browser directly, so both also feed the app's
-// Content-Security-Policy (appCSP): their origins are what gets added to
-// img-src and connect-src. Keeping one source of truth for "where the map
-// talks to" is the point — a deployment that self-hosts tiles or Nominatim
-// sets these, and the policy widens to match instead of silently blocking it.
+// Both values are read by the browser, so both also feed the app's
+// Content-Security-Policy: their origins are what gets added to img-src and
+// connect-src. That single source of truth is the point — a deployment that
+// self-hosts tiles or Nominatim sets these and the policy widens to match
+// instead of silently blocking it.
 
 import (
 	"log"

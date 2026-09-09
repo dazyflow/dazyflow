@@ -10,20 +10,17 @@ import { Callout } from "../ui/Callout";
 import { ICON } from "../../icons";
 import { useEscapeToClose } from "../ui/useEscapeToClose";
 
-// PublishLabelModal confirms a publish / go-live and nudges the user to give
-// the release an optional name. The name field is always offered but never
-// required: "Publish without a name" commits with no label, while the primary
-// button commits with whatever was typed (an empty value is treated as no
-// label and leaves any existing name untouched server-side). Escape and a
-// backdrop click cancel without publishing. The input is autofocused so a
-// name can be typed straight away.
+// PublishLabelModal confirms a publish / go-live and nudges the user to name the
+// release. The name is always offered but never required: "Publish without a
+// name" commits with no label, and an empty value leaves any existing name
+// untouched server-side. Escape and a backdrop click cancel.
 //
-// `warning` + `connect` turn this into a gate rather than a plain confirm:
-// when the flow references an app nobody has connected yet, going live would
-// arm automatic triggers for a run that cannot succeed, and the user would
-// have no reason to look at the run list to find out. The warning names what
-// is missing and `connect` becomes the emphasised action, which demotes
-// publishing to a deliberate override instead of the default click.
+// `warning` + `connect` turn this into a gate rather than a plain confirm: when
+// the flow references an app nobody has connected, going live would arm
+// automatic triggers for a run that cannot succeed, and the user would have no
+// reason to look at the run list to find out. The warning names what is missing
+// and `connect` becomes the emphasised action, which demotes publishing to a
+// deliberate override.
 export function PublishLabelModal({
   title,
   message,

@@ -14,16 +14,15 @@ import (
 
 // memoryWriteDedupe protects single-node deployments: every worker is a
 // goroutine in one dzd sharing one store, so a worker reclaiming another's
-// expired-lease job sees the recorded write and skips re-firing it.
-//
-// NOT cross-PROCESS: in a cluster, a reclaim by a DIFFERENT dzd won't see this
-// node's record, so a cross-node lease steal can still double-fire. A shared
-// implementation of the same interface closes that gap.
+// expired-lease job sees the recorded write and skips re-firing it. NOT
+// cross-PROCESS — in a cluster a reclaim by a different dzd won't see this
+// node's record, which a shared implementation of the same interface closes.
 //
 // The TTL only has to outlive the re-execution window — an expired lease is
-// reclaimed within tens of seconds, crash recovery within minutes — so an hour is
-// generous. The entry cap bounds memory with FIFO eviction, and an evicted entry
-// just means a rare re-execution re-fires, which is the at-least-once contract.
+// reclaimed within tens of seconds, crash recovery within minutes — so an hour
+// is generous. The entry cap bounds memory with FIFO eviction, and an evicted
+// entry just means a rare re-execution re-fires, which is the at-least-once
+// contract.
 const (
 	writeDedupeTTL      = time.Hour
 	writeDedupeMaxItems = 50_000

@@ -13,20 +13,16 @@ import (
 // Run-level "waiting for approval" status.
 //
 // A node that parks on an approval gets status=awaiting on its own record, but
-// the RUN kept reporting Running — so the runs list showed a flow that had
-// been sitting on a person for two days as though it were busy working, and
-// the list's "Waiting" filter matched nothing. The run status is the one most
-// people look at; this makes it tell the truth.
+// the RUN kept reporting Running — so a flow that had been sitting on a person
+// for two days looked busy, and the list's "Waiting" filter matched nothing.
 //
 // Only an approval pause counts. A subgraph node also parks as awaiting while
-// its child graph runs, and that run is not waiting on anybody — it has work
-// in flight. isApprovalPause draws the same line the Approvals inbox and the
-// mail hook draw: the pause emitted a pending_url, so there is something for a
-// human to decide.
+// its child graph runs, and that run has work in flight. isApprovalPause draws
+// the same line the Approvals inbox and the mail hook draw: the pause emitted a
+// pending_url, so there is something for a human to decide.
 //
-// Everything here is best-effort. The run status is a display concern; failing
-// to update it must never fail the park that already committed, nor the
-// decision that resumed it.
+// Everything here is best-effort — a display concern must never fail the park
+// that already committed, nor the decision that resumed it.
 
 func isApprovalPause(result *core.Result) bool {
 	if result == nil || result.Output == nil {

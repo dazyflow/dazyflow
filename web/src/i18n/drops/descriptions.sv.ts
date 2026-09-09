@@ -8,18 +8,18 @@ import type { DescriptionMap } from "../../lib/dropText";
 // `en` is the descriptionFingerprint (see dropText.ts) of the ENGLISH paragraph
 // each translation was made from. dropDescription compares it against the
 // manifest's current description and falls back to English on a mismatch, so a
-// description reworded on the Go side shows the new English rather than a
-// translation of behaviour that no longer exists. To refresh one: retranslate,
-// then recompute the fingerprint —
+// reworded description shows the new English rather than a translation of
+// behaviour that no longer exists. To refresh one: retranslate, then recompute
+// the fingerprint —
 //
 //   h = 2166136261
 //   for cp in english_text:  h = ((h ^ cp) * 16777619) & 0xFFFFFFFF
 //   "%08x" % h
 //
-// Prose is translated; identifiers, param keys, quoted literals and API values
-// ('mode', `row`, whsec_…, ORDER_OPEN) are left in English because that is what
-// the user types and what the service returns. Port and step names use the
-// Swedish forms from dropText.ts, so a description names what the card shows.
+// Prose is translated; identifiers, param keys and API values are left in
+// English because that is what the user types and what the service returns.
+// Port and step names use the Swedish forms from dropText.ts, so a description
+// names what the card shows.
 export const SV_DESCRIPTIONS: DescriptionMap = {
   and: {
     en: "3ec0832f",

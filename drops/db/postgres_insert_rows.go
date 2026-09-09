@@ -73,29 +73,22 @@ func init() {
 	})
 }
 
-// executePostgresInsertRows opens a single Postgres connection,
-// batch-inserts the input rows into the named table inside one
-// transaction, and reports the count. The whole batch succeeds or
-// rolls back — partial loads break the contract downstream nodes
-// expect.
+// executePostgresInsertRows opens a single Postgres connection, batch-inserts
+// the input rows into the named table inside one transaction, and reports the
+// count. The whole batch succeeds or rolls back — partial loads break the
+// contract downstream nodes expect.
 //
-// Credentials never reach this code as plaintext from the graph JSON:
-// the engine resolves ${secret.NAME} placeholders in
-// params (see engine/secrets.go) before Execute is invoked, so a DSN
-// like "postgres://app:${secret.DB_PROD_PWD}@db/orders" arrives with the
-// password already substituted. We hold the resolved DSN only for the
-// duration of the call.
+// Credentials never reach this code as plaintext from the graph JSON: the engine
+// resolves ${secret.NAME} placeholders before Execute is invoked, so the
+// resolved DSN is held only for the duration of the call.
 //
-// Connections: routed through defaultPGRegistry (see conns.go),
-// which caches one pgxpool.Pool per (tenant, dsn) and evicts idle
-// pools in a lazy sweep. Per-job overhead is now just a pool.Acquire
-// + Release rather than a full connect + auth + TLS handshake.
+// Connections route through defaultPGRegistry (conns.go), which caches one
+// pgxpool.Pool per (tenant, dsn), so per-job overhead is an Acquire + Release
+// rather than a connect + auth + TLS handshake.
 //
-// Identifiers (schema, table, column names) are restricted to
-// [A-Za-z0-9_] and then wrapped in standard double-quote quoting in
-// the generated SQL. That's defense-in-depth: even a future bug in
-// the regex wouldn't open a SQL-injection path because the identifier
-// would still be quoted in the right place.
+// Identifiers are restricted to [A-Za-z0-9_] and then double-quoted in the
+// generated SQL: defense in depth, so even a bug in the regex would not open a
+// SQL-injection path.
 func executePostgresInsertRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	dsn, err := params.String(job.Params, "dsn")
 	if err != nil {

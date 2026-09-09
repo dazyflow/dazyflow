@@ -5,13 +5,11 @@
 //
 // Reported missing three times. Twice it was fixed by changing a mechanism and
 // came back: first it lived in the scrolling half of the toolbar and was
-// genuinely off-screen (see FlowEditorToolbarOverflow.test.tsx), so it moved to
-// the canvas; then it greyed out below two steps at 40% opacity, which on a 1px
-// stroked glyph reads as absent rather than unavailable, so the dimming went.
-// After both, it was measurably on screen — and someone still could not find it.
-//
-// What both fixes missed is that the canvas cluster gives it no NAME. So it is
-// in the pinned toolbar too, labelled, next to Run.
+// genuinely off-screen, so it moved to the canvas; then it greyed out below two
+// steps at 40% opacity, which on a 1px stroked glyph reads as absent rather than
+// unavailable, so the dimming went. After both, it was measurably on screen —
+// and someone still could not find it, because the canvas cluster gives it no
+// NAME.
 //
 // The guards, therefore: both controls always render, neither is ever disabled
 // however small the flow, the toolbar one is never in the scrolling region, and

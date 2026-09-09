@@ -9,16 +9,14 @@ import { tokenizeScript, type ScriptLang } from "../../lib/scriptHighlight";
 // JsonEditor and CelInput, with the tokenizer chosen by the language the step
 // says it will run the script with.
 //
-// It exists because the field was a single-line <input>. A script is many lines
-// by nature — a shell one with a pipe per line, a Python one whose indentation
-// IS its structure — and everything past the right edge was invisible: you
-// could not read what a step would run without selecting the field and scrolling
-// through it with the arrow keys.
+// It exists because the field was a single-line <input>, and a script is many
+// lines by nature — everything past the right edge was invisible unless you
+// selected the field and arrowed through it.
 //
 // The highlight is generated as React elements rather than an HTML string, so
-// React escapes every character of the script and there is no innerHTML to get
-// wrong. That matters more here than in the JSON editor: this text is executed
-// on someone's machine, and it arrives from a flow that may not be the reader's.
+// there is no innerHTML to get wrong. That matters more here than in the JSON
+// editor: this text is executed on someone's machine, and it arrives from a flow
+// that may not be the reader's.
 export function ScriptEditor({
   value,
   onChange,

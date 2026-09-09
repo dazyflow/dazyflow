@@ -1,22 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package emailtheme renders Dazyflow's transactional ("system") email into
-// one professional, brand-consistent HTML layout: the welcome, email
-// verification, password reset, organization invitation, signup invitation,
-// and flow-failure notifications all share this shell.
+// Package emailtheme renders Dazyflow's transactional email into one
+// professional, brand-consistent HTML layout: the welcome, email verification,
+// password reset, organization invitation, signup invitation and flow-failure
+// notifications all share this shell.
 //
-// The markup is deliberately old-fashioned — nested tables, inline styles,
-// a 600px fixed container, web-safe fonts, a "bulletproof" button — because
-// that is the subset every mail client (Gmail, Outlook desktop, Apple Mail,
-// the mobile apps) renders consistently. Modern CSS (fl«ex/grid, external
-// stylesheets) is unreliable in email, so the <style> block carries only
-// progressive-enhancement resets and a mobile breakpoint; every visual is
-// also expressed inline so it survives a client that strips <style>.
+// The markup is deliberately old-fashioned — nested tables, inline styles, a
+// 600px fixed container, web-safe fonts, a "bulletproof" button — because that
+// is the subset every mail client renders consistently. The <style> block
+// carries only progressive-enhancement resets and a mobile breakpoint, and every
+// visual is also expressed inline so it survives a client that strips <style>.
 //
-// All caller-supplied text flows through html/template, so it is
-// HTML-escaped automatically — an inviter's name, a flow name, or a remote
-// error message can't inject markup into the email.
+// All caller-supplied text flows through html/template, so an inviter's name, a
+// flow name or a remote error message cannot inject markup into the email.
 package emailtheme
 
 import (

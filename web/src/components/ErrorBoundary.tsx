@@ -1,20 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The last line of defence. Neither SPA had one, so a render error anywhere in
-// the tree unmounted it and left an empty document: no message, no reload, no
-// indication the product had not simply died. React does this by design — an
-// error during render is treated as unrecoverable and the whole tree goes —
-// and only a boundary changes it.
+// The last line of defence. Without one, a render error anywhere in the tree
+// unmounts it and leaves an empty document — React treats an error during render
+// as unrecoverable by design, and only a boundary changes that.
 //
-// DELIBERATELY DEPENDENCY-FREE. No i18n, no router, no design-system button.
-// This component runs precisely when something else has just failed, and every
-// import it takes is another thing that can be the reason it cannot render.
-// react-i18next in particular reads a module-global instance that a failed
-// bootstrap may never have initialised, so a translated error page is one that
-// disappears exactly when a bootstrap error is what you needed to see. Plain
-// English and plain elements, styled with tokens the stylesheet already
-// defines.
+// DELIBERATELY DEPENDENCY-FREE. This component runs precisely when something
+// else has just failed, and every import it takes is another thing that can be
+// the reason it cannot render — react-i18next in particular reads a
+// module-global a failed bootstrap may never have initialised. Plain English and
+// plain elements, styled with tokens the stylesheet already defines.
 //
 // Boundaries must be class components: there is no hook equivalent of
 // getDerivedStateFromError.

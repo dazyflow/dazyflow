@@ -14,15 +14,13 @@ import (
 //
 // SubmitGraphWithSeed admits a top-level run immediately when the tenant is
 // under its max_concurrency, else it persists the run as a PENDING graph record
-// (status=queued) with its seeds but no runnable work. This file starts those
-// pending runs as slots free up.
+// with its seeds but no runnable work. This file starts those as slots free up.
 //
-// Promotion is driven by a periodic sweep (startConcurrencyPromotion) rather
-// than completion callbacks: it's robust to every way a slot can free (a run
-// succeeds, fails, is cancelled, or is reaped after a crash) without wiring a
-// hook into each path, at the cost of up to one sweep-interval of latency — a
-// non-issue for a fairness throttle. MarkGraphRunning's conditional flip makes
-// it safe to run on every replica at once.
+// Promotion is driven by a periodic sweep rather than completion callbacks: it
+// is robust to every way a slot can free — a run succeeds, fails, is cancelled,
+// or is reaped after a crash — without wiring a hook into each path, at the cost
+// of up to one sweep-interval of latency, which a fairness throttle can afford.
+// MarkGraphRunning's conditional flip makes it safe on every replica at once.
 
 // promotePendingRuns starts as many of a tenant's pending (queued) graph runs
 // as its free concurrency slots allow, oldest first. Uncapped tenants (pro/

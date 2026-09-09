@@ -5,21 +5,19 @@ package journey
 
 // Running the scenario corpus, rather than validating it on paper.
 //
-// tests/usecases/ (its README and graphs) proves each flow COMPOSES: the steps exist,
-// the wiring type-checks, the formulas do what they claim on sample data. None
-// of that runs the engine. These tests take the graphs as saved and put them
-// through the real stack — save, publish, fire, wait — with every outside
-// service mocked, then assert on what the world received.
+// tests/usecases/ proves each flow COMPOSES — the steps exist, the wiring
+// type-checks, the formulas do what they claim — but none of that runs the
+// engine. These tests take the graphs as saved and put them through the real
+// stack (save, publish, fire, wait) with every outside service mocked.
 //
-// The shapes here are chosen for their MECHANICS, not their business domain:
-// a loop handing a step structured data, a read-act-write-back round trip,
-// collecting loop results, transition-only firing, tolerating a failed step,
-// pausing for approval. Those are the parts that can only break at run time.
+// The shapes are chosen for their MECHANICS, not their business domain: a loop
+// handing a step structured data, a read-act-write-back round trip, collecting
+// loop results, transition-only firing, tolerating a failed step, pausing for
+// approval — the parts that can only break at run time.
 //
 // Every test also runs its flow a SECOND time. Eleven scenarios promise that
-// nothing happens twice — via only_new, unique_by, a write-back, or firing
-// only on a change — and that promise is the most damaging one in the product
-// to get wrong. A second run is how it gets checked.
+// nothing happens twice, and that is the most damaging promise in the product to
+// get wrong.
 
 import (
 	"fmt"

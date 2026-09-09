@@ -11,22 +11,20 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// Primitive comparison drops — the "super basic" split of the Compare node,
-// one node per operator, modelled on Unreal Blueprint's individual
-// comparison nodes (==, !=, >, >=, <, <=). Each bakes a fixed operator and
-// delegates to compareWith (compare.go), so there is exactly one evaluator:
-// a primitive can never drift from Compare's semantics — it IS Compare, with
-// the operator as the node's identity instead of a dropdown.
+// Primitive comparison drops — the "super basic" split of the Compare node, one
+// node per operator, modelled on Unreal Blueprint's individual comparison nodes.
+// Each bakes a fixed operator and delegates to compareWith (compare.go), so a
+// primitive can never drift from Compare's semantics — it IS Compare, with the
+// operator as the node's identity instead of a dropdown.
 //
-// They share Compare's shape — two operand pins A and B (wire them, or type a
-// literal default), and a Yes/No output emitting a boolean to feed Branch. The win is
-// reading speed: an "A > B" node says what it does at a glance, no need to
-// open it and read the dropdown. The full Compare stays the power node for
-// the long tail (contains, one_of, in_range, exists) — the primitives are
-// deliberately only the binary comparisons that earn their glance-value.
+// They share Compare's shape: two operand pins, and a Yes/No output feeding
+// Branch. The win is reading speed — an "A > B" node says what it does at a
+// glance. Compare stays the power node for the long tail (contains, one_of,
+// in_range, exists), so the primitives are only the binary comparisons that earn
+// their glance-value.
 //
-// Category "logic" (distinct from flow_control) buckets these pure
-// predicates; the UI tints the whole category one color, Blueprint-style.
+// Category "logic" (distinct from flow_control) buckets these pure predicates;
+// the UI tints the whole category one color.
 
 var operandSchema = json.RawMessage(`{
 	"type":"object",

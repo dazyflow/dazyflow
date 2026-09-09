@@ -12,22 +12,20 @@ import { useEscapeToClose } from "../ui/useEscapeToClose";
 import { FaceBody } from "./NodeDataFace";
 import type { Port, Ref } from "../../types";
 
-// The data face at reading size. The card's face is a 200px glance — three
-// rows, four columns, cells cut at 28 characters — which answers "did this
-// produce anything, and roughly what shape". It cannot answer "what is this
-// field called" for the eleventh column, and that is the question you have
-// when wiring the next step.
+// The data face at reading size. The card's face is a 200px glance — three rows,
+// four columns, cells cut at 28 characters — which answers "did this produce
+// anything, and roughly what shape". It cannot answer "what is this field
+// called" for the eleventh column, which is the question you have when wiring
+// the next step.
 //
-// A dialog rather than a second browser window: a window is blocked by
-// default, lands on top of the canvas anyway on a single screen, degrades to
-// a context-destroying tab on mobile, and cannot see the run state or the
-// shipped example without refetching them. This lives in the same React tree,
-// so it renders whatever the face is already showing — including an Example,
-// which a run-scoped route could not show at all.
+// A dialog rather than a second browser window: a window is blocked by default,
+// lands on top of the canvas anyway on a single screen, degrades to a
+// context-destroying tab on mobile, and cannot see the run state or the shipped
+// example without refetching them.
 //
-// It deliberately does NOT replace the card face. The canvas-wide Data view
-// (v) opens every card at once to trace one value through a whole flow, and
-// no dialog can do that. This is the per-port escalation behind it.
+// It deliberately does NOT replace the card face. The canvas-wide Data view (v)
+// opens every card at once to trace one value through a whole flow, and no
+// dialog can do that; this is the per-port escalation behind it.
 
 type Props = {
   // The step's name, so the data is never anonymous once it leaves the card.

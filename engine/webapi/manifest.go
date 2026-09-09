@@ -202,10 +202,9 @@ func retryPolicy(method string) core.RetryPolicy {
 //
 // The credential and NOTHING ELSE. The service address is deliberately not a
 // connection field: connections are writable with secret:write, the catalog
-// address is set behind organization:admin, and an injected connection value beats
-// the descriptor's own — so making the address one would let the less privileged
-// source redirect the token to a host of its choosing. The per-step base_url PARAM
-// remains, which is flow-shaping power graph:edit already has.
+// address is set behind organization:admin, and an injected connection value
+// beats the descriptor's own — so making the address one would let the less
+// privileged source redirect the token to a host of its choosing.
 //
 // Not marked Required: it is injected rather than typed, so flagging it would
 // mark every node incomplete until the connection exists.

@@ -100,13 +100,12 @@ export function NodeDataFace({ ports, outputs, active, onSelect, onExpand }: Pro
 
 // The card's shape line: WHAT came out, not a sample of it.
 //
-// The card used to render the same table the dialog does, at three rows and
-// four columns with cells cut at 28 characters. In a 300px card that could
-// not be read, and it duplicated the dialog badly — while hiding the thing
-// the canvas is actually for. Deciding what to wire next is a question about
-// FIELD NAMES, and names are short: all four fit on a line that a table's
-// truncated values did not. One line per card also scans across a whole flow
-// under Data view in a way three cramped rows never did.
+// The card used to render the same table the dialog does, at three rows and four
+// columns with cells cut at 28 characters. In a 300px card that could not be
+// read, and it duplicated the dialog badly while hiding what the canvas is
+// actually for: deciding what to wire next is a question about FIELD NAMES, and
+// names are short enough that all four fit on a line. One line per card also
+// scans across a whole flow under Data view.
 //
 // The row count is not repeated here — the footer already states it, and only
 // for a real run (see countLabel).

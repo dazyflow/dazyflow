@@ -92,14 +92,14 @@ var AbandonRunsAfter = 6 * time.Hour
 
 // abandonIfStuck fails a run that can never finish.
 //
-// Retention is run-scoped now: an unfinished run is never pruned, which is right,
-// but it means a run that can NEVER finish is immortal — it holds a concurrency
+// Retention is run-scoped, so an unfinished run is never pruned — which is right,
+// but it means a run that can NEVER finish is immortal: it holds a concurrency
 // slot for ever, so after a few of them every new run is admitted as pending and
 // never starts, and nothing notifies because the run never reaches a terminal
 // state. Two things produce one: a node record deleted by the old row-scoped
 // retention, and a submission whose enqueue and Complete both failed.
 //
-// The test is not "old" but "nothing is pending". A run with any queued, running
+// The test is not "old" but "nothing is pending": a run with any queued, running
 // or awaiting record is waiting for something real — an approval parked three
 // weeks, a delay counting down 90 days — and must never be touched.
 func (d *Dispatcher) abandonIfStuck(ctx context.Context, graph core.Graph, run core.JobRecord) bool {

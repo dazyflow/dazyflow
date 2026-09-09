@@ -19,20 +19,14 @@ const CELEBRATION_MS = 1200;
 // toolbar switch.
 //
 // The rule to hold onto is DRAFT SAFETY. "Live" means published AND enabled, and
-// those are two separate facts. Resuming a flow that already has a live version
-// must only re-enable it — the edits made while it was paused stay a draft until
-// they are deliberately pushed. Re-publishing on resume would silently ship work
-// nobody chose to ship, and exactly one `if` stands between those two outcomes.
+// those are two separate facts: resuming a flow that already has a live version
+// must only re-enable it, or edits made while it was paused ship without anyone
+// choosing to. Exactly one `if` stands between those outcomes, and
 // FlowEditorPublish.test.tsx fails if it inverts.
 //
-// What it does not own:
-//
-//   The enabled flag. `disabled` is part of the saved graph, so the component
-//   holds it and this hook reports changes back through setDisabled.
-//
-//   The history list. Publishing changes which revision is live, so a visible
-//   list has to be re-read — that arrives as onPublished rather than this hook
-//   reaching into the revisions cluster.
+// Not owned here: the enabled flag, which is part of the saved graph and comes
+// back through setDisabled, and the history list, which is re-read via
+// onPublished rather than this hook reaching into the revisions cluster.
 
 export interface UsePublishArgs {
   token: string | null;

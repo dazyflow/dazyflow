@@ -3,21 +3,19 @@
 
 // Package spotify hosts the native Spotify connector. Auth is Spotify OAuth2:
 // the daemon owns the token (its provider entry uses client_secret_basic, which
-// Spotify's token endpoint expects) and this package resolves it per-job via
-// the oauthtok hook the other OAuth connectors share.
+// Spotify's token endpoint expects) and this package resolves it per-job via the
+// oauthtok hook the other OAuth connectors share.
 //
 // Two facts shape what can be built here. Spotify has no webhooks, so anything
-// event-shaped polls — Schedule → a read step → dedupe, the same composition
-// the Fortnox and Gmail connectors document. And a Spotify app stays in
-// development mode unless its owner is a business with 250k monthly users, so
-// an install can connect at most five allowlisted listeners and the app owner
-// needs Premium; that ceiling belongs in front of an operator before they wire
-// a flow, so it is in the provider's SetupHelp.
+// event-shaped polls. And a Spotify app stays in development mode unless its
+// owner is a business with 250k monthly users, so an install can connect at most
+// five allowlisted listeners and the app owner needs Premium — a ceiling that
+// belongs in front of an operator before they wire a flow, so it is in the
+// provider's SetupHelp.
 //
-// Unlike Notion, no `token` param is offered on the steps: a Spotify access
-// token expires in an hour, so a pasted one is a flow that breaks by lunchtime.
-// Tests still inject through it — the oauthtok resolve sequence honors it —
-// they just do it with an undeclared param.
+// Unlike Notion, no `token` param is offered: a Spotify access token expires in
+// an hour, so a pasted one is a flow that breaks by lunchtime. Tests inject
+// through an undeclared param, which the oauthtok resolve sequence honors.
 package spotify
 
 import (

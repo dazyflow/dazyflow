@@ -2,21 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package geo hosts the OpenStreetMap connector: pick a location on a map and
-// emit its coordinate (geo_location, a pure value source parsed at run time
-// with no network), turn a place name into a coordinate, and turn a coordinate
-// back into a place name. The geocoding drops go through a pluggable backend
-// chosen per tenant via the OpenStreetMap connection (`backend`, `base_url`,
-// `api_key`), with DAZYFLOW_GEOCODER as the deployment default and Nominatim
-// as the final fallback (see geocoderFor):
+// emit its coordinate (geo_location, a pure value source with no network), turn
+// a place name into a coordinate, and turn a coordinate back into a place name.
+//
+// The geocoding drops go through a pluggable backend chosen per tenant via the
+// OpenStreetMap connection, with DAZYFLOW_GEOCODER as the deployment default and
+// Nominatim as the final fallback (see geocoderFor):
 //
 //   - nominatim: OpenStreetMap's reference API, no key. The public instance is
-//     limited to ~1 req/s and forbids bulk use; self-host for real load
-//     (base_url or DAZYFLOW_NOMINATIM_URL).
-//   - photon: Komoot's GeoJSON API, no key, good typo tolerance. Public
-//     instance is fair-use; self-host via base_url or DAZYFLOW_PHOTON_URL.
+//     limited to ~1 req/s and forbids bulk use; self-host for real load.
+//   - photon: Komoot's GeoJSON API, no key, good typo tolerance. Public instance
+//     is fair-use; self-host via base_url or DAZYFLOW_PHOTON_URL.
 //   - locationiq: hosted Nominatim-compatible API, REQUIRES an api_key.
 //
-// Every backend normalizes to geoPlace. Output coordinates are the "lat,lon"
+// Every backend normalizes to geoPlace, and output coordinates are the "lat,lon"
 // string the weather drops accept, so a geocode wires straight into a lookup.
 // All dials go through the shared SSRF-guarded client.
 package geo

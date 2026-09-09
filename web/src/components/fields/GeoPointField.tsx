@@ -10,24 +10,19 @@ import { mapConfig } from "../../mapConfig";
 
 // GeoPointField is the editor widget behind a param with format:"geo-point"
 // (the Location drop's `point`). It renders an OpenStreetMap map: search for a
-// place, then click or drag the pin to fine-tune. The value it reads/writes is
-// the canonical "lat,lon" string the Weather/geo drops speak.
+// place, then click or drag the pin. The value it reads and writes is the
+// canonical "lat,lon" string the Weather/geo drops speak.
 //
-// When a sibling Place (a city/address) is set, the pin FOLLOWS it: the Place
-// is geocoded client-side and the marker moves there, mirroring the run-time
-// behaviour where a Place overrides the map pin. In that mode manual picking is
-// off (the Place wins); clear the Place to pick on the map again.
+// When a sibling Place is set, the pin FOLLOWS it — geocoded client-side, mirror
+// of the run-time behaviour where a Place overrides the map pin — and manual
+// picking is off until the Place is cleared.
 //
-// Tiles and search default to OpenStreetMap's public servers — both free and
-// key-less, used here only at design time (one tile fetch per pan, one search
-// per place/typed query), within their fair-use policy. Attribution
-// ("© OpenStreetMap contributors") is shown, as their licence requires.
-//
-// Neither URL is hardcoded: both come from the daemon (mapConfig), so a
-// deployment can self-host either one. That indirection is load-bearing rather
-// than decorative — the app's Content-Security-Policy is built from the same
-// two values, so a hardcoded host here would be a host the browser is not
-// allowed to reach (blank map, failing search). See daemon/mapconfig.go.
+// Tiles and search default to OpenStreetMap's public servers, used here only at
+// design time and within their fair-use policy, with the attribution their
+// licence requires. Neither URL is hardcoded: both come from the daemon
+// (mapConfig), and that indirection is load-bearing, because the app's CSP is
+// built from the same two values — a hardcoded host would be one the browser is
+// not allowed to reach.
 
 function parsePoint(v: string): { lat: number; lon: number } | null {
   const m = v.split(",");

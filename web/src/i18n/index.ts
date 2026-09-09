@@ -62,20 +62,18 @@ export async function setLanguage(tag: string): Promise<void> {
   await i18n.changeLanguage(tag);
 }
 
-// i18nReady resolves when the first paint can be trusted to be in the
-// reader's language. main.tsx awaits it before rendering: a fetch is not
-// instant, and a screen that paints English and then redraws in Swedish is
-// worse than one that paints a moment later. Chained off init's own promise,
-// because the detector has not run — so there is no language to load — until
-// that resolves.
+// i18nReady resolves when the first paint can be trusted to be in the reader's
+// language. main.tsx awaits it before rendering: a screen that paints English
+// and then redraws in Swedish is worse than one that paints a moment later. It
+// chains off init's own promise, because until that resolves the detector has
+// not run and there is no language to load.
 //
-// It goes through setLanguage rather than loadLanguage alone for the second
-// half of that: i18n.language is the tag the DETECTOR reported, while
-// resolvedLanguage is the language i18next found strings for, which at this
-// point is still the bundled fallback. Adding a resource bundle does not move
-// resolvedLanguage on its own, and half the app reads it — the Settings
-// toggle, the tag passed to every drop-text resolver — so the switch has to
-// be made explicitly. Nothing has rendered yet, so it costs no redraw.
+// It goes through setLanguage rather than loadLanguage alone because
+// i18n.language is the tag the DETECTOR reported while resolvedLanguage is the
+// language i18next found strings for — still the bundled fallback at this point.
+// Adding a resource bundle does not move resolvedLanguage, and half the app
+// reads it, so the switch has to be explicit. Nothing has rendered yet, so it
+// costs no redraw.
 export const i18nReady: Promise<void> = initialized.then(() =>
   setLanguage(i18n.language ?? i18n.resolvedLanguage ?? "en"),
 );

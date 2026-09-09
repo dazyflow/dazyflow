@@ -6,26 +6,20 @@ import { useTranslation } from "react-i18next";
 
 // The one-shot confirmation shown when a publish lands.
 //
-// It used to be a 44px rocket that flew 220px up the middle of the screen
-// through two expanding coloured rings, under the word "Published!". That is a
-// consumer-app flourish, and it read as one: big, centred, exclaimed, and long
-// enough (1.6s) that it had to be waited out. Publishing is the most consequential
-// button in this product — it is what makes a flow start receiving — so the
-// feedback should carry weight, not delight.
+// Publishing is the most consequential button in this product — it is what makes
+// a flow start receiving — so the feedback should carry weight, not delight. The
+// rocket-and-rings version that preceded this read as a consumer-app flourish
+// and lasted long enough (1.6s) that it had to be waited out.
 //
 // So: a small card, one drawn check, a single quiet halo, and words that say
-// what changed rather than congratulating anybody. Everything moves a short
-// distance on an ease-out curve and nothing bounces, overshoots or spins. The
-// whole thing is done in a bit over a second.
-//
-// The check is inline SVG because it is drawn rather than shown — its stroke
-// is dashed and the dash offset animates to zero, which is the one flourish
-// here that is worth its cost: a mark being made reads as "this has been
-// recorded", where a mark that simply appears is just an icon.
+// what changed rather than congratulating anybody. Nothing bounces, overshoots
+// or spins. The check is inline SVG because it is drawn rather than shown — a
+// mark being made reads as "this has been recorded", where a mark that simply
+// appears is just an icon.
 //
 // Mount it conditionally (the parent clears the flag on a timer). It portals to
-// <body>, sits above everything, and never intercepts clicks. Honours
-// prefers-reduced-motion in CSS: no draw, no travel, a plain fade.
+// <body>, sits above everything, and never intercepts clicks.
+// prefers-reduced-motion is honoured in CSS: no draw, no travel, a plain fade.
 export function PublishCelebration() {
   const { t } = useTranslation();
   return createPortal(

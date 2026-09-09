@@ -78,21 +78,18 @@ func init() {
 	})
 }
 
-// executePostgresUpsertRows runs INSERT ... ON CONFLICT (...) DO UPDATE
-// for each input row, in one transaction. Like the insert drop, the
-// whole batch is atomic — partial upserts violate downstream contracts.
+// executePostgresUpsertRows runs INSERT ... ON CONFLICT (...) DO UPDATE for each
+// input row in one transaction. Like the insert drop the whole batch is atomic —
+// partial upserts violate downstream contracts.
 //
-// Conflict semantics: Postgres needs a unique index/constraint covering
-// the conflict_columns to match on. When create_table=true we add a
-// UNIQUE constraint on those columns at create time; for existing
-// tables the user is responsible for the index.
+// Postgres needs a unique index covering the conflict_columns to match on: with
+// create_table=true one is added at create time, and for an existing table the
+// user is responsible for it.
 //
-// Update set: by default every non-conflict column is overwritten from
-// the new row (the EXCLUDED pseudo-table). When update_columns is set,
-// only those columns are written — useful when some columns should be
-// "first-write-wins" rather than always overwritten. An empty
-// update_columns becomes ON CONFLICT DO NOTHING, which is a useful
-// "insert if missing" pattern.
+// By default every non-conflict column is overwritten from the new row. Setting
+// update_columns writes only those, which is how a column becomes
+// first-write-wins; an empty list becomes ON CONFLICT DO NOTHING, the "insert if
+// missing" pattern.
 func executePostgresUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	dsn, err := params.String(job.Params, "dsn")
 	if err != nil {

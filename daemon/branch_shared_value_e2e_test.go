@@ -20,17 +20,16 @@ import (
 
 // The double-send regression.
 //
-// The shape is the one people actually build: an If that mails one thing on
-// Yes and another on No, where BOTH send steps take their recipient from an
-// Email step sitting off to the side. That address wire is live for both
-// branches, and it used to be enough on its own to make the untaken send step
-// runnable — dispatch treated the If's unemitted `else` port as "no comment"
-// rather than "not down here", so any other live wire ran the branch nobody
-// chose and two mails went out.
+// The shape is the one people actually build: an If that mails one thing on Yes
+// and another on No, where BOTH send steps take their recipient from an Email
+// step off to the side. That address wire is live for both branches, and it used
+// to be enough on its own to make the untaken send step runnable — dispatch
+// treated the If's unemitted `else` port as "no comment" rather than "not down
+// here", so two mails went out.
 //
-// Note the untaken side is checked TWO steps deep: the skip has to keep
-// travelling past a step that itself has a live wire into it, or the leak
-// simply moves one node downstream.
+// The untaken side is checked TWO steps deep: the skip has to keep travelling
+// past a step that itself has a live wire into it, or the leak simply moves one
+// node downstream.
 func TestBranch_ValueWireCannotRunTheUntakenSide(t *testing.T) {
 	t.Parallel()
 	var sentYes, sentNo, followUp atomic.Int32

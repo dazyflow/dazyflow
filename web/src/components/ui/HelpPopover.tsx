@@ -9,26 +9,20 @@ import { useAnchoredPop } from "./useAnchoredPop";
 
 // The (i) affordance on a step header or a form field.
 //
-// This used to be a native `title=` tooltip, which failed the readers who
-// needed it most. A native tooltip does not fire on touch AT ALL — so on a
-// tablet every word of the step and field guidance was simply absent — and it
-// cannot be scrolled or pinned, which made it the wrong container for a drop
-// description (median 63 words, longest 131). Click-to-open fixes both: the
-// panel survives a pointer leaving it, scrolls when it has to, and a tap opens
-// it.
+// A native `title=` tooltip failed the readers who needed it most: it does not
+// fire on touch at all, so on a tablet every word of the step and field guidance
+// was absent, and it cannot be scrolled or pinned, which made it the wrong
+// container for a drop description (median 63 words). Click-to-open fixes both.
 //
-// `label` stays on the button as its accessible name and its hover text, so
-// the affordance still says what it is before you commit to opening it. The
-// body deliberately does NOT also live in `title`: two copies of the same
-// prose on one control read as a duplicate to a screen reader and flicker a
-// native tooltip over the panel on desktop.
+// `label` stays on the button as its accessible name and hover text, so the
+// affordance still says what it is before you open it. The body deliberately
+// does NOT also live in `title`: two copies of the same prose read as a
+// duplicate to a screen reader and flicker a native tooltip over the panel.
 //
 // The panel is portaled to <body> and positioned from the trigger's rect
-// (useAnchoredPop). Both call sites live inside .inspector-body, which scrolls
-// — and a scroll container clips on BOTH axes, so an absolutely-positioned
-// panel was sliced off at the panel's edge whenever the (i) sat near the
-// bottom or the body was narrower than the prose. Fixed coords, clamped to the
-// viewport, cannot be cut in half.
+// (useAnchoredPop), because both call sites live inside .inspector-body, which
+// scrolls — and a scroll container clips on both axes, slicing an
+// absolutely-positioned panel off at its edge.
 export function HelpPopover({ label, body }: { label: string; body: string }) {
   const [open, setOpen] = useState(false);
   const id = useId();

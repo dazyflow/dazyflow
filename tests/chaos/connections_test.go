@@ -148,15 +148,13 @@ func TestWideFanIn_DoesNotFloodTheLog(t *testing.T) {
 	}
 }
 
-// core.DefaultMaxVariadicFanIn (64) bounds a variadic input only when the port
-// declares no Max of its own — so the drop that DECLARES the port picked its
-// own ceiling, and a manifest is not always ours to trust. A remote runner's
-// arrives over gRPC and its max is taken verbatim (engine.portFromPB does no
-// clamping), as does an MCP host's and a web-API catalog's. A port declaring
-// max=1000000 therefore put fan-in back exactly where it was before the
-// default existed, bounded only by the 5000-connection cap — and for precisely
-// the steps outside the default palette, which is the same blind spot
-// TestCatalogLessModule_StillObeysFanIn was written about.
+// core.DefaultMaxVariadicFanIn bounds a variadic input only when the port
+// declares no Max of its own — so the drop that DECLARES the port picks its own
+// ceiling, and a manifest is not always ours to trust: a remote runner's arrives
+// over gRPC and its max is taken verbatim, as does an MCP host's and a web-API
+// catalog's. A port declaring max=1000000 therefore put fan-in back where it was
+// before the default existed, and for precisely the steps outside the default
+// palette.
 //
 // Every wire is a value the run assembles and stores, so "the manifest says so"
 // cannot mean unbounded.

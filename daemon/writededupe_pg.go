@@ -15,19 +15,17 @@ import (
 )
 
 // PgWriteDedupeStore is the shared, Postgres-backed core.WriteDedupeStore. It
-// closes the cross-process gap the in-memory engine.memoryWriteDedupe leaves
-// open: in a multi-node cluster, a lease reclaim by a DIFFERENT dzd can't see
-// the first node's in-memory record and re-fires the non-idempotent write
-// (Twilio SMS, Gmail send, Discord/Sheets/Home Assistant). Recording the result
-// in a shared row instead lets any node's reclaim find the prior result.
+// closes the cross-process gap engine.memoryWriteDedupe leaves open: in a
+// multi-node cluster a lease reclaim by a DIFFERENT dzd cannot see the first
+// node's in-memory record and re-fires the non-idempotent write.
 //
-// The guarantee is unchanged — at-least-once. Get and the external write are
-// not atomic, so two nodes that both Get a miss before either Puts can still
-// double-fire (the same narrow window single-node already has between a Get miss
-// and Put). What this removes is the LARGER cross-node window where a record
-// existed but was invisible to other processes. Put is first-writer-wins
-// (ON CONFLICT DO NOTHING): the same job ID reproduces the same write, so the
-// earliest recorded result is the right one to replay.
+// The guarantee is unchanged — at-least-once. Get and the external write are not
+// atomic, so two nodes that both Get a miss before either Puts can still
+// double-fire, the same narrow window a single node already has. What this
+// removes is the LARGER cross-node window where a record existed but was
+// invisible to other processes. Put is first-writer-wins: the same job ID
+// reproduces the same write, so the earliest recorded result is the right one to
+// replay.
 type PgWriteDedupeStore struct {
 	pool   *pgxpool.Pool
 	ttl    time.Duration

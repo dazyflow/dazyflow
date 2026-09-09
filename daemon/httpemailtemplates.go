@@ -19,18 +19,16 @@ import (
 	"github.com/dazyflow/dazyflow/internal/smtputil"
 )
 
-// Email templates are reusable HTML layout shells the email-sending drops wrap
-// a body in (see core.EmailTemplate). CRUD lives here; org templates are
-// stored in the encrypted secret store under the reserved "emailtmpl."
-// namespace at organization scope (tenant-wide, no flow tier). Unlike a
-// secret, a template's HTML is not sensitive, so GET returns it.
+// Email templates are reusable HTML layout shells the email-sending drops wrap a
+// body in (see core.EmailTemplate). Org templates live in the encrypted secret
+// store under the reserved "emailtmpl." namespace at organization scope; unlike
+// a secret, a template's HTML is not sensitive, so GET returns it.
 //
 //	GET    /api/v1/email-templates         → built-ins ∪ this org's templates
 //	PUT    /api/v1/email-templates/{name}  → create/replace an org template
 //	DELETE /api/v1/email-templates/{name}  → remove an org template
 //
-// Built-in templates (ID "builtin:…") are global and read-only: they always
-// appear in the list and cannot be written or deleted.
+// Built-in templates (ID "builtin:…") are global and read-only.
 
 const maxEmailTemplateBytes = 256 * 1024 // 256 KiB — HTML shells are larger than secrets
 

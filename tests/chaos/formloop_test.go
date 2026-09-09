@@ -21,18 +21,16 @@ import (
 )
 
 // TestTriggerLoop_IsBroken closed the self-triggering flow: a step calling one
-// of OUR OWN urls stamps core.TriggerDepthHeader, the /trigger endpoint reads
-// it into the run's TriggerDepth, and seedRun refuses past
-// core.MaxTriggerChainDepth.
+// of OUR OWN urls stamps core.TriggerDepthHeader, the /trigger endpoint reads it
+// into the run's TriggerDepth, and seedRun refuses past MaxTriggerChainDepth.
 //
-// The hosted form is the same entry point with none of that. handleForm calls
-// SubmitGraphWithSeed directly and passes no depth at all, so every form
-// submission starts a run at depth 0 — including one a flow's own HTTP step
-// posted. The chain never climbs and never breaks.
+// The hosted form is the same entry point with none of that: handleForm calls
+// SubmitGraphWithSeed directly and passes no depth, so every form submission
+// starts a run at depth 0 — including one a flow's own HTTP step posted.
 //
 // It is also the WEAKER door of the two: /trigger needs the flow's secret in an
-// Authorization header, /form needs nothing. The loop is startable by anyone
-// who has the public link.
+// Authorization header, /form needs nothing, so the loop is startable by anyone
+// holding the public link.
 func TestFormLoop_IsBroken(t *testing.T) {
 	hfnet.SetAllowPrivateEgress(true)
 	t.Cleanup(func() { hfnet.SetAllowPrivateEgress(false) })

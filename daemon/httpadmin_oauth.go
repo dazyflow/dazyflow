@@ -12,18 +12,16 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Admin OAuth provider configuration — paste-client-credentials-in-
-// the-UI for operators who'd otherwise have to set env vars and
-// restart the daemon. Endpoints:
+// Admin OAuth provider configuration — paste client credentials in the UI,
+// rather than setting env vars and restarting the daemon:
 //
 //	GET    /api/v1/admin/oauth-providers           — list known + their state
 //	PUT    /api/v1/admin/oauth-providers/{name}    — set credentials, live-register
 //	DELETE /api/v1/admin/oauth-providers/{name}    — clear credentials, unregister
 //
-// All gated on organization:admin OR platform:admin (same pattern as the
-// rest of /api/v1/admin/*). The endpoints write through the
-// encrypted secret store and update the in-memory registry; no
-// daemon restart needed for changes to take effect.
+// All gated on organization:admin OR platform:admin, like the rest of
+// /api/v1/admin/*. They write through the encrypted secret store and update the
+// in-memory registry, so no restart is needed.
 
 // adminProviderRow is the shape returned per provider in the list
 // response. Combines the deployment-invariant metadata (display

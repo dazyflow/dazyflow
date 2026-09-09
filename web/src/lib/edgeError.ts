@@ -4,23 +4,20 @@
 // What a connection does when the step it comes from fails.
 //
 // The engine has honoured this since the beginning (core.Edge.OnError, applied
-// by classifyEdge in daemon/dispatch.go) and nothing in the editor could set
-// it: a flow author had to reach for the API, the MCP tools or the flow's JSON
-// to say "run this only if that failed". This module is the editor's half —
-// the vocabulary, and how each mode is drawn.
+// by classifyEdge in daemon/dispatch.go) and nothing in the editor could set it,
+// so an author had to reach for the API or the flow's JSON to say "run this only
+// if that failed". This module is the editor's half — the vocabulary, and how
+// each mode is drawn.
 //
-// Two of the four are about ROUTING and one is not, which is the thing worth
-// getting straight before reading the rest:
+// Three of the four are routing and one is not:
 //
 //   ""         the default. The next step runs only if this one succeeded; a
 //              failure blocks the branch and fails the run.
 //   "skip"     the next step runs either way.
-//   "fallback" the next step runs ONLY on failure — dormant on success. This is
-//              the error handler.
-//   "retry"    not routing at all: it asks the WORKER to run the failed step
-//              again with backoff. For routing it behaves like the default
-//              (classifyEdge falls through to blocking), so it stacks with
-//              neither of the two above.
+//   "fallback" the next step runs ONLY on failure — the error handler.
+//   "retry"    not routing: it asks the WORKER to run the failed step again with
+//              backoff, and for routing behaves like the default, so it stacks
+//              with neither of the two above.
 export type EdgeErrorMode = "" | "skip" | "fallback" | "retry";
 
 // ROUTING_MODES are the three mutually exclusive answers to "when does the next

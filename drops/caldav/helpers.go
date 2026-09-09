@@ -67,18 +67,17 @@ func location(job core.Job) (*time.Location, error) {
 
 // resolveWindowEnd turns one end of a time window into an instant.
 //
-// It accepts the same relative forms the Google Calendar steps do — now,
-// today, tomorrow, +3d, tomorrow+9h — so a window can be written once and
-// moved between the two steps.
+// It accepts the same relative forms the Google Calendar steps do — now, today,
+// tomorrow, +3d, tomorrow+9h — so a window can be written once and moved between
+// the two steps. It also accepts what the Date & time step emits, which is the
+// most likely thing wired into these ports: RFC3339, a plain date, the
+// "2026-06-16 09:00" forms and Unix seconds — reltime's input layouts, which the
+// Date step shares.
 //
-// It also accepts what the Date & time step emits, which is the most likely
-// thing wired into these ports: ISO/RFC3339 (its default), a plain date, the
-// "2026-06-16 09:00[:00]" forms, and Unix seconds. Those are exactly
-// reltime's input layouts, which the Date step shares — the two were built to
-// interoperate. What does NOT flow in is a Date step set to render for a
-// HUMAN: a weekday name, the email/HTTP format, a 12-hour clock, or a custom
-// pattern like "DD/MM/YYYY". Those are display strings, and reltime says so
-// by name rather than guessing at a locale's date order.
+// What does NOT flow in is a Date step set to render for a HUMAN: a weekday
+// name, a 12-hour clock, a custom pattern like "DD/MM/YYYY". Those are display
+// strings, and reltime says so by name rather than guessing at a locale's date
+// order.
 func resolveWindowEnd(job core.Job, port, param string, loc *time.Location, now time.Time) (time.Time, bool, error) {
 	raw, ok := params.TextInputOr(job, port, params.StringDefault(job.Params, param, ""))
 	if !ok {

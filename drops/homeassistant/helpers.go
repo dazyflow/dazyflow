@@ -7,24 +7,18 @@
 // changes state.
 //
 // Auth + endpoint are a per-tenant ConnectionFields bundle (base_url + a
-// long-lived access token), configured once on the integration page rather
-// than typed on every node — exactly like ntfy's server+token. The engine
-// injects the configured connection into each node's unset params at run time
-// (injectConnectionDefaults), so flows carry only the per-use fields (which
-// service, which entity).
+// long-lived access token), configured once on the integration page and injected
+// into each node's unset params at run time, so flows carry only the per-use
+// fields.
 //
-// Home Assistant usually lives on the LAN (http://homeassistant.local:8123,
-// 192.168.x.x). The connection's base_url is tenant-supplied, so every dial
-// goes through the shared SSRF guard (net.SafeHTTPClient) — which refuses
-// loopback/private/link-local targets UNLESS the operator opted in via
-// DAZYFLOW_ALLOW_PRIVATE_EGRESS. That's the same posture the Postgres/MySQL
-// drops take for private DB hosts: reaching a public Nabu Casa URL works out
-// of the box; reaching a LAN instance needs the operator flag. The egress
-// error message says exactly that.
+// Home Assistant usually lives on the LAN, and the base_url is tenant-supplied,
+// so every dial goes through the shared SSRF guard: a public Nabu Casa URL works
+// out of the box, and reaching a LAN instance needs
+// DAZYFLOW_ALLOW_PRIVATE_EGRESS — the same posture the Postgres/MySQL drops take
+// for private DB hosts, and the egress error says so.
 //
-// The state-changed trigger remembers the last state it emitted per (flow,
-// node) via the cursor store the daemon wires at startup (cursor.SetStore),
-// the same mechanism google_form_trigger uses for its watermark.
+// The state-changed trigger remembers the last state it emitted per (flow, node)
+// via the cursor store, the same mechanism google_form_trigger uses.
 package homeassistant
 
 import (

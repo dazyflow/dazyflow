@@ -172,19 +172,18 @@ func TestUpload_NoSandboxConfigured(t *testing.T) {
 	}
 }
 
-// The regression test for the
-// upload-timeout bug. http.Server.ReadTimeout covers reading the ENTIRE
-// request including the body, and the gateway sets one global 30s value
-// (ServeListener) shared by every route — so an upload was implicitly capped
-// at whatever fits in 30s, not at maxUploadBytes: finishing a 200 MiB body
-// inside it needs ~6.7 MB/s sustained. A large upload over an ordinary uplink
-// died as a severed connection, never reaching the handler's 413.
+// The regression test for the upload-timeout bug. http.Server.ReadTimeout covers
+// reading the ENTIRE request including the body, and the gateway sets one global
+// 30s value shared by every route — so an upload was implicitly capped at
+// whatever fits in 30s, not at maxUploadBytes, and a large upload over an
+// ordinary uplink died as a severed connection without ever reaching the
+// handler's 413.
 //
 // The handler now lifts that ceiling for its own request via
-// http.ResponseController (which also requires jsonErrorWriter to expose
-// Unwrap — it is the writer handlers actually receive). This drives a real
-// server with a deliberately tiny ReadTimeout and a body streamed slower than
-// it, so the request only completes if the deadline was extended.
+// http.ResponseController, which also requires jsonErrorWriter to expose Unwrap.
+// This drives a real server with a deliberately tiny ReadTimeout and a body
+// streamed slower than it, so the request only completes if the deadline was
+// extended.
 func TestUpload_OutlivesServerReadTimeout(t *testing.T) {
 	t.Parallel()
 	h, root := newUploadHarness(t)

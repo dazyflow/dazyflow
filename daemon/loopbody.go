@@ -9,18 +9,16 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// loopBodyOwners maps each loop-body node ID → the for_each node that owns it.
-// A node is a loop body when it's reachable from a for_each's "body" output
-// pin (an edge with From = the for_each node and FromPort = "body");
-// ownership extends transitively along edges leaving the entry node. Loop-body
-// nodes are excluded from the normal dispatcher — they run only via their
-// for_each, once per item — so this is the single source of truth both the
+// loopBodyOwners maps each loop-body node ID → the for_each node that owns it. A
+// node is a loop body when it is reachable from a for_each's "body" output pin,
+// and ownership extends transitively along edges leaving the entry node.
+// Loop-body nodes are excluded from the normal dispatcher — they run only via
+// their for_each, once per item — so this is the single source of truth both the
 // seed path and the live dispatcher consult.
 //
 // v1 limitation: the body is "the entry node and everything downstream of it",
-// stopping only at the loop node itself. Don't wire a loop body back into the
-// main flow; a node reachable from both the body and the main flow is treated
-// as loop-owned (and thus excluded from normal dispatch).
+// stopping only at the loop node itself, so a node reachable from both the body
+// and the main flow is treated as loop-owned.
 func loopBodyOwners(graph core.Graph) map[string]string {
 	module := make(map[string]string, len(graph.Nodes))
 	for _, n := range graph.Nodes {
@@ -73,18 +71,15 @@ func validateLoopBodies(g core.Graph) error {
 	return nil
 }
 
-// extractLoopBody builds the standalone subgraph that a for_each runs once
-// per item: every node owned by forEachID, plus the edges that run *between*
-// those body nodes. The for_each's own "body" pin edge is dropped — in the
-// extracted subgraph the body entry node has no incoming edge, so it's a
-// root and runs with empty input (its params reference ${item.…} for the
-// row). Edges crossing the body boundary (into or out of the body from the
-// main flow) are dropped too; v1 body nodes draw their per-row data from
-// ${item.…} and from other body nodes only.
+// extractLoopBody builds the standalone subgraph a for_each runs once per item:
+// every node owned by forEachID, plus the edges between those body nodes. The
+// for_each's own "body" pin edge is dropped, so the entry node is a root and runs
+// with empty input, drawing its per-row data from ${item.…}. Edges crossing the
+// body boundary are dropped for the same reason.
 //
 // The returned graph inherits the parent's ID/Tenant/Workspace so secrets,
-// connection defaults, and resource resolution scope identically to the
-// main run. ok=false means this node owns no body (legacy/unwired for_each).
+// connection defaults and resource resolution scope identically to the main run.
+// ok=false means this node owns no body.
 func extractLoopBody(graph core.Graph, forEachID string) (core.Graph, bool) {
 	owners := loopBodyOwners(graph)
 	bodyIDs := map[string]struct{}{}

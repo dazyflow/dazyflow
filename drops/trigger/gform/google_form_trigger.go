@@ -111,19 +111,13 @@ func executeGoogleFormTrigger(ctx context.Context, job core.Job, progress chan<-
 	// First fire after publishing: record where the form is up to and emit
 	// NOTHING, so the flow starts watching from now.
 	//
-	// This step used to be the odd one out. With no stored watermark every
-	// response counts as new (see newerThan), so publishing a flow against a
-	// form that already had 500 responses fired all 500 into a step that acts
-	// on each one — 500 emails, 500 rows, 500 whatever. Every sibling watcher
-	// baselines silently for exactly this reason (gmail_search_messages,
-	// imap_search_messages, rss, sftp_list_files,
-	// homeassistant_state_changed, ticketmaster_on_new_event), and two of
-	// them carry comments claiming they mirror THIS one, which was the wrong
-	// way round.
+	// With no stored watermark every response counts as new, so publishing a flow
+	// against a form that already had 500 responses fired all 500 into a step
+	// that acts on each one. Every sibling watcher baselines for the same reason.
 	//
-	// It also removes a way to lose the lot: emitting a backlog and then
-	// failing to record it meant re-emitting the same backlog on every fire,
-	// for ever, against a step whose contract is "each response exactly once".
+	// It also removes a way to lose the lot: emitting a backlog and then failing
+	// to record it meant re-emitting the same backlog on every fire, for ever,
+	// against a step whose contract is "each response exactly once".
 	if last == "" {
 		if newCursor != "" {
 			if werr := cursor.Write(ctx, job.Tenant, cursorName, newCursor); werr != nil {

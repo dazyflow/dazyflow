@@ -7,15 +7,14 @@
 // the Go table in internal/svsearch that both search paths read.
 //
 // The table used to live in web/src/lib/dropSearch.ts, which split the product
-// in two: a Swedish word added so a person could find a step in the editor's
-// palette did nothing for the same person asking the AI to build the flow,
-// because the server-side search — the one search_drops and the MCP
-// list_drops tool go through — had never heard of it. Go owns the data now and
-// the web reads a generated copy.
+// in two: a Swedish word added so a person could find a step in the palette did
+// nothing for the same person asking the AI to build the flow, because the
+// server-side search had never heard of it. Go owns the data now and the web
+// reads a generated copy.
 //
-// TypeScript rather than the JSON the other two scripts emit: those are read
-// by guard tests, this one is imported by application code, so it carries its
-// own types and needs no tsconfig change to consume.
+// TypeScript rather than the JSON the other two scripts emit: those are read by
+// guard tests, this one is imported by application code, so it carries its own
+// types and needs no tsconfig change to consume.
 package main
 
 import (

@@ -170,22 +170,19 @@ const membershipUpsertSQL = `
             roles      = EXCLUDED.roles,
             invited_by = EXCLUDED.invited_by`
 
-// PutMembershipWithinLimit implements auth.SeatLimitedMembershipStore: it
-// counts and seats inside one transaction, so two people accepting at once
-// can't both take the last seat.
+// PutMembershipWithinLimit implements auth.SeatLimitedMembershipStore: it counts
+// and seats inside one transaction, so two people accepting at once can't both
+// take the last seat.
 //
-// The count alone isn't enough to make that safe. Under READ COMMITTED both
-// transactions would take their snapshot before either insert lands, both read
-// the same free seat, and both proceed. A per-tenant advisory lock serializes
-// the pair instead: the second waits for the first to commit and then counts
-// again, seeing the seat gone. The lock is transaction-scoped, so it's
-// released on commit AND on rollback — a panicking or cancelled accept can't
-// wedge an org out of ever adding anyone.
+// The count alone isn't enough. Under READ COMMITTED both transactions take
+// their snapshot before either insert lands, both read the same free seat, and
+// both proceed. A per-tenant advisory lock serializes the pair instead, and
+// being transaction-scoped it releases on commit AND on rollback, so a panicking
+// or cancelled accept can't wedge an org out of ever adding anyone.
 //
-// Locking on the tenant (not globally) keeps unrelated orgs writing in
-// parallel; hashtext maps the tenant id onto the bigint the advisory lock API
-// takes. A hash collision between two tenants costs a little contention and
-// nothing else — both still count their own rows.
+// Locking on the tenant keeps unrelated orgs writing in parallel; hashtext maps
+// the tenant id onto the bigint the advisory lock API takes, and a collision
+// costs a little contention and nothing else.
 func (s *PgMembershipStore) PutMembershipWithinLimit(ctx context.Context, m Membership, maxRows int) (bool, error) {
 	email := strings.ToLower(strings.TrimSpace(m.UserEmail))
 	if email == "" {

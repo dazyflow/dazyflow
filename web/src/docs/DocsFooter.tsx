@@ -3,17 +3,15 @@
 
 // The site footer, under the prev/next pair at the foot of every page.
 //
-// A reference site ends somewhere, and until now this one just stopped: the
-// last thing on the page was whatever the last table happened to be. That
-// reads as an internal build rather than a product's documentation, and it
-// leaves the two questions a reader most often has at the bottom of a docs
-// page — what is this thing, and where do I get it — with nowhere to land.
+// A reference site ends somewhere, and this one used to just stop at whatever
+// the last table happened to be — which reads as an internal build, and leaves
+// the two questions a reader most often has at the bottom of a docs page (what
+// is this thing, where do I get it) with nowhere to land.
 //
 // The link columns are DERIVED FROM NAV, the same decision ORDER makes in
-// content.ts: a footer that lists its own copy of the sidebar is a second
-// list to keep in step, and the failure mode is a footer quietly pointing at
-// a page that moved. Only the off-site links are written out here, because
-// nothing in the nav knows about them.
+// content.ts: a footer listing its own copy of the sidebar is a second list to
+// keep in step, and it fails by quietly pointing at a page that moved. Only the
+// off-site links are written out here.
 import { Link } from "react-router-dom";
 import { NAV } from "./content";
 import { SITE, SOURCE, LICENSE, CONTACT, INVITE } from "./links";

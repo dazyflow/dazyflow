@@ -12,41 +12,25 @@ import (
 	"sync"
 )
 
-// The daemon serves its own runner agent.
-//
-// That is what makes the install a single line with one secret in it:
+// The daemon serves its own runner agent, which is what makes the install one
+// line with one secret in it:
 //
 //	curl -fsSL https://dazyflow.example.com/runner.sh | sh -s -- --token dzrt_… --service
 //
-// The alternative — publishing the agent somewhere else and asking the operator
-// to supply the server address too — means two things to get right instead of
-// one, and a version of the agent that can drift from the server it talks to.
-// Serving it here makes skew impossible: whatever answers this URL is exactly
-// what that server expects to talk to.
-//
-// Two files, both public and unauthenticated on purpose. Neither is a secret:
-// they are source anyone may read (which is the point of them being scripts),
-// and runner.sh does nothing without a registration token. Requiring auth to
-// download them would break the one-liner for no gain.
-//
-// runner.sh is both halves of the operator's experience. Piped from here it sets
-// the machine up; the copy it leaves behind is how the runner is managed from
-// then on — install, start, stop, status, logs, uninstall. One file to fetch,
-// one file to read, one file to keep.
+// Serving the agent here also makes version skew impossible: whatever answers
+// this URL is exactly what that server expects to talk to. Both files are
+// public and unauthenticated on purpose — they are source anyone may read, and
+// runner.sh does nothing without a registration token. The copy runner.sh
+// leaves behind is also how the runner is managed from then on.
 
 //go:embed embed/dzrunner.py embed/runner.sh
 var runnerFiles embed.FS
 
 const urlPlaceholder = "@@DAZYFLOW_URL@@"
 
-// agentSHAPlaceholder is where the installer carries the checksum of the agent
-// it is about to download and execute.
-//
-// runner.sh fetches dzrunner.py and runs it as a service, so without this the
-// only thing vouching for that file is the transport. Substituting the hash of
-// the very bytes this build embeds means the two files cannot disagree: an
-// agent altered between here and the runner's disk fails the check instead of
-// being chmod +x'ed. Left as the placeholder when running from the repository,
+// agentSHAPlaceholder carries the checksum of the agent the installer is about
+// to download and execute; without it the only thing vouching for dzrunner.py
+// is the transport. Left as the placeholder when running from the repository,
 // where runner.sh skips the check and says so.
 const agentSHAPlaceholder = "@@DAZYFLOW_AGENT_SHA256@@"
 
@@ -93,20 +77,16 @@ func (h *runnerAPI) serveRunnerScript(rw http.ResponseWriter, r *http.Request) {
 	_, _ = rw.Write([]byte(script))
 }
 
-// runnerBaseURL is the address an agent should call back on.
-//
-// Prefers the configured public URL, because that is the one an operator
-// deliberately set and the only one that is right behind a proxy. Falls back to
-// reconstructing it from the request, which is what a local development server
-// needs — there the request host IS the address.
+// runnerBaseURL is the address an agent should call back on: the configured
+// public URL when there is one (the only address that is right behind a proxy),
+// otherwise reconstructed from the request, which is what local development
+// needs.
 //
 // The fallback goes through effectiveBaseURL rather than reading the forwarded
 // headers itself. GET /runner.sh is unauthenticated and the address it bakes in
-// is where the agent then downloads code from and posts its registration token,
-// so an ungated X-Forwarded-Proto let any caller decide the served script said
-// "http://" — and an ungated X-Forwarded-Host let a primed cache point real
-// operators at somebody else's server. effectiveBaseURL gates both on
-// TrustProxyHeaders, which is the rule the rest of the gateway already follows.
+// is where the agent downloads code from and posts its token, so an ungated
+// X-Forwarded-Host let a primed cache point real operators at someone else's
+// server.
 func (h *runnerAPI) runnerBaseURL(r *http.Request) string {
 	if h.svc != nil {
 		if b := h.effectiveBaseURL(r); b != "" {

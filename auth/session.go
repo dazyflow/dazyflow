@@ -147,23 +147,18 @@ func (a *SessionAuthenticator) now() time.Time {
 	return time.Now()
 }
 
-// NextSessionExpiry computes the expiry a live session should slide to
-// when its holder makes a request at now, turning the fixed-lifetime
-// session into a rolling one: an active user keeps getting fresh time and
-// is never bounced mid-work, while an idle one still lapses idle past the
-// current ExpiresAt.
+// NextSessionExpiry computes the expiry a live session should slide to when its
+// holder makes a request at now, turning a fixed-lifetime session into a rolling
+// one: an active user is never bounced mid-work, while an idle one still lapses.
 //
-// Two knobs bound it. idle is the sliding window — each renewal pushes
-// expiry to now+idle. maxAge is the absolute ceiling measured from
-// CreatedAt (<= 0 disables it): a continuously-used session can't outlive
-// CreatedAt+maxAge, so a leaked token can't be kept alive forever by
-// merely being used. The renewed expiry is capped to that ceiling.
+// Two knobs bound it. idle is the sliding window — each renewal pushes expiry to
+// now+idle. maxAge is the absolute ceiling measured from CreatedAt (<= 0
+// disables it), so a leaked token can't be kept alive forever by merely being
+// used.
 //
-// The second return reports whether the new expiry is worth persisting. To
-// keep steady traffic from writing the store on every request, a renewal
-// only fires once the session has entered the second half of its idle
-// window (less than idle/2 remaining); before that, and once the absolute
-// cap has been reached, it returns the unchanged expiry and false.
+// The second return reports whether the new expiry is worth persisting: to keep
+// steady traffic from writing the store on every request, a renewal only fires
+// once the session is in the second half of its idle window.
 func NextSessionExpiry(sess Session, idle, maxAge time.Duration, now time.Time) (time.Time, bool) {
 	if idle <= 0 {
 		return sess.ExpiresAt, false

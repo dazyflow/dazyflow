@@ -2,27 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package roaring hosts the native Roaring connector — Roaring.io is the Nordic
-// company- and person-data enrichment service (org-number → company overview,
-// name → candidate companies, credit/risk data). The shipped drops are a first
-// vertical over Roaring's company data: look up a company by its organisation
-// number (roaring_company_overview) and search for one by name
-// (roaring_company_search). Together they're the resolve-then-enrich loop a
-// workflow uses to turn a bare org number (or a typed company name) into
-// structured data.
+// company- and person-data enrichment service. The drops are a first vertical
+// over its company data: look up a company by organisation number and search for
+// one by name, which together are the resolve-then-enrich loop that turns a bare
+// org number or typed name into structured data.
 //
-// Auth is Roaring's OAuth2 *client-credentials* flow: a Consumer Key + Consumer
-// Secret are exchanged for a short-lived bearer token at POST /token (HTTP Basic
-// with the key:secret, grant_type=client_credentials) —
-// https://developer.roaring.io/docs/guides/api-authorization-guide. Because this
-// is a two-legged machine grant (no per-user consent, no redirect), it needs NO
-// daemon-side OAuth provider or token store: the connector performs the exchange
-// itself at run time from the static key/secret and caches the token in memory
-// until it nears expiry. So — like 46elks / Klarna / nShift — this is a
-// static-credential connector from the platform's point of view.
+// Auth is Roaring's OAuth2 client-credentials flow: a Consumer Key + Secret are
+// exchanged for a short-lived bearer at POST /token. Being a two-legged machine
+// grant (no per-user consent, no redirect) it needs no daemon-side OAuth
+// provider — the connector does the exchange itself and caches the token until
+// it nears expiry, so like 46elks / Klarna / nShift this is a static-credential
+// connector from the platform's point of view.
 //
-// The key + secret are a per-tenant service connection (Manifest.ConnectionFields),
-// set once on the Apps page (stored as conn.roaring.*) and injected into each
-// action's job at run time, so credentials never live in the graph.
+// The key + secret are a per-tenant service connection set once on the Apps page
+// and injected at run time, so credentials never live in the graph.
 package roaring
 
 import (

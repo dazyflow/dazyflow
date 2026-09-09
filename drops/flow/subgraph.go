@@ -68,23 +68,20 @@ func init() {
 	})
 }
 
-// executeSubgraph is purely declarative: it validates params, repackages
-// the parent's Input as a seed map keyed by child node ID, and returns
-// awaiting with the metadata the worker needs to submit the child. The
-// worker hands SubGraphRunner the metadata; this module never touches
+// executeSubgraph is purely declarative: it validates params, repackages the
+// parent's Input as a seed map keyed by child node ID, and returns awaiting with
+// the metadata the worker needs to submit the child. This module never touches
 // the JobStore or Service directly.
 //
 // Wire shape:
 //
-//   - input_map (param): { parentPort → childNodeID }
-//     For every entry, the Ref the engine assembled on parentPort is
-//     forwarded onto childNodeID as a single-Ref seed (the child node's
-//     Execute will read its `in` input).
+//   - input_map (param): { parentPort → childNodeID }. The Ref the engine
+//     assembled on parentPort is forwarded onto childNodeID as a single-Ref
+//     seed, which the child node's Execute reads as its `in` input.
 //
-//   - output_map (param): { parentPort → {node, port} }
-//     After the child terminates, the dispatcher reads child.node's
-//     terminal output[port] and writes it to the parent's parentPort.
-//     Unmapped parent ports stay empty.
+//   - output_map (param): { parentPort → {node, port} }. After the child
+//     terminates, the dispatcher writes child.node's terminal output[port] to
+//     the parent's parentPort. Unmapped parent ports stay empty.
 func executeSubgraph(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	graphID, ok := job.Params["graph_id"].(string)
 	if !ok || graphID == "" {

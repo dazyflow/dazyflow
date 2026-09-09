@@ -35,23 +35,22 @@ type DropSwitchStore interface {
 	Disable(ctx context.Context, sw DropSwitch) error
 	Enable(ctx context.Context, dropID, tenant string) error
 	List(ctx context.Context) ([]DropSwitch, error)
+	// AnonymizeSubject replaces an erased person's identifier wherever it appears
+	// in this store's rows, returning the rows changed.
+	//
+	// The rows belong to an ORG and outlive the person, so the identifier is
+	// pseudonymised rather than deleted, the same treatment the audit trail gets.
+	// Deleting an org takes these rows anyway; this is the OTHER path, where a
+	// member of a shared org erases their account and the org carries on.
+	AnonymizeSubject(ctx context.Context, ident string) (int, error)
 	// DeleteByTenant clears every per-tenant switch set against a tenant,
-	// returning the count. The erasure-cascade entry point (GDPR Art. 17): a
-	// row names the admin who set it and the reason they gave.
+	// returning the count — the erasure-cascade entry point (GDPR Art. 17), since
+	// a row names the admin who set it and the reason they gave.
 	//
 	// GLOBAL switches (tenant "") are never touched, and an empty tenant is
-	// refused outright rather than treated as "all". A global switch is the
-	// platform's own kill-switch on a broken drop; taking those out while
-	// erasing one org would silently re-enable it for everybody.
-	// AnonymizeSubject replaces an erased person's identifier wherever it
-	// appears in this store's rows, returning the rows changed.
-	//
-	// The rows belong to an ORG and outlive the person, so their identifier is
-	// pseudonymised rather than deleted — the same treatment the audit trail
-	// gets. Deleting an org takes these rows anyway; this is the OTHER path,
-	// where a member of a shared org erases their account and the org carries
-	// on with their address still in it.
-	AnonymizeSubject(ctx context.Context, ident string) (int, error)
+	// refused rather than treated as "all": a global switch is the platform's own
+	// kill-switch on a broken drop, so removing one while erasing an org would
+	// silently re-enable it for everybody.
 	DeleteByTenant(ctx context.Context, tenant string) (int, error)
 }
 

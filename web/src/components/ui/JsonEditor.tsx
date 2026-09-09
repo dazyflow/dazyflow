@@ -4,17 +4,15 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 
 // JsonEditor is a dependency-free, syntax-highlighted JSON editor. It layers a
-// transparent <textarea> (the real input + caret) over an aria-hidden <pre>
-// that renders the same text tokenised into coloured spans. The two share
-// identical metrics (font, padding, line-height, wrapping) so the visible
-// highlight sits exactly under the caret; the textarea drives the <pre>'s
-// scroll so they stay aligned. No editor library — the stack has none and JSON
-// is simple enough to tokenise with one regex (see tokenizeJSON).
+// transparent <textarea> (the real input + caret) over an aria-hidden <pre> that
+// renders the same text tokenised into coloured spans. The two share identical
+// metrics so the highlight sits exactly under the caret, and the textarea drives
+// the <pre>'s scroll. No editor library — the stack has none and JSON tokenises
+// with one regex.
 //
 // Tolerant by design: it highlights whatever currently looks like JSON, so
-// partial/mid-typing input still colours. Validity is a separate, soft signal
-// — `invalid` (caller-computed) just tints the border red; it never blocks
-// typing. Used by the inspector field and the on-card value-source editor.
+// mid-typing input still colours. `invalid` is a soft, caller-computed signal
+// that only tints the border; it never blocks typing.
 export function JsonEditor({
   value,
   onChange,
@@ -74,19 +72,17 @@ export function JsonEditor({
   );
 }
 
-// tokenizeJSON turns JSON text into an array of React nodes — one <span> per
-// coloured token, plain strings for the gaps. React escapes every value as it
-// renders, so unlike the old HTML-string approach this needs no manual
-// escaping and exposes no innerHTML surface. Token groups:
+// tokenizeJSON turns JSON text into React nodes — one <span> per coloured
+// token, plain strings for the gaps — so React escapes every value as it renders
+// and there is no innerHTML surface. Token groups:
 //   1 = a string immediately followed by a colon → an object KEY
 //   2 = the "<ws>:" that follows that key (ws kept plain, ":" punctuated)
 //   3 = a string value
 //   4 = a number
 //   5 = true | false | null
 //   6 = structural punctuation { } [ ] , :
-// Strings are matched before numbers/literals, so digits/words inside a string
-// are part of the string, not separately coloured. Untokenised text (whitespace,
-// stray characters in mid-typing input) is emitted verbatim.
+// Strings are matched before numbers/literals, so digits inside a string are
+// part of the string. Untokenised text is emitted verbatim.
 export function tokenizeJSON(src: string): ReactNode[] {
   if (!src) return [];
   const re =

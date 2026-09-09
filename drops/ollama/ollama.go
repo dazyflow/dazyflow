@@ -1,31 +1,23 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package ollama is the local-model provider for the shared llmtask core —
-// the sibling of drops/claude and drops/openai, and the first that talks to
-// something the operator runs themselves.
+// Package ollama is the local-model provider for the shared llmtask core — the
+// sibling of drops/claude and drops/openai, and the first that talks to
+// something the operator runs themselves, so a self-hosted dazyflow is not
+// obliged to hold an account with a US model vendor to use the AI steps.
 //
-// It exists so a self-hosted dazyflow is not obliged to hold an account with a
-// US model vendor to use the AI steps at all. The task UX is unchanged: the
-// same five steps, the same manifests, a different endpoint.
+// Ollama serves an OpenAI-compatible /v1/chat/completions, so the shapes here
+// mirror drops/openai rather than using the native /api/chat. Two things differ,
+// and both are why llmtask grew KeyOptional and BaseURLLabel:
 //
-// Ollama serves an OpenAI-compatible /v1/chat/completions, so the request and
-// response shapes here mirror drops/openai deliberately rather than using the
-// native /api/chat. Two things genuinely differ, and both are why llmtask grew
-// KeyOptional and BaseURLLabel:
+//   - There is no API key — authentication is the network boundary. One is
+//     still accepted, because a shared instance is often behind a reverse proxy
+//     that wants one.
+//   - There is no model catalog. Models are whatever the operator has pulled, so
+//     the model field is free text and the default below is only a guess.
 //
-//   - There is no API key. Ollama is a process on a machine the operator
-//     controls; authentication is the network boundary, not a bearer token. A
-//     key is still accepted, because a shared instance is often fronted by a
-//     reverse proxy that wants one.
-//   - There is no model catalog. Models are whatever the operator has pulled,
-//     so the step's model field is free text rather than a picker, and the
-//     default below is only a guess at the most likely one.
-//
-// Reaching a localhost Ollama needs the operator to have set
-// DAZYFLOW_ALLOW_PRIVATE_EGRESS — the SSRF guard blocks private addresses by
-// default and that default is right. Without it the connection test fails
-// with a clear egress_blocked rather than a timeout.
+// Reaching a localhost Ollama needs DAZYFLOW_ALLOW_PRIVATE_EGRESS; without it
+// the connection test fails with a clear egress_blocked rather than a timeout.
 package ollama
 
 import (

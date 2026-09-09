@@ -78,14 +78,14 @@ type ModelOption struct {
 //
 // Optional. A provider without one keeps its compiled-in Models list, which is
 // the honest answer when there is no catalog endpoint to ask. A provider WITH
-// one is saying its catalog moves faster than our releases — which is the
-// normal case, and which a static list gets wrong in both directions: it
-// cannot offer a model published after the list was written, and it goes on
-// offering one the vendor has since withdrawn. Only the vendor knows, and only
-// per credential: availability varies by key, project and tier.
+// one is saying its catalog moves faster than our releases, and a static list
+// then gets it wrong in both directions: it cannot offer a model published after
+// the list was written, and it goes on offering one the vendor has withdrawn.
+// Only the vendor knows, and only per credential — availability varies by key,
+// project and tier.
 //
-// Implementations must be read-only and free (a catalog GET, not a
-// generation), because this runs without the user asking for it.
+// Implementations must be read-only and free (a catalog GET, not a generation),
+// because this runs without the user asking for it.
 type ModelLister func(ctx context.Context, apiKey, baseURL string) ([]ModelOption, error)
 
 // ProviderInfo is a registered backend: its stable id, the integration name

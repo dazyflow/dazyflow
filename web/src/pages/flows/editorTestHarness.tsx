@@ -3,26 +3,22 @@
 
 // Shared rig for the FlowEditor tests.
 //
-// The editor is the one surface in the app with no behavioural coverage, and it
-// is also the one carrying a 26-atom / 27-effect state machine — which is
-// exactly the code that cannot be safely refactored into hooks without tests,
-// because `tsc` does not catch a stale closure or a wrong dependency array.
-// These helpers exist so each test can say what it is actually about rather
-// than restating six mocks.
+// The editor carries a 26-atom / 27-effect state machine, which is exactly the
+// code that cannot be safely refactored into hooks without tests: `tsc` does not
+// catch a stale closure or a wrong dependency array. These helpers let each test
+// say what it is about rather than restate six mocks.
 //
 // Two things make the editor testable at all:
 //
-//   api.streamJob(token, runID, onEvent, signal) is the ONLY route by which run
-//   state reaches the canvas. Capturing `onEvent` lets a test drive the exact
-//   frame sequence the daemon would send — node status, progress, terminal —
-//   synchronously and in whatever order it likes, including the orders that are
-//   hard to reproduce against a real daemon (a terminal frame arriving before a
-//   node's record fetch resolves, say).
+//   api.streamJob is the ONLY route by which run state reaches the canvas, so
+//   capturing `onEvent` lets a test drive the exact frame sequence the daemon
+//   would send, synchronously and in orders that are hard to reproduce against a
+//   real daemon.
 //
-//   React Flow needs layout, and jsdom has none. It reads element geometry
-//   through ResizeObserver and getBoundingClientRect, both of which have to be
-//   stubbed with non-zero sizes or the canvas renders nothing and every node
-//   assertion fails for the wrong reason.
+//   React Flow reads element geometry through ResizeObserver and
+//   getBoundingClientRect, which jsdom does not implement — both must be stubbed
+//   with non-zero sizes or the canvas renders nothing and every assertion fails
+//   for the wrong reason.
 
 import { vi } from "vitest";
 

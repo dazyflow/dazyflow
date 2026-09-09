@@ -1,26 +1,21 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package openmeteo hosts the Open-Meteo connector: read the current
-// conditions or a multi-day daily forecast for a latitude/longitude from
-// Open-Meteo's Forecast API.
+// Package openmeteo hosts the Open-Meteo connector: current conditions or a
+// multi-day daily forecast for a latitude/longitude.
 //
-// Open-Meteo needs NO API key for non-commercial use — the free endpoint
-// (api.open-meteo.com) answers key-less. A key is only required for
-// Open-Meteo's commercial (paid) plan, which routes through a separate host
-// (customer-api.open-meteo.com) and carries the key as an `apikey` query
-// param. The key is therefore an OPTIONAL per-tenant ConnectionField: leave
-// it blank and the drops call the free endpoint; set it and they call the
-// commercial one. Deciding whether a given use is commercial — and supplying
-// a key when it is — is the user's responsibility, mirrored in the field copy.
+// Open-Meteo needs no API key for non-commercial use; a key is only required for
+// the paid plan, which routes through a separate host and carries it as an
+// `apikey` query param. The key is therefore an OPTIONAL per-tenant
+// ConnectionField — blank calls the free endpoint, set calls the commercial one.
+// Deciding whether a use is commercial is the user's responsibility, and the
+// field copy says so.
 //
-// The coordinate can be typed on the node as separate Latitude / Longitude
-// numbers, or wired in from another step as a single "lat,lon" text value on
-// the Coordinate input (so a geocode step, a form field, or a device's GPS
-// can drive it). Coordinate parsing, unit symbols and number formatting are
-// shared with the other location connectors in drops/internal/geoloc. The
-// hosts are fixed (not tenant-supplied), but the dial still goes through the
-// shared SSRF guard (net.Do → SafeHTTPClient).
+// The coordinate can be typed as separate Latitude / Longitude numbers or wired
+// in as a single "lat,lon" text value, so a geocode step, a form field or a
+// device's GPS can drive it. Parsing, unit symbols and number formatting are
+// shared with the other location connectors in drops/internal/geoloc. The hosts
+// are fixed, but the dial still goes through the shared SSRF guard.
 package openmeteo
 
 import (

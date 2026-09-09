@@ -6,24 +6,19 @@
 // Two passes, and the second one is the point.
 //
 // EARLIEST (longest path from the roots) fixes how many columns there are and
-// guarantees every edge points rightward: a node sits at least one column right
-// of everything feeding it. On its own it also puts every node with no incoming
-// edge in column 0 — because that is where they all start and only targets are
-// ever pushed along. A Text card wired solely into the fifth step is not a
-// root of anything a reader cares about, but it looked like one, so Tidy parked
-// it at the far left with a wire dragged across the whole canvas. That is the
-// bug this file exists to fix.
+// guarantees every edge points rightward. On its own it also puts every node
+// with no incoming edge in column 0, because that is where they all start and
+// only targets are ever pushed along — so a Text card wired solely into the
+// fifth step got parked at the far left with a wire dragged across the canvas.
 //
-// LATEST then slides each node right until it is one column left of its
-// nearest consumer. MIN over consumers, not max: a node feeding both step 1 and
-// step 5 belongs beside step 1, and taking the max would drag it past a node it
-// has to precede. Since a consumer's column is always at least one greater than
-// this node's earliest column, the slide can only move a node right, never past
-// a predecessor — the first pass's ordering survives untouched.
+// LATEST then slides each node right until it is one column left of its nearest
+// consumer. MIN over consumers, not max: a node feeding both step 1 and step 5
+// belongs beside step 1. Since a consumer's column is always greater than this
+// node's earliest column, the slide can only move a node right, never past a
+// predecessor.
 //
-// Triggers are exempt. A trigger is the graph's entry point and reads as the
-// place the flow begins, so it anchors the left edge even when its only wire
-// runs to something late. Shortening that one edge would cost more than it buys.
+// Triggers are exempt: a trigger reads as the place the flow begins, so it
+// anchors the left edge even when its only wire runs to something late.
 
 export interface LayoutEdge {
   source: string;

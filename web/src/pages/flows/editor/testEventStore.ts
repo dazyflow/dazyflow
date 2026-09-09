@@ -4,16 +4,13 @@
 // Remembers the JSON payload last used in the editor's "Send test event"
 // dialog, per flow.
 //
-// Without this the dialog regenerated a fresh synthetic sample every time it
-// opened, so a payload you had shaped to reproduce something — the awkward
-// field, the empty array, the real body you pasted out of a provider's docs —
-// lasted exactly one firing and had to be typed again for the next. Testing an
-// edge case twice meant preparing it twice.
+// Without it the dialog regenerated a fresh synthetic sample every time, so a
+// payload you had shaped to reproduce something lasted exactly one firing and
+// had to be typed again — testing an edge case twice meant preparing it twice.
 //
-// localStorage, keyed by flow, so it is per person and per browser. That is
-// the right scope for a scratch payload: it is not part of the flow, it is not
-// something a teammate should inherit, and it must not ride along in a publish
-// or show up in the draft-vs-published diff.
+// localStorage, keyed by flow, so it is per person and per browser. That is the
+// right scope for a scratch payload: it is not part of the flow, and it must not
+// ride along in a publish or show up in the draft-vs-published diff.
 
 const KEY_PREFIX = "dazyflow.testEvent.";
 

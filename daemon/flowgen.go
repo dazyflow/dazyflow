@@ -16,24 +16,21 @@ import (
 	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
-// Flow generation: "describe a flow in plain English → a draft flow graph".
-// The flagship AI feature. It runs server-side through the shared LLM layer
-// (internal/llm) using the tenant's connected provider, built around:
+// Flow generation: "describe a flow in plain English → a draft flow graph". It
+// runs server-side through the shared LLM layer using the tenant's connected
+// provider, built around:
 //
-//  1. Grounding — the model gets a COMPACT CATALOG of the steps that exist
-//     (ids, params, ports) and is told to use only those.
+//  1. Grounding — the model gets a COMPACT CATALOG of the steps that exist (ids,
+//     params, ports) and is told to use only those.
 //  2. Structured output — it answers via a forced tool whose schema is the
-//     flow-graph shape, so we decode JSON, not scrape prose.
+//     flow-graph shape, so we decode JSON rather than scrape prose.
 //  3. Validate-and-repair — the candidate is linted with the SAME linter the
-//     save path uses (core.LintGraph); errors are fed back for the model to
-//     fix, bounded by a retry cap.
-//  4. Triggers — for scheduled requests it emits a graph-level cron trigger,
-//     which we validate with the real cron parser (event/webhook flows use a
-//     webhook_input node from the catalog instead — graph triggers are cron
-//     only).
+//     save path uses, and errors are fed back, bounded by a retry cap.
+//  4. Triggers — a scheduled request emits a graph-level cron trigger, validated
+//     with the real cron parser. Event/webhook flows use a webhook_input node
+//     instead, since graph triggers are cron only.
 //
-// Safety: the result is a DRAFT. It is never saved and never run — the editor
-// opens it for review.
+// The result is a DRAFT: never saved, never run — the editor opens it for review.
 
 const (
 	flowGenMaxTokens = 4000

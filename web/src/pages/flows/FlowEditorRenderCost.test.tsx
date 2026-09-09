@@ -6,23 +6,18 @@
 // The editor's per-node data cache (displayNodes) exists so that editing,
 // dragging or advancing one step re-renders one card. It is defeated by any
 // single dependency that gets a fresh identity on every render, and when it is
-// defeated NOTHING FAILS — the canvas is still correct, just quadratically
-// more expensive as a flow grows. Measured in a real browser before the fix, a
-// sixty-step flow re-rendered all sixty cards on every pointermove of a drag.
+// defeated NOTHING FAILS — the canvas stays correct, just quadratically more
+// expensive as a flow grows. Measured in a real browser, a sixty-step flow
+// re-rendered all sixty cards on every pointermove of a drag.
 //
-// So this is a cost test, and it asserts a shape rather than a number: a change
-// scoped to one step must not re-render the others. That is the property; the
-// mechanisms that deliver it today (tokenLabels reusing its object when the
-// content is unchanged, memo on the node card) are free to change as long as
-// the property holds.
+// So this asserts a shape rather than a number: a change scoped to one step must
+// not re-render the others. The mechanisms that deliver that today are free to
+// change as long as the property holds. It counts renders rather than timing
+// anything, because a count is deterministic and a jsdom timing is not.
 //
-// It counts renders rather than timing anything, because a count is
-// deterministic and a jsdom timing is not.
-//
-// VERIFIED TO FAIL WITHOUT THE FIX, which is the only thing that makes a
-// regression test worth its runtime: with tokenLabels handing back a fresh
-// object each render, one status frame produced 7 card renders on a 7-node
-// canvas instead of 1.
+// Verified to fail without the fix, which is the only thing that makes a
+// regression test worth its runtime: one status frame produced 7 card renders on
+// a 7-node canvas instead of 1.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, act, waitFor } from "@testing-library/react";

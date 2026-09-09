@@ -2,31 +2,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package nshift hosts the native nShift connector (formerly Unifaun /
-// Consignor) — the dominant multi-carrier shipping platform across the Nordics.
-// The shipped drops are a thin first vertical over nShift's Unifaun ExtAPI v1:
-// book a shipment (nshift_create_shipment), look one up (nshift_get_shipment),
-// and delete an unprinted draft (nshift_delete_shipment). That's the
-// create → track → cancel loop a workflow tool actually automates against a
-// carrier account.
+// Consignor), the dominant multi-carrier shipping platform across the Nordics.
+// The drops are a thin first vertical over nShift's Unifaun ExtAPI v1: book a
+// shipment, look one up, delete an unprinted draft — the create → track → cancel
+// loop a workflow tool automates against a carrier account.
 //
-// Auth is nShift's static API-key scheme: a generated key sent as
-// `Authorization: Bearer <key>` (see
-// https://help.unifaun.com/phc-se/en/16401-16968-authorization-and-access.html).
-// Like 46elks / Klarna / Stripe this is a static-credential connector — no
-// daemon-side OAuth provider or token lookup. The key is a per-tenant service
-// connection (Manifest.ConnectionFields), set once on the Apps page (stored as
-// conn.nshift.*) and injected into each action's job at run time, so the
-// credential never lives in the graph. This mirrors ntfy / Home Assistant /
-// SMTP / 46elks.
+// Auth is nShift's static API-key scheme (`Authorization: Bearer <key>`), so
+// like 46elks / Klarna / Stripe the key is a per-tenant service connection
+// injected at run time and never lives in the graph.
 //
-// nShift has separate hosts for its production and integration-test
-// environments; the environment is part of the connection (envHosts maps it to
-// a host), defaulting to the integration sandbox so a half-configured
-// connection can't book (and bill) a real carrier consignment.
+// The environment is part of the connection (envHosts maps it to a host) and
+// defaults to the integration sandbox, so a half-configured connection cannot
+// book — and bill — a real carrier consignment.
 //
 // The ExtAPI has no push webhooks for these resources, so event reactions
-// ("shipment delivered") compose the same way the Klarna/Stripe connectors
-// document: a poll trigger driving nshift_get_shipment → branch on status.
+// compose as a poll trigger driving nshift_get_shipment → branch on status.
 package nshift
 
 import (

@@ -18,28 +18,23 @@ import type { Vocabulary } from "../../lib/dropText";
 // The catalog is authored in English on the Go side and stays that way: it is
 // what the API, the MCP tools and the AI generator are grounded on, so
 // translating core.Manifest would change the contract every non-human consumer
-// reads. Only the human UI localizes, and it does so here — one hop from the
-// manifest text to the reader's language, applied at render time.
+// reads. Only the human UI localizes, at render time.
 //
 // Why these strings live in a lib module and not in i18n/*.json:
 //   - The key is the English catalog string itself, so a label changing on the
 //     Go side MISSES here and falls back to the new English. Per-drop-id keys
-//     would instead keep showing a stale translation of text that no longer
-//     exists — silently wrong beats visibly untranslated.
-//   - i18next treats "." in a key as a path separator; catalog strings are
-//     prose ("A ≠ B", "Place → map coordinate") and can grow a dot at any
-//     time. Natural keys in a plain Record dodge that entirely.
-//   - Two maps of 87 labels + 89 subtitles dedupe the 145 drops (five Stripe
-//     drops share one label), and they belong beside the search aliases in
-//     dropSearch.ts that translate the same vocabulary in the other direction.
+//     would keep showing a stale translation of text that no longer exists.
+//   - i18next treats "." in a key as a path separator, and catalog strings are
+//     prose that can grow a dot at any time. Natural keys dodge that.
+//   - The two maps dedupe the drops that share a label, and they belong beside
+//     the search aliases in dropSearch.ts, which translate the same vocabulary
+//     in the other direction.
 //
-// Brand names are absent on purpose — Slack stays Slack. Only generic English
-// gets a Swedish reading, and an entry identical to its key would be noise, so
-// those are left out and resolved by the fallback.
+// Brand names are absent on purpose — Slack stays Slack — and so is any entry
+// identical to its key, which the fallback resolves anyway.
 //
-// The whole Swedish vocabulary is ~90 KB gzipped, so it lives behind the
-// dynamic import in dropText.loadVocabulary: an English reader never
-// downloads a word of it.
+// The whole Swedish vocabulary is ~90 KB gzipped, so it lives behind the dynamic
+// import in dropText.loadVocabulary: an English reader never downloads it.
 
 export const SV_LABELS: Record<string, string> = {
   "A AND B": "A OCH B",

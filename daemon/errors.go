@@ -14,29 +14,13 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// ErrorEnvelope is the structured error shape every spec-aligned
-// endpoint returns on a 4xx/5xx response. The shape matches the
-// `ErrorEnvelope` schema in daemon/openapi.yaml — wire format is:
+// ErrorEnvelope is the structured error every spec-aligned endpoint returns on
+// a 4xx/5xx; the shape matches the `ErrorEnvelope` schema in openapi.yaml.
+// Routes that have not been migrated still emit the legacy {"error":"<string>"}
+// via writeJSONError, and the web client's parser accepts both.
 //
-//	{
-//	  "error": {
-//	    "code":    "drop_not_found",
-//	    "message": "no such drop: foo",
-//	    "details": [ {"field": "params.channel", "issue": "required"} ],
-//	    "doc":     "/api/v1/openapi.json#/.../SlackSendMessage"
-//	  }
-//	}
-//
-// The legacy {"error": "<string>"} shape is still emitted by
-// writeJSONError on routes that haven't been migrated yet (most of
-// the gateway today). The web client's parser accepts both.
-//
-// Code is a stable snake_case enum for machine-readable branching.
-// Message is the human/LLM-readable explanation — keep it
-// actionable. Details is optional and structured (per-field
-// validation failures). Doc is an optional deep link into the
-// OpenAPI spec describing the expected shape — invaluable for an
-// LLM that hit a 4xx and needs to read what it should have sent.
+// Code is the stable snake_case discriminator; Doc deep-links the spec for the
+// expected shape, which is what an LLM needs after a 4xx.
 type ErrorEnvelope struct {
 	Error ErrorBody `json:"error"`
 }
@@ -133,20 +117,14 @@ func requireOrgAdmin(rw http.ResponseWriter, p core.Principal) bool {
 	return true
 }
 
-// jsonErrors wraps a handler so the Go ServeMux's built-in plain-text
-// responses for an unmatched route (404) and a method mismatch (405) come
-// back as the same JSON ErrorEnvelope as every other error. It decides at
-// WriteHeader time — never buffers — so long-lived SSE streams are
-// untouched.
+// jsonErrors rewrites the ServeMux's plain-text 404/405 as the same JSON
+// envelope as every other error. It decides at WriteHeader time and never
+// buffers, so SSE streams are untouched.
 //
-// The discriminator is Content-Type, and it names what gets REWRITTEN rather
-// than what gets left alone: text/plain (what http.Error and the mux's own
-// 404/405 set) and a writer that set nothing at all. Any other type is a
-// handler that deliberately chose its own representation and keeps it —
-// application/json because it already built an envelope, and text/html
-// because it rendered a page for a human. The public hosted form is the
-// second kind: it is the one URL an owner gives to their customers, and
-// before this it answered them with a raw JSON envelope on a blank page.
+// Content-Type is the discriminator, and it names what gets rewritten:
+// text/plain (what http.Error and the mux set) or nothing at all. Anything else
+// is a handler that chose its own representation — text/html in particular is
+// the public hosted form, the one URL an owner gives their customers.
 func jsonErrors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		next.ServeHTTP(&jsonErrorWriter{ResponseWriter: rw}, r)

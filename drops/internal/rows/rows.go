@@ -1,25 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package rows holds the row/header normalization shared by the
-// database-connector drops (drops/db) and the data-shaping drops
-// (drops/transform). Both consume the same external shapes — native
-// typed slices in-process, and the []any / map[string]any forms that
-// arrive once a payload has round-tripped through JSON, gRPC, or MCP —
-// so the coercion logic lives here once instead of being copied per
-// integration.
+// Package rows holds the row/header normalization shared by the database
+// connectors (drops/db) and the data-shaping drops (drops/transform). Both
+// consume the same external shapes — native typed slices in-process, and the
+// []any / map[string]any forms that arrive once a payload has round-tripped
+// through JSON, gRPC or MCP — so the coercion lives here once.
 //
-// The two callers differ in two small ways, both expressed through
-// Options on Normalize:
-//
-//   - drops/transform caps the input against the per-drop row ceiling
-//     (limits.MaxRows) so a transform can't be made to hold an
-//     unbounded list; drops/db does not pre-cap here.
-//   - drops/transform accepts a single object (a webhook/form JSON
-//     body) as a one-row list; drops/db only accepts list shapes.
-//
-// Everything else — CoerceRowMap, DeriveHeaders — is byte-for-byte
-// identical across the two and exported as-is.
+// The two callers differ in two ways, both expressed through Options on
+// Normalize: drops/transform caps the input against the per-drop row ceiling and
+// accepts a single object as a one-row list; drops/db does neither.
 package rows
 
 import (

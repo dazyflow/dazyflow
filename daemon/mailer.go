@@ -22,12 +22,11 @@ import (
 	"github.com/dazyflow/dazyflow/internal/smtputil"
 )
 
-// Mailer sends the platform's own transactional email — invitation
-// links, failure notifications — through ONE operator-configured SMTP
-// account (DAZYFLOW_SMTP_URL + DAZYFLOW_SMTP_FROM). This is deliberately
-// separate from the Email drop: that one sends through each tenant's
-// own mail server as a flow step; this one is daemon infrastructure,
-// off until the operator wires it.
+// Mailer sends the platform's own transactional email — invitation links,
+// failure notifications — through ONE operator-configured SMTP account
+// (DAZYFLOW_SMTP_URL + DAZYFLOW_SMTP_FROM). Deliberately separate from the Email
+// drop, which sends through each tenant's own server as a flow step; this is
+// daemon infrastructure, off until the operator wires it.
 //
 // URL shapes:
 //
@@ -37,11 +36,9 @@ import (
 //
 // Credentials are optional (an internal relay may not need them).
 //
-// DAZYFLOW_SMTP_FROM may carry a display name in RFC 5322 form so the
-// recipient's client shows a friendly sender instead of the bare local
-// part: "Dazyflow <hi@dazyflow.app>". The display name only rides the
-// From: header — the SMTP envelope and the Message-ID domain always use
-// the bare address parsed out of it.
+// DAZYFLOW_SMTP_FROM may carry a display name in RFC 5322 form, which rides the
+// From: header only — the SMTP envelope and the Message-ID domain always use the
+// bare address parsed out of it.
 type Mailer struct {
 	From string // From: header, may include a display name
 

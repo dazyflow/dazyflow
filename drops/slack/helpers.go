@@ -1,20 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package slack hosts the Slack launch connector — the first T1
-// drops on the path to a Zapier-shape product. Two action drops
-// (slack_send_message, slack_list_channels) for v1; the
-// slack_on_mention webhook trigger is a follow-up because Events-
-// API routing crosses the daemon boundary.
+// Package slack hosts the Slack connector: two action drops
+// (slack_send_message, slack_list_channels) for v1, with the slack_on_mention
+// webhook trigger a follow-up because Events-API routing crosses the daemon
+// boundary.
 //
-// Token resolution: the drops accept either an explicit `token`
-// param (for tests / users pasting a bot token by hand) OR an
-// `account` param that the daemon's OAuth registry maps to the
-// connected Slack workspace's access token via the
-// SetTokenLookup hook. The lookup hook avoids an import cycle
-// (daemon → drops/slack would conflict with the umbrella
-// integrations import that dzd already does); production wires it
-// at startup, tests can stub it.
+// Token resolution: the drops accept either an explicit `token` param (for tests
+// and users pasting a bot token by hand) or an `account` param that the daemon's
+// OAuth registry maps to the connected workspace's access token via the
+// SetTokenLookup hook. The hook avoids an import cycle; production wires it at
+// startup and tests can stub it.
 package slack
 
 import (

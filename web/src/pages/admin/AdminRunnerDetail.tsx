@@ -175,24 +175,20 @@ function RunnerStatus({ runner }: { runner: Runner }) {
 }
 
 // RunnerTags assigns the tags a machine carries — which is to say which steps
-// can send it work.
-//
-// Two things the layout has to make true, because getting either wrong sends
-// work to the wrong machine and the mistake only shows up in a run:
+// can send it work. Two things the layout has to make true, because getting
+// either wrong sends work to the wrong machine and only shows up in a run:
 //
 //   The NAME is a tag, always, and cannot be removed. That is what lets a step
-//   target one machine without a separate field for it, and it is invisible
-//   unless the page shows it — so it sits with the others, marked, rather than
-//   being described in prose nobody reads.
+//   target one machine without a separate field, and it is invisible unless the
+//   page shows it, so it sits with the others rather than in prose nobody reads.
 //
-//   A step matching on tags needs ALL of them. So these are requirements a
+//   A step matching on tags needs ALL of them, so these are requirements a
 //   machine satisfies, not categories it belongs to, and the intro says so.
 //
-// Each add and each remove saves on its own rather than collecting a draft
-// behind a Save button. The set is short, one request per act leaves no
-// half-entered state to lose, and the saved row comes back from the server — so
-// a tag typed as "Build " visibly becomes "build", which is the spelling a step
-// has to use.
+// Each add and remove saves on its own: the set is short, one request per act
+// leaves no half-entered state to lose, and the saved row comes back from the
+// server — so a tag typed as "Build " visibly becomes "build", which is the
+// spelling a step has to use.
 function RunnerTags({
   runner,
   onSaved,

@@ -137,18 +137,15 @@ func executeRenderTable(_ context.Context, job core.Job, _ chan<- core.Progress)
 	return renderTableResult(job, buildHTMLTable(title, cols, rowsOut)), nil
 }
 
-// tableColumn is one column of the output: `key` is the row field the cells
-// come from, `label` is what the header says. They are the same thing for a
-// plainly-named column, and deliberately separable for a table meant to be
-// read by a person — `customer_email` is the data's name for it, "Customer" is
-// the reader's.
+// tableColumn is one column of the output: `key` is the row field the cells come
+// from, `label` is what the header says. The same thing for a plainly-named
+// column, and deliberately separable for a table meant to be read by a person —
+// `customer_email` is the data's name for it, "Customer" is the reader's.
 //
-// The split is what makes renaming a header work at all. The inspector's
-// column editor has always offered "tap a column to rename it", and with only
-// a name to write it wrote the new name into `columns` as the KEY: the header
-// read "Customer" and every cell under it came out blank, because no row has a
-// field called "Customer". The header text and the field name are two
-// different facts and the param now carries both.
+// The split is what makes renaming a header work at all. With only a name to
+// write, the inspector's column editor wrote the new name into `columns` as the
+// KEY: the header read "Customer" and every cell under it came out blank,
+// because no row has a field called "Customer".
 type tableColumn struct {
 	key   string
 	label string

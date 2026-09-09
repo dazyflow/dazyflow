@@ -413,19 +413,17 @@ func TestRevokeInvitation_Cov(t *testing.T) {
 	}
 }
 
-// The seat gate must count the organization
-// owner, who holds no membership row.
+// The seat gate must count the organization owner, who holds no membership row.
 //
 // Ownership is implicit in the home tenant: `memberships` carries a row for
-// everyone who was invited, and nobody for the owner. listMembers knows this
-// and adds the owner back before rendering the People page, so the page shows
-// N+1 people where the table holds N rows. The seat gate read the rows alone,
-// so the two disagreed by exactly one and every plan seated one person too
-// many — a 3-seat org reached four before anything refused.
+// everyone who was invited and nobody for the owner, and listMembers adds the
+// owner back before rendering the People page. The seat gate read the rows
+// alone, so the two disagreed by exactly one and every plan seated one person
+// too many.
 //
-// Walking it through at limit 3: owner + 2 invited = 3 people, which is the
-// cap, so the next invitation must be refused. Counting rows alone reads 2,
-// sees 2 >= 3 is false, and lets a fourth person in.
+// At limit 3: owner + 2 invited = 3 people, so the next invitation must be
+// refused. Counting rows alone reads 2, sees 2 >= 3 is false, and lets a fourth
+// person in.
 func TestSeatQuota_CountsTheOwner(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)

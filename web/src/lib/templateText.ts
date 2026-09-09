@@ -12,15 +12,13 @@ import type { TemplateSummary } from "../types";
 // Localized template vocabulary — the gallery's counterpart to dropText.ts.
 //
 // Templates are authored in English in web/public/templates/index.json and stay
-// that way: the file is fetched by id, seeded into flows, and referenced by the
+// that way: the file is fetched by id, seeded into flows and referenced by the
 // docs, so translating it in place would fork the data. Only the human UI
-// localizes, one hop from the index entry to the reader's language, at render
-// time.
+// localizes, at render time.
 //
 // Kept separate from dropText.ts rather than folded into its Vocabulary because
 // the two populations have nothing in common but the trick: a drop is a step in
-// a catalog the daemon serves, a template is a JSON file behind a card. Sharing
-// the fingerprint helper is the whole of what they usefully share.
+// a catalog the daemon serves, a template is a JSON file behind a card.
 
 // resolve looks one entry up and falls back to the English on a fingerprint
 // mismatch — the drift guard described in i18n/templates.sv.ts.

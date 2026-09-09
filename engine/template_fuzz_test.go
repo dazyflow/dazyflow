@@ -8,27 +8,21 @@ import (
 	"testing"
 )
 
-// Exercises the ${scheme.path} template parser against
-// arbitrary input bytes, pinning two contract invariants the example-based
-// tests in template_test.go only spot-check:
+// Exercises the ${scheme.path} template parser against arbitrary input bytes,
+// pinning two contract invariants the example-based tests only spot-check:
 //
-//  1. Passthrough identity — a substituter that claims no scheme (ok=false for
-//     everything) must return the input verbatim. SubstituteString's whole
-//     reason for the restrictive scheme charset is that unrelated text (JSON
-//     templates, shell snippets, money amounts like ${5}) survives untouched;
-//     any input where a "left intact" match is silently dropped or mangled is
-//     a data-corruption bug.
+//  1. Passthrough identity — a substituter that claims no scheme must return the
+//     input verbatim. The restrictive scheme charset exists so unrelated text
+//     (JSON templates, shell snippets, money amounts like ${5}) survives
+//     untouched, so a dropped or mangled "left intact" match is data corruption.
 //
-//  2. Full resolution — a substituter that resolves every scheme to a
-//     brace-free constant must leave no ${scheme.path} placeholder behind.
-//     Replacement is a single non-overlapping pass and the constant contains
-//     no "${", so a surviving match means the regex skipped a placeholder it
-//     was contracted to handle. (A leftmost-greedy "${a." can only survive
-//     unmatched when no "}" follows it at all — in which case no "}" remains to
-//     re-form a placeholder around the inserted constant either.)
+//  2. Full resolution — a substituter that resolves every scheme to a brace-free
+//     constant must leave no placeholder behind. Replacement is a single
+//     non-overlapping pass and the constant contains no "${", so a survivor
+//     means the regex skipped a placeholder it was contracted to handle.
 //
-// Neither substituter errors, so err must always be nil and the call must
-// never panic on arbitrary bytes.
+// Neither substituter errors, so err must always be nil and the call must never
+// panic on arbitrary bytes.
 func FuzzSubstituteString(f *testing.F) {
 	for _, s := range []string{
 		"",

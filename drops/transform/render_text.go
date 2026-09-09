@@ -81,29 +81,24 @@ func init() {
 	})
 }
 
-// executeRenderText reduces a rows list to a single string on the `text`
-// output port. It is the deliberate inverse of the tabular drops: where
-// compute_rows/map_rows take rows and emit rows, render_text takes rows
-// and emits one scalar string — the shape the message sinks
-// (slack_send_message.body, gmail_send_email.body, github_create_issue.body)
-// actually consume. Without it, the only way to feed those ports was the
-// ${upstream.node.rows[0].col} param trick, which can only reach row 0;
-// render_text spans every row.
+// executeRenderText reduces a rows list to a single string on the `text` output
+// port — the deliberate inverse of the tabular drops, and the shape the message
+// sinks (slack_send_message.body, gmail_send_email.body) actually consume.
+// Without it the only way to feed those ports was the
+// ${upstream.node.rows[0].col} param trick, which can only reach row 0.
 //
-// Each row renders to a line via either a CEL `template` expression
-// (sees `row` and `now`, like compute_rows) or a single `column`.
-// Lines are joined with `separator`, wrapped in `prefix`/`suffix`. A
-// per-row eval error fails the whole job rather than emitting a partial
-// message — a half-rendered notification is worse than a clear failure.
-// With zero rows, none of prefix/suffix/separator apply; the output is
-// the `empty` string verbatim, so an empty result set yields a chosen
-// fallback ("Nothing to report.") instead of an empty message the sink
-// would reject.
-// executeRenderText reads the `rows` input, then defers the actual rendering
-// (CEL compile, per-row eval, join, prefix/suffix, empty fallback) to the
-// shared internal/rendertext package — the SAME code the editor's live-preview
-// endpoint runs, so a previewed template renders byte-identically at run time.
-// maxBytes is 0 (no ceiling) at run time; the preview imposes a small cap.
+// Each row renders to a line via either a CEL `template` expression (seeing
+// `row` and `now`, like compute_rows) or a single `column`; lines are joined
+// with `separator` and wrapped in `prefix`/`suffix`. A per-row eval error fails
+// the whole job — a half-rendered notification is worse than a clear failure.
+// With zero rows none of those apply and the output is the `empty` string
+// verbatim, so an empty result set yields a chosen fallback rather than an empty
+// message the sink would reject.
+//
+// The rendering itself is the shared internal/rendertext package, which is the
+// SAME code the editor's live-preview endpoint runs, so a previewed template
+// renders byte-identically at run time. maxBytes is 0 (no ceiling) at run time;
+// the preview imposes a small cap.
 func executeRenderText(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	rowsRef, ok := job.Input["rows"]
 	if !ok {

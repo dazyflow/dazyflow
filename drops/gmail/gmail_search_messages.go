@@ -198,17 +198,15 @@ func listMessages(ctx context.Context, job core.Job, token string, q url.Values,
 // pollNewMail emits each email that arrived since the last run, exactly once,
 // oldest first.
 //
-// It is its own path because a poll has to ask Gmail a different question from an
-// ad-hoc search, and the old code asked the search's. messages.list returns the
-// newest maxResults matches, so with a 50-email cap and 200 new emails the poll
-// saw the newest 50 and advanced the watermark past them, putting the other 150
-// permanently behind it — silently, on a green run. No watermark arithmetic fixes
-// that, because the 150 are never in the response: the QUERY has to change.
+// It is its own path because a poll has to ask Gmail a different question from
+// an ad-hoc search. messages.list returns the NEWEST maxResults matches, so a
+// 50-email cap against 200 new emails saw the newest 50 and advanced the
+// watermark past the other 150 — silently, on a green run. No watermark
+// arithmetic fixes that, because those 150 are never in the response.
 //
 // So `after:<watermark>` goes into the query, making the result set the backlog
-// itself, and the backlog is scanned ids-only and drained from its OLDEST end,
-// capped at maxResults. The watermark then advances only as far as the emails
-// actually emitted. Same shape as sftp_list_files.
+// itself, which is then scanned ids-only and drained from its OLDEST end. Same
+// shape as sftp_list_files.
 func pollNewMail(
 	ctx context.Context,
 	job core.Job,
@@ -322,11 +320,9 @@ func backlogQuery(query, last string) string {
 // downstream steps work with emails and never ids. dates[i] carries the
 // internalDate, Gmail's authoritative receive time, for the watermark.
 //
-// unresolved counts the entries that could not be expanded, which matters to the
-// watermark and not just the log: an email nobody could fetch has no date, so it
-// cannot be emitted, and if the watermark advanced past it — which it does the
-// moment any NEWER email in the page fetches cleanly — it would never be offered
-// again.
+// unresolved counts the entries that could not be expanded, which the watermark
+// depends on: an email nobody could fetch has no date, so it cannot be emitted,
+// and a watermark that advanced past it would never offer it again.
 func hydrateAll(ctx context.Context, job core.Job, token string, stubs []any, timeoutMS int) (msgs []any, dates []string, unresolved int) {
 	msgs = make([]any, len(stubs))
 	dates = make([]string, len(stubs))
@@ -374,16 +370,14 @@ func hydrateAll(ctx context.Context, job core.Job, token string, stubs []any, ti
 	return msgs, dates, int(missed.Load())
 }
 
-// hydrateMessage's ok is false when the message could not be resolved, which
-// the caller must count — the watermark decision depends on knowing it happened.
+// hydrateMessage's ok is false when the message could not be resolved, which the
+// caller must count — the watermark decision depends on knowing it happened.
 //
-// Deliberately NO retry loop, though a retry is the obvious instinct. The shared
-// egress client already paces a 429/503 with a per-(tenant, host) cooldown the
-// NEXT call waits out, so an in-step retry sleeps 5s per attempt holding a worker
-// slot, with every concurrent sibling queued behind the same cooldown — a page
-// with a handful of failures took 15s each. And that same path calls
-// core.SetRetryAfter, so the retry already exists one layer up where it costs no
-// worker time.
+// Deliberately NO retry loop. The shared egress client paces a 429/503 with a
+// per-(tenant, host) cooldown the next call waits out, so an in-step retry
+// sleeps holding a worker slot with every concurrent sibling queued behind the
+// same cooldown. That path calls core.SetRetryAfter, so the retry already exists
+// one layer up where it costs no worker time.
 func hydrateMessage(ctx context.Context, job core.Job, token, id string, timeoutMS int) (map[string]any, bool) {
 	ep := baseURL(job) + "/users/me/messages/" + url.PathEscape(id) + "?format=full"
 	st, b, ferr := gmailDo(ctx, "GET", ep, token, "", nil, timeoutMS)
@@ -401,14 +395,11 @@ func hydrateMessage(ctx context.Context, job core.Job, token, id string, timeout
 // it to the newest seen, and emits the fresh batch.
 //
 // First run baselines to the newest email present and emits NOTHING, so the flow
-// starts watching from "now" rather than replaying the mailbox. A nothing-new run
-// emits no output ports, so downstream edges go dormant — an empty poll is a
-// non-event. The cursor write is at-least-once: a failed write means at worst the
-// next run re-emits this batch, never a silent drop.
+// starts watching from "now" rather than replaying the mailbox. A nothing-new
+// run emits no output ports, so downstream edges go dormant. The cursor write is
+// at-least-once: a failed write re-emits this batch, never drops it silently.
 //
-// unresolved HOLDS the watermark — see below. That is the difference between "one
-// email arrives twice" and "one email is never processed", and this module has
-// already picked its side of that trade.
+// unresolved HOLDS the watermark — see below.
 func emitOnlyNew(
 	ctx context.Context,
 	job core.Job,
@@ -446,13 +437,12 @@ func emitOnlyNew(
 
 	// Emails that could not be fetched have no date and cannot be emitted, so hold
 	// the watermark: advancing past them — which happens the moment any NEWER email
-	// fetches cleanly — would mean they are never offered again, silently, on a green
-	// run. The cost is that the emails that DID fetch are emitted again next run,
-	// which is the same trade this module documents for a failed cursor write.
+	// fetches cleanly — would mean they are never offered again, silently, on a
+	// green run. The cost is re-emitting the ones that did fetch.
 	//
-	// NOT on the first run, though: a baseline emits nothing by design, and holding
-	// would leave the watermark unwritten — its own silent trap, where every run
-	// baselines for ever while reporting success.
+	// NOT on the first run: a baseline emits nothing by design, so holding would
+	// leave the watermark unwritten and every run would baseline for ever while
+	// reporting success.
 	switch {
 	case unresolved > 0 && !first:
 		params.EmitProgress(progress, job, 1, fmt.Sprintf(

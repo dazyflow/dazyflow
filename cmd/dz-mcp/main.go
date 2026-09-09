@@ -1,12 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// dz-mcp is the Dazyflow MCP (Model Context Protocol) server. It
-// runs as a stdio subprocess of an MCP client (Claude Desktop /
-// Claude Code) and exposes pipeline-management operations as tools.
-// Internally it just forwards to the running dzd daemon's /api/v1
-// gateway, so it works with any deployment that exposes the gateway
-// over HTTP.
+// dz-mcp is the Dazyflow MCP (Model Context Protocol) server. It runs as a
+// stdio subprocess of an MCP client and exposes pipeline-management operations
+// as tools, forwarding to the running dzd daemon's /api/v1 gateway.
 //
 // Client config (Claude Desktop):
 //
@@ -24,8 +21,8 @@
 //	  }
 //	}
 //
-// All logging goes to stderr — stdout is the JSON-RPC protocol
-// stream and must never carry anything else.
+// All logging goes to stderr — stdout is the JSON-RPC stream and must never
+// carry anything else.
 package main
 
 import (

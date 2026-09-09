@@ -31,19 +31,18 @@ const integration = "SFTP"
 
 const brandColor = "#7c3aed"
 
-// connectionFields is the SFTP server, configured once on the integration
-// page and injected into every node's params at run time
-// (injectConnectionDefaults) — so flows carry only the per-transfer fields,
-// and neither the password nor the private key ever lands in a graph.
+// connectionFields is the SFTP server, configured once on the integration page
+// and injected into every node's params at run time — so flows carry only the
+// per-transfer fields, and neither the password nor the private key lands in a
+// graph.
 //
-// Every drop in the integration MUST declare this same slice: the connection
-// UI takes the fields from whichever drop it finds first, so a drop declaring
-// a subset would render a page missing whatever it left out.
+// Every drop in the integration MUST declare this same slice: the connection UI
+// takes the fields from whichever drop it finds first, so a drop declaring a
+// subset would render a page missing whatever it left out.
 //
-// One connection per tenant, like Postgres and Mailbox. Someone with a bank
-// drop box AND a supplier feed needs two, which this shape doesn't give them
-// — the named-credential store behind drops/git is the pattern that would,
-// and the honest upgrade path if people ask.
+// One connection per tenant, like Postgres and Mailbox. Someone with a bank drop
+// box AND a supplier feed needs two, which this shape doesn't give them — the
+// named-credential store behind drops/git is the upgrade path if people ask.
 func connectionFields() []core.ConnectionField {
 	return []core.ConnectionField{
 		{Key: "host", Label: "Server", Required: true, Placeholder: "sftp.example.com"},

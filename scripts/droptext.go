@@ -5,37 +5,17 @@
 
 // Prints every drop id in the catalog with the English text the translations
 // are made from — its name, its wiring pins, its description, and every string
-// its params_schema and its connection fields put on a screen — as JSON. The
-// web build's Swedish coverage guard reads the result, so adding a drop,
-// adding a port, adding a param, or rewording any of them fails that test
-// until the Swedish is written or refreshed.
+// its params_schema and connection fields put on a screen — as JSON, for the
+// web build's Swedish coverage guard.
 //
-// Why the description TEXT and not just the ids: i18n/drops/descriptions.sv.ts
-// records the FINGERPRINT of the English each translation was made from, and
-// falls back to English when it stops matching. That fail-safe is deliberate,
-// but it is also silent — a reworded paragraph quietly reverts a Swedish
-// reader to English with nothing anywhere saying so. Shipping the English here
-// lets the guard recompute the fingerprint and name the drops that have gone
-// stale.
+// The English text itself has to ship, not just the ids: every lookup in
+// dropText.ts falls back to English when a translation is missing or its
+// fingerprint no longer matches, so an added drop, an added pin or a reworded
+// paragraph reverts a Swedish reader to English with nothing saying so. What is
+// not shipped here is not guarded.
 //
-// Why the PORTS: same silence, one word at a time. A pin whose label has no
-// SV_PORTS entry renders its English on the card, next to pins that read
-// Swedish, and nothing fails. Shipping the labels lets the guard name the drop
-// the untranslated pin belongs to instead of just the orphan string.
-//
-// Why the rest — the label, the subtitle, the params_schema titles, help and
-// enumNames, the connection fields, the "keeps state" copy: every one of them
-// is looked up the same forgiving way in dropText.ts, so all of them fail
-// silently too, and they had: 207 strings needed writing or re-keying — 127
-// field-help paragraphs, 25 field titles, 24 connection strings and the rest
-// spread over the names, the dropdowns and the keeps-state copy. Mostly whole
-// drop families added after the last translation pass, plus the fallout of a
-// 'wire' → 'connect' rewording that orphaned 38 translations at once. What is
-// not shipped here is not guarded, which is how that happened.
-//
-// Ports go through core.WithPassthrough so the list is what the canvas draws,
-// not what the drop declared: the universal pass pin is a label a reader sees
-// and therefore a label that needs translating.
+// Ports go through core.WithPassthrough so the list is what the canvas draws:
+// the universal pass pin is a label a reader sees, so it needs translating.
 //
 //	go run ./scripts/droptext.go > web/src/i18n/drops/catalog.json
 package main

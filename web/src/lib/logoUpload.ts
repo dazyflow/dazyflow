@@ -4,16 +4,15 @@
 // Turning a file an admin picked into the one thing the daemon stores: an
 // inlined `data:` image, small.
 //
-// The size limit is not arbitrary and cannot be raised away. A catalog's mark
-// lands on the manifest of EVERY operation it contributes, and the catalog
-// response the editor loads carries each manifest in full — so the limit
-// multiplies by up to sixty. engine/webapi/icon.go holds the same number.
+// The size limit cannot be raised away. A catalog's mark lands on the manifest
+// of EVERY operation it contributes, and the catalog response the editor loads
+// carries each manifest in full — so the limit multiplies by up to sixty.
+// engine/webapi/icon.go holds the same number.
 //
 // Rather than hand that budget to the admin as an error message, an oversized
-// raster is redrawn here before it ever leaves the browser: a logo that was a
-// 400 KiB screenshot becomes a couple of kilobytes, and the cap stops being
-// something anyone has to think about. An image that already fits is passed
-// through untouched, so a mark someone prepared properly keeps its own pixels.
+// raster is redrawn here before it leaves the browser, so a 400 KiB screenshot
+// becomes a couple of kilobytes. An image that already fits is passed through
+// untouched.
 
 // MAX_LOGO_BYTES mirrors maxLogoBytes in engine/webapi/icon.go. The daemon is
 // the authority — this copy exists so the browser can shrink an image instead of

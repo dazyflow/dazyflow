@@ -4,18 +4,16 @@
 package daemon
 
 // flowgen_sim_test evaluates the AI flow-generator WITHOUT a real LLM/API key.
-// It has two halves:
+// Two halves:
 //
 //   - Regression tests (always run): they drive the real generateFlow loop with
 //     a scripted provider and the REAL drop catalog, asserting that the
-//     manifest-level structural gate now feeds errors back for repair, and that
-//     the enriched grounding (examples + required-input markers + patterns)
-//     stays in the catalog/system prompt.
+//     structural gate feeds errors back for repair and that the enriched
+//     grounding stays in the catalog/system prompt.
 //
 //   - A manual eval (TestFlowGenEval, skipped unless FLOWGEN_DUMP=1): dumps the
-//     exact catalog the model is grounded on and scores hand-authored
-//     "what the model would emit" graphs through all three production gates.
-//     Run it with:  FLOWGEN_DUMP=1 go test ./daemon -run TestFlowGenEval -v
+//     exact catalog the model is grounded on and scores hand-authored graphs
+//     through all three production gates.
 
 import (
 	"context"
@@ -512,17 +510,14 @@ func firstSearchHit(out string) string {
 
 // ${trigger.…} and ${upstream.…} are the only way to feed several scalar params
 // from one structured output — the shape every "form → calendar/SMS/sheet" flow
-// needs. Before this, the prompt taught ${item.…} seventeen times and never
-// named either of them: the word "upstream" appeared once, saying a loop body
-// has none, and ${trigger.body.…} appeared once inside a single catalogue
-// example's params. A model could only learn them by accident, or by tripping
-// the structured-into-text check — which is a warning, so it never came back
-// through the repair loop.
-// A Swedish request reaches an English catalogue, and nothing used to say so:
-// the word "language" appeared eleven times in the whole prompt, every one of
-// them a `language(string)` param on an AI step. A Swedish keyword finds nothing
-// in search_drops, so the model has to be told to search in English while
-// writing what the user reads in their own language.
+// needs — and the prompt never named either, teaching ${item.…} seventeen times
+// instead. A model could only learn them by accident, or by tripping the
+// structured-into-text check, which is a warning and so never came back through
+// the repair loop.
+
+// A Swedish request reaches an English catalogue, and nothing used to say so. A
+// Swedish keyword finds nothing in search_drops, so the model has to be told to
+// search in English while writing what the user reads in their own language.
 func TestFlowGen_PromptSaysTheCatalogueIsEnglish(t *testing.T) {
 	t.Parallel()
 	sys := flowGenSystemPrompt(compactCatalog(allManifests()))

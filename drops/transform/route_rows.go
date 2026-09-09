@@ -15,21 +15,16 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// routeSlotCount is how many named routing outputs the manifest
-// declares. Enough for most real-world routing without making the
-// node visually crowded; routes beyond this either fold into
-// `default` or compose two route_rows.
+// routeSlotCount is how many named routing outputs the manifest declares —
+// enough for most real-world routing without making the node visually crowded.
+// Routes beyond it fold into `default` or compose two route_rows.
 //
-// Each slot is `rows_<N>` where N is 1..routeSlotCount. The slot name
-// is what the user references from params; downstream nodes can label
-// the semantic meaning (e.g. wire `rows_1` to "SE pipeline").
+// Each slot is `rows_<N>`, which is what the user references from params;
+// downstream nodes label the semantic meaning.
 //
-// **Why fixed slots for V1:** true variadic-by-name outputs
-// (`{SE: ..., NO: ...}`) need editor support to render per-name
-// handles — that's the open Editor → "Variadic input/output ports"
-// follow-up. Fixed slots ship a usable N-way split TODAY against the
-// current editor; the upgrade path is purely additive (semantic
-// names) without behavioral changes.
+// Fixed slots because true variadic-by-name outputs need editor support to
+// render per-name handles, which is the open "Variadic input/output ports"
+// follow-up. The upgrade to semantic names is purely additive.
 const routeSlotCount = 8
 
 const routeDefaultSlot = "default"

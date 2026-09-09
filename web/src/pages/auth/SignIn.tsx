@@ -13,21 +13,18 @@ import { AuthLayout } from "../../components/auth/AuthLayout";
 import { PasswordField } from "../../components/ui/PasswordField";
 import { OtpInput } from "../../components/ui/OtpInput";
 
-// SignIn is the email+password sign-in form. It also handles two
-// deep-link query params:
-//   ?email=…   → pre-fills the email field (used by the invite-accept
-//                landing when the user wasn't signed in yet)
-//   ?invite=…  → after successful sign-in, navigate to /invite/<token>
-//                so the invite-accept flow can pick up where it left off
-//   ?org=…     → if that org has Google SSO configured, render a
-//                "Sign in with Google" button alongside the password
-//                form. The org is also the tenant the Google round-trip
-//                lands the user in.
+// SignIn is the email+password sign-in form. It also handles four deep-link
+// query params:
+//   ?email=…   → pre-fills the email field (used by the invite-accept landing)
+//   ?invite=…  → after sign-in, navigate to /invite/<token> so the accept flow
+//                picks up where it left off
+//   ?org=…     → if that org has Google SSO configured, render a "Sign in with
+//                Google" button alongside the password form. The org is also
+//                the tenant the Google round-trip lands the user in.
 //   signInRequired → set by the signed-out catch-all, where the visitor asked
-//                for something other than the sign-in page. Says why the form
-//                is on screen, without claiming the page is missing: from here
-//                a protected page and a typo look identical, and only one of
-//                them is a dead link.
+//                for something other than the sign-in page. Says why the form is
+//                on screen without claiming the page is missing: a protected
+//                page and a typo look identical, and only one is a dead link.
 export function SignIn({ signInRequired = false }: { signInRequired?: boolean } = {}) {
   const { t } = useTranslation();
   const { signInWithPassword, verifyTOTP, error, loading, clearError } = useAuth();

@@ -4,30 +4,20 @@
 // How often the UI asks the daemon anything, and how long transient feedback
 // stays on screen.
 //
-// These were eleven bare literals with four named constants between them, and
-// the values disagreed for no stated reason: the run-detail page polled a live
-// run every 2s, the runs list polled the same runs every 3s, and the approvals
-// inbox — which lists the very same `awaiting` runs — every 5s. Three surfaces
-// showing one fact at three latencies. The support badge polled at 60s while
-// the approvals badge beside it polled at 30s, both driving nothing but a
-// number in the sidebar.
-//
 // The tier is chosen by WHAT the poll is for, not by which file it lives in:
 //
 //   live        You are watching this thing change right now, and the poll is
-//               gated on something actually being in flight — it stops the
-//               moment the run finishes. Costs nothing when idle, so it can
-//               afford to be quick.
-//   watched     A list you have open where anything could arrive at any time
-//               (an inbox, a ticket thread, a wall display). It cannot gate on
-//               a live status, because "something new appeared" is the event —
-//               so it runs the whole time the surface is open, and pays for
-//               that by being slower.
-//   background  A badge in the shell, on every page, for a surface you are not
-//               looking at. Only has to be roughly right.
+//               gated on something being in flight — it stops the moment the
+//               run finishes, so it can afford to be quick.
+//   watched     A list you have open where anything could arrive at any time.
+//               It cannot gate on a live status, because "something new
+//               appeared" is the event, so it runs the whole time the surface
+//               is open and pays for that by being slower.
+//   background  A badge in the shell, for a surface you are not looking at.
+//               Only has to be roughly right.
 //
-// Being on a tier is the point: if a surface needs its own number, that is a
-// signal the tier boundaries are wrong, not that the surface is special.
+// If a surface needs its own number, that is a signal the tier boundaries are
+// wrong, not that the surface is special.
 export const POLL = {
   live: 2_000,
   watched: 5_000,

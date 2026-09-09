@@ -13,24 +13,21 @@ import (
 	"github.com/dazyflow/dazyflow/auth"
 )
 
-// One-time sign-in handoff tokens bridge an OAuth/SSO sign-in that
-// completed on the apex callback to the org subdomain where the session
-// cookie has to live (Option B: host-only cookies, no shared
-// parent-domain cookie). The apex callback issues the real session,
-// stashes its token here under a single-use code, and 302s the browser
-// to "<subdomain>/api/v1/auth/handoff?ot=<code>", which this handler
+// One-time sign-in handoff tokens bridge an OAuth/SSO sign-in that completed on
+// the apex callback to the org subdomain where the session cookie has to live
+// (host-only cookies, no shared parent-domain cookie). The apex callback issues
+// the real session, stashes its token here under a single-use code, and 302s the
+// browser to "<subdomain>/api/v1/auth/handoff?ot=<code>", which this handler
 // turns into a host-only Set-Cookie on the subdomain origin.
 //
-// The code is single-use and short-lived: it's consumed (deleted) the
-// first time it's presented and rejected after handoffTTL. It travels in
-// a URL exactly like an OAuth authorization code does, and over the same
-// TLS hop; the brief lifetime + single use keep that exposure bounded.
+// The code is consumed the first time it is presented and rejected after
+// handoffTTL. It travels in a URL exactly as an OAuth authorization code does,
+// and over the same TLS hop; the brief lifetime and single use bound that.
 //
-// The code lives in auth.EphemeralStore, so the apex callback and the subdomain
-// handoff need not be served by the same dzd: they are two requests moments
-// apart, and on more than one replica the load balancer decides which pod sees
-// each. That used to be an in-process map, which is why subdomain traffic once
-// had to be pinned to a single upstream.
+// It lives in auth.EphemeralStore so the apex callback and the subdomain handoff
+// need not be served by the same dzd — on more than one replica the load
+// balancer decides which pod sees each. As an in-process map it forced subdomain
+// traffic to be pinned to a single upstream.
 type handoffEntry struct {
 	Token     string    // the session token to install as the cookie
 	ExpiresAt time.Time // session expiry — becomes the cookie's Expires

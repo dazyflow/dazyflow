@@ -4,24 +4,22 @@
 import { useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-// TimezoneField is the editor behind a param with format:"timezone" (the Date
-// & time step's `tz`). Type to filter, arrow keys to move, Enter to pick.
+// TimezoneField is the editor behind a param with format:"timezone" (the Date &
+// time step's `tz`). Type to filter, arrow keys to move, Enter to pick.
 //
-// It exists because a timezone is the wrong shape for a dropdown: there are
-// over four hundred IANA zones, so a <select> can only hold a curated handful
-// plus an "other" escape hatch — which means the common case is a list that
-// doesn't have your zone in it, and the real case is typing a name from memory
-// into a text box with no confirmation you got it right until a run fails.
+// A timezone is the wrong shape for a dropdown: with over four hundred IANA
+// zones a <select> holds a curated handful plus an "other" escape hatch, so the
+// common case is a list without your zone and the real case is typing a name
+// from memory with no confirmation until a run fails.
 //
-// The list comes from the browser (Intl.supportedValuesOf), not from a bundled
-// table: the tz database changes a few times a year — zones are added, renamed
-// and merged — and a table we ship would be stale from the day it was written
-// and would need a release to fix. The fallback below is only for engines
-// without the enumeration API.
+// The list comes from the browser (Intl.supportedValuesOf) rather than a bundled
+// table, because the tz database changes a few times a year and a shipped table
+// would need a release to fix. The fallback below is only for engines without
+// the enumeration API.
 //
 // Each row shows the zone's CURRENT offset, because that is what people
-// actually recognise a zone by ("the one that's GMT+2 in summer") and what
-// tells Europe/Dublin from Europe/London in the two months a year they differ.
+// recognise a zone by, and what tells Europe/Dublin from Europe/London in the
+// two months a year they differ.
 
 const FALLBACK_ZONES = [
   "UTC",

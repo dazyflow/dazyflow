@@ -13,18 +13,15 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// Switch is the N-way value router — the multi-case sibling of Branch. Branch
-// forwards its payload down one of two ports by a boolean; Switch forwards it
-// down one of N case ports by matching a key against each case's value
-// (first-match-wins, à la a switch/case statement), with everything unmatched
-// landing on `default`. Use it instead of chaining Branches when you fan one
-// payload out by a status/enum/category.
+// Switch is the N-way value router — the multi-case sibling of Branch. It
+// forwards its payload down one of N case ports by matching a key against each
+// case's value (first-match-wins), with everything unmatched landing on
+// `default`. Use it instead of chaining Branches when you fan one payload out by
+// a status/enum/category.
 //
-// Matching reuses Compare's evaluator (looseEqual / inSet from compare.go,
-// same package): a case `equals` that's a list matches if the key equals ANY
-// element (one_of semantics); a scalar matches by loose equality. So Switch
-// can never drift from Compare's equality semantics — it IS Compare's match,
-// fanned across cases.
+// Matching reuses Compare's evaluator (looseEqual / inSet), so Switch can never
+// drift from Compare's equality semantics: a case `equals` that is a list
+// matches any element, a scalar matches by loose equality.
 //
 // Output slots are fixed (`case_1..case_8` + `default`) for the same reason as
 // route_rows: variadic-by-name output handles need editor support that isn't

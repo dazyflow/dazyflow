@@ -3,26 +3,21 @@
 
 // Graph editing and undo/redo.
 //
-// lib/graphHistory.ts is unit-tested on its own, so what is left untested is
-// the part that only exists inside the editor: WHEN a snapshot is taken, when
-// it is refused, and what an undo means for the server.
+// lib/graphHistory.ts is unit-tested on its own, so what is left is the part
+// that only exists inside the editor: WHEN a snapshot is taken, when it is
+// refused, and what an undo means for the server. Three behaviours carry the
+// weight:
 //
-// Three behaviours carry the weight:
-//
-//   An undo is an edit. applyHistoryDoc sets dirty, because otherwise the
-//   server keeps holding the state the user just undid and autosave never
-//   fires to correct it. These tests assert on the SAVED document rather than
-//   on the canvas, which is both the thing that actually matters and the only
-//   assertion jsdom can make honestly about a React Flow surface.
+//   An undo is an edit. applyHistoryDoc sets dirty, or the server keeps holding
+//   the state the user just undid. These tests assert on the SAVED document,
+//   which is the only assertion jsdom can make honestly about React Flow.
 //
 //   An undo is not itself undoable. The observer runs on every document change
-//   including the one an undo causes; pendingHistoryApplyRef is what stops it
-//   recording that as a fresh edit, which would clear the redo stack and strand
-//   the user one step from where they were.
+//   including the one an undo causes; recording that would clear the redo stack.
 //
 //   The stack is fenced. Undo must not reach past a document the user did not
-//   author — a revision preview, a restore, an external edit arriving over the
-//   flow watch. Undoing past someone else's change would silently clobber it.
+//   author — a revision preview, a restore, an external edit — because undoing
+//   past someone else's change would silently clobber it.
 
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { EDITOR_NARROW, MOBILE } from "../../lib/breakpoints";
@@ -215,14 +210,12 @@ describe("editor undo/redo", () => {
   });
 
   // Per-node flags are part of the undo contract, and they were only half
-  // wired: the observer's dep list watched breakpoints and disabled steps but
-  // not continue_on_error (nor, later, folds and locks), so toggling one
-  // recorded no snapshot; and applyHistoryDoc rebuilt only those same two, so
-  // applying a snapshot never restored the rest. Together that meant a flag
-  // could not be undone AND was silently carried across an unrelated undo.
+  // wired: the observer watched breakpoints and disabled steps but not the other
+  // flags, and applyHistoryDoc rebuilt only those same two. A flag could
+  // therefore not be undone AND was silently carried across an unrelated undo.
   //
   // The fold is the flag reachable without React Flow's pointer surface — its
-  // button lives on the card — and it exercises exactly the two mechanisms.
+  // button lives on the card — and it exercises both mechanisms.
   it("makes a per-node flag its own undo step", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     mount();
@@ -263,16 +256,14 @@ describe("editor undo/redo", () => {
     expect(savedFlag("ntfy_1", "collapsed")).toBe(true);
   });
 
-  // The observer fires again on the document change an undo causes. If that
-  // were recorded as a fresh edit it would clear the redo stack, leaving the
-  // user one step back with no way forward.
+  // The observer fires again on the document change an undo causes. Recording
+  // that as a fresh edit would clear the redo stack, leaving the user one step
+  // back with no way forward.
   //
-  // Two things stop it, and it is worth being precise about which: the
-  // re-observed document is identical to the history head, so `record`
-  // classifies the delta as "none" and returns the state untouched.
-  // pendingHistoryApplyRef in the editor is a second line of defence — deleting
-  // it does NOT break this test, which was checked. What is pinned here is the
-  // behaviour a user feels, not either mechanism.
+  // Two things stop it: the re-observed document is identical to the history
+  // head, so `record` classifies the delta as "none", and pendingHistoryApplyRef
+  // is a second line of defence. What is pinned here is the behaviour a user
+  // feels, not either mechanism.
   it("leaves the redo stack intact after an undo", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     mount();
@@ -352,20 +343,15 @@ describe("editor undo/redo", () => {
 
 // The phone route into a step's settings. At phone widths the inspector is a
 // fullscreen overlay and this floating button is the ONLY way to open it, so it
-// stays on screen and goes disabled when there is nothing to inspect. It used
-// to render only once a node was selected — which hid the control behind the
-// very interaction it exists to complete, and left phone users with no visible
-// sign the inspector was there at all.
+// stays on screen and goes disabled when there is nothing to inspect — rendering
+// it only once a node was selected hid the control behind the very interaction
+// it exists to complete.
 //
-// The band is MOBILE, not EDITOR_NARROW. It was EDITOR_NARROW (1100), which
-// put a half-width desktop window into phone mode: selecting a step did
-// nothing visible, because the overlay only ever opened from this button.
-// Anything wider than a phone now gets a side panel that opens on selection,
-// where a FAB would be a second door to an already-open room.
+// The band is MOBILE, not EDITOR_NARROW: at 1100 a half-width desktop window
+// landed in phone mode, where selecting a step did nothing visible.
 //
 // Selecting a node is not testable here (React Flow has no pointer surface in
-// jsdom), so what is asserted is the state that was previously unreachable:
-// present-but-disabled with an empty selection.
+// jsdom), so what is asserted is present-but-disabled with an empty selection.
 describe("phone inspector", () => {
   const realWidth = window.innerWidth;
   afterEach(() => {

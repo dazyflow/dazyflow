@@ -3,27 +3,21 @@
 
 // `.test()` on a global regex is always a bug.
 //
-// A /g regex carries `lastIndex`, and `test()` advances it to the end of the
-// match it just found. The next call therefore starts from the middle of the
-// string, so asking the same question twice gives different answers, and any
-// LATER scan of the same regex begins wherever `test()` left off.
+// A /g regex carries `lastIndex`, and `test()` advances it past the match it
+// just found. Asking the same question twice therefore gives different answers,
+// and any LATER scan of the same regex begins wherever `test()` left off.
 //
 // That is what hid raw ${…} syntax in plain sight on every node card. Two
-// helpers shared one /g regex: `hasToken()` used `test()`, and `tokenizeValue()`
-// used `matchAll()`, which copies `lastIndex`. Every display surface asks
-// hasToken first and tokenizes only if it says yes — so the tokenizer always
-// began past the only token in the value and found none. The chip container
-// rendered around nothing.
+// helpers shared one /g regex: `hasToken()` used `test()`, `tokenizeValue()`
+// used `matchAll()`. Every display surface asks hasToken first and tokenizes
+// only if it says yes, so the tokenizer always began past the only token in the
+// value. `hasToken` did reset `lastIndex` before testing — on the wrong side of
+// the call that mattered, which is what made the code read as correct.
 //
-// `hasToken` DID reset `lastIndex` before testing. That is the detail worth
-// keeping: the reset was there, on the wrong side of the call that mattered,
-// which is exactly what made the code read as correct.
-//
-// So the rule is the narrow, always-true one rather than a general ban on
-// shared regex state. `test()` wants a boolean; statefulness buys nothing and
-// costs this. An `exec()` loop that resets at entry is legitimate, and
-// `matchAll()` clones rather than mutating — both stay allowed, and both are
-// in use here.
+// So the rule is the narrow, always-true one rather than a ban on shared regex
+// state: `test()` wants a boolean, and statefulness buys nothing. An `exec()`
+// loop that resets at entry is legitimate, and `matchAll()` clones rather than
+// mutating — both stay allowed, and both are in use here.
 
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";

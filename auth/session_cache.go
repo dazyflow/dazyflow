@@ -11,18 +11,15 @@ import (
 )
 
 // CachingSessionStore wraps a SessionStore with a small TTL cache for
-// GetSession — the hot path hit on every cookie/bearer-authenticated
-// request. Without it each API call is a DB round-trip just to validate
-// the session token, which dominates the connection pool under load.
+// GetSession — the hot path hit on every cookie/bearer-authenticated request.
+// Without it each API call is a DB round-trip just to validate the session
+// token, which dominates the connection pool under load.
 //
-// Revocation semantics: writes flow through to the inner store AND
-// update (or evict) the local cache synchronously, so a sign-out
-// (DeleteSession) or rotation (PutSession) on THIS instance takes effect
-// immediately. The only staleness is cross-instance — a session revoked
-// on instance A can still validate on instance B until B's cached copy
-// expires. Keep the TTL short (seconds) so that window is small; it
-// trades a brief revocation lag for a large drop in lookup queries. The
-// cache never serves a session past its own ExpiresAt regardless of TTL.
+// Writes flow through to the inner store AND update or evict the local cache
+// synchronously, so a sign-out or rotation on THIS instance takes effect
+// immediately. The only staleness is cross-instance, bounded by the TTL — keep
+// it short (seconds). The cache never serves a session past its own ExpiresAt
+// regardless of TTL.
 type CachingSessionStore struct {
 	inner SessionStore
 	ttl   time.Duration

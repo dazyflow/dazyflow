@@ -3,31 +3,22 @@
 
 // Public collection share links.
 //
-// A flow that only ever runs by hand still has to put its answer somewhere a
-// person can look. The Collections drops give it a place to write (see
-// drops/db/builtin_store.go) and results.go lets a signed-in member read it
-// back — but the person who wants the answer is often not a member: the
-// colleague who asked for the list, the client waiting on the export. Their
-// options were a screenshot or an account.
+// The Collections drops give a flow somewhere to write its answer and results.go
+// lets a signed-in member read it back, but the person who wants the answer is
+// often not a member — the colleague who asked for the list, the client waiting
+// on the export. So: one regenerable token per (tenant, workspace, collection),
+// backing a login-free read-only table at /board/{token}. The token IS the
+// credential, as with share.go, the hosted forms and the approval links.
 //
-// So: one regenerable token per (tenant, workspace, collection), backing a
-// login-free read-only table at /board/{token}. The token IS the credential,
-// the same model as the workspace-overview link (share.go), the hosted forms
-// and the approval links.
+// Unlike share.go's sanitized TV overview, this publishes the collection's ROWS,
+// whatever they are; there is no field-level redaction and there cannot be one,
+// because the rows are the reason for the link. A share is therefore a
+// deliberate act of publication — gated on graph:edit, audited, revocable, and
+// the UI says so before the link is minted.
 //
-// The difference from share.go is worth stating plainly, because it decides
-// how this may be used. The TV overview publishes a SANITIZED snapshot — flow
-// names and run statuses, nothing actionable. This publishes the collection's
-// ROWS, whatever they are. There is no field-level redaction and there cannot
-// be one: the rows are the reason for the link. A share here is therefore a
-// deliberate act of publication, gated on graph:edit (a read-only viewer
-// cannot publish one), audited, and revocable — and the UI says so before the
-// link is minted.
-//
-// No new storage for the data itself: the read path is results.go's BoardRows
-// against the same workspace store, so the public page and the Collections
-// page cannot disagree, and the GDPR erasure cascade already covers the rows.
-// Only the token needs a table.
+// The read path is results.go's BoardRows against the same workspace store, so
+// the public page and the Collections page cannot disagree and the GDPR erasure
+// cascade already covers the rows. Only the token needs a table.
 
 package daemon
 

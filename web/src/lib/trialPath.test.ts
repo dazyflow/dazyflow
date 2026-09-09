@@ -12,27 +12,21 @@ import {
   unavailableSecretRefs,
 } from "./requiredConnections";
 
-// trialPath.test guards the "fresh user, no admin help" experience.
-// Two things must stay true for the trial to convert:
+// trialPath.test guards the "fresh user, no admin help" experience. Two things
+// must stay true for the trial to convert:
 //
-//   1. The try-it-now template must remain forkable on day one —
-//      no OAuth provider, no tenant secret. It's the one template
-//      a non-technical persona can run before their admin enables
-//      anything. If a future commit adds an `account` param or a
-//      ${secret....} reference here, the test fails and the
-//      no-setup promise is broken.
+//   1. The try-it-now template must remain forkable on day one — no OAuth
+//      provider, no tenant secret. It is the one template a non-technical
+//      persona can run before their admin enables anything, so an `account`
+//      param or a ${secret....} reference added here fails the test.
 //
-//   2. An OAuth-needing template — New email → Slack message — must
-//      surface a clear "your administrator needs to enable Google
-//      / Slack" signal when the install has no OAuth. The editor's
-//      pre-run gate relies on this, so the run never silently
-//      dispatches into a doomed setup. (This template references no
-//      tenant secret — the poll/for_each/unwrap_results flow carries
-//      everything it needs.)
+//   2. An OAuth-needing template must surface a clear "your administrator needs
+//      to enable Google / Slack" signal when the install has no OAuth. The
+//      editor's pre-run gate relies on it, so a run never silently dispatches
+//      into a doomed setup.
 //
-// The fixtures are the actual JSON shipped under web/public — load
-// them straight from disk so the test pins behaviour against what
-// the gallery actually serves.
+// The fixtures are the actual JSON shipped under web/public, loaded from disk so
+// the test pins behaviour against what the gallery serves.
 
 const REPO_ROOT = resolve(__dirname, "../../public/templates");
 

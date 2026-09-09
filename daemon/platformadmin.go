@@ -17,21 +17,20 @@ import (
 )
 
 // Runtime platform-admin grants. The DAZYFLOW_PLATFORM_ADMINS env allowlist is
-// the immutable bootstrap layer (it can't be edited without a restart); this
-// store is the mutable layer a platform admin manages from the UI to grant or
-// revoke the cross-tenant super-admin role without redeploying.
+// the immutable bootstrap layer; this store is the mutable one a platform admin
+// manages from the UI, so the cross-tenant super-admin role can be granted or
+// revoked without redeploying.
 //
-// Both layers feed the SAME chokepoint (HTTPGateway.elevatePlatformAdmin),
-// which stamps core.PlatformAdminRole onto a session at issue time. So a grant
-// takes effect on the target's next session issue (sign-in or org switch); a
-// revoke takes effect once their live sessions are dropped (the handler revokes
-// them) and they re-authenticate. Env-allowlist admins are NOT revocable here —
-// elevatePlatformAdmin would re-grant them on next login — so the revoke
-// handler refuses them and points the operator at the env var.
+// Both layers feed the SAME chokepoint (HTTPGateway.elevatePlatformAdmin), which
+// stamps core.PlatformAdminRole onto a session at issue time — so a grant takes
+// effect on the target's next session issue, and a revoke once their live
+// sessions are dropped and they re-authenticate. Env-allowlist admins are NOT
+// revocable here (elevatePlatformAdmin would re-grant them), so the handler
+// refuses and points the operator at the env var.
 //
 // Like the drop killswitch and entitlement stores, a cached in-memory snapshot
-// keeps the per-session-issue Granted lookup off the DB hot path; writes
-// refresh it and a ticker catches cross-node changes.
+// keeps the per-session-issue lookup off the DB hot path; writes refresh it and
+// a ticker catches cross-node changes.
 
 type PlatformAdminGrant struct {
 	Email     string    `json:"email"`

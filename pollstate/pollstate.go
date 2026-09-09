@@ -4,22 +4,18 @@
 // Package pollstate lets poll-driven fetcher nodes report whether their last
 // fire found new data, so the scheduler can adapt a flow's poll cadence —
 // widening the interval for a poller that keeps coming up empty and snapping
-// back when data reappears. On a hosted shared-fleet deployment this cuts the
-// dominant cost of polling: the calls that find nothing.
+// back when data reappears. On a hosted shared fleet this cuts the dominant cost
+// of polling: the calls that find nothing.
 //
-// The marker is keyed by the FLOW (graph), not the reporting node, because the
-// scheduler fires the whole graph and the node that knows "empty" (the fetcher
-// — homeassistant_state_changed, google_form_trigger, a conditional
-// http_request) is often DOWNSTREAM of the scheduler-fired trigger node, so
-// their node IDs differ. Graph scoping lets any fetcher in the run speak for
-// the run. A flow with several independent pollers shares one marker; the
-// failure mode is benign (less-aggressive backoff), so the approximation is
-// acceptable.
+// The marker is keyed by the FLOW, not the reporting node, because the scheduler
+// fires the whole graph and the node that knows "empty" is often downstream of
+// the trigger node, so their ids differ. A flow with several independent pollers
+// shares one marker; the failure mode is benign (less-aggressive backoff).
 //
-// Persistence mirrors the cursor store (drops/trigger/gform): the daemon wires
-// SetStore to the encrypted secret store under the reserved "pollstate."
-// prefix (hidden from the Credentials UI). When unwired (tests, in-process
-// Engine.Run) every call is a no-op.
+// Persistence mirrors the cursor store: the daemon wires SetStore to the
+// encrypted secret store under the reserved "pollstate." prefix, hidden from the
+// Credentials UI. When unwired (tests, in-process Engine.Run) every call is a
+// no-op.
 package pollstate
 
 import (

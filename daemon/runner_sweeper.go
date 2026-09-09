@@ -10,26 +10,17 @@ import (
 
 // RunnerTaskSweeper closes tasks nobody is waiting for any more.
 //
-// It exists because RunnerDispatcher.Dispatch's goroutine was the only thing
-// that ever moved a task to a terminal state, and that goroutine does not
-// survive a redeploy or an OOM kill. The row it leaves behind is not merely
-// untidy:
-//
-//   - A QUEUED task stays claimable forever. The runner is switched on an hour
-//     later, claims it, and runs a script for a run that died — which for a
-//     script that sends invoices is, in CancelQueued's own words, "the same
-//     harm as running it twice".
-//   - A RUNNING task whose agent vanished is never condemned, so nothing ever
-//     records what happened to it.
-//   - Neither is terminal, and Prune only collects 'done' and 'failed', so both
-//     accumulate permanently inside the partial index runner_tasks_claim_idx
-//     and slow the claim query every agent polls.
+// RunnerDispatcher.Dispatch's goroutine is otherwise the only thing that moves a
+// task to a terminal state, and it does not survive a redeploy or an OOM kill.
+// The row it leaves behind is not merely untidy: a QUEUED task stays claimable
+// forever, so a runner switched on an hour later runs a script for a run that
+// died; a RUNNING task whose agent vanished is never condemned; and since Prune
+// collects only 'done' and 'failed', both accumulate inside the partial claim
+// index and slow the query every agent polls.
 //
 // The sweep is idempotent and safe to run on several daemons at once: it closes
-// each row through FailAbandoned or CancelQueued, which are the same atomic,
-// re-checking operations the dispatcher uses. A task that finishes between the
-// listing and the close simply reports "not closed by me", and the agent's real
-// answer wins — the same race the dispatcher already handles.
+// each row through the same atomic, re-checking operations the dispatcher uses,
+// so a task that finishes mid-listing simply reports "not closed by me".
 type RunnerTaskSweeper struct {
 	Tasks RunnerTaskStore
 	// QueuedCeiling bounds a task that carries no timeout of its own. Rows that

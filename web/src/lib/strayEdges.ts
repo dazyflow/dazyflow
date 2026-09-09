@@ -4,33 +4,22 @@
 // Edges pointing at a port that isn't on the node.
 //
 // Such an edge is dead three times over: the engine can't carry a value down
-// it, React Flow draws nothing for a handle the node doesn't have — so it is
-// invisible and cannot be selected or deleted — and the daemon refuses to save
-// any graph containing one ("edge 0: node \"text_1\" (text) has no input port
-// \"in\""). The result is a flow that cannot be saved and shows the author
-// nothing to fix: every autosave fails, and moving a step is enough to
-// trigger one.
+// it, React Flow draws nothing for a handle the node doesn't have — so it
+// cannot be selected or deleted — and the daemon refuses to save any graph
+// containing one. The result is a flow that cannot be saved and shows the
+// author nothing to fix, since moving a step is enough to trigger an autosave.
+// spawnPort (lib/ports.ts) closed the path that created these; this prunes the
+// graphs that already contain one.
 //
-// spawnPort (lib/ports.ts) closed the path that used to CREATE these. This is
-// the other half — the graphs that already contain one. The editor prunes them
-// once it knows the drops' ports, and says so, which is the only way an author
-// can get such a flow moving again.
-//
-// It runs against the editor's LIVE state rather than the loaded Graph on
-// purpose: at graph-load time the drop catalog usually hasn't arrived, so
-// every node's manifest is still undefined and there is nothing to judge
-// against (see the manifest back-fill in FlowEditor). Waiting until the
-// manifests are in is what makes the check able to see anything at all.
+// It runs against the editor's LIVE state rather than the loaded Graph: at
+// graph-load time the drop catalog usually hasn't arrived, so every node's
+// manifest is still undefined and there is nothing to judge against.
 //
 // The rule mirrors core.Validate (core/validate.go) exactly, including what it
 // declines to judge, so this never removes an edge the daemon would have
-// accepted:
-//
-//   - a node whose manifest this client doesn't have (a runner or MCP step
-//     registered elsewhere) gets no port rules at all;
-//   - an edge touching a disabled node is not port-checked;
-//   - a step whose ports come from its own params (dynamic_ports, e.g.
-//     subgraph's input_map) can't be judged against its manifest.
+// accepted: a node whose manifest this client doesn't have, an edge touching a
+// disabled node, and a step whose ports come from its own params
+// (dynamic_ports) are all left alone.
 
 import type { Manifest } from "../types";
 

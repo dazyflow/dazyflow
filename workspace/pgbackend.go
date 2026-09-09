@@ -27,11 +27,10 @@ import (
 // What it drops is the working tree — which is the point, since a working tree
 // on shared storage is what stops two dzd processes editing one workspace.
 //
-// Revisions are per FLOW rather than per workspace. Git had no choice but to
-// give the whole workspace one history (a commit is a whole-tree snapshot), so
-// saving flow A appeared in flow B's timeline as an unchanged neighbour. Here
-// a save touches only its own chain, and History reads it directly instead of
-// walking every commit filtering by path.
+// Revisions are per FLOW rather than per workspace. Git had no choice there (a
+// commit is a whole-tree snapshot), so saving flow A appeared in flow B's
+// timeline; here a save touches only its own chain, and History reads it
+// directly instead of walking every commit filtering by path.
 type pgBackend struct {
 	pool      *pgxpool.Pool
 	tenant    string

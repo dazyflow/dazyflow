@@ -4,15 +4,13 @@
 // "On this page" — the sticky right rail listing a page's H2s.
 //
 // It reads the headings back out of the RENDERED DOM rather than re-parsing the
-// Markdown source. That is deliberate: the ids come from remarkHeadingIds
-// (Markdown.tsx), which handles `{#custom-id}` anchors, GitHub-style slugs and
-// per-document de-duplication. A second parser here would be a second set of
-// those rules to keep in step, and the failure mode of drift is a table of
-// contents whose links quietly go nowhere. Reading the DOM cannot drift.
+// Markdown. The ids come from remarkHeadingIds (Markdown.tsx), which handles
+// `{#custom-id}` anchors, GitHub-style slugs and per-document de-duplication; a
+// second parser here would be a second set of those rules to keep in step, and
+// drift means a table of contents whose links quietly go nowhere.
 //
 // The rail earns its keep on the generated catalog: a step-group page is one H2
-// per step — Gmail runs to a dozen — on a single page with no other way to see
-// what is on it or where you are in it.
+// per step — Gmail runs to a dozen — with no other way to see what is on it.
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Item = { id: string; text: string };

@@ -2,19 +2,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package fortnox hosts the native Fortnox connectors — Sweden's dominant SMB
-// accounting/invoicing platform. The shipped drops are the first vertical:
-// customers (create + a picker) and invoices (create + a paid-invoice poll
-// source). Auth is Fortnox OAuth2: the daemon owns the token (its provider
-// entry uses client_secret_basic, which Fortnox's token endpoint requires),
-// and this package resolves it per-job via the oauthtok hook that the other
-// OAuth connectors share.
+// accounting/invoicing platform. The drops are the first vertical: customers
+// (create + a picker) and invoices (create + a paid-invoice poll source). Auth
+// is Fortnox OAuth2, with the daemon owning the token (client_secret_basic,
+// which Fortnox's token endpoint requires) and this package resolving it
+// per-job via the shared oauthtok hook.
 //
-// Fortnox wraps every request and response body in a singular PascalCase key
-// ({"Customer": {…}}, {"Invoice": {…}}) — the helpers here marshal/unmarshal
-// through that envelope so the drops deal in flat structs.
+// Fortnox wraps every request and response body in a singular PascalCase key,
+// so the helpers here marshal through that envelope and the drops deal in flat
+// structs.
 //
-// Fortnox has no webhooks, so event reactions ("new paid invoice") compose the
-// same way the Stripe/Gmail connectors document: poll_trigger →
+// Fortnox has no webhooks, so event reactions compose as poll_trigger →
 // fortnox_list_invoices (cursor in `page`) → for_each.
 package fortnox
 

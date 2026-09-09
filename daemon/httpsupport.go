@@ -33,16 +33,14 @@ func (h *HTTPGateway) supportAPI() *supportAPI {
 
 // httpsupport.go wires the Support feature's HTTP surface: a support agent
 // requests a scoped, time-boxed, read-only view of one flow; an org admin
-// approves/denies/revokes; the agent then reads the REDACTED bundle. Every
+// approves, denies or revokes; the agent then reads the REDACTED bundle. Every
 // action is audited into the ORG's log.
 //
-// Trust invariants enforced here:
-//   - Requesting/viewing requires core.PermSupportAgent (the weak, grant-gated
-//     role stamped at session issue).
-//   - Deciding/revoking/listing requires org-admin IN the grant's tenant.
-//   - The view is authorized ONLY by an active AccessGrant
-//     (AuthorizeGraphSupportView), never by tenant membership, and always
-//     serves the redacted BuildSupportBundle — never the raw graph/run.
+// The trust invariants enforced here: requesting or viewing needs
+// core.PermSupportAgent, deciding or revoking needs org-admin IN the grant's
+// tenant, and the view is authorized ONLY by an active AccessGrant — never by
+// tenant membership — always serving the redacted bundle rather than the raw
+// graph or run.
 
 const defaultSupportGrantTTL = 4 * time.Hour
 

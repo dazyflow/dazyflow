@@ -306,18 +306,15 @@ func (p queryPlan) score(m core.Manifest) int {
 // aliasScore is the best score any English reading of a Swedish token earns,
 // held below the literal hit it stands in for (svsearch.AliasWeight).
 //
-// Consulted ONLY for a token that matched nothing literally, which is what
-// makes "adding Swedish never reorders an English result" true rather than
-// merely intended. Weighting alone does not: English words prefix-match
-// Swedish keys, so "check" reached "checksumma" and put `hash` in the results
-// for "check every five minutes", and "summarise" reached "summa" and put
-// `group_aggregate` first for "summarise it". The web palette keeps that
-// eager expansion on purpose — it wants "fakt" to reach "faktura" while
-// someone is still typing — and nothing is typed here.
+// Consulted ONLY for a token that matched nothing literally, which is what makes
+// "adding Swedish never reorders an English result" true rather than merely
+// intended. Weighting alone does not: English words prefix-match Swedish keys,
+// so "check" reached "checksumma" and put `hash` in the results for "check every
+// five minutes". The web palette keeps that eager expansion on purpose — it
+// wants "fakt" to reach "faktura" mid-typing — and nothing is typed here.
 //
-// Both search paths read one table now. The web step palette used to keep its
-// own copy, so a Swedish word added for someone searching the palette did
-// nothing for the same person asking the AI to build the flow.
+// Both search paths read one table, so a Swedish word added for the palette also
+// works when the same person asks the AI to build the flow.
 func (p queryPlan) aliasScore(m core.Manifest, token string, score func(core.Manifest, string) int) int {
 	best := 0
 	for _, term := range p.alias[token] {

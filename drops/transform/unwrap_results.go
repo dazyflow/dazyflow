@@ -84,24 +84,22 @@ func init() {
 
 // executeUnwrapResults turns for_each's wrapped results into flat rows.
 //
-// for_each runs a body subgraph per item and emits `results` as a list of
-// wrappers — each item is {status, nodes:{<id>:{status, output:{port:value}}}} —
-// because it can't know what downstream wants from a heterogeneous fan-out.
-// Every tabular drop, though, expects rows: bare objects whose keys are
-// columns. Without a bridge, `for_each(body: gmail_get_message) → compute_rows`
-// reads row.headers.From against the wrapper, not the message, and silently
-// produces garbage (the defect that grounded both Gmail templates).
+// for_each emits `results` as a list of wrappers —
+// {status, nodes:{<id>:{status, output:{port:value}}}} — because it can't know
+// what downstream wants from a heterogeneous fan-out. Every tabular drop expects
+// rows: bare objects whose keys are columns. Without a bridge,
+// `for_each(body: gmail_get_message) → compute_rows` reads row.headers.From
+// against the wrapper and silently produces garbage.
 //
-// unwrap_results is that bridge. For each result it selects one body node
-// (named, or inferred when the body is one node) and one of its output ports
-// (named, or inferred when there's exactly one), and unwraps its Ref to the
-// underlying value. A value that is itself a list of objects is flattened (so
-// a step that returns rows contributes many); a single object contributes one
-// row; a scalar is wrapped as {"value": x} so it still lands as a row.
+// So for each result this selects one body node (named, or inferred when the
+// body is one node) and one output port (named, or inferred when there is
+// exactly one), and unwraps its Ref. A value that is itself a list of objects is
+// flattened, a single object contributes one row, and a scalar is wrapped as
+// {"value": x} so it still lands as a row.
 //
-// Failed items are skipped by default — they already surface on the
-// for_each `errors` port, and a half-broken row would poison the table.
-// Set skip_errors=false to fold them in as explicit error rows instead.
+// Failed items are skipped by default — they already surface on for_each's
+// `errors` port, and a half-broken row would poison the table. skip_errors=false
+// folds them in as explicit error rows instead.
 func executeUnwrapResults(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	resultsRef, ok := job.Input["results"]
 	if !ok {

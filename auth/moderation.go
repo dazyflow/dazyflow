@@ -19,31 +19,23 @@ import (
 // 401 ("who are you"), and the lockout screen can explain why.
 var ErrAccountSuspended = errors.New("account suspended")
 
-// ModerationGate wraps the auth Chain with the platform-admin lockout
-// check. It runs AFTER the inner authenticator has proven the credential,
-// then refuses the resulting principal when either the acting user or the
-// acting org is suspended — so the same gate covers sessions, API keys,
-// and OIDC bearers in one place, including keys minted before a
-// suspension and members of an org suspended out from under them.
+// ModerationGate wraps the auth Chain with the platform-admin lockout check. It
+// runs AFTER the inner authenticator has proven the credential, then refuses the
+// principal when either the acting user or the acting org is suspended — so one
+// gate covers sessions, API keys and OIDC bearers, including keys minted before
+// a suspension. Both stores are optional: a nil store skips that half, so dev
+// deployments without Postgres still authenticate.
 //
-// Both stores are optional: a nil store skips that half of the check, so
-// dev deployments without a Postgres user/profile backend still
-// authenticate (they simply can't suspend).
+// CacheTTL memoizes the two answers for a short window. Uncached they are two
+// primary-key reads on EVERY authenticated request — measured at 483us of the
+// 485us spent in the auth chain, against 1.4us for the session lookup. A zero
+// TTL restores the uncached behaviour exactly.
 //
-// CacheTTL memoizes the two answers for a short window. Without it these
-// are two uncached primary-key reads on EVERY authenticated request —
-// measured at 483us of the 485us an authenticated request spent in the
-// auth chain, against 1.4us for the (already cached) session lookup, and
-// the user read decodes four JSON columns to reach one boolean. A zero
-// TTL disables the cache and restores the uncached behaviour exactly.
-//
-// Revocation semantics mirror CachingSessionStore deliberately, because
-// this cache sits in the same request path: a suspension applied on THIS
-// instance takes effect immediately (the platform-admin handlers call
-// Invalidate), and the TTL bounds only cross-instance lag — the same
-// window the session cache already has. Only definitive answers are
-// cached: a transient store error still fails open, as before, but is
-// never remembered, so a blip can't pin the gate open for the window.
+// Revocation mirrors CachingSessionStore, since this cache sits in the same
+// path: a suspension applied on THIS instance takes effect immediately (the
+// handlers call Invalidate) and the TTL bounds only cross-instance lag. Only
+// definitive answers are cached, so a transient error still fails open but
+// cannot pin the gate open for the window.
 type ModerationGate struct {
 	Inner Authenticator
 	Users UserStore

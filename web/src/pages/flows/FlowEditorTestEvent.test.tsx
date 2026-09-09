@@ -1,20 +1,17 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// "Send test event" — the control that replaces Run on a webhook flow.
+// "Send test event" — the control that replaces Run on a webhook flow, since
+// clicking Run there hands the webhook_input node no body. It feeds a synthetic
+// payload through the same seed-building path a real /trigger hit uses.
 //
-// Clicking Run on a webhook flow hands its webhook_input node no body, so the
-// editor offers a test event instead: a synthetic payload fed through the same
-// seed-building path a real /trigger hit uses.
+// It was unreachable: the condition also required a graph-level webhook entry in
+// g.triggers, and trigger config moved onto the nodes when the Triggers menu
+// went away, so every webhook flow built since had `triggers: null`. Nothing
+// failed — the endpoint worked and the only symptom was a user looking for a
+// button that was never drawn.
 //
-// It was unreachable. The condition also required a graph-level webhook entry
-// in g.triggers, and trigger config moved onto the nodes when the Triggers
-// menu went away — so every webhook flow built since had `triggers: null`, the
-// condition was never true, and the button never rendered. Nothing failed: the
-// endpoint worked, the affordance existed, and the only symptom was a user
-// looking for a button that was never drawn.
-//
-// That is why this test asserts on a graph with `triggers` ABSENT. A fixture
+// That is why this test asserts on a graph with `triggers` ABSENT: a fixture
 // carrying a legacy trigger array would have passed against the broken code.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

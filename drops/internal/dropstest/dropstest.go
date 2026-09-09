@@ -5,15 +5,10 @@
 // a copy-pasted egress_test.go: the private-egress opt-in each suite needs, and
 // the SSRF assertion each one makes against its own `xDo`.
 //
-// It lives under drops/internal/ for the same reason apibase does — only
-// sibling connector packages have any business calling it. It is a non-test
-// package (like engine/mcp/mcptest) because the callers are _test.go files in
-// OTHER packages, which cannot import another package's test binary.
-//
-// One thing it deliberately does NOT serve: drops/net's own egress_test.go.
-// That file is an internal test of the guard itself (package net), so importing
-// this package — which imports net — would be a test-time import cycle. It is
-// also not a copy of anything: it tests the guard, not a connector's use of it.
+// It is a non-test package (like engine/mcp/mcptest) because the callers are
+// _test.go files in OTHER packages, which cannot import another package's test
+// binary. drops/net's own egress_test.go stays outside it: it is an internal
+// test of the guard itself, so importing this would be a test-time cycle.
 package dropstest
 
 import (
@@ -28,30 +23,22 @@ import (
 //
 //	func TestMain(m *testing.M) { dropstest.EgressTestMain(m) }
 //
-// The connectors dial through net.SafeHTTPClient, whose SSRF guard blocks
-// loopback unless the operator opts in; the suites point each connector at a
-// 127.0.0.1 httptest server, so they need the same opt-in production gets via
-// DAZYFLOW_ALLOW_PRIVATE_EGRESS. It calls os.Exit, exactly as a hand-written
-// TestMain would.
+// The suites point each connector at a 127.0.0.1 httptest server, which
+// net.SafeHTTPClient's SSRF guard blocks without the same opt-in production
+// gets via DAZYFLOW_ALLOW_PRIVATE_EGRESS. It calls os.Exit, as a TestMain does.
 func EgressTestMain(m *testing.M) {
 	hfnet.SetAllowPrivateEgress(true)
 	os.Exit(m.Run())
 }
 
 // AssertSSRFBlocked turns the operator opt-in off for the duration of call and
-// requires the dial guard to refuse it.
+// requires the dial guard to refuse it — the assertion every connector owes,
+// since otherwise a tenant could point base_url at cloud metadata and exfiltrate
+// that connector's credential. Each connector passes a closure because their
+// `xDo` signatures differ; the error is the only part that matters.
 //
-// This is the assertion every connector owes: with the opt-in off, a base_url
-// pointing at a loopback/private address must be refused — otherwise a tenant
-// could exfiltrate that connector's credential to cloud metadata or an internal
-// host. Each connector passes a closure because their `xDo` signatures differ
-// in arity and in what they take (some a core.Job, some a bare token); the
-// error is the only part the assertion cares about.
-//
-// The opt-in is process-global, so a caller must not run this in parallel with
-// tests that need egress allowed. That is why it restores on defer rather than
-// via t.Cleanup: the window closes at the end of the call, not at the end of
-// the test.
+// The opt-in is process-global, so this must not run in parallel with tests that
+// need egress allowed — hence restoring on defer rather than via t.Cleanup.
 func AssertSSRFBlocked(t *testing.T, call func() error) {
 	t.Helper()
 	hfnet.SetAllowPrivateEgress(false)

@@ -4,16 +4,15 @@
 // The files a run touched.
 //
 // A step that writes a file emits the path on its output port rather than the
-// bytes (core.Ref.Ref instead of Ref.Inline), so a flow ending in "Save as
-// file", "Write Excel" or "Merge PDFs" has a result the Result panel can only
-// describe as a string. The file itself is right there in the workspace, and
-// the workspace file endpoints can already serve it — this turns those refs
-// into a list with a download beside each one.
+// bytes (core.Ref.Ref instead of Ref.Inline), so a flow ending in "Save as file"
+// or "Merge PDFs" has a result the Result panel can only describe as a string.
+// The file is right there in the workspace and the workspace file endpoints can
+// already serve it, so this turns those refs into a list with a download beside
+// each one.
 //
 // No new storage: an artifact IS a workspace file. That also sets the one real
-// limit — a scratch:// path lives in the run's ephemeral tree and is reclaimed
-// when the run finishes, so it is listed as gone rather than offered as a
-// download the server would refuse.
+// limit — a scratch:// path is reclaimed when the run finishes, so it is listed
+// as gone rather than offered as a download the server would refuse.
 
 import type { JobRecord, Ref } from "../types";
 

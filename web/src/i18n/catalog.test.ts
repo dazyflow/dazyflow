@@ -3,18 +3,16 @@
 
 // Structural guards on the locale bundles.
 //
-// These check the things a human reviewer cannot eyeball across ~2,000 keys and
-// that no type system covers: that the two catalogues carry the SAME keys, and
-// that a translation never silently drops an interpolation. A Swedish string
-// that loses its {{count}} doesn't crash — it renders a sentence with a hole in
-// it, in production, in the language the reviewer doesn't read.
+// These check what a human reviewer cannot eyeball across ~2,000 keys and no
+// type system covers: that the two catalogues carry the SAME keys, and that a
+// translation never silently drops an interpolation. A Swedish string that loses
+// its {{count}} renders a sentence with a hole in it, in production, in the
+// language the reviewer doesn't read.
 //
-// Deliberately NOT tested here: whether every key is referenced from a
-// component. Keys are legitimately built at runtime — `flowStatus.${status}`,
-// `nodeCard.schedule.${kind}`, and `t(`${active.configPathKey}.${os}`)`, whose
-// prefix is itself a variable — so any static "unused key" rule produces false
-// positives and would eventually be silenced rather than fixed. Dead keys get
-// swept by hand, with each candidate verified against the source.
+// Deliberately NOT tested: whether every key is referenced from a component.
+// Keys are legitimately built at runtime — `flowStatus.${status}` and the like —
+// so any static "unused key" rule produces false positives and would eventually
+// be silenced rather than fixed.
 import { describe, expect, it } from "vitest";
 import en from "./en.json";
 import sv from "./sv.json";
@@ -79,19 +77,15 @@ describe("locale catalogues", () => {
     expect(unpaired).toEqual([]);
   });
 
-  // One English label rendered as two different Swedish ones is drift a
-  // reviewer cannot see: the English reads fine, so nothing looks wrong unless
-  // you read the other catalogue. It had already happened thirteen times — the
-  // publish toggle called a live flow "Live" while the status chip beside it
-  // called the same state "Aktiv", and the TV wall reported a run as
-  // "Misslyckades" where the runs list said "Misslyckad".
+  // One English label rendered as two different Swedish ones is drift a reviewer
+  // cannot see: the English reads fine. It had already happened thirteen times —
+  // the publish toggle called a live flow "Live" while the status chip beside it
+  // called the same state "Aktiv".
   //
   // Divergence is sometimes CORRECT, which is why this is an allowlist rather
-  // than a ban. Swedish inflects for gender and number, so one English word
-  // legitimately becomes two; and a couple of English labels are simply
-  // imprecise, covering two different things the Swedish distinguishes. Every
-  // entry below says which it is. Adding one is a real decision — if you cannot
-  // write the reason, it is drift.
+  // than a ban: Swedish inflects for gender and number, and a few English labels
+  // are imprecise where the Swedish distinguishes. Every entry says which it is —
+  // if you cannot write the reason, it is drift.
   const ALLOWED_DIVERGENCE: Record<string, string> = {
     Custom: "neuter 'schema' (Anpassat) vs en-word 'roll'/'mall' (Anpassad)",
     "Built-in": "plural group heading (Inbyggda) vs singular badge (Inbyggd)",

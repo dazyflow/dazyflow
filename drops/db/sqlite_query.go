@@ -66,20 +66,17 @@ func init() {
 	})
 }
 
-// executeSQLiteQuery runs a single SELECT against a SQLite database
-// file inside the workspace sandbox and emits the rows as the same
-// {column: value}[] shape postgres_query produces — wire-up
-// compatible with excel_write, postgres_insert_rows, the lot.
+// executeSQLiteQuery runs a single SELECT against a SQLite database file inside
+// the workspace sandbox and emits the rows in the same {column: value}[] shape
+// postgres_query produces, so it is wire-up compatible with excel_write,
+// postgres_insert_rows and the rest.
 //
-// SQLite's dynamic typing means cell values come back as the Go type
-// the storage class decoded to: int64 for INTEGER, float64 for REAL,
-// string for TEXT, []byte for BLOB. JSON serialization handles all of
-// these (binary becomes base64). Unlike Postgres, there's no NUMERIC
-// pseudo-type wrapper to unwrap.
+// SQLite's dynamic typing means cell values come back as the Go type the storage
+// class decoded to, all of which JSON serialization handles (binary becomes
+// base64). Unlike Postgres there is no NUMERIC pseudo-type to unwrap.
 //
-// Sandbox: same os.Root probe as sqlite_insert_rows — the user-
-// supplied path is workspace-relative and validated through the
-// sandbox root before sqlite (which accepts unconstrained filenames)
+// Same os.Root probe as sqlite_insert_rows: the user-supplied path is validated
+// through the sandbox root before sqlite, which accepts unconstrained filenames,
 // is allowed to see it.
 func executeSQLiteQuery(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	path, err := params.String(job.Params, "path")

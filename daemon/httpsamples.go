@@ -10,23 +10,21 @@ import (
 )
 
 // The editor's card data faces need a step's last output without a run id to
-// hand: the canvas is open, nothing has run in THIS session, and the question
-// is still "what does this step produce?".
+// hand: the canvas is open, nothing has run in THIS session, and the question is
+// still "what does this step produce?".
 //
-// Nothing new is stored to answer it. A node record already holds what its
-// node produced, and the run viewer already serves those values to the same
-// people behind the same authorization — this reads the same rows keyed by
-// flow instead of by run, newest-first, and keeps the first hit per node.
+// Nothing new is stored to answer it. A node record already holds what its node
+// produced, and the run viewer serves those values to the same people behind the
+// same authorization — this reads the same rows keyed by flow instead of by run,
+// newest-first, keeping the first hit per node.
 //
-// Merging across runs rather than reading only the newest run is what makes
-// it useful: sampling one step (POST .../nodes/{id}/sample) runs that step's
-// upstream chain alone, so the newest run frequently covers a fraction of the
-// graph while older runs hold the rest.
+// Merging across runs is what makes it useful: sampling one step runs that
+// step's upstream chain alone, so the newest run frequently covers a fraction of
+// the graph while older runs hold the rest.
 //
-// The bound is retention. When a run's records are pruned or its logs
-// deleted, its samples go with them and the card falls back to "no data yet"
-// — which is the honest reading of a badge that says "from the last run". A
-// sample that must outlive retention has to be pinned, and a pin is storage.
+// The bound is retention. When a run's records are pruned its samples go too and
+// the card falls back to "no data yet", which is the honest reading of a badge
+// that says "from the last run".
 
 const maxSampleRecords = 400
 

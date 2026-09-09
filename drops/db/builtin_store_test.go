@@ -799,19 +799,16 @@ func TestBuiltinStore_TimestampColumnRespectsCallerAndOptOut(t *testing.T) {
 	})
 }
 
-// A collection's
-// columns are created in the order the incoming value declares, not
-// alphabetically.
+// A collection's columns are created in the order the incoming value declares,
+// not alphabetically.
 //
-// This is the store half of the hosted-form path. A form asking "Your
-// name, Your email, What you like about us" carries exactly that order on
-// its rows Ref (daemon.buildFormSeed), and the owner then reads the
-// collection in the Collections page. Sorting anywhere along the way puts
-// the long free-text answer first and the person's name last, which is
-// the wrong way round for every form ever written.
+// This is the store half of the hosted-form path: a form asking "Your name, Your
+// email, What you like about us" carries exactly that order on its rows Ref, and
+// sorting anywhere along the way puts the long free-text answer first and the
+// person's name last.
 //
-// The row maps are deliberately unordered (Go map iteration is random) so
-// the only thing that can produce a stable order is Headers being honored.
+// The row maps are deliberately unordered (Go map iteration is random), so the
+// only thing that can produce a stable order is Headers being honored.
 func TestBuiltinStore_AppendCreatesColumnsInHeaderOrder(t *testing.T) {
 	root := t.TempDir()
 	declared := []string{"your_name", "your_email", "what_you_like_about_us"}

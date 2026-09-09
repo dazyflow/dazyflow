@@ -131,23 +131,19 @@ func (h *reparkHarness) waitForNotifySettled(t *testing.T, want int32) int32 {
 	return h.notified.Load()
 }
 
-// Reproduces the duplicate
-// approval email.
+// Reproduces the duplicate approval email.
 //
-// A node that parks is announced by OnNodeAwaiting, which mails the
-// approvers. The announcement hangs off the park's status write, so it is
-// only sent once if that write can only commit once. It could commit twice:
-// an expired lease lets a second worker reclaim and re-execute a node the
-// first worker is still running, and awaiting → awaiting was an accepted
-// transition, so BOTH executions committed a park and BOTH mailed the
-// approvers — the same request, the same link, twice.
+// A node that parks is announced by OnNodeAwaiting, which mails the approvers.
+// The announcement hangs off the park's status write, so it is sent once only if
+// that write can commit once — and it could commit twice: an expired lease lets
+// a second worker re-execute a node the first is still running, and awaiting →
+// awaiting was an accepted transition, so both executions mailed the approvers.
 //
-// The ownership fence (worker_id) was supposed to stop the late writer, but
-// dzd gave every process the same worker IDs ("dzd-dev-w0"), so across two
-// instances it compared equal and passed. This test pins the store-level
-// guard that holds even then: the record is parked out-of-band WITHOUT
-// changing its worker id — the late worker still "owns" it — and the park
-// must still be refused, with no second notification.
+// The ownership fence (worker_id) was supposed to stop the late writer, but dzd
+// gave every process the same worker IDs, so across two instances it compared
+// equal. This test pins the store-level guard that holds even then: the record is
+// parked out-of-band WITHOUT changing its worker id, and the park must still be
+// refused, with no second notification.
 func TestPark_SecondParkIsFencedAndDoesNotNotify(t *testing.T) {
 	t.Parallel()
 	h := newReparkHarness(t)

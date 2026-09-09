@@ -29,25 +29,23 @@ import (
 
 // Mirroring a Postgres-backed workspace.
 //
-// A mirror is a push of a real git repository, and Postgres has none — so one
-// is SYNTHESIZED from the revision log: every revision becomes a commit, in
-// `seq` order, carrying the author, message and timestamp the row records.
+// A mirror is a push of a real git repository, and Postgres has none — so one is
+// SYNTHESIZED from the revision log: every revision becomes a commit, in `seq`
+// order, carrying the author, message and timestamp the row records.
 //
-// The whole design turns on one property: synthesis must be DETERMINISTIC.
-// Whichever replica holds the mirror lock rebuilds the repository from the same
-// rows, and if two replicas derived different commit hashes for the same
-// history, every failover would turn the next push into a force-push and the
-// customer's mirror would lose its history. So nothing here may depend on the
-// machine, the clock, or the order rows happen to arrive in:
+// Synthesis must be DETERMINISTIC. Whichever replica holds the mirror lock
+// rebuilds from the same rows, and if two derived different commit hashes for
+// the same history, every failover would turn the next push into a force-push
+// and the customer's mirror would lose its history. So nothing here may depend
+// on the machine, the clock, or the order rows arrive in:
 //
 //   - the committer is a fixed identity, never the pod;
 //   - every timestamp comes from the row and is normalized to UTC;
 //   - the flow's JSON is re-encoded canonically rather than echoed;
 //   - commits follow `seq`, the order Postgres already assigned.
 //
-// Given that, the on-disk repository is a pure CACHE. Losing it costs one
-// rebuild (~390 revisions/sec, measured) and nothing else, which is why it can
-// live on whichever replica currently mirrors.
+// Given that, the on-disk repository is a pure CACHE: losing it costs one
+// rebuild and nothing else.
 
 const synthTrailer = "Dazyflow-Revision: "
 

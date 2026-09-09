@@ -1,18 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package journey runs the scenarios in tests/scenarios/README.md as
-// experience tests, from the perspective of a brand-new, non-technical
-// user. Instead of poking the engine internals, each test boots the
-// real stack (the same HTTP API the web UI calls, plus a worker that
-// actually executes flows) and walks the steps a newcomer takes:
+// Package journey runs the scenarios in tests/scenarios/README.md as experience
+// tests, from the perspective of a brand-new, non-technical user. Instead of
+// poking engine internals, each test boots the real stack — the same HTTP API
+// the web UI calls, plus a worker that executes flows — and walks the steps a
+// newcomer takes:
 //
 //	sign up  ->  find the building blocks in the catalog  ->  see which
 //	accounts to connect  ->  save the flow  ->  let the app validate it
 //	->  fill in the blanks  ->  (where possible) run it and watch it work.
 //
-// A failure means a newcomer would be stuck at that step. The harness
-// here is the shared plumbing; the journeys live in journey_test.go.
+// A failure means a newcomer would be stuck at that step. This file is the
+// shared plumbing; the journeys live in journey_test.go.
 package journey
 
 import (

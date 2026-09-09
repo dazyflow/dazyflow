@@ -10,31 +10,19 @@ import (
 )
 
 // Package datenames holds localized day and month names — the words Go's time
-// package cannot produce.
+// package cannot produce: t.Format("Monday") is always English, and there is no
+// locale to hand it. golang.org/x/text/date is a dead end (generated CLDR
+// tables, no exported API), and Intl is a browser thing.
 //
-// Shared rather than owned by whoever needed it first: the Date & time drop
-// formats them into a flow's output, and the daemon's transactional email
-// formats them into an invitation's expiry date. One table means a language
-// added for one surface is added for both, and the casing rule below is
-// decided once.
-//
-// Go's time package has no localization: t.Format("Monday") is always English,
-// and there is no locale to hand it. The obvious shortcut is a dead end —
-// golang.org/x/text/date ships generated CLDR tables but exports no API at all
-// (its gen.go is //go:build ignore), and Intl is a browser thing while this
-// runs on the server. So the names live here, in a table we own.
-//
-// A table rather than a CLDR dependency because the set is small and the cost
-// of being wrong is visible: twelve months and seven days per language, in a
-// product whose UI ships two languages. If that count grows past a handful,
-// a library earns its keep; at two it would be a dependency for forty strings.
+// A table rather than a CLDR dependency because the set is small: twelve months
+// and seven days per language, in a product whose UI ships two. It is shared
+// because both the Date & time drop and the daemon's transactional email need
+// it, so a language added for one is added for both.
 //
 // CASING IS PART OF THE DATA, not a rule applied afterwards. English
-// capitalises day and month names; Swedish does not — "måndag", "augusti". A
-// formatter that capitalised both would be wrong in Swedish in exactly the way
-// it would be wrong in English to lowercase them, and no amount of
-// post-processing knows which is which. The table stores each language's names
-// as that language writes them.
+// capitalises day and month names; Swedish does not — "måndag", "augusti" — and
+// no post-processing knows which is which.
+
 // Names is one language's day and month names.
 type Names struct {
 	Days        [7]string // indexed by time.Weekday: Sunday..Saturday

@@ -14,28 +14,17 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// verifyCookieOrigin is the CSRF defense layer for cookie-authenticated
-// requests. The session cookie already has SameSite=Lax + HttpOnly, which
-// in modern browsers blocks the classical fetch-driven CSRF attack on its
-// own. This middleware adds belt-and-suspenders defense for older browsers
-// and for the small set of fetch shapes Lax doesn't cover (e.g. some
-// top-level POST navigations in older Safari): every cookie-auth POST /
-// PUT / PATCH / DELETE must carry an Origin header that matches one of
-// the configured AllowedOrigins.
+// verifyCookieOrigin is the CSRF defense for cookie-authenticated requests. The
+// session cookie is already SameSite=Lax + HttpOnly, which blocks the classical
+// fetch-driven attack in modern browsers; this covers older ones and the few
+// fetch shapes Lax misses, by requiring every cookie-auth POST/PUT/PATCH/DELETE
+// to carry an Origin matching AllowedOrigins.
 //
-// Behaviour:
-//   - GET / HEAD / OPTIONS pass through (they shouldn't mutate state; the
-//     CORS preflight needs to land first anyway).
-//   - Requests with no session cookie pass through (Bearer-auth clients
-//     have no cookies attached, so there's no CSRF surface).
-//   - Cookie-auth state-changing requests must have an Origin header
-//     present and matching AllowedOrigins. Missing or mismatched Origin
-//     returns 403.
+// GET/HEAD/OPTIONS pass through, as do requests with no session cookie — a
+// Bearer client attaches none, so it has no CSRF surface.
 //
-// When AllowedOrigins is empty (single-tenant dev mode without web-origin
-// configured), cookie-auth state-changing requests fall back to refusing —
-// "no allowed origins" implies no browser-served origin should be
-// performing writes; the deployment hasn't opted into browser auth.
+// An empty AllowedOrigins refuses rather than allows: no browser-served origin
+// should be writing, because the deployment has not opted into browser auth.
 func (h *HTTPGateway) verifyCookieOrigin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		switch r.Method {

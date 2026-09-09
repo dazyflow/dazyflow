@@ -14,17 +14,15 @@ import { ICON } from "../../icons";
 import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 // ReportProblemModal files a support ticket about a specific flow/run — the
-// zero-friction "the ask" path (Tier 1): the server auto-attaches a redacted
-// diagnostic bundle for the referenced flow/run, so support can help without a
-// live grant. On success it navigates to the new ticket's thread. Rendered from
-// the run-failure banner when the deployment has the ticket surface enabled.
+// zero-friction path: the server auto-attaches a redacted diagnostic bundle for
+// the referenced flow/run, so support can help without a live grant. On success
+// it navigates to the new ticket's thread.
 //
-// defaultMessage seeds the message box with what the caller already knows —
-// the error the user is looking at. The bundle carries the same facts in
-// machine form, but a ticket whose first line is blank asks the user to
-// retype an error that is on screen in front of them, and most people send it
-// empty instead. Editable, not fixed: it is a starting point for "and here is
-// what I was doing", which is the part only they can supply.
+// defaultMessage seeds the message box with the error the user is looking at.
+// The bundle carries the same facts in machine form, but a ticket whose first
+// line is blank asks the user to retype an error that is on screen, and most
+// people send it empty instead. Editable, not fixed: it is a starting point for
+// "and here is what I was doing", which is the part only they can supply.
 export function ReportProblemModal({
   flowId,
   runId,

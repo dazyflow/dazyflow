@@ -6,15 +6,14 @@ package daemon
 // The page the signed approval link opens.
 //
 // The link is emailed to a person and rendered as a button, so opening it is a
-// GET — and for a long time the only thing registered here was POST, which
-// meant the one-click approval the mail promises answered a raw
-// "method_not_allowed" JSON body. This file is the missing half: GET renders
-// the question with an Approve and a Reject button, and those buttons post
-// back to the same URL.
+// GET — and for a long time only POST was registered here, so the one-click
+// approval the mail promises answered a raw "method_not_allowed" JSON body. GET
+// renders the question with an Approve and a Reject button, which post back to
+// the same URL.
 //
-// GET stays free of side effects, deliberately. Mail scanners and link
-// previewers fetch URLs out of messages before a human sees them, so an
-// approval that happened on GET would be decided by a virus scanner.
+// GET stays free of side effects, deliberately: mail scanners and link
+// previewers fetch URLs out of messages before a human sees them, so an approval
+// that happened on GET would be decided by a virus scanner.
 
 import (
 	"encoding/json"

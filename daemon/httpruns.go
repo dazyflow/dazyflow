@@ -64,20 +64,17 @@ func (h *flowAPI) listModules(rw http.ResponseWriter, r *http.Request, p core.Pr
 		writeXML(rw, http.StatusOK, dropsXML{Drops: mans})
 		return
 	}
-	// Emit both keys: "drops" is the new canonical name; "modules" is
-	// kept for the legacy /api/v1/modules clients (and a transition
-	// window for anything that still reads the old key).
+	// Emit both keys: "drops" is the canonical name, "modules" is kept for legacy
+	// /api/v1/modules clients.
 	//
-	// The catalog is encoded ONCE and the same bytes are written under
-	// both keys. Handing the slice to a map made the encoder walk the
-	// whole catalog twice by reflection, and routing it back through a
-	// json.RawMessage is worse still (v2 re-validates and reformats raw
-	// bytes) — measured both. Writing the envelope around one encoding is
-	// the only shape that pays for neither. The wire bytes are unchanged.
+	// The catalog is encoded ONCE and the same bytes are written under both keys.
+	// Handing the slice to a map made the encoder walk the whole catalog twice by
+	// reflection, and routing it through a json.RawMessage is worse still (v2
+	// re-validates and reformats raw bytes) — measured both.
 	//
-	// Cached: this is the largest body the API serves and compressing it
-	// is 71% of the request, so the compressed form is kept keyed by the
-	// body's own fingerprint and a client that still holds it gets a 304.
+	// Cached: this is the largest body the API serves and compressing it is 71% of
+	// the request, so the compressed form is kept keyed by the body's own
+	// fingerprint and a client that still holds it gets a 304.
 	writeSharedJSONPairCached(rw, r, "drops", "modules", mans, !h.noCompression)
 }
 

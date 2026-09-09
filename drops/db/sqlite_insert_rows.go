@@ -69,28 +69,20 @@ func init() {
 	})
 }
 
-// executeSQLiteInsertRows opens (or creates) a SQLite file under the
-// workspace sandbox and batch-inserts the input rows into the named
-// table inside a single transaction. The whole batch succeeds or rolls
-// back — partial inserts are worse than no inserts for an ETL step.
+// executeSQLiteInsertRows opens (or creates) a SQLite file under the workspace
+// sandbox and batch-inserts the input rows into the named table in a single
+// transaction — partial inserts are worse than none for an ETL step.
 //
-// Sandboxing: SQLite's connection string is a filesystem path, so we
-// route it through the same os.Root discipline as file_read/excel_read
-// — the path is workspace-relative, "../" or absolute paths are
-// rejected. modernc.org/sqlite opens via stdlib database/sql, which
-// just takes a filename; we pre-resolve it through os.Root to fail
-// fast on escape attempts.
+// SQLite's connection string is a filesystem path, so it goes through the same
+// os.Root discipline as file_read/excel_read: workspace-relative, "../" and
+// absolute rejected. modernc.org/sqlite opens via database/sql, which just takes
+// a filename, so the path is pre-resolved through os.Root to fail fast.
 //
-// Schema: when create_table=true and the table is missing, we CREATE
-// TABLE from the resolved header list. Columns default to TEXT; the
-// column_types param overrides per column ("age":"INTEGER",
-// "created_at":"DATETIME"). Existing tables are left untouched —
-// schema migrations are out of scope here.
-//
-// Quotas: SQLite grows the file in pages; we don't pre-check against
-// the tenant quota because the per-INSERT delta isn't knowable up
-// front. A daily quota sweep is the right place for that, not this
-// drop.
+// When create_table=true and the table is missing it is created from the
+// resolved header list, TEXT by default and overridable per column via
+// column_types. Existing tables are left untouched — schema migration is out of
+// scope, and so is quota: the per-INSERT delta isn't knowable up front, so a
+// daily sweep is the right place for it.
 func executeSQLiteInsertRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	path, err := params.String(job.Params, "path")
 	if err != nil {

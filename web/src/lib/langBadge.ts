@@ -5,16 +5,14 @@
 //
 // A step says which language it is in a param of its own — Text's "Written in",
 // the runner step's "Run it with" — and the field points at it with
-// x_lang_param. On the canvas that fact is worth showing: a Text node holding a
+// x_lang_param. That fact is worth showing on the canvas: a Text node holding a
 // SQL query and one holding an email body are different nodes to a reader, and
 // they used to look identical.
 //
-// The glyph says what KIND of thing it is, not which language it is. Only three
-// of the languages on offer have a mark anyone would recognise (Python,
-// JavaScript, PowerShell) — SQL is a standard rather than a product, and YAML
-// and shell have no logo at all — so a row of real brand marks beside invented
-// ones would read as broken. A terminal, a database, a pair of braces: those
-// group the seven honestly, and the label carries the identity.
+// The glyph says what KIND of thing it is, not which language. Only three of the
+// languages on offer have a mark anyone would recognise, so a row of real brand
+// marks beside invented ones would read as broken. A terminal, a database, a
+// pair of braces group the seven honestly, and the label carries the identity.
 
 export type LangGlyph = "terminal" | "database" | "braces" | "code" | "text";
 

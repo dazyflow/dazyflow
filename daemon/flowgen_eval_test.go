@@ -6,31 +6,28 @@ package daemon
 // The flow-generator eval: can the product's own AI build the flows people
 // actually ask for, from the sentence they'd say out loud?
 //
-// tests/usecases/README.md is a corpus of thirty-five plain-language asks, each
-// paired with a hand-built graph beside it that is known to compose. That
-// pairing is an eval set for free: the ask is the input a real user types, the
-// graph is one known-good answer, and the gate is the same one the save path
-// applies. If the generator can't get there from the sentence, a non-technical
-// user can't either — which is the whole promise of the feature.
+// tests/usecases/README.md pairs thirty-five plain-language asks with hand-built
+// graphs that are known to compose, which is an eval set for free: the ask is
+// the input a real user types, the graph is one known-good answer, and the gate
+// is the same one the save path applies.
 //
 // Two entry points:
 //
 //   - TestFlowGenScenariosHarness runs everywhere, with no model: it checks the
-//     corpus parses, every ask has a reference graph, and the scorer agrees
-//     that a reference graph answers its own ask (and that a wrong graph
-//     doesn't). This keeps the harness honest as the corpus changes.
+//     corpus parses, every ask has a reference graph, and the scorer agrees that
+//     a reference graph answers its own ask (and that a wrong graph doesn't).
 //
 //   - TestFlowGenScenarios calls the real generator and needs a key. Opt in with
-//     FLOWGEN_EVAL_KEY (or ANTHROPIC_API_KEY); it is skipped otherwise, since
-//     it spends money and its results are not deterministic.
+//     FLOWGEN_EVAL_KEY (or ANTHROPIC_API_KEY); it is skipped otherwise, since it
+//     spends money and its results are not deterministic.
 //
 //	FLOWGEN_EVAL_KEY=sk-ant-… go test ./daemon -run TestFlowGenScenarios -timeout 60m -v
 //	FLOWGEN_EVAL_ONLY=12,29,33 FLOWGEN_EVAL_KEY=… go test ./daemon -run TestFlowGenScenarios -v
 //
 // Env knobs: FLOWGEN_EVAL_PROVIDER (default "claude"), FLOWGEN_EVAL_ONLY (a
 // comma-separated scenario list), FLOWGEN_EVAL_OUT (report directory, default
-// the test's temp dir), FLOWGEN_EVAL_MIN_VALID (fail the test below this
-// percentage of valid drafts; default 0 = report only).
+// the test's temp dir), FLOWGEN_EVAL_MIN_VALID (fail below this percentage of
+// valid drafts; default 0 = report only).
 
 import (
 	"context"

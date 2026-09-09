@@ -15,18 +15,14 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// Invitation is a pending offer for someone to join an org. It carries
-// the prospective member's email (case-insensitive), the org they're
-// being invited into, the roles they'll get on accept, who invited
-// them, and an opaque single-use token. The recipient hits an /invite
-// link that includes the token; they sign in (or sign up using the
-// invited email) and the daemon turns the invitation into a
-// Membership.
+// Invitation is a pending offer for someone to join an org: the prospective
+// member's email (case-insensitive), the org, the roles they get on accept, who
+// invited them, and an opaque single-use token. The recipient hits an /invite
+// link carrying the token, signs in or signs up, and the daemon turns the
+// invitation into a Membership.
 //
-// Token is the URL-safe random ID; we don't store a hash because
-// the token only grants access to view + accept the invite (no
-// privileged action). Hashing would prevent operator inspection of
-// pending invites with no real security gain.
+// Token is stored unhashed: it only grants viewing and accepting the invite, so
+// hashing would cost operator inspection of pending invites for no real gain.
 type Invitation struct {
 	Token      string      `json:"token"`
 	Email      string      `json:"email"`
@@ -44,20 +40,14 @@ func (i Invitation) IsPending(now time.Time) bool {
 	return i.AcceptedAt == nil && i.RevokedAt == nil && now.Before(i.ExpiresAt)
 }
 
-// SignupInviteTenant is the sentinel Tenant value that marks an
-// Invitation as a platform signup-invite rather than an org-join
-// invite. A platform admin issues these to authorize one specific
-// email to create its OWN account — own tenant, default signup roles —
-// on a deployment where self-serve signup is disabled (see the signUp
-// gate in daemon/httpsignup.go). The value is NOT a real tenant: no
-// org, membership, workspace, or profile is ever keyed on it, and no
-// account ever lands here (signup mints a fresh usr_<hex> tenant).
-// Reusing the invitations store rather than a parallel table means
-// signup-invites inherit its TTL, audit trail, and GDPR erasure
-// (DeleteByEmail) for free. The org-join handlers
-// (viewInvitation/acceptInvitation) reject any invite where
-// IsSignupInvite is true, and a tenant admin's ListByTenant never
-// returns these because their tenant is never the sentinel.
+// SignupInviteTenant marks an Invitation as a platform signup-invite rather
+// than an org-join invite: a platform admin authorizing one specific email to
+// create its OWN account on a deployment where self-serve signup is disabled.
+//
+// The value is not a real tenant — nothing is ever keyed on it, and signup mints
+// a fresh usr_<hex>. Reusing the invitations store rather than a parallel table
+// means signup-invites inherit its TTL, audit trail and GDPR erasure for free;
+// the org-join handlers reject any invite where IsSignupInvite is true.
 const SignupInviteTenant = "_signup"
 
 // IsSignupInvite reports whether this invitation is a platform

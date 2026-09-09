@@ -3,15 +3,13 @@
 
 // Site search for the docs.
 //
-// Sixty-odd pages — ten guides and forty-six generated step-catalog groups —
-// and until now not a single input on the site. Finding "what does the webhook
-// trigger output?" meant guessing which reference page it lived on, and the
-// guide's own cross-link guessed wrong. A reader who can't search a reference
-// re-reads the sidebar instead.
+// Sixty-odd pages and, until this, not a single input on the site: finding "what
+// does the webhook trigger output?" meant guessing which reference page it lived
+// on, and the guide's own cross-link guessed wrong.
 //
-// No index to build and no library to load: content.ts already globs every page
-// eagerly, so the corpus is in memory. We score title/heading/body hits, show
-// the matching line as context, and keep it to the keyboard: / or Ctrl-K opens,
+// No index to build and no library to load — content.ts already globs every page
+// eagerly, so the corpus is in memory. It scores title/heading/body hits, shows
+// the matching line as context, and stays on the keyboard: / or Ctrl-K opens,
 // arrows move, Enter navigates, Escape closes.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";

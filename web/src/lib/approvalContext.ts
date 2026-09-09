@@ -5,15 +5,14 @@
 // something an approver can read at a glance.
 //
 // The inbox used to show only which step was waiting, so someone was asked to
-// approve a stranger's words into a testimonial list, or a refund, without
-// being shown either. The value was already carried on the step — it just
-// never reached the card.
+// approve a stranger's words into a testimonial list, or a refund, without being
+// shown either — the value was already on the step, it just never reached the
+// card.
 //
 // The value is whatever the flow wired in, so this normalizes the shapes that
-// actually turn up: a form submission or a looked-up record (an object → named
-// fields), a drafted reply or a summary (a string → text), and everything else
-// (numbers, lists, nested objects → compact text), rather than rendering raw
-// JSON at a non-technical reader.
+// actually turn up — an object into named fields, a string into text, everything
+// else into compact text — rather than rendering raw JSON at a non-technical
+// reader.
 
 export type ApprovalContextView =
   | { kind: "text"; text: string }

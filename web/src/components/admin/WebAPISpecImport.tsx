@@ -1,21 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Importing operations from an OpenAPI spec — the second front end onto the
-// same descriptor the form below it builds by hand.
+// Importing operations from an OpenAPI spec — the second front end onto the same
+// descriptor the form below it builds by hand.
 //
-// The feature is "import OPERATIONS", never "register a spec", and that shows
-// here more than anywhere: reading a document produces a LIST, and nothing is
-// stored until the admin has chosen from it and pressed the form's own Save.
-// Stripe's spec is ~500 operations and GitHub's ~900; registering one naively
-// would file every one of them into the palette and into the flow generator's
-// grounding, which is not "slow", it is unusable.
+// The feature is "import OPERATIONS", never "register a spec": reading a
+// document produces a LIST, and nothing is stored until the admin has chosen
+// from it and pressed the form's own Save. Stripe's spec is ~500 operations and
+// GitHub's ~900, and filing every one of them into the palette and the flow
+// generator's grounding is not slow, it is unusable.
 //
 // Refresh is the same panel pointed at a catalog that already exists. The
-// difference that matters is removals: an operation can vanish from a spec
-// because someone deleted a handler, and the steps it contributed are
-// referenced by saved flows. So a refresh reports what it would take away and
-// will not do it until the admin says so.
+// difference that matters is removals: an operation can vanish from a spec while
+// saved flows still reference the steps it contributed, so a refresh reports
+// what it would take away and will not do it until the admin says so.
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, Minus, Plus, RefreshCw } from "lucide-react";

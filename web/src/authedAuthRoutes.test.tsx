@@ -3,15 +3,14 @@
 
 // The signed-out pages, asked for by someone who is already signed in.
 //
-// /signin and /signup live only in the signed-OUT route tree, so with a
-// session in hand the authenticated tree answered them with its catch-all:
-// "We couldn't find that page." The page exists — the visitor is simply past
-// it. The sign-up form's own "Already have an account? Sign in" link lands
-// there, and so does any bookmark or stale marketing link.
+// /signin and /signup live only in the signed-OUT route tree, so with a session
+// in hand the authenticated tree answered them with its catch-all: "We couldn't
+// find that page." The page exists — the visitor is simply past it — and the
+// sign-up form's own "Already have an account?" link lands there.
 //
-// The fix has to be a REDIRECT, and this file exists to keep it one. Signing
-// the session out instead reads as the more literal answer, and it is wrong:
-// a successful sign-up sets the token while the URL is still /signup, so a
+// The fix has to be a REDIRECT, and this file exists to keep it one. Signing the
+// session out instead reads as the more literal answer and is wrong: a
+// successful sign-up sets the token while the URL is still /signup, so a
 // sign-out there logs people out the instant they create an account.
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";

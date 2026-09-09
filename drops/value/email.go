@@ -15,33 +15,27 @@ import (
 	"github.com/dazyflow/dazyflow/engine"
 )
 
-// email.go is a typed source field, the address sibling of url.go and
-// phone.go: the Text drop's inline-or-wire ergonomics, constrained to one
-// email address and normalized. Like both it declares an input port (so the
-// address can be computed upstream) and VALIDATES at run time, failing the
-// node on a bad address (bad_param) rather than emitting a `valid` boolean —
-// a malformed address is a mistake to surface at the field, not a value to
-// thread onward.
+// email.go is a typed source field, the address sibling of url.go and phone.go:
+// the Text drop's inline-or-wire ergonomics, constrained to one email address
+// and normalized. It declares an input port so the address can be computed
+// upstream, and VALIDATES at run time, failing the node (bad_param) rather than
+// emitting a `valid` boolean — a malformed address is a mistake to surface at
+// the field, not a value to thread onward.
 //
-// Parsing is net/mail.ParseAddress, NOT a regular expression. The RFC 5322
-// grammar admits quoted local parts, escapes and comments, so every short
-// email regex is wrong in both directions at once: it rejects addresses that
-// work and accepts ones that don't. The stdlib parser is already what
-// internal/smtputil and drops/notify/verify trust to decide whether an
-// address is sendable, and a drop that disagreed with the step that actually
-// sends the mail would be worse than no check at all.
+// Parsing is net/mail.ParseAddress, NOT a regular expression: the RFC 5322
+// grammar admits quoted local parts, escapes and comments, so a short regex
+// rejects addresses that work and accepts ones that don't. It is also what
+// internal/smtputil and drops/notify/verify already trust, and a drop that
+// disagreed with the step that sends the mail would be worse than no check.
 //
-// ParseAddress also accepts display-name form ("Ada <ada@acme.com>"), which
-// is a feature here rather than a hazard: 'out' carries the bare address a
-// later step needs, and the name lands on its own pin instead of being
-// smuggled into the address.
+// ParseAddress accepts display-name form ("Ada <ada@acme.com>"), which is a
+// feature: 'out' carries the bare address a later step needs and the name lands
+// on its own pin.
 //
-// Two things it deliberately does NOT do. It does not look up MX records:
-// deliverability is a network call with its own latency and failure modes,
-// and "the domain resolves" is not the same claim as "this is an address".
-// And it does not lowercase the local part — only the domain, which is
-// case-insensitive by spec. Case in a local part is the mail server's
-// business, and folding it is how you turn a working address into a bounce.
+// It deliberately does not look up MX records ("the domain resolves" is not the
+// same claim as "this is an address"), and lowercases only the domain — case in
+// a local part is the mail server's business, and folding it turns a working
+// address into a bounce.
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{

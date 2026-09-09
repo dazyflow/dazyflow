@@ -12,26 +12,21 @@ import { loadRecentFlow, userScope } from "../recentFlow";
 
 // Welcome is the post-signup landing — the "first-run" surface.
 //
-// It reads top to bottom as: who you are, where you were, what you can do
-// next. That ordering is the whole rework. Before it, the page opened with a
-// greeting, offered the resume link, and only THEN introduced itself — so the
-// one line explaining the page arrived after the reader had already been given
-// something to click. The featured button had the same problem in miniature:
-// the sentence saying what pressing it would do sat underneath it.
+// It reads top to bottom as: who you are, where you were, what you can do next.
+// That ordering is the whole rework: before it, the page opened with a greeting,
+// offered the resume link, and only THEN introduced itself, so the one line
+// explaining the page arrived after the reader had been given something to
+// click.
 //
-// The four ways into a new flow were the deeper mess. All four go to the same
-// place — /flows/new, differing only in ?tab= — but they were presented at
-// three different weights: one accent button, two 13px text links separated by
-// a dot, and a bordered card at the bottom of the page. Nothing about that
-// ranking followed from how useful they are; describing a flow in English, the
-// most distinctive of the three, was the one at the bottom in a box. They are
-// now one row of equal cards, carrying the SAME icons as the tabs they land on
-// (CreateFlow's tab strip), so the thing you pressed is the thing you arrive
-// at.
+// The four ways into a new flow all go to /flows/new, differing only in ?tab=,
+// but they were presented at three different weights — and describing a flow in
+// English, the most distinctive of them, was the one at the bottom in a box.
+// They are now one row of equal cards carrying the SAME icons as the tabs they
+// land on, so the thing you pressed is the thing you arrive at.
 //
-// What survives untouched is the resume card: it is the only element here that
-// knows anything about this particular user, which is exactly why it outranks
-// every generic call to action on the page.
+// The resume card survives untouched: it is the only element here that knows
+// anything about this particular user, which is why it outranks every generic
+// call to action.
 
 // HAS_FLOWS_KEY mirrors App.tsx's RootRedirect signal. We read it to decide
 // between first-run and returning copy: someone who has already built a flow

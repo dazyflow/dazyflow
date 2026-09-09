@@ -1,29 +1,23 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package weather hosts the OpenWeather connector: read the current
-// conditions or a multi-day forecast for a latitude/longitude.
+// Package weather hosts the OpenWeather connector: read the current conditions
+// or a multi-day forecast for a latitude/longitude.
 //
-// It uses OpenWeather's FREE endpoints — Current Weather (/data/2.5/weather)
-// and the 5-day / 3-hour Forecast (/data/2.5/forecast) — which any standard
-// API key can call without the paid "One Call by Call" subscription. (The
-// One Call 3.0 endpoint is paywalled and returns 401 for free keys, which is
-// why this connector deliberately avoids it.)
+// It uses OpenWeather's FREE endpoints — Current Weather and the 5-day / 3-hour
+// Forecast — which any standard API key can call. The One Call 3.0 endpoint is
+// paywalled and returns 401 for free keys, so this connector avoids it.
 //
-// Auth is a single per-tenant ConnectionField — the OpenWeather API key (the
-// "appid"), configured once on the integration page rather than typed on every
-// node. The engine injects the configured connection into each node's unset
-// params at run time (injectConnectionDefaults), so flows carry only the
-// per-use fields (which coordinate, which units) — the same shape as the
-// Home Assistant and ntfy connectors.
+// Auth is a single per-tenant ConnectionField (the "appid"), configured once on
+// the integration page and injected into each node's unset params at run time,
+// so flows carry only the per-use fields — the same shape as the Home Assistant
+// and ntfy connectors.
 //
-// The coordinate can be typed on the node as separate Latitude / Longitude
-// numbers, or wired in from another step as a single "lat,lon" text value on
-// the Coordinate input (so a geocode step, a form field, or a device's GPS
-// can drive it). Coordinate parsing, unit symbols and number formatting are
-// shared with the other location connectors in drops/internal/geoloc. The
-// hosts are fixed (not tenant-supplied), but the dial still goes through the
-// shared SSRF guard (net.Do → SafeHTTPClient).
+// The coordinate can be typed as separate Latitude / Longitude numbers or wired
+// in as a single "lat,lon" text value, so a geocode step, a form field or a
+// device's GPS can drive it. Parsing, unit symbols and number formatting are
+// shared with the other location connectors in drops/internal/geoloc. The hosts
+// are fixed, but the dial still goes through the shared SSRF guard.
 package weather
 
 import (

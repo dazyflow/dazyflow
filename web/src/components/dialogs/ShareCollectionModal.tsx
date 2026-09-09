@@ -20,14 +20,13 @@ import { Loading } from "../ui/Loading";
 //
 // The warning above the button is not decoration. The workspace-overview link
 // publishes a sanitized snapshot, so its dialog can be breezy; this one
-// publishes the collection's actual rows to anyone who ends up holding the
-// URL, and the person clicking may not have thought about what is in there.
-// So the consequence is stated before the link exists, not after.
+// publishes the collection's actual rows to anyone holding the URL, and the
+// person clicking may not have thought about what is in there. So the
+// consequence is stated before the link exists, not after.
 //
-// The displayed URL is built from the browser's own origin rather than the
-// server-reported one: behind a dev proxy the daemon's derived base URL can be
-// the internal host, while window.location.origin is always the address the
-// operator is actually looking at.
+// The displayed URL is built from the browser's own origin: behind a dev proxy
+// the daemon's derived base URL can be the internal host, while
+// window.location.origin is always the address the operator is looking at.
 export function ShareCollectionModal({
   collection,
   onClose,

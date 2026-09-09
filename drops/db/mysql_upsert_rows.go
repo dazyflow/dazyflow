@@ -77,22 +77,16 @@ func init() {
 	})
 }
 
-// executeMySQLUpsertRows is the MySQL sibling of postgres_upsert_rows.
-// Same three-mode update semantics (absent → all non-conflict cols;
-// explicit list → just those; explicit [] → effectively no-op), same
-// auto-UNIQUE on create_table, same all-or-nothing transaction.
+// executeMySQLUpsertRows is the MySQL sibling of postgres_upsert_rows: same
+// three-mode update semantics (absent → all non-conflict cols; explicit list →
+// just those; explicit [] → effectively no-op), same auto-UNIQUE on
+// create_table, same all-or-nothing transaction.
 //
-// SQL flavor differences vs Postgres:
-//
-//   - syntax: INSERT ... ON DUPLICATE KEY UPDATE col = VALUES(col)
-//     instead of ON CONFLICT (k) DO UPDATE SET col = EXCLUDED.col
-//   - quoting: backticks instead of double quotes
-//   - placeholders: ? instead of $1/$2/...
-//   - "DO NOTHING": MySQL has no direct equivalent. INSERT IGNORE
-//     swallows ALL errors, which is too blunt. We approximate by
-//     setting the conflict column to itself (a write that's a no-op)
-//     when update_columns is empty — same observable behavior as DO
-//     NOTHING for the typical case.
+// Flavor differences: INSERT ... ON DUPLICATE KEY UPDATE rather than ON
+// CONFLICT, backtick quoting, ? placeholders — and no direct "DO NOTHING".
+// INSERT IGNORE swallows ALL errors, which is too blunt, so an empty
+// update_columns sets the conflict column to itself instead, which is
+// observably the same for the typical case.
 func executeMySQLUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	dsn, err := params.String(job.Params, "dsn")
 	if err != nil {

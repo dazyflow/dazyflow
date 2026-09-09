@@ -10,27 +10,20 @@ import (
 // Manifest.DedupeWrites and Manifest.Idempotent are hand-set bools that decide
 // whether the engine may replay a step or must replay its RECORDED RESULT. Get
 // them wrong on a step that writes to the outside world and an expired-lease
-// reclaim sends a second email, books a second slot, or issues a second
-// refund — and every existing test still passes, because the drop's own tests
-// exercise one clean run.
+// reclaim sends a second email, books a second slot, or issues a second refund —
+// and every existing test still passes, because the drop's own tests exercise
+// one clean run.
 //
-// That is the same shape of hazard passthrough_test.go was written for, and it
-// gets the same two-part guard: the drops that opt in today are pinned by name
-// (the regression case — someone refactoring a manifest and dropping the
-// flag), and the declaration is checked for internal consistency (the
-// new-drop case, where a contradictory pair means the author had one of the
-// two backwards).
+// Same hazard passthrough_test.go was written for, and the same two-part guard:
+// the drops that opt in today are pinned by name, and the declaration is checked
+// for internal consistency, which catches an author who had the pair backwards.
+// engine/writededupe_test.go covers the MECHANISM; nothing covered which drops
+// ask for it.
 //
-// engine/writededupe_test.go covers the MECHANISM this protects; nothing
-// covered which drops ask for it.
-//
-// dedupingWrites is every drop that performs a non-idempotent external write
-// and relies on engine-side dedupe to recover safely. Removing the flag from
-// any of these reintroduces the hole, so they are pinned by name. A new write
-// drop belongs in this list; a drop that legitimately becomes idempotent
-// (because its protocol made the write repeatable) should be removed from it
-// in the same commit that changes the manifest, with the reason in the
-// manifest comment.
+// dedupingWrites is every drop that performs a non-idempotent external write and
+// relies on engine-side dedupe. A new write drop belongs in the list; a drop
+// that legitimately becomes idempotent should leave it in the same commit that
+// changes the manifest, with the reason in the manifest comment.
 var dedupingWrites = []string{
 	"caldav_create_event",
 	"discord_send_message",

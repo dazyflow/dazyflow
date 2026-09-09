@@ -50,25 +50,21 @@ func (s *Service) ResumeGraphRun(ctx context.Context, p core.Principal, graphRun
 	return nil
 }
 
-// ResumeFailedRun retries a failed (or cancelled) run by re-executing only
-// the part that didn't succeed — the failed node and everything downstream
-// of it — while reusing the outputs of the nodes that already succeeded.
-// Returns the new run's ID.
+// ResumeFailedRun retries a failed (or cancelled) run by re-executing only the
+// part that didn't succeed — the failed node and everything downstream — while
+// reusing the outputs of the nodes that already succeeded. Returns the new run's
+// ID.
 //
-// Mechanism: it reuses the exact seed machinery webhook triggers use
-// (SubmitGraphWithSeed / populateSeededRun). Every previously-succeeded
-// node is pre-completed in the new run as a seed carrying its old output;
-// the seed path then enqueues the frontier — the first not-yet-satisfied
-// node, i.e. the one that failed — and normal worker dispatch drives the
-// rest. No engine or dispatcher change is needed.
+// It reuses the seed machinery webhook triggers use: every previously-succeeded
+// node is pre-completed in the new run as a seed carrying its old output, and
+// the seed path enqueues the frontier, so no engine or dispatcher change is
+// needed.
 //
-// Caveat handled here: a failed graph run reclaims its scratch space (see
-// dispatch.go markGraphFailed → reclaimScratch), so any node output stored
-// as a scratch Ref is gone. We therefore only seed nodes whose outputs are
-// fully inline (self-contained in the DB record). A succeeded node with a
-// scratch-backed output is deliberately NOT seeded, so it re-runs — and
-// because not seeding a node makes the seed/dispatch chain re-enqueue it
-// and its descendants, the partial recomputation stays correct.
+// A failed graph run reclaims its scratch space, so any node output stored as a
+// scratch Ref is gone. Only nodes whose outputs are fully inline are therefore
+// seeded; a succeeded node with a scratch-backed output re-runs, and because not
+// seeding a node re-enqueues its descendants too, the partial recomputation
+// stays correct.
 func (s *Service) ResumeFailedRun(ctx context.Context, p core.Principal, runID string) (string, error) {
 	rec, err := s.GetJob(ctx, p, runID)
 	if err != nil {

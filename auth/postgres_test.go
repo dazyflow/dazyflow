@@ -492,18 +492,14 @@ func TestPgOrgAuthStore_TenantRequired(t *testing.T) {
 	}
 }
 
-// The real SQL path:
-// several people accepting at the same instant cannot all take the last seat.
+// The real SQL path: several people accepting at the same instant cannot all
+// take the last seat. This exercises the real transaction and per-tenant
+// advisory lock, where the daemon-level test uses a mutex-backed fake.
 //
-// This exercises the real transaction and per-tenant advisory lock. The
-// daemon-level test uses a mutex-backed fake, which proves the caller asks the
-// store to decide, but not that Postgres decides correctly.
-//
-// Honest about what it proves: it is a smoke test. The window a plain
-// count-then-insert leaves open is microseconds wide, so goroutines rarely
-// land inside it and this passes with the lock removed too. The test below —
-// SeatLimitNeedsTheLock — is the one that pins the hazard, by forcing the
-// interleave instead of hoping for it.
+// It is a smoke test, and honest about it: the window a plain count-then-insert
+// leaves open is microseconds wide, so goroutines rarely land inside it and this
+// passes with the lock removed too. SeatLimitNeedsTheLock below is the one that
+// pins the hazard, by forcing the interleave instead of hoping for it.
 //
 // Gated on DAZYFLOW_TEST_DB like the rest of the Postgres suite.
 func TestPgMembership_SeatLimitIsAtomicUnderConcurrency(t *testing.T) {
@@ -599,18 +595,17 @@ func TestPgMembership_SeatLimitAllowsUpdatingAnExistingMember(t *testing.T) {
 	}
 }
 
-// The executable rationale for the
-// advisory lock in PutMembershipWithinLimit: it forces the interleave that a
-// plain count-then-insert cannot survive, and shows the store's own method
-// surviving it.
+// The executable rationale for the advisory lock in PutMembershipWithinLimit: it
+// forces the interleave a plain count-then-insert cannot survive, and shows the
+// store's own method surviving it.
 //
 // Under READ COMMITTED each statement sees a snapshot taken when it starts, so
-// two transactions that both count before either inserts BOTH see the free
-// seat. Nothing in Postgres stops them — there is no row to conflict on,
-// because the anomaly is about a row that does not exist yet.
+// two transactions that both count before either inserts BOTH see the free seat.
+// Nothing in Postgres stops them — there is no row to conflict on, because the
+// anomaly is about a row that does not exist yet.
 //
-// If the first half of this test ever stops failing to hold the limit, the
-// isolation story changed and the lock deserves a fresh look.
+// If the first half ever stops failing to hold the limit, the isolation story
+// changed and the lock deserves a fresh look.
 func TestPgMembership_SeatLimitNeedsTheLock(t *testing.T) {
 	pool, ctx := covPool(t)
 	store, err := NewPgMembershipStore(ctx, pool)

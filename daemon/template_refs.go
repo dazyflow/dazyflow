@@ -17,12 +17,11 @@ import (
 // assembling inputs but too narrow for template references: in
 // webhook → if → email, the email step never saw the webhook's result.
 //
-// The referenced nodes are looked up in the run instead: every node's result is
+// The referenced nodes are looked up in the run instead — every node's result is
 // a completed job record at NodeJobID(runID, nodeID), and the seeded trigger is
-// written as one too. Only nodes a node's params mention are fetched, so the
-// common case costs nothing. They are added to the SAME map the inputs came
-// from, which is safe because every reader is a keyed lookup: AssembleInput
-// walks edges and reads prior[edge.From], so an unwired entry is never consulted.
+// written as one too. Only nodes a node's params mention are fetched. They are
+// added to the SAME map the inputs came from, which is safe because every reader
+// is a keyed lookup, so an unwired entry is never consulted.
 
 // upstreamRefPattern matches ${upstream.<nodeID>.<port>…}. The node ID stops at
 // the dot that begins the port, which the substituter requires — a reference

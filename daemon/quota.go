@@ -122,19 +122,17 @@ func (q *FSQuota) usedLocked(tenant string) (int64, error) {
 	return used, nil
 }
 
-// Reserve implements core.QuotaReserver. It atomically checks that the
-// tenant's committed usage plus its outstanding reservations plus n fits
-// within the limit, and if so records n as in-flight, returning a release
-// to free it. The reservation is what closes the concurrent-write race
-// the bare Used() snapshot can't: a second writer sees the first's
-// not-yet-committed bytes in q.inflight.
+// Reserve implements core.QuotaReserver. It atomically checks that the tenant's
+// committed usage plus its outstanding reservations plus n fits within the
+// limit, and if so records n as in-flight, returning a release to free it. The
+// reservation closes the concurrent-write race a bare Used() snapshot cannot: a
+// second writer sees the first's not-yet-committed bytes in q.inflight.
 //
-// The lock is held only across the check+increment, not across the
-// caller's disk write — holding the in-flight count is what "reserves"
-// the budget, so the write itself runs unserialized. On release we drop
-// the in-flight bytes and invalidate the usage cache so the next Reserve
-// re-walks and sees the bytes this write committed (avoiding a window
-// where stale-cached used + reduced inflight would under-count).
+// The lock is held only across the check+increment, not across the caller's disk
+// write — holding the in-flight count is what reserves the budget. Release drops
+// the in-flight bytes and invalidates the usage cache, so the next Reserve
+// re-walks rather than under-counting from a stale cache plus a reduced
+// inflight.
 func (q *FSQuota) Reserve(tenant string, n int64) (func(), error) {
 	// Resolve the override before taking the lock (it may call into the
 	// entitlement store, which has its own lock).

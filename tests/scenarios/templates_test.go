@@ -207,19 +207,17 @@ var stringSinkPorts = map[string]map[string]bool{
 	"secret_set":          {"value": true},
 }
 
-// paramSchemaIssues does a focused check of a node's params against the
-// drop's JSON-Schema: required properties are present, and declared
-// properties carry a value of the declared JSON type. It is deliberately
-// not a full validator — just enough to catch the param mistakes the
-// composition check can't see. It only inspects declared properties, so
-// a drop whose schema omits a param it accepts won't produce a false
-// positive.
+// paramSchemaIssues does a focused check of a node's params against the drop's
+// JSON-Schema: required properties are present, and declared properties carry a
+// value of the declared JSON type. Deliberately not a full validator — just
+// enough to catch the param mistakes the composition check can't see. It
+// inspects only declared properties, so a schema that omits a param the drop
+// accepts won't produce a false positive.
 //
 // wired names the node's connected input ports. A required setting whose
-// matching input is wired is satisfied — that is the product's own model
-// ("fill it in, or connect it"; a connected input overrides the typed
-// value), so demanding a placeholder param alongside the wire would push
-// templates into carrying values that the run ignores.
+// matching input is wired is satisfied — that is the product's own model ("fill
+// it in, or connect it") — so demanding a placeholder param alongside the wire
+// would push templates into carrying values the run ignores.
 func paramSchemaIssues(params map[string]any, schema json.RawMessage, wired map[string]bool) []string {
 	if len(schema) == 0 {
 		return nil

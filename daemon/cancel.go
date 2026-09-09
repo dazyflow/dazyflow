@@ -12,29 +12,25 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// CancelGraphRun aborts an in-flight graph run gracefully. Every
-// non-terminal node-record is marked Cancelled, the graph-record is
-// marked Cancelled, and a Terminal event is published so SSE
-// subscribers wrap up.
+// CancelGraphRun aborts an in-flight graph run gracefully. Every non-terminal
+// node-record is marked Cancelled, the graph-record is marked Cancelled, and a
+// Terminal event is published so SSE subscribers wrap up.
 //
-// "Graceful" means we do NOT interrupt nodes that are mid-execution —
-// they finish naturally and the worker's call to
-// Dispatcher.AdvanceAfterCompletion is short-circuited once the
-// graph-record is terminal (see dispatch.go). This keeps the cancel
-// path safe for nodes that don't cooperate with context cancellation
-// (external HTTP calls, sleeps, sandbox processes) while still
-// guaranteeing that no further downstream work starts.
+// "Graceful" means nodes mid-execution are NOT interrupted — they finish
+// naturally and the worker's AdvanceAfterCompletion is short-circuited once the
+// graph-record is terminal. That keeps the cancel path safe for nodes that don't
+// cooperate with context cancellation (external HTTP calls, sleeps, sandbox
+// processes) while still guaranteeing no further downstream work starts.
 //
 // Errors:
 //   - core.ErrNotFound if the run doesn't exist
-//   - core.ErrConflict if the run is already in a terminal state
-//   - core.ErrUnauthorized when the principal lacks graph:run on the
-//     stored graph
-//
+//   - core.ErrConflict if the run is already terminal
+//   - core.ErrUnauthorized when the principal lacks graph:run on the graph
+
 // CancelCodeByPerson marks a cancel somebody asked for, as opposed to one the
-// platform imposed (CancelCodeTimeout). The failure-notification sweep reads
-// this to decide whether a cancelled run is worth an email: stopping your own
-// run needs no telling, but a run the platform stopped does — and it reads as
+// platform imposed (CancelCodeTimeout). The failure-notification sweep reads it
+// to decide whether a cancelled run is worth an email: stopping your own run
+// needs no telling, but a run the platform stopped does — and it reads as
 // "cancelled" in the Runs list, which looks like somebody meant it.
 const (
 	CancelCodeByPerson = "cancelled"

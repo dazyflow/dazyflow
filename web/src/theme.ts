@@ -3,19 +3,18 @@
 
 // Theme has two layers, and keeping them apart is the whole design:
 //
-//   ThemeMode  — what the USER chose: "system" (the default), "dark", or
-//                "light". Persisted per browser in localStorage and roamed
-//                to the account via /me/preferences.
-//   ResolvedTheme — what actually gets painted: "dark" or "light", never
-//                "system". This is what lands on <html data-theme>, so every
-//                CSS token keys off a concrete value and the stylesheet
-//                needs no prefers-color-scheme rules of its own.
+//   ThemeMode     — what the USER chose: "system" (the default), "dark" or
+//                   "light". Persisted per browser and roamed to the account
+//                   via /me/preferences.
+//   ResolvedTheme — what actually gets painted, never "system". This is what
+//                   lands on <html data-theme>, so every CSS token keys off a
+//                   concrete value and the stylesheet needs no
+//                   prefers-color-scheme rules of its own.
 //
-// "system" resolves through prefers-color-scheme and re-resolves live when
-// the OS flips (see watchSystemTheme). Defaulting to the OS rather than to
-// dark matters: most people run their machine in light mode, and forcing a
-// near-black violet app on them on first sign-in reads as broken, not
-// styled.
+// "system" resolves through prefers-color-scheme and re-resolves live when the
+// OS flips. Defaulting to the OS rather than to dark matters: most people run
+// their machine in light mode, and a near-black violet app on first sign-in
+// reads as broken, not styled.
 import { useEffect, useState } from "react";
 
 export type ThemeMode = "system" | "dark" | "light";

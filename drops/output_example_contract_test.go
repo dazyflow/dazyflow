@@ -14,14 +14,13 @@ import (
 // editor renders it on the card's data face and the reference picker reads its
 // field names, so a flow gets wired against it.
 //
-// That makes a wrong example worse than none. An example promising a field the
-// port never carries teaches an author to write ${…total} against nothing, and
-// the failure surfaces on the first real run — far from the cause. Nothing can
+// That makes a wrong example worse than none — one promising a field the port
+// never carries teaches an author to write ${…total} against nothing, and the
+// failure surfaces on the first real run, far from the cause. Nothing can
 // statically prove the field NAMES right, but the shape is checkable, and a
-// shape mismatch is the class of error that breaks the card outright.
+// shape mismatch breaks the card outright.
 //
-// Companion to output_contract_test.go (the ports themselves are well-formed)
-// and examples_contract_test.go (the params side).
+// Companion to output_contract_test.go and examples_contract_test.go.
 
 func TestAllDrops_OutputExamplesMatchTheirPort(t *testing.T) {
 	for _, d := range allDrops(t) {

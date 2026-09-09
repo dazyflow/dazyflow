@@ -58,18 +58,15 @@ func init() {
 	})
 }
 
-// executeSplitRows is the "filter that doesn't drop the false branch"
-// drop. Real ETL pipelines want to route invalid records somewhere
-// (review queue, dead-letter table, log file) rather than dropping
-// them — split_rows makes that a one-node pattern instead of the
-// two-map_rows-with-opposite-filters workaround that walks the
-// input twice.
+// executeSplitRows is the "filter that doesn't drop the false branch" drop. Real
+// ETL pipelines want to route invalid records somewhere — a review queue, a
+// dead-letter table — rather than dropping them, and this makes that one node
+// instead of two map_rows with opposite filters walking the input twice.
 //
-// Filter semantics match compute_rows.filter exactly (same CEL env,
-// same evalFilter helper, same "expression must return bool" rule).
-// Runtime errors fail the whole batch, consistent with compute_rows
-// and the SQL drops — partial routing is worse than no routing for
-// downstream consumers expecting deterministic split sizes.
+// Filter semantics match compute_rows.filter exactly (same CEL env, same
+// evalFilter helper, same "expression must return bool" rule). Runtime errors
+// fail the whole batch, consistent with compute_rows and the SQL drops: partial
+// routing is worse than none for consumers expecting deterministic split sizes.
 func executeSplitRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	rows, headers, errRes, ok := loadRowsAndHeaders(job)
 	if !ok {

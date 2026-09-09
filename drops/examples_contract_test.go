@@ -24,18 +24,15 @@ type paramSchema struct {
 	Required   []string                   `json:"required"`
 }
 
-// Asserts, for every registered drop and
-// every worked example it ships:
+// Asserts, for every registered drop and every worked example it ships:
 //
 //   - the example has a non-empty Title (the catalog renders it verbatim),
 //   - its Params decode to a JSON object,
-//   - every param key it uses is declared in the drop's ParamsSchema — a
-//     key that isn't is a typo or schema drift that would mislead an LLM,
-//   - every *required* param is present — unless the drop draws params from
-//     a configured connection (RequiresConnections / ConnectionFields), in
-//     which case the credential params are injected at run time and a worked
-//     example legitimately omits them (e.g. Stripe's api_key, supplied as a
-//     ${secret.STRIPE_API_KEY}).
+//   - every param key it uses is declared in the drop's ParamsSchema — a key that
+//     isn't is a typo or schema drift that would mislead an LLM,
+//   - every *required* param is present, unless the drop draws params from a
+//     configured connection, in which case the credential params are injected at
+//     run time and an example legitimately omits them.
 func TestAllDrops_ExamplesMatchSchema(t *testing.T) {
 	for _, d := range allDrops(t) {
 		d := d

@@ -3,36 +3,25 @@
 
 // The viewport widths the layout changes at, in one place.
 //
-// These are duplicated from the stylesheets on purpose, and the duplication is
-// unavoidable: CSS custom properties are not usable inside a media query, so a
-// `@media (max-width: var(--mobile))` does not exist. Anything the CSS can do
-// alone should stay in CSS — these exist only for behaviour a media query
-// cannot express, where a component has to KNOW which layout is active:
-// AppShell latching the sidebar open/closed across a breakpoint cross,
-// DocsShell doing the same for its nav, and FlowEditor switching the inspector
-// between a side panel and a bottom sheet.
+// Duplicated from the stylesheets unavoidably: custom properties are not usable
+// inside a media query. Anything the CSS can do alone stays in CSS — these
+// exist only where a component has to KNOW which layout is active, such as
+// AppShell latching the sidebar across a breakpoint cross or FlowEditor
+// switching the inspector between a side panel and a bottom sheet.
 //
-// Before this module there were three mirror sites and two conventions:
-// AppShell and DocsShell each declared their own `MOBILE_BREAK = 768`, and
-// FlowEditor compared against a bare `1100` twice, with its obligation to match
-// the stylesheet recorded only in a comment. scripts/check-css-breakpoints.mjs
-// now fails the build if a value here has no matching @media rule, so the
-// mirror is checked rather than remembered.
+// scripts/check-css-breakpoints.mjs fails the build if a value here has no
+// matching @media rule, so the mirror is checked rather than remembered.
 
 export const MOBILE = 768;
 
-// EDITOR_NARROW is where the flow editor stops reserving canvas room beside
-// the inspector: above it the canvas narrows to make space, below it the panel
-// floats over the right edge instead, because narrowing a ~900px canvas by
-// another 320 leaves less than one step's width. Mirrors
-// `@media (min-width: 1101px)`. Distinct from MOBILE because the editor needs
-// far more horizontal room than a page of prose does.
+// EDITOR_NARROW is where the flow editor stops reserving canvas room beside the
+// inspector: below it the panel floats over the right edge instead, because
+// narrowing a ~900px canvas by another 320 leaves less than one step's width.
+// Mirrors `@media (min-width: 1101px)`.
 //
-// It is NOT where the inspector changes shape. That is MOBILE: a phone gets a
-// fullscreen sheet opened from the Inspect FAB, everything wider gets a side
-// panel that opens on selection. This constant used to do both jobs, which
-// left every window under 1100px in phone mode — clicking a step selected it
-// and nothing appeared.
+// It is NOT where the inspector changes shape — that is MOBILE, and conflating
+// the two put every window under 1100px in phone mode, where clicking a step
+// selected it and nothing appeared.
 export const EDITOR_NARROW = 1100;
 
 export function isNarrower(breakpoint: number): boolean {

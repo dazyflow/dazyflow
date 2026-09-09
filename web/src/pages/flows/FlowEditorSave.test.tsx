@@ -10,13 +10,12 @@
 //   previewRef      you're looking at an old revision, not HEAD
 //   loadFailed      the in-memory graph is an empty placeholder, not the server's
 //   loadedIDRef     the nodes still belong to the flow you just navigated away
-//                   from — the comment on this one says "real data loss,
-//                   observed in the wild"
+//                   from — real data loss, observed in the wild
 //   saving          a PUT is already in flight
 //
-// Guards are invisible when they work, which is exactly why they rot. These
-// tests assert the absence of a write, which is the only way to notice a guard
-// that has quietly stopped guarding.
+// Guards are invisible when they work, which is why they rot. These tests assert
+// the absence of a write, which is the only way to notice a guard that has
+// quietly stopped guarding.
 
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, act } from "@testing-library/react";
@@ -409,15 +408,12 @@ describe("editor step name round trip", () => {
 // The editor rebuilds the saved document from its own state, field by field,
 // rather than writing back the graph it loaded. That is deliberate — the canvas
 // is the source of truth for nodes and edges — but it means a graph-level field
-// the editor does not know about is DROPPED on the next save, silently, no
-// matter what set it. That is how the flow's language went missing after the
-// settings modal wrote it: the modal saved, and the next autosave wrote a
-// document rebuilt without it.
+// the editor does not know about is DROPPED on the next save, silently. That is
+// how the flow's language went missing after the settings modal wrote it.
 //
-// So this asserts round-tripping, not any one field's plumbing: load a graph
-// with every graph-level setting populated, let a save fire, and require them
-// all back. A field added to core.Graph and wired into the settings UI but not
-// into the editor's state fails here instead of in someone's flow.
+// So this asserts round-tripping rather than any one field's plumbing: a field
+// added to core.Graph and wired into the settings UI but not into the editor's
+// state fails here instead of in someone's flow.
 describe("editor graph-level round-trip", () => {
   const META = {
     visibility: "private" as const,

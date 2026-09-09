@@ -53,24 +53,19 @@ func (h *harness) childRuns() []core.JobRecord {
 
 // A subgraph child run must inherit its parent's trigger-chain depth.
 //
-// The two runaway-recursion guards divide the space: subgraph nesting is
-// bounded by walking ParentNodeRecID (maxSubgraphDepth), and a flow that
-// calls its OWN trigger URL is bounded by core.MaxTriggerChainDepth carried
-// on the run record and re-stamped onto the outbound request by the HTTP
-// drop. Neither covers a chain that ALTERNATES between the two.
-//
-// submitGraphWithParent builds the child's JobRecord without copying
-// TriggerDepth, so every subgraph hop resets the trigger counter to zero:
+// The two runaway-recursion guards divide the space: subgraph nesting is bounded
+// by walking ParentNodeRecID, and a flow that calls its OWN trigger URL is
+// bounded by core.MaxTriggerChainDepth carried on the run record. Neither covers
+// a chain that ALTERNATES between the two:
 //
 //	A (webhook trigger, depth d)
 //	  └─ subgraph step → B   (child run, depth 0  ← the reset)
 //	       └─ HTTP step → POST A's own trigger URL, header depth 0+1 = 1
 //	            └─ A (depth 1) → subgraph B (depth 0) → ...
 //
-// The trigger counter never climbs to MaxTriggerChainDepth, the subgraph
-// lineage walk never sees more than one level (each webhook run is a fresh
-// top-level tree), and the per-tree fan-out budget is re-keyed on every new
-// root. The loop runs forever at whatever rate the HTTP step sustains.
+// The trigger counter never climbs to the limit, the lineage walk never sees
+// more than one level, and the per-tree fan-out budget is re-keyed on every new
+// root, so the loop runs forever.
 func TestTriggerChainDepth_SurvivesASubgraphHop(t *testing.T) {
 	hs := newHarness(t)
 	hs.save(graph("kid", []core.Node{
@@ -110,13 +105,11 @@ func TestTriggerChainDepth_SurvivesASubgraphHop(t *testing.T) {
 // A dynamic-port step must not be a hole in the fan-in rule.
 //
 // core.validateManifests skips every port check on an edge touching a
-// DynamicPorts module — today only `subgraph`, whose real ports are named by
-// its input_map param. The skip is understandable for port EXISTENCE and MIME
-// (the manifest can't know the names), but it also drops the fan-in rule, and
-// that one needs no manifest at all: two wires into one input port is
-// unrepresentable whatever the port is called. AssembleInput keeps the last
-// edge it walks, so the other 199 values are silently discarded — the exact
-// failure TestIllegalWiring_IsRefusedNotRun fixed for ordinary steps.
+// DynamicPorts module — today only `subgraph`. Skipping port existence and MIME
+// is understandable (the manifest can't know the names), but the fan-in rule
+// needs no manifest at all: two wires into one input port is unrepresentable
+// whatever the port is called, and AssembleInput keeps only the last edge it
+// walks.
 func TestDynamicPortsStep_FanInIsBounded(t *testing.T) {
 	hs := newHarness(t)
 	hs.save(graph("kid", []core.Node{
@@ -226,21 +219,17 @@ func TestEditorMetadata_IsCapped(t *testing.T) {
 // The doubling bomb rebuilt out of Merge steps, with no templates involved.
 //
 // core.MaxValueBytes exists because an uncapped compounding value killed the
-// process with `fatal error: out of memory` inside the resolver — a runtime
-// throw no recover catches, so it took every tenant's runs down with it
-// (TestOOM_DoublingTemplateBomb). Both guards that enforce it — the engine's
-// per-value check (core.RefTooLarge) and the worker's per-run budget
-// (resultStateBytes) — measure with core.ApproxValueSize.
+// process with an out-of-memory runtime throw no recover catches, taking every
+// tenant's runs down with it. Both guards that enforce it measure with
+// core.ApproxValueSize.
 //
 // `merge` emits Inline: []core.Ref — a slice of STRUCTS. Charged 8 bytes per
-// element and never walked, an 18 MB value measured as 16 bytes and sailed
-// past a 1 MiB ceiling; 21 steps stored a gigabyte. core.refSize now walks a
-// Ref for its strings and its inline payload, and the reflect arm walks a
-// struct's exported fields rather than charging it a word, so the fan-out
-// below is refused at the step that crosses the limit.
+// element and never walked, an 18 MB value measured as 16 bytes and sailed past
+// a 1 MiB ceiling. core.refSize now walks a Ref for its strings and inline
+// payload, and the reflect arm walks a struct's exported fields.
 //
-// The wiring is ordinary and legal throughout — fan-in 2 on a variadic pin,
-// every wire distinct — so nothing else is in a position to refuse it.
+// The wiring below is ordinary and legal throughout, so nothing else is in a
+// position to refuse it.
 func TestMergeChain_HitsTheValueCeiling(t *testing.T) {
 	const seedKiB = 1
 	hops := 15 // 2^14 KiB ≈ 16 MiB stored, from a 1 KiB seed

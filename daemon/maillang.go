@@ -13,23 +13,18 @@ import (
 
 // Resolving whose language a transactional email is written in.
 //
-// There is no single answer, which is why these are three functions rather
-// than one: an email's language belongs to whoever will READ it, and how we
-// know that differs per email.
+// An email's language belongs to whoever will READ it, and how we know that
+// differs per email — which is why these are three functions rather than one:
 //
-//	mailLang    the recipient is an account holder, so their own preference
-//	            (Settings → Language) is the answer.
-//	inviteLang  an invitation has no account behind the address — that is what
-//	            an invitation is — so it follows the person doing the inviting,
-//	            who is the one who knows who they are writing to. If the
-//	            invitee DOES already have an account, theirs wins.
-//	flowLang    the email is sent by a flow (an approval request and its
-//	            outcome), so it follows the flow's own language: it is the flow
-//	            speaking, and its author chose what language its steps write in.
+//	mailLang    the recipient is an account holder, so their own preference wins.
+//	inviteLang  an invitation has no account behind the address, so it follows
+//	            the inviter, who knows who they are writing to. If the invitee
+//	            does already have an account, theirs wins.
+//	flowLang    the email is sent by a flow, so it follows the flow's own
+//	            language: it is the flow speaking.
 //
-// Every one of them degrades to English rather than failing: an email in the
-// wrong language is a papercut, and an email not sent because a preference
-// lookup failed is a broken product.
+// All three degrade to English rather than failing: an email in the wrong
+// language is a papercut, an email not sent is a broken product.
 
 // langFromStore reads one account's language preference. Empty — meaning
 // English — for every way the lookup can come up short: no store, no address,

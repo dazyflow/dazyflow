@@ -14,15 +14,13 @@ import (
 // A remote belongs to exactly one tenant.
 //
 // This is not ordinary scoping. By the time the engine hands a Job to a
-// transport, Job.Params carry RESOLVED secrets — the ${secret.…} references
-// have already been expanded into real API keys and credentials. A remote any
-// tenant could reach would therefore be a place one org's secrets could be
-// sent by another org's flow.
+// transport, Job.Params carry RESOLVED secrets — the ${secret.…} references have
+// been expanded into real API keys. A remote any tenant could reach would
+// therefore be a place one org's secrets could be sent by another org's flow.
 //
 // The catalog is keyed by (tenant, id) rather than filtered on read, so these
-// tests are asserting something the map cannot skip. They exist anyway,
-// because the guarantee is invisible when it works: nothing about a passing
-// run tells you the isolation is still there.
+// tests assert something the map cannot skip. They exist anyway, because the
+// guarantee is invisible when it works.
 
 func fakeRemote(c *RemoteCatalog, tenant, id string) {
 	c.nodes[remoteKey{tenant: tenant, id: id}] = &RemoteTransport{

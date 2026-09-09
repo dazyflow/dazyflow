@@ -59,18 +59,16 @@ func newPoolHarness(t *testing.T, workers int) *harness {
 }
 
 // A parked approval holds no worker slot — TestParkedApprovals_DoNotStarveWorkers
-// pins that. The Wait step does not park: executeDelay blocks inside the drop
-// on a timer, on the worker goroutine that claimed it, and Worker.Run claims
-// exactly one node at a time. So a Wait step is a worker slot held for the
-// duration of the wait.
+// pins that. The Wait step does not park: executeDelay blocks inside the drop on
+// a timer, on the worker goroutine that claimed it, and Worker.Run claims one
+// node at a time. So a Wait step is a worker slot held for the duration.
 //
-// The pool is shared by every tenant on the daemon and defaults to TWO
-// (DAZYFLOW_WORKER_COUNT). A flow with as many parallel Wait steps as there are
-// workers therefore stops the whole daemon for as long as it waits — no
-// privilege needed beyond being able to run one flow, and nothing in the flow
-// looks abnormal. `ms` is bounded per step (one year) and each occupancy is
-// bounded by the 30-minute DefaultNodeTimeout backstop, but neither bounds how
-// many slots a flow may hold at once, nor how long in total: Wait steps chain.
+// The pool is shared by every tenant on the daemon and defaults to TWO, so a
+// flow with as many parallel Wait steps as there are workers stops the whole
+// daemon for as long as it waits — no privilege needed beyond running one flow,
+// and nothing in the flow looks abnormal. `ms` is bounded per step and each
+// occupancy by the node-timeout backstop, but neither bounds how many slots a
+// flow may hold at once, nor how long in total: Wait steps chain.
 func TestParallelWaits_DoNotStarveWorkers(t *testing.T) {
 	const (
 		workers = 2

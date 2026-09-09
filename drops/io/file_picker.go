@@ -63,18 +63,17 @@ func init() {
 	})
 }
 
-// executeFilePicker validates the picked path lives inside the
-// sandbox, guesses a MIME if the user didn't pin one, and emits two
-// outputs:
+// executeFilePicker validates the picked path lives inside the sandbox, guesses
+// a MIME if the user didn't pin one, and emits two outputs:
 //
-//   - "path" — plain string Ref carrying the workspace-relative path
-//     (handy for downstream tool params and for display).
-//   - "file" — Ref locator with MIME and the same path stashed in
-//     Ref.Ref. Inlines bytes when params.inline=true.
+//   - "path" — plain string Ref carrying the workspace-relative path, for
+//     downstream tool params and for display.
+//   - "file" — Ref locator with MIME and the same path in Ref.Ref. Inlines bytes
+//     when params.inline=true.
 //
-// We do NOT eagerly read the file unless inline is on — the path is
-// the contract; downstream nodes re-resolve through their own sandbox
-// root, same pattern file_read uses.
+// The file is not read eagerly unless inline is on: the path is the contract,
+// and downstream nodes re-resolve through their own sandbox root, the same
+// pattern file_read uses.
 func executeFilePicker(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	path, err := params.String(job.Params, "path")
 	if err != nil {

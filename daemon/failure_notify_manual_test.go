@@ -13,21 +13,18 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// A failure email used to be suppressed for a "manual" run — one someone
-// started from the app — on the reasoning that they were watching the canvas
-// turn red and did not need telling twice.
+// A failure email used to be suppressed for a "manual" run — one someone started
+// from the app — on the reasoning that they were watching the canvas turn red.
 //
-// That reasoning did not survive the ways a run actually gets started. The
-// same endpoints serve dzctl, the MCP server and anybody's own cron, and all
-// of them submit as Manual, so the flag meant "tell nobody" for exactly the
-// unattended runs that need telling. Nothing separates those callers
-// server-side either: an API-key principal and a browser-session principal
-// look alike by the time a submission arrives.
+// That did not survive the ways a run actually gets started. The same endpoints
+// serve dzctl, the MCP server and anybody's own cron, and all of them submit as
+// Manual, so the flag meant "tell nobody" for exactly the unattended runs that
+// need telling. Nothing separates those callers server-side either.
 //
-// So the suppression is gone, and the hourly per-flow throttle carries the
-// job instead: someone iterating on a broken flow gets one email an hour, not
-// one per attempt. JobRecord.Manual still gates breakpoints, which is what it
-// was for.
+// So the suppression is gone and the hourly per-flow throttle carries the job
+// instead: someone iterating on a broken flow gets one email an hour, not one
+// per attempt. JobRecord.Manual still gates breakpoints, which is what it was
+// for.
 
 func TestFailureNotify_AppStartedRunStillEmailsTheOwner(t *testing.T) {
 	svc, srv := ownerEmailHarness(t, auth.User{Email: "owner@example.com"})

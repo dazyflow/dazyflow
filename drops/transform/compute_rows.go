@@ -74,22 +74,18 @@ func init() {
 	})
 }
 
-// executeComputeRows evaluates CEL expressions over each row,
-// adding derived columns and dropping rows that fail a filter. The
-// design is the deliberate companion to map_rows: same input/output
-// shape, same headers handling, same all-or-nothing batch contract,
-// but a real expression language for the cases map_rows can't reach
-// (string concat, arithmetic, multi-column predicates, conditionals).
+// executeComputeRows evaluates CEL expressions over each row, adding derived
+// columns and dropping rows that fail a filter. It is the deliberate companion
+// to map_rows — same input/output shape, same headers handling, same
+// all-or-nothing batch contract — with a real expression language for the cases
+// map_rows can't reach.
 //
-// Expressions are compiled once before the row loop. Per-row failure
-// (type mismatch, undefined field) fails the whole job rather than
-// silently dropping the row — like the SQL insert drops, partial
-// completion is worse than no completion for ETL.
+// Expressions are compiled once before the row loop, and a per-row failure fails
+// the whole job rather than silently dropping the row: like the SQL insert
+// drops, partial completion is worse than none for ETL.
 //
-// Order of operations: filter first, then compute. This lets a
-// filter expression refer ONLY to existing input columns; computed
-// columns aren't visible to filter. Users wanting "filter on a
-// computed value" should chain compute_rows → map_rows.
+// Filter runs before compute, so a filter expression can refer only to existing
+// input columns. "Filter on a computed value" chains compute_rows → map_rows.
 func executeComputeRows(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	rows, inputHeaders, errRes, ok := loadRowsAndHeaders(job)
 	if !ok {

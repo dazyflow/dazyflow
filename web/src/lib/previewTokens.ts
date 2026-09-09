@@ -7,19 +7,17 @@ import {
   tokenizeValue,
 } from "../components/editor/nodeCardShared";
 
-// Preview-time rendering of ${…} references in a value that is shown to a
-// user as CONTENT rather than as a field — today the email preview's subject
-// line and body.
+// Preview-time rendering of ${…} references in a value shown to a user as
+// CONTENT rather than as a field — today the email preview's subject and body.
 //
-// The node card already holds the line that raw token syntax is never a thing
-// to show a user (see TokenText): a reference's wire format is not its name.
-// The email preview was sending the drop's raw params straight to the render
-// endpoint, so the one surface whose whole job is "this is what your recipient
-// gets" was the surface still showing "Re: ${upstream.gmail_1.out[0].subject}".
+// Raw token syntax is never a thing to show a user (see TokenText), and the
+// email preview was sending the drop's raw params straight to the render
+// endpoint — so the one surface whose whole job is "this is what your recipient
+// gets" was still showing "Re: ${upstream.gmail_1.out[0].subject}".
 //
-// The preview cannot resolve a reference to a real value — nothing has run —
-// so it substitutes the same words the {} menu and the node-card chips use.
-// That says both what will be there and that it isn't literal text.
+// The preview cannot resolve a reference to a real value, since nothing has run,
+// so it substitutes the same words the {} menu and the node-card chips use. That
+// says both what will be there and that it isn't literal text.
 export function fillTokensForPreview(
   value: string,
   labels?: TokenLabels,

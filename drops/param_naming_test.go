@@ -9,25 +9,17 @@ import (
 	"testing"
 )
 
-// TestParamNaming_Conventions is the param-name lint: it walks every
-// registered drop's params schema and enforces the canonical names that keep
-// the manifest metadata discoverable to an LLM (the whole point of the schema
-// surface). Non-canonical names drift the vocabulary — "limit" vs
-// "max_results", "max_bytes" vs "max_output_bytes" — so a model can't learn
-// one convention and apply it everywhere.
+// TestParamNaming_Conventions is the param-name lint: it walks every registered
+// drop's params schema and enforces the canonical names that keep the manifest
+// discoverable to an LLM. Drift — "limit" vs "max_results", "max_bytes" vs
+// "max_output_bytes" — means a model cannot learn one convention and apply it
+// everywhere.
 //
-// Two kinds of rule:
-//
-//   - Canonical-name rules flag a non-canonical spelling of a known concept.
-//     Renaming an existing param is a BREAKING change (a saved graph stores
-//     params by name, so a rename silently drops the saved value), so the
-//     drift that already shipped is grandfathered in `legacyParamNames` with a
-//     comment. The lint's job from here is to stop NEW drift: add a param with
-//     a non-canonical name and this fails until it's renamed or, if it's a
-//     genuine new exception, added to the allowlist with justification.
-//   - The timeout_ms rule has no grandfathering: every timeout_ms param must
-//     carry a description (they're all fixed to), so a new one without a
-//     description fails immediately.
+// Renaming an existing param is a BREAKING change (a saved graph stores params
+// by name, so a rename silently drops the value), so drift that already shipped
+// is grandfathered in `legacyParamNames`; the lint's job is to stop NEW drift.
+// The timeout_ms rule has no grandfathering: every timeout_ms param carries a
+// description today, so a new one without fails immediately.
 type schemaProps struct {
 	Properties map[string]struct {
 		Type        string `json:"type"`

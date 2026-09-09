@@ -4,16 +4,14 @@
 // Honouring an `?org=` deep link.
 //
 // A run, flow or ticket only exists inside one org, but the app's routes carry
-// no org segment — the active org is browser state (localStorage) plus the
-// server-side session scope. So a link mailed to a user (a failure
-// notification's "View run details", say) opens against whichever org that
-// browser last used. For anyone who belongs to more than one, that is usually
-// the wrong one, and the page reports the run as missing.
+// no org segment — the active org is browser state plus the server-side session
+// scope. So a link mailed to a user opens against whichever org that browser
+// last used, which for anyone in more than one is usually the wrong one, and the
+// page reports the run as missing.
 //
 // The links therefore carry `?org=<tenant>` and the app resolves it on boot.
 // This module is the decision, kept pure so the precedence rules are testable
-// without a router or a live session; AuthProvider performs the resulting
-// action.
+// without a router or a live session; AuthProvider performs the action.
 
 // OrgDeepLinkAction is what the caller should do about the `?org=` param.
 //
