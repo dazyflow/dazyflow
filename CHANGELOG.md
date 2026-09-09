@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.41.7] - 2026-09-09
+
 ### Added
 
 - **A skipped step says why on the card.** A skip used to be invisible on the
