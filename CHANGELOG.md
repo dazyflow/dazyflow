@@ -58,6 +58,16 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Fixed
 
+- **A drop card can no longer grow wider than the canvas.** A card was sized by
+  its content with nothing to stop it: a step named after a pasted URL, a long
+  URL in a parameter, or an enum label written as a sentence each stretched the
+  card to the width of one unbroken line — several screens across at working
+  zoom, hiding whatever it overlapped. Cards now cap at 320px, which clears the
+  widest card the catalogue produces on its own; past it a parameter value
+  ellipsises, a long port label wraps, and a step name wraps to two lines and
+  then ellipsises with the whole name on hover. A parameter's text box resizes
+  vertically only, since dragging one sideways used to widen the card with it.
+
 - **A trigger that did not fire no longer runs, or fails the flow.** Every root
   step with no incoming wire is dispatched, and only a *seeded* one is held
   back, so a flow with two triggers ran both: a Slack delivery also executed the

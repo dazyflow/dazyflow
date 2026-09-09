@@ -4106,6 +4106,11 @@ button.warning:hover:not(:disabled) {
   border-radius: var(--r-3);
   padding: var(--space-3) var(--space-3);
   min-width: 200px;
+  /* A card is sized by its content, and content is not bounded: a URL param, a
+     renamed step or a long enum label each stretched the card to the width of a
+     single unbroken line. 320px clears the widest card the catalogue produces
+     on its own; past it the text inside ellipsises or wraps instead. */
+  max-width: 320px;
   box-shadow: var(--shadow);
   font-size: var(--text-md);
   display: flex;
@@ -4682,7 +4687,11 @@ button.warning:hover:not(:disabled) {
   font-size: var(--text-xs);
   color: var(--ink-soft);
   line-height: 16px;
-  white-space: nowrap;
+  /* Wraps rather than nowrap so the widest port pairs (Klarna's money labels)
+     stay inside the card's max-width; the pin sits at the row's midline either
+     way. Ellipsis is not an option here — the pin hangs outside the label box,
+     so the `overflow: hidden` it needs would clip the pin. */
+  overflow-wrap: anywhere;
 }
 .react-flow__handle.connectingto:not(.valid) {
   border-color: var(--danger) !important;
@@ -5557,6 +5566,16 @@ img[src$="/brands/smhi.svg"] {
   font-weight: 500;
   color: var(--ink);
   line-height: 1.2;
+  /* A step renamed after a pasted URL has no space to break at. Two lines is
+     as tall as a name gets — a card that grows downwards instead of sideways
+     is still a card that swallows the canvas — and the full name is on the
+     element's title. */
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 .dz-port-out.has-value {
   cursor: help;
@@ -5609,6 +5628,7 @@ img[src$="/brands/smhi.svg"] {
 }
 .dz-param-readonly {
   font-size: var(--text-sm);
+  min-width: 0;
   padding: var(--space-1) var(--space-1h);
   border-radius: var(--r-1);
   background: var(--surface-2);
@@ -5624,9 +5644,15 @@ img[src$="/brands/smhi.svg"] {
   font-size: var(--text-sm);
   padding: var(--space-1) var(--space-1h);
   border-radius: var(--r-1);
+  /* Keeps a long <option>, or a `size` wider than the card, inside the cap. */
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .dz-node-params textarea {
-  resize: both;
+  /* Vertical only: dragging a textarea sideways used to widen the card, and
+     now it would just overhang the border. */
+  resize: vertical;
+  width: 100%;
   min-height: 34px;
 }
 .dz-param input[type="checkbox"] {

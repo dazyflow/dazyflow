@@ -317,7 +317,9 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
           brandLogo={d.manifest?.brand_logo}
           glyphSize={ICON.md}
         />
-        <span className="dz-collapsed-name">{d.label || d.moduleID}</span>
+        <span className="dz-collapsed-name" title={d.label || d.moduleID}>
+          {d.label || d.moduleID}
+        </span>
         {d.locked && (
           <Lock className="dz-collapsed-lock" size={ICON.xs} strokeWidth={2.2} aria-hidden="true" />
         )}
@@ -406,7 +408,9 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
             glyphSize={ICON.md}
           />
           <div className="dz-node-body">
-            <div className="label">{d.label}</div>
+            {/* Clamped to two lines in CSS, so the name it cannot show has to
+                be reachable somehow. */}
+            <div className="label" title={d.label}>{d.label}</div>
             {d.manifest?.subtitle && (
               <div className="dz-node-subtitle">{dropSubtitle(d.manifest, i18n.language)}</div>
             )}
