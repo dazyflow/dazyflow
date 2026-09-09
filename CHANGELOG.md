@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.41.8] - 2026-09-09
+
 ### Added
 
 - **Watch a page can send headers.** The step fetched with no headers at all,
