@@ -461,6 +461,9 @@ type JobResult = {
   status?: string;
   output?: Record<string, Ref>;
   error?: JobError;
+  // Why a skipped step was skipped (core.SkipCode* in Go). Its own field
+  // because a skip is not a failure — see skipReason.ts.
+  skip_code?: string;
 };
 
 export type RunLogEntry = {

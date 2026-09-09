@@ -65,6 +65,22 @@ func IsInboundEventTriggerModule(module string) bool {
 		module == RequestInputModule || EventTriggerModules[module]
 }
 
+// The other half: the scheduler starts these, and they derive the fire moment
+// themselves rather than receiving it. That is what makes them runnable
+// standalone — and why a run something else started has to skip them, rather
+// than let one invent a moment that never happened.
+//
+// Together with IsInboundEventTriggerModule this partitions IsTriggerModule;
+// TestTriggerModulesArePartitioned holds that.
+func IsScheduledTriggerModule(module string) bool {
+	switch module {
+	case "cron_trigger", "poll_trigger", "google_form_trigger",
+		"ticketmaster_on_new_event":
+		return true
+	}
+	return false
+}
+
 func classifyTriggers(g Graph) (hasScheduler, hasWebhook, hasEvent bool) {
 	for _, tr := range g.Triggers {
 		if tr.Type == "cron" && strings.TrimSpace(tr.Cron) != "" {

@@ -319,6 +319,16 @@ func (d *Dispatcher) PublishNodeStatus(
 	}})
 }
 
+// A skip carries its reason instead of an error, so the editor can explain the
+// grey card without anything downstream reading it as a failure.
+func (d *Dispatcher) PublishNodeSkipped(graphRunID, nodeID, skipCode string) {
+	d.bus.Publish(graphRunID, BusEvent{NodeStatus: &NodeStatusEvent{
+		NodeID:   nodeID,
+		Status:   core.JobStatusSkipped,
+		SkipCode: skipCode,
+	}})
+}
+
 func (d *Dispatcher) dispatchReady(ctx context.Context, graph core.Graph, graphRunID, completedNodeID string) int {
 	return d.dispatchReadyIndexed(ctx, graph, graphRunID, completedNodeID, d.indexFor(graphRunID, graph))
 }
@@ -385,6 +395,7 @@ func (d *Dispatcher) recordSkippedIndexed(
 		Tenant:     graph.Tenant,
 		Workspace:  graph.Workspace,
 		Status:     core.JobStatusSkipped,
+		Result:     &core.Result{SkipCode: core.SkipCodeUpstream, JobID: NodeJobID(graphRunID, nodeID)},
 		Job:        core.Job{GraphID: graph.ID, NodeID: nodeID},
 	}
 	if err := d.store.Enqueue(ctx, rec); err != nil {
@@ -393,8 +404,10 @@ func (d *Dispatcher) recordSkippedIndexed(
 		}
 		return
 	}
+	// The prose reason names nodes and edge modes, which is what an operator
+	// reading the log needs; the card gets the stable code.
 	d.logger.Printf("skipped %s: %s", nodeID, reason)
-	d.PublishNodeStatus(graphRunID, nodeID, core.JobStatusSkipped, nil)
+	d.PublishNodeSkipped(graphRunID, nodeID, core.SkipCodeUpstream)
 	ix.put(rec)
 	d.dispatchReadyIndexed(ctx, graph, graphRunID, nodeID, ix)
 	d.maybeCompleteGraph(ctx, graph, graphRunID, nodeID, core.JobStatusSkipped, nil)

@@ -121,7 +121,10 @@ export function useRunStream({
       if (!token) return () => {};
       streamAbortRef.current?.abort();
       setNodes((nds) =>
-        nds.map((n) => ({ ...n, data: { ...n.data, status: undefined } })),
+        nds.map((n) => ({
+          ...n,
+          data: { ...n.data, status: undefined, skipCode: undefined },
+        })),
       );
       setLiveLogs({});
       setRunOutputs({});
@@ -139,13 +142,24 @@ export function useRunStream({
           runID,
           (kind, data) => {
             if (kind === "node") {
-              const ev = data as { node_id?: string; status?: JobStatus };
+              const ev = data as {
+                node_id?: string;
+                status?: JobStatus;
+                skip_code?: string;
+              };
               if (!ev.node_id || !ev.status) return;
               if (ev.status === "failed") nodeFailureSeen = true;
               setNodes((nds) =>
                 nds.map((n) =>
                   n.id === ev.node_id
-                    ? { ...n, data: { ...n.data, status: ev.status } }
+                    ? {
+                        ...n,
+                        data: {
+                          ...n.data,
+                          status: ev.status,
+                          skipCode: ev.skip_code,
+                        },
+                      }
                     : n,
                 ),
               );
@@ -285,9 +299,11 @@ export function useRunStream({
     return begin(() => api.retryRun(token!, failedRun));
   }, [begin, token, failedRun]);
 
+  // nodeID names the one trigger step to fire; omitted, the daemon seeds the
+  // whole webhook family, which is what the flow-level button means.
   const fireTestEvent = useCallback(
-    (sample: unknown) =>
-      begin(() => api.testTrigger(token!, tenant, workspace, graphID!, sample)),
+    (sample: unknown, nodeID?: string) =>
+      begin(() => api.testTrigger(token!, tenant, workspace, graphID!, sample, nodeID)),
     [begin, token, tenant, workspace, graphID],
   );
 

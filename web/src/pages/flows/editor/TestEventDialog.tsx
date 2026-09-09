@@ -11,6 +11,7 @@ export function TestEventDialog({
   json,
   error,
   canRun,
+  blocked,
   onChange,
   onSubmit,
   onReset,
@@ -19,6 +20,10 @@ export function TestEventDialog({
   json: string;
   error: string | null;
   canRun: boolean;
+  // Why firing cannot happen right now — unsaved edits (the run uses the saved
+  // graph) or a run already in flight. Shown rather than hidden: a trigger card
+  // opens this dialog without knowing either.
+  blocked?: string;
   onChange: (json: string) => void;
   onSubmit: () => void;
   onReset: () => void;
@@ -84,6 +89,7 @@ export function TestEventDialog({
             <RotateCcw size={ICON.sm} />
             {t("editor.testRunReset")}
           </Button>
+          {blocked && <span className="sub test-sample-blocked">{blocked}</span>}
           <span style={{ flex: 1 }} />
           <Button variant="ghost" onClick={() => onClose()}>
             {t("common.dismiss")}
@@ -91,7 +97,8 @@ export function TestEventDialog({
           <Button
             variant="primary"
             onClick={() => onSubmit()}
-            disabled={!canRun}
+            disabled={!canRun || blocked !== undefined}
+            title={blocked}
           >
             <Send size={ICON.sm} />
             {t("editor.testRunFire")}

@@ -843,17 +843,21 @@ export const api = {
     request<MirrorPushResult>(token, "POST", "/git/mirror/push", {
       overwrite_unrelated: overwriteUnrelated,
     }),
+  // nodeID fires ONE trigger step; without it every Webhook/Form/Request step
+  // in the flow is seeded, which is ambiguous the moment there are two.
   testTrigger: (
     token: string,
     tenant: string,
     workspace: string,
     id: string,
     sample: unknown,
+    nodeID?: string,
   ) =>
     request<{ job_id: string }>(
       token,
       "POST",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/test-trigger`,
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/test-trigger` +
+        (nodeID ? `?node=${encodeURIComponent(nodeID)}` : ""),
       sample,
     ),
   validateCron: (token: string, expr: string, tz?: string) =>

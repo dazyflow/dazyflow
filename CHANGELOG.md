@@ -10,7 +10,74 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **A skipped step says why on the card.** A skip used to be invisible on the
+  canvas: no chip, no dimming, a card identical to one the run had not reached
+  yet — which is exactly the moment someone asks why nothing happened. Skipped
+  cards now dim and carry a chip naming the reason: *Didn't fire* for a trigger
+  the run did not enter through, *Not reached* for a step whose branch was
+  skipped, failed, or routed elsewhere. A switched-off step keeps its own
+  **Off** chip rather than gaining a second one saying the same thing.
+
+  The run detail's timeline says the same thing: the row carries the reason
+  beside the status, and opening it explains the skip in a sentence rather than
+  the "no result recorded" it used to fall through to. That page has no **Off**
+  chip of its own, so it explains a switched-off step too.
+
+  The reason travels as a stable code (`core.SkipCode*`) on the run stream's
+  node frame and on the step's record, with the copy per language shared by both
+  views. It is a field of its own rather than a `JobError`, because everything
+  that reads `Result.Error` — failure notifications, the run detail's red chip —
+  would present a skip as a failure. A record written before the codes existed,
+  or one carrying a code this build has no copy for, still gets labelled.
+
+- **Fire one trigger from its own card.** A Slack- or GitHub-triggered flow
+  could not be tested in the editor at all: the toolbar only offers "Send test
+  event" for the Webhook/Form/Request family, and plain Run makes
+  `slack_on_mention` execute standalone, which fails with `no_trigger_data` by
+  design — the error told you to go post a real mention in Slack. Trigger cards
+  now carry **Test fire**, which runs the flow as if that trigger had gone off,
+  seeded with the payload the provider actually posts (an Events API envelope, a
+  push, a newly opened pull request) and editable before firing.
+
+  `POST /test-trigger` takes an optional `?node=<id>` naming the one trigger to
+  seed. That is what a two-trigger flow needs: seeding the whole webhook family
+  at once left `${trigger.*}` resolving to whichever trigger came first in graph
+  order. Without the parameter the endpoint behaves exactly as before.
+
+  The seeds are built by the same code the live delivery handlers use
+  (`slackMentionSeed`, `githubPushSeed`, `githubPRSeed`, now shared via
+  `daemon/triggerseed.go`), and a test asserts every port a manifest declares
+  gets a value — a test fire that produced a different payload shape than
+  production would be worse than no test. Payloads that a real delivery would
+  not have produced are refused rather than fired: a Slack event of another
+  type, a mention outside the step's channel filter, a pull request whose action
+  is not `opened`. Schedule triggers get no button, since they derive their own
+  fire moment and plain Run already exercises them.
+
 ### Fixed
+
+- **A trigger that did not fire no longer runs, or fails the flow.** Every root
+  step with no incoming wire is dispatched, and only a *seeded* one is held
+  back, so a flow with two triggers ran both: a Slack delivery also executed the
+  Webhook step, which fails by design with `no_trigger_data` — and that failed
+  the whole run even though the branch that did fire was fine. A scheduled flow
+  carrying a Webhook step failed the same way on **every** fire, and in the
+  other direction a webhook delivery executed the schedule step, stamping the
+  steps after it with a fire moment nothing had scheduled.
+
+  A trigger that did not fire is now skipped, the same path a switched-off step
+  takes, so its branch goes dormant and the run still reaches a terminal state.
+  The test is what each trigger needs in order to have fired, never which one
+  finished first: an inbound trigger (webhook, form, request, provider event)
+  carries data only when a delivery seeds it, and a seeded step is already
+  terminal before anything is dispatched — so one that reaches a worker was not
+  the way in, and is skipped as soon as anything else could have been. A
+  schedule trigger derives its own moment, so it is skipped only on a run a
+  delivery started. With neither present nothing is skipped, which is what keeps
+  the `no_trigger_data` message reaching an author who pressed Run on a webhook
+  or Slack flow.
 
 - **Tidy no longer moves a locked step.** A locked card promises on its face
   that it "won't move", and dragging it was blocked — but Tidy repositioned

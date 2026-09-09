@@ -1641,7 +1641,19 @@
     "maximizeTitle": "Fäll ut steget igen",
     "collapsedLabel": "{{name}} ({{module}}) flödessteg, minimerat",
     "locked": "Låst",
-    "lockedHint": "Det här steget är låst: fälten går inte att ändra och kortet kan inte flyttas. Lås upp det i inspektören."
+    "lockedHint": "Det här steget är låst: fälten går inte att ändra och kortet kan inte flyttas. Lås upp det i inspektören.",
+    "fireTrigger": "Testkör",
+    "fireTriggerHint": "Kör flödet från den här triggern med ett exempelinnehåll du kan ändra — samma form som den riktiga händelsen levererar"
+  },
+  "skip": {
+    "skipped": "Överhoppad",
+    "skippedHint": "Det här steget kördes inte.",
+    "notFired": "Avfyrades inte",
+    "notFiredHint": "Den här triggern startade inte körningen — en annan trigger gjorde det, så stegen efter den lämnades orörda.",
+    "upstream": "Inte nådd",
+    "upstreamHint": "Ett steg före det här hoppades över, misslyckades eller skickade flödet en annan väg, så det här steget kördes inte.",
+    "stepOff": "Avstängt",
+    "stepOffHint": "Det här steget är avstängt, så körningen hoppade över det."
   },
   "issueKey": {
     "title": "Skapa API-nyckel",
@@ -2171,7 +2183,8 @@
     "ctxCollapse": "Minimera steg",
     "ctxExpand": "Maximera steg",
     "ctxLock": "Lås steg",
-    "ctxLockHint": "Gör stegets fält skrivskyddade och hindra att kortet dras. Det körs precis som förut."
+    "ctxLockHint": "Gör stegets fält skrivskyddade och hindra att kortet dras. Det körs precis som förut.",
+    "fireWhileRunning": "Vänta tills den pågående körningen är klar och avfyra triggern igen."
   },
   "iconUpload": {
     "upload": "Ladda upp bild"

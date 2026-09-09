@@ -126,6 +126,24 @@ type slackAppMentionEvent struct {
 	TS      string `json:"ts"`
 }
 
+// slackMentionSeed is the one place a slack_on_mention node's ports are
+// defined, shared with the editor's test fire (see triggerseed.go).
+func slackMentionSeed(teamID string, ev slackAppMentionEvent, rawEvent json.RawMessage) core.Result {
+	var event any
+	_ = json.Unmarshal(rawEvent, &event) // best-effort; the caller has already validated its source
+	return core.Result{
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{
+			"text":    {MIME: "text/plain", Inline: ev.Text},
+			"user":    {MIME: "text/plain", Inline: ev.User},
+			"channel": {MIME: "text/plain", Inline: ev.Channel},
+			"team":    {MIME: "text/plain", Inline: teamID},
+			"ts":      {MIME: "text/plain", Inline: ev.TS},
+			"event":   {MIME: "application/json", Inline: event},
+		},
+	}
+}
+
 func (h *SlackEventsHandler) dispatchEvent(_ context.Context, tenant string, env slackEventEnvelope, rw http.ResponseWriter) {
 	var ev slackAppMentionEvent
 	if err := json.Unmarshal(env.Event, &ev); err != nil {
@@ -138,19 +156,7 @@ func (h *SlackEventsHandler) dispatchEvent(_ context.Context, tenant string, env
 		return
 	}
 
-	var rawEvent any
-	_ = json.Unmarshal(env.Event, &rawEvent) // best-effort; signature was already validated
-	seed := core.Result{
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"text":    {MIME: "text/plain", Inline: ev.Text},
-			"user":    {MIME: "text/plain", Inline: ev.User},
-			"channel": {MIME: "text/plain", Inline: ev.Channel},
-			"team":    {MIME: "text/plain", Inline: env.TeamID},
-			"ts":      {MIME: "text/plain", Inline: ev.TS},
-			"event":   {MIME: "application/json", Inline: rawEvent},
-		},
-	}
+	seed := slackMentionSeed(env.TeamID, ev, env.Event)
 
 	// Slack retries after 3s, so the run must be dispatched asynchronously.
 	go h.fanoutSeed(context.Background(), tenant, ev.Channel, seed)

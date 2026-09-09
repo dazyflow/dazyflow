@@ -73,12 +73,29 @@ type Result struct {
 	Status string         `json:"status"`
 	Output map[string]Ref `json:"output,omitempty"`
 	Error  *JobError      `json:"error,omitempty"`
+	// Why a skipped step was skipped, as one of the SkipCode* values. Its own
+	// field rather than Error: a skip is not a failure, and everything that
+	// reads Error — failure notifications, the run detail's red chip — would
+	// present it as one.
+	SkipCode string `json:"skip_code,omitempty"`
 }
 
 const (
 	StatusOK       = "ok"
 	StatusError    = "error"
 	StatusAwaiting = "awaiting"
+)
+
+// Why a step did not run. The CODE is the contract — the editor maps it to copy
+// per language — so these strings are stable and never shown to a person as-is.
+const (
+	// The author switched this step off.
+	SkipCodeStepOff = "step_off"
+	// A trigger step on a run that entered through a different trigger.
+	SkipCodeTriggerNotFired = "trigger_not_fired"
+	// A step whose incoming wires all came from steps that were themselves
+	// skipped, failed, or routed down another branch.
+	SkipCodeUpstream = "upstream"
 )
 
 type Progress struct {

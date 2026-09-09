@@ -86,6 +86,14 @@ You don't have to wait until 08:00 to find out whether your morning report works
   test. To run automatically on new responses, click Publish."*
 - **Send test event** fires the flow with a sample submission, end to end — the
   right way to test a form or webhook flow before pointing anything real at it.
+- **Test fire**, on the trigger step's own card, runs the flow as if that
+  trigger had gone off. Slack and GitHub triggers need it: they only carry data
+  when the real event arrives, so plain **Run** leaves the steps after them with
+  nothing to read. You get the payload the provider actually posts — a Slack
+  mention, a push, a new pull request — and can edit it before firing, so an
+  awkward case can be reproduced without asking anyone to post in Slack. The
+  payload is remembered per step, and a flow with two triggers fires whichever
+  card you click.
 
 Both write a normal entry to **Runs**, so you can read the result the same way
 you'd read a real one.

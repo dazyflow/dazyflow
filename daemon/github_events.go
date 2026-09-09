@@ -116,32 +116,7 @@ func (h *GitHubEventsHandler) dispatchPush(tenant string, body []byte, rw http.R
 		http.Error(rw, fmt.Sprintf("parse push: %v", err), http.StatusBadRequest)
 		return
 	}
-	var commits, repo, pusher, raw any
-	_ = json.Unmarshal(ev.Repository, &repo)
-	_ = json.Unmarshal(ev.Pusher, &pusher)
-	if len(ev.Commits) > 0 {
-		commitsList := make([]any, 0, len(ev.Commits))
-		for _, c := range ev.Commits {
-			var v any
-			_ = json.Unmarshal(c, &v)
-			commitsList = append(commitsList, v)
-		}
-		commits = commitsList
-	}
-	_ = json.Unmarshal(body, &raw)
-
-	seed := core.Result{
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"ref":        {MIME: "text/plain", Inline: ev.Ref},
-			"before":     {MIME: "text/plain", Inline: ev.Before},
-			"after":      {MIME: "text/plain", Inline: ev.After},
-			"commits":    {MIME: "application/json", Inline: commits},
-			"repository": {MIME: "application/json", Inline: repo},
-			"pusher":     {MIME: "application/json", Inline: pusher},
-			"event":      {MIME: "application/json", Inline: raw},
-		},
-	}
+	seed := githubPushSeed(ev, body)
 	go h.runFanout(context.Background(), tenant, githubOnPushModuleID, seed)
 
 	rw.WriteHeader(http.StatusOK)
@@ -178,6 +153,44 @@ func (h *GitHubEventsHandler) dispatchPullRequest(tenant string, body []byte, rw
 		return
 	}
 
+	seed := githubPRSeed(ev, body)
+	go h.runFanout(context.Background(), tenant, githubOnNewPRModuleID, seed)
+
+	rw.WriteHeader(http.StatusOK)
+	_, _ = rw.Write([]byte("ok"))
+}
+
+// githubPushSeed and githubPRSeed are the one place each trigger's ports are
+// defined, shared with the editor's test fire (see triggerseed.go).
+func githubPushSeed(ev pushEvent, body []byte) core.Result {
+	var commits, repo, pusher, raw any
+	_ = json.Unmarshal(ev.Repository, &repo)
+	_ = json.Unmarshal(ev.Pusher, &pusher)
+	if len(ev.Commits) > 0 {
+		commitsList := make([]any, 0, len(ev.Commits))
+		for _, c := range ev.Commits {
+			var v any
+			_ = json.Unmarshal(c, &v)
+			commitsList = append(commitsList, v)
+		}
+		commits = commitsList
+	}
+	_ = json.Unmarshal(body, &raw)
+	return core.Result{
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{
+			"ref":        {MIME: "text/plain", Inline: ev.Ref},
+			"before":     {MIME: "text/plain", Inline: ev.Before},
+			"after":      {MIME: "text/plain", Inline: ev.After},
+			"commits":    {MIME: "application/json", Inline: commits},
+			"repository": {MIME: "application/json", Inline: repo},
+			"pusher":     {MIME: "application/json", Inline: pusher},
+			"event":      {MIME: "application/json", Inline: raw},
+		},
+	}
+}
+
+func githubPRSeed(ev pullRequestEvent, body []byte) core.Result {
 	var author map[string]any
 	_ = json.Unmarshal(ev.PullRequest.User, &author)
 	authorLogin := ""
@@ -189,8 +202,7 @@ func (h *GitHubEventsHandler) dispatchPullRequest(tenant string, body []byte, rw
 	var repo, raw any
 	_ = json.Unmarshal(ev.Repository, &repo)
 	_ = json.Unmarshal(body, &raw)
-
-	seed := core.Result{
+	return core.Result{
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{
 			"number":     {MIME: "text/plain", Inline: fmt.Sprintf("%d", ev.PullRequest.Number)},
@@ -204,10 +216,6 @@ func (h *GitHubEventsHandler) dispatchPullRequest(tenant string, body []byte, rw
 			"event":      {MIME: "application/json", Inline: raw},
 		},
 	}
-	go h.runFanout(context.Background(), tenant, githubOnNewPRModuleID, seed)
-
-	rw.WriteHeader(http.StatusOK)
-	_, _ = rw.Write([]byte("ok"))
 }
 
 func (h *GitHubEventsHandler) runFanout(ctx context.Context, tenant, moduleID string, seed core.Result) {

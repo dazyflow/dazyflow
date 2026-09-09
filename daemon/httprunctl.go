@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
@@ -249,24 +250,47 @@ func (h *runCtlAPI) testTrigger(rw http.ResponseWriter, r *http.Request, p core.
 		}
 		rawBody = data
 	}
-	seed := buildWebhookSeed(rawBody, r)
 	seeds := map[string]core.Result{}
-	for _, n := range g.Nodes {
-		switch n.Module {
-		case webhookInputModuleID, core.RequestInputModule, core.FormInputModule:
-			seeds[n.ID] = seed
+	// ?node= names ONE trigger to fire, which is what a flow with two of them
+	// needs: seeding both would leave ${trigger.*} resolving to whichever came
+	// first in graph order. Without it, the whole webhook family is seeded —
+	// the shape every client sent before per-node firing existed.
+	target := strings.TrimSpace(r.URL.Query().Get("node"))
+	if target != "" {
+		n, ok := g.Node(target)
+		if !ok {
+			writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("flow has no step %q", target))
+			return
 		}
-	}
-	if len(seeds) == 0 {
-		writeJSONError(rw, http.StatusBadRequest, "flow has no Webhook, Form or Request step to send a test event to")
-		return
+		seed, err := testTriggerSeed(n, rawBody, r)
+		if err != nil {
+			writeJSONError(rw, http.StatusBadRequest, err.Error())
+			return
+		}
+		seeds[n.ID] = seed
+	} else {
+		seed := buildWebhookSeed(rawBody, r)
+		for _, n := range g.Nodes {
+			switch n.Module {
+			case webhookInputModuleID, core.RequestInputModule, core.FormInputModule:
+				seeds[n.ID] = seed
+			}
+		}
+		if len(seeds) == 0 {
+			writeJSONError(rw, http.StatusBadRequest, "flow has no Webhook, Form or Request step to send a test event to")
+			return
+		}
 	}
 	runID, err := h.svc.SubmitGraphOpts(r.Context(), p, g, SubmitOpts{Seeds: seeds, Manual: true})
 	if err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
 	}
-	h.audit(r.Context(), p, "graph.run", id, "test-trigger run="+runID)
+	audit := "test-trigger run=" + runID
+	if target != "" {
+		audit += " node=" + target
+	}
+	h.audit(r.Context(), p, "graph.run", id, audit)
 	writeJSON(rw, http.StatusAccepted, map[string]string{"job_id": runID})
 }
 

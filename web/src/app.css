@@ -3378,6 +3378,10 @@ button.warning:hover:not(:disabled) {
 .diff-row.changed {
   color: var(--ink);
 }
+.test-sample-blocked {
+  padding-left: var(--space-2);
+  font-size: var(--text-sm);
+}
 .test-sample-input {
   width: 100%;
   box-sizing: border-box;
@@ -3451,6 +3455,20 @@ button.warning:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   padding: var(--space-0) var(--space-2);
   border-radius: 999px;
+}
+/* The same pill as .node-err beside it, muted: a skip is an outcome, not a
+   fault. Prose, so not the mono face a code needs. */
+.node-skip {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--faint) 14%, transparent);
+  padding: var(--space-0) var(--space-2);
+  border-radius: 999px;
+}
+.node-skip-why {
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--muted);
 }
 .node-body {
   padding: 0 14px 14px 38px;
@@ -4508,6 +4526,10 @@ button.warning:hover:not(:disabled) {
   opacity: 1;
   color: var(--accent-2);
 }
+.dz-node-skipchip {
+  opacity: 1;
+  color: var(--muted);
+}
 .dz-node-keepgoing {
   opacity: 1;
   color: var(--status-warning);
@@ -5477,6 +5499,12 @@ button.warning:hover:not(:disabled) {
 }
 .dz-node.status-succeeded {
   border-color: var(--status-completed);
+}
+/* --faint is what a skipped run already reads as elsewhere (.status-dot.skipped),
+   and the dimming says "not reached" without competing with a real outcome. */
+.dz-node.status-skipped {
+  border-color: var(--faint);
+  opacity: 0.72;
 }
 .dz-node.status-failed {
   border-color: var(--status-failed);
@@ -11931,6 +11959,34 @@ button:active,
 .dz-node-approve-btn:disabled {
   cursor: default;
   opacity: 0.6;
+}
+
+.dz-node-fire {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  /* Cancels .dz-node's padding so the strip meets the card's own edges: an
+     inset box with rounded bottom corners reads as a mis-sized button, not as
+     this card's footer. */
+  margin: var(--space-2) calc(-1 * var(--space-3)) calc(-1 * var(--space-3));
+  padding: var(--space-2);
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--r-2) var(--r-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: background 120ms;
+}
+.dz-node-fire:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+.dz-node-fire:disabled {
+  cursor: default;
+  color: var(--muted);
 }
 
 .wa-import {

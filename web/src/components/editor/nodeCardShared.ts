@@ -90,6 +90,8 @@ export type DazyNodeData = {
   moduleID: string;
   manifest?: Manifest;
   status?: string;
+  // Why a skipped step was skipped (core.SkipCode* in Go), from the run stream.
+  skipCode?: string;
   lintMessage?: string;
   loopHint?: string;
   params?: Record<string, unknown>;
@@ -112,6 +114,8 @@ export type DazyNodeData = {
   offByCascade?: boolean;
   tokenLabels?: TokenLabels;
   onApprove?: (decision: "approve" | "reject") => Promise<void>;
+  // Set only on a trigger step the editor can fire with a pasted payload.
+  onFire?: () => void;
   breakpoint?: boolean;
   paused?: boolean;
   resourceLabels?: Record<string, string>;

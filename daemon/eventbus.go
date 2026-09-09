@@ -38,6 +38,9 @@ type NodeStatusEvent struct {
 	NodeID string         `json:"node_id"`
 	Status core.JobStatus `json:"status"`
 	Error  *core.JobError `json:"error,omitempty"`
+	// Set with a skipped status: one of core.SkipCode*, so the editor can say
+	// on the card WHY a step went grey rather than leaving it unexplained.
+	SkipCode string `json:"skip_code,omitempty"`
 }
 
 type TerminalEvent struct {

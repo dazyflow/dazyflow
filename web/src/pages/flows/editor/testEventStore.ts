@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Remembers the JSON payload last used in the editor's "Send test event"
-// dialog, per flow.
+// dialog, per flow and per trigger step.
 //
 // Without it the dialog regenerated a fresh synthetic sample every time, so a
 // payload you had shaped to reproduce something lasted exactly one firing and
@@ -16,16 +16,21 @@ const KEY_PREFIX = "dazyflow.testEvent.";
 
 const PERSIST_CAP = 256 * 1024;
 
-function keyFor(flowID: string | undefined): string | null {
+// A Slack envelope and a webhook body have nothing in common, so a flow with
+// two triggers needs two slots. The bare flow key stays the flow-level
+// dialog's, which keeps payloads saved before per-step firing existed.
+function keyFor(flowID: string | undefined, nodeID?: string): string | null {
   const id = flowID?.trim();
-  return id ? KEY_PREFIX + id : null;
+  if (!id) return null;
+  const node = nodeID?.trim();
+  return KEY_PREFIX + id + (node ? "#" + node : "");
 }
 
 // loadTestEvent returns the saved payload for a flow, or null when there is
 // none (or when storage can't be read at all — a private window, a browser set
 // to block site data). Callers fall back to a generated sample.
-export function loadTestEvent(flowID: string | undefined): string | null {
-  const key = keyFor(flowID);
+export function loadTestEvent(flowID: string | undefined, nodeID?: string): string | null {
+  const key = keyFor(flowID, nodeID);
   if (!key) return null;
   try {
     const saved = localStorage.getItem(key);
@@ -41,11 +46,11 @@ export function loadTestEvent(flowID: string | undefined): string | null {
 // every failure path (no flow id yet on an unsaved flow, storage disabled, the
 // quota exhausted, an oversized body) leaves the dialog working and simply
 // doesn't remember. Nothing here is allowed to interrupt firing a test.
-export function saveTestEvent(flowID: string | undefined, json: string): void {
-  const key = keyFor(flowID);
+export function saveTestEvent(flowID: string | undefined, json: string, nodeID?: string): void {
+  const key = keyFor(flowID, nodeID);
   if (!key) return;
   if (json.trim() === "") {
-    clearTestEvent(flowID);
+    clearTestEvent(flowID, nodeID);
     return;
   }
   if (json.length > PERSIST_CAP) return;
@@ -60,8 +65,8 @@ export function saveTestEvent(flowID: string | undefined, json: string): void {
 // generating a sample. Backs the dialog's "Reset to sample": a saved payload
 // otherwise outlives the shape it was written for, and a form whose fields
 // changed would keep offering the old body forever.
-export function clearTestEvent(flowID: string | undefined): void {
-  const key = keyFor(flowID);
+export function clearTestEvent(flowID: string | undefined, nodeID?: string): void {
+  const key = keyFor(flowID, nodeID);
   if (!key) return;
   try {
     localStorage.removeItem(key);

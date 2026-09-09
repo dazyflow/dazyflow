@@ -16,6 +16,7 @@ import { Callout } from "../../components/ui/Callout";
 import { explainRunError, type AppContext } from "../../lib/explainRunError";
 import { integrationSlug } from "../../integrationMeta";
 import { explainApiError } from "../../lib/explainApiError";
+import { skipCopy } from "../../lib/skipReason";
 import { ApprovalPanel } from "../../components/editor/ApprovalPanel";
 import { supportContactWithContext } from "../../lib/supportContact";
 import { pickResultNode, resultView } from "../../lib/runResult";
@@ -488,6 +489,8 @@ export function RunDetail() {
               : n.Status === "running"
               ? t("runDetail.inProgress")
               : "—";
+          const skip =
+            n.Status === "skipped" ? skipCopy(n.Result?.skip_code) : null;
           return (
             <div
               key={n.ID}
@@ -514,6 +517,9 @@ export function RunDetail() {
                   </span>
                 )}
                 <span className="node-dur">{dur}</span>
+                {/* Named, not just "Skipped": the status word says a step did
+                    not run, the reason says whether that was expected. */}
+                {skip && <span className="node-skip">{t(skip.label)}</span>}
                 {n.Result?.error?.code && (
                   <span className="node-err">{n.Result.error.code}</span>
                 )}
@@ -523,6 +529,7 @@ export function RunDetail() {
                   {n.Result?.error && (
                     <NodeError error={n.Result.error} app={failedApp(n.NodeID)} />
                   )}
+                  {skip && <div className="node-skip-why">{t(skip.hint)}</div>}
                   {n.Job?.Input && Object.keys(n.Job.Input).length > 0 && (
                     <div className="node-output">
                       <div className="node-section-head">{t("runDetail.inputs")}</div>
@@ -563,7 +570,7 @@ export function RunDetail() {
                       ))}
                     </div>
                   )}
-                  {!n.Result?.error && !n.Result?.output && !(n.Job?.Input && Object.keys(n.Job.Input).length > 0) && (
+                  {!skip && !n.Result?.error && !n.Result?.output && !(n.Job?.Input && Object.keys(n.Job.Input).length > 0) && (
                     <div style={{ color: "var(--faint)", fontSize: "var(--text-sm)" }}>
                       {t("runDetail.noResult")}
                     </div>

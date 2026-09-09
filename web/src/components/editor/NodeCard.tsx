@@ -3,9 +3,10 @@
 
 import { memo, useEffect, useState } from "react";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, Braces, Check, ChevronDown, ChevronRight, Database, FileCode, FileText, Lock, Maximize2, Minimize2, Plug, Repeat, ShieldOff, Terminal, Unplug, X } from "lucide-react";
+import { AlertTriangle, Braces, Check, ChevronDown, ChevronRight, Database, FileCode, FileText, Lock, Maximize2, Minimize2, MinusCircle, Play, Plug, Repeat, ShieldOff, Terminal, Unplug, X } from "lucide-react";
 import i18n from "../../i18n";
 import { portTypeLabel } from "../../lib/ports";
+import { cardSkipCopy } from "../../lib/skipReason";
 import { telFieldFlag, regionDisplayName } from "../../lib/phoneFlag";
 import { Switch } from "../ui/Switch";
 import { DropIcon, ICON, dropColor, iconFor } from "../../icons";
@@ -470,6 +471,19 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                 {i18n.t("nodeCard.locked")}
               </div>
             )}
+            {/* A skipped step is otherwise indistinguishable from one the run
+                never reached, which is the moment someone asks why nothing
+                happened. */}
+            {(() => {
+              const skip = cardSkipCopy(d.status, d.skipCode);
+              if (!skip) return null;
+              return (
+                <div className="dz-node-chip dz-node-skipchip" title={i18n.t(skip.hint)}>
+                  <MinusCircle size={ICON.xs} strokeWidth={2.2} />
+                  {i18n.t(skip.label)}
+                </div>
+              );
+            })()}
           </div>
           {minimizeToggle}
           {foldToggle}
@@ -819,6 +833,23 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
         </a>
       )}
       {d.onApprove && <NodeApproveBar onApprove={d.onApprove} />}
+      {/* On the trigger card rather than the toolbar: the payload belongs to
+          THIS step, and a flow with two triggers cannot say which one a single
+          toolbar button means. */}
+      {d.onFire && (
+        <button
+          type="button"
+          className="dz-node-fire nodrag"
+          title={i18n.t("nodeCard.fireTriggerHint")}
+          onClick={(e) => {
+            e.stopPropagation();
+            d.onFire!();
+          }}
+        >
+          <Play size={ICON.sm} />
+          {i18n.t("nodeCard.fireTrigger")}
+        </button>
+      )}
       {/* Suppressed while the provider is unreachable: "Connect Slack" next to
           "needs connection" would offer a fix for the wrong thing. */}
       {!d.manifest?.unavailable &&

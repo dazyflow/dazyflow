@@ -115,6 +115,7 @@ import { explainApiError } from "../../lib/explainApiError";
 import { findStrayEdges } from "../../lib/strayEdges";
 import { lintMessage } from "./editor/lintMessage";
 import { buildTestEventSample } from "./editor/testEventSample";
+import { buildTriggerSample, canTestFire } from "../../lib/testTrigger";
 import {
   clearTestEvent,
   loadTestEvent,
@@ -318,6 +319,9 @@ function EditorInner() {
     hint: string;
   } | null>(null);
   const [testEventOpen, setTestEventOpen] = useState(false);
+  // Which trigger the dialog will fire. null = the flow-level button, which
+  // seeds every Webhook/Form/Request step at once.
+  const [fireTarget, setFireTarget] = useState<{ id: string; module: string } | null>(null);
   const [testEventJSON, setTestEventJSON] = useState("");
   const [testEventErr, setTestEventErr] = useState<string | null>(null);
   const [issuePanel, setIssuePanel] = useState<"error" | "warning" | null>(null);
@@ -1731,6 +1735,66 @@ function EditorInner() {
     return m;
   }, [edges, nodes, paramsByID]);
 
+  const webhookNode = nodes.find((n) => {
+    const m = (n.data as DazyNodeData | undefined)?.moduleID;
+    return m === "webhook_input" || m === "request_input" || m === "form_input";
+  });
+  const hasWebhookTrigger = webhookNode !== undefined;
+
+  // A Slack or GitHub trigger gets the payload its provider posts; the webhook
+  // family gets a body shaped by the step's own declared form fields.
+  const freshTestEventSample = (target?: { id: string; module: string } | null) => {
+    if (target) {
+      const provider = buildTriggerSample(target.module);
+      if (provider) return JSON.stringify(provider, null, 2);
+      const fields = paramsByID[target.id]?.form_fields as string[] | undefined;
+      return JSON.stringify(buildTestEventSample(fields), null, 2);
+    }
+    const nodeFields = webhookNode
+      ? (paramsByID[webhookNode.id]?.form_fields as string[] | undefined)
+      : undefined;
+    const legacyFields = triggers.find((tr) => tr.type === "webhook")?.form_fields;
+    return JSON.stringify(
+      buildTestEventSample(nodeFields ?? legacyFields),
+      null,
+      2,
+    );
+  };
+
+  const openTestEventFor = (target: { id: string; module: string } | null) => {
+    setFireTarget(target);
+    // Last time's payload wins: regenerating would discard what the user typed.
+    setTestEventJSON(loadTestEvent(id, target?.id) ?? freshTestEventSample(target));
+    setTestEventErr(null);
+    setTestEventOpen(true);
+  };
+
+  const openTestEvent = () => openTestEventFor(null);
+
+  const closeTestEvent = () => {
+    saveTestEvent(id, testEventJSON, fireTarget?.id);
+    setTestEventOpen(false);
+  };
+
+  const resetTestEvent = () => {
+    clearTestEvent(id, fireTarget?.id);
+    setTestEventJSON(freshTestEventSample(fireTarget));
+    setTestEventErr(null);
+  };
+
+  const submitTestEvent = async () => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(testEventJSON);
+    } catch (e) {
+      setTestEventErr((e as Error).message);
+      return;
+    }
+    saveTestEvent(id, testEventJSON, fireTarget?.id);
+    setTestEventOpen(false);
+    await run.fireTestEvent(parsed, fireTarget?.id);
+  };
+
   const displayNodes = useMemo<FlowNode<DazyNodeData>[]>(() => {
     const sel = nodes.filter((n) => n.selected);
     const soleId = sel.length === 1 ? sel[0].id : null;
@@ -1757,6 +1821,8 @@ function EditorInner() {
       const locked = lockedNodes.has(n.id);
       const paused = pausedAt === n.id;
       const enterDelay = animApply?.enter.get(n.id);
+      const moduleID = (n.data as DazyNodeData).moduleID;
+      const fireable = canTestFire(moduleID) && hasPerm("graph:run");
       const deps: unknown[] = [
         n,
         params,
@@ -1783,6 +1849,7 @@ function EditorInner() {
         n.data.status,
         approveFromCard,
         enterDelay,
+        fireable,
       ];
       const hit = cache.get(n.id);
       if (hit && hit.deps.length === deps.length && hit.deps.every((v, i) => v === deps[i])) {
@@ -1821,6 +1888,9 @@ function EditorInner() {
           breakpoint,
           paused,
           enterDelay,
+          onFire: fireable
+            ? () => openTestEventFor({ id: n.id, module: moduleID })
+            : undefined,
         },
       };
       cache.set(n.id, { deps, node });
@@ -1852,6 +1922,7 @@ function EditorInner() {
     pausedAt,
     approveFromCard,
     animApply,
+    hasPerm,
   ]);
 
   const setEdgeErrorMode = useCallback((edgeID: string, mode: EdgeErrorMode) => {
@@ -2758,57 +2829,6 @@ function EditorInner() {
     setGateOpen(false);
     await run.startRun();
   };
-
-
-  const webhookNode = nodes.find((n) => {
-    const m = (n.data as DazyNodeData | undefined)?.moduleID;
-    return m === "webhook_input" || m === "request_input" || m === "form_input";
-  });
-  const hasWebhookTrigger = webhookNode !== undefined;
-
-  const freshTestEventSample = () => {
-    const nodeFields = webhookNode
-      ? (paramsByID[webhookNode.id]?.form_fields as string[] | undefined)
-      : undefined;
-    const legacyFields = triggers.find((tr) => tr.type === "webhook")?.form_fields;
-    return JSON.stringify(
-      buildTestEventSample(nodeFields ?? legacyFields),
-      null,
-      2,
-    );
-  };
-
-  const openTestEvent = () => {
-    // Last time's payload wins: regenerating would discard what the user typed.
-    setTestEventJSON(loadTestEvent(id) ?? freshTestEventSample());
-    setTestEventErr(null);
-    setTestEventOpen(true);
-  };
-
-  const closeTestEvent = () => {
-    saveTestEvent(id, testEventJSON);
-    setTestEventOpen(false);
-  };
-
-  const resetTestEvent = () => {
-    clearTestEvent(id);
-    setTestEventJSON(freshTestEventSample());
-    setTestEventErr(null);
-  };
-
-  const submitTestEvent = async () => {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(testEventJSON);
-    } catch (e) {
-      setTestEventErr((e as Error).message);
-      return;
-    }
-    saveTestEvent(id, testEventJSON);
-    setTestEventOpen(false);
-    await run.fireTestEvent(parsed);
-  };
-
 
   const confirmDelete = useCallback(
     (params: { nodes: FlowNode[]; edges: FlowEdge[] }): Promise<boolean> => {
@@ -3928,6 +3948,13 @@ function EditorInner() {
             json={testEventJSON}
             error={testEventErr}
             canRun={hasPerm("graph:run")}
+            blocked={
+              dirty
+                ? t("editor.saveFirst")
+                : running || lockedRunID
+                ? t("editor.fireWhileRunning")
+                : undefined
+            }
             onChange={setTestEventJSON}
             onSubmit={() => void submitTestEvent()}
             onReset={resetTestEvent}

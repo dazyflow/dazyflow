@@ -70,6 +70,11 @@ export const frame = {
     "node",
     { node_id: nodeID, status },
   ],
+  // A skipped step arrives with the reason it was skipped (core.SkipCode*).
+  skipped: (nodeID: string, skipCode: string): StreamFrame => [
+    "node",
+    { node_id: nodeID, status: "skipped", skip_code: skipCode },
+  ],
   progress: (nodeID: string, line: string): StreamFrame => [
     "progress",
     { node_id: nodeID, progress: { data: { stream: "stdout", line } } },

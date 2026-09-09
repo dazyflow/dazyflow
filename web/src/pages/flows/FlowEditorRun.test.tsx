@@ -350,3 +350,47 @@ describe("editor run lifecycle", () => {
     );
   });
 });
+
+// A skipped step used to look exactly like one the run had not reached yet:
+// same card, no chip, nothing said. The reason travels with the status frame.
+describe("a skipped step on the canvas", () => {
+  const skipChip = () => document.querySelector(".dz-node-skipchip");
+
+  async function runTo(nodeID: string, skipCode: string) {
+    mount();
+    await userEvent.click(await screen.findByText("editor.run"));
+    await waitFor(() => expect(stream.latest()?.runID).toBe("run-1"));
+    await emit(...frame.skipped(nodeID, skipCode));
+  }
+
+  it("says a trigger did not fire", async () => {
+    await runTo("ntfy_1", "trigger_not_fired");
+    await waitFor(() => expect(skipChip()).toBeTruthy());
+    expect(skipChip()?.textContent).toContain("skip.notFired");
+  });
+
+  it("distinguishes a step the flow never reached", async () => {
+    await runTo("ntfy_1", "upstream");
+    await waitFor(() => expect(skipChip()).toBeTruthy());
+    expect(skipChip()?.textContent).toContain("skip.upstream");
+  });
+
+  // The card already carries an "Off" chip for a switched-off step, and two
+  // chips saying the same thing is worse than one.
+  it("leaves a switched-off step to its own chip", async () => {
+    await runTo("ntfy_1", "step_off");
+    await waitFor(() => expect(stream.latest()).toBeTruthy());
+    expect(skipChip()).toBeNull();
+  });
+
+  // Starting a second run must clear the first one's verdicts, or a card keeps
+  // explaining a skip that belongs to a finished run.
+  it("clears the chip when the next run starts", async () => {
+    await runTo("ntfy_1", "upstream");
+    await waitFor(() => expect(skipChip()).toBeTruthy());
+    await emit(...frame.terminal("succeeded"));
+
+    await userEvent.click(await screen.findByText("editor.run"));
+    await waitFor(() => expect(skipChip()).toBeNull());
+  });
+});

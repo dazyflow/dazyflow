@@ -1641,7 +1641,19 @@
     "maximizeTitle": "Open this step back up",
     "collapsedLabel": "{{name}} ({{module}}) flow step, minimized",
     "locked": "Locked",
-    "lockedHint": "This step is locked: its fields can't be edited and the card won't move. Unlock it in the inspector."
+    "lockedHint": "This step is locked: its fields can't be edited and the card won't move. Unlock it in the inspector.",
+    "fireTrigger": "Test fire",
+    "fireTriggerHint": "Run the flow from this trigger with a sample payload you can edit — the same payload shape the real event delivers"
+  },
+  "skip": {
+    "skipped": "Skipped",
+    "skippedHint": "This step didn't run.",
+    "notFired": "Didn't fire",
+    "notFiredHint": "This trigger didn't start the run — a different trigger did, so the steps after it were left alone.",
+    "upstream": "Not reached",
+    "upstreamHint": "A step before this one was skipped, failed, or sent the flow down another branch, so this step didn't run.",
+    "stepOff": "Switched off",
+    "stepOffHint": "This step is switched off, so the run passed over it."
   },
   "issueKey": {
     "title": "Issue API key",
@@ -2171,7 +2183,8 @@
     "ctxCollapse": "Minimize step",
     "ctxExpand": "Maximize step",
     "ctxLock": "Lock step",
-    "ctxLockHint": "Make this step's fields read-only and stop the card being dragged. It still runs exactly as before."
+    "ctxLockHint": "Make this step's fields read-only and stop the card being dragged. It still runs exactly as before.",
+    "fireWhileRunning": "Wait for the current run to finish, then fire this trigger again."
   },
   "iconUpload": {
     "upload": "Upload image"

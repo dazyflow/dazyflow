@@ -223,17 +223,20 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 	}
 	graph := run.graph
 
-	if node, ok := graph.Node(rec.NodeID); ok && node.Disabled {
+	if skip := w.skipCode(jobCtx, graph, rec); skip != "" {
 		if stopLease() {
 			w.cfg.Logger.Printf("[%s] %s: lease lost; abandoning (reclaimed elsewhere)", w.cfg.ID, rec.ID)
 			return
 		}
-		if cerr := w.completeNode(jobCtx, rec.ID, core.JobStatusSkipped, nil); cerr != nil {
-			w.cfg.Logger.Printf("[%s] skip disabled %s: %v", w.cfg.ID, rec.ID, cerr)
+		// The reason rides on the record as well as the event: the event
+		// explains the card mid-run, the record answers the run detail later.
+		result := &core.Result{JobID: rec.ID, SkipCode: skip}
+		if cerr := w.completeNode(jobCtx, rec.ID, core.JobStatusSkipped, result); cerr != nil {
+			w.cfg.Logger.Printf("[%s] skip %s: %v", w.cfg.ID, rec.ID, cerr)
 			return
 		}
-		w.cfg.Logger.Printf("[%s] %s skipped (step is switched off)", w.cfg.ID, rec.ID)
-		w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusSkipped, nil)
+		w.cfg.Logger.Printf("[%s] %s skipped (%s)", w.cfg.ID, rec.ID, skip)
+		w.dispatcher.PublishNodeSkipped(rec.GraphRunID, rec.NodeID, skip)
 		w.dispatcher.dispatchReady(jobCtx, graph, rec.GraphRunID, rec.NodeID)
 		w.dispatcher.maybeCompleteGraph(jobCtx, graph, rec.GraphRunID, rec.NodeID, core.JobStatusSkipped, nil)
 		return
@@ -389,6 +392,72 @@ func (w *Worker) completeAndEnqueue(ctx context.Context, jobID string, status co
 		}
 	}
 	return adv, nil
+}
+
+// skipCode says why this node must not execute, as one of core.SkipCode*, or ""
+// to run it. Both cases end in a skip rather than a failure, so the dependents
+// cascade through the normal edge rules and the run still reaches a terminal
+// state.
+func (w *Worker) skipCode(ctx context.Context, graph core.Graph, rec core.JobRecord) string {
+	node, ok := graph.Node(rec.NodeID)
+	if !ok {
+		return ""
+	}
+	if node.Disabled {
+		return core.SkipCodeStepOff
+	}
+	if w.triggerDidNotFire(ctx, graph, rec) {
+		return core.SkipCodeTriggerNotFired
+	}
+	return ""
+}
+
+// A run enters through ONE trigger, and executing the others is wrong in both
+// directions: an inbound trigger fails the run on its "no trigger data"
+// sentinel, while a schedule trigger SUCCEEDS and hands the steps after it a
+// fire moment that never happened.
+//
+// The test is what each trigger needs in order to have fired, never which one
+// happened to finish first — a sibling's completion is a race, and skipping on
+// it would make the outcome depend on scheduling order.
+//
+//   - An inbound trigger (webhook, form, request, provider event) carries data
+//     only when a delivery seeds it, and a seeded node is already terminal
+//     before anything is dispatched. So an inbound trigger that reaches a worker
+//     at all was not the way in: skip it as soon as anything else could have
+//     been — a schedule sibling, or a sibling delivery.
+//   - A schedule trigger derives its own moment, so it is skipped only on a run
+//     that a delivery started.
+//
+// With neither present nothing is skipped, which is what keeps the sentinel
+// reaching the author who pressed Run on a webhook or Slack flow: nothing
+// fired, and that is precisely what they need told.
+func (w *Worker) triggerDidNotFire(ctx context.Context, graph core.Graph, rec core.JobRecord) bool {
+	node, ok := graph.Node(rec.NodeID)
+	if !ok || !core.IsTriggerModule(node.Module) {
+		return false
+	}
+	var delivered, scheduled bool
+	for _, n := range graph.Nodes {
+		if n.ID == rec.NodeID || !core.IsTriggerModule(n.Module) {
+			continue
+		}
+		if core.IsScheduledTriggerModule(n.Module) {
+			scheduled = true
+			continue
+		}
+		// Succeeded is the seed's own signature here: an inbound trigger has no
+		// standalone path to success, so it cannot have reached that status by
+		// executing.
+		if other, err := w.store.Get(ctx, NodeJobID(rec.GraphRunID, n.ID)); err == nil &&
+			other.Status == core.JobStatusSucceeded {
+			delivered = true
+		}
+	}
+	if core.IsScheduledTriggerModule(node.Module) {
+		return delivered
+	}
+	return delivered || scheduled
 }
 
 func (w *Worker) completeNode(ctx context.Context, jobID string, status core.JobStatus, result *core.Result) error {
