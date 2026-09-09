@@ -170,7 +170,7 @@ import { ReportProblemModal } from "../../components/dialogs/ReportProblemModal"
 import { useResourceResolver } from "../useResourceResolver";
 import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
-import { layerNodes } from "../../lib/autoLayout";
+import { layerNodes, packColumns } from "../../lib/autoLayout";
 
 // React Flow caches by reference: this must stay module-level, not rebuilt.
 const nodeTypes = { dazy: DazyNode, comment: CommentNode };
@@ -1158,7 +1158,7 @@ function EditorInner() {
       const cx = (minX + maxR) / 2;
       const cy = (minY + maxB) / 2;
       const next = new Map(
-        b.map((v) => {
+        b.filter((v) => !lockedNodes.has(v.id)).map((v) => {
           let { x, y } = v;
           if (kind === "left") x = minX;
           else if (kind === "right") x = maxR - v.w;
@@ -1174,7 +1174,7 @@ function EditorInner() {
       );
     });
     setDirty(true);
-  }, []);
+  }, [lockedNodes]);
   const distributeNodes = useCallback((axis: "h" | "v") => {
     setNodes((nds) => {
       const sel = nds.filter((n) => n.selected);
@@ -1190,8 +1190,11 @@ function EditorInner() {
       const first = items[0].center;
       const last = items[items.length - 1].center;
       const step = (last - first) / (items.length - 1);
+      // Nailed cards keep their slot in the spacing but stay where they are.
       const next = new Map(
-        items.map((it, i) => [it.id, first + step * i - it.size / 2]),
+        items
+          .map((it, i) => [it.id, first + step * i - it.size / 2] as const)
+          .filter(([id]) => !lockedNodes.has(id)),
       );
       return nds.map((n) =>
         next.has(n.id)
@@ -1205,11 +1208,9 @@ function EditorInner() {
       );
     });
     setDirty(true);
-  }, []);
+  }, [lockedNodes]);
 
   const autoLayout = useCallback(() => {
-    const HGAP = 80;
-    const VGAP = 36;
     setNodes((nds) => {
       if (nds.length < 2) return nds;
       const ids = nds.map((n) => n.id);
@@ -1223,50 +1224,26 @@ function EditorInner() {
           .map((n) => n.id),
       );
       const layer = layerNodes(ids, es, (id) => triggerIDs.has(id));
-      const sizeOf = (n: FlowNode<DazyNodeData>) => ({
-        w: n.measured?.width ?? n.width ?? 240,
-        h: n.measured?.height ?? n.height ?? 120,
-      });
-      const cols = new Map<number, FlowNode<DazyNodeData>[]>();
-      for (const n of nds) {
-        const c = layer.get(n.id) ?? 0;
-        const arr = cols.get(c);
-        if (arr) arr.push(n);
-        else cols.set(c, [n]);
-      }
-      const sortedCols = [...cols.keys()].sort((a, b) => a - b);
-      let maxColH = 0;
-      const colH = new Map<number, number>();
-      for (const c of sortedCols) {
-        const arr = cols.get(c)!;
-        arr.sort((a, b) => a.position.y - b.position.y);
-        const h =
-          arr.reduce((s, n) => s + sizeOf(n).h, 0) + VGAP * (arr.length - 1);
-        colH.set(c, h);
-        if (h > maxColH) maxColH = h;
-      }
-      const startX = 80;
-      const startY = 80;
-      const pos = new Map<string, { x: number; y: number }>();
-      let x = startX;
-      for (const c of sortedCols) {
-        const arr = cols.get(c)!;
-        const colW = Math.max(...arr.map((n) => sizeOf(n).w));
-        let y = startY + (maxColH - (colH.get(c) ?? 0)) / 2;
-        for (const n of arr) {
-          const { w, h } = sizeOf(n);
-          pos.set(n.id, { x: x + (colW - w) / 2, y });
-          y += h + VGAP;
-        }
-        x += colW + HGAP;
-      }
+      // Nailed cards are passed in so they still hold their column and get
+      // stacked around, but packColumns returns no position for them.
+      const pos = packColumns(
+        nds.map((n) => ({
+          id: n.id,
+          x: n.position.x,
+          y: n.position.y,
+          w: n.measured?.width ?? n.width ?? 240,
+          h: n.measured?.height ?? n.height ?? 120,
+          nailed: lockedNodes.has(n.id),
+        })),
+        layer,
+      );
       return nds.map((n) =>
         pos.has(n.id) ? { ...n, position: pos.get(n.id)! } : n,
       );
     });
     setDirty(true);
     window.setTimeout(() => fitView({ padding: 0.3, duration: 400 }), 50);
-  }, [edges, fitView]);
+  }, [edges, fitView, lockedNodes]);
 
   const onDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -2095,6 +2072,7 @@ function EditorInner() {
       const fh = node.height ?? node.measured?.height ?? 0;
       const enclosed = nodes
         .filter((n) => {
+          if (lockedNodes.has(n.id)) return false; // a nailed card is not carried
           const nw = n.measured?.width ?? 0;
           const nh = n.measured?.height ?? 0;
           return (
@@ -2107,7 +2085,7 @@ function EditorInner() {
         .map((n) => ({ id: n.id, x: n.position.x, y: n.position.y }));
       frameDragRef.current = { start: { x: fx, y: fy }, nodes: enclosed };
     },
-    [nodes],
+    [nodes, lockedNodes],
   );
   const onNodeDrag = useCallback((_e: unknown, node: FlowNode) => {
     const ctx = frameDragRef.current;

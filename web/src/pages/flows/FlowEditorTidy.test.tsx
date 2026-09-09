@@ -16,7 +16,7 @@
 // it carries a visible label.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { installLayoutStubs, makeStreamJob, manifests, twoStepGraph } from "./editorTestHarness";
 
@@ -166,5 +166,33 @@ describe("Tidy control", () => {
     const btn = await pinnedTidy();
     expect(btn.closest(".toolbar-scroll")).toBeNull();
     expect(btn.closest(".editor-toolbar")).not.toBeNull();
+  });
+
+  // A locked card says on its face that it will not move; Tidy is the one
+  // action that moves everything at once, so it is where that breaks.
+  it("leaves a locked step exactly where it was", async () => {
+    const g = twoStepGraph();
+    loadGraph.mockResolvedValue({
+      ...g,
+      nodes: [
+        g.nodes[0],
+        { ...g.nodes[1], position: { x: 900, y: 640 }, locked: true },
+      ],
+    });
+    const { container } = mount();
+    const btn = await pinnedTidy();
+    await waitFor(() =>
+      expect(container.querySelectorAll(".react-flow__node").length).toBe(2),
+    );
+    const posOf = (id: string) =>
+      (container.querySelector(`.react-flow__node[data-id="${id}"]`) as HTMLElement | null)
+        ?.style.transform;
+    const before = { trigger: posOf("manual_1"), locked: posOf("ntfy_1") };
+    expect(before.locked).toContain("900");
+    await act(async () => {
+      btn.click();
+    });
+    expect(posOf("ntfy_1")).toBe(before.locked);
+    expect(posOf("manual_1")).not.toBe(before.trigger);
   });
 });

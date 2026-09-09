@@ -10,6 +10,18 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tidy no longer moves a locked step.** A locked card promises on its face
+  that it "won't move", and dragging it was blocked — but Tidy repositioned
+  every node on the canvas, locked ones included, which is the one action where
+  an author had deliberately said otherwise. Locked steps now keep their
+  position: they still hold the column their wiring gives them, so the rest of
+  the flow still reads left to right through them, and any column whose band
+  runs into a locked card stacks below it instead of on top of it. Align,
+  distribute, and dragging a comment frame over a locked card leave it alone
+  for the same reason (the frame carries everything else it encloses).
+
 ## [0.41.6] - 2026-09-09
 
 ### Fixed
