@@ -1,0 +1,49 @@
+{
+  "id": "watch-a-price",
+  "version": "1",
+  "name": "Watch a price → tell me when it drops",
+  "description": "Checks a shop's product API every half hour and notifies you only when the price actually goes down — not when it rises, and not when anything else on the page moves. Point it at the shop's JSON address for the product (Shopify serves one at /products/<name>.json, WooCommerce at /wp-json/wc/store/v1/products?slug=<name>), adjust the pattern if the field isn't called price, and set your ntfy topic. An API that wants a key takes one in the Watch step's Headers field, as ${secret.YOUR_TOKEN_NAME}. The first check quietly records today's price; only later drops reach your phone.",
+  "icon": "package-search",
+  "nodes": [
+    {
+      "id": "every_30_min",
+      "module": "poll_trigger",
+      "params": { "interval_seconds": 1800 },
+      "position": { "x": 120, "y": 220 }
+    },
+    {
+      "id": "watch",
+      "module": "web_watch",
+      "params": {
+        "url": "https://shop.example.com/products/the-thing.json",
+        "text_only": false,
+        "pattern": "\"price\":\\s*\"?([0-9]+(?:[.,][0-9]+)?)",
+        "timeout_ms": 20000
+      },
+      "position": { "x": 460, "y": 220 }
+    },
+    {
+      "id": "cheaper",
+      "module": "if",
+      "params": { "op": "less_than" },
+      "position": { "x": 800, "y": 220 }
+    },
+    {
+      "id": "tell_me",
+      "module": "ntfy",
+      "params": {
+        "topic": "REPLACE_WITH_YOUR_TOPIC",
+        "title": "Price drop: ${upstream.watch.value} (was ${upstream.watch.previous})",
+        "click": "https://shop.example.com/products/the-thing",
+        "priority": "4"
+      },
+      "position": { "x": 1140, "y": 220 }
+    }
+  ],
+  "edges": [
+    { "from": "every_30_min", "from_port": "pass", "to": "watch", "to_port": "pass", "on_error": "" },
+    { "from": "watch", "from_port": "on_change", "to": "cheaper", "to_port": "A", "on_error": "" },
+    { "from": "watch", "from_port": "previous", "to": "cheaper", "to_port": "B", "on_error": "" },
+    { "from": "cheaper", "from_port": "then", "to": "tell_me", "to_port": "message", "on_error": "" }
+  ]
+}

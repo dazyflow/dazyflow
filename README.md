@@ -43,7 +43,7 @@ also deletes the data.
 
 ## What you can build with it
 
-Thirteen templates ship in the gallery, each a working flow you fork and fill in:
+Seventeen templates ship in the gallery, each a working flow you fork and fill in:
 
 | | |
 |---|---|
@@ -53,6 +53,7 @@ Thirteen templates ship in the gallery, each a working flow you fork and fill in
 | **Stripe payment → thank-you, team ping, sales log** | One event fans out to three places. |
 | **Nothing goes out until someone approves** | The flow parks itself until a human clicks approve. |
 | **Watch a page → ping my phone** | Compares the visible words, not the markup, so it fires on real change. |
+| **Watch a price → tell me when it drops** | Reads the shop's product API and stays quiet unless the price actually falls. |
 | **Invoices emailed to you → filed in Drive** | Finds mail carrying a PDF, files the attachment. |
 
 [`tests/usecases/README.md`](tests/usecases/README.md) works through 36 more

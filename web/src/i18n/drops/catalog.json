@@ -5348,7 +5348,7 @@
     ]
   },
   "web_watch": {
-    "description": "Keep an eye on a web page and let the flow run only when it actually changes — a price, a status page, a tender list, a job board. Pair it with an Interval trigger. The first check quietly records what the page says today; from then on, every check compares. Steps connected to 'On change' stay dormant while nothing changes, so an alert only goes out when there's something to say. By default it compares the words on the page, not the HTML behind them, which keeps invisible markup churn from crying wolf. To watch one number rather than the whole page, give a 'Watch just this' pattern. One exception worth knowing: the pass-through pin carries its value on every check, changed or not — so wire from 'On change' when you mean \"only when it changed\".",
+    "description": "Keep an eye on a web page and let the flow run only when it actually changes — a price, a status page, a tender list, a job board. Pair it with an Interval trigger. The first check quietly records what the page says today; from then on, every check compares. Steps connected to 'On change' stay dormant while nothing changes, so an alert only goes out when there's something to say. By default it compares the words on the page, not the HTML behind them, which keeps invisible markup churn from crying wolf. To watch one number rather than the whole page, give a 'Watch just this' pattern. It works just as well on an API as on a page: turn the word-comparison off, add any headers the API needs, and let the pattern pick the one field out of the JSON. One exception worth knowing: the pass-through pin carries its value on every check, changed or not — so wire from 'On change' when you mean \"only when it changed\".",
     "ports": [
       "Changed?",
       "On change",
@@ -5361,10 +5361,12 @@
     "subtitle": "Tell me when it changes",
     "titles": [
       "Compare the words, not the code",
+      "Headers",
       "Page address",
       "Watch just this"
     ],
     "help": [
+      "Extra request headers (one per key), for an API that needs a key or a particular Accept. Values may include ${secret.NAME} placeholders that resolve to stored secrets.",
       "Hard deadline for the fetch, in milliseconds.",
       "On: strip the HTML and compare the visible text, so invisible markup churn doesn't count as a change. Off: compare the raw response exactly as it arrives (right for JSON or a plain-text endpoint).",
       "Optional. A pattern picking out the one part of the page to compare — the first bracketed group, or the whole match if there are no brackets. Leave blank to compare the whole page.",

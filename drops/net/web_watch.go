@@ -43,7 +43,7 @@ func init() {
 			Provider:    "internal",
 			Tags:        []string{"watch", "monitor", "change", "poll", "scrape", "price", "diff", "alert"},
 			Summary:     "Fetch a page on a schedule and fire only when what it says has changed.",
-			Description: "Keep an eye on a web page and let the flow run only when it actually changes — a price, a status page, a tender list, a job board. Pair it with an Interval trigger. The first check quietly records what the page says today; from then on, every check compares. Steps connected to 'On change' stay dormant while nothing changes, so an alert only goes out when there's something to say. By default it compares the words on the page, not the HTML behind them, which keeps invisible markup churn from crying wolf. To watch one number rather than the whole page, give a 'Watch just this' pattern. One exception worth knowing: the pass-through pin carries its value on every check, changed or not — so wire from 'On change' when you mean \"only when it changed\".",
+			Description: "Keep an eye on a web page and let the flow run only when it actually changes — a price, a status page, a tender list, a job board. Pair it with an Interval trigger. The first check quietly records what the page says today; from then on, every check compares. Steps connected to 'On change' stay dormant while nothing changes, so an alert only goes out when there's something to say. By default it compares the words on the page, not the HTML behind them, which keeps invisible markup churn from crying wolf. To watch one number rather than the whole page, give a 'Watch just this' pattern. It works just as well on an API as on a page: turn the word-comparison off, add any headers the API needs, and let the pattern pick the one field out of the JSON. One exception worth knowing: the pass-through pin carries its value on every check, changed or not — so wire from 'On change' when you mean \"only when it changed\".",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Alert when a page changes at all",
@@ -54,6 +54,11 @@ func init() {
 					Title:  "Watch one price on the page",
 					Params: json.RawMessage(`{"url":"https://example.com/product/123","pattern":"Price:\\s*([0-9]+(?:[.,][0-9]{2})?)"}`),
 					Notes:  "The first bracketed group is what's compared, so unrelated edits to the page are ignored.",
+				},
+				{
+					Title:  "Watch a price on the shop's API",
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/products/123","text_only":false,"pattern":"\"price\":\\s*\"?([0-9]+(?:[.,][0-9]+)?)","headers":{"Authorization":"Bearer ${secret.SHOP_API_TOKEN}"}}`),
+					Notes:  "A JSON endpoint is steadier than the page around it. Turn off 'Compare the words, not the code' so the response is compared as it arrives, and let the pattern pick the price out of it.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -76,6 +81,7 @@ func init() {
 					"url":{"type":"string","title":"Page address","description":"The page to watch. Can also be connected into the Page address input."},
 					"pattern":{"type":"string","title":"Watch just this","examples":["Price:\\s*([0-9]+)"],"description":"Optional. A pattern picking out the one part of the page to compare — the first bracketed group, or the whole match if there are no brackets. Leave blank to compare the whole page."},
 					"text_only":{"type":"boolean","title":"Compare the words, not the code","default":true,"description":"On: strip the HTML and compare the visible text, so invisible markup churn doesn't count as a change. Off: compare the raw response exactly as it arrives (right for JSON or a plain-text endpoint)."},
+					"headers":{"type":"object","title":"Headers","additionalProperties":{"type":"string"},"description":"Extra request headers (one per key), for an API that needs a key or a particular Accept. Values may include ${secret.NAME} placeholders that resolve to stored secrets."},
 					"timeout_ms":{"type":"integer","default":20000,"minimum":1,"description":"Hard deadline for the fetch, in milliseconds."}
 				},
 				"required":["url"]
@@ -117,8 +123,13 @@ func executeWebWatch(ctx context.Context, job core.Job, progress chan<- core.Pro
 		return params.Err(job, "egress_blocked", err.Error()), nil
 	}
 
+	headers, err := paramHeaders(job.Params, "headers")
+	if err != nil {
+		return params.Err(job, "bad_param", err.Error()), nil
+	}
+
 	timeout := params.IntDefault(job.Params, "timeout_ms", 20000)
-	status, body, _, err := Do(ctx, "GET", target, nil, nil, timeout, maxWatchBytes)
+	status, body, _, err := Do(ctx, "GET", target, headers, nil, timeout, maxWatchBytes)
 	if err != nil {
 		if IsSSRFError(err) {
 			return params.Err(job, "ssrf_blocked", err.Error()), nil

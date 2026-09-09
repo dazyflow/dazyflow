@@ -160,6 +160,71 @@ func TestWebWatch_PatternMissingIsAClearError(t *testing.T) {
 	}
 }
 
+func TestWebWatch_SendsHeaders(t *testing.T) {
+	SetAllowPrivateEgress(true)
+	defer SetAllowPrivateEgress(false)
+	memWatchStore(t)
+
+	var gotAuth, gotAccept string
+	price := "1299.00"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth, gotAccept = r.Header.Get("Authorization"), r.Header.Get("Accept")
+		_, _ = w.Write([]byte(`{"variants":[{"price":"` + price + `"}]}`))
+	}))
+	defer srv.Close()
+
+	opts := map[string]any{
+		"text_only": false,
+		"pattern":   `"price":"([0-9.]+)"`,
+		"headers":   map[string]any{"Authorization": "Bearer tok", "Accept": "application/json"},
+	}
+	res, _ := executeWebWatch(context.Background(), watchJob(srv.URL, opts), nil)
+	if res.Status != core.StatusOK {
+		t.Fatalf("status=%q error=%+v", res.Status, res.Error)
+	}
+	if gotAuth != "Bearer tok" || gotAccept != "application/json" {
+		t.Fatalf("headers not sent: auth=%q accept=%q", gotAuth, gotAccept)
+	}
+	if got := res.Output["value"].Inline; got != "1299.00" {
+		t.Fatalf("value = %v, want the price out of the JSON", got)
+	}
+
+	// The headers must be sent on EVERY check, not just the baseline — an API
+	// key dropped on the second call would 401 exactly when the watch matters.
+	gotAuth = ""
+	price = "999.00"
+	res, _ = executeWebWatch(context.Background(), watchJob(srv.URL, opts), nil)
+	if gotAuth != "Bearer tok" {
+		t.Fatalf("second check sent auth=%q", gotAuth)
+	}
+	if _, fired := res.Output["on_change"]; !fired {
+		t.Fatal("the price changing must fire on_change")
+	}
+	if got := res.Output["previous"].Inline; got != "1299.00" {
+		t.Fatalf("previous = %v", got)
+	}
+}
+
+func TestWebWatch_BadHeadersParamIsAClearError(t *testing.T) {
+	SetAllowPrivateEgress(true)
+	defer SetAllowPrivateEgress(false)
+	memWatchStore(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("<p>hi</p>"))
+	}))
+	defer srv.Close()
+
+	opts := map[string]any{"headers": map[string]any{"X-Count": 7}}
+	res, _ := executeWebWatch(context.Background(), watchJob(srv.URL, opts), nil)
+	if res.Status == core.StatusOK {
+		t.Fatal("a non-string header value should be reported, not silently dropped")
+	}
+	if res.Error.Code != "bad_param" {
+		t.Errorf("code = %q", res.Error.Code)
+	}
+}
+
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (len(sub) == 0 || indexOf(s, sub) >= 0)
 }

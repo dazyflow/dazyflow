@@ -10,6 +10,29 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **Watch a page can send headers.** The step fetched with no headers at all,
+  which quietly ruled out the case it is best at: watching a shop's or a
+  service's JSON API rather than the page wrapped around it. An API that wants
+  an `Authorization` key, or just an `Accept`, was unreachable — leaving a
+  ten-step scrape-and-diff as the only way to follow one number.
+
+  It now takes the same **Headers** field as the Web request step, with the same
+  `${secret.NAME}` resolution, so the key stays in the secret store. Watching a
+  price is four steps: Interval → Watch a page (word-comparison off, a pattern
+  picking the price out of the JSON) → If (is less than) → a notification. The
+  step's `On change` pin leaves the whole chain dormant on a quiet check, and
+  the first check — which has nothing to compare against — cannot reach the
+  comparison at all.
+
+- **Template: "Watch a price → tell me when it drops".** The four steps above,
+  shipped in the gallery under Notifications. It reads the shop's product API
+  rather than scraping the page around it, so a redesign or a moving review
+  count cannot set it off, and it tells you only when the new price is *lower* —
+  a rise is recorded silently. Fill in the product's JSON address and an ntfy
+  topic. The README's gallery count was stale at thirteen; it is seventeen.
+
 ## [0.41.7] - 2026-09-09
 
 ### Added

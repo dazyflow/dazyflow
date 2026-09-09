@@ -86,6 +86,14 @@ export const SV_TEMPLATE_PROSE: DescriptionMap = {
     en: "bab9ed0e",
     sv: "Håll ett öga på en webbsida — en upphandlingslista, en statussida, ett pris — och få en avisering bara när det som står där faktiskt ändras.",
   },
+  "watch-a-price.title": {
+    en: "1e0209b8",
+    sv: "Bevaka ett pris → säg till när det sjunker",
+  },
+  "watch-a-price.use_case": {
+    en: "c09e756c",
+    sv: "Följ priset på en sak i en butik och få en avisering i samma stund som det går ner — kontrollerat åt dig varje halvtimme, tyst tills det faktiskt sjunker.",
+  },
   "payment-to-thanks-and-log.title": {
     en: "df29ce91",
     sv: "Stripe-betalning → tack, teamavisering, säljlogg",

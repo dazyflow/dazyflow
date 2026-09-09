@@ -150,6 +150,27 @@
       "graph_file": "/templates/watch-a-page.json"
     },
     {
+      "id": "watch-a-price",
+      "title": "Watch a price → tell me when it drops",
+      "use_case": "Follow the price of one thing in a shop and get a notification the moment it goes down — checked for you every half hour, silent until it actually drops.",
+      "category": "Notifications",
+      "description": "Reads the shop's own product API rather than scraping the page around it, so a redesign or a changed review count can't set it off. It compares only the price, and only tells you when the new one is lower — a rise is recorded silently. Point it at the product's JSON address, set your ntfy topic, and the first check quietly records today's price.",
+      "icon": "package-search",
+      "tags": [
+        "price",
+        "watch",
+        "monitor",
+        "api",
+        "shop",
+        "ntfy",
+        "alert"
+      ],
+      "integrations": [
+        "ntfy"
+      ],
+      "graph_file": "/templates/watch-a-price.json"
+    },
+    {
       "id": "payment-to-thanks-and-log",
       "title": "Stripe payment → thank-you, team ping, sales log",
       "use_case": "When someone pays, thank them, tell the team, and record the sale — without anyone retyping an order.",

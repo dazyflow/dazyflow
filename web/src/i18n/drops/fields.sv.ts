@@ -496,6 +496,8 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "Event title.": "Händelsens rubrik.",
   "Expand recurring events into individual instances.": "Expandera återkommande händelser till enskilda tillfällen.",
   "Extra request headers (one per key). Values may include ${secret.NAME} placeholders that resolve to stored secrets.": "Extra rubriker i förfrågan (en per nyckel). Värdena får innehålla platshållare som ${secret.NAMN}, vilka slås upp mot lagrade hemligheter.",
+  "Extra request headers (one per key), for an API that needs a key or a particular Accept. Values may include ${secret.NAME} placeholders that resolve to stored secrets.":
+    "Extra rubriker i förfrågan (en per nyckel), för ett API som kräver en nyckel eller ett visst Accept. Värdena får innehålla platshållare som ${secret.NAMN}, vilka slås upp mot lagrade hemligheter.",
   "Extra request headers.": "Extra rubriker i förfrågan.",
   "Extra service options passed through as-is — e.g. {\"brightness_pct\":50} or {\"temperature\":21}.": "Extra tjänstinställningar som skickas vidare som de är — t.ex. {\"brightness_pct\":50} eller {\"temperature\":21}.",
   "Fail responses larger than this. Default 10 MiB.": "Misslyckas på svar större än detta. Standard 10 MiB.",
