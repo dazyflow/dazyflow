@@ -24,7 +24,9 @@ func init() {
 			Icon:     "arrow-left-right",
 			Category: "transformation",
 			Provider: "internal",
-			Tags: []string{"lookup", "table", "map", "translate", "convert", "match",
+			// Deliberately NOT "translate": this maps a value through a table,
+			// and someone asking to translate wants an AI step.
+			Tags: []string{"lookup", "table", "map", "convert", "match",
 				"code", "country", "replace", "dictionary", "key", "value"},
 			Description: "Turn one value into another using a little table you fill in — country code to country name, " +
 				"plan to discount, status code to the words you want people to read.\n\n" +

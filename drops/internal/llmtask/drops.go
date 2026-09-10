@@ -35,7 +35,7 @@ func askDrop(cfg Config) engine.NativeDrop {
 			Color:       cfg.Color,
 			BrandLogo:   cfg.BrandLogo,
 			Provider:    "internal",
-			Tags:        tags(cfg, "prompt", "llm", "ask"),
+			Tags:        tags(cfg, "prompt", "llm", "ask", "translate", "rewrite", "generate"),
 			Examples: []core.ParamsExample{
 				{Title: "One-shot summary", Params: json.RawMessage(`{"prompt":"Summarize the text from an earlier step in one sentence."}`), Notes: "Connect the text into the Prompt input. " + connNote(cfg)},
 			},

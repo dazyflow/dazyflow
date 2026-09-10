@@ -135,15 +135,93 @@ drops instead of six — see the note in item 9.
 a different shape from a step — a loop with tool calls — and the DAG says no to
 the loop. Deliberately not attempted.
 
-## 9. Collapse the AI provider × task matrix  — status: open
+## 9. Collapse the AI provider × task matrix  — status: WON'T DO (2026-09-10)
 
 20 drops: 4 providers (ChatGPT, Claude, Gemini, Ollama) × 5 tasks (ask,
 classify, extract, summarize, draft_reply), identical in shape. Five drops with
 the provider as a param would say the same thing.
 
-Not just tidiness: the flow generator's prompt is already ~14.5k tokens and
-`search_drops` returns the wrong step; 20 near-identical entries are exactly
-what poisons that retrieval. Migration for existing flows is the hard half.
+**Decided against, on three counts.**
+
+*The logos are the feature.* Someone with a ChatGPT account scans the palette
+for the ChatGPT mark; a `provider` dropdown inside one generic "Ask AI" step
+hides the exact thing they are looking for. Zapier and n8n keep per-vendor
+nodes for the same reason. Every drop carries its provider's Icon, Color and
+BrandLogo, and the Apps page's connection cards are per-provider too.
+
+*The measured cost is small.* The matrix is 20 of 199 catalogue rows and 6,833
+of 58,157 characters — 11.7% of the flow generator's prompt, ~1,700 tokens.
+Collapsing to five saves ~1,300, or 9% of the prompt.
+
+*Retrieval is not actually harmed.* "summarize", "classify", "extract fields"
+and "draft a reply" each rank the right task first with the four providers
+clustered at the top, which is the correct answer — the model then picks by
+which account is connected. The retrieval complaint that motivated this item
+was a different bug (below).
+
+**It is also blocked, if anyone revisits it.** The 20 come from four
+`llmtask.Config` values, so the code duplication is small — only the catalogue
+is 20 wide. Collapsing needs a step whose CONNECTION is chosen by a param, and
+`engine/secrets.go` injects from the manifest's static `Integration`, so one
+`ask` drop with a provider dropdown could never be handed the right key. Item 8
+sidestepped that by giving Knowledge a connection of its own; item 9 cannot.
+Making injection dynamic means letting an author's param choose which stored
+secret is injected — only ever behind a manifest-declared allowlist, and think
+about `base_url` overrides first.
+
+---
+
+## 9b. Short queries lose to incidental substrings — status: DONE (2026-09-10)
+
+Found while measuring item 9. A search for "ai" returns `await_approval`,
+`contains` and `email`, and none of the AI steps:
+
+    email           150   id contains "ai" (+100), label contains "ai" (+50)
+    await_approval  150   aw(ai)t
+    contains        150   cont(ai)ns
+    claude           55   exact tag match on "ai"
+
+`matchScore` (daemon/search.go) awards a raw `strings.Contains` on id and
+label, so an incidental substring beats an exact tag three to one. The same
+function already fixed this class for prose — its own comment: as a substring,
+"form" hit "format", which ranked build_csv above form_input — by switching to
+`containsWord`; the id and label paths were left raw.
+
+Not a straight swap: `containsWord("google_sheets_read", "sheet")` is false,
+and losing that hit would be its own regression, so the id path likely wants
+the three tiers `tagScore` already uses (exact / word / stem) rather than one
+`Contains`. It is a scored system with tests, so it deserves its own pass.
+
+Half of this was already known and guarded: `TestRetrieval_SwedishNoiseFindsNothing`
+catches the same trap for Swedish filler ("min" inside ge-min-i, "en" inside
+builtin_store_app-en-d), but only for two-word queries — its comment says a
+bare one-word search is a deliberate act, so single words were left out on
+purpose. "ai" is what that exclusion cost: a one-word query that means
+something, answered by three steps that merely contain the letters.
+
+**Shipped.** `matchScore` now tiers the id and label the way `tagScore`
+already tiered its tags: a delimited word in the id keeps +100, a bare
+substring drops to +30 (label 50 → 15), which puts it below an exact tag
+match's 55. The substring tier stays because it is load-bearing — "mail"
+reaches gmail/imap and "sheet" reaches google_sheets_read only as a substring,
+neither delimited nor a prefix — and the guard asserts both still work.
+
+The 83-ask benchmark is unchanged by it: hit@1 74% (62/83), hit@5 98% (82/83),
+Swedish 93%, identical before and after.
+
+**"db" was a second, unrelated cause.** The SQL steps carried the tag
+`database` but never `db`, while three transform DESCRIPTIONS mention "a DB
+query" in passing and scored +20 each on it — so the abbreviation found the
+wrong half of the catalogue. Nine SQL drops gained a `db` tag; the descriptions
+were left alone, since "a DB query" is the right prose.
+
+Pinned by `TestRetrieval_ShortQueriesMeanWhatTheySay`, which asserts the first
+hit for a short query CARRIES the word as a category or tag rather than naming
+today's ids.
+
+**Not touched:** the prefix tier still answers "js" with `json` (id prefix,
++250) ahead of `code` (exact tag, 55). That one is defensible — it is what
+makes as-you-type prefix matching work — and `code` is still rank 2.
 
 ## 10. `expression` points at a step most users cannot see  — status: DONE (2026-09-10)
 

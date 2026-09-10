@@ -30,7 +30,7 @@ func init() {
 			Category:    "io",
 			Provider:    "internal",
 			Integration: "SQLite",
-			Tags:        []string{"sqlite", "sql", "database", "insert", "save", "store", "etl"},
+			Tags:        []string{"sqlite", "sql", "database", "db", "insert", "save", "store", "etl"},
 			SearchBoost: 25,
 			Description: "Save rows into a database file kept in your workspace — no server, connection string, or setup needed (this is the easy database; use Postgres/MySQL only if you already have one). The table is auto-created from the row shape by default; flip create_table off if you've already set up a schema you don't want overwritten.",
 			Summary:     "Save rows into a workspace database file — no setup; the table is auto-created from the row shape.",

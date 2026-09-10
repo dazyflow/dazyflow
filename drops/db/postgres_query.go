@@ -26,7 +26,7 @@ func init() {
 			Category:    "io",
 			Provider:    "internal",
 			Integration: "Postgres",
-			Tags:        []string{"postgres", "postgresql", "sql", "database", "query", "select"},
+			Tags:        []string{"postgres", "postgresql", "sql", "database", "db", "query", "select"},
 			Description: "Run a SELECT against your Postgres database and get rows back. Use $1, $2 placeholders in the SQL and pass values through the params array so user-supplied data is safely escaped. Set a row limit to keep large result sets bounded.",
 			Summary:     "Run a parameterized SELECT against Postgres and stream rows back as a result set with typed values.",
 			Examples: []core.ParamsExample{

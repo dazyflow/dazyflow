@@ -113,12 +113,25 @@ func matchScore(m core.Manifest, needle string) int {
 		return 200
 	}
 
+	// A needle delimited inside the id is a real word of it — "email" in
+	// gmail_send_email. A bare substring is weaker evidence and sometimes
+	// none at all: "ai" lives inside await_approval, contains and email, and
+	// at the old flat +100 those outranked an exact "ai" tag three to one.
+	// It cannot go away, though — "mail" reaches gmail_send_email and "sheet"
+	// reaches google_sheets_read only as a substring, neither delimited nor a
+	// prefix — so it scores below tagScore's exact match instead.
 	score := 0
-	if strings.Contains(id, needle) {
+	switch {
+	case containsWord(id, needle):
 		score += 100
+	case strings.Contains(id, needle):
+		score += 30
 	}
-	if strings.Contains(label, needle) {
+	switch {
+	case containsWord(label, needle):
 		score += 50
+	case strings.Contains(label, needle):
+		score += 15
 	}
 	// Prose matches on the WHOLE word. As a substring, "form" hit "format"
 	// and "transform", which is how a search for it ranked build_csv and

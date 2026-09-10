@@ -18,6 +18,7 @@ package daemon
 // nothing.
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -302,6 +303,66 @@ var swedishCases = []retrievalCase{
 var swedishNoise = []string{
 	"min", "mina", "mitt", "en", "ett", "och", "att", "för", "som", "den",
 	"det", "till", "från", "med", "vad", "när", "hur", "varje", "någon",
+}
+
+// A SHORT query is the other half of what the Swedish-noise guard covers, and
+// the half it deliberately leaves out: "ai" and "db" mean something, so they
+// cannot be answered by steps that merely contain the letters. Both used to
+// be — `matchScore` scored a bare substring of the id at +100 and the label at
+// +50, so "ai" was answered by aw(ai)t_approval, cont(ai)ns and em(ai)l at 150
+// apiece while an exact "ai" tag scored 55, and "db" was answered by the three
+// transform descriptions that mention "a DB query" in passing.
+func TestRetrieval_ShortQueriesMeanWhatTheySay(t *testing.T) {
+	mans := allManifests()
+	byID := map[string]core.Manifest{}
+	for _, m := range mans {
+		byID[m.ID] = m
+	}
+	// A step that carries the word — as its category or one of its tags — is
+	// a right answer; naming exact ids here would make the test a diary of
+	// today's catalogue instead of a check on the ranking.
+	carries := func(m core.Manifest, word string) bool {
+		if strings.EqualFold(m.Category, word) {
+			return true
+		}
+		for _, tag := range m.Tags {
+			if strings.EqualFold(tag, word) {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, tc := range []struct{ query, word string }{
+		{"ai", "ai"},
+		{"db", "db"},
+	} {
+		hits := rankedIDs(mans, tc.query)
+		if len(hits) == 0 {
+			t.Errorf("%q found nothing", tc.query)
+			continue
+		}
+		if !carries(byID[hits[0]], tc.word) {
+			shown := hits
+			if len(shown) > 4 {
+				shown = shown[:4]
+			}
+			t.Errorf("%q ranked %q first, which does not carry the word %q (%v) — an incidental substring outranked a real match",
+				tc.query, hits[0], tc.word, shown)
+		}
+	}
+
+	// The substring match still has to earn its keep: neither of these is a
+	// word of the id, and both are the right answer.
+	for _, tc := range []struct{ query, want string }{
+		{"mail", "imap_get_message"},
+		{"sheet", "sheets_read_range"},
+	} {
+		hits := rankedIDs(mans, tc.query)
+		if !slices.Contains(hits, tc.want) {
+			t.Errorf("%q no longer finds %s at all — the substring tier was cut too deep", tc.query, tc.want)
+		}
+	}
 }
 
 func TestRetrieval_SwedishNoiseFindsNothing(t *testing.T) {

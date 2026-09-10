@@ -26,7 +26,7 @@ func init() {
 			Category:    "io",
 			Provider:    "internal",
 			Integration: "Postgres",
-			Tags:        []string{"postgres", "postgresql", "sql", "database", "insert", "etl"},
+			Tags:        []string{"postgres", "postgresql", "sql", "database", "db", "insert", "etl"},
 			Description: "Insert rows into a Postgres table. Accepts rows from Sheets, Excel, or any transform step — the shape is interchangeable across these steps, so no extra mapping needed.",
 			Summary:     "Batch-insert rows into a Postgres table inside one transaction; auto-creates the table from headers when missing.",
 			Examples: []core.ParamsExample{

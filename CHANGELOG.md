@@ -195,6 +195,18 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Fixed
 
+- **Searching the catalogue for a short word finds what it means.** A search
+  for "ai" answered with `await_approval`, `contains` and `email` — steps that
+  merely contain those two letters — and none of the AI steps; "db" answered
+  with the CSV and JSON transforms, whose descriptions mention "a DB query" in
+  passing, and none of the databases. Ranking scored a bare substring of a
+  step's id above an exact tag match, three to one. A word properly inside the
+  id still counts for full marks, so "mail" still finds the mailbox steps and
+  "sheet" still finds Google Sheets; an incidental run of letters now counts
+  for less than a step that actually says the word. The SQL steps also learned
+  that people write "db". This is the flow generator's and MCP's search — the
+  editor's own step palette has always searched separately, and was unaffected.
+
 - **Wires to a folded drop no longer go missing when a flow opens.** The editor
   asks for the flow and the drop catalogue at the same time, so a card can be
   drawn before the catalogue answers — holding stand-in pins for a moment

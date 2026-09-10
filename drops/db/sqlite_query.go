@@ -30,7 +30,7 @@ func init() {
 			Category:    "io",
 			Provider:    "internal",
 			Integration: "SQLite",
-			Tags:        []string{"sqlite", "sql", "database", "query", "select"},
+			Tags:        []string{"sqlite", "sql", "database", "db", "query", "select"},
 			Description: "Run a SELECT against a SQLite file in your workspace and get rows back. Use ? placeholders in the SQL and pass values through the params array so user-supplied data is safely escaped.",
 			Summary:     "Run a parameterized SELECT against a workspace-sandboxed SQLite file and emit rows plus column names.",
 			Examples: []core.ParamsExample{

@@ -26,7 +26,7 @@ func init() {
 			Category:    "io",
 			Provider:    "internal",
 			Integration: "MySQL",
-			Tags:        []string{"mysql", "mariadb", "sql", "database", "upsert", "merge", "insert", "update", "duplicate", "duplicates", "etl"},
+			Tags:        []string{"mysql", "mariadb", "sql", "database", "db", "upsert", "merge", "insert", "update", "duplicate", "duplicates", "etl"},
 			Description: "Upsert (insert-or-update) rows into a MySQL or MariaDB table. Set the conflict columns — MySQL matches existing rows on those, updating them in place, while new rows get inserted. Reports separate insert vs update counts so later notifications can say 'X new + Y updated'.",
 			Summary:     "Insert-or-update rows in MySQL/MariaDB via INSERT ... ON DUPLICATE KEY UPDATE, matching existing rows on the conflict columns.",
 			Examples: []core.ParamsExample{

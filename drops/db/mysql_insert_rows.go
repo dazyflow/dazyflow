@@ -27,7 +27,7 @@ func init() {
 			Category:    "io",
 			Provider:    "internal",
 			Integration: "MySQL",
-			Tags:        []string{"mysql", "mariadb", "sql", "database", "insert", "etl"},
+			Tags:        []string{"mysql", "mariadb", "sql", "database", "db", "insert", "etl"},
 			Description: "Insert rows into a MySQL or MariaDB table. Accepts rows from Sheets, Excel, or any transform step — the shape is interchangeable across these steps.",
 			Summary:     "Batch-insert rows into a MySQL/MariaDB table inside one transaction; auto-creates the table from headers when missing.",
 			Examples: []core.ParamsExample{
