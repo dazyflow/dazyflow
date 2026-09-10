@@ -20,6 +20,38 @@
 // conflict_columns and STRIPE_API_KEY are what the user types.
 
 export const SV_FIELD_TITLES: Record<string, string> = {
+  "Decimals": "Decimaler",
+  "Group the thousands": "Gruppera tusentalen",
+  "Which way": "Åt vilket håll",
+  "Between passages": "Mellan avsnitten",
+  "How many passages": "Hur många avsnitt",
+  "Knowledge base": "Kunskapsbas",
+  "Least score": "Lägsta poäng",
+  "Overlap": "Överlapp",
+  "Passage length": "Avsnittets längd",
+  "Where it came from": "Varifrån det kom",
+  "Condition": "Villkor",
+  "Find": "Sök efter",
+  "How many characters": "Hur många tecken",
+  "Match capitalisation": "Skilj på stora och små bokstäver",
+  "Replace with": "Ersätt med",
+  "Split on": "Dela vid",
+  "The table": "Tabellen",
+  "Use this instead": "Använd det här i stället",
+  "What to do": "Vad som ska göras",
+  "When nothing matches": "När inget matchar",
+  "Delete every row": "Ta bort varje rad",
+  "Digest name": "Sammandragets namn",
+  "Wait until": "Vänta till",
+  "Values to pick out": "Värden att plocka ut",
+  "Where each row is": "Var varje rad finns",
+  "Fetch every page": "Hämta alla sidor",
+  "Most pages to fetch": "Högst antal sidor",
+  "Page parameter": "Sidparameter",
+  "Where the items are": "Var posterna finns",
+  "Where the next page is": "Var nästa sida finns",
+  "Run it": "Kör det",
+  "Time limit (ms)": "Tidsgräns (ms)",
   "Rules": "Regler",
   "Route to send it down": "Vägen de ska ta",
   "Where the leftovers go": "Var resten hamnar",
@@ -323,6 +355,98 @@ export const SV_FIELD_TITLES: Record<string, string> = {
 };
 
 export const SV_FIELD_HELP: Record<string, string> = {
+  "How many digits after the decimal point. 0 gives a whole number.":
+    "Hur många siffror efter decimaltecknet. 0 ger ett helt tal.",
+  "Nearest is the ordinary one. Up and down are for the cases where the answer has to cover something — boxes to order, a price ceiling.":
+    "Närmaste är den vanliga. Uppåt och nedåt är för fallen där svaret måste täcka något — lådor att beställa, ett pristak.",
+  "On writes 1 234 567 (or 1,234,567); off writes 1234567. Turn it off when the number is going somewhere that has to read it back as a number.":
+    "På skriver 1 234 567 (eller 1,234,567); av skriver 1234567. Slå av det när talet ska vidare någonstans som måste läsa tillbaka det som ett tal.",
+  "Rounding changes the number; the others change only how it is written.":
+    "Avrundning ändrar talet; de andra ändrar bara hur det skrivs.",
+  "The three-letter code — SEK, EUR, USD, GBP. Ones with a symbol of their own get it; the rest are written with the code.":
+    "Den tre bokstäver långa koden — SEK, EUR, USD, GBP. De som har ett eget tecken får det; resten skrivs med koden.",
+  "Which way round the separators go, and where a currency sits. Leave it on the flow's language (Settings → General) unless this one step should differ.":
+    "Hur avskiljarna vänds, och var valutan sitter. Låt det följa flödets språk (Inställningar → Allmänt) om inte just det här steget ska skilja sig.",
+  "Drop matches weaker than this. 0 keeps everything; around 0.3 keeps only passages that are really about the question.":
+    "Sålla bort träffar svagare än så här. 0 behåller allt; runt 0,3 behåller bara avsnitt som verkligen handlar om frågan.",
+  "How long to wait for the embedding service, in milliseconds.":
+    "Hur länge det ska väntas på inbäddningstjänsten, i millisekunder.",
+  "How many characters a passage may hold. Longer keeps an argument together; shorter makes a search point at the exact sentence.":
+    "Hur många tecken ett avsnitt får rymma. Längre håller ihop ett resonemang; kortare gör att en sökning pekar på exakt rätt mening.",
+  "How many characters each passage repeats from the one before, so a fact split across a seam survives whole in one of them.":
+    "Hur många tecken varje avsnitt upprepar från det föregående, så att en uppgift som delas av en skarv överlever hel i ett av dem.",
+  "How many of the closest passages to bring back. Five is a good starting point for a prompt.":
+    "Hur många av de närmaste avsnitten som ska hämtas. Fem är en bra utgångspunkt för en prompt.",
+  "Injected from the Knowledge connection — leave unset.":
+    "Hämtas från Kunskap-anslutningen — lämna tomt.",
+  "What goes between the passages on the joined 'Passages' output.":
+    "Vad som sätts mellan avsnitten på den sammanfogade utgången Avsnitt.",
+  "What identifies this document — a filename, a URL, a ticket number. Adding the same source again replaces its passages. Empty means the text's own fingerprint, so the identical document twice is stored once.":
+    "Vad som identifierar det här dokumentet — ett filnamn, en URL, ett ärendenummer. Läggs samma källa till igen ersätts dess avsnitt. Tomt betyder textens eget fingeravtryck, så samma dokument två gånger lagras en gång.",
+  "What this collection of documents is called — handbook, prices, policies. Made the first time you add to it.":
+    "Vad den här samlingen dokument heter — handbok, priser, policyer. Skapas första gången du lägger till i den.",
+  "Which collection of documents to search.": "Vilken samling dokument som ska sökas igenom.",
+  "Value to store. Overridden by the 'value' input port when connected.": "Värdet som ska sparas. Ingången 'value' vinner över detta när den är inkopplad.",
+  "The condition that has to hold for this path to be taken — row.amount > 100, or row.status == 'paid' && row.country == 'SE'. The incoming value is 'row'; a plain number or text reads as row.value. Set this OR a value to look for, not both.":
+    "Villkoret som måste gälla för att den här vägen ska tas — row.amount > 100, eller row.status == 'paid' && row.country == 'SE'. Det inkommande värdet är 'row'; ett vanligt tal eller en text läses som row.value. Sätt det här ELLER ett värde att leta efter, inte båda.",
+  "What has to be equal for this path to be taken — one value (\"paid\", 200, true), or a list ([200,201,204]) if several values should all take the same path. Use a condition instead when equality cannot say what you mean.":
+    "Vad som måste vara lika för att den här vägen ska tas — ett värde (\"paid\", 200, true), eller en lista ([200,201,204]) om flera värden ska ta samma väg. Använd ett villkor i stället när likhet inte kan säga det du menar.",
+  "Cut to this many characters. An ellipsis is added only when something was actually cut.":
+    "Klipp till så här många tecken. En ellips läggs till bara när något faktiskt klipptes.",
+  "Off (the default) means \"se\", \"SE\" and \"Se\" all find the same row. On means they are three different keys.":
+    "Av (standard) betyder att \"se\", \"SE\" och \"Se\" hittar samma rad. På betyder att de är tre olika nycklar.",
+  "The one change to make. For pattern matching use the Regex step instead.":
+    "Den enda ändring som ska göras. För mönstermatchning använder du steget Regex i stället.",
+  "The pairs to look through: what comes in on the left, what comes out on the right.":
+    "Paren som ska letas igenom: det som kommer in till vänster, det som kommer ut till höger.",
+  "The separator to cut on — a comma, a semicolon, \" | \". Use \\n for one piece per line. Spaces around each piece are trimmed.":
+    "Avgränsaren att klippa vid — ett komma, ett semikolon, \" | \". Använd \\n för en del per rad. Mellanslag runt varje del tas bort.",
+  "The text to look for, taken literally — a full stop means a full stop.":
+    "Texten att leta efter, tagen bokstavligt — en punkt betyder en punkt.",
+  "What to put in its place. Leave empty to remove what you found.":
+    "Vad som ska sättas i stället. Lämna tomt för att ta bort det du sökte efter.",
+  "What to send out for a value the table does not list. Leave empty and unlisted values leave on the 'No match' output instead.":
+    "Vad som ska skickas ut för ett värde som tabellen inte listar. Lämna tomt så går olistade värden ut på utgången \"Ingen träff\" i stället.",
+  "What to send out when the text is empty or nothing but spaces.":
+    "Vad som ska skickas ut när texten är tom eller bara innehåller mellanslag.",
+  "Confirms that a step with no condition really is meant to empty the whole collection. Ignored when a condition is set.":
+    "Bekräftar att ett steg utan villkor verkligen är tänkt att tömma hela samlingen. Ignoreras när ett villkor är satt.",
+  "Delete only the rows that match these conditions. Leave empty to mean every row — which the step will not do unless 'Delete every row' is also on.":
+    "Ta bara bort de rader som matchar de här villkoren. Lämnar du tomt menas varje rad — vilket steget inte gör om inte \"Ta bort varje rad\" också är på.",
+  "How long to pause before continuing, in milliseconds (1000 = 1 second). Use 'Wait until' instead to hold for a named moment.":
+    "Hur länge pausen ska vara innan flödet fortsätter, i millisekunder (1000 = 1 sekund). Använd \"Vänta till\" i stället för att vänta på en bestämd tidpunkt.",
+  "Name of the collection to delete from. Overridden by a value connected into the Collection input.":
+    "Namnet på samlingen som rader ska tas bort ur. Ett värde som kopplas in på ingången Samling vinner över det här.",
+  "The moment to carry on at: \"tomorrow\", \"tomorrow+9h\", \"now+2h\", \"+3d\", or a timestamp (2026-06-16T09:00:00Z). A moment already past carries straight on. The 'Wait until' input overrides this when connected.":
+    "Tidpunkten då flödet ska fortsätta: \"tomorrow\", \"tomorrow+9h\", \"now+2h\", \"+3d\", eller en tidsstämpel (2026-06-16T09:00:00Z). En tidpunkt som redan passerat fortsätter direkt. Ingången \"Vänta till\" vinner över det här när den är kopplad.",
+  "The pile to take, named the same as in the flow that adds to it.":
+    "Högen som ska hämtas, med samma namn som i flödet som lägger till i den.",
+  "What this pile is called. The flow that sends it later takes the same name. Stored as a collection called \"digest_<name>\".":
+    "Vad den här högen heter. Flödet som skickar den senare anger samma namn. Sparas som en samling som heter \"digest_<namn>\".",
+  "Which zone the day boundaries of \"today\" and \"tomorrow\" are taken in, e.g. \"Europe/Stockholm\". Empty = UTC. Ignored for a full timestamp.":
+    "Vilken zon dygnsgränserna för \"today\" och \"tomorrow\" räknas i, t.ex. \"Europe/Stockholm\". Tomt = UTC. Ignoreras för en fullständig tidsstämpel.",
+  "One entry per value you want: the name it comes out under, and the CSS selector that finds it. Write \"selector@attribute\" to take an attribute instead of the text — \"a@href\", \"img@src\", \"@data-id\" for the row element's own attribute, \"@html\" for its inner HTML. Leave the selector empty to mean the row element itself. Nothing matched comes out as empty text.":
+    "En rad per värde du vill ha: namnet det kommer ut under, och CSS-väljaren som hittar det. Skriv \"väljare@attribut\" för att ta ett attribut i stället för texten — \"a@href\", \"img@src\", \"@data-id\" för radelementets eget attribut, \"@html\" för dess inre HTML. Lämna väljaren tom för att mena radelementet självt. Träffas ingenting kommer värdet ut som tom text.",
+  "The selector for the thing that repeats — \".product\", \"table tbody tr\", \"article\". You get one row per match, with every field read inside it. Leave it empty to read the fields once from the whole page.":
+    "Väljaren för det som upprepas — \".product\", \"table tbody tr\", \"article\". Du får en rad per träff, där varje fält läses inuti den. Lämna tomt för att läsa fälten en gång från hela sidan.",
+  "The address the HTML came from. With it set, a link or image you pull comes out as a full address instead of the relative half the page carries.":
+    "Adressen som HTML-koden kom från. Med den satt kommer varje länk eller bild du plockar ut som en fullständig adress i stället för den halva som sidan bär.",
+  "Most APIs hand back one page at a time. Turn this on and the step keeps fetching until the pages run out, then gives you every item as one list. Pick how that API says where the next page is: a Link header (GitHub and friends), a field in the response (most modern APIs — name it below), or a page number that climbs until a page comes back empty. Status and Headers then describe the last page fetched.":
+    "De flesta API:er lämnar ut en sida i taget. Slår du på det här fortsätter steget hämta tills sidorna tar slut, och ger dig alla poster som en enda lista. Välj hur det API:et talar om var nästa sida finns: en Link-rubrik (GitHub och liknande), ett fält i svaret (de flesta moderna API:er — namnge det nedan) eller ett sidnummer som räknas upp tills en sida kommer tillbaka tom. Status och Rubriker beskriver då den sista hämtade sidan.",
+  "The field on each page holding the list, written with dots — \"data\", \"result.items\". Leave it empty when the API answers with a bare list. Every page's items are joined into one list on the Response output; without it you get the pages themselves, one after another.":
+    "Fältet på varje sida som håller listan, skrivet med punkter — \"data\", \"result.items\". Lämna tomt när API:et svarar med en ren lista. Posterna från alla sidor slås ihop till en enda lista på utgången Svar; utan det får du sidorna i sig, en efter en.",
+  "The field holding the next page's address or cursor, written with dots — \"next\", \"meta.next_cursor\", \"paging.next\". Paging stops when that field is missing or empty. If it holds a cursor rather than a web address, name the query parameter to send it as below.":
+    "Fältet som håller nästa sidas adress eller markör, skrivet med punkter — \"next\", \"meta.next_cursor\", \"paging.next\". Hämtningen slutar när fältet saknas eller är tomt. Håller det en markör i stället för en webbadress namnger du frågeparametern att skicka den som nedan.",
+  "The query parameter that carries the position — \"cursor\" or \"page_token\" when following a cursor field, \"page\" or \"offset\" when climbing a number. Climbing defaults to \"page\" and starts from whatever the address already says.":
+    "Frågeparametern som bär positionen — \"cursor\" eller \"page_token\" när du följer ett markörfält, \"page\" eller \"offset\" när du räknar upp ett tal. Uppräkning använder \"page\" som standard och utgår från det som adressen redan säger.",
+  "Stop after this many pages even if the API offers more, so a runaway feed cannot hold the flow up. The time limit and the response size limit are spent across all the pages together, not granted afresh for each one.":
+    "Sluta efter så här många sidor även om API:et erbjuder fler, så att ett skenande flöde av sidor inte kan hålla upp flödet. Tidsgränsen och gränsen för svarsstorlek delas av alla sidorna tillsammans, inte på nytt för varje sida.",
+  "The script. 'input' is the value wired into 'in' (or 'row' and 'index' in per-row mode); whatever you return leaves on 'out'. console.log writes to the run log. No network, no files, no imports.":
+    "Skriptet. 'input' är värdet som kopplas in på 'in' (eller 'row' och 'index' i läget en gång per rad); det du returnerar går ut på 'out'. console.log skriver till körningsloggen. Inget nätverk, inga filer, inga importer.",
+  "Once, with the whole input as 'input' — or once per row, with each row as 'row' and its position as 'index'. Per-row collects what you return into a list, and drops any row you return nothing for.":
+    "En gång, med hela indatat som 'input' — eller en gång per rad, med varje rad som 'row' och dess position som 'index'. Per rad samlas det du returnerar i en lista, och rader du inte returnerar något för faller bort.",
+  "How long the script may run in total, per-row runs included. Past it the step fails rather than holding the flow up. Maximum 30000.":
+    "Hur länge skriptet får köra totalt, körningarna per rad inräknade. Därefter misslyckas steget i stället för att hålla upp flödet. Högst 30000.",
   "Keys a caller may send to start this flow, either as an Authorization: Bearer header or as ?key=… on the end of the address — use the address form for senders that only let you paste a URL. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime.":
     "Nycklar som en avsändare kan skicka för att starta flödet, antingen som rubriken Authorization: Bearer eller som ?key=… sist i adressen — använd adressformen för avsändare som bara låter dig klistra in en URL. Adressen godtar VILKEN som helst av nycklarna i listan, så du kan lägga till en ny nyckel, flytta över avsändarna och sedan återkalla den gamla utan avbrott.",
   "Let anyone who knows this flow's address start it, with no key at all. Only for senders that can carry neither a header nor a key in the URL — the address becomes the only thing standing between the flow and the internet. Off by default, and a key-less step stays inert until you turn this on.":
@@ -523,7 +647,6 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "Hard deadline for the whole download, in milliseconds.": "Absolut tidsgräns för hela nedladdningen, i millisekunder.",
   "Hard deadline for the whole upload, in milliseconds.": "Absolut tidsgräns för hela uppladdningen, i millisekunder.",
   "Hash algorithm. Use sha256 or stronger for security; sha1/md5 are for checksums/compatibility only.": "Hash-algoritm. Använd sha256 eller starkare av säkerhetsskäl; sha1/md5 är bara för kontrollsummor och kompatibilitet.",
-  "How long to pause before continuing, in milliseconds (1000 = 1 second).": "Hur länge det ska pausas innan flödet fortsätter, i millisekunder (1000 = 1 sekund).",
   "How many commits to return at most.": "Hur många commits som som mest returneras.",
   "How many days to return, counting from today (1..10).": "Hur många dagar som returneras, räknat från i dag (1..10).",
   "How many days to return, counting from today (1..16).": "Hur många dagar som returneras, räknat från i dag (1..16).",
@@ -797,9 +920,6 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "Upper bound on events returned.": "Övre gräns för antalet händelser som returneras.",
   "Upper bound on files returned.": "Övre gräns för antalet filer som returneras.",
   "Validate the request with 46elks without sending or being billed.": "Validera förfrågan hos 46elks utan att skicka eller bli fakturerad.",
-  "What has to be equal for this path to be taken — one value (\"paid\", 200, true), or a list ([200,201,204]) if several values should all take the same path.":
-    "Vad som måste vara lika för att den här vägen ska tas — ett värde (\"paid\", 200, true), eller en lista ([200,201,204]) om flera värden ska ta samma väg.",
-  "Value to store. Overridden by the 'value' input port when connected.": "Värdet som ska sparas. Ingången 'value' vinner över detta när den är inkopplad.",
   "Values for any ? placeholders in the SQL, in order.": "Värden till eventuella ?-platshållare i SQL:en, i ordning.",
   "Values for the $1, $2 … placeholders in the SQL, in order.": "Värden till platshållarna $1, $2 … i SQL:en, i ordning.",
   "Values for the ? placeholders in the SQL, in order.": "Värden till ?-platshållarna i SQL:en, i ordning.",
@@ -878,6 +998,28 @@ export const SV_FIELD_HELP: Record<string, string> = {
 };
 
 export const SV_ENUM_LABELS: Record<string, string> = {
+  "Write it out": "Skriv ut det",
+  "Round it": "Avrunda",
+  "As money": "Som pengar",
+  "As a percentage": "Som procent",
+  "To the nearest": "Till närmaste",
+  "Always up": "Alltid uppåt",
+  "Always down": "Alltid nedåt",
+  "UPPER CASE": "VERSALER",
+  "lower case": "gemener",
+  "Title Case": "Versal Inledning",
+  "Sentence case": "Meningsform",
+  "Tidy up the spaces": "Städa upp mellanrummen",
+  "Shorten it": "Korta av",
+  "Use this instead, when empty": "Använd det här i stället, när tomt",
+  "Find and replace": "Sök och ersätt",
+  "Split into pieces": "Dela i delar",
+  "Just this one page": "Bara den här sidan",
+  "Follow the Link header": "Följ Link-rubriken",
+  "Follow a field in the response": "Följ ett fält i svaret",
+  "Climb a page number": "Räkna upp ett sidnummer",
+  "Once, over everything": "En gång, över allt",
+  "Once per row": "En gång per rad",
   "Every row from the first list": "Varje rad från första listan",
   "Every row from the second list": "Varje rad från andra listan",
   "English": "Engelska",
@@ -1158,6 +1300,17 @@ export const SV_ENUM_LABELS: Record<string, string> = {
 };
 
 export const SV_CONNECTION_TEXT: Record<string, string> = {
+  "Who turns your text into numbers. Whichever you pick, every knowledge base is built with it — switching later means building the bases again.":
+    "Vem som gör din text till siffror. Vilken du än väljer byggs varje kunskapsbas med den — att byta senare betyder att baserna måste byggas om.",
+  "Embedding model": "Inbäddningsmodell",
+  "Embeddings from": "Inbäddningar från",
+  "Service address": "Tjänstens adress",
+  "Leave empty for the provider's default. Changing it means building your bases again — a base remembers the model that made it.":
+    "Lämna tomt för leverantörens standard. Ett byte betyder att baserna måste byggas om — en bas minns modellen som gjorde den.",
+  "Only for Ollama, or a proxy in front of one of the others. A localhost address also needs DAZYFLOW_ALLOW_PRIVATE_EGRESS on the daemon.":
+    "Bara för Ollama, eller en proxy framför någon av de andra. En localhost-adress kräver dessutom DAZYFLOW_ALLOW_PRIVATE_EGRESS på daemonen.",
+  "The key for the service above. Leave it empty for Ollama, which runs on your own machine.":
+    "Nyckeln till tjänsten ovan. Lämna tom för Ollama, som kör på din egen maskin.",
   "993 (SSL/TLS) or 143 (STARTTLS)": "993 (SSL/TLS) eller 143 (STARTTLS)",
   "An alternative to the fingerprint, if you already have an OpenSSH known_hosts line for this server.": "Ett alternativ till fingeravtrycket, om du redan har en OpenSSH-known_hosts-rad för den här servern.",
   "Calendar": "Kalender",

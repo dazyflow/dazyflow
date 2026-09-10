@@ -10,6 +10,189 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **Change a number.** Rounding was reachable through a formula; writing a
+  number for the person who reads it was not reachable at all. 1,234.50 in
+  English is 1 234,50 in Swedish, money goes $1,234.50 in one and 1 234,50 kr
+  in the other, and a Swedish customer emailed an English number reads it as a
+  mistake. The step follows the flow's own language unless you set Language on
+  it — the same rule the Date & time step already uses.
+
+  Four things: write it out with fixed decimals and grouped thousands, round it
+  (to the nearest, or always up or down for the answers that have to cover
+  something — boxes to order, a price ceiling), as money, or as a percentage.
+  Rounding is the one that changes the number, so the number comes out on its
+  own port alongside the text: a rounded value can be multiplied without being
+  parsed back out of its own formatting.
+
+  The thousands separator is an ordinary space, not the non-breaking one
+  typography asks for. An invisible non-ASCII character survives an email and
+  then quietly breaks a spreadsheet lookup, a CSV column and every comparison
+  downstream, with nothing on screen to explain why. A number that arrives as
+  text is read as a number, including the forms people actually write —
+  "1 234,50", "1,234.50", "1.234,50".
+
+- **Knowledge: let a flow answer from your own documents.** The retrieval half
+  of what Dify calls a knowledge base, and the last thing on the porting list
+  with no answer here at all. **Add documents** cuts a document into passages,
+  turns each into numbers that capture what it is about, and stores them in a
+  knowledge base in the workspace. **Find related** takes a question, finds the
+  passages closest to it in meaning, and hands them over already joined and
+  ready for a prompt — wire that into ChatGPT or Claude and the answer rests on
+  your handbook rather than the model's memory.
+
+  Two steps rather than six, because the embedding provider is part of a
+  **Knowledge** connection you make once — ChatGPT, Gemini, or Ollama on your
+  own machine — instead of a separate pair of steps per provider. That also
+  buys the thing correctness needs: a base records the model that built it and
+  refuses a question embedded by another, since numbers from two models are not
+  comparable and ranking them would be ranking noise. Connecting embeds a probe
+  string, so "Connected" means the key, the model name and the address all work
+  together.
+
+  Adding the same source twice replaces its passages rather than duplicating
+  them, so a nightly re-read keeps a base current; a document with no source of
+  its own is identified by its own fingerprint, so adding it twice stores it
+  once. Passages live beside your Collections in the workspace — a plain file,
+  backed up with everything else, no database to provision. A search reads and
+  scores every passage in the base, which answers a thousand of them in tens of
+  milliseconds; past twenty thousand in one base the step says so rather than
+  quietly getting slow.
+
+- **Expression points somewhere you can actually go.** Its description ended
+  by sending you to the Shell step, which is unregistered unless the operator
+  sets `DAZYFLOW_ENABLE_SHELL` — so most readers were pointed at a step they
+  could not see. It now names Code for anything longer than a line, and Run on
+  your machine for work that needs a network or a library.
+
+- **Switch can route on a condition, not just a value.** Each of its eight
+  matches took a value to be equal to, so "amount over 100" needed an If in
+  front of it and "paid AND over 100" needed two — which is why a Zapier Path
+  could not be brought over as one step. A match now takes either a value to
+  look for, as before, or a **Condition** written with the same visual editor
+  Find, Split rows and Route rows already show. First match still wins, so the
+  strict one goes above the loose one.
+
+  The condition sees the whole incoming value as `row`, which is what the
+  editor's own output expects; a plain number or piece of text reads as
+  `row.value`, since an editor that speaks in fields has no other way to say
+  anything about one. Every existing Switch keeps working — a match with a
+  value is exactly what it always was — and the two kinds can sit in the same
+  step.
+
+- **Look up.** Turning a value into another value — country code to country
+  name, plan to discount, status code to words a person can read — meant an
+  eight-case Switch or a chain of formulas, neither of which survives a table of
+  twenty rows. **Look up** takes the table as pairs and swaps the value on its
+  way through. Capitalisation is ignored unless you ask for it, so a table typed
+  by hand matches what an API sends. Anything unlisted takes the fallback, or —
+  with no fallback — leaves on a separate **No match** output carrying its own
+  value, so a flow can handle the unknown ones instead of pretending they were
+  fine. Exactly one of the two outputs fires.
+
+- **Change text.** The small text jobs, without writing a formula: upper case,
+  lower case, Title Case and Sentence case (both of which lower the rest first,
+  so a name shouted in capitals comes out readable), tidy up the spaces — both
+  ends and the runs in the middle, which is the fix for text pasted out of a web
+  page — shorten to a length, fill in a blank when the text arrived empty, find
+  and replace plainly, and split into pieces. Splitting hands the pieces back
+  twice over: as a list, and as rows, so a comma-separated line becomes
+  something a loop can walk. All of it was reachable through CEL before; none of
+  it was reachable without learning CEL.
+
+- **A digest: pile things up now, send them together later.** The one Zapier
+  built-in with no equivalent here. Entries arrive one at a time over hours and
+  have to leave together, which no single flow can hold — so it is two steps in
+  two flows sharing a collection. **Add to a digest** puts a row, a record or a
+  line of text aside and emits nothing but a count, because the point is that
+  the flow does not act now. **Take the digest**, after a Schedule trigger,
+  hands over everything and empties the pile in the same transaction, so an
+  entry cannot go out twice and a failure leaves the pile intact for next time.
+
+  An empty digest fires a separate **Nothing there** output rather than an
+  empty list, so a quiet night sends no email unless you deliberately wire that
+  side up. Entries live in an ordinary collection called `digest_<name>` —
+  browsable in-app while they wait, and prefixed so naming a digest after a
+  collection you already keep cannot empty that collection.
+
+- **Collections can delete.** Rows could be saved and read but never tidied, so
+  anything a flow remembered piled up for good. **Delete rows** takes the same
+  visual conditions the Find step uses. Emptying a collection whole is
+  deliberately harder: with no condition the step refuses unless **Delete every
+  row** is also on. The collection itself survives, so the flow that fills it
+  keeps working.
+
+- **Delay can wait until a moment, not just for a while.** `Wait until` takes
+  the same time words the calendar steps do — `tomorrow`, `tomorrow+9h` for
+  tomorrow morning, `now+2h`, `+3d`, or a timestamp the Date & time step handed
+  you — with a timezone deciding which day `tomorrow` means. A moment already
+  past carries straight on rather than failing, so a flow that ran late still
+  finishes. The wait defers exactly as a duration does: a flow parked until
+  Monday hands its worker back and costs nothing while it waits.
+
+- **Read a web page.** A page could be fetched and watched for changes, but
+  nothing could say "the price is in `.product-price`". Extracting anything
+  from HTML meant a regular expression against markup — which works right up
+  until the page adds a space.
+
+  **Read a web page** takes the HTML and a list of CSS selectors, the same ones
+  a browser's inspector hands you. Each value is written `selector@attribute`,
+  both halves optional: `.price` for text, `a@href` for a link's address,
+  `@data-id` for an attribute of the element itself, `@html` for its inner
+  markup. Name no row selector and you get one record read from the whole page;
+  name the thing that repeats — `.product`, `table tbody tr` — and you get one
+  row per match with every field read inside it, which is the shape Choose &
+  rename columns, Write CSV, Sheets and the database steps already take. Set
+  the page address and a relative link comes out whole.
+
+  A selector that cannot be read fails the step naming the field it belongs to,
+  rather than quietly matching nothing and filling a column with blanks — which
+  is what the underlying library does on its own, and is indistinguishable from
+  a page that changed shape.
+
+- **Web request can fetch every page.** An API that answers in pages had no
+  answer here at all: the graph is a DAG, so "fetch, and fetch again while
+  there is a next page" has nowhere to live as a wire, and the three steps that
+  do paginate (GitHub issues, Gmail search, Notion queries) each did it
+  privately, out of reach of every other API.
+
+  **Fetch every page** puts the loop inside the step. Pick how the API says
+  where the next page is — a `Link` header, a field in the response body (a
+  cursor or a whole address), or a page number that climbs until a page comes
+  back empty — and point **Where the items are** at the list on each page. What
+  comes out of Response is every page's items joined into one list, ready for
+  the row steps.
+
+  Every bound a loop that talks to someone else's server needs is in place: a
+  page ceiling (ten by default, a hundred at most), the step's time limit and
+  response-size limit spent across all the pages together rather than granted
+  afresh for each one, a fresh private-address and allowlist check on every hop
+  — the next address comes from the server, so it is as untrusted as any other
+  field in the response — and an early stop when an API offers itself as its
+  own next page. An unpaginated call is untouched.
+
+- **A Code step.** Between a one-line formula and a machine you host there was
+  nothing: `Expression` computes a single value, `Run on your machine` needs a
+  runner, and the `shell` drop is rightly switched off on a shared deployment.
+  So the most common step on every other automation platform — Zapier's Code,
+  n8n's Code, Dify's Code — had no answer here, and any flow built around one
+  could not be brought over.
+
+  **Code** runs JavaScript inside Dazyflow. The value wired into `in` arrives as
+  `input`, whatever you `return` leaves on `out`, and `console.log` writes to
+  the run log while the flow runs. It runs once over the whole input, or once
+  per row with the row as `row` and its position as `index` — and in per-row
+  mode returning nothing drops the row, so one step filters and transforms at
+  once.
+
+  It has no way out of the process: no network, no files, no imports. That is
+  the point — call APIs with **Web request**, read files with the file steps,
+  then wire the result in. A script is held to five seconds by default (thirty
+  at most) and to 8 MB of returned data; past either, the step fails instead of
+  holding a worker. Work that genuinely needs a library or a network still
+  belongs on **Run on your machine**.
+
 ### Fixed
 
 - **Wires to a folded drop no longer go missing when a flow opens.** The editor

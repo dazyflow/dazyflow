@@ -7,10 +7,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
+	"github.com/google/cel-go/cel"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
+	"github.com/dazyflow/dazyflow/internal/rowcel"
 )
 
 // Switch is the N-way value router — the multi-case sibling of Branch. It
@@ -19,9 +23,18 @@ import (
 // `default`. Use it instead of chaining Branches when you fan one payload out by
 // a status/enum/category.
 //
-// Matching reuses Compare's evaluator (looseEqual / inSet), so Switch can never
-// drift from Compare's equality semantics: a case `equals` that is a list
-// matches any element, a scalar matches by loose equality.
+// A case says what it wants in one of two ways. `equals` is the plain one, and
+// reuses Compare's evaluator (looseEqual / inSet) so Switch can never drift
+// from Compare's equality semantics: a list matches any element, a scalar
+// matches by loose equality. `filter` is the richer one — the same visual
+// row-condition the Find, Split rows and Route rows steps show, compiled by
+// internal/rowcel — for the cases equality cannot state: a threshold, a
+// combination, a field that must merely exist.
+//
+// The incoming value is bound to `row` for a condition, so the builder's own
+// output (row.<field> op value) works unchanged. A value that is not an object
+// is wrapped as {"value": …}, which is the only way a builder that speaks in
+// fields can say anything about a bare number.
 //
 // Output slots are fixed (`case_1..case_8` + `default`) for the same reason as
 // route_rows: variadic-by-name output handles need editor support that isn't
@@ -50,13 +63,18 @@ func init() {
 			Category:    "flow_control",
 			Provider:    "internal",
 			Tags:        []string{"conditional", "routing", "switch", "case", "multiway"},
-			Description: "Send one value down a different path depending on what it is — the multi-way version of Branch. Where Branch has a yes and a no, Switch has up to eight matches: you give each one a value to look for, and whatever comes in leaves on the first match whose value it equals. Anything equal to none of them leaves on Everything else.\n\nBy default the whole incoming value is what gets matched. Set \"What to match on\" to compare just one field of it instead — an order's status, say — and the whole order still travels onward; the field only decides which path it takes. A match can also hold a list of values, and then anything equal to ANY of them takes that path (200, 201 and 204 all going one way).\n\nFirst match wins, so if two of them could apply, the earlier one takes it. Reach for this instead of chaining Branch steps when you are fanning one payload out by a status, a category or a type.",
+			Description: "Send one value down a different path depending on what it is — the multi-way version of Branch. Where Branch has a yes and a no, Switch has up to eight matches, and whatever comes in leaves on the FIRST one it satisfies. Anything satisfying none of them leaves on Everything else.\n\nEach match says what it wants in one of two ways. Give it a value to look for and the path is taken by anything equal to it — one value (\"paid\", 200, true), or a list ([200,201,204]) if several should all go the same way. Or set a condition instead, with the same editor the row steps use, for what equality cannot say: amount over 100, status paid AND country SE, a field that merely has to be there.\n\nBy default the whole incoming value is what a value-match compares. Set \"What to match on\" to compare just one field of it instead — an order's status, say. Either way the whole order travels onward; this only decides which path it takes. A condition always sees the whole value, as `row` — so `row.status == 'paid' && row.amount > 100`. When what comes in is a plain number or text rather than an object, a condition reads it as `row.value`.\n\nFirst match wins, so if two of them could apply, the earlier one takes it — put the strict match before the loose one, or the loose one swallows what the strict one was meant to catch.",
 			Summary:     "Route the input payload to one of N case ports by matching a key against each case value; unmatched goes to default.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Route an order by status",
 					Params: json.RawMessage(`{"field":"status","cases":[{"slot":"case_1","equals":"paid"},{"slot":"case_2","equals":"refunded"},{"slot":"case_3","equals":"failed"}]}`),
 					Notes:  "Connect the order into 'in'. A paid order rides out case_1; anything not paid/refunded/failed goes to default. The whole order travels — field only selects what to match on.",
+				},
+				{
+					Title:  "Route by a condition, not just a value",
+					Params: json.RawMessage(`{"cases":[{"slot":"case_1","filter":"row.status == 'paid' && row.amount > 100"},{"slot":"case_2","filter":"row.status == 'paid'"},{"slot":"case_3","filter":"row.status == 'refunded'"}]}`),
+					Notes:  "The strict match comes first: a paid order over 100 takes case_1, and only a smaller paid one falls through to case_2.",
 				},
 				{
 					Title:  "Group HTTP statuses, match-any per case",
@@ -83,9 +101,10 @@ func init() {
 							"type":"object",
 							"properties":{
 								"slot":{"type":"string","title":"Path to send it down","description":"Which output it leaves on when this match wins. \"case_1\" is the pin labelled Match 1, \"case_2\" is Match 2, and so on up to \"case_8\"."},
-								"equals":{"title":"Value to look for","description":"What has to be equal for this path to be taken — one value (\"paid\", 200, true), or a list ([200,201,204]) if several values should all take the same path."}
+								"equals":{"title":"Value to look for","description":"What has to be equal for this path to be taken — one value (\"paid\", 200, true), or a list ([200,201,204]) if several values should all take the same path. Use a condition instead when equality cannot say what you mean."},
+								"filter":{"type":"string","format":"row-condition","title":"Condition","description":"The condition that has to hold for this path to be taken — row.amount > 100, or row.status == 'paid' && row.country == 'SE'. The incoming value is 'row'; a plain number or text reads as row.value. Set this OR a value to look for, not both."}
 							},
-							"required":["slot","equals"]
+							"required":["slot"]
 						}
 					},
 					"field":{"type":"string","title":"What to match on","description":"Which field of the incoming value to compare — status, say, or customer.country for a field inside a field. Leave it empty to compare the whole value. Either way the whole value travels onward; this only decides which path it takes.","x_advanced":true}
@@ -105,6 +124,10 @@ func init() {
 type switchCase struct {
 	slot   string
 	equals any
+	// Exactly one of equals/filter is set; prog is the compiled filter.
+	hasEquals bool
+	filter    string
+	prog      cel.Program
 }
 
 // executeSwitch matches the key (the whole `in` payload, or the field of it
@@ -128,10 +151,24 @@ func executeSwitch(_ context.Context, job core.Job, _ chan<- core.Progress) (cor
 	if err != nil {
 		return params.Err(job, "bad_input", err.Error()), nil
 	}
+	// A condition always sees the whole value, whatever `field` says: `field`
+	// picks what a VALUE-match compares, and a condition names its own fields.
+	scope := conditionScope(payload.Inline)
 
 	slot := switchDefaultSlot
-	for _, c := range cases {
-		if matchCase(key, c.equals) {
+	for i, c := range cases {
+		var hit bool
+		if c.hasEquals {
+			hit = matchCase(key, c.equals)
+		} else {
+			ok, err := rowcel.EvalBool(c.prog, scope)
+			if err != nil {
+				return params.Err(job, "eval",
+					fmt.Sprintf("cases[%d] (slot %q): %v", i, c.slot, err)), nil
+			}
+			hit = ok
+		}
+		if hit {
 			slot = c.slot
 			break // first-match-wins
 		}
@@ -142,6 +179,16 @@ func executeSwitch(_ context.Context, job core.Job, _ chan<- core.Progress) (cor
 		Status: core.StatusOK,
 		Output: map[string]core.Ref{slot: payload},
 	}, nil
+}
+
+// conditionScope is what a condition sees. An object is itself; anything else
+// is wrapped, so the row-condition builder — which can only write row.<field>
+// — can still say something about a bare number or a list.
+func conditionScope(payload any) map[string]any {
+	if m, ok := payload.(map[string]any); ok {
+		return m
+	}
+	return map[string]any{"value": payload}
 }
 
 func matchCase(key, equals any) bool {
@@ -183,10 +230,30 @@ func parseSwitchCases(p map[string]any) ([]switchCase, error) {
 		if _, ok := valid[slot]; !ok {
 			return nil, fmt.Errorf("cases[%d]: slot %q is not a known output port (use one of case_1..case_%d)", i, slot, switchSlotCount)
 		}
-		if _, has := obj["equals"]; !has {
-			return nil, fmt.Errorf("cases[%d] (slot %q): missing 'equals'", i, slot)
+		_, hasEquals := obj["equals"]
+		filter, _ := obj["filter"].(string)
+		filter = strings.TrimSpace(filter)
+		switch {
+		case hasEquals && filter != "":
+			return nil, fmt.Errorf("cases[%d] (slot %q): has both a value to look for and a condition — keep the one you meant", i, slot)
+		case !hasEquals && filter == "":
+			return nil, fmt.Errorf("cases[%d] (slot %q): needs a value to look for or a condition", i, slot)
 		}
-		cases = append(cases, switchCase{slot: slot, equals: coerceLiteral(obj["equals"])})
+		c := switchCase{slot: slot, hasEquals: hasEquals, filter: filter}
+		if hasEquals {
+			c.equals = coerceLiteral(obj["equals"])
+		} else {
+			env, err := rowcel.Env()
+			if err != nil {
+				return nil, fmt.Errorf("cases[%d] (slot %q): %v", i, slot, err)
+			}
+			prog, err := rowcel.Compile(env, filter, "condition")
+			if err != nil {
+				return nil, fmt.Errorf("cases[%d] (slot %q): %v", i, slot, err)
+			}
+			c.prog = prog
+		}
+		cases = append(cases, c)
 	}
 	return cases, nil
 }

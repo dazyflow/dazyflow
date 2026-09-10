@@ -162,12 +162,15 @@ func baseOr(base string) string {
 
 func init() {
 	llm.Register(llm.ProviderInfo{
-		Name:         "gemini",
-		Integration:  "Gemini",
-		DefaultModel: defaultModel,
-		Models:       geminiModels,
-		ListModels:   listModels,
-		Provider:     provider{},
+		Name:              "gemini",
+		Integration:       "Gemini",
+		DefaultModel:      defaultModel,
+		Models:            geminiModels,
+		ListModels:        listModels,
+		Provider:          provider{},
+		Embedder:          embedder{},
+		DefaultEmbedModel: defaultEmbedModel,
+		EmbedModels:       embedModels,
 	})
 	llmtask.RegisterAll(llmtask.Config{
 		Provider:       provider{},

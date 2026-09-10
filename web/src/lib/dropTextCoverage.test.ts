@@ -87,13 +87,13 @@ describe("Swedish port labels", () => {
   // Labels that read the same in Swedish. Not a to-do list: each of these is a
   // deliberate decision that translating would be wrong or pointless.
   //
-  //   file formats and protocols — CSV, JSON, PDF, XML, URL
+  //   file formats and protocols — CSV, HTML, JSON, PDF, XML, URL
   //   loanwords Swedish uses unchanged — Data, Diff, Order, Plan, Prompt,
   //     Status, Text, Commits, Start (which pairs with "Slut" for End)
   //   the bare operands of a comparison — A, B
   //   a standard's own name — E.164
   const SAME_IN_SWEDISH = new Set([
-    "A", "B", "CSV", "Commits", "Data", "Diff", "E.164", "JSON", "Order",
+    "A", "B", "CSV", "Commits", "Data", "Diff", "E.164", "HTML", "JSON", "Order",
     "PDF", "Plan", "Prompt", "Start", "Status", "Text", "URL", "XML",
     "YAML",
   ]);
@@ -230,7 +230,8 @@ const TYPED_VALUES = new Set([
   "nominatim", "nominatim (default)", "none", "oc", "oc-playground", "photon",
   "postgres://user:pass@host:5432/db", "production", "reports@example.com",
   "sftp.example.com", "sk-ant-…", "sk-…", "sk_live_… / sk_test_…",
-  "smtp.example.com", "starttls", "tcp://broker.example.com:1883", "u…",
+  "sk-… / AIza…", "smtp.example.com", "starttls",
+  "tcp://broker.example.com:1883", "text-embedding-3-small", "u…",
   "user:pass@tcp(host:3306)/db",
 ]);
 

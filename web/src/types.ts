@@ -205,6 +205,8 @@ export type JSONSchema = {
   // Confirm before deleting a row.
   x_confirm_remove?: boolean;
   x_lang_param?: string;
+  // A fixed language for a script box, when the step runs only one.
+  x_lang?: string;
   x_columns_source?: "collection";
 };
 

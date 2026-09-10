@@ -14,6 +14,7 @@ package drops
 import (
 	_ "github.com/dazyflow/dazyflow/drops/caldav"
 	_ "github.com/dazyflow/dazyflow/drops/claude"
+	_ "github.com/dazyflow/dazyflow/drops/code"
 	_ "github.com/dazyflow/dazyflow/drops/datetime"
 	_ "github.com/dazyflow/dazyflow/drops/db"
 	_ "github.com/dazyflow/dazyflow/drops/discord"
@@ -32,6 +33,7 @@ import (
 	_ "github.com/dazyflow/dazyflow/drops/homeassistant"
 	_ "github.com/dazyflow/dazyflow/drops/io"
 	_ "github.com/dazyflow/dazyflow/drops/klarna"
+	_ "github.com/dazyflow/dazyflow/drops/knowledge"
 	_ "github.com/dazyflow/dazyflow/drops/mailbox"
 	_ "github.com/dazyflow/dazyflow/drops/mqtt"
 	_ "github.com/dazyflow/dazyflow/drops/net"

@@ -50,6 +50,7 @@ import {
   MessageSquare,
   Activity,
   Binary,
+  Layers,
   Braces,
   Building2,
   Calendar,
@@ -145,6 +146,8 @@ const iconRegistry: Record<string, LucideIcon> = {
   // Every glyph a drop manifest can name; a missing one falls back to a default.
   "activity": Activity,
   "binary": Binary,
+  "layers": Layers,
+  "type": Type,
   "braces": Braces,
   "building-2": Building2,
   "calendar": Calendar,

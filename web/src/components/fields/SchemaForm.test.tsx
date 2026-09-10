@@ -522,6 +522,28 @@ describe("SchemaForm — the runner step's fields", () => {
     expect(container.querySelector(".dz-s-keyword")).toHaveTextContent("import");
     expect(container.querySelector(".dz-s-comment")).toHaveTextContent("# go");
   });
+
+  // A step that runs exactly one language (the Code step runs JavaScript, and
+  // only JavaScript) names it on the field. Without x_lang the box falls back
+  // to shell, and JavaScript reads as unhighlighted text.
+  it("colours a fixed-language script box without a sibling to ask", () => {
+    const fixed: JSONSchema = {
+      type: "object",
+      properties: {
+        code: { type: "string", format: "script", x_lang: "javascript", title: "JavaScript" },
+      },
+    } as JSONSchema;
+    const { container } = render(
+      <SchemaForm
+        schema={fixed}
+        value={{ code: "const x = 1; // go" }}
+        onChange={() => {}}
+      />,
+    );
+    expect(container.querySelector(".dz-code-editor textarea")).toHaveValue("const x = 1; // go");
+    expect(container.querySelector(".dz-s-keyword")).toHaveTextContent("const");
+    expect(container.querySelector(".dz-s-comment")).toHaveTextContent("// go");
+  });
 });
 
 describe("SchemaForm — a two-way choice", () => {

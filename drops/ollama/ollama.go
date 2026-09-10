@@ -126,11 +126,13 @@ func baseOr(base string) string {
 
 func init() {
 	llm.Register(llm.ProviderInfo{
-		Name:         "ollama",
-		Integration:  "Ollama",
-		DefaultModel: defaultModel,
-		ListModels:   listModels,
-		Provider:     provider{},
+		Name:              "ollama",
+		Integration:       "Ollama",
+		DefaultModel:      defaultModel,
+		ListModels:        listModels,
+		Provider:          provider{},
+		Embedder:          embedder{},
+		DefaultEmbedModel: defaultEmbedModel,
 	})
 	llmtask.RegisterAll(llmtask.Config{
 		Provider:           provider{},

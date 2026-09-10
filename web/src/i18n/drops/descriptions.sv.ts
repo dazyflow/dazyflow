@@ -57,6 +57,10 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "878f559c",
     sv: "Spara rader i en samling — ingen databas att sätta upp och ingen anslutningssträng att klistra in. Välj ett namn på samlingen och raderna hamnar där; samlingen skapas automatiskt första gången. Varje arbetsyta har sina egna privata Samlingar, och de sparade raderna visas under Samlingar så att du kan bläddra i dem i appen. Varje rad stämplas med tidpunkten då den sparades (kolumnen saved_at) så att du kan sortera med de nyaste först. Som standard läggs rader till vid varje körning; sätt \"Unik enligt\" till en nyckelkolumn (t.ex. datum) så uppdateras en rad med samma nyckel på plats i stället för att bli en dubblett — så att en ny körning av flödet förblir idempotent.",
   },
+  builtin_store_delete: {
+    en: "74fb1936",
+    sv: "Ta bort rader ur en samling. Hittills gick en samling att skriva till och läsa ur men aldrig att städa, så allt ett flöde kom ihåg — ordrarna det redan hanterat, adresserna det redan mejlat — låg kvar för gott.\n\nSätt \"Var\" med samma visuella villkor som steget Hitta rader använder, så försvinner bara de rader som matchar. Ett vanligt villkor är ålder: behåll den senaste månaden genom att ta bort där saved_at är före det datum du vill ha.\n\nAtt ta bort allt är med flit svårare: lämnar du \"Var\" tomt vägrar steget om du inte också slår på \"Ta bort varje rad\". Själva samlingen blir kvar, så flödet som fyller den fortsätter fungera.",
+  },
   builtin_store_find: {
     en: "405cf2a0",
     sv: "Läs tillbaka rader ur en samling utan att skriva någon SQL. Välj samlingen och lägg till enkla villkor — som att status är lika med obetald, eller att belopp är större än 100 — i den visuella redigeraren, och de matchande raderna kommer ut. Du kan också sortera på en kolumn och begränsa hur många rader du får. Det vänliga syskonet till \"Spara rader\"; ta \"Fråga med SQL\" när du vill skriva ren SQL.",
@@ -105,6 +109,10 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "f67a4a74",
     sv: "Mata in vilken text som helst — ett mejl, ett dokument, en rad med anteckningar — och få tillbaka en kort sammanfattning. Välj hur kort den ska vara och om du vill ha en mening, ett stycke eller punktlista. Koppla en PDF eller en bild till Filer — en fakturerad bilaga, ett skannat kvitto, en skärmbild — och steget läser filen självt i stället för bara text om den.",
   },
+  code: {
+    en: "7b6de586",
+    sv: "Skriv lite JavaScript när de färdiga stegen inte kan säga det du menar. Värdet som kopplas in på 'in' kommer fram som `input`, och det du returnerar med `return` går ut på 'out' — ett objekt, en lista, ett tal, en text, ett ja/nej. `console.log(…)` skriver till körningsloggen, så du ser vad koden såg.\n\nVälj hur det körs. 'En gång, över allt' ger dig hela indatat på en gång — ta det för att forma om ett svar, räkna över en lista eller bygga ett värde som inget annat steg kan. 'En gång per rad' kör koden en gång per rad i stället, med raden som `row` och dess position som `index`, och samlar det du returnerar i en ny lista; returnerar du ingenting för en rad faller den raden bort, vilket gör det här till både filter och omvandling.\n\nDet körs inne i Dazyflow utan väg ut: inget nätverk, inga filer, inga bibliotek att importera. Det är med avsikt — anropa API:er med steget Webbanrop och läs filer med filstegen, och koppla sedan in resultatet här. Skript får några sekunder som standard (höj Tidsgräns till som mest 30 sekunder) och 8 MB returnerad data. Behöver du en riktig körmiljö, ett bibliotek eller ett nätverk använder du Kör på din maskin i stället.\n\nFör ett enda värde — lite räkning, ett fält som ska plockas ut — är steget Uttryck lättare, och Lägg till en beräknad kolumn gör samma sak per rad helt utan kod.",
+  },
   compare: {
     en: "e6392d92",
     sv: "Jämför två värden, A och B, och skicka ut sant eller falskt på Ja/Nej-utgången. Välj testet i en lista på vanlig svenska — är lika med, är större än, innehåller, är någon av, ligger inom intervall och mer. Koppla A och B från tidigare steg, eller skriv ett fast standardvärde direkt på steget. Kombinera Ja/Nej-utgången med ett Förgrening-steg (koppla Ja/Nej till Förgrenings villkorsingång) för att dirigera.",
@@ -130,8 +138,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Ta bort dubblettrader. Som standard är två rader dubbletter när varje cell stämmer; med 'by' angivet räcker det att de listade kolumnerna är lika. 'keep' väljer vilken kopia i en dubblettgrupp som får leva vidare: \"first\" (standard) eller \"last\". Ordningen från indatat bevaras för de rader som blir kvar.",
   },
   delay: {
-    en: "d05d99e0",
-    sv: "Pausa en valfri tid och skicka sedan det genomströmmade värdet vidare på vidarekopplingsutgången (eller skicka en styrsignal när inget värde är inkopplat, så att en ren pausning ändå startar nästa steg).",
+    en: "020fb339",
+    sv: "Pausa, och fortsätt sedan — värdet som trädits igenom kommer ut på andra sidan (eller en styrsignal när inget är trätt igenom, så att en ren paus ändå utlöser nästa steg).\n\nSäg hur länge med \"Vänta\", i millisekunder, för de korta pauserna: ett mellanrum mellan två API-anrop, ett ögonblick för ett system att komma ikapp.\n\nSäg NÄR i stället med \"Vänta till\", för de långa. Det tar samma tidsord som kalenderstegen — \"tomorrow\", \"tomorrow+9h\" för imorgon bitti, \"now+2h\", \"+3d\", eller en tidsstämpel som steget Datum och tid gett dig — och \"Tidszon\" avgör vilken dag \"tomorrow\" betyder. Ett ögonblick som redan passerat ger inget fel; flödet fortsätter helt enkelt direkt.\n\nEn väntan längre än en sekund lämnar tillbaka sin arbetsplats och ber att bli väckt vid tidpunkten, så ett flöde som parkerats till på måndag kostar ingenting medan det väntar. Ett år är taket i båda fallen — för längre använder du en Schema-utlösare.",
   },
   discord_send_message: {
     en: "4cb76288",
@@ -152,6 +160,14 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   elks_send_sms: {
     en: "de5e8cf8",
     sv: "Skicka ett SMS via 46elks. Mottagaren ('Till') och meddelandet ('Meddelande') kan skrivas på steget eller kopplas in från ett tidigare steg (motsvarande ingång vinner över parametern). 'Från' är antingen ett av dina 46elks-nummer (E.164, som +46700000000) eller ett alfanumeriskt avsändarnamn (upp till 11 tecken, t.ex. \"Acme\" — måste innehålla en bokstav, och mottagarna kan inte svara på det). Anslut ditt 46elks-konto en gång på Appar-sidan. Sätt 'Testkörning' för att validera utan att skicka (eller bli fakturerad).",
+  },
+  digest_add: {
+    en: "127ed670",
+    sv: "Lägg undan något som ska skickas senare, tillsammans med allt annat som hinner komma in innan dess. Det klassiska fallet är den dagliga sammanställningen: varje ny lead, fel eller order lägger till en rad här när den händer, och ett enda schemalagt flöde skickar hela högen klockan nio på morgonen.\n\nNamnge sammandraget och koppla in det som ska sparas — en radlista, en enskild post, eller bara en text, som sparas i en kolumn som heter value. Varje post stämplas med tiden den lades till. Inget går ut ur det här steget utom antalet, för hela poängen är att flödet INTE gör något nu.\n\nDen andra halvan är \"Hämta sammandraget\", i ett flöde med en Schema-utlösare: det lämnar över allt som samlats och tömmer sammandraget på en gång. Posterna ligger i en vanlig samling som heter \"digest_<namn>\", så du kan titta igenom dem under Samlingar medan de väntar.",
+  },
+  digest_take: {
+    en: "4bbf3b06",
+    sv: "Lämna över allt ett sammandrag har samlat på sig, och töm det. Lägg det här efter en Schema-utlösare — nio på morgonen, måndag, den första i månaden — och koppla Poster vidare till det som skickar sammanställningen: Gör en tabell, Fyll i en mall, ett mejl, ett Slack-meddelande.\n\nHämtningen är allt-eller-inget: posterna läses och sammandraget töms i samma andetag, så samma post kan inte gå ut två gånger, och ett fel lämnar högen orörd till nästa gång.\n\nEtt tomt sammandrag utlöser INTE utgången Poster — det utlöser \"Inget där\" i stället, så en tyst natt skickar inget mejl alls om du inte medvetet kopplar den sidan. \"Hur många\" kommer ut i båda fallen.",
   },
   email: {
     en: "78cba9e8",
@@ -174,8 +190,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Skriv rader till en Excel-fil (.xlsx) i arbetsytan. Koppla in en radlista i ingången Rader; kolumnerna tas från ingången Rubriker eller härleds ur radernas fält. Slå på 'Lägg till i befintligt blad' för att lägga raderna under det som redan finns i stället för att skriva om filen från början.",
   },
   expression: {
-    en: "771d3f70",
-    sv: "Beräkna ett enda värde med en formel — motsvarigheten på värdenivå till steget för beräknade kolumner. Skriv ett CEL-uttryck (samma formelspråk som radverktygen använder) där det inkopplade 'in'-värdet finns som `input` och aktuell tid som `now`. Använd det för att forma om ett värde mitt i flödet: plocka ut ett fält (`input.user.email`), räkna (`input * 1.25`), bygga en sträng (`\"Hej \" + input.name`), testa ett villkor (`input.status == \"paid\"`) eller omvandla en lista (`input.map(x, x.id)`). Resultatet skickas ut på 'out', med den typ formeln ger (text, boolean eller JSON). För att köra riktiga OS-kommandon eller skript använder du Shell-steget i stället — det här är en säker uttrycksberäknare i sandlåda, inte en generell körmiljö för kod.",
+    en: "87dc9da9",
+    sv: "Beräkna ett enda värde med en formel — motsvarigheten på värdenivå till steget för beräknade kolumner. Skriv ett CEL-uttryck (samma formelspråk som radverktygen använder) där det inkopplade 'in'-värdet finns som `input` och aktuell tid som `now`. Använd det för att forma om ett värde mitt i flödet: plocka ut ett fält (`input.user.email`), räkna (`input * 1.25`), bygga en sträng (`\"Hej \" + input.name`), testa ett villkor (`input.status == \"paid\"`) eller omvandla en lista (`input.map(x, x.id)`). Resultatet skickas ut på 'out', med den typ formeln ger (text, boolean eller JSON). För mer än en enda rad — satser, en loop, ett värde som byggs upp i etapper — använder du steget Kod, som kör JavaScript i samma sandlåda utan väg ut; för arbete som behöver ett nätverk eller ett bibliotek Kör på din maskin. Det här är en säker formelberäknare i sandlåda, inte en generell körmiljö för kod.",
   },
   file_picker: {
     en: "d6b15454",
@@ -188,6 +204,14 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   file_write: {
     en: "7520b03a",
     sv: "Spara inkommande data som en fil i arbetsytan. Koppla in vad som helst i ingången Data — text, JSON eller en fil från ett annat steg — och det skrivs till den sökväg du väljer. Arbetsytans lagringsgränser respekteras.",
+  },
+  format_number: {
+    en: "55737318",
+    sv: "Avrunda ett tal, eller skriv ut det så som en människa läser det.\n\n\"Avrunda\" är den som ändrar själva talet — till ett antal decimaler, och uppåt eller nedåt i stället för till närmaste när du behöver ett pristak eller ett helt antal lådor. Allt annat ändrar bara hur det skrivs.\n\n\"Skriv ut det\" ger det ett fast antal decimaler och grupperar tusentalen. \"Som pengar\" lägger till valutan, och \"Som procent\" multiplicerar med hundra och lägger till tecknet — 0,25 blir 25 %.\n\nHur det skrivs beror på vem som läser: 1,234.50 på engelska är 1 234,50 på svenska, och pengar blir $1,234.50 i det ena och 1 234,50 kr i det andra. Steget följer flödets eget språk om du inte sätter \"Språk\" på det. Allt utom valutorna med ett eget tecken skrivs med sin kod, som på ett kontoutdrag.\n\nBåda kommer ut: texten på Resultat, och själva talet på Tal — så att ett avrundat värde kan jämföras eller summeras vidare utan att läsas tillbaka ur sin egen formatering.",
+  },
+  format_text: {
+    en: "79036be9",
+    sv: "De små textjobben, utan att skriva en formel. Välj vad som ska göras så kommer texten ut på andra sidan:\n\nVERSALER, gemener, Versal Inledning och Meningsform — de två sista sänker resten av ordet eller raden först, så ett namn skrivet med versaler kommer ut läsbart.\n\nStäda upp tar bort mellanslagen i båda ändarna och slår ihop följder av mellanslag, tabbar och radbrytningar i mitten till ett enda — fixen för text som klistrats in från en webbsida. Korta av klipper till ett antal tecken och lägger till en ellips bara om något faktiskt klipptes. Använd det här i stället byter in din text när det som kom in var tomt.\n\nSök och ersätt byter varje förekomst av en text mot en annan, rakt av — inget mönsterspråk, så en punkt betyder en punkt. Dela klipper texten vid en avgränsare och ger dig delarna som en lista, och som rader, så att \"a, b, c\" kan bli tre saker att loopa över.\n\nFör något med ett mönster i använder du steget Regex; för räkning på ett värde steget Uttryck.",
   },
   for_each: {
     en: "02f6eaea",
@@ -405,6 +429,18 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "696fd8aa",
     sv: "Skickar ut sant på Ja/Nej-utgången när det numeriska A är mindre än eller lika med B, annars falskt. Kombinera Ja/Nej-utgången med Förgrening för att dirigera.",
   },
+  knowledge_add: {
+    en: "be957412",
+    sv: "Lägg ett dokument där dina flöden kan ställa frågor till det. Texten klipps i avsnitt, varje avsnitt görs om till siffror som fångar vad det handlar om, och de hamnar i en kunskapsbas i den här arbetsytan.\n\nDöp basen efter vad som finns i den — handbok, priser, policyer. Vad som helst kan mata den: en sida läst med Läs en webbsida, texten ur en PDF, rader ur en samling, ett mejls innehåll.\n\n\"Varifrån det kom\" är det som identifierar ett dokument. Lägger du till samma källa igen ERSÄTTS dess avsnitt, de dubbleras inte, så en omläsning varje natt håller basen aktuell i stället för att odla en andra kopia av allt. Lämnar du det tomt används textens eget fingeravtryck, vilket betyder att samma dokument två gånger inte ändrar något.\n\nAnslut Kunskap en gång på Appar-sidan för att säga vem som gör inbäddningarna. En bas minns modellen som byggde den och blandar inte två — siffror från olika modeller går inte att jämföra, så ett byte av modell betyder att basen måste byggas om.",
+  },
+  knowledge_search: {
+    en: "b96bcde9",
+    sv: "Hitta de avsnitt i en kunskapsbas som har med en fråga att göra, och lämna dem till ett AI-steg att svara utifrån.\n\nDet här är hämtningshalvan av att ställa frågor till sina egna dokument. Koppla in frågan på 'query'; avsnitten kommer tillbaka på 'text', redan sammanfogade och redo att klistras in i en prompt, och på 'rows' ett per avsnitt med poäng och varifrån det kom. Koppla sedan 'text' till ChatGPT eller Claude tillsammans med frågan — \"svara bara utifrån det här\" — så vilar svaret på dina egna dokument i stället för på modellens minne. Koppla 'text' till AI-stegets Prompt och lägg frågan i dess Systemprompt, eller skriv en prompt som läser båda med ${upstream.<det här stegets id>.text}.\n\nDen matchar på betydelse snarare än på ord: \"hur mycket semester får jag\" hittar avsnittet om semesterdagar. Be om fler avsnitt när svaren blir tunna, färre när de blir vaga. \"Lägsta poäng\" sållar bort de svaga träffarna — runt 0,3 är ett rimligt golv för de flesta modeller, och ingenting alls är bättre än ett avsnitt om fel sak.\n\nBasen måste ha byggts med samma inbäddningsmodell som den här anslutningen använder; om den inte är det säger steget till i stället för att svara med struntprat.",
+  },
+  lookup: {
+    en: "95a7c663",
+    sv: "Gör om ett värde till ett annat med hjälp av en liten tabell du fyller i — landskod till landsnamn, plan till rabatt, statuskod till orden du vill att folk ska läsa.\n\nSkriv tabellen som par: det som kommer in till vänster, det som ska komma ut till höger. Koppla in värdet på 'in' så går träffen ut på 'out'. Stora och små bokstäver spelar ingen roll om du inte slår på \"Skilj på stora och små bokstäver\", så \"se\" hittar \"SE\".\n\nAllt som inte finns i tabellen tar \"När inget matchar\", om du sätter något. Lämnar du det tomt går värdet ut på utgången \"Ingen träff\" i stället, med det som kom in — så att ett flöde kan ta hand om de okända i stället för att låtsas att allt var bra. Exakt en av de två utgångarna utlöses, aldrig båda.\n\nFör en handfull vägar som var och en gör något olika använder du Växel; det här är till för att göra ett värde till ett annat och fortsätta.",
+  },
   map_rows: {
     en: "ae0d4c05",
     sv: "Forma om en radström mellan två steg: välj ut eller ta bort kolumner, byt namn, fyll i saknade värden, filtrera rader på likhet / olikhet / medlemskap. Alla operationer utgår från kolumnnamnen i INDATAT; namnbyten sker sist, så utdatat använder de nya namnen. Ren konfiguration, inget uttrycksspråk — täcker de flesta fallen av 'mina Excel-kolumner matchar inte mitt databasschema'.",
@@ -500,6 +536,10 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   parse_csv: {
     en: "ed343c3a",
     sv: "Gör om CSV-text till rader. Mata in ett HTTP-svar, innehållet i en nedladdad fil eller vilken kommaseparerad text som helst, och den tolkas till den vanliga formen med rader + rubriker som Sheets, Excel, Postgres och omvandlingsfamiljen använder. Som standard är första raden rubrikrad och namnger kolumnerna; sätt 'header' till false för data utan rubriker (kolumnerna blir col1, col2, …). 'delimiter' byter avgränsare — använd \"\\t\" eller \"tab\" för tabbseparerade värden, \";\" för europeiska CSV-filer. Rader som är kortare än rubriken fylls ut med tomma strängar; längre rader behåller sina extra celler under de utfyllda namnen.",
+  },
+  parse_html: {
+    en: "7d196a75",
+    sv: "Plocka ut de delar du vill ha ur en webbsida. Hämta sidan med steget Webbanrop, koppla in svaret här och namnge varje värde du vill ha med en CSS-väljare — samma sak som du skriver i webbläsarens inspektor.\n\nVarje fält skrivs `väljare@attribut`, och båda halvorna är valfria: \".price\" tar texten i första .price, \"a@href\" tar en länks adress, \"img@src\" en bilds, \"@data-id\" ett attribut på elementet självt och \"@html\" dess inre HTML. Ett fält som inte träffar något kommer ut tomt i stället för att misslyckas, så ett enda pris som saknas stoppar inte flödet.\n\nLämnar du \"Var varje rad finns\" tomt får du en enda post: fälten du namngav, lästa från hela sidan. Fyller du i väljaren för det som upprepas — ett produktkort, en tabellrad, en artikel — får du i stället en rad per träff, där varje fält läses inuti den raden. Det är formen radstegen vill ha, så resultatet går rakt in i Välj och byt namn på kolumner, Skriv CSV, Kalkylark eller en databas.\n\nSätt \"Sidans adress\" så kommer varje länk eller bild du plockar ut som en fullständig adress i stället för den halva som sidan bär. Alla värden är text, som i CSV.",
   },
   parse_json: {
     en: "7b8eb1e0",
@@ -714,8 +754,8 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     sv: "Kör ett annat flöde (med ID, i samma arbetsyta) som ett enda steg. Ingångarna på det här steget matas in på bestämda steg i barnflödet via input_map; bestämda utgångar i barnflödet blir det här stegets utgångar via output_map. Arbetaren startar barnflödet asynkront; föräldern parkeras tills barnet är klart.",
   },
   switch: {
-    en: "09302efc",
-    sv: "Skickar ett värde olika väg beroende på vad det är — flervalsvarianten av Gren. Där Gren har ett ja och ett nej har Flerval upp till åtta träffar: du ger var och en ett värde att leta efter, och det som kommer in lämnar steget på den första träff vars värde det är lika med. Det som inte är lika med någon av dem lämnar det på Allt annat.\n\nSom standard är det hela det inkommande värdet som matchas. Sätt \"Vad som ska matchas\" för att i stället jämföra bara ett fält av det — en orders status, till exempel — och hela ordern färdas ändå vidare; fältet avgör bara vilken väg den tar. En träff kan också innehålla en lista med värden, och då tar allt som är lika med NÅGOT av dem den vägen (200, 201 och 204 går alla samma väg).\n\nFörsta träffen vinner, så om två skulle kunna gälla tar den tidigare det. Ta det här i stället för att kedja Gren-steg när du grenar ut en nyttolast efter en status, en kategori eller en typ.",
+    en: "1ed992b5",
+    sv: "Skicka ett värde vidare olika vägar beroende på vad det är — flervägsvarianten av Förgrening. Där Förgrening har ett ja och ett nej har Växel upp till åtta matchningar, och det som kommer in går ut på den FÖRSTA som det uppfyller. Allt som inte uppfyller någon av dem går ut på Allt annat.\n\nVarje matchning säger vad den vill ha på ett av två sätt. Ge den ett värde att leta efter, så tas vägen av allt som är lika med det — ett värde (\"paid\", 200, true), eller en lista ([200,201,204]) om flera ska gå samma väg. Eller sätt ett villkor i stället, med samma editor som radstegen använder, för det likhet inte kan säga: belopp över 100, status paid OCH land SE, ett fält som bara måste finnas.\n\nSom standard är det hela det inkommande värdet som en värdematchning jämför. Sätt \"Vad som ska matchas\" för att jämföra bara ett fält av det i stället — en orders status, till exempel. Hur som helst reser hela ordern vidare; det här avgör bara vilken väg den tar. Ett villkor ser alltid hela värdet, som `row` — alltså `row.status == 'paid' && row.amount > 100`. När det som kommer in är ett vanligt tal eller en text i stället för ett objekt läser ett villkor det som `row.value`.\n\nFörsta matchningen vinner, så om två skulle kunna gälla tar den tidigare den — sätt den strikta matchningen före den lösa, annars slukar den lösa det som den strikta var tänkt att fånga.",
   },
   ticketmaster_on_new_event: {
     en: "e916ca6d",

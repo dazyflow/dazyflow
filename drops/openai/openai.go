@@ -94,11 +94,14 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 
 func init() {
 	llm.Register(llm.ProviderInfo{
-		Name:         "openai",
-		Integration:  "ChatGPT",
-		DefaultModel: defaultModel,
-		Models:       openaiModels,
-		Provider:     provider{},
+		Name:              "openai",
+		Integration:       "ChatGPT",
+		DefaultModel:      defaultModel,
+		Models:            openaiModels,
+		Provider:          provider{},
+		Embedder:          embedder{},
+		DefaultEmbedModel: defaultEmbedModel,
+		EmbedModels:       embedModels,
 	})
 	llmtask.RegisterAll(llmtask.Config{
 		Provider:       provider{},

@@ -37,6 +37,10 @@ import type { Vocabulary } from "../../lib/dropText";
 // import in dropText.loadVocabulary: an English reader never downloads it.
 
 export const SV_LABELS: Record<string, string> = {
+  "Change a number": "Ändra ett tal",
+  "Knowledge": "Kunskap",
+  "Change text": "Ändra text",
+  "Look up": "Slå upp",
   "A AND B": "A OCH B",
   "A OR B": "A ELLER B",
   "Calendar": "Kalender",
@@ -46,6 +50,7 @@ export const SV_LABELS: Record<string, string> = {
   "Add a calculated column": "Lägg till en beräknad kolumn",
   Branch: "Förgrening",
   "Choose & rename columns": "Välj och byt namn på kolumner",
+  Code: "Kod",
   "Collect loop results": "Samla resultat från loopen",
   Collections: "Samlingar",
   "Combine two lists": "Kombinera två listor",
@@ -71,6 +76,7 @@ export const SV_LABELS: Record<string, string> = {
   Phone: "Telefon",
   "Read YAML": "Läs YAML",
   "RSS / Atom feed": "RSS-/Atomflöde",
+  "Read a web page": "Läs en webbsida",
   "Read CSV": "Läs CSV",
   "Read JSON": "Läs JSON",
   "Read XML": "Läs XML",
@@ -99,6 +105,14 @@ export const SV_LABELS: Record<string, string> = {
 };
 
 export const SV_SUBTITLES: Record<string, string> = {
+  "Round it, or write it out": "Avrunda, eller skriv ut det",
+  "Add documents": "Lägg till dokument",
+  "Find related": "Hitta relaterat",
+  "Swap one value for another": "Byt ett värde mot ett annat",
+  "Upper case, trim, replace…": "Versaler, städa, ersätt …",
+  "Add to a digest": "Lägg i ett sammandrag",
+  "Take the digest": "Hämta sammandraget",
+  "Delete rows": "Ta bort rader",
   "A script, on a runner you host": "Ett skript, på en körnod du driver",
   "Add comment": "Lägg till kommentar",
   "Alert when a site breaks, and when it's back": "Larma när en sajt går ner, och när den är tillbaka",
@@ -117,6 +131,8 @@ export const SV_SUBTITLES: Record<string, string> = {
   "Company overview": "Företagsöversikt",
   "Company search": "Företagssökning",
   "Compute a value with a formula": "Beräkna ett värde med en formel",
+  "Pick values out of HTML": "Plocka ut värden ur HTML",
+  "Run a bit of JavaScript": "Kör lite JavaScript",
   "Create customer": "Skapa kund",
   "Create event": "Skapa händelse",
   "Create invoice": "Skapa faktura",
@@ -217,6 +233,17 @@ export const SV_SUBTITLES: Record<string, string> = {
 // spot an entry no drop reaches any more — a question portLabel() cannot be
 // asked, since it is only ever handed labels that DO exist.
 export const SV_PORTS: Record<string, string> = {
+  "Passages": "Avsnitt",
+  "Passages stored": "Lagrade avsnitt",
+  "Question": "Fråga",
+  "Where it came from": "Varifrån det kom",
+  "No match": "Ingen träff",
+  "Pieces": "Delar",
+  "Entries": "Poster",
+  "Entries added": "Tillagda poster",
+  "Nothing there": "Inget där",
+  "Rows deleted": "Borttagna rader",
+  "Wait until": "Vänta till",
   Address: "Adress",
   "After ID": "Efter ID",
   "Amount (display)": "Belopp (visning)",

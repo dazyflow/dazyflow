@@ -172,6 +172,27 @@
       "Optional: force a column's type (e.g. {\"age\":\"INTEGER\"}). Everything defaults to text, which is fine for most things."
     ]
   },
+  "builtin_store_delete": {
+    "description": "Remove rows from a collection. Until now a collection could be written to and read from but never tidied, so anything a flow remembered — the orders it has already handled, the addresses it has already mailed — piled up for good.\n\nSet 'Where' with the same visual conditions the Find step uses and only the matching rows go. A common one is age: keep the last month by deleting where saved_at is before the date you want.\n\nDeleting everything is deliberately harder: leave 'Where' empty and the step refuses unless you also turn on 'Delete every row'. The collection itself stays, so the flow that fills it keeps working.",
+    "ports": [
+      "Collection",
+      "Pass-through",
+      "Rows deleted"
+    ],
+    "label": "Collections",
+    "subtitle": "Delete rows",
+    "integration": "Collections",
+    "titles": [
+      "Collection",
+      "Delete every row",
+      "Where"
+    ],
+    "help": [
+      "Confirms that a step with no condition really is meant to empty the whole collection. Ignored when a condition is set.",
+      "Delete only the rows that match these conditions. Leave empty to mean every row — which the step will not do unless 'Delete every row' is also on.",
+      "Name of the collection to delete from. Overridden by a value connected into the Collection input."
+    ]
+  },
   "builtin_store_find": {
     "description": "Read rows back out of a collection without writing any SQL. Pick the collection, then add simple conditions — like status equals unpaid, or amount greater than 100 — with the visual editor, and the matching rows come out. Optionally sort by a column and cap how many rows you get. The friendly companion to “Save rows”; reach for “Query rows” when you want raw SQL.",
     "ports": [
@@ -632,6 +653,30 @@
       "sk-ant-…"
     ]
   },
+  "code": {
+    "description": "Write a little JavaScript when the ready-made steps cannot say what you mean. The value wired into 'in' arrives as `input`, and whatever you `return` leaves on 'out' — an object, a list, a number, a string, a true/false. `console.log(…)` writes to the run log, so you can see what your code saw.\n\nChoose how it runs. 'Once, over everything' hands you the whole input in one go — reach for it to reshape a payload, do arithmetic across a list, or build a value no other step can. 'Once per row' runs your code for each row instead, with the row as `row` and its position as `index`, and collects what you return into a new list; return nothing for a row and that row is dropped, which makes this a filter as well as a transform.\n\nIt runs inside Dazyflow with no way out: no network, no files, no libraries to import. That is deliberate — call an API with the Web request step and read files with the file steps, then wire the result in here. Scripts are held to a few seconds by default (raise 'Time limit' up to 30 seconds) and to 8 MB of returned data. If you need a real runtime, a library, or a network, use 'Run on your machine' instead.\n\nFor a single value — a bit of arithmetic, one field pulled out — the Expression step is lighter, and 'Add a calculated column' does the same per row without any code at all.",
+    "ports": [
+      "Input",
+      "Pass-through",
+      "Result"
+    ],
+    "label": "Code",
+    "subtitle": "Run a bit of JavaScript",
+    "titles": [
+      "JavaScript",
+      "Run it",
+      "Time limit (ms)"
+    ],
+    "help": [
+      "How long the script may run in total, per-row runs included. Past it the step fails rather than holding the flow up. Maximum 30000.",
+      "Once, with the whole input as 'input' — or once per row, with each row as 'row' and its position as 'index'. Per-row collects what you return into a list, and drops any row you return nothing for.",
+      "The script. 'input' is the value wired into 'in' (or 'row' and 'index' in per-row mode); whatever you return leaves on 'out'. console.log writes to the run log. No network, no files, no imports."
+    ],
+    "enum_names": [
+      "Once per row",
+      "Once, over everything"
+    ]
+  },
   "compare": {
     "description": "Compare two values, A and B, and emit true or false on the Yes/No output. Pick the test from a plain-language list — equals, is greater than, contains, is one of, is within range, and more. Connect A and B from earlier steps, or type a literal default right on the step. Pair the Yes/No output with a Branch step (connect Yes/No into Branch's condition input) to route.",
     "ports": [
@@ -779,17 +824,57 @@
     ]
   },
   "delay": {
-    "description": "Pause for a configurable duration, then forward the threaded value on the pass-through output (or emit a control signal when nothing is threaded, so a pure pause still fires the next step).",
+    "description": "Pause, then carry on — the threaded value comes out the other side (or a control signal when there is nothing threaded, so a pure pause still fires the next step).\n\nSay how long with 'Wait', in milliseconds, for the short pauses: a gap between two API calls, a moment for a system to catch up.\n\nSay WHEN instead with 'Wait until', for the long ones. It takes the same time words the calendar steps do — \"tomorrow\", \"tomorrow+9h\" for tomorrow morning, \"now+2h\", \"+3d\", or a timestamp the Date \u0026 time step handed you — and 'Timezone' decides which day \"tomorrow\" means. A moment that has already passed does not fail; the flow simply carries straight on.\n\nA wait longer than a second hands its worker back and asks to be woken at the deadline, so a flow parked until Monday costs nothing while it waits. A year is the ceiling either way — for longer, use a Schedule trigger.",
     "ports": [
       "Delay (milliseconds)",
-      "Pass-through"
+      "Pass-through",
+      "Wait until"
     ],
     "label": "Delay",
     "titles": [
-      "Wait (milliseconds)"
+      "Timezone",
+      "Wait (milliseconds)",
+      "Wait until"
     ],
     "help": [
-      "How long to pause before continuing, in milliseconds (1000 = 1 second)."
+      "How long to pause before continuing, in milliseconds (1000 = 1 second). Use 'Wait until' instead to hold for a named moment.",
+      "The moment to carry on at: \"tomorrow\", \"tomorrow+9h\", \"now+2h\", \"+3d\", or a timestamp (2026-06-16T09:00:00Z). A moment already past carries straight on. The 'Wait until' input overrides this when connected.",
+      "Which zone the day boundaries of \"today\" and \"tomorrow\" are taken in, e.g. \"Europe/Stockholm\". Empty = UTC. Ignored for a full timestamp."
+    ]
+  },
+  "digest_add": {
+    "description": "Put something aside to be sent later, together with everything else that arrives before then. The classic use is the daily roundup: every new lead, error or order adds a line here as it happens, and one scheduled flow sends the lot at nine in the morning.\n\nName the digest and wire in what to remember — a row list, a single record, or just a piece of text, which is kept as a 'value' column. Each entry is stamped with the time it was added. Nothing goes out of this step but the count, because the point is that the flow does NOT act now.\n\nThe other half is 'Take the digest', in a flow with a Schedule trigger: it hands over everything piled up and empties the digest in one go. The entries live in an ordinary collection called \"digest_\u003cname\u003e\", so you can look through them under Collections while they wait.",
+    "ports": [
+      "Entries",
+      "Entries added",
+      "Pass-through"
+    ],
+    "label": "Collections",
+    "subtitle": "Add to a digest",
+    "integration": "Collections",
+    "titles": [
+      "Digest name"
+    ],
+    "help": [
+      "What this pile is called. The flow that sends it later takes the same name. Stored as a collection called \"digest_\u003cname\u003e\"."
+    ]
+  },
+  "digest_take": {
+    "description": "Hand over everything a digest has piled up, and empty it. Put this after a Schedule trigger — nine in the morning, Monday, the first of the month — and wire Entries into whatever sends the roundup: Make a table, Fill a template, an email, a Slack message.\n\nTaking is all-or-nothing: the entries are read and the digest is emptied in the same breath, so the same entry cannot go out twice, and a failure leaves the pile untouched to be sent next time.\n\nAn empty digest does NOT fire the Entries output — it fires 'Nothing there' instead, so a quiet night sends no email at all unless you deliberately wire that side up. 'How many' comes out either way.",
+    "ports": [
+      "Entries",
+      "How many",
+      "Nothing there",
+      "Pass-through"
+    ],
+    "label": "Collections",
+    "subtitle": "Take the digest",
+    "integration": "Collections",
+    "titles": [
+      "Digest name"
+    ],
+    "help": [
+      "The pile to take, named the same as in the flow that adds to it."
     ]
   },
   "discord_send_message": {
@@ -1082,7 +1167,7 @@
     ]
   },
   "expression": {
-    "description": "Compute a single value from a formula — the value-level companion to the calculated-column step. Write one CEL expression (the same formula language the row tools use) with the connected 'in' value available as `input` and the current time as `now`. Use it to reshape a value mid-flow: pull a field (`input.user.email`), do arithmetic (`input * 1.25`), build a string (`\"Hi \" + input.name`), test a condition (`input.status == \"paid\"`), or transform a list (`input.map(x, x.id)`). The result is emitted on 'out', typed by what the formula returns (text, boolean, or JSON). For running real OS commands or scripts, use the Shell step instead — this is a safe, sandboxed expression evaluator, not a general code runtime.",
+    "description": "Compute a single value from a formula — the value-level companion to the calculated-column step. Write one CEL expression (the same formula language the row tools use) with the connected 'in' value available as `input` and the current time as `now`. Use it to reshape a value mid-flow: pull a field (`input.user.email`), do arithmetic (`input * 1.25`), build a string (`\"Hi \" + input.name`), test a condition (`input.status == \"paid\"`), or transform a list (`input.map(x, x.id)`). The result is emitted on 'out', typed by what the formula returns (text, boolean, or JSON). For more than a single line — statements, a loop, a value built up in stages — use the Code step, which runs JavaScript with the same no-way-out sandbox; for work that needs a network or a library, Run on your machine. This is a safe, sandboxed formula evaluator, not a general code runtime.",
     "ports": [
       "Input",
       "Pass-through",
@@ -1184,6 +1269,82 @@
     "help": [
       "Heading shown at the top of the form. Defaults to the flow's name.",
       "The questions the form asks, one per field. Each becomes a key on the Body output, so later steps know the columns before the first submission arrives. Defaults to name, email, message."
+    ]
+  },
+  "format_number": {
+    "description": "Round a number, or write it out the way a person reads it.\n\n'Round it' is the one that changes the number itself — to a number of decimals, and up or down rather than to the nearest when you need a price ceiling or a whole box count. Everything else changes only how it is written.\n\n'Write it out' gives it a fixed number of decimals and groups the thousands. 'As money' adds the currency, and 'As a percentage' multiplies by a hundred and adds the sign — 0.25 becomes 25%.\n\nHow it is written depends on who reads it: 1,234.50 in English is 1 234,50 in Swedish, and money goes $1,234.50 in one and 1 234,50 kr in the other. The step follows the flow's own language unless you set 'Language' on it. Anything but the currencies with a symbol of their own is written with its code, the way a bank statement writes it.\n\nBoth come out: the text on 'Result', and the number itself on 'Number' — so a rounded value can go on to be compared or added up without being read back out of its own formatting.",
+    "ports": [
+      "Number",
+      "Pass-through",
+      "Result"
+    ],
+    "label": "Change a number",
+    "subtitle": "Round it, or write it out",
+    "titles": [
+      "Currency",
+      "Decimals",
+      "Group the thousands",
+      "Language",
+      "What to do",
+      "Which way"
+    ],
+    "help": [
+      "How many digits after the decimal point. 0 gives a whole number.",
+      "Nearest is the ordinary one. Up and down are for the cases where the answer has to cover something — boxes to order, a price ceiling.",
+      "On writes 1 234 567 (or 1,234,567); off writes 1234567. Turn it off when the number is going somewhere that has to read it back as a number.",
+      "Rounding changes the number; the others change only how it is written.",
+      "The three-letter code — SEK, EUR, USD, GBP. Ones with a symbol of their own get it; the rest are written with the code.",
+      "Which way round the separators go, and where a currency sits. Leave it on the flow's language (Settings → General) unless this one step should differ."
+    ],
+    "enum_names": [
+      "Always down",
+      "Always up",
+      "As a percentage",
+      "As money",
+      "English",
+      "Follow the flow's language",
+      "Round it",
+      "Svenska",
+      "To the nearest",
+      "Write it out"
+    ]
+  },
+  "format_text": {
+    "description": "The small text jobs, without writing a formula. Pick what to do and the text comes out the other side:\n\nUPPER CASE, lower case, Title Case, and Sentence case — the last two lower the rest of the word or line first, so a name typed in capitals comes out readable.\n\nTidy up removes the spaces at both ends and collapses runs of spaces, tabs and newlines in the middle into one — the fix for text pasted out of a web page. Shorten cuts to a number of characters and adds an ellipsis only if it actually cut. Use this instead swaps in your text when what arrived was empty.\n\nFind and replace swaps every occurrence of one piece of text for another, plainly — no pattern language, so a full stop means a full stop. Split cuts the text on a separator and gives you the pieces as a list, and as rows, so \"a, b, c\" can become three things to loop over.\n\nFor anything with a pattern in it, use the Regex step; for arithmetic on a value, the Expression step.",
+    "ports": [
+      "Pass-through",
+      "Pieces",
+      "Result",
+      "Text"
+    ],
+    "label": "Change text",
+    "subtitle": "Upper case, trim, replace…",
+    "titles": [
+      "Find",
+      "How many characters",
+      "Replace with",
+      "Split on",
+      "Use this instead",
+      "What to do"
+    ],
+    "help": [
+      "Cut to this many characters. An ellipsis is added only when something was actually cut.",
+      "The one change to make. For pattern matching use the Regex step instead.",
+      "The separator to cut on — a comma, a semicolon, \" | \". Use \\n for one piece per line. Spaces around each piece are trimmed.",
+      "The text to look for, taken literally — a full stop means a full stop.",
+      "What to put in its place. Leave empty to remove what you found.",
+      "What to send out when the text is empty or nothing but spaces."
+    ],
+    "enum_names": [
+      "Find and replace",
+      "Sentence case",
+      "Shorten it",
+      "Split into pieces",
+      "Tidy up the spaces",
+      "Title Case",
+      "UPPER CASE",
+      "Use this instead, when empty",
+      "lower case"
     ]
   },
   "fortnox_create_customer": {
@@ -2407,21 +2568,37 @@
       "Allow private networks",
       "Body",
       "Cache key",
+      "Fetch every page",
       "Headers",
       "Max response bytes",
       "Method",
-      "URL"
+      "Most pages to fetch",
+      "Page parameter",
+      "URL",
+      "Where the items are",
+      "Where the next page is"
     ],
     "help": [
       "Disable the private-address guard. Only enable when calling a local service intentionally.",
       "Extra request headers (one per key). Values may include ${secret.NAME} placeholders that resolve to stored secrets.",
       "Fail responses larger than this. Default 10 MiB.",
       "Hard deadline for the full request, in milliseconds.",
+      "Most APIs hand back one page at a time. Turn this on and the step keeps fetching until the pages run out, then gives you every item as one list. Pick how that API says where the next page is: a Link header (GitHub and friends), a field in the response (most modern APIs — name it below), or a page number that climbs until a page comes back empty. Status and Headers then describe the last page fetched.",
       "Set this on a GET you poll repeatedly to skip re-downloading unchanged data: the step remembers the server's ETag/Last-Modified and sends them next time. When nothing changed the server replies fast with status 304 and an empty Response — branch on status to skip work. Use a unique name per polled URL.",
       "Status codes treated as success. Empty defaults to 2xx.",
+      "Stop after this many pages even if the API offers more, so a runaway feed cannot hold the flow up. The time limit and the response size limit are spent across all the pages together, not granted afresh for each one.",
       "Text to send with the request (POST/PUT/PATCH). The Body input overrides this when connected.",
+      "The field holding the next page's address or cursor, written with dots — \"next\", \"meta.next_cursor\", \"paging.next\". Paging stops when that field is missing or empty. If it holds a cursor rather than a web address, name the query parameter to send it as below.",
+      "The field on each page holding the list, written with dots — \"data\", \"result.items\". Leave it empty when the API answers with a bare list. Every page's items are joined into one list on the Response output; without it you get the pages themselves, one after another.",
+      "The query parameter that carries the position — \"cursor\" or \"page_token\" when following a cursor field, \"page\" or \"offset\" when climbing a number. Climbing defaults to \"page\" and starts from whatever the address already says.",
       "The web address to call. The URL input overrides this when connected.",
       "What kind of request to make. GET fetches data; POST/PUT/PATCH send the Body along."
+    ],
+    "enum_names": [
+      "Climb a page number",
+      "Follow a field in the response",
+      "Follow the Link header",
+      "Just this one page"
     ]
   },
   "http_upload": {
@@ -2826,6 +3003,112 @@
       "na-playground",
       "oc",
       "oc-playground"
+    ]
+  },
+  "knowledge_add": {
+    "description": "Put a document where your flows can ask it questions. The text is cut into passages, each passage is turned into numbers that capture what it is about, and those go into a knowledge base in this workspace.\n\nName the base after what is in it — handbook, prices, policies. Anything can feed it: a page read with Read a web page, a PDF's text, rows from a collection, an email body.\n\n'Where it came from' is how a document is identified. Add the same source again and its passages are REPLACED, not duplicated, so a nightly re-read keeps the base current instead of growing a second copy of everything. Leave it empty and the text's own fingerprint is used, which means adding the identical document twice changes nothing.\n\nConnect Knowledge once on the Apps page to say who makes the embeddings. A base remembers the model that built it and will not mix two — numbers from different models are not comparable, so changing the model means building the base again.",
+    "ports": [
+      "Pass-through",
+      "Passages stored",
+      "Text",
+      "Where it came from"
+    ],
+    "label": "Knowledge",
+    "subtitle": "Add documents",
+    "integration": "Knowledge",
+    "titles": [
+      "Knowledge base",
+      "Overlap",
+      "Passage length",
+      "Where it came from"
+    ],
+    "help": [
+      "How long to wait for the embedding service, in milliseconds.",
+      "How many characters a passage may hold. Longer keeps an argument together; shorter makes a search point at the exact sentence.",
+      "How many characters each passage repeats from the one before, so a fact split across a seam survives whole in one of them.",
+      "Injected from the Knowledge connection — leave unset.",
+      "What identifies this document — a filename, a URL, a ticket number. Adding the same source again replaces its passages. Empty means the text's own fingerprint, so the identical document twice is stored once.",
+      "What this collection of documents is called — handbook, prices, policies. Made the first time you add to it."
+    ],
+    "connection": [
+      "API key",
+      "ChatGPT",
+      "Embedding model",
+      "Embeddings from",
+      "Gemini",
+      "Leave empty for the provider's default. Changing it means building your bases again — a base remembers the model that made it.",
+      "Ollama",
+      "Only for Ollama, or a proxy in front of one of the others. A localhost address also needs DAZYFLOW_ALLOW_PRIVATE_EGRESS on the daemon.",
+      "Service address",
+      "The key for the service above. Leave it empty for Ollama, which runs on your own machine.",
+      "Who turns your text into numbers. Whichever you pick, every knowledge base is built with it — switching later means building the bases again.",
+      "http://localhost:11434",
+      "sk-… / AIza…",
+      "text-embedding-3-small"
+    ]
+  },
+  "knowledge_search": {
+    "description": "Find the passages in a knowledge base that bear on a question, and hand them to an AI step to answer from.\n\nThis is the retrieval half of asking your own documents questions. Wire the question into 'query'; the passages come back on 'text', already joined and ready to paste into a prompt, and on 'rows' one per passage with the score and where it came from. Then wire 'text' into ChatGPT or Claude alongside the question — \"answer using only this\" — and the answer is grounded in your own documents instead of the model's memory. Wire 'text' into the AI step's Prompt and put the question in its System prompt, or write one prompt that reads both with ${upstream.\u003cthis step's id\u003e.text}.\n\nIt matches by meaning rather than by words: \"how much holiday do I get\" finds the passage about annual leave. Ask for more passages when answers come out thin, fewer when they come out vague. 'Least score' drops the weak matches — around 0.3 is a reasonable floor for most models, and nothing at all is better than a passage about the wrong thing.\n\nThe base has to have been built with the same embedding model this connection uses; if it was not, the step says so rather than returning nonsense.",
+    "ports": [
+      "How many",
+      "Matches",
+      "Pass-through",
+      "Passages",
+      "Question"
+    ],
+    "label": "Knowledge",
+    "subtitle": "Find related",
+    "integration": "Knowledge",
+    "titles": [
+      "Between passages",
+      "How many passages",
+      "Knowledge base",
+      "Least score"
+    ],
+    "help": [
+      "Drop matches weaker than this. 0 keeps everything; around 0.3 keeps only passages that are really about the question.",
+      "How long to wait for the embedding service, in milliseconds.",
+      "How many of the closest passages to bring back. Five is a good starting point for a prompt.",
+      "Injected from the Knowledge connection — leave unset.",
+      "What goes between the passages on the joined 'Passages' output.",
+      "Which collection of documents to search."
+    ],
+    "connection": [
+      "API key",
+      "ChatGPT",
+      "Embedding model",
+      "Embeddings from",
+      "Gemini",
+      "Leave empty for the provider's default. Changing it means building your bases again — a base remembers the model that made it.",
+      "Ollama",
+      "Only for Ollama, or a proxy in front of one of the others. A localhost address also needs DAZYFLOW_ALLOW_PRIVATE_EGRESS on the daemon.",
+      "Service address",
+      "The key for the service above. Leave it empty for Ollama, which runs on your own machine.",
+      "Who turns your text into numbers. Whichever you pick, every knowledge base is built with it — switching later means building the bases again.",
+      "http://localhost:11434",
+      "sk-… / AIza…",
+      "text-embedding-3-small"
+    ]
+  },
+  "lookup": {
+    "description": "Turn one value into another using a little table you fill in — country code to country name, plan to discount, status code to the words you want people to read.\n\nWrite the table as pairs: what comes in on the left, what should come out on the right. Wire the value into 'in' and the match leaves on 'out'. Capitalisation is ignored unless you turn on 'Match capitalisation', so \"se\" finds \"SE\".\n\nAnything not in the table takes 'When nothing matches', if you set one. Leave that empty and the value leaves on the 'No match' output instead, carrying what came in — so a flow can handle the unknown ones rather than pretending they were fine. Exactly one of the two outputs fires, never both.\n\nFor a handful of paths that each do something different, use Switch; this is for turning a value into another value and carrying on.",
+    "ports": [
+      "No match",
+      "Pass-through",
+      "Result",
+      "Value"
+    ],
+    "label": "Look up",
+    "subtitle": "Swap one value for another",
+    "titles": [
+      "Match capitalisation",
+      "The table",
+      "When nothing matches"
+    ],
+    "help": [
+      "Off (the default) means \"se\", \"SE\" and \"Se\" all find the same row. On means they are three different keys.",
+      "The pairs to look through: what comes in on the left, what comes out on the right.",
+      "What to send out for a value the table does not list. Leave empty and unlisted values leave on the 'No match' output instead."
     ]
   },
   "lt": {
@@ -3515,6 +3798,27 @@
     "help": [
       "Field separator. Use \"\\t\" or \"tab\" for TSV, \";\" for European CSVs. A single character.",
       "When true the first line names the columns; when false columns are named col1, col2, …"
+    ]
+  },
+  "parse_html": {
+    "description": "Pull the parts you want out of a web page. Fetch the page with the Web request step, wire the response in here, and name each value you want with a CSS selector — the same thing you'd type in a browser's inspector.\n\nEach field is written `selector@attribute`, and both halves are optional: \".price\" takes the text of the first .price, \"a@href\" takes a link's address, \"img@src\" an image's, \"@data-id\" an attribute of the element itself, and \"@html\" its inner HTML. A field that matches nothing comes out empty rather than failing, so one missing price does not stop the flow.\n\nLeave 'Where each row is' empty and you get one record: the fields you named, read from the whole page. Fill it in with the selector for the repeated thing — a product card, a table row, an article — and you get one row per match instead, with each field read inside that row. That is the shape the row steps want, so the result goes straight into Choose \u0026 rename columns, Write CSV, Sheets or a database.\n\nSet 'Page address' and any link or image you pull comes out as a full address rather than the half of one the page carries. Every value is text, like CSV.",
+    "ports": [
+      "HTML",
+      "Pass-through",
+      "Rows",
+      "Value"
+    ],
+    "label": "Read a web page",
+    "subtitle": "Pick values out of HTML",
+    "titles": [
+      "Page address",
+      "Values to pick out",
+      "Where each row is"
+    ],
+    "help": [
+      "One entry per value you want: the name it comes out under, and the CSS selector that finds it. Write \"selector@attribute\" to take an attribute instead of the text — \"a@href\", \"img@src\", \"@data-id\" for the row element's own attribute, \"@html\" for its inner HTML. Leave the selector empty to mean the row element itself. Nothing matched comes out as empty text.",
+      "The address the HTML came from. With it set, a link or image you pull comes out as a full address instead of the relative half the page carries.",
+      "The selector for the thing that repeats — \".product\", \"table tbody tr\", \"article\". You get one row per match, with every field read inside it. Leave it empty to read the fields once from the whole page."
     ]
   },
   "parse_json": {
@@ -5061,7 +5365,7 @@
     ]
   },
   "switch": {
-    "description": "Send one value down a different path depending on what it is — the multi-way version of Branch. Where Branch has a yes and a no, Switch has up to eight matches: you give each one a value to look for, and whatever comes in leaves on the first match whose value it equals. Anything equal to none of them leaves on Everything else.\n\nBy default the whole incoming value is what gets matched. Set \"What to match on\" to compare just one field of it instead — an order's status, say — and the whole order still travels onward; the field only decides which path it takes. A match can also hold a list of values, and then anything equal to ANY of them takes that path (200, 201 and 204 all going one way).\n\nFirst match wins, so if two of them could apply, the earlier one takes it. Reach for this instead of chaining Branch steps when you are fanning one payload out by a status, a category or a type.",
+    "description": "Send one value down a different path depending on what it is — the multi-way version of Branch. Where Branch has a yes and a no, Switch has up to eight matches, and whatever comes in leaves on the FIRST one it satisfies. Anything satisfying none of them leaves on Everything else.\n\nEach match says what it wants in one of two ways. Give it a value to look for and the path is taken by anything equal to it — one value (\"paid\", 200, true), or a list ([200,201,204]) if several should all go the same way. Or set a condition instead, with the same editor the row steps use, for what equality cannot say: amount over 100, status paid AND country SE, a field that merely has to be there.\n\nBy default the whole incoming value is what a value-match compares. Set \"What to match on\" to compare just one field of it instead — an order's status, say. Either way the whole order travels onward; this only decides which path it takes. A condition always sees the whole value, as `row` — so `row.status == 'paid' \u0026\u0026 row.amount \u003e 100`. When what comes in is a plain number or text rather than an object, a condition reads it as `row.value`.\n\nFirst match wins, so if two of them could apply, the earlier one takes it — put the strict match before the loose one, or the loose one swallows what the strict one was meant to catch.",
     "ports": [
       "Everything else",
       "Match 1",
@@ -5076,14 +5380,16 @@
     ],
     "label": "Switch",
     "titles": [
+      "Condition",
       "Matches",
       "Path to send it down",
       "Value to look for",
       "What to match on"
     ],
     "help": [
+      "The condition that has to hold for this path to be taken — row.amount \u003e 100, or row.status == 'paid' \u0026\u0026 row.country == 'SE'. The incoming value is 'row'; a plain number or text reads as row.value. Set this OR a value to look for, not both.",
       "The matches, in order. Whatever comes in leaves on the FIRST one whose value it equals; if it equals none of them it leaves on Everything else. Order matters when two could apply — the earlier one takes it.",
-      "What has to be equal for this path to be taken — one value (\"paid\", 200, true), or a list ([200,201,204]) if several values should all take the same path.",
+      "What has to be equal for this path to be taken — one value (\"paid\", 200, true), or a list ([200,201,204]) if several values should all take the same path. Use a condition instead when equality cannot say what you mean.",
       "Which field of the incoming value to compare — status, say, or customer.country for a field inside a field. Leave it empty to compare the whole value. Either way the whole value travels onward; this only decides which path it takes.",
       "Which output it leaves on when this match wins. \"case_1\" is the pin labelled Match 1, \"case_2\" is Match 2, and so on up to \"case_8\"."
     ]

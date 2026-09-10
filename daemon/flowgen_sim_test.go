@@ -460,7 +460,15 @@ func TestFlowGen_SearchRanksTheRightStepFirst(t *testing.T) {
 		{"public form", []string{"form_input"}},
 		{"hosted form page", []string{"form_input"}},
 		{"send email", []string{"email_send", "gmail_send_email"}},
-		{"web page", []string{"web_watch"}},
+		// Bare, this one is genuinely ambiguous — reading a page and watching
+		// one are both "web page" steps, and the word that separates them is
+		// not in the query. What must hold is that the disambiguating word
+		// decides, so both spelled-out forms are asserted below.
+		{"web page", []string{"web_watch", "parse_html"}},
+		{"watch a web page", []string{"web_watch"}},
+		{"scrape a web page", []string{"parse_html"}},
+		{"read a web page", []string{"parse_html"}},
+		{"run javascript", []string{"code"}},
 	} {
 		out := searchDropsForModel(mans, c.query)
 		if strings.HasPrefix(out, "No steps") {

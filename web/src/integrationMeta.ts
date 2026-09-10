@@ -500,6 +500,12 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Save rows to a built-in collection with no setup, then query them back — it's the storage behind the in-app Collections page. Reach for it to collect a flow's output for review, build a lightweight dashboard, or keep running totals without provisioning a real database.",
   },
+  knowledge: {
+    name: "Knowledge",
+    tagline: "Let your flows answer from your own documents.",
+    description:
+      "Store documents as passages a flow can search by meaning rather than by keyword, then hand the closest ones to an AI step to answer from — the retrieval half of asking your own handbook, prices or policies a question. Connect it once to say who turns text into embeddings: ChatGPT, Gemini, or Ollama running on your own machine. The passages live in this workspace, beside your Collections.",
+  },
   mcp: {
     name: "MCP servers",
     tagline: "Bring in tools from any MCP server you connect.",

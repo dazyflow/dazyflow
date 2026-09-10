@@ -98,6 +98,13 @@ type ProviderInfo struct {
 	Models       []ModelOption
 	ListModels   ModelLister
 	Provider     Provider
+
+	// Embedder is set only by a provider that also sells embeddings; see
+	// embed.go. DefaultEmbedModel and EmbedModels are its own catalogue,
+	// separate from the chat models above — the two lists never overlap.
+	Embedder          Embedder
+	DefaultEmbedModel string
+	EmbedModels       []ModelOption
 }
 
 var (

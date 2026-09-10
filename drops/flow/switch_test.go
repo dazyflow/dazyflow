@@ -4,6 +4,7 @@
 package flow
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -173,5 +174,112 @@ func TestSwitch_Manifest(t *testing.T) {
 	}
 	if len(m.Outputs) != switchSlotCount+1 {
 		t.Errorf("got %d outputs, want %d", len(m.Outputs), switchSlotCount+1)
+	}
+}
+
+// A condition says what equality cannot: a threshold, and two things at once.
+func TestSwitch_RoutesOnACondition(t *testing.T) {
+	cases := []any{
+		map[string]any{"slot": "case_1", "filter": "row.status == 'paid' && row.amount > 100"},
+		map[string]any{"slot": "case_2", "filter": "row.status == 'paid'"},
+		map[string]any{"slot": "case_3", "filter": "row.status == 'refunded'"},
+	}
+	for name, tc := range map[string]struct {
+		order map[string]any
+		want  string
+	}{
+		"big and paid":    {map[string]any{"status": "paid", "amount": 250.0}, "case_1"},
+		"small and paid":  {map[string]any{"status": "paid", "amount": 20.0}, "case_2"},
+		"refunded":        {map[string]any{"status": "refunded", "amount": 250.0}, "case_3"},
+		"nothing matches": {map[string]any{"status": "failed", "amount": 250.0}, "default"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := routedPort(t, runSwitch(t, tc.order, map[string]any{"cases": cases}))
+			if got != tc.want {
+				t.Errorf("routed to %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// The whole value travels on whichever way it was matched.
+func TestSwitch_ConditionCarriesTheWholePayload(t *testing.T) {
+	order := map[string]any{"status": "paid", "amount": 250.0, "id": "A-1"}
+	res := runSwitch(t, order, map[string]any{
+		"cases": []any{map[string]any{"slot": "case_1", "filter": "row.amount > 100"}},
+	})
+	got, ok := res.Output["case_1"].Inline.(map[string]any)
+	if !ok || got["id"] != "A-1" {
+		t.Errorf("case_1 carried %v, want the whole order", res.Output["case_1"].Inline)
+	}
+}
+
+// One switch can hold both kinds of match, and first-match-wins spans them.
+func TestSwitch_MixesValuesAndConditions(t *testing.T) {
+	params := map[string]any{
+		"field": "status",
+		"cases": []any{
+			map[string]any{"slot": "case_1", "filter": "row.amount > 1000"},
+			map[string]any{"slot": "case_2", "equals": "paid"},
+		},
+	}
+	// The condition is first, so a huge paid order takes it...
+	if got := routedPort(t, runSwitch(t, map[string]any{"status": "paid", "amount": 5000.0}, params)); got != "case_1" {
+		t.Errorf("routed to %q, want case_1", got)
+	}
+	// ...and a small one falls through to the value match, which reads the
+	// field named by 'field' while the condition read the whole value.
+	if got := routedPort(t, runSwitch(t, map[string]any{"status": "paid", "amount": 5.0}, params)); got != "case_2" {
+		t.Errorf("routed to %q, want case_2", got)
+	}
+}
+
+// The condition editor can only write row.<field>, so a bare value has to be
+// reachable as one.
+func TestSwitch_ConditionOnAPlainValue(t *testing.T) {
+	params := map[string]any{
+		"cases": []any{map[string]any{"slot": "case_1", "filter": "row.value >= 500"}},
+	}
+	if got := routedPort(t, runSwitch(t, 503.0, params)); got != "case_1" {
+		t.Errorf("routed to %q, want case_1", got)
+	}
+	if got := routedPort(t, runSwitch(t, 200.0, params)); got != "default" {
+		t.Errorf("routed to %q, want default", got)
+	}
+}
+
+func TestSwitch_ConditionFailures(t *testing.T) {
+	for name, tc := range map[string]struct {
+		params  map[string]any
+		payload any
+		code    string
+		says    string
+	}{
+		"both kinds on one case": {
+			map[string]any{"cases": []any{map[string]any{"slot": "case_1", "equals": "paid", "filter": "row.amount > 1"}}},
+			map[string]any{"status": "paid"}, "bad_param", "keep the one you meant",
+		},
+		"neither kind": {
+			map[string]any{"cases": []any{map[string]any{"slot": "case_1"}}},
+			map[string]any{"status": "paid"}, "bad_param", "needs a value to look for or a condition",
+		},
+		"unreadable condition": {
+			map[string]any{"cases": []any{map[string]any{"slot": "case_1", "filter": "row.amount >>> 1"}}},
+			map[string]any{"amount": 2.0}, "bad_param", "condition",
+		},
+		"condition that cannot run": {
+			map[string]any{"cases": []any{map[string]any{"slot": "case_1", "filter": "row.missing > 1"}}},
+			map[string]any{"amount": 2.0}, "eval", "case_1",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			res := runSwitch(t, tc.payload, tc.params)
+			if res.Status != core.StatusError || res.Error.Code != tc.code {
+				t.Fatalf("status=%q err=%+v, want %s", res.Status, res.Error, tc.code)
+			}
+			if !strings.Contains(res.Error.Message, tc.says) {
+				t.Errorf("message = %q, want it to mention %q", res.Error.Message, tc.says)
+			}
+		})
 	}
 }

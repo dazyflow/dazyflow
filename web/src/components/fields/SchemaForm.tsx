@@ -480,6 +480,9 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
         );
       }
       const chosenLang = (() => {
+        // A step that runs exactly one language names it outright; the rest
+        // read it off the sibling param where the author picks one.
+        if (schema.x_lang) return schema.x_lang;
         const key = schema.x_lang_param ?? (schema.format === "script" ? "shell" : undefined);
         const v = key ? siblings?.[key] : undefined;
         return typeof v === "string" ? v : undefined;

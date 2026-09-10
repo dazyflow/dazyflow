@@ -7,25 +7,30 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/drops/internal/reltime"
 	"github.com/dazyflow/dazyflow/engine"
 )
 
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:          "delay",
-			Version:     "1.0",
-			Label:       "Delay",
-			Icon:        "timer",
-			Category:    "flow_control",
-			Provider:    "internal",
-			Tags:        []string{"timing", "delay", "sleep", "wait", "passthrough"},
-			Description: "Pause for a configurable duration, then forward the threaded value on the pass-through output (or emit a control signal when nothing is threaded, so a pure pause still fires the next step).",
-			Summary:     "Hold the flow for a fixed number of milliseconds before passing the input on to the next step.",
+			ID:       "delay",
+			Version:  "1.0",
+			Label:    "Delay",
+			Icon:     "timer",
+			Category: "flow_control",
+			Provider: "internal",
+			Tags:     []string{"timing", "delay", "sleep", "wait", "passthrough"},
+			Description: "Pause, then carry on — the threaded value comes out the other side (or a control signal when there is nothing threaded, so a pure pause still fires the next step).\n\n" +
+				"Say how long with 'Wait', in milliseconds, for the short pauses: a gap between two API calls, a moment for a system to catch up.\n\n" +
+				"Say WHEN instead with 'Wait until', for the long ones. It takes the same time words the calendar steps do — \"tomorrow\", \"tomorrow+9h\" for tomorrow morning, \"now+2h\", \"+3d\", or a timestamp the Date & time step handed you — and 'Timezone' decides which day \"tomorrow\" means. A moment that has already passed does not fail; the flow simply carries straight on.\n\n" +
+				"A wait longer than a second hands its worker back and asks to be woken at the deadline, so a flow parked until Monday costs nothing while it waits. A year is the ceiling either way — for longer, use a Schedule trigger.",
+			Summary: "Hold the flow for a set time, or until a given moment, then pass the input on.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Throttle a polling loop by one second",
@@ -34,6 +39,16 @@ func init() {
 				{
 					Title:  "Wait 30 seconds before retrying a later call",
 					Params: json.RawMessage(`{"ms":30000}`),
+				},
+				{
+					Title:  "Hold until tomorrow morning",
+					Params: json.RawMessage(`{"until":"tomorrow+9h","tz":"Europe/Stockholm"}`),
+					Notes:  "\"tomorrow\" is midnight in the given zone, so +9h is 09:00 there. The step hands its worker back while it waits.",
+				},
+				{
+					Title:  "Hold until a moment an earlier step worked out",
+					Params: json.RawMessage(`{}`),
+					Notes:  "Wire a timestamp into the 'Wait until' input — what the Date & time step emits fits as it is.",
 				},
 			},
 			ExecutionModel: core.ExecutionBatch,
@@ -49,9 +64,18 @@ func init() {
 			// `pass` pin (prepended by WithPassthrough) — Delay no longer
 			// declares its own in/out passthrough ports; it threads through
 			// like any other node.
-			Inputs: []core.Port{{Port: "ms", Label: "Delay (milliseconds)", MIME: []string{"application/json"}}},
+			Inputs: []core.Port{
+				{Port: "ms", Label: "Delay (milliseconds)", MIME: []string{"application/json"}},
+				{Port: "until", Label: "Wait until", MIME: []string{"text/plain"}},
+			},
+			// Neither wait is `required`: exactly one of them must be set, which
+			// a schema cannot say and Execute reports instead.
 			ParamsSchema: json.RawMessage(
-				`{"type":"object","properties":{"ms":{"type":"integer","minimum":0,"title":"Wait (milliseconds)","description":"How long to pause before continuing, in milliseconds (1000 = 1 second)."}},"required":["ms"]}`,
+				`{"type":"object","properties":{` +
+					`"ms":{"type":"integer","minimum":0,"title":"Wait (milliseconds)","description":"How long to pause before continuing, in milliseconds (1000 = 1 second). Use 'Wait until' instead to hold for a named moment."},` +
+					`"until":{"type":"string","title":"Wait until","description":"The moment to carry on at: \"tomorrow\", \"tomorrow+9h\", \"now+2h\", \"+3d\", or a timestamp (2026-06-16T09:00:00Z). A moment already past carries straight on. The 'Wait until' input overrides this when connected."},` +
+					`"tz":{"type":"string","format":"timezone","title":"Timezone","description":"Which zone the day boundaries of \"today\" and \"tomorrow\" are taken in, e.g. \"Europe/Stockholm\". Empty = UTC. Ignored for a full timestamp."}` +
+					`}}`,
 			),
 			Idempotent:  true,
 			RetryPolicy: core.RetryExponentialBackoff,
@@ -73,9 +97,37 @@ const maxDelayMs = 365 * 24 * 60 * 60 * 1000
 const maxInlineDelay = time.Second
 
 func executeDelay(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	ms, ok := resolveDelayMs(job)
-	if !ok {
-		return params.Err(job, "bad_param", "ms is required: connect the Delay (ms) input or set the ms param"), nil
+	ms, hasMS := resolveDelayMs(job)
+	until := resolveUntil(job)
+
+	// Absolute and relative say different things about a requeue, so a step
+	// carrying both has no single answer to give.
+	if until != "" && hasMS {
+		return params.Err(job, "bad_param",
+			"'Wait' and 'Wait until' are both set — keep the one you meant"), nil
+	}
+	if until == "" && !hasMS {
+		return params.Err(job, "bad_param",
+			"set 'Wait' (how long, in milliseconds) or 'Wait until' (the moment to carry on at)"), nil
+	}
+
+	var target time.Time
+	if until != "" {
+		loc, lerr := delayLocation(job)
+		if lerr != nil {
+			return params.Err(job, "bad_param", lerr.Error()), nil
+		}
+		t, ok, rerr := reltime.Resolve(until, loc, time.Now())
+		if rerr != nil || !ok {
+			if rerr == nil {
+				rerr = fmt.Errorf("'Wait until' is empty")
+			}
+			return params.Err(job, "bad_param", rerr.Error()), nil
+		}
+		target = t
+		// A moment already gone is not an error — a flow that ran late should
+		// carry on, not fail — so it becomes a zero wait.
+		ms = int(max(0, time.Until(target).Milliseconds()))
 	}
 	if ms < 0 {
 		return params.Err(job, "bad_param", "ms must be non-negative"), nil
@@ -108,6 +160,11 @@ func executeDelay(ctx context.Context, job core.Job, progress chan<- core.Progre
 	deadline := time.Now().Add(total)
 	if deferrable {
 		deadline = anchor.Add(total)
+	}
+	// A named moment IS the deadline: re-deriving it from an anchor would move
+	// it, and "tomorrow at nine" must mean the same instant on every hop.
+	if !target.IsZero() {
+		deadline = target
 	}
 	remaining := time.Until(deadline)
 	if remaining <= 0 {
@@ -170,6 +227,29 @@ func executeDelay(ctx context.Context, job core.Job, progress chan<- core.Progre
 			params.EmitProgress(progress, job, pct, fmt.Sprintf("%v elapsed", time.Since(start).Round(time.Millisecond)))
 		}
 	}
+}
+
+// resolveUntil reads the moment to wait for, preferring a wired value over the
+// typed one so an earlier step can work it out.
+func resolveUntil(job core.Job) string {
+	if v, ok := params.TextInputOr(job, "until", params.StringDefault(job.Params, "until", "")); ok {
+		return strings.TrimSpace(v)
+	}
+	return strings.TrimSpace(params.StringDefault(job.Params, "until", ""))
+}
+
+// delayLocation resolves the step's timezone, matching the calendar steps:
+// empty means UTC, and it decides which day "today" and "tomorrow" name.
+func delayLocation(job core.Job) (*time.Location, error) {
+	tz := strings.TrimSpace(params.StringDefault(job.Params, "tz", ""))
+	if tz == "" {
+		return time.UTC, nil
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return nil, fmt.Errorf("%q isn't a timezone name — use an IANA one like \"Europe/Stockholm\"", tz)
+	}
+	return loc, nil
 }
 
 func resolveDelayMs(job core.Job) (int, bool) {

@@ -4,6 +4,7 @@
 package net
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -47,6 +48,16 @@ func init() {
 					Params: json.RawMessage(`{"url":"https://api.example.com/v1/orders","method":"POST","headers":{"Content-Type":"application/json","Authorization":"Bearer ${secret.EXAMPLE_API_TOKEN}"},"body":"{\"sku\":\"ABC-123\",\"qty\":2}","expect_status":[200,201]}`),
 				},
 				{
+					Title:  "Fetch every page, GitHub style",
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/issues?per_page=100","method":"GET","headers":{"Authorization":"Bearer ${secret.EXAMPLE_API_TOKEN}"},"paginate":"link","max_pages":20}`),
+					Notes:  "Follows the Link header's rel=\"next\". The bodies are bare lists, so every page's items arrive joined on Response.",
+				},
+				{
+					Title:  "Fetch every page from a cursor in the response",
+					Params: json.RawMessage(`{"url":"https://api.example.com/v1/contacts","method":"GET","paginate":"body","next_path":"meta.next_cursor","page_param":"cursor","items_path":"data","max_pages":50}`),
+					Notes:  "Reads meta.next_cursor from each page and sends it back as ?cursor=…, collecting data[] from every page into one list.",
+				},
+				{
 					Title:  "DELETE with explicit status expectation and short timeout",
 					Params: json.RawMessage(`{"url":"https://api.example.com/v1/sessions/42","method":"DELETE","timeout_ms":5000,"expect_status":[204]}`),
 				},
@@ -71,6 +82,11 @@ func init() {
 						"method":{"type":"string","title":"Method","default":"GET","enum":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"],"description":"What kind of request to make. GET fetches data; POST/PUT/PATCH send the Body along."},
 						"body":{"type":"string","title":"Body","description":"Text to send with the request (POST/PUT/PATCH). The Body input overrides this when connected."},
 						"headers":{"type":"object","title":"Headers","additionalProperties":{"type":"string"},"description":"Extra request headers (one per key). Values may include ${secret.NAME} placeholders that resolve to stored secrets."},
+						"paginate":{"type":"string","title":"Fetch every page","default":"off","enum":["off","link","body","page"],"enumNames":["Just this one page","Follow the Link header","Follow a field in the response","Climb a page number"],"description":"Most APIs hand back one page at a time. Turn this on and the step keeps fetching until the pages run out, then gives you every item as one list. Pick how that API says where the next page is: a Link header (GitHub and friends), a field in the response (most modern APIs — name it below), or a page number that climbs until a page comes back empty. Status and Headers then describe the last page fetched."},
+						"items_path":{"type":"string","title":"Where the items are","x_visible_when":{"paginate":["link","body","page"]},"description":"The field on each page holding the list, written with dots — \"data\", \"result.items\". Leave it empty when the API answers with a bare list. Every page's items are joined into one list on the Response output; without it you get the pages themselves, one after another."},
+						"next_path":{"type":"string","title":"Where the next page is","x_visible_when":{"paginate":["body"]},"description":"The field holding the next page's address or cursor, written with dots — \"next\", \"meta.next_cursor\", \"paging.next\". Paging stops when that field is missing or empty. If it holds a cursor rather than a web address, name the query parameter to send it as below."},
+						"page_param":{"type":"string","title":"Page parameter","x_visible_when":{"paginate":["body","page"]},"description":"The query parameter that carries the position — \"cursor\" or \"page_token\" when following a cursor field, \"page\" or \"offset\" when climbing a number. Climbing defaults to \"page\" and starts from whatever the address already says."},
+						"max_pages":{"type":"integer","title":"Most pages to fetch","default":10,"minimum":1,"maximum":100,"x_visible_when":{"paginate":["link","body","page"]},"description":"Stop after this many pages even if the API offers more, so a runaway feed cannot hold the flow up. The time limit and the response size limit are spent across all the pages together, not granted afresh for each one."},
 						"timeout_ms":{"type":"integer","default":30000,"minimum":1,"description":"Hard deadline for the full request, in milliseconds."},
 						"expect_status":{"type":"array","title":"Accepted status codes","items":{"type":"integer"},"x_advanced":true,"description":"Status codes treated as success. Empty defaults to 2xx."},
 						"max_body_bytes":{"type":"integer","title":"Max response bytes","default":10485760,"minimum":0,"x_advanced":true,"description":"Fail responses larger than this. Default 10 MiB."},
@@ -102,6 +118,12 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	}
 	if err := EgressAllowedFor(ctx, url); err != nil {
 		return params.Err(job, "egress_blocked", err.Error()), nil
+	}
+
+	// Paging is its own loop with its own budgets; the one-shot path below is
+	// what an unpaginated call has always done.
+	if p, on := paginationFrom(job); on {
+		return fetchAllPages(ctx, job, progress, p)
 	}
 
 	method := params.StringDefault(job.Params, "method", "GET")
@@ -163,16 +185,11 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	client := buildClient(time.Duration(timeoutMs)*time.Millisecond, allowPrivate)
 	resp, err := client.Do(req)
 	if err != nil {
-		if isSSRFError(err) {
-			return params.Err(job, "ssrf_blocked", err.Error()), nil
-		}
-		if strings.Contains(err.Error(), "egress_blocked") {
-			return params.Err(job, "egress_blocked", err.Error()), nil
-		}
+		res := classifyRequestError(ctx, job, err)
 		if ctx.Err() != nil {
-			return params.Err(job, "cancelled", ctx.Err().Error()), ctx.Err()
+			return res, ctx.Err()
 		}
-		return params.Err(job, "http", err.Error()), nil
+		return res, nil
 	}
 	defer resp.Body.Close()
 	ObserveEgressResponse(ctx, url, resp.StatusCode, resp.Header)
@@ -246,6 +263,37 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 			"headers":       {MIME: "application/json", Inline: flattenHeaders(resp.Header)},
 		},
 	}, nil
+}
+
+// classifyRequestError names what stopped an outbound call, so the run view
+// can tell a blocked internal address from an unreachable host.
+func classifyRequestError(ctx context.Context, job core.Job, err error) core.Result {
+	switch {
+	case isSSRFError(err):
+		return params.Err(job, "ssrf_blocked", err.Error())
+	case strings.Contains(err.Error(), "egress_blocked"):
+		return params.Err(job, "egress_blocked", err.Error())
+	case ctx.Err() != nil:
+		return params.Err(job, "cancelled", ctx.Err().Error())
+	}
+	return params.Err(job, "http", err.Error())
+}
+
+// requestBodyBytes materializes the request body, which a paginated call must
+// be able to send again for every page.
+func requestBodyBytes(job core.Job) ([]byte, error) {
+	r, err := params.RequestBody(job)
+	if err != nil || r == nil {
+		return nil, err
+	}
+	return io.ReadAll(r)
+}
+
+func bodyReaderFor(body []byte) io.Reader {
+	if body == nil {
+		return nil
+	}
+	return bytes.NewReader(body)
 }
 
 func resolveURL(job core.Job) string {

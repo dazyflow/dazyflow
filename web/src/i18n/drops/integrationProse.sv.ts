@@ -463,6 +463,14 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
     en: "f9b435a6",
     sv: "Ingen anslutningspool — att öppna filen tar mikrosekunder, så en ny handtag per anrop går bra. .sqlite-filen ligger i arbetsytans sandlåda som alla andra filer där; sandlådans regler gäller.",
   },
+  "knowledge.description": {
+    en: "3607c326",
+    sv: "Lagra dokument som avsnitt ett flöde kan söka i på betydelse snarare än på nyckelord, och lämna sedan de närmaste till ett AI-steg att svara utifrån — hämtningshalvan av att ställa en fråga till din egen handbok, dina priser eller dina policyer. Anslut en gång för att säga vem som gör text till inbäddningar: ChatGPT, Gemini eller Ollama på din egen maskin. Avsnitten ligger i den här arbetsytan, bredvid dina Samlingar.",
+  },
+  "knowledge.tagline": {
+    en: "4691a09b",
+    sv: "Låt dina flöden svara utifrån dina egna dokument.",
+  },
   "mcp.description": {
     en: "1a4554a8",
     sv: "Steg som kommer från en MCP-server som din organisation har lagt till, i stället för från en koppling som vi har skrivit. Peka Dazyflow mot en servers adress under Admin → MCP-servrar, så dyker varje verktyg den publicerar upp här som ett steg — inget att installera, och ingen koppling att vänta på. Servern har sin egen inloggning, så dessa steg behöver ingen separat anslutning.",
@@ -540,6 +548,7 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
 // (integrations.builtinGroup / mcpGroup), and a second translation here would
 // be free to drift from them.
 export const SV_INTEGRATION_NAMES: Record<string, string> = {
+  Knowledge: "Kunskap",
   Calendar: "Kalender",
   "Calendar (any provider)": "Kalender (valfri leverantör)",
   Collections: "Samlingar",
