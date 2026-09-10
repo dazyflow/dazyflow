@@ -10,6 +10,81 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.41.10] - 2026-09-11
+
+### Added
+
+- **A script can arrive on a wire.** The Code step's JavaScript could only be
+  typed on the step, so the same twenty lines lived in four flows and got fixed
+  in three of them. There is now a **Script** input: wire a Text step or a file
+  read into it and that text runs instead of what is typed on the step, the same
+  way the Send email steps already let a subject or a body come from upstream.
+  Typing it on the step still works and still is the ordinary way to do it.
+
+  A script that arrives on a wire is code somebody else chose, so wiring a
+  *trigger* into it is now flagged when you save: a webhook's caller would be
+  choosing what runs. It is a warning, not a refusal — an internal endpoint only
+  your own systems can reach is a fair design — but it should be a decision
+  rather than a line drawn across a canvas by accident.
+
+- **One bad row need not cost the other two hundred.** Per-row mode stopped at
+  the first row whose script threw, and the rows after it never ran. Usually
+  that is right: a script that breaks on row 7 breaks on row 8 as well, and two
+  hundred identical errors help nobody. But a single malformed entry in a feed
+  should not throw away everything behind it. **If a row's script throws** now
+  offers to send that row out a new **Failed rows** output instead — the row
+  itself, its position, and the error — and carry on with the rest. Failing the
+  step is still what happens unless you ask for the other thing, so no existing
+  flow changes.
+
+- **What the script printed is now something a flow can use.** `console.log`
+  went to the run log and stopped there, which is fine while you are watching
+  and no use at all afterwards. The lines now also leave on a **Log lines**
+  output, so a flow can mail them, file them, or keep them as an audit trail of
+  what a script saw. The sandbox still stops the console after 200 lines and
+  says so on the last line, and that marker travels with the rest.
+
+- **A per-row run says what it did with the rows.** Returning nothing for a row
+  drops it — that is what makes the step a filter as well as a transform — and
+  it happened in complete silence. A script that dropped every row looked
+  exactly like one that dropped none, and the only way to tell was to count the
+  output yourself. The run log now ends a per-row run with `ran 200 row(s) ·
+  kept 187 · dropped 13`, plus `· failed 2` when rows are being routed.
+
+### Fixed
+
+- **Saving a flow warns when many items go into a step that takes one.** The
+  check existed and was correct; the editor simply never ran it. Only the
+  standalone graph check knew what a step's ports *are*, and saving used the
+  rules that do not — so a feed's item list wired into a step expecting one
+  merge object saved clean, ran, and failed at the far end with `can't evaluate
+  field title in type interface {}`: a message that names neither the two steps
+  nor the wire between them. Saving now runs the same wiring rules, so the
+  warning arrives while you are looking at the wire you drew, naming both ends
+  of it.
+
+  Only the wiring warnings moved across. "This step is not in the catalogue"
+  stays out of a save on purpose: a catalogue is legitimately incomplete while
+  an MCP server or an API integration is briefly unreachable, and a flow you had
+  not touched should not turn red about somebody else's network.
+
+- **Checking a flow checks the flow you are looking at.** "Is this sound?" is
+  only worth asking before you commit to something, and the check answered about
+  the last *saved* version — it reloaded the stored flow and ignored the one it
+  had been handed. An unsaved change could not be checked at all, and the answer
+  looked like it applied to what was on screen. It now judges what it is given,
+  and still judges what is stored when it is given nothing.
+
+- **A big result no longer vanishes from a step's data.** Anything past 96 KB
+  was dropped whole, keeping the port and its column names but nothing to look
+  at — and the steps that most need a look, an RSS feed or a wide spreadsheet
+  read, are exactly the ones that go past it on sheer volume rather than on any
+  one row being large. A row list now keeps as many rows from the front as fit,
+  and carries the count of how many there really were, so a step that emitted
+  thirty-four items shows the first few instead of nothing at all. Text and
+  files are still dropped whole: half a JSON document is not a shorter document,
+  and nothing in it would admit it had been cut.
+
 ## [0.41.9] - 2026-09-10
 
 ### Added
