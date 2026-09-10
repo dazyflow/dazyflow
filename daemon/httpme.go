@@ -206,21 +206,50 @@ func (h *flowAPI) saveFlowMe(rw http.ResponseWriter, r *http.Request, p core.Pri
 		return
 	}
 	h.audit(r.Context(), p, "graph.save", g.ID, "commit="+commit)
-	writeJSON(rw, http.StatusOK, h.flowMutationResponse(r, commit, g))
+	writeJSON(rw, http.StatusOK, h.flowMutationResponse(r, p, commit, g))
 }
 
-func (h *flowAPI) flowMutationResponse(r *http.Request, commit string, g core.Graph) map[string]any {
+func (h *flowAPI) flowMutationResponse(r *http.Request, p core.Principal, commit string, g core.Graph) map[string]any {
 	scope := g.Tenant + "/" + g.Workspace + "/" + g.ID
 	base := h.effectiveBaseURL(r)
 	resp := map[string]any{
 		"commit":                 commit,
 		"flow_id":                scope,
-		"lint":                   core.LintGraph(g),
+		"lint":                   h.lintGraph(r, p, g),
 		"endpoints":              h.triggerEndpoints(base, g),
 		"public_base_configured": h.svc.PublicBaseURL != "",
 	}
 	resp["canvas_url"] = base + "/flows/" + g.ID
 	return resp
+}
+
+// lintGraph is the lint a save returns: LintGraph plus the catalog-aware
+// WIRING warnings.
+//
+// The wiring rules are the ones that need to know what a step's ports are, and
+// their absence is felt: a list wired into a single-item input saved clean, and
+// the author found out at run time with "can't evaluate field X in type
+// interface {}" — a message that names neither the edge nor the step that made
+// it. many_into_one names both.
+//
+// Structural errors are deliberately not here; see WiringWarnings. A catalog
+// that cannot be read degrades to LintGraph rather than failing the save.
+// validateGraph answers an explicit "is this sound?" and so runs everything,
+// structural errors included — unlike a save, which only reports on the wiring.
+func (h *flowAPI) validateGraph(r *http.Request, p core.Principal, g core.Graph) []core.LintIssue {
+	manifests, err := h.svc.ListDrops(r.Context(), p)
+	if err != nil {
+		return core.LintGraph(g)
+	}
+	return core.ValidateGraphFull(g, manifests)
+}
+
+func (h *flowAPI) lintGraph(r *http.Request, p core.Principal, g core.Graph) []core.LintIssue {
+	manifests, err := h.svc.ListDrops(r.Context(), p)
+	if err != nil {
+		return core.LintGraph(g)
+	}
+	return append(core.LintGraph(g), core.WiringWarnings(g, manifests)...)
 }
 
 func (h *flowAPI) historyFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -272,7 +301,7 @@ func (h *flowAPI) restoreFlowMe(rw http.ResponseWriter, r *http.Request, p core.
 		return
 	}
 	h.audit(r.Context(), p, "graph.restore", id, "from="+body.Ref+" commit="+commit)
-	writeJSON(rw, http.StatusOK, h.flowMutationResponse(r, commit, g))
+	writeJSON(rw, http.StatusOK, h.flowMutationResponse(r, p, commit, g))
 }
 
 func (h *flowAPI) duplicateFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -301,7 +330,7 @@ func (h *flowAPI) duplicateFlowMe(rw http.ResponseWriter, r *http.Request, p cor
 		return
 	}
 	h.audit(r.Context(), p, "graph.duplicate", newID, "from="+id+" commit="+commit)
-	writeJSON(rw, http.StatusCreated, h.flowMutationResponse(r, commit, g))
+	writeJSON(rw, http.StatusCreated, h.flowMutationResponse(r, p, commit, g))
 }
 
 func (h *flowAPI) labelRevisionMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -605,7 +634,7 @@ func (h *flowAPI) patchFlowMe(rw http.ResponseWriter, r *http.Request, p core.Pr
 		return
 	}
 	h.audit(r.Context(), p, "graph.patch", next.ID, "commit="+commit)
-	writeJSON(rw, http.StatusOK, h.flowMutationResponse(r, commit, next))
+	writeJSON(rw, http.StatusOK, h.flowMutationResponse(r, p, commit, next))
 }
 
 // RFC 7396: a null value deletes, an object merges recursively.
@@ -762,12 +791,26 @@ func (h *flowAPI) validateFlowMe(rw http.ResponseWriter, r *http.Request, p core
 	if !ok {
 		return
 	}
-	g, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, "")
-	if err != nil {
-		writeAPIError(rw, http.StatusNotFound, "flow_not_found", err.Error())
+	// A posted graph is a candidate the author has not saved yet — "is this
+	// wiring sound?" asked BEFORE committing to it, which is the only order in
+	// which the answer can change what they do. An empty body keeps the older
+	// meaning and lints what is stored.
+	body, ok := decodeRequestJSONOptional[core.Graph](rw, r)
+	if !ok {
 		return
 	}
-	issues := core.LintGraph(g)
+	g := body
+	if len(g.Nodes) == 0 {
+		var err error
+		if g, err = h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, ""); err != nil {
+			writeAPIError(rw, http.StatusNotFound, "flow_not_found", err.Error())
+			return
+		}
+	}
+	// The path names the flow; a body claiming another one must not redirect the
+	// scoping that readFlowID already authorized.
+	g.Tenant, g.Workspace, g.ID = tenant, workspace, id
+	issues := h.validateGraph(r, p, g)
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"ok":     !hasLintError(issues),
 		"issues": issues,

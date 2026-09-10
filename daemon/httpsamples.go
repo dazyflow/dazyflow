@@ -5,6 +5,7 @@ package daemon
 
 import (
 	"net/http"
+	"reflect"
 
 	"github.com/dazyflow/dazyflow/core"
 )
@@ -32,8 +33,22 @@ const maxSampleRecords = 400
 // face. The face shows three rows and a few columns; a step that emitted a
 // 40 MB spreadsheet has nothing extra to say on a 200px card, and sending it
 // would cost every editor load. Oversized ports keep their port and MIME so
-// the card still names what flows, and drop the value.
+// the card still names what flows.
 const maxSampleValueBytes = 96 << 10 // 96 KiB
+
+// sampleRef is a Ref plus how much of it was left behind. Truncated carries the
+// row count the step ACTUALLY produced whenever the served value holds fewer —
+// so a reader can say "3 of 34" rather than presenting a prefix as the whole
+// thing. Zero means the value is complete, which is the common case and why it
+// is omitempty.
+//
+// It embeds core.Ref rather than adding a field to it: Ref crosses the
+// daemon/runner wire on every job, and "how much did the editor get" is a
+// question only this endpoint asks.
+type sampleRef struct {
+	core.Ref
+	Truncated int `json:"truncated,omitempty"`
+}
 
 func (h *flowAPI) flowSamples(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := readFlowID(rw, r, p)
@@ -78,8 +93,8 @@ func (h *flowAPI) flowSamples(rw http.ResponseWriter, r *http.Request, p core.Pr
 //
 // A record with no result is skipped rather than recorded as empty: a step
 // that failed this morning should still show what it produced yesterday.
-func latestOutputs(recs []core.JobRecord, budget int) map[string]map[string]core.Ref {
-	out := make(map[string]map[string]core.Ref)
+func latestOutputs(recs []core.JobRecord, budget int) map[string]map[string]sampleRef {
+	out := make(map[string]map[string]sampleRef)
 	for _, rec := range recs {
 		if rec.NodeID == "" || rec.Result == nil || len(rec.Result.Output) == 0 {
 			continue
@@ -87,7 +102,7 @@ func latestOutputs(recs []core.JobRecord, budget int) map[string]map[string]core
 		if _, seen := out[rec.NodeID]; seen {
 			continue
 		}
-		ports := make(map[string]core.Ref, len(rec.Result.Output))
+		ports := make(map[string]sampleRef, len(rec.Result.Output))
 		for port, ref := range rec.Result.Output {
 			ports[port] = capSampleRef(ref, budget)
 		}
@@ -96,13 +111,68 @@ func latestOutputs(recs []core.JobRecord, budget int) map[string]map[string]core
 	return out
 }
 
-// capSampleRef strips the inline value of an oversized port, keeping the
-// metadata that says what the port carries. ApproxValueSize stops counting at
-// the budget, so measuring a huge value costs the budget rather than the
-// value.
-func capSampleRef(ref core.Ref, budget int) core.Ref {
+// capSampleRef brings an oversized port under the budget, preferring a shorter
+// value to no value.
+//
+// A row list is the case worth handling: an RSS feed or a spreadsheet read blows
+// the budget on volume, not on any one row, and its FIRST rows answer every
+// question the editor asks of a sample — what the columns are called, what a
+// value looks like, what a template will render. So a list keeps the prefix that
+// fits and reports the true length in Truncated.
+//
+// Anything else (a 40 MB string, a blob) can only be cut mid-value, which would
+// hand a reader a half a JSON document and no way to know it. Those still drop
+// to metadata alone, as does a list whose very first row already exceeds the
+// budget — Truncated still carries the row count, so "34 items, too large to
+// show" stays sayable.
+//
+// ApproxValueSize stops counting at the budget, so measuring a huge value costs
+// the budget rather than the value.
+func capSampleRef(ref core.Ref, budget int) sampleRef {
 	if ref.Inline == nil || core.ApproxValueSize(ref.Inline, budget) < budget {
-		return ref
+		return sampleRef{Ref: ref}
 	}
-	return core.Ref{MIME: ref.MIME, Ref: ref.Ref, Headers: ref.Headers}
+	if rows, ok := sampleRows(ref.Inline); ok {
+		kept, spent := 0, 0
+		for _, row := range rows {
+			spent += core.ApproxValueSize(row, budget)
+			if spent >= budget {
+				break
+			}
+			kept++
+		}
+		if kept > 0 {
+			short := ref
+			short.Inline = rows[:kept]
+			return sampleRef{Ref: short, Truncated: len(rows)}
+		}
+		return sampleRef{Ref: core.Ref{MIME: ref.MIME, Ref: ref.Ref, Headers: ref.Headers}, Truncated: len(rows)}
+	}
+	return sampleRef{Ref: core.Ref{MIME: ref.MIME, Ref: ref.Ref, Headers: ref.Headers}}
+}
+
+// sampleRows reports whether a port's value is a list of rows, and flattens it
+// to []any so a prefix can be taken.
+//
+// Reflection rather than a []any type assertion because the same value reaches
+// here in two shapes: a drop emits its own []map[string]any, and a store that
+// round-trips through JSON hands back []any. Both are the same rows to a reader,
+// and a type switch that saw only one would truncate inconsistently depending on
+// where the record came from.
+//
+// []byte is a blob, not a list — slicing it would cut a value in half, which is
+// the thing this whole function exists to avoid.
+func sampleRows(v any) ([]any, bool) {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array {
+		return nil, false
+	}
+	if rv.Type().Elem().Kind() == reflect.Uint8 {
+		return nil, false
+	}
+	out := make([]any, rv.Len())
+	for i := range out {
+		out[i] = rv.Index(i).Interface()
+	}
+	return out, true
 }

@@ -78,6 +78,13 @@ type Port struct {
 
 	List bool `json:"list,omitempty" xml:"list,omitempty"`
 
+	// Executable marks a port whose text is RUN rather than read — the Code
+	// step's script, and anything like it later. It changes nothing at run time;
+	// it exists so a lint rule can tell "this step reads a value from the web"
+	// apart from "this step runs what the web sent it", which are the same edge
+	// to every other rule in this file.
+	Executable bool `json:"executable,omitempty" xml:"executable,omitempty"`
+
 	// Illustrative payload, NOT UI copy, so it is never translated: an author wiring
 	// ${…subject} needs whatever key the upstream API really uses.
 	Example json.RawMessage `json:"example,omitempty" xml:"example,omitempty"`

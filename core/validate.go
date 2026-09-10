@@ -336,8 +336,67 @@ func unknownModuleFanIn(g Graph, n Node, incoming map[inputKey]int) []error {
 func ValidateGraphFull(g Graph, manifests map[string]Manifest) []LintIssue {
 	issues := LintGraph(g)
 	issues = append(issues, ManifestLintIssues(g, manifests)...)
-	issues = append(issues, structuredIntoTextWarnings(g, manifests)...)
-	return append(issues, cardinalityMismatchWarnings(g, manifests)...)
+	return append(issues, WiringWarnings(g, manifests)...)
+}
+
+// WiringWarnings is the catalog-aware half of ValidateGraphFull that judges
+// EDGES rather than structure: a list wired into a single-item input, raw JSON
+// wired into a text one. Every issue it returns is a warning about a connection
+// the author drew, and every one names both ends.
+//
+// It is split out for the save path, which wants these and not the structural
+// errors beside them. "Unknown module" is an error there for a reason that does
+// not hold on a save: the catalog can be legitimately incomplete when an MCP
+// server or an API integration is momentarily unreachable, and a red
+// "references unknown module" across a flow the author has not touched would be
+// wrong about their flow and right only about the network.
+func WiringWarnings(g Graph, manifests map[string]Manifest) []LintIssue {
+	issues := structuredIntoTextWarnings(g, manifests)
+	issues = append(issues, cardinalityMismatchWarnings(g, manifests)...)
+	return append(issues, executableFromTriggerWarnings(g, manifests)...)
+}
+
+// A trigger's payload is written by whoever called the endpoint. Feeding it to a
+// port that RUNS its text means the caller chooses the code, which is a
+// different proposition from the caller choosing a value — and it does not
+// announce itself on the canvas, where both are one line between two steps.
+//
+// A warning rather than an error: it is a legitimate design for a trusted
+// internal endpoint, and the sandbox bounds what the code can reach. But it
+// should be a decision someone made, not one they drew by accident.
+func executableFromTriggerWarnings(g Graph, manifests map[string]Manifest) []LintIssue {
+	if len(manifests) == 0 {
+		return nil
+	}
+	byID := make(map[string]Manifest, len(g.Nodes))
+	for _, n := range g.Nodes {
+		if m, ok := manifests[n.Module]; ok {
+			byID[n.ID] = m
+		}
+	}
+	var out []LintIssue
+	for _, e := range g.Edges {
+		src, ok1 := byID[e.From]
+		dst, ok2 := byID[e.To]
+		if !ok1 || !ok2 || e.FromPort == PassPort {
+			continue
+		}
+		ip, hasIn := dst.Input(e.ToPort)
+		if !hasIn || !ip.Executable {
+			continue
+		}
+		if src.ExecutionModel != ExecutionTrigger && src.Category != "trigger" {
+			continue
+		}
+		out = append(out, LintIssue{
+			Code:     "executable_from_trigger",
+			Severity: LintWarn,
+			Message: fmt.Sprintf("node %q is a trigger, and %q runs what arrives on %q as code — whoever calls the trigger would choose the script. Feed it from a Text step or a file instead, or make sure only trusted callers can reach %q.",
+				e.From, e.To, e.ToPort, e.From),
+			NodeIDs: []string{e.From, e.To},
+		})
+	}
+	return out
 }
 
 // A warning, not an error: occasionally intentional, and the run will not fail,
