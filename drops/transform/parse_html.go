@@ -45,8 +45,11 @@ func init() {
 			Category: "transformation",
 			Provider: "internal",
 			Tags: []string{
-				"transform", "html", "parse", "scrape", "selector", "css",
+				"transform", "html", "parse", "scrape", "scraping", "selector", "css",
 				"web", "extract", "rows", "table",
+				// web_watch owns "page" through its label; without these,
+				// "scrape a product page" found the page WATCHER first.
+				"page", "web page", "webpage", "product page", "price",
 			},
 			Description: "Pull the parts you want out of a web page. Fetch the page with the Web request step, " +
 				"wire the response in here, and name each value you want with a CSS selector — the same thing " +
@@ -62,7 +65,7 @@ func init() {
 				"CSV, Sheets or a database.\n\n" +
 				"Set 'Page address' and any link or image you pull comes out as a full address rather than the " +
 				"half of one the page carries. Every value is text, like CSV.",
-			Summary: "Extract fields from HTML with CSS selectors, as one record or one row per match.",
+			Summary: "Scrape a web page: extract fields from HTML with CSS selectors, as one record or one row per match.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Read one value off a page",

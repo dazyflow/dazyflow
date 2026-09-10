@@ -20,6 +20,7 @@
 // conflict_columns and STRIPE_API_KEY are what the user types.
 
 export const SV_FIELD_TITLES: Record<string, string> = {
+  "Forget the whole base": "Glöm hela basen",
   "Decimals": "Decimaler",
   "Group the thousands": "Gruppera tusentalen",
   "Which way": "Åt vilket håll",
@@ -355,6 +356,20 @@ export const SV_FIELD_TITLES: Record<string, string> = {
 };
 
 export const SV_FIELD_HELP: Record<string, string> = {
+  "Confirms that a step with no document named really is meant to empty the base. Ignored when a document is named.":
+    "Bekräftar att ett steg utan angivet dokument verkligen är tänkt att tömma basen. Ignoreras när ett dokument anges.",
+  "How to compare A against B. Mind the last four: \"is set\" asks only whether there is a value at all, so an empty list or empty text IS set — reach for \"is empty\" when you mean nothing in it.":
+    "Hur A ska jämföras med B. Se upp med de fyra sista: \"har ett värde\" frågar bara om det finns något värde alls, så en tom lista eller tom text HAR ett värde — ta \"är tomt\" när du menar att det inte finns något i det.",
+  "How to test the Value against Compare to. Mind the last four: \"is set\" asks only whether there is a value at all, so an empty list or empty text IS set — reach for \"is empty\" when you mean nothing in it, which is what stops a report going out with no rows.":
+    "Hur Värdet ska testas mot Jämför med. Se upp med de fyra sista: \"har ett värde\" frågar bara om det finns något värde alls, så en tom lista eller tom text HAR ett värde — ta \"är tomt\" när du menar att det inte finns något i det, vilket är det som hindrar en rapport från att gå ut utan rader.",
+  "Keep only this many rows, taken AFTER sorting — which is what makes a top-five: sort by score descending, then cap at 5. Empty keeps every row.":
+    "Behåll bara så här många rader, tagna EFTER sorteringen — vilket är det som ger en topp fem: sortera på poäng nedåt, och kapa sedan vid 5. Tomt behåller alla rader.",
+  "Keep only this many rows, taken after the filters. Empty keeps every row.":
+    "Behåll bara så här många rader, tagna efter filtren. Tomt behåller alla rader.",
+  "The document to forget, named exactly as it was added — a filename, a URL, a ticket number. Leave it empty only to empty the whole base.":
+    "Dokumentet som ska glömmas, angivet exakt som det lades till — ett filnamn, en URL, ett ärendenummer. Lämna tomt bara för att tömma hela basen.",
+  "Which collection of documents to take it out of.":
+    "Vilken samling dokument det ska tas ut ur.",
   "How many digits after the decimal point. 0 gives a whole number.":
     "Hur många siffror efter decimaltecknet. 0 ger ett helt tal.",
   "Nearest is the ordinary one. Up and down are for the cases where the answer has to cover something — boxes to order, a price ceiling.":
@@ -536,7 +551,6 @@ export const SV_FIELD_HELP: Record<string, string> = {
     "Hur många träffar som som mest hämtas. En tillfällig sökning returnerar de nyaste. Med ”Bara nya sedan förra körningen” påslaget tas i stället de ÄLDSTA väntande meddelandena, i ankomstordning, och resten följer vid nästa kontroller — så en skur som är större än detta fördröjs, den hoppas aldrig över.",
   "How many pages each piece gets. 1 makes a file per page.": "Hur många sidor varje del får. 1 ger en fil per sida.",
   "How many spaces each level is indented by. 2 is the convention almost everything uses.": "Hur många blanksteg varje nivå dras in med. 2 är den konvention nästan allt använder.",
-  "How to test the Value against Compare to.": "Hur värdet ska testas mot Jämför med.",
   "How to treat a file with \"---\" separators. \"One row per document\" suits a manifest bundle; \"Only the first\" suits a file whose later documents are overrides you don't want.": "Hur en fil med \"---\"-avgränsare ska hanteras. \"En rad per dokument\" passar en samling manifest; \"Bara det första\" passar en fil vars senare dokument är överstyrningar du inte vill ha.",
   "IANA timezone relative times are resolved in, e.g. \"Europe/Stockholm\". Empty = UTC.": "IANA-tidszonen som relativa tider räknas i, t.ex. \"Europe/Stockholm\". Tomt = UTC.",
   "IANA timezone relative times are resolved in. Empty = UTC.": "IANA-tidszonen som relativa tider räknas i. Tomt = UTC.",
@@ -658,7 +672,6 @@ export const SV_FIELD_HELP: Record<string, string> = {
   "How often to check for a change once the flow is published. Leave blank to only check when you press Run (for testing).": "Hur ofta det kontrolleras om något ändrats när flödet är publicerat. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
   "How often to check for new responses once the flow is published. Leave blank to only check when you press Run (for testing).": "Hur ofta det kontrolleras om nya svar kommit när flödet är publicerat. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
   "How the body is sent. HTML renders formatting and links; Text sends it exactly as typed.": "Hur innehållet skickas. HTML visar formatering och länkar; Text skickar det exakt som du skrivit.",
-  "How to compare A against B.": "Hur A ska jämföras med B.",
   "How urgently it buzzes. Leave unset for the normal level.": "Hur enträget den låter. Lämna oställt för normal nivå.",
   "IANA time zone for timed events. Optional when the timestamp carries an offset.": "IANA-tidszon för händelser med klockslag. Valfritt när tidsstämpeln bär en tidsförskjutning.",
   "IANA time zone the schedule is read in, e.g. \"Europe/Stockholm\". Empty = UTC. The editor stamps your browser's zone here automatically; search the list to change it.": "IANA-tidszon som schemat läses i, t.ex. \"Europe/Stockholm\". Tomt = UTC. Redigeraren fyller automatiskt i din webbläsares zon här; sök i listan för att byta.",
@@ -998,6 +1011,12 @@ export const SV_FIELD_HELP: Record<string, string> = {
 };
 
 export const SV_ENUM_LABELS: Record<string, string> = {
+  "is set": "har ett värde",
+  "is not set": "har inget värde",
+  "has something in it": "innehåller något",
+  "A is set": "A har ett värde",
+  "A is not set": "A har inget värde",
+  "A has something in it": "A innehåller något",
   "Write it out": "Skriv ut det",
   "Round it": "Avrunda",
   "As money": "Som pengar",
@@ -1076,7 +1095,6 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "A does not contain B": "A innehåller inte B",
   "A does not equal B": "A är inte lika med B",
   "A equals B": "A är lika med B",
-  "A has a value": "A har ett värde",
   "A is empty": "A är tomt",
   "A is greater than B": "A är större än B",
   "A is greater than or equal to B": "A är större än eller lika med B",
@@ -1098,7 +1116,6 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "is not one of": "är inte någon av",
   "is within range": "ligger inom intervallet",
   "is outside range": "ligger utanför intervallet",
-  "has a value": "har ett värde",
   "is empty": "är tomt",
   "AED — UAE Dirham": "AED — Förenade Arabemiratens dirham",
   "AFN — Afghan Afghani": "AFN — Afghansk afghani",

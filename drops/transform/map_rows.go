@@ -55,6 +55,7 @@ func init() {
 					"drop":       {"type":"array","items":{"type":"string"},"description":"Columns to remove (mutually exclusive with select)."},
 					"rename":     {"type":"object","additionalProperties":{"type":"string"},"description":"Column rename map {old_name: new_name}. Applied AFTER select/drop/default so other ops can still refer to original names."},
 					"default":    {"type":"object","additionalProperties":true,"description":"Default values for missing or null cells, keyed by INPUT column name."},
+					"limit":      {"type":"integer","minimum":1,"title":"Max rows","description":"Keep only this many rows, taken after the filters. Empty keeps every row."},
 					"filter_eq":  {"type":"object","additionalProperties":true,"description":"Keep only rows where every listed (column == value). String-compared, so 30 matches \"30\"."},
 					"filter_neq": {"type":"object","additionalProperties":true,"description":"Drop rows where any listed (column == value). String-compared."},
 					"filter_in":  {"type":"object","additionalProperties":{"type":"array"},"description":"Keep only rows where every listed column's value appears in the given list. String-compared."}
@@ -152,6 +153,9 @@ func executeMapRows(_ context.Context, job core.Job, _ chan<- core.Progress) (co
 		outRows = append(outRows, outRow)
 	}
 
+	if n := params.IntDefault(job.Params, "limit", 0); n > 0 && n < len(outRows) {
+		outRows = outRows[:n]
+	}
 	return resultRows(job, outRows, outputHeaders), nil
 }
 

@@ -310,3 +310,24 @@ func TestMapRows_JSONRoundtripShape(t *testing.T) {
 		t.Errorf("rows = %+v", rows)
 	}
 }
+
+// The cap applies to what survived the filters, not to what came in.
+func TestMapRows_LimitAppliesAfterFiltering(t *testing.T) {
+	rows := []map[string]any{
+		{"name": "a", "status": "open"},
+		{"name": "b", "status": "done"},
+		{"name": "c", "status": "open"},
+		{"name": "d", "status": "open"},
+	}
+	got, _ := run(t, map[string]any{
+		"filter_eq": map[string]any{"status": "open"},
+		"limit":     2,
+	}, rows, nil)
+
+	if len(got) != 2 {
+		t.Fatalf("got %d rows, want 2", len(got))
+	}
+	if got[0]["name"] != "a" || got[1]["name"] != "c" {
+		t.Errorf("got %v, want the first two OPEN rows — the cap comes after the filter", got)
+	}
+}

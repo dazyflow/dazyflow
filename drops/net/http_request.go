@@ -35,9 +35,14 @@ func init() {
 			Category:    "network",
 			Provider:    "internal",
 			Integration: "HTTP",
-			Tags:        []string{"http", "rest", "api", "webhook"},
+			Tags: []string{"http", "rest", "api", "webhook",
+				// The paging words: the feature was unfindable by the phrase
+				// anyone would use for it ("get every page from the api"
+				// ranked this step seventh).
+				"pagination", "paginate", "pages", "every page", "next page",
+				"cursor", "all results", "all pages"},
 			Description: "Call any web address (API) — GET, POST, PUT, PATCH, or DELETE. Useful when the service you want to talk to doesn't have a dedicated step here yet. The response, the status code, and the headers come out on separate ports, so a Branch can test the status directly. Private-network addresses are blocked by default to prevent accidental internal calls.",
-			Summary:     "Call a web address (API) and get the response, status code, and headers back as separate ports.",
+			Summary:     "Call a web address (API) and get the response, status code and headers back as separate ports; follows the pages of a paged API and returns every item as one list.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Simple authenticated GET",

@@ -68,6 +68,12 @@ func init() {
 						"default":"asc",
 						"title":"Direction",
 						"description":"Which way to sort. Applies to every column in 'Sort by' except ones prefixed with '-' or '+', which keep their own direction."
+					},
+					"limit":{
+						"type":"integer",
+						"minimum":1,
+						"title":"Max rows",
+						"description":"Keep only this many rows, taken AFTER sorting — which is what makes a top-five: sort by score descending, then cap at 5. Empty keeps every row."
 					}
 				},
 				"required":["by"]
@@ -131,6 +137,12 @@ func executeSortRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 		return false
 	})
 
+	// The cap comes after the sort, which is the whole point: it is what
+	// turns "sort by score" into "the top five by score". Every other step
+	// that caps rows calls the param `limit`.
+	if n := params.IntDefault(job.Params, "limit", 0); n > 0 && n < len(out) {
+		out = out[:n]
+	}
 	return resultRows(job, out, headers), nil
 }
 

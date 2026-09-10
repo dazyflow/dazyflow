@@ -12,6 +12,30 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Added
 
+- **"Is empty" now means empty.** If and Compare could ask whether a value was
+  *there*, and the dropdown called that "is empty" — but an empty list is
+  there, so a report guarded that way went out with no rows in it, silently.
+  Two new tests answer the question that was actually being asked: **is empty**
+  and **has something in it**, true of nothing at all, a list or object with no
+  entries, and text that is blank or only spaces. A number is never empty — 0
+  sales is a measurement — and neither is false. The old pair keeps its exact
+  behaviour and is now honestly labelled **is set** / **is not set**, so no
+  existing flow changes what it does.
+
+- **Row steps can take the first few.** Twenty steps had a row cap and every
+  one of them was a step that *fetches* rows — nothing that shaped them could
+  cap at all, so "the top five by score" had no expression. **Sort rows** and
+  **Choose & rename columns** now take a **Max rows**, applied after the sort
+  and after the filters respectively, which is what turns a sort into a top-N.
+
+- **Knowledge can forget a document.** Adding a source again replaced its
+  passages, but nothing could take one out — the page that no longer exists,
+  the policy that was withdrawn, the customer who asked to be forgotten.
+  **Forget a document** removes one source's passages, or empties a whole base
+  behind an explicit switch, which also frees the name to be rebuilt with a
+  different embedding model. It needs no connection: forgetting reads no
+  embeddings, so it works before Knowledge is set up.
+
 - **Change a number.** Rounding was reachable through a formula; writing a
   number for the person who reads it was not reachable at all. 1,234.50 in
   English is 1 234,50 in Swedish, money goes $1,234.50 in one and 1 234,50 kr
@@ -194,6 +218,15 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   belongs on **Run on your machine**.
 
 ### Fixed
+
+- **Three steps that could not be found by the words for them.** Web request
+  had just learned to fetch every page of an API and the catalogue never
+  learned to say so — "get every page from the api" ranked it seventh, behind
+  the page watcher and a Notion step. "Clean up old rows" ranked Collections'
+  delete sixth, behind Sort rows, whose id carries the word. And "scrape the
+  price off a product page" found the page *watcher* before Read a web page.
+  All three now rank first, and neither the watcher nor Sort rows lost the
+  queries that are genuinely theirs.
 
 - **Searching the catalogue for a short word finds what it means.** A search
   for "ai" answered with `await_approval`, `contains` and `email` — steps that

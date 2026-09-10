@@ -694,7 +694,7 @@
     "help": [
       "For in_range: include the lower bound. Defaults to true (like Unreal's InRange).",
       "For in_range: include the upper bound. Defaults to true (like Unreal's InRange).",
-      "How to compare A against B.",
+      "How to compare A against B. Mind the last four: \"is set\" asks only whether there is a value at all, so an empty list or empty text IS set — reach for \"is empty\" when you mean nothing in it.",
       "Literal value for A when the A input isn't connected. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text.",
       "Literal value for B when the B input isn't connected. Parsed as JSON when possible — a number, or a list like [200,201,204] for one_of, or [min,max] for in_range.",
       "Optional dot-path into A when A is a JSON object (e.g. priority). Empty compares the whole value."
@@ -704,15 +704,17 @@
       "A does not contain B",
       "A does not equal B",
       "A equals B",
-      "A has a value",
+      "A has something in it",
       "A is empty",
       "A is greater than B",
       "A is greater than or equal to B",
       "A is less than B",
       "A is less than or equal to B",
       "A is not one of B",
+      "A is not set",
       "A is one of B",
       "A is outside range B",
+      "A is set",
       "A is within range B"
     ]
   },
@@ -2655,7 +2657,7 @@
     "help": [
       "For \"is within range\": include the lower bound.",
       "For \"is within range\": include the upper bound.",
-      "How to test the Value against Compare to.",
+      "How to test the Value against Compare to. Mind the last four: \"is set\" asks only whether there is a value at all, so an empty list or empty text IS set — reach for \"is empty\" when you mean nothing in it, which is what stops a report going out with no rows.",
       "Optional dot-path into the Value when it is a JSON object (e.g. status). Empty tests the whole value. The full payload still routes — only the test reads the field.",
       "What to compare the Value against, used when the Compare to input isn't connected. Parsed as JSON when possible — a number, or a list like [200,201,204] for \"is one of\", or [min,max] for \"is within range\"."
     ],
@@ -2664,15 +2666,17 @@
       "does not contain",
       "does not equal",
       "equals",
-      "has a value",
+      "has something in it",
       "is empty",
       "is greater than",
       "is greater than or equal to",
       "is less than",
       "is less than or equal to",
       "is not one of",
+      "is not set",
       "is one of",
       "is outside range",
+      "is set",
       "is within range"
     ]
   },
@@ -3047,6 +3051,27 @@
       "text-embedding-3-small"
     ]
   },
+  "knowledge_forget": {
+    "description": "Take a document back out of a knowledge base. Adding a source again replaces its passages, so this is for the other case — the page that no longer exists, the policy that was withdrawn, the customer who asked to be forgotten.\n\nName the same 'Where it came from' the document was added under. Every passage that came from it goes; the rest of the base is untouched.\n\nEmptying a whole base is deliberately harder: leave the source empty and the step refuses unless you also turn on 'Forget the whole base'. That frees the name to be built again — with a different embedding model, if that is why you are clearing it.\n\nIt needs no connection: forgetting reads no embeddings, so this works even before Knowledge is set up.",
+    "ports": [
+      "Pass-through",
+      "Passages forgotten",
+      "Where it came from"
+    ],
+    "label": "Knowledge",
+    "subtitle": "Forget a document",
+    "integration": "Knowledge",
+    "titles": [
+      "Forget the whole base",
+      "Knowledge base",
+      "Where it came from"
+    ],
+    "help": [
+      "Confirms that a step with no document named really is meant to empty the base. Ignored when a document is named.",
+      "The document to forget, named exactly as it was added — a filename, a URL, a ticket number. Leave it empty only to empty the whole base.",
+      "Which collection of documents to take it out of."
+    ]
+  },
   "knowledge_search": {
     "description": "Find the passages in a knowledge base that bear on a question, and hand them to an AI step to answer from.\n\nThis is the retrieval half of asking your own documents questions. Wire the question into 'query'; the passages come back on 'text', already joined and ready to paste into a prompt, and on 'rows' one per passage with the score and where it came from. Then wire 'text' into ChatGPT or Claude alongside the question — \"answer using only this\" — and the answer is grounded in your own documents instead of the model's memory. Wire 'text' into the AI step's Prompt and put the question in its System prompt, or write one prompt that reads both with ${upstream.\u003cthis step's id\u003e.text}.\n\nIt matches by meaning rather than by words: \"how much holiday do I get\" finds the passage about annual leave. Ask for more passages when answers come out thin, fewer when they come out vague. 'Least score' drops the weak matches — around 0.3 is a reasonable floor for most models, and nothing at all is better than a passage about the wrong thing.\n\nThe base has to have been built with the same embedding model this connection uses; if it was not, the step says so rather than returning nonsense.",
     "ports": [
@@ -3152,6 +3177,9 @@
       "Rows"
     ],
     "label": "Choose \u0026 rename columns",
+    "titles": [
+      "Max rows"
+    ],
     "help": [
       "Column rename map {old_name: new_name}. Applied AFTER select/drop/default so other ops can still refer to original names.",
       "Columns to keep (mutually exclusive with drop). If absent and drop is absent, all input columns are kept.",
@@ -3159,7 +3187,8 @@
       "Default values for missing or null cells, keyed by INPUT column name.",
       "Drop rows where any listed (column == value). String-compared.",
       "Keep only rows where every listed (column == value). String-compared, so 30 matches \"30\".",
-      "Keep only rows where every listed column's value appears in the given list. String-compared."
+      "Keep only rows where every listed column's value appears in the given list. String-compared.",
+      "Keep only this many rows, taken after the filters. Empty keeps every row."
     ]
   },
   "merge": {
@@ -4741,10 +4770,12 @@
     "label": "Sort rows",
     "titles": [
       "Direction",
+      "Max rows",
       "Sort by"
     ],
     "help": [
       "Comma-separated column names in priority order; earlier names win ties. E.g. \"revenue,created_at\". To override Direction for one column, prefix it with '-' (descending) or '+' (ascending).",
+      "Keep only this many rows, taken AFTER sorting — which is what makes a top-five: sort by score descending, then cap at 5. Empty keeps every row.",
       "Which way to sort. Applies to every column in 'Sort by' except ones prefixed with '-' or '+', which keep their own direction."
     ],
     "enum_names": [

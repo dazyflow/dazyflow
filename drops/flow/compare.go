@@ -64,9 +64,9 @@ func init() {
 						"type":"string",
 						"default":"equals",
 						"title":"Test",
-						"description":"How to compare A against B.",
-						"enum":["equals","not_equals","greater_than","greater_or_equal","less_than","less_or_equal","contains","not_contains","one_of","not_one_of","in_range","not_in_range","exists","not_exists"],
-						"enumNames":["A equals B","A does not equal B","A is greater than B","A is greater than or equal to B","A is less than B","A is less than or equal to B","A contains B","A does not contain B","A is one of B","A is not one of B","A is within range B","A is outside range B","A has a value","A is empty"]
+						"description":"How to compare A against B. Mind the last four: \"is set\" asks only whether there is a value at all, so an empty list or empty text IS set — reach for \"is empty\" when you mean nothing in it.",
+						"enum":["equals","not_equals","greater_than","greater_or_equal","less_than","less_or_equal","contains","not_contains","one_of","not_one_of","in_range","not_in_range","exists","not_exists","is_empty","not_empty"],
+						"enumNames":["A equals B","A does not equal B","A is greater than B","A is greater than or equal to B","A is less than B","A is less than or equal to B","A contains B","A does not contain B","A is one of B","A is not one of B","A is within range B","A is outside range B","A is set","A is not set","A is empty","A has something in it"]
 					},
 					"A":{"type":"string","title":"A","description":"Literal value for A when the A input isn't connected. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text."},
 					"B":{"type":"string","title":"B","description":"Literal value for B when the B input isn't connected. Parsed as JSON when possible — a number, or a list like [200,201,204] for one_of, or [min,max] for in_range."},
@@ -180,12 +180,49 @@ func extractPath(root any, field string) (any, error) {
 	return current, nil
 }
 
+// isEmptyValue answers "is there nothing in it" for the shapes a flow moves:
+// no value at all, a list or object with no entries, text that is blank or
+// only spaces. A number is never empty — 0 is a value someone measured — and
+// neither is false.
+func isEmptyValue(v any) bool {
+	switch t := v.(type) {
+	case nil:
+		return true
+	case string:
+		return strings.TrimSpace(t) == ""
+	case []byte:
+		return len(strings.TrimSpace(string(t))) == 0
+	case bool, float64, float32, int, int64:
+		return false
+	}
+	// Reflection for the rest, because rows arrive as several concrete slice
+	// types ([]any, []map[string]any, []core.Ref) and an object as several
+	// map types; enumerating them would miss the next one.
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array, reflect.Map:
+		return rv.Len() == 0
+	case reflect.Ptr, reflect.Interface:
+		return rv.IsNil()
+	}
+	return false
+}
+
 func evaluate(a, b any, op string, incMin, incMax bool) (bool, error) {
 	switch op {
 	case "exists":
 		return a != nil, nil
 	case "not_exists":
 		return a == nil, nil
+	// "is set" and "is empty" are different questions, and the difference is
+	// the one that bites: an empty list is SET. Guarding a weekly report with
+	// "is not set" let it go out with no rows, because [] is not nil — and
+	// the dropdown called that operator "is empty", which is what an author
+	// reaches for and not what they got.
+	case "is_empty":
+		return isEmptyValue(a), nil
+	case "not_empty":
+		return !isEmptyValue(a), nil
 	case "equals":
 		return looseEqual(a, b), nil
 	case "not_equals":

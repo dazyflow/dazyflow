@@ -426,3 +426,40 @@ func TestDedupeRows_JSONRoundtripShape(t *testing.T) {
 		t.Errorf("rows = %d, want 2", len(rows))
 	}
 }
+
+// Sort then cap is what "the top five by score" means. Until now nothing in
+// the row family could cap at all: every `limit` in the catalogue was on a
+// step that FETCHES rows, never on one that shapes them.
+func TestSortRows_LimitTakesTheTop(t *testing.T) {
+	rows := []map[string]any{
+		{"name": "a", "score": 10},
+		{"name": "b", "score": 90},
+		{"name": "c", "score": 50},
+		{"name": "d", "score": 70},
+	}
+	got := runSort(t, map[string]any{"by": "score", "sort_dir": "desc", "limit": 2}, rows, nil)
+	if len(got) != 2 {
+		t.Fatalf("got %d rows, want the top 2", len(got))
+	}
+	if got[0]["name"] != "b" || got[1]["name"] != "d" {
+		t.Errorf("got %v, want b then d — the cap has to come after the sort", got)
+	}
+	// The input must not have been truncated in place: it is the upstream
+	// node's own output slice.
+	if len(rows) != 4 {
+		t.Errorf("the input list was cut down to %d rows", len(rows))
+	}
+}
+
+func TestSortRows_LimitBeyondTheRowsIsHarmless(t *testing.T) {
+	rows := []map[string]any{{"score": 1}, {"score": 2}}
+	for _, limit := range []any{nil, 0, 99} {
+		p := map[string]any{"by": "score"}
+		if limit != nil {
+			p["limit"] = limit
+		}
+		if got := runSort(t, p, rows, nil); len(got) != 2 {
+			t.Errorf("limit=%v kept %d rows, want both", limit, len(got))
+		}
+	}
+}

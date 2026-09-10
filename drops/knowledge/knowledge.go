@@ -490,3 +490,115 @@ func floatParam(p map[string]any, key string) float64 {
 	}
 	return 0
 }
+
+// Forgetting needs no embeddings, so this step declares no connection fields —
+// the only step in the integration that works before Knowledge is connected.
+func init() {
+	engine.Register(engine.NativeDrop{
+		Manifest: core.Manifest{
+			ID:          "knowledge_forget",
+			Version:     "1.0",
+			Label:       "Knowledge",
+			Subtitle:    "Forget a document",
+			Color:       "#7c5cff",
+			Icon:        "trash-2",
+			Category:    "io",
+			Provider:    "internal",
+			Integration: integration,
+			Tags: []string{"knowledge", "forget", "delete", "remove", "rag",
+				"document", "stale", "clean up", "tidy", "empty", "rebuild"},
+			Description: "Take a document back out of a knowledge base. Adding a source again replaces its " +
+				"passages, so this is for the other case — the page that no longer exists, the policy that was " +
+				"withdrawn, the customer who asked to be forgotten.\n\n" +
+				"Name the same 'Where it came from' the document was added under. Every passage that came from it " +
+				"goes; the rest of the base is untouched.\n\n" +
+				"Emptying a whole base is deliberately harder: leave the source empty and the step refuses unless " +
+				"you also turn on 'Forget the whole base'. That frees the name to be built again — with a " +
+				"different embedding model, if that is why you are clearing it.\n\n" +
+				"It needs no connection: forgetting reads no embeddings, so this works even before Knowledge is " +
+				"set up.",
+			Summary: "Remove one document's passages from a knowledge base, or empty the base entirely.",
+			Examples: []core.ParamsExample{
+				{
+					Title:  "Forget a page that no longer exists",
+					Params: json.RawMessage(`{"base":"prices","source":"https://shop.example.com/old-page"}`),
+				},
+				{
+					Title:  "Start a base again under a new model",
+					Params: json.RawMessage(`{"base":"handbook","all":true}`),
+					Notes:  "Frees the name: the base no longer remembers which model built it.",
+				},
+			},
+			ExecutionModel: core.ExecutionBatch,
+			ProcessModel:   core.ProcessLongLived,
+			Inputs: []core.Port{
+				{Port: "source", Label: "Where it came from", MIME: []string{"text/plain"}},
+			},
+			Outputs: []core.Port{
+				{Port: "forgotten", Label: "Passages forgotten", MIME: []string{"application/json"}},
+			},
+			ParamsSchema: json.RawMessage(`{
+				"type":"object",
+				"properties":{
+					"base":{"type":"string","title":"Knowledge base","description":"Which collection of documents to take it out of."},
+					"source":{"type":"string","title":"Where it came from","description":"The document to forget, named exactly as it was added — a filename, a URL, a ticket number. Leave it empty only to empty the whole base."},
+					"all":{"type":"boolean","default":false,"title":"Forget the whole base","description":"Confirms that a step with no document named really is meant to empty the base. Ignored when a document is named."}
+				},
+				"required":["base"]
+			}`),
+			// Forgetting twice removes nothing the second time, so a retry edge
+			// is safe.
+			Idempotent: true,
+		},
+		Execute: executeForget,
+	})
+}
+
+func executeForget(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
+	base := strings.TrimSpace(params.StringDefault(job.Params, "base", ""))
+	if base == "" {
+		return params.Err(job, "bad_param", "'Knowledge base' is required — name the collection to take it out of"), nil
+	}
+	source, _ := params.TextInputOr(job, "source", strings.TrimSpace(params.StringDefault(job.Params, "source", "")))
+	source = strings.TrimSpace(source)
+	all := params.BoolDefault(job.Params, "all", false)
+	if source == "" && !all {
+		return params.Err(job, "bad_param",
+			"this would empty the whole "+base+" base — name the document under 'Where it came from', or turn on 'Forget the whole base' to say you meant it"), nil
+	}
+
+	db, errRes := openStore(job, false)
+	if errRes != nil {
+		return *errRes, nil
+	}
+	// Nothing was ever added, so there is nothing to forget.
+	if db == nil {
+		return forgottenResult(job, 0), nil
+	}
+	defer db.Close()
+
+	var (
+		n   int
+		err error
+	)
+	if source == "" {
+		n, err = forgetBase(ctx, db, base)
+	} else {
+		n, err = forgetSource(ctx, db, base, source)
+	}
+	if err != nil {
+		if isMissingTable(err) {
+			return forgottenResult(job, 0), nil
+		}
+		return params.Err(job, "db", err.Error()), nil
+	}
+	return forgottenResult(job, n), nil
+}
+
+func forgottenResult(job core.Job, n int) core.Result {
+	return core.Result{
+		JobID:  job.ID,
+		Status: core.StatusOK,
+		Output: map[string]core.Ref{"forgotten": {MIME: "application/json", Inline: n}},
+	}
+}

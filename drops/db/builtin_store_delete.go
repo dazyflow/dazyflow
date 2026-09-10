@@ -35,7 +35,10 @@ func init() {
 			Provider:    "internal",
 			Integration: "Collections",
 			Tags: []string{"collection", "collections", "store", "delete", "remove",
-				"clear", "empty", "clean up", "tidy", "housekeeping", "purge", "expire"},
+				"clear", "empty", "clean up", "tidy", "housekeeping", "purge", "expire",
+				// Without "rows" and "old" this lost "clean up old rows" to
+				// sort_rows, whose id carries the word.
+				"rows", "delete rows", "old", "stale", "prune"},
 			Description: "Remove rows from a collection. Until now a collection could be written to and read from but never " +
 				"tidied, so anything a flow remembered — the orders it has already handled, the addresses it has already " +
 				"mailed — piled up for good.\n\n" +
@@ -43,7 +46,7 @@ func init() {
 				"one is age: keep the last month by deleting where saved_at is before the date you want.\n\n" +
 				"Deleting everything is deliberately harder: leave 'Where' empty and the step refuses unless you also " +
 				"turn on 'Delete every row'. The collection itself stays, so the flow that fills it keeps working.",
-			Summary: "Delete matching rows from a collection; emptying it whole needs an explicit switch.",
+			Summary: "Delete or clean up old rows from a collection; emptying it whole needs an explicit switch.",
 			Examples: []core.ParamsExample{
 				{
 					Title:  "Forget what has already been handled",

@@ -62,9 +62,9 @@ func init() {
 						"type":"string",
 						"default":"equals",
 						"title":"Test",
-						"description":"How to test the Value against Compare to.",
-						"enum":["equals","not_equals","greater_than","greater_or_equal","less_than","less_or_equal","contains","not_contains","one_of","not_one_of","in_range","not_in_range","exists","not_exists"],
-						"enumNames":["equals","does not equal","is greater than","is greater than or equal to","is less than","is less than or equal to","contains","does not contain","is one of","is not one of","is within range","is outside range","has a value","is empty"]
+						"description":"How to test the Value against Compare to. Mind the last four: \"is set\" asks only whether there is a value at all, so an empty list or empty text IS set — reach for \"is empty\" when you mean nothing in it, which is what stops a report going out with no rows.",
+						"enum":["equals","not_equals","greater_than","greater_or_equal","less_than","less_or_equal","contains","not_contains","one_of","not_one_of","in_range","not_in_range","exists","not_exists","is_empty","not_empty"],
+						"enumNames":["equals","does not equal","is greater than","is greater than or equal to","is less than","is less than or equal to","contains","does not contain","is one of","is not one of","is within range","is outside range","is set","is not set","is empty","has something in it"]
 					},
 					"B":{"type":"string","title":"Compare to","description":"What to compare the Value against, used when the Compare to input isn't connected. Parsed as JSON when possible — a number, or a list like [200,201,204] for \"is one of\", or [min,max] for \"is within range\"."},
 					"field":{"type":"string","title":"Field in the value","description":"Optional dot-path into the Value when it is a JSON object (e.g. status). Empty tests the whole value. The full payload still routes — only the test reads the field.","x_advanced":true},

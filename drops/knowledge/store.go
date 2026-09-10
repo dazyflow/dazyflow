@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -137,6 +138,12 @@ CREATE INDEX IF NOT EXISTS chunks_by_source ON chunks(base, source);`
 	return nil
 }
 
+// isMissingTable covers the store file existing without its schema, which
+// only happens if something else made the file — nothing to forget either way.
+func isMissingTable(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "no such table")
+}
+
 func readBase(ctx context.Context, db *sql.DB, base string) (baseInfo, bool, error) {
 	var info baseInfo
 	err := db.QueryRowContext(ctx,
@@ -194,6 +201,28 @@ func forgetSource(ctx context.Context, db *sql.DB, base, source string) (int, er
 	}
 	n, _ := res.RowsAffected()
 	return int(n), nil
+}
+
+// forgetBase empties a base and forgets what built it, so the name is free to
+// be rebuilt with another model. Both tables in one transaction: a base row
+// left behind with no passages would still refuse a query embedded by a
+// different model, for a base that no longer holds anything.
+func forgetBase(ctx context.Context, db *sql.DB, base string) (int, error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx, `DELETE FROM chunks WHERE base = ?`, base)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM bases WHERE base = ?`, base); err != nil {
+		return 0, err
+	}
+	return int(n), tx.Commit()
 }
 
 // search scores every chunk in the base against the query and returns the best

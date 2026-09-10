@@ -302,3 +302,105 @@ func TestKnowledge_VerifierChecksTheServiceAnswers(t *testing.T) {
 		t.Error("a rejected key verified")
 	}
 }
+
+func forget(t *testing.T, root string, p map[string]any, source string) core.Result {
+	t.Helper()
+	in := map[string]core.Ref{}
+	if source != "" {
+		in["source"] = core.Ref{MIME: "text/plain", Inline: source}
+	}
+	res, err := executeForget(t.Context(), core.Job{ID: "t", WorkspaceRoot: root, Params: p, Input: in}, nil)
+	if err != nil {
+		t.Fatalf("executeForget: %v", err)
+	}
+	return res
+}
+
+func passageCount(t *testing.T, root, base string) int {
+	t.Helper()
+	res := takeDigestLike(t, root, base)
+	rows, _ := res.Output["rows"].Inline.([]map[string]any)
+	return len(rows)
+}
+
+// A search with a high limit is the only way to count from outside, and it
+// needs the same connection the base was built with.
+func takeDigestLike(t *testing.T, root, base string) core.Result {
+	t.Helper()
+	return okResult(t, find(t, root, conn(map[string]any{"base": base, "limit": 50}), "anything"))
+}
+
+// Adding a source again replaces it; this is the other case — the document
+// that should no longer be there at all.
+func TestKnowledge_ForgetsOneDocument(t *testing.T) {
+	useFake(t, &fakeEmbedder{})
+	root := t.TempDir()
+	p := conn(map[string]any{"base": "hb", "chunk_size": 120, "overlap": 20})
+	okResult(t, add(t, root, p, handbook, "handbook.md"))
+	okResult(t, add(t, root, p, "A coffee is thirty kronor.", "prices.md"))
+	before := passageCount(t, root, "hb")
+
+	res := okResult(t, forget(t, root, map[string]any{"base": "hb"}, "prices.md"))
+	if n, _ := res.Output["forgotten"].Inline.(int); n != 1 {
+		t.Errorf("forgotten = %v, want the one passage prices.md held", res.Output["forgotten"].Inline)
+	}
+	if after := passageCount(t, root, "hb"); after != before-1 {
+		t.Errorf("base holds %d passages, want %d — the handbook must be untouched", after, before-1)
+	}
+}
+
+// Emptying the whole base has to be said out loud, exactly as it does for a
+// collection.
+func TestKnowledge_ForgetWontEmptyWithoutSayingSo(t *testing.T) {
+	useFake(t, &fakeEmbedder{})
+	root := t.TempDir()
+	okResult(t, add(t, root, conn(map[string]any{"base": "hb"}), handbook, "handbook.md"))
+
+	res := forget(t, root, map[string]any{"base": "hb"}, "")
+	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Fatalf("status=%q err=%+v, want bad_param", res.Status, res.Error)
+	}
+	if !strings.Contains(res.Error.Message, "Forget the whole base") {
+		t.Errorf("message = %q, want it to name the switch", res.Error.Message)
+	}
+	if passageCount(t, root, "hb") == 0 {
+		t.Error("the refused step emptied the base anyway")
+	}
+}
+
+// Emptying frees the name: the base no longer remembers which model built it,
+// so it can be rebuilt with another.
+func TestKnowledge_ForgettingTheBaseFreesTheModel(t *testing.T) {
+	useFake(t, &fakeEmbedder{})
+	root := t.TempDir()
+	okResult(t, add(t, root, conn(map[string]any{"base": "hb"}), handbook, "handbook.md"))
+
+	// The other model is refused while the base remembers the first one...
+	other := conn(map[string]any{"base": "hb", "model": "another-embed"})
+	failsWith(t, add(t, root, other, handbook, "handbook.md"), "bad_param", "cannot be compared")
+
+	okResult(t, forget(t, root, map[string]any{"base": "hb", "all": true}, ""))
+
+	// ...and accepted once the base has been emptied.
+	okResult(t, add(t, root, other, handbook, "handbook.md"))
+	failsWith(t, find(t, root, conn(map[string]any{"base": "hb"}), "holiday"), "bad_param", "different model")
+}
+
+// Forgetting needs no embeddings, so it must work with nothing connected —
+// and forgetting what was never there is not an error.
+func TestKnowledge_ForgetNeedsNoConnection(t *testing.T) {
+	res := forget(t, t.TempDir(), map[string]any{"base": "hb", "all": true}, "")
+	if res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if n, _ := res.Output["forgotten"].Inline.(int); n != 0 {
+		t.Errorf("forgotten = %v, want 0", res.Output["forgotten"].Inline)
+	}
+}
+
+func TestKnowledge_ForgetNeedsABase(t *testing.T) {
+	res := forget(t, t.TempDir(), map[string]any{}, "x")
+	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+		t.Fatalf("status=%q err=%+v, want bad_param", res.Status, res.Error)
+	}
+}

@@ -230,3 +230,64 @@ step instead" — but `shell` is unregistered without `DAZYFLOW_ENABLE_SHELL`.
 **Shipped:** it now points at Code for more than one line, and at Run on your
 machine for work needing a network or a library. Nothing in the catalogue names
 the opt-in shell step any more.
+
+---
+
+# Second round (2026-09-10)
+
+Audited again after the ten steps landed — this time asking what breaks when
+someone builds with what is there, rather than what a competitor has. Six
+findings, all fixed.
+
+## 11. "is empty" did not mean empty — status: DONE (2026-09-10)
+
+`evaluate("not_exists")` is `a == nil`, and the enumNames ALREADY called it
+"is empty". So an author guarding a weekly report with the operator labelled
+"is empty" got the report anyway, because `[]` is not nil. A wrong answer, not
+a missing one.
+
+Measured before: `op=exists` took `then` for an empty list and `else` only for
+nil. Nothing in the catalogue answered "only if there are any rows" or "skip
+when the list is empty" — reachable only as CEL (`size(input) > 0`).
+
+**Shipped:** `is_empty` / `not_empty` on both `if` and `compare`, via
+`isEmptyValue` — nil, empty list/object (by reflection, since rows arrive as
+several concrete slice types), blank or whitespace-only text. A number and a
+boolean are never empty. `exists`/`not_exists` keep their behaviour exactly and
+are relabelled "is set" / "is not set", so saved flows are untouched and the
+misleading label is gone.
+
+## 12. Nothing could take the first N rows — status: DONE (2026-09-10)
+
+Twenty steps had a `limit`; every one was a source (list/query/search). Not one
+row-shaping step could cap: build_csv, compute_rows, dedupe_rows,
+group_aggregate, map_rows, sort_rows. So "top five by score" was `sort_rows` →
+nothing, and the probe agreed ("top five by score" → compute_rows).
+
+**Shipped:** `limit` on `sort_rows` (after the sort — that is what makes a
+top-N) and on `map_rows` (after the filters). Canonical param name, matching
+the twenty that already had one.
+
+## 13. Three steps unfindable by their own words — status: DONE (2026-09-10)
+
+Measured ranks before → after: "get every page from the api" 7 → 1
+(`http_request`), "clean up old rows" 6 → 1 (`builtin_store_delete`), "scrape
+the price off a product page" 2 → 1 (`parse_html`). Fixed in tags and Summary
+only — `Summary` is not in the translated catalogue, so retrieval vocabulary
+costs no Swedish. Checked that `web_watch` still wins "watch a web page for
+changes" and `sort_rows` still wins "sort the rows".
+
+The other twelve new steps already ranked first on a plain-language ask.
+
+## 14. Knowledge could not forget a document — status: DONE (2026-09-10)
+
+`deadcode -test` found `forgetSource` unreachable: I wrote it and never wired
+it, so a base could be added to and searched but never cleaned — item 7's
+defect in a new store.
+
+**Shipped:** `knowledge_forget` ("Forget a document"), plus `forgetBase` for
+emptying one behind an explicit switch, which also drops the `bases` row so the
+name is free to be rebuilt under a different embedding model. It declares NO
+connection fields — forgetting reads no embeddings — making it the only step in
+the integration that works before Knowledge is connected. `deadcode -test` is
+clean across the new packages now.
