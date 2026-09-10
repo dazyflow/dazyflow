@@ -13,7 +13,7 @@ A 3-node Dazyflow graph that runs across **two processes**:
                                ↓              │
                        ┌────────────────────────┐
                        │  csv_uppercase (remote)│
-                       │  port :60001           │
+                       │  port :18001           │
                        └────────────────────────┘
 ```
 

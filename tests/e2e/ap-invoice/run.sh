@@ -21,11 +21,20 @@ SANDBOX_BASE=$(mktemp -d)
 DZD_LOG=/tmp/ap-dzd.log
 BE_LOG=/tmp/ap-be.log
 
+# Every fixed port here sits BELOW /proc/sys/net/ipv4/ip_local_port_range
+# (32768–60999 on the CI image). Ports inside that range are the ones the kernel
+# hands out as SOURCE ports for outbound connections, so a server binding one is
+# racing every other process on the machine: the bind fails with "address
+# already in use" against a connection that has nothing to do with this test,
+# minutes or months apart, and the run that catches it looks like a code
+# failure. This suite lost a CI run to exactly that on :60500. Keep new ports
+# under 32768.
+
 # Ephemeral Postgres for the encrypted secret store (secret://). Own
 # container + port + strong password, so the demo is self-contained and
 # never touches a local/production database.
 PG_CONTAINER=ap-demo-pg
-PG_PORT=55432
+PG_PORT=15432
 PG_PASS=ap-demo-not-a-real-password
 PG_DSN="postgres://dazyflow:${PG_PASS}@localhost:${PG_PORT}/dazyflow?sslmode=disable"
 
@@ -45,8 +54,8 @@ echo "[1/7] building binaries"
 go build -o /tmp/ap-backend ./mock-backend
 
 # --- 2. start mock backend + ephemeral Postgres ---------------------------
-echo "[2/7] starting mock backend on :60500"
-/tmp/ap-backend --listen=:60500 > "$BE_LOG" 2>&1 &
+echo "[2/7] starting mock backend on :18500"
+/tmp/ap-backend --listen=:18500 > "$BE_LOG" 2>&1 &
 BE_PID=$!
 sleep 0.2
 
@@ -86,7 +95,7 @@ MASTER_KEY=$(head -c32 /dev/urandom | base64)
 # throwaway loopback container with no certificate, and giving it one to run a
 # demo would be theatre. Without this the script dies at boot with
 # "DAZYFLOW_POSTGRES_DSN does not enforce TLS", which is what it did.
-DAZYFLOW_LISTEN=":50099" \
+DAZYFLOW_LISTEN=":18097" \
 DAZYFLOW_HTTP=":18080" \
 DAZYFLOW_DEV=1 \
 DAZYFLOW_DEV_KEY=1 \
@@ -127,8 +136,8 @@ seed_secret APPROVAL_API_KEY "Bearer approval-system-key-ghi"
 
 # --- 4. save the two pipeline graphs --------------------------------------
 echo "[4/7] saving and publishing graphs"
-DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 graph save pipeline-low.json > /dev/null
-DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 graph save pipeline-high.json > /dev/null
+DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:18097 graph save pipeline-low.json > /dev/null
+DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:18097 graph save pipeline-high.json > /dev/null
 
 # A webhook fires the PUBLISHED revision, never the draft (see
 # daemon/webhook.go: store.LoadPublished). Saving alone leaves both flows
@@ -162,7 +171,7 @@ done
 # diagnostic below rather than as a named assertion.
 wait_for_job() { # job-id label
     for _ in $(seq 1 300); do   # 30s
-        if DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job status "$1" 2>&1 \
+        if DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:18097 job status "$1" 2>&1 \
             | grep -qE 'status:[[:space:]]+(succeeded|failed)'; then
             return 0
         fi
@@ -194,10 +203,10 @@ sed 's/^/    /' "$BE_LOG"
 echo
 
 echo "--- low-invoice ($LOW_JOB) node trail ---"
-DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoice-low 2>&1 | sed 's/^/    /'
+DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:18097 job list process-invoice-low 2>&1 | sed 's/^/    /'
 echo
 echo "--- high-invoice ($HIGH_JOB) node trail ---"
-DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoice-high 2>&1 | sed 's/^/    /'
+DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:18097 job list process-invoice-high 2>&1 | sed 's/^/    /'
 
 echo
 # `|| true` on each: these are diagnostics, and under `set -euo pipefail` a
@@ -214,7 +223,7 @@ sed 's/^/    /' "$SANDBOX_BASE/sandbox/dev/main/archive/invoice-big-99.json" || 
 
 echo
 echo "--- audit: saved graph still references secrets symbolically ---"
-DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 graph load process-invoice-low 2>&1 \
+DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:18097 graph load process-invoice-low 2>&1 \
     | grep -E '"Authorization"|"url"' | head -10 | sed 's/^/    /'
 
 # --- assertions -----------------------------------------------------------
@@ -240,17 +249,17 @@ assert() {
     fi
 }
 assert "low-invoice graph succeeded" \
-    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job status $LOW_JOB 2>&1 | grep -q 'status:    succeeded'"
+    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:18097 job status $LOW_JOB 2>&1 | grep -q 'status:    succeeded'"
 assert "high-invoice graph succeeded" \
-    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job status $HIGH_JOB 2>&1 | grep -q 'status:    succeeded'"
+    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:18097 job status $HIGH_JOB 2>&1 | grep -q 'status:    succeeded'"
 assert "low invoice routed to auto_approve" \
-    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoice-low 2>&1 | grep auto_approve | grep -q succeeded"
+    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:18097 job list process-invoice-low 2>&1 | grep auto_approve | grep -q succeeded"
 assert "low invoice's notify_cfo was skipped" \
-    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoice-low 2>&1 | grep notify_cfo | grep -q skipped"
+    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:18097 job list process-invoice-low 2>&1 | grep notify_cfo | grep -q skipped"
 assert "high invoice routed to notify_cfo" \
-    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoice-high 2>&1 | grep notify_cfo | grep -q succeeded"
+    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:18097 job list process-invoice-high 2>&1 | grep notify_cfo | grep -q succeeded"
 assert "high invoice's auto_approve was skipped" \
-    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 job list process-invoice-high 2>&1 | grep auto_approve | grep -q skipped"
+    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:18097 job list process-invoice-high 2>&1 | grep auto_approve | grep -q skipped"
 assert "both invoices archived" \
     "test -f $SANDBOX_BASE/sandbox/dev/main/archive/invoice-42.json && test -f $SANDBOX_BASE/sandbox/dev/main/archive/invoice-big-99.json"
 assert "mock backend saw correct API key for /invoices" \
@@ -258,7 +267,7 @@ assert "mock backend saw correct API key for /invoices" \
 assert "no SSRF or auth refusals in backend log" \
     "! grep -q 'unauthorized' $BE_LOG"
 assert "graph JSON still references secret:// (resolved secrets not leaked)" \
-    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:50099 graph load process-invoice-low 2>&1 | grep -q 'secret://INVOICE_API_KEY'"
+    "DZCTL_TOKEN=$TOKEN /tmp/ap-dzctl --server=localhost:18097 graph load process-invoice-low 2>&1 | grep -q 'secret://INVOICE_API_KEY'"
 
 if [[ $errors -eq 0 ]]; then
     echo

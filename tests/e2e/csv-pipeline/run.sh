@@ -46,26 +46,29 @@ wait_for() { # host port label
     echo "[!!]  timed out waiting for $3 ($1:$2)"; return 1
 }
 
-echo "[3/6] starting csv_uppercase on :60001"
-/tmp/csv-xform-demo --listen=127.0.0.1:60001 > /tmp/csv-xform.log 2>&1 &
+# Fixed ports stay below 32768, outside the kernel's ephemeral source-port range
+# (see tests/e2e/ap-invoice/run.sh) — inside it, a bind races every outbound
+# connection on the machine and fails as "address already in use".
+echo "[3/6] starting csv_uppercase on :18001"
+/tmp/csv-xform-demo --listen=127.0.0.1:18001 > /tmp/csv-xform.log 2>&1 &
 XFORM_PID=$!
 trap 'kill $XFORM_PID 2>/dev/null || true; kill $DZD_PID 2>/dev/null || true; rm -rf "$DATA_DIR" /tmp/dzd-demo /tmp/dzctl-demo /tmp/csv-xform-demo' EXIT
-wait_for 127.0.0.1 60001 csv_uppercase
+wait_for 127.0.0.1 18001 csv_uppercase
 
 echo "[4/6] starting dzd with the remote registered"
 # DAZYFLOW_DEV=1 downgrades the insecure-defaults guard (default DB password,
 # empty master key) to warnings so the demo runs without provisioning real
 # secrets; DEV_KEY=1 mints the dev token we grep out below.
-DAZYFLOW_LISTEN=":50099" \
+DAZYFLOW_LISTEN=":18099" \
 DAZYFLOW_DEV=1 \
 DAZYFLOW_DEV_KEY=1 \
 DAZYFLOW_DATA_DIR="$DATA_DIR" \
-DAZYFLOW_REMOTE_MODULES="csv_uppercase=127.0.0.1:60001" \
+DAZYFLOW_REMOTE_MODULES="csv_uppercase=127.0.0.1:18001" \
 /tmp/dzd-demo > /tmp/dzd.log 2>&1 &
 DZD_PID=$!
 # Dump dzd's log if it never binds — otherwise a startup failure (e.g. an
 # unreachable DB) shows only as an opaque timeout.
-wait_for 127.0.0.1 50099 dzd || { echo "    --- dzd log ---"; sed 's/^/    /' /tmp/dzd.log; exit 1; }
+wait_for 127.0.0.1 18099 dzd || { echo "    --- dzd log ---"; sed 's/^/    /' /tmp/dzd.log; exit 1; }
 # The dev token is minted during boot; poll the log until it appears.
 TOKEN=""
 for _ in $(seq 1 100); do
@@ -77,8 +80,8 @@ echo "    dev token: ${TOKEN:0:20}..."
 grep -E "registered remote|listening" /tmp/dzd.log | sed 's/^/    /'
 
 echo "[5/6] submitting + running the graph"
-DZCTL_TOKEN="$TOKEN" /tmp/dzctl-demo --server=localhost:50099 graph save pipeline.json > /dev/null
-DZCTL_TOKEN="$TOKEN" /tmp/dzctl-demo --server=localhost:50099 graph run csv-uppercase 2>&1 | sed 's/^/    /'
+DZCTL_TOKEN="$TOKEN" /tmp/dzctl-demo --server=localhost:18099 graph save pipeline.json > /dev/null
+DZCTL_TOKEN="$TOKEN" /tmp/dzctl-demo --server=localhost:18099 graph run csv-uppercase 2>&1 | sed 's/^/    /'
 
 echo "[6/6] verifying output"
 if [[ -f "$DATA_DIR/sandbox/dev/main/output.csv" ]]; then

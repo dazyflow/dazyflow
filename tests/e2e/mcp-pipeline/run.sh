@@ -47,8 +47,11 @@ export DAZYFLOW_POSTGRES_DSN
 # the dev token grepped out below.
 #
 # --mcp=name=command [args]; semicolon-separated across servers
-DAZYFLOW_LISTEN=":50099" \
-DAZYFLOW_HTTP=":18099" \
+# Fixed ports stay below 32768, outside the kernel's ephemeral source-port range
+# (see tests/e2e/ap-invoice/run.sh) — inside it, a bind races every outbound
+# connection on the machine and fails as "address already in use".
+DAZYFLOW_LISTEN=":18098" \
+DAZYFLOW_HTTP=":18093" \
 DAZYFLOW_DEV=1 \
 DAZYFLOW_DEV_KEY=1 \
 DAZYFLOW_DATA_DIR="$SANDBOX_BASE" \
@@ -72,8 +75,8 @@ wait_for_port() {
     done
     return 1
 }
-wait_for_port 50099 || {
-    echo "    dzd never bound :50099 — log follows"
+wait_for_port 18098 || {
+    echo "    dzd never bound :18098 — log follows"
     sed 's/^/    /' "$DZD_LOG"
     exit 1
 }
@@ -91,12 +94,12 @@ done
 grep -E "registered MCP|listening" "$DZD_LOG" | sed 's/^/    /'
 
 echo "[3/5] verifying MCP tools appear as modules"
-DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:50099 module list 2>&1 \
+DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:18098 module list 2>&1 \
     | grep "^mcp:" | sed 's/^/    /'
 
 echo "[4/5] running the graph"
-DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:50099 graph save pipeline.json > /dev/null
-DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:50099 graph run mcp-lookup-and-route 2>&1 | tail -5
+DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:18098 graph save pipeline.json > /dev/null
+DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:18098 graph run mcp-lookup-and-route 2>&1 | tail -5
 
 echo "[5/5] inspecting outcome"
 echo "    archives written under $SANDBOX_BASE/sandbox/dev/main/users/:"
@@ -109,7 +112,7 @@ fi
 
 echo
 echo "    job records:"
-DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:50099 job list mcp-lookup-and-route 2>&1 | sed 's/^/      /'
+DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:18098 job list mcp-lookup-and-route 2>&1 | sed 's/^/      /'
 
 echo
 echo "--- assertions ---"
@@ -133,13 +136,13 @@ assert() {
 assert "dzd registered the MCP server" \
     "grep -q 'registered MCP server' $DZD_LOG"
 assert "tools appear as mcp:ap-demo:* modules" \
-    "DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:50099 module list 2>&1 | grep -q 'mcp:ap-demo:lookup_user'"
+    "DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:18098 module list 2>&1 | grep -q 'mcp:ap-demo:lookup_user'"
 assert "graph succeeded end-to-end" \
-    "DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:50099 job list mcp-lookup-and-route 2>&1 | grep -E '^[a-f0-9]+ +succeeded'"
+    "DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:18098 job list mcp-lookup-and-route 2>&1 | grep -E '^[a-f0-9]+ +succeeded'"
 assert "MCP tool result reached the branch and routed to premium" \
     "test -f $SANDBOX_BASE/sandbox/dev/main/users/premium.json"
 assert "regular path was skipped (branch correctly forked)" \
-    "DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:50099 job list mcp-lookup-and-route 2>&1 | grep save_regular | grep -q skipped"
+    "DZCTL_TOKEN=$TOKEN /tmp/mcp-dzctl --server=localhost:18098 job list mcp-lookup-and-route 2>&1 | grep save_regular | grep -q skipped"
 
 if [[ $errors -eq 0 ]]; then
     echo

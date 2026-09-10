@@ -13,7 +13,7 @@
       "id": "fetch_invoice",
       "module": "http_request",
       "params": {
-        "url": "http://127.0.0.1:60500/invoices/big-99",
+        "url": "http://127.0.0.1:18500/invoices/big-99",
         "headers": {"Authorization": "secret://INVOICE_API_KEY"},
         "allow_private_networks": true
       }
@@ -31,7 +31,7 @@
       "id": "notify_cfo",
       "module": "http_request",
       "params": {
-        "url": "http://127.0.0.1:60500/notifications/cfo",
+        "url": "http://127.0.0.1:18500/notifications/cfo",
         "method": "POST",
         "headers": {
           "Authorization": "secret://SLACK_TOKEN",
@@ -44,7 +44,7 @@
       "id": "auto_approve",
       "module": "http_request",
       "params": {
-        "url": "http://127.0.0.1:60500/approvals/auto",
+        "url": "http://127.0.0.1:18500/approvals/auto",
         "method": "POST",
         "headers": {
           "Authorization": "secret://APPROVAL_API_KEY",

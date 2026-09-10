@@ -106,7 +106,7 @@ func sendResult(stream nodepb.NodeService_ExecuteServer, _ string, r *nodepb.Res
 }
 
 func main() {
-	addr := flag.String("listen", "127.0.0.1:60001", "gRPC listen address")
+	addr := flag.String("listen", "127.0.0.1:18001", "gRPC listen address")
 	flag.Parse()
 	lis, err := net.Listen("tcp", *addr)
 	if err != nil {

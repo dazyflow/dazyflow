@@ -25,7 +25,7 @@ const (
 )
 
 func main() {
-	listen := flag.String("listen", ":60500", "listen address")
+	listen := flag.String("listen", ":18500", "listen address")
 	checkAuth := flag.Bool("check-auth", true, "verify expected Authorization headers")
 	flag.Parse()
 
