@@ -26,6 +26,7 @@ import {
   applyEdgeChanges,
   applyNodeChanges,
   useReactFlow,
+  useUpdateNodeInternals,
   type Connection,
   type Edge as FlowEdge,
   type EdgeChange,
@@ -291,6 +292,7 @@ function EditorInner() {
     Map<string, { deps: unknown[]; node: FlowNode<DazyNodeData> }>
   >(new Map());
   const edgeCacheRef = useRef<Map<string, { deps: unknown[]; edge: FlowEdge }>>(new Map());
+  const repinRef = useRef<string[]>([]);
   const [selectedID, setSelectedID] = useState<string | null>(null);
   const [showConfigList, setShowConfigList] = useState(false);
   const [history, setHistory] = useState<HistoryState>(emptyHistory);
@@ -436,6 +438,7 @@ function EditorInner() {
   // One SSE run-stream at a time; the previous is aborted before a new one opens.
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
 
   const hydrateGraph = useCallback((g: Graph) => {
     setManifests((current) => {
@@ -756,6 +759,7 @@ function EditorInner() {
   useEffect(() => {
     if (manifests.length === 0) return;
     const mm = new Map(manifests.map((m) => [m.id, m]));
+    const repinned: string[] = [];
     setNodes((nds) => {
       let changed = false;
       const next = nds.map((n) => {
@@ -766,13 +770,26 @@ function EditorInner() {
           : n.data.label;
         if (n.data.manifest !== m || label !== n.data.label) {
           changed = true;
+          if (n.data.manifest !== m) repinned.push(n.id);
           return { ...n, data: { ...n.data, manifest: m, label } };
         }
         return n;
       });
       return changed ? next : nds;
     });
+    repinRef.current = repinned;
   }, [manifests, i18nLanguage]);
+
+  // A card that mounts before /drops answers carries placeholder in/out pins,
+  // and React Flow only re-reads a node's pin positions when its box changes
+  // size. A folded card is the same size either way — icon, name, button — so
+  // it keeps the placeholder bounds, no edge can resolve the real port ids it
+  // was drawn to, and every wire to that drop renders as nothing.
+  useEffect(() => {
+    if (repinRef.current.length === 0) return;
+    updateNodeInternals(repinRef.current);
+    repinRef.current = [];
+  }, [nodes, updateNodeInternals]);
 
   useEffect(() => {
     if (manifests.length === 0 || nodes.length === 0) return;

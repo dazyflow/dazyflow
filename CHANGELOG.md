@@ -10,6 +10,20 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Wires to a folded drop no longer go missing when a flow opens.** The editor
+  asks for the flow and the drop catalogue at the same time, so a card can be
+  drawn before the catalogue answers — holding stand-in pins for a moment
+  instead of the ports its wires were drawn to. An open card corrects itself
+  when the real ports land, because the card changes size and the canvas
+  re-reads its pins; a folded card is the same size either way — icon, name,
+  button — so it kept the stand-ins, and every connector line into or out of it
+  stayed invisible until the drop was dragged or unfolded. Flows whose steps
+  carry names of your own were hit hardest: a renamed card does not change width
+  when its catalogue entry arrives, so nothing prompted a second look. The
+  editor now re-reads the pins of every card that was drawn ahead of its entry.
+
 ## [0.41.8] - 2026-09-09
 
 ### Added
