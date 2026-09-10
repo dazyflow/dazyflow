@@ -374,6 +374,7 @@ export const SV_PORTS: Record<string, string> = {
   List: "Lista",
   "Local part": "Lokal del",
   Location: "Plats",
+  "Log lines": "Loggrader",
   Longitude: "Longitud",
   "Loop body": "Loopens innehåll",
   "Match count": "Antal träffar",

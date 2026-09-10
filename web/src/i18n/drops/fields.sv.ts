@@ -166,6 +166,7 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "HMAC key": "HMAC-nyckel",
   "Headers": "Rubriker",
   "If a field isn't found": "Om ett fält inte hittas",
+  "If a row's script throws": "Om en rads skript ger fel",
   "If there are no rows": "Om det inte finns några rader",
   "In folder": "I mapp",
   "Include <?xml …?> line": "Ta med <?xml …?>-raden",
@@ -456,8 +457,10 @@ export const SV_FIELD_HELP: Record<string, string> = {
     "Frågeparametern som bär positionen — \"cursor\" eller \"page_token\" när du följer ett markörfält, \"page\" eller \"offset\" när du räknar upp ett tal. Uppräkning använder \"page\" som standard och utgår från det som adressen redan säger.",
   "Stop after this many pages even if the API offers more, so a runaway feed cannot hold the flow up. The time limit and the response size limit are spent across all the pages together, not granted afresh for each one.":
     "Sluta efter så här många sidor även om API:et erbjuder fler, så att ett skenande flöde av sidor inte kan hålla upp flödet. Tidsgränsen och gränsen för svarsstorlek delas av alla sidorna tillsammans, inte på nytt för varje sida.",
-  "The script. 'input' is the value wired into 'in' (or 'row' and 'index' in per-row mode); whatever you return leaves on 'out'. console.log writes to the run log. No network, no files, no imports.":
-    "Skriptet. 'input' är värdet som kopplas in på 'in' (eller 'row' och 'index' i läget en gång per rad); det du returnerar går ut på 'out'. console.log skriver till körningsloggen. Inget nätverk, inga filer, inga importer.",
+  "The script. 'input' is the value wired into 'in' (or 'row' and 'index' in per-row mode); whatever you return leaves on 'out'. console.log writes to the run log and to the 'logs' output. No network, no files, no imports. Overridden by the 'Script' input.":
+    "Skriptet. 'input' är värdet som kopplas in på 'in' (eller 'row' och 'index' i läget en gång per rad); det du returnerar går ut på 'out'. console.log skriver till körningsloggen och till utgången 'logs'. Inget nätverk, inga filer, inga importer. Ingången Skript vinner över detta.",
+  "Per-row mode only. Fail the step on the first row that throws, or keep going and send that row — with its error — out the 'Failed rows' output. Routing lets 199 good rows through when row 7 is malformed.":
+    "Endast i läget en gång per rad. Låt steget misslyckas vid den första raden som ger fel, eller fortsätt och skicka den raden — med sitt felmeddelande — ut på utgången 'Misslyckade rader'. Att skicka vidare släpper igenom 199 fungerande rader när rad 7 är trasig.",
   "Once, with the whole input as 'input' — or once per row, with each row as 'row' and its position as 'index'. Per-row collects what you return into a list, and drops any row you return nothing for.":
     "En gång, med hela indatat som 'input' — eller en gång per rad, med varje rad som 'row' och dess position som 'index'. Per rad samlas det du returnerar i en lista, och rader du inte returnerar något för faller bort.",
   "How long the script may run in total, per-row runs included. Past it the step fails rather than holding the flow up. Maximum 30000.":
@@ -1027,6 +1030,7 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "UPPER CASE": "VERSALER",
   "lower case": "gemener",
   "Title Case": "Versal Inledning",
+  "Send the row to 'Failed rows'": "Skicka raden till 'Misslyckade rader'",
   "Sentence case": "Meningsform",
   "Tidy up the spaces": "Städa upp mellanrummen",
   "Shorten it": "Korta av",

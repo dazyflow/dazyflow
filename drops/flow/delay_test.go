@@ -280,6 +280,15 @@ func TestDelayUntil_AMomentAlreadyPassedCarriesOn(t *testing.T) {
 }
 
 // "tomorrow" is midnight somewhere, and which somewhere decides the instant.
+//
+// The assertion is that each answer is 09:00 IN ITS OWN ZONE, not that one
+// falls before the other. Ordering looks like the obvious test and is wrong for
+// two hours out of every day: "tomorrow" is relative to the zone's own calendar,
+// so once Stockholm has passed midnight and UTC has not — 22:00–24:00 UTC under
+// CEST, 23:00–24:00 under CET — the two zones disagree about what today is, and
+// Stockholm's "tomorrow 09:00" lands the best part of a day LATER rather than
+// two hours earlier. The step is right in that window; only an ordering
+// assertion is wrong, and only then, which is why it survived so long.
 func TestDelayUntil_TimezoneDecidesWhichMidnight(t *testing.T) {
 	utc, err := executeDelay(deferrableCtx(t), core.Job{
 		Params: map[string]any{"until": "tomorrow+9h"},
@@ -298,9 +307,30 @@ func TestDelayUntil_TimezoneDecidesWhichMidnight(t *testing.T) {
 	if !okA || !okB {
 		t.Fatalf("statuses = %q / %q, want both deferred", utc.Status, sthlm.Status)
 	}
-	// Stockholm is ahead of UTC, so its 09:00 lands earlier in absolute terms.
-	if !b.Before(a) {
-		t.Errorf("Stockholm 09:00 (%v) is not before UTC 09:00 (%v)", b, a)
+
+	loc, err := time.LoadLocation("Europe/Stockholm")
+	if err != nil {
+		t.Fatalf("load Europe/Stockholm: %v", err)
+	}
+	assertTomorrowAtNine(t, "UTC", a.UTC(), time.Now().UTC())
+	assertTomorrowAtNine(t, "Europe/Stockholm", b.In(loc), time.Now().In(loc))
+
+	// Same wall clock, different instants: that is the whole point of the zone.
+	if a.Equal(b) {
+		t.Errorf("both zones resolved to %v — the timezone made no difference", a)
+	}
+}
+
+// assertTomorrowAtNine checks a resume instant reads as 09:00 on the day after
+// `now` when viewed in the zone it was asked for.
+func assertTomorrowAtNine(t *testing.T, zone string, got, now time.Time) {
+	t.Helper()
+	if got.Hour() != 9 || got.Minute() != 0 || got.Second() != 0 {
+		t.Errorf("%s: resume at %v, want 09:00:00 local", zone, got)
+	}
+	want := now.AddDate(0, 0, 1)
+	if got.Year() != want.Year() || got.YearDay() != want.YearDay() {
+		t.Errorf("%s: resume on %v, want tomorrow (%v)", zone, got.Format("2006-01-02"), want.Format("2006-01-02"))
 	}
 }
 
