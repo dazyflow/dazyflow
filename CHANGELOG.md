@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.41.9] - 2026-09-10
+
 ### Added
 
 - **"Is empty" now means empty.** If and Compare could ask whether a value was
