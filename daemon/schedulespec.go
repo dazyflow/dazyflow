@@ -108,8 +108,8 @@ func DeriveScheduleSpecs(parser cron.Parser, tenant, workspace string, g core.Gr
 		if triggerNodeDisabled(node) {
 			continue // this trigger is individually paused
 		}
-		switch node.Module {
-		case "cron_trigger":
+		switch {
+		case node.Module == "cron_trigger":
 			expr := strings.TrimSpace(paramString(node.Params, "cron"))
 			if expr == "" {
 				continue // unscheduled node — runs only on manual Run
@@ -130,7 +130,7 @@ func DeriveScheduleSpecs(parser cron.Parser, tenant, workspace string, g core.Gr
 				TZ:        tz,
 			})
 
-		case "poll_trigger", "google_form_trigger", "ticketmaster_on_new_event":
+		case core.IsPollTriggerModule(node.Module):
 			secs := paramSeconds(node.Params, "interval_seconds")
 			if secs == 0 {
 				continue // unset — runs only on manual Run

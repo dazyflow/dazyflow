@@ -12,6 +12,18 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Added
 
+- **A flow can start from the calendar.** Google Calendar could be read,
+  written and cleared out, but nothing in it could START a flow: to act on a
+  meeting you had to poll the day's bookings on a schedule and work out for
+  yourself which of them you had already dealt with. Two triggers do that part
+  now. **Before an event starts** fires a set time ahead of each booking — ten
+  minutes before a meeting, the evening before a delivery window — announcing
+  each start once, and again at its new time if the event moves. **When an
+  event changes** fires when something is booked, moved or cancelled, and says
+  which of the three it was, a cancelled event's details included. Both
+  remember what they have already reported, so nothing is announced twice, and
+  publishing the change watch doesn't replay the calendar's history.
+
 - **The console says which line printed what, and how loudly.** A line the Code
   step recorded was text and nothing else: `console.error` looked exactly like
   `console.log`, and a print inside a loop said nothing about which line of
@@ -59,6 +71,14 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   wears everywhere else.
 
 ### Fixed
+
+- **A flow started by a Slack mention or a Stripe payment stopped asking for a
+  trigger.** The editor's "add a trigger" hint knew about the scheduled and
+  inbound-HTTP triggers but not the event ones, so a flow that begins at a
+  Slack mention, a GitHub push or a Stripe payment was told it had nothing to
+  start it — and its Run button offered a plain run rather than a test fire.
+  Both now recognise every trigger the daemon does, from one list instead of
+  six copies of it.
 
 - **A Code step showed its log where its result belonged.** The step sent a Log
   lines output on every run, an empty list included, and the run view shows the

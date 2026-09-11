@@ -123,6 +123,8 @@ var retrievalCases = []retrievalCase{
 	{"put it on my google calendar", []string{"gcal_create_event"}},
 	{"what is booked tomorrow", []string{"gcal_list_events", "caldav_list_events"}},
 	{"move the booking to another time", []string{"caldav_update_event"}},
+	{"remind me ten minutes before a meeting", []string{"gcal_on_event_start"}},
+	{"when a meeting is booked in my calendar", []string{"gcal_on_event_change"}},
 
 	// ---- Shaping the data ------------------------------------------------
 	{"turn the rows into a message", []string{"render_text"}},
@@ -169,7 +171,7 @@ func anyOf(want, got []string) bool {
 // costs retrieval shows up here. Raise them when the score rises; never lower
 // one to make a change pass.
 const (
-	minHitAt1 = 72
+	minHitAt1 = 73
 	minHitAt5 = 95
 	// Swedish is lower on purpose: the catalogue is English and the table
 	// covers the vocabulary someone thought to add, not the language.

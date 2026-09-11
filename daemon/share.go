@@ -327,8 +327,8 @@ func nextScheduledFire(g core.Graph, now time.Time) *time.Time {
 		if triggerNodeDisabled(node) {
 			continue
 		}
-		switch node.Module {
-		case "cron_trigger":
+		switch {
+		case node.Module == "cron_trigger":
 			expr, _ := node.Params["cron"].(string)
 			expr = strings.TrimSpace(expr)
 			if expr == "" {
@@ -338,7 +338,7 @@ func nextScheduledFire(g core.Graph, now time.Time) *time.Time {
 			if sched, err := parseCronInTZ(cronValidator, expr, tz); err == nil {
 				consider(sched.Next(now))
 			}
-		case "poll_trigger", "google_form_trigger", "ticketmaster_on_new_event":
+		case core.IsPollTriggerModule(node.Module):
 			secs := paramSeconds(node.Params, "interval_seconds")
 			if secs <= 0 || secs > core.MaxPollIntervalSeconds {
 				continue

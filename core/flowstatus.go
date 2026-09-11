@@ -45,16 +45,31 @@ var EventTriggerModules = map[string]bool{
 	"homeassistant_state_changed":     true,
 }
 
+// Fired by the scheduler on an interval the node itself carries in
+// interval_seconds: the drop polls the provider when it runs, so nothing
+// arrives from outside. TestPollTriggerModulesMatchCatalog keeps this in
+// lockstep, and every place that reads an interval off a trigger node asks
+// through IsPollTriggerModule rather than repeating the list — the list had
+// reached six copies, and a drop added to five of them is a drop that never
+// fires.
+var PollTriggerModules = map[string]bool{
+	"poll_trigger":              true,
+	"google_form_trigger":       true,
+	"ticketmaster_on_new_event": true,
+	"gcal_on_event_change":      true,
+	"gcal_on_event_start":       true,
+}
+
+func IsPollTriggerModule(module string) bool { return PollTriggerModules[module] }
+
 // Presence only, deliberately: this answers "is this the node a run STARTED
 // from" rather than "is it configured to fire".
 func IsTriggerModule(module string) bool {
 	switch module {
-	case WebhookInputModule, FormInputModule, RequestInputModule,
-		"cron_trigger", "poll_trigger", "google_form_trigger",
-		"ticketmaster_on_new_event":
+	case WebhookInputModule, FormInputModule, RequestInputModule, "cron_trigger":
 		return true
 	}
-	return EventTriggerModules[module]
+	return PollTriggerModules[module] || EventTriggerModules[module]
 }
 
 // Whether the trigger's data ARRIVES with an external delivery, which is what
@@ -73,12 +88,7 @@ func IsInboundEventTriggerModule(module string) bool {
 // Together with IsInboundEventTriggerModule this partitions IsTriggerModule;
 // TestTriggerModulesArePartitioned holds that.
 func IsScheduledTriggerModule(module string) bool {
-	switch module {
-	case "cron_trigger", "poll_trigger", "google_form_trigger",
-		"ticketmaster_on_new_event":
-		return true
-	}
-	return false
+	return module == "cron_trigger" || PollTriggerModules[module]
 }
 
 func classifyTriggers(g Graph) (hasScheduler, hasWebhook, hasEvent bool) {
@@ -88,22 +98,22 @@ func classifyTriggers(g Graph) (hasScheduler, hasWebhook, hasEvent bool) {
 		}
 	}
 	for _, n := range g.Nodes {
-		switch n.Module {
-		case "cron_trigger":
+		switch {
+		case n.Module == "cron_trigger":
 			if expr, _ := n.Params["cron"].(string); strings.TrimSpace(expr) != "" {
 				hasScheduler = true
 			}
-		case "poll_trigger", "google_form_trigger", "ticketmaster_on_new_event":
+		case IsPollTriggerModule(n.Module):
 			if secs, ok := paramInt(n.Params, "interval_seconds"); ok && secs > 0 && secs <= MaxPollIntervalSeconds {
 				hasScheduler = true
 			}
-		case WebhookInputModule:
+		case n.Module == WebhookInputModule:
 			if len(WebhookSecrets(n.Params)) > 0 || WebhookPublic(n.Params) {
 				hasWebhook = true
 			}
-		case FormInputModule:
+		case n.Module == FormInputModule:
 			hasWebhook = true
-		case RequestInputModule:
+		case n.Module == RequestInputModule:
 			if len(WebhookSecrets(n.Params)) > 0 || WebhookPublic(n.Params) {
 				hasWebhook = true
 			}

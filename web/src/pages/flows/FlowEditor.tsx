@@ -146,7 +146,7 @@ import { MOBILE, isNarrower } from "../../lib/breakpoints";
 import { pickGraphSettings } from "../../lib/graphMeta";
 import { Inspector } from "../../components/editor/Inspector";
 import { FlowStatusChip } from "../../components/ui/FlowStatusChip";
-import { flowRunStatusPublished } from "../../flowStatus";
+import { flowRunStatusPublished, isTriggerModule } from "../../flowStatus";
 import { DazyNode } from "../../components/editor/NodeCard";
 import { portColor, type DazyNodeData } from "../../components/editor/nodeCardShared";
 import { CommentNode, FRAME_COLOR_DEFAULT } from "../../components/editor/CommentNode";
@@ -2923,18 +2923,9 @@ function EditorInner() {
 
   const hasAnyTrigger =
     triggers.length > 0 ||
-    nodes.some((n) => {
-      const m = (n.data as DazyNodeData | undefined)?.moduleID;
-      return (
-        m === "cron_trigger" ||
-        m === "poll_trigger" ||
-        m === "google_form_trigger" ||
-        m === "ticketmaster_on_new_event" ||
-        m === "webhook_input" ||
-        m === "request_input" ||
-        m === "form_input"
-      );
-    });
+    nodes.some((n) =>
+      isTriggerModule((n.data as DazyNodeData | undefined)?.moduleID ?? ""),
+    );
   const runStatus = useMemo(
     () =>
       flowRunStatusPublished(

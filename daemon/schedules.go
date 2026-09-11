@@ -57,8 +57,8 @@ func (s *Service) ListSchedules(ctx context.Context, p core.Principal, tenant, w
 		}
 		flowID := tenant + "/" + ws + "/" + id
 		for _, node := range g.Nodes {
-			switch node.Module {
-			case "cron_trigger":
+			switch {
+			case node.Module == "cron_trigger":
 				expr, _ := node.Params["cron"].(string)
 				expr = strings.TrimSpace(expr)
 				if expr == "" {
@@ -83,7 +83,7 @@ func (s *Service) ListSchedules(ctx context.Context, p core.Principal, tenant, w
 					}
 				}
 				out = append(out, e)
-			case "poll_trigger", "google_form_trigger", "ticketmaster_on_new_event":
+			case core.IsPollTriggerModule(node.Module):
 				secs := paramSeconds(node.Params, "interval_seconds")
 				if secs <= 0 || secs > core.MaxPollIntervalSeconds {
 					continue

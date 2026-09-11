@@ -1534,6 +1534,68 @@
       "Upper bound on events returned."
     ]
   },
+  "gcal_on_event_change": {
+    "description": "Watches a Google Calendar and starts the flow when something in it changes — an event booked, moved, renamed or cancelled. The changed events come out as a list, ready for For each, and each one carries `change`: newly booked, changed or cancelled. A cancelled event still carries its details, so a flow can say what was called off.\n\nThe first check after you publish records where the calendar is up to and fires nothing, so switching the watch on doesn't replay the calendar's history. After that a check only sees what changed since the check before it.\n\nRecurring events are reported as the series, not as expanded instances: editing a weekly standup fires once, rather than once for every week it will ever run. Use \"Before an event starts\" when you want the individual bookings.\n\nGoogle's calendar notifications carry no details of their own and need a publicly verified callback to reach at all, so this polls instead — one API call per check, whether anything changed or not.",
+    "ports": [
+      "Changed events",
+      "Count",
+      "Time"
+    ],
+    "label": "Google Calendar",
+    "subtitle": "When an event changes",
+    "integration": "Google Calendar",
+    "titles": [
+      "Calendar",
+      "Check every",
+      "Max events",
+      "Which changes"
+    ],
+    "help": [
+      "About how many changed events one check takes. A check that finds more takes the oldest changes and leaves the rest for the next one, so nothing is dropped — it just arrives a check later.",
+      "Hard deadline for the request, in milliseconds.",
+      "How often to check for changes once the flow is published. Leave blank to only check when you press Run (for testing).",
+      "Override the API host (testing).",
+      "The calendar to read — pick from your account's calendars, or 'primary' for your own.",
+      "Which changes are worth starting the flow for. A check costs the same either way — this decides what reaches the rest of the flow, and a check whose changes are all filtered out skips it."
+    ],
+    "enum_names": [
+      "Any change",
+      "Cancelled",
+      "Changed",
+      "Newly booked"
+    ]
+  },
+  "gcal_on_event_start": {
+    "description": "Starts the flow a set time before an event in a Google Calendar begins — ten minutes before a meeting, an hour before a delivery window, the evening before a booking. The events about to start come out as a list, ready for For each, each one carrying `minutes_until_start` alongside its title, time, place and attendees.\n\nEach booking is announced once. One that is moved is announced again for its new time, because the reminder worth having is the one for when the thing actually happens. Cancelled events are left alone.\n\nKeep the check interval no longer than the notice you ask for, or an event can be reached after it has already begun. A check that never happened is not made up for either: an event whose start has slipped further than a quarter of an hour into the past is left alone rather than announced late, so a daemon that was down overnight doesn't wake up and page you about yesterday's meetings.\n\nAll-day events have no clock time to count back from, so they are left out unless you ask for them; asked for, they count from midnight in the timezone you name.\n\nUnlike \"When an event changes\", the first check after publishing does fire — it reaches whatever already sits inside the notice window, usually the next event or two. The alternative is publishing at nine and silently missing the half-past-nine meeting.",
+    "ports": [
+      "Count",
+      "Starting soon",
+      "Time"
+    ],
+    "label": "Google Calendar",
+    "subtitle": "Before an event starts",
+    "integration": "Google Calendar",
+    "titles": [
+      "Calendar",
+      "Check every",
+      "Include all-day events",
+      "Max events",
+      "Notice",
+      "Search text",
+      "Timezone"
+    ],
+    "help": [
+      "All-day events have no start time of their own. Include them and they count from midnight, which means a day's notice reaches them at midnight the night before.",
+      "Free-text search over event fields. Leave blank to match all.",
+      "Hard deadline for the request, in milliseconds.",
+      "How long before the start to fire, in minutes. 0 fires as the event begins. A day is the most that can be asked for; longer notice is better built as a Schedule step reading the week ahead with List events.",
+      "How many events inside the notice window one check looks at. Anything past the cut is never announced, so raise it if a window can hold more events than this.",
+      "How often to check once the flow is published. Keep it no longer than the notice asked for above, or an event can start between two checks and be reached late or not at all. Leave blank to only check when you press Run (for testing).",
+      "IANA timezone that all-day events take their midnight from, e.g. \"Europe/Stockholm\". Empty = UTC.",
+      "Override the API host (testing).",
+      "The calendar to read — pick from your account's calendars, or 'primary' for your own."
+    ]
+  },
   "gemini": {
     "description": "Send a prompt and get a response back — summarise text from an earlier step, classify an input, or generate text. Connect the text to work on into the Prompt input, or type a prompt on the step.",
     "ports": [

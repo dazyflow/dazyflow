@@ -20,6 +20,9 @@
 // conflict_columns and STRIPE_API_KEY are what the user types.
 
 export const SV_FIELD_TITLES: Record<string, string> = {
+  "Notice": "Varsel",
+  "Which changes": "Vilka ändringar",
+  "Include all-day events": "Ta med heldagshändelser",
   "Forget the whole base": "Glöm hela basen",
   "Decimals": "Decimaler",
   "Group the thousands": "Gruppera tusentalen",
@@ -357,6 +360,14 @@ export const SV_FIELD_TITLES: Record<string, string> = {
 };
 
 export const SV_FIELD_HELP: Record<string, string> = {
+  "About how many changed events one check takes. A check that finds more takes the oldest changes and leaves the rest for the next one, so nothing is dropped — it just arrives a check later.": "Ungefär hur många ändrade händelser en kontroll tar. En kontroll som hittar fler tar de äldsta ändringarna och lämnar resten till nästa, så inget tappas — det kommer bara en kontroll senare.",
+  "All-day events have no start time of their own. Include them and they count from midnight, which means a day's notice reaches them at midnight the night before.": "Heldagshändelser har ingen egen starttid. Ta med dem och de räknas från midnatt, vilket betyder att ett dygns varsel når dem vid midnatt kvällen före.",
+  "How long before the start to fire, in minutes. 0 fires as the event begins. A day is the most that can be asked for; longer notice is better built as a Schedule step reading the week ahead with List events.": "Hur långt före starten det ska utlösa, i minuter. 0 utlöser när händelsen börjar. Ett dygn är det mesta som kan begäras; längre varsel byggs bättre som ett Schema-steg som läser veckan framåt med Lista händelser.",
+  "How many events inside the notice window one check looks at. Anything past the cut is never announced, so raise it if a window can hold more events than this.": "Hur många händelser inne i varselfönstret en kontroll tittar på. Allt bortom gränsen aviseras aldrig, så höj den om ett fönster kan innehålla fler händelser än så.",
+  "How often to check for changes once the flow is published. Leave blank to only check when you press Run (for testing).": "Hur ofta det kontrolleras om något ändrats när flödet är publicerat. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
+  "How often to check once the flow is published. Keep it no longer than the notice asked for above, or an event can start between two checks and be reached late or not at all. Leave blank to only check when you press Run (for testing).": "Hur ofta det kontrolleras när flödet är publicerat. Håll det inte längre än varselet du ber om ovan, annars kan en händelse börja mellan två kontroller och nås sent eller inte alls. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
+  "IANA timezone that all-day events take their midnight from, e.g. \"Europe/Stockholm\". Empty = UTC.": "IANA-tidszonen som heldagshändelser tar sin midnatt från, t.ex. \"Europe/Stockholm\". Tomt = UTC.",
+  "Which changes are worth starting the flow for. A check costs the same either way — this decides what reaches the rest of the flow, and a check whose changes are all filtered out skips it.": "Vilka ändringar som är värda att starta flödet för. En kontroll kostar lika mycket oavsett — det här avgör vad som når resten av flödet, och en kontroll vars ändringar alla filtreras bort hoppar över det.",
   "Confirms that a step with no document named really is meant to empty the base. Ignored when a document is named.":
     "Bekräftar att ett steg utan angivet dokument verkligen är tänkt att tömma basen. Ignoreras när ett dokument anges.",
   "How to compare A against B. Mind the last four: \"is set\" asks only whether there is a value at all, so an empty list or empty text IS set — reach for \"is empty\" when you mean nothing in it.":
@@ -1014,6 +1025,9 @@ export const SV_FIELD_HELP: Record<string, string> = {
 };
 
 export const SV_ENUM_LABELS: Record<string, string> = {
+  "Any change": "Alla ändringar",
+  "Newly booked": "Nybokad",
+  "Changed": "Ändrad",
   "is set": "har ett värde",
   "is not set": "har inget värde",
   "has something in it": "innehåller något",

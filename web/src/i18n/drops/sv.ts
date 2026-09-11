@@ -105,6 +105,8 @@ export const SV_LABELS: Record<string, string> = {
 };
 
 export const SV_SUBTITLES: Record<string, string> = {
+  "When an event changes": "När en händelse ändras",
+  "Before an event starts": "Innan en händelse börjar",
   "Forget a document": "Glöm ett dokument",
   "Round it, or write it out": "Avrunda, eller skriv ut det",
   "Add documents": "Lägg till dokument",
@@ -234,6 +236,8 @@ export const SV_SUBTITLES: Record<string, string> = {
 // spot an entry no drop reaches any more — a question portLabel() cannot be
 // asked, since it is only ever handed labels that DO exist.
 export const SV_PORTS: Record<string, string> = {
+  "Changed events": "Ändrade händelser",
+  "Starting soon": "Börjar snart",
   "Passages forgotten": "Glömda avsnitt",
   "Passages": "Avsnitt",
   "Passages stored": "Lagrade avsnitt",

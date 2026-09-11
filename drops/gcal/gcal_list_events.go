@@ -184,6 +184,13 @@ type rawEvent struct {
 	Start       eventTime  `json:"start"`
 	End         eventTime  `json:"end"`
 	Attendees   []attendee `json:"attendees"`
+
+	// Only the trigger drops read these: `normalize` leaves them off the
+	// listing shape, which is a description of an event rather than of a
+	// change to one.
+	Created          string `json:"created"`
+	Updated          string `json:"updated"`
+	RecurringEventID string `json:"recurringEventId"`
 }
 
 type eventTime struct {

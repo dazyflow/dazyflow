@@ -69,6 +69,32 @@ const EVENT_TRIGGER_MODULES = new Set([
   "homeassistant_state_changed",
 ]);
 
+// Fired by the scheduler on the interval the node carries. Mirrors
+// core.PollTriggerModules in Go, which TestPollTriggerModulesMatchCatalog holds
+// against the catalog; add a drop there and mirror it here.
+const POLL_TRIGGER_MODULES = new Set([
+  "poll_trigger",
+  "google_form_trigger",
+  "ticketmaster_on_new_event",
+  "gcal_on_event_change",
+  "gcal_on_event_start",
+]);
+
+// The modules that can start a flow at all, however they are fired. Mirrors
+// core.IsTriggerModule; the editor asks through this rather than repeating the
+// union, which is how "trigger present" and "trigger configured" drifted apart
+// once already.
+export function isTriggerModule(module: string): boolean {
+  return (
+    module === "cron_trigger" ||
+    module === "webhook_input" ||
+    module === "request_input" ||
+    module === "form_input" ||
+    POLL_TRIGGER_MODULES.has(module) ||
+    EVENT_TRIGGER_MODULES.has(module)
+  );
+}
+
 // hasConfiguredAutoTrigger reports whether anything will fire the flow
 // without a manual Run. Rules mirror HasConfiguredAutoTrigger in Go.
 function hasConfiguredAutoTrigger(
@@ -83,14 +109,6 @@ function hasConfiguredAutoTrigger(
       case "cron_trigger":
         if (readString(n.params, "cron").trim() !== "") return true;
         break;
-      case "poll_trigger":
-      case "google_form_trigger":
-      case "ticketmaster_on_new_event": {
-        const secs = readNumber(n.params, "interval_seconds");
-        if (secs !== undefined && secs > 0 && secs <= MAX_POLL_INTERVAL_SECONDS)
-          return true;
-        break;
-      }
       case "webhook_input":
         if (webhookKeys(n.params).length > 0 || webhookPublic(n.params)) return true;
         break;
@@ -100,6 +118,12 @@ function hasConfiguredAutoTrigger(
       case "form_input":
         return true;
       default:
+        if (POLL_TRIGGER_MODULES.has(n.module)) {
+          const secs = readNumber(n.params, "interval_seconds");
+          if (secs !== undefined && secs > 0 && secs <= MAX_POLL_INTERVAL_SECONDS)
+            return true;
+          break;
+        }
         if (EVENT_TRIGGER_MODULES.has(n.module)) return true;
     }
   }
