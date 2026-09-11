@@ -7,17 +7,44 @@ import { columnsOfRows } from "./rowColumns";
 
 export const RUN_PREVIEW_MAX = 600;
 
+// Ports that carry what HAPPENED rather than what came out: the console log,
+// the rows a step could not process, an exit code. They are real output and a
+// reader can wire them onward, but "the result" never means them.
+//
+// Order matters because nothing else imposes one: a Go result map is marshalled
+// in key order, so "failed" and "logs" reach the reader ahead of "out" purely
+// on spelling, and the Code step's preview showed its log — or an empty list —
+// where its answer belonged.
+const EXPLANATORY_PORTS = new Set([
+  "logs",
+  "failed",
+  "errors",
+  "stderr",
+  "exit_code",
+]);
+
+// resultPorts reads a step's ports in the order a person means them: the answer
+// first, the account of the work after.
+function resultPorts(output: Record<string, Ref> | undefined): string[] {
+  const ports = Object.keys(output ?? {});
+  const answers = ports.filter((p) => !EXPLANATORY_PORTS.has(p));
+  return answers.length === ports.length
+    ? ports
+    : [...answers, ...ports.filter((p) => EXPLANATORY_PORTS.has(p))];
+}
+
 // previewOutput renders a step's output ports as one short human-readable
-// blob: the first port carrying an inline value wins. Text passes through
-// as-is (a rendered summary, a message body); anything structured is
-// pretty-printed. Returns "" when the step produced nothing inline — which
-// includes outputs held by reference (a large blob in storage), where the
-// internal ref string would mean nothing to the reader.
+// blob: the first port carrying an inline value wins, with the explanatory
+// ports counted last (see resultPorts). Text passes through as-is (a rendered
+// summary, a message body); anything structured is pretty-printed. Returns ""
+// when the step produced nothing inline — which includes outputs held by
+// reference (a large blob in storage), where the internal ref string would mean
+// nothing to the reader.
 export function previewOutput(
   output: Record<string, Ref> | undefined,
   max: number = RUN_PREVIEW_MAX,
 ): string {
-  for (const port of Object.keys(output ?? {})) {
+  for (const port of resultPorts(output)) {
     const data = output?.[port]?.data;
     if (data == null) continue;
     let text: string;
@@ -72,15 +99,15 @@ function isRowList(v: unknown): v is Record<string, unknown>[] {
 }
 
 // resultView classifies a step's output. The port choice is previewOutput's —
-// first port carrying an inline value — so the panel and the banner never
-// disagree about which port "the result" came from.
+// first port carrying an inline value, explanatory ports last — so the panel
+// and the banner never disagree about which port "the result" came from.
 //
 // Column order prefers the value's own headers, then appends any column the
 // rows actually carry that they didn't declare: the producer's order is the
 // right default, and a column missing from the header list is still data the
 // reader is owed.
 export function resultView(output: Record<string, Ref> | undefined): ResultView {
-  for (const port of Object.keys(output ?? {})) {
+  for (const port of resultPorts(output)) {
     const ref = output?.[port];
     const data = ref?.data;
     if (data == null) continue;

@@ -37,16 +37,23 @@ func init() {
 			Label:    "Code",
 			Subtitle: "Run a bit of JavaScript",
 			Icon:     "code",
-			Category: "transformation",
-			Provider: "internal",
+			// The language's own mark rather than the generic code glyph: on a
+			// canvas of thirty steps it is what tells this one from the
+			// Expression step at a glance. The lucide icon stays as the
+			// fallback for anywhere the asset does not load.
+			BrandLogo: "/brands/javascript.svg",
+			Category:  "transformation",
+			Provider:  "internal",
 			Tags: []string{
 				"code", "javascript", "js", "script", "function", "custom",
 				"transform", "compute", "zapier", "n8n",
 			},
 			Description: "Write a little JavaScript when the ready-made steps cannot say what you mean. " +
 				"The value wired into 'in' arrives as `input`, and whatever you `return` leaves on 'out' — " +
-				"an object, a list, a number, a string, a true/false. `console.log(…)` writes to the run log, " +
-				"so you can see what your code saw.\n\n" +
+				"an object, a list, a number, a string, a true/false. `console.log(…)` writes to the step's " +
+				"console while you watch, and stays there once the run is over — each line tagged with the " +
+				"level you printed it at, errors in red and warnings in yellow, and the line of script it came " +
+				"from. The same lines leave on 'Log lines', so a flow can mail them or file them.\n\n" +
 				"Choose how it runs. 'Once, over everything' hands you the whole input in one go — reach for " +
 				"it to reshape a payload, do arithmetic across a list, or build a value no other step can. " +
 				"'Once per row' runs your code for each row instead, with the row as `row` and its position " +
@@ -74,7 +81,7 @@ func init() {
 				{
 					Title:  "Summarize a list into one value",
 					Params: json.RawMessage(`{"code":"const total = input.reduce((sum, r) => sum + r.amount, 0);\nconsole.log('rows', input.length);\nreturn { total, average: total / input.length };"}`),
-					Notes:  "console.log lines show up in the run log while the flow runs.",
+					Notes:  "console.log lines show up in the step's console while the flow runs, and stay there afterwards.",
 				},
 				{
 					Title:  "Give a slow script more time",
@@ -103,7 +110,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"code":{"type":"string","format":"script","x_lang":"javascript","title":"JavaScript","description":"The script. 'input' is the value wired into 'in' (or 'row' and 'index' in per-row mode); whatever you return leaves on 'out'. console.log writes to the run log and to the 'logs' output. No network, no files, no imports. Overridden by the 'Script' input."},
+					"code":{"type":"string","format":"script","x_lang":"javascript","title":"JavaScript","description":"The script. 'input' is the value wired into 'in' (or 'row' and 'index' in per-row mode); whatever you return leaves on 'out'. console.log writes to the step's console and to the 'logs' output, each line carrying its level and the line of script that printed it. No network, no files, no imports. Overridden by the 'Script' input."},
 					"mode":{"type":"string","enum":["once","each"],"enumNames":["Once, over everything","Once per row"],"default":"once","title":"Run it","description":"Once, with the whole input as 'input' — or once per row, with each row as 'row' and its position as 'index'. Per-row collects what you return into a list, and drops any row you return nothing for."},
 					"on_row_error":{"type":"string","enum":["fail","route"],"enumNames":["Fail the step","Send the row to 'Failed rows'"],"default":"fail","title":"If a row's script throws","description":"Per-row mode only. Fail the step on the first row that throws, or keep going and send that row — with its error — out the 'Failed rows' output. Routing lets 199 good rows through when row 7 is malformed."},
 					"timeout_ms":{"type":"integer","default":5000,"minimum":100,"maximum":30000,"title":"Time limit (ms)","description":"How long the script may run in total, per-row runs included. Past it the step fails rather than holding the flow up. Maximum 30000."}
@@ -135,9 +142,9 @@ func executeCode(ctx context.Context, job core.Job, progress chan<- core.Progres
 	log := &logRecorder{}
 	sandbox, err := jsvm.New(ctx, src, jsvm.Options{
 		Timeout: timeout(job),
-		Log: func(line string) {
-			log.add(line)
-			emitLog(progress, job, line)
+		Log: func(rec jsvm.LogLine) {
+			log.add(rec)
+			emitLog(progress, job, rec)
 		},
 	})
 	if err != nil {
@@ -267,14 +274,19 @@ func emit(job core.Job, value any, log *logRecorder) core.Result {
 	case bool:
 		mime = core.MIMEBool
 	}
-	return core.Result{
-		JobID:  job.ID,
-		Status: core.StatusOK,
-		Output: map[string]core.Ref{
-			"out":  {MIME: mime, Inline: value},
-			"logs": {MIME: "application/json", Inline: log.rows(), Headers: []string{"index", "line"}},
-		},
+	out := map[string]core.Ref{"out": {MIME: mime, Inline: value}}
+	// Omitted when the script printed nothing, rather than sent out empty: an
+	// empty list is still a value, and the run view shows the first port that
+	// has one — so a logs port that is always present makes every silent
+	// script preview as "[]" instead of as its result.
+	if rows := log.rows(); len(rows) > 0 {
+		out["logs"] = core.Ref{
+			MIME:    "application/json",
+			Inline:  rows,
+			Headers: []string{"index", "line", "level", "message"},
+		}
 	}
+	return core.Result{JobID: job.ID, Status: core.StatusOK, Output: out}
 }
 
 // logRecorder keeps what console.log said, so the lines survive past the live
@@ -288,20 +300,30 @@ func emit(job core.Job, value any, log *logRecorder) core.Result {
 // Not concurrency-guarded: the sandbox evaluates on the calling goroutine, one
 // row at a time, and its Log callback runs inside that evaluation.
 type logRecorder struct {
-	lines []string
+	lines []jsvm.LogLine
 }
 
-func (l *logRecorder) add(line string) { l.lines = append(l.lines, line) }
+func (l *logRecorder) add(rec jsvm.LogLine) { l.lines = append(l.lines, rec) }
 
+// rows renders the log as a table: the position it was printed at, the line of
+// script that printed it, how loudly, and what it said. Position and script
+// line are not the same number and neither replaces the other — one script line
+// inside a loop prints a hundred times, and `index` is what keeps those hundred
+// in order once the rows travel on into a filter or a sort.
 func (l *logRecorder) rows() []any {
 	out := make([]any, 0, len(l.lines))
-	for i, line := range l.lines {
-		out = append(out, map[string]any{"index": i, "line": line})
+	for i, rec := range l.lines {
+		out = append(out, map[string]any{
+			"index":   i,
+			"line":    rec.Line,
+			"level":   rec.Level,
+			"message": rec.Message,
+		})
 	}
 	return out
 }
 
-func emitLog(ch chan<- core.Progress, job core.Job, line string) {
+func emitLog(ch chan<- core.Progress, job core.Job, rec jsvm.LogLine) {
 	if ch == nil {
 		return
 	}
@@ -309,9 +331,26 @@ func emitLog(ch chan<- core.Progress, job core.Job, line string) {
 	case ch <- core.Progress{
 		JobID:   job.ID,
 		NodeID:  job.NodeID,
-		Message: line,
-		Data:    map[string]any{"stream": "stdout", "line": line},
+		Message: rec.Message,
+		Data: map[string]any{
+			"stream":  logStream(rec.Level),
+			"line":    rec.Message,
+			"level":   rec.Level,
+			"at_line": rec.Line,
+		},
 	}:
 	default:
+	}
+}
+
+// logStream maps a console method onto the two streams the run log knows, the
+// way a terminal would: the run view marks stderr, so console.error stands out
+// there without the viewer learning a second vocabulary.
+func logStream(level string) string {
+	switch level {
+	case "error", "warn":
+		return "stderr"
+	default:
+		return "stdout"
 	}
 }

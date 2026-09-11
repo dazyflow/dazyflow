@@ -58,6 +58,9 @@ const (
 	// maxCallStack turns runaway recursion into a catchable JS error
 	// rather than a Go stack overflow, which no recover() can save.
 	maxCallStack = 512
+	// scriptName labels the compiled program. It is how a stack frame from
+	// the author's script is told apart from the console's own native frame.
+	scriptName = "script.js"
 )
 
 var (
@@ -68,13 +71,28 @@ var (
 	ErrCancelled = errors.New("the run was cancelled")
 )
 
+// LogLine is one console call, kept apart rather than flattened into a string:
+// a reader hunting a failure wants the errors, and a reader hunting a value
+// wants the line of script that printed it. Both are lost the moment the three
+// become one piece of text.
+type LogLine struct {
+	// Level is the console method the script called — log, info, warn, error
+	// or debug.
+	Level string
+	// Line is where in the author's own script the call sits, 1-based. 0 when
+	// the sandbox itself speaks rather than the script.
+	Line int
+	// Message is the rendered arguments, joined by a space.
+	Message string
+}
+
 // Options configures one sandbox. Timeout covers the sandbox's whole life —
 // every Eval together — so a per-row script cannot buy more budget by being
 // individually quick.
 type Options struct {
 	Timeout time.Duration
-	// Log receives each console line. Optional.
-	Log func(line string)
+	// Log receives each console call. Optional.
+	Log func(LogLine)
 }
 
 type Sandbox struct {
@@ -98,7 +116,7 @@ func New(ctx context.Context, code string, opt Options) (*Sandbox, error) {
 	if len(code) > MaxCodeLen {
 		return nil, fmt.Errorf("the script is %d characters; the limit is %d", len(code), MaxCodeLen)
 	}
-	prog, err := goja.Compile("script.js", "(function(){"+code+"\n})()", false)
+	prog, err := goja.Compile(scriptName, "(function(){"+code+"\n})()", false)
 	if err != nil {
 		return nil, fmt.Errorf("the script does not parse: %s", cleanErr(err))
 	}
@@ -198,9 +216,21 @@ func result(v goja.Value) (any, error) {
 	return exported, nil
 }
 
-func (s *Sandbox) installConsole(sink func(string)) error {
+func (s *Sandbox) installConsole(sink func(LogLine)) error {
 	console := s.rt.NewObject()
-	write := func(call goja.FunctionCall) goja.Value {
+	// One closure per method rather than one shared writer: the method name is
+	// the only place the script says how much it meant by a line, and a single
+	// writer throws that away before anyone downstream can read it.
+	for _, level := range []string{"log", "info", "warn", "error", "debug"} {
+		if err := console.Set(level, s.consoleWriter(sink, level)); err != nil {
+			return err
+		}
+	}
+	return s.rt.Set("console", console)
+}
+
+func (s *Sandbox) consoleWriter(sink func(LogLine), level string) func(goja.FunctionCall) goja.Value {
+	return func(call goja.FunctionCall) goja.Value {
 		if sink == nil || s.logs >= MaxLogLines {
 			return goja.Undefined()
 		}
@@ -209,20 +239,32 @@ func (s *Sandbox) installConsole(sink func(string)) error {
 		for _, a := range call.Arguments {
 			parts = append(parts, format(a))
 		}
+		sink(LogLine{Level: level, Line: s.callerLine(), Message: strings.Join(parts, " ")})
 		if s.logs == MaxLogLines {
-			sink(strings.Join(parts, " "))
-			sink(fmt.Sprintf("… console output stopped after %d lines", MaxLogLines))
-			return goja.Undefined()
+			// The marker is the sandbox talking, not the script: warn, so a
+			// reader filtering for trouble sees that the log ends early, and
+			// no line number, because no line of theirs produced it.
+			sink(LogLine{
+				Level:   "warn",
+				Message: fmt.Sprintf("… console output stopped after %d lines", MaxLogLines),
+			})
 		}
-		sink(strings.Join(parts, " "))
 		return goja.Undefined()
 	}
-	for _, name := range []string{"log", "info", "warn", "error", "debug"} {
-		if err := console.Set(name, write); err != nil {
-			return err
+}
+
+// callerLine is the line of the script that called console. goja reports the
+// console function's own native frame first, so the first frame belonging to
+// the compiled script is the author's — and because New opens its wrapper on
+// the script's first line, that number is the one they see in their editor.
+func (s *Sandbox) callerLine() int {
+	var buf [2]goja.StackFrame
+	for _, f := range s.rt.CaptureCallStack(2, buf[:0]) {
+		if f.SrcName() == scriptName {
+			return f.Position().Line
 		}
 	}
-	return s.rt.Set("console", console)
+	return 0
 }
 
 // format renders one console argument. Objects go out as JSON because

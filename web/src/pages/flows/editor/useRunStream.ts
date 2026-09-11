@@ -6,6 +6,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { Edge as FlowEdge, Node as FlowNode, ReactFlowInstance } from "@xyflow/react";
 import { api } from "../../../api";
 import { explainApiError } from "../../../lib/explainApiError";
+import { consoleLine } from "../../../lib/consoleLog";
 import { previewOutput } from "../../../lib/runResult";
 import { POLL } from "../../../lib/timing";
 import type { DazyNodeData } from "../../../components/editor/nodeCardShared";
@@ -208,15 +209,25 @@ export function useRunStream({
                 node_id?: string;
                 progress?: {
                   message?: string;
-                  data?: { stream?: string; line?: string };
+                  data?: {
+                    stream?: string;
+                    line?: string;
+                    level?: string;
+                    at_line?: number;
+                  };
                 };
               };
               if (!ev.node_id) return;
               const line = ev.progress?.data?.line ?? ev.progress?.message;
               if (typeof line !== "string" || line === "") return;
               const stream = ev.progress?.data?.stream;
-              const localLine =
-                (stream === "stderr" ? "[stderr] " : "") + line;
+              const level = ev.progress?.data?.level;
+              // A step that names the level says everything "[stderr]" was
+              // standing in for, and says it the same way the recorded log
+              // does — so the live console and the one after the run agree.
+              const localLine = level
+                ? consoleLine(line, level, ev.progress?.data?.at_line)
+                : (stream === "stderr" ? "[stderr] " : "") + line;
               setLiveLogs((prev) => {
                 const cur = prev[ev.node_id!] ?? [];
                 const next =

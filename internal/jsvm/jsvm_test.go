@@ -173,22 +173,57 @@ func TestEval_DeepRecursionIsCatchable(t *testing.T) {
 }
 
 func TestConsole_LogsAndStopsAtTheCap(t *testing.T) {
-	var lines []string
+	var lines []LogLine
 	_, err := run(t, `console.log("plain", { a: 1 }, null);
 		for (let i = 0; i < 500; i++) console.log(i);
 		return 1;`,
-		nil, Options{Log: func(l string) { lines = append(lines, l) }})
+		nil, Options{Log: func(l LogLine) { lines = append(lines, l) }})
 	if err != nil {
 		t.Fatalf("eval: %v", err)
 	}
-	if len(lines) == 0 || lines[0] != `plain {"a":1} null` {
-		t.Fatalf("first line = %q, want the formatted arguments", lines)
+	if len(lines) == 0 || lines[0].Message != `plain {"a":1} null` {
+		t.Fatalf("first line = %+v, want the formatted arguments", lines)
 	}
 	if len(lines) > MaxLogLines+1 {
 		t.Errorf("%d lines, want the cap to hold at %d", len(lines), MaxLogLines)
 	}
-	if !strings.Contains(lines[len(lines)-1], "stopped after") {
-		t.Errorf("last line = %q, want the truncation notice", lines[len(lines)-1])
+	last := lines[len(lines)-1]
+	if !strings.Contains(last.Message, "stopped after") {
+		t.Errorf("last line = %q, want the truncation notice", last.Message)
+	}
+	// The sandbox's own notice, not the script's: loud, and from no line.
+	if last.Level != "warn" || last.Line != 0 {
+		t.Errorf("truncation notice = %+v, want warn from line 0", last)
+	}
+}
+
+// Which console method the script called is the only place it says how much it
+// meant by a line, and the line number is how an author finds the print they
+// are reading. Both used to be thrown away before the drop could see them.
+func TestConsole_CarriesTheLevelAndTheScriptLine(t *testing.T) {
+	var lines []LogLine
+	_, err := run(t, `console.log("one");
+console.warn("two");
+function deeper() { console.error("three"); }
+deeper();
+return 1;`, nil, Options{Log: func(l LogLine) { lines = append(lines, l) }})
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	want := []LogLine{
+		{Level: "log", Line: 1, Message: "one"},
+		{Level: "warn", Line: 2, Message: "two"},
+		// Reported where the call sits, not where the function was called
+		// from — that is the line the author is looking at in their editor.
+		{Level: "error", Line: 3, Message: "three"},
+	}
+	if len(lines) != len(want) {
+		t.Fatalf("lines = %+v, want %d", lines, len(want))
+	}
+	for i, w := range want {
+		if lines[i] != w {
+			t.Errorf("line %d = %+v, want %+v", i, lines[i], w)
+		}
 	}
 }
 

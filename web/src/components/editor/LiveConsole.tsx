@@ -36,6 +36,18 @@ export function LiveConsole({ lines }: Props) {
         foreground: "#d8d4ec",
         cursor: "#9f83fe",
         selectionBackground: "rgba(159, 131, 254, 0.3)",
+        // A step's errors and warnings arrive as ANSI red and yellow (see
+        // consoleLog.ts). xterm's defaults for those are a muddy red and an
+        // acid yellow on this near-black violet; these are the same colours a
+        // failed and a warning status wear everywhere else in the app, so one
+        // red means one thing. Literal values because xterm draws on a canvas
+        // and cannot read a CSS variable — keep them in step with theme.css.
+        red: "#ff6464", // --status-failed
+        brightRed: "#ff6464",
+        yellow: "#f5a623", // --status-warning
+        brightYellow: "#f5a623",
+        cyan: "#9f83fe", // --accent, for console.info
+        brightCyan: "#9f83fe",
       },
     });
     const fit = new FitAddon();

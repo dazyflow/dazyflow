@@ -75,6 +75,10 @@ type Props = {
   rowsSource?: { nodeId: string; port: string };
   upstreamRows?: Record<string, unknown>[];
   liveLogs?: string[];
+  // What this step's last finished run recorded on its console, kept for when
+  // the live stream has nothing to show: the run is over, or its best-effort
+  // lines were dropped while it was busy.
+  recordedLogs?: string[];
   workspace?: WorkspaceCtx;
   onSample?: (nodeID: string) => Promise<string | undefined>;
   onClose?: () => void;
@@ -120,6 +124,7 @@ export function Inspector({
   upstreamRows,
   rowsSource,
   liveLogs,
+  recordedLogs,
   workspace,
   onSample,
   onClose,
@@ -215,6 +220,10 @@ export function Inspector({
     );
   }
   const d = selected.data;
+  // Live while a run is streaming, the last run's record once it is not. One
+  // console either way: a reader looking for what their script printed should
+  // not have to know which of the two they are looking at.
+  const consoleLog = liveLogs?.length ? liveLogs : (recordedLogs ?? []);
   const schema = d.manifest?.params_schema;
   const canForm = supportsSchemaForm(schema);
   // A drop whose schema is an object with no properties has nothing to
@@ -666,10 +675,10 @@ export function Inspector({
         )}
         </div>
 
-        {liveLogs && liveLogs.length > 0 && (
+        {consoleLog.length > 0 && (
           <div className="inspector-section">
             <h4>{t("inspector.liveOutput")}</h4>
-            <LiveConsole lines={liveLogs} />
+            <LiveConsole lines={consoleLog} />
           </div>
         )}
 

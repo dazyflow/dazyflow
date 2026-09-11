@@ -10,6 +10,39 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **The console says which line printed what, and how loudly.** A line the Code
+  step recorded was text and nothing else: `console.error` looked exactly like
+  `console.log`, and a print inside a loop said nothing about which line of
+  script it came from. Every line on the **Log lines** output now carries the
+  level it was printed at, the line of your own script that printed it, and its
+  position in the log, alongside the text — so a flow can mail just the errors,
+  or a person can find the print they are reading.
+
+- **The Code step wears the JavaScript mark.** It shared the generic code glyph
+  with everything else that looks like code, which is no help at all on a canvas
+  where the question is "which of these two steps is the script?". It now shows
+  the language's own logo, the way the Git and Postgres steps show theirs.
+
+- **The console in the step inspector outlives the run.** It had lines only
+  while a run was streaming, and those are sent best-effort — a busy run drops
+  them, and a finished one has none to send. It now falls back to the copy the
+  step recorded, so what a script printed is still there after the run ends.
+  Errors are red and warnings yellow, in the same red and yellow a failed step
+  wears everywhere else.
+
+### Fixed
+
+- **A Code step showed its log where its result belonged.** The step sent a Log
+  lines output on every run, an empty list included, and the run view shows the
+  first output carrying a value — which, sorted by name, meant `failed` or
+  `logs` long before `out`. A script that printed nothing previewed as `[]`, and
+  one that printed something previewed as its log. The log output is now left
+  off entirely when a script printed nothing, and the run view looks past the
+  outputs that account for the work — the log, the failed rows, an exit code —
+  to find the one carrying the answer.
+
 ## [0.41.10] - 2026-09-11
 
 ### Added

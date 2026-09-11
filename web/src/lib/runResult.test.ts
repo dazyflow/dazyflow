@@ -34,6 +34,24 @@ describe("previewOutput", () => {
     expect(previewOutput(out)).toBe("the answer");
   });
 
+  // Go marshals a result map in key order, so "failed" and "logs" arrive ahead
+  // of "out" on spelling alone. The Code step's preview showed its log — or an
+  // empty failed list — where its answer belonged.
+  it("passes over the explanatory ports to find the answer", () => {
+    const out = {
+      failed: { data: [] },
+      logs: { data: [{ index: 0, line: 1, level: "log", message: "hi" }] },
+      out: { data: { total: 12 } },
+    };
+    expect(previewOutput(out)).toBe('{\n  "total": 12\n}');
+  });
+
+  it("still shows an explanatory port when it is all there is", () => {
+    expect(previewOutput({ stderr: { data: "command not found" } })).toBe(
+      "command not found",
+    );
+  });
+
   it("ignores outputs held by reference", () => {
     expect(previewOutput({ file: { ref: "blob://abc", mime: "application/pdf" } })).toBe("");
   });
@@ -141,6 +159,14 @@ describe("resultView", () => {
       text: { data: "the answer" },
     });
     expect(view.kind === "text" && view.port).toBe("text");
+  });
+
+  it("passes over the explanatory ports to find the answer", () => {
+    const view = resultView({
+      logs: { data: [{ index: 0, message: "hi" }] },
+      out: { data: "the answer" },
+    });
+    expect(view.kind === "text" && view.port).toBe("out");
   });
 
   it("reports none for a by-reference or absent output", () => {

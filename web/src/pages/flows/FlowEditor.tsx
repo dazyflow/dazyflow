@@ -113,6 +113,7 @@ import {
 } from "../../lib/edgeError";
 import { suggestNextDrops, topDropsByUsage } from "../../lib/suggest";
 import { explainApiError } from "../../lib/explainApiError";
+import { consoleLines } from "../../lib/consoleLog";
 import { findStrayEdges } from "../../lib/strayEdges";
 import { lintMessage } from "./editor/lintMessage";
 import { buildTestEventSample } from "./editor/testEventSample";
@@ -1491,6 +1492,16 @@ function EditorInner() {
   const inspectorSelected = useMemo(
     () => nodes.find((n) => n.id === selectedID) ?? null,
     [nodes, selectedID],
+  );
+
+  // What the selected step printed on its last finished run. The live stream
+  // is best-effort and ends with the run; this is the copy the step recorded.
+  const inspectorRecordedLogs = useMemo(
+    () =>
+      inspectorSelected
+        ? consoleLines(runOutputs[inspectorSelected.id]?.logs?.data)
+        : undefined,
+    [inspectorSelected, runOutputs],
   );
 
   const inspectorRowsSource = useMemo(() => {
@@ -4256,6 +4267,7 @@ function EditorInner() {
             setDirty(true);
           }}
           liveLogs={inspectorSelected ? liveLogs[inspectorSelected.id] : undefined}
+          recordedLogs={inspectorRecordedLogs}
           workspace={
             token ? { token, tenant: activeTenant, workspace: activeWorkspace } : undefined
           }

@@ -90,11 +90,45 @@ func TestConsoleLogLeavesOnTheLogsOutput(t *testing.T) {
 	if len(logs) != 2 {
 		t.Fatalf("logs = %d rows, want 2", len(logs))
 	}
-	if got := logs[0].(map[string]any)["line"]; got != "first" {
+	if got := logs[0].(map[string]any)["message"]; got != "first" {
 		t.Errorf("first line = %v", got)
 	}
-	if got := logs[1].(map[string]any)["line"]; got != "second" {
+	if got := logs[1].(map[string]any)["message"]; got != "second" {
 		t.Errorf("second line = %v", got)
+	}
+}
+
+// A log row says what the script said, how loudly it said it, and which line of
+// their own script said it — the three questions an author asks of a print,
+// and none of them answerable once the row is only text.
+func TestALogRowCarriesItsLevelAndScriptLine(t *testing.T) {
+	t.Parallel()
+	job := core.Job{ID: "t", NodeID: "code_1", Params: map[string]any{
+		"code": "const n = 2;\nconsole.warn('careful', n);\nreturn 1;",
+	}}
+	res := runJob(t, job, nil)
+	logs := res.Output["logs"].Inline.([]any)
+	if len(logs) != 1 {
+		t.Fatalf("logs = %d rows, want 1", len(logs))
+	}
+	row := logs[0].(map[string]any)
+	if row["level"] != "warn" || row["message"] != "careful 2" || row["line"] != 2 || row["index"] != 0 {
+		t.Errorf("row = %+v, want warn/careful 2 from script line 2 at index 0", row)
+	}
+}
+
+// An empty logs port is still a value, and the run view shows the first port
+// carrying one — so a step that printed nothing would preview as "[]" rather
+// than as its own result.
+func TestTheLogsPortIsAbsentWhenTheScriptPrintedNothing(t *testing.T) {
+	t.Parallel()
+	res := runJob(t, core.Job{ID: "t", NodeID: "code_1",
+		Params: map[string]any{"code": "return {a: 1};"}}, nil)
+	if ref, ok := res.Output["logs"]; ok {
+		t.Errorf("logs = %+v, want the port left off entirely", ref)
+	}
+	if _, ok := res.Output["out"]; !ok {
+		t.Error("out is missing")
 	}
 }
 
@@ -114,7 +148,7 @@ func TestATruncatedLogSaysSoInTheLogItself(t *testing.T) {
 	if len(logs) != jsvm.MaxLogLines+1 {
 		t.Fatalf("logs = %d rows, want %d lines plus the marker", len(logs), jsvm.MaxLogLines)
 	}
-	last := logs[len(logs)-1].(map[string]any)["line"].(string)
+	last := logs[len(logs)-1].(map[string]any)["message"].(string)
 	if !strings.Contains(last, "stopped after") {
 		t.Errorf("last line = %q, want the sandbox's truncation marker", last)
 	}
