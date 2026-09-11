@@ -78,6 +78,8 @@ const POLL_TRIGGER_MODULES = new Set([
   "ticketmaster_on_new_event",
   "gcal_on_event_change",
   "gcal_on_event_start",
+  "gmail_on_new_message",
+  "imap_on_new_message",
 ]);
 
 // The modules that can start a flow at all, however they are fired. Mirrors

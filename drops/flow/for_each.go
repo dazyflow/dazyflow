@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/limits"
@@ -62,7 +63,8 @@ func init() {
 					"type":"object",
 					"properties":{
 						"concurrency":{"type":"integer","minimum":1,"title":"Concurrency","description":"How many items to process at once. Higher is faster but hits rate limits sooner."},
-						"fail_fast":{"type":"boolean","default":false,"title":"Stop on first error","description":"Stop the whole loop as soon as one item fails, instead of continuing with the rest."}
+						"fail_fast":{"type":"boolean","default":false,"title":"Stop on first error","description":"Stop the whole loop as soon as one item fails, instead of continuing with the rest."},
+						"max_per_second":{"type":"number","minimum":0.01,"maximum":1000,"title":"Start at most (per second)","description":"Pace how fast items are STARTED, for a loop that calls someone else's API — 5 means a fifth of a second between starts, 0.5 means one every two seconds. Leave blank for no pacing. Concurrency still bounds how many run at once; this bounds how often a new one begins."}
 					}
 				}`,
 			),
@@ -122,6 +124,20 @@ const defaultForEachConcurrency = 8
 // radius on the multi-tenant daemon.
 const maxForEachConcurrency = 64
 
+// paceInterval turns "at most N starts a second" into the gap between two of
+// them. Zero when the author asked for no pacing, which is the default: most
+// loops are over the flow's own data and have nobody to be polite to.
+func paceInterval(p map[string]any) time.Duration {
+	rate, ok := paramFloat(p, "max_per_second")
+	if !ok || rate <= 0 {
+		return 0
+	}
+	if rate > 1000 {
+		rate = 1000
+	}
+	return time.Duration(float64(time.Second) / rate)
+}
+
 type itemFunc func(ctx context.Context, idx int, item core.Ref) (core.Ref, any)
 
 // runForEachItems is the shared fan-out skeleton for both modes: it runs
@@ -178,10 +194,24 @@ func runForEachItems(
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// Spacing the STARTS is what a rate limit means to the service on the other
+	// end: concurrency says how many calls may be in flight, and says nothing
+	// about how often a new one begins. A loop of 500 rows against an API that
+	// allows five a second needs both.
+	pace := paceInterval(job.Params)
+
 	var wg sync.WaitGroup
 	for i, item := range items {
 		if runCtx.Err() != nil {
 			break
+		}
+		if pace > 0 && i > 0 {
+			t := time.NewTimer(pace)
+			select {
+			case <-t.C:
+			case <-runCtx.Done():
+				t.Stop()
+			}
 		}
 		wg.Add(1)
 		sem <- struct{}{}

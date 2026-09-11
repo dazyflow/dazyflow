@@ -47,7 +47,7 @@ var retrievalCases = []retrievalCase{
 	{"when someone submits the contact form", []string{"form_input"}},
 	{"when another system posts data to us", []string{"webhook_input"}},
 	{"answer the caller that asked", []string{"request_input", "reply"}},
-	{"when a new email arrives", []string{"gmail_search_messages", "imap_search_messages"}},
+	{"when a new email arrives", []string{"gmail_on_new_message", "imap_on_new_message", "gmail_search_messages", "imap_search_messages"}},
 	{"when someone pays", []string{"stripe_on_payment"}},
 	{"when a payment is declined", []string{"stripe_on_payment_failed"}},
 	{"when somebody cancels their subscription", []string{"stripe_on_subscription_canceled"}},

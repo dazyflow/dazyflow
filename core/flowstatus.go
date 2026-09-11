@@ -58,6 +58,8 @@ var PollTriggerModules = map[string]bool{
 	"ticketmaster_on_new_event": true,
 	"gcal_on_event_change":      true,
 	"gcal_on_event_start":       true,
+	"gmail_on_new_message":      true,
+	"imap_on_new_message":       true,
 }
 
 func IsPollTriggerModule(module string) bool { return PollTriggerModules[module] }

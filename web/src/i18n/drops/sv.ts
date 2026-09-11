@@ -37,6 +37,8 @@ import type { Vocabulary } from "../../lib/dropText";
 // import in dropText.loadVocabulary: an English reader never downloads it.
 
 export const SV_LABELS: Record<string, string> = {
+  "Batch rows": "Bunta rader",
+  "Only what's new": "Bara det som är nytt",
   "Change a number": "Ändra ett tal",
   "Knowledge": "Kunskap",
   "Change text": "Ändra text",
@@ -105,6 +107,9 @@ export const SV_LABELS: Record<string, string> = {
 };
 
 export const SV_SUBTITLES: Record<string, string> = {
+  "Into groups of N": "I grupper om N",
+  "Skip what this step has already seen": "Hoppa över det steget redan sett",
+  "When an email arrives": "När ett mejl kommer in",
   "When an event changes": "När en händelse ändras",
   "Before an event starts": "Innan en händelse börjar",
   "Forget a document": "Glöm ett dokument",
@@ -236,6 +241,11 @@ export const SV_SUBTITLES: Record<string, string> = {
 // spot an entry no drop reaches any more — a question portLabel() cannot be
 // asked, since it is only ever handed labels that DO exist.
 export const SV_PORTS: Record<string, string> = {
+  "Batch count": "Antal buntar",
+  "Batches": "Buntar",
+  "New emails": "Nya mejl",
+  "New rows": "Nya rader",
+  "Seen before": "Sedda tidigare",
   "Changed events": "Ändrade händelser",
   "Starting soon": "Börjar snart",
   "Passages forgotten": "Glömda avsnitt",

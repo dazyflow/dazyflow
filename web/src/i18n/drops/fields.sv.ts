@@ -20,6 +20,13 @@
 // conflict_columns and STRIPE_API_KEY are what the user types.
 
 export const SV_FIELD_TITLES: Record<string, string> = {
+  "Identify a row by": "Identifiera en rad med",
+  "Keys to remember": "Nycklar att minnas",
+  "Memory name": "Minnets namn",
+  "On the first run": "Vid första körningen",
+  "Only emails matching": "Bara mejl som matchar",
+  "Rows per batch": "Rader per bunt",
+  "Start at most (per second)": "Starta som mest (per sekund)",
   "Notice": "Varsel",
   "Which changes": "Vilka ändringar",
   "Include all-day events": "Ta med heldagshändelser",
@@ -360,6 +367,22 @@ export const SV_FIELD_TITLES: Record<string, string> = {
 };
 
 export const SV_FIELD_HELP: Record<string, string> = {
+  "Hard deadline for the whole check, in milliseconds.": "Absolut tidsgräns för hela kontrollen, i millisekunder.",
+  "How many emails one check may take. The oldest waiting ones go first, in arrival order, so a burst bigger than this is delayed rather than skipped.": "Hur många mejl en kontroll får ta. De äldsta väntande går först, i ankomstordning, så en skur större än så fördröjs i stället för att hoppas över.",
+  "How many keys to keep before the oldest falls off. Keep more than the source can produce between two runs.": "Hur många nycklar som ska sparas innan den äldsta faller av. Håll fler än källan hinner producera mellan två körningar.",
+  "How many rows go in each batch. The last one takes whatever is left over.": "Hur många rader som ryms i varje bunt. Den sista tar det som blir över.",
+  "How often to check for new mail once the flow is published. Leave blank to only check when you press Run (for testing).": "Hur ofta det kontrolleras om nya mejl kommit när flödet är publicerat. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
+  "Leave blank to fire on every email. Otherwise works exactly like Gmail's search box, e.g. 'is:unread', 'from:someone@example.com', 'has:attachment'.": "Lämna tomt för att utlösa på varje mejl. Annars fungerar det precis som Gmails sökfält, t.ex. 'is:unread', 'from:nagon@example.com', 'has:attachment'.",
+  "Nothing has been seen yet, so everything is new — which is right for a list you want to work through. Choose the other when you are switching a watch on and the source already holds a backlog nobody wants processed.": "Inget har setts än, så allt är nytt — vilket är rätt för en lista du vill beta av. Välj det andra när du slår på en bevakning och källan redan rymmer en hög som ingen vill ha behandlad.",
+  "Only fire for mail to this address — useful on a shared mailbox that receives several.": "Utlös bara för mejl till den här adressen — användbart på en delad brevlåda som tar emot flera.",
+  "Only fire for this sender. Any part of the address or name counts, so \"@customer.com\" covers everyone at that company.": "Utlös bara för den här avsändaren. Vilken del som helst av adressen eller namnet räknas, så \"@kund.se\" täcker alla på det företaget.",
+  "Only fire when the message text contains this. Slower than the other filters on a large mailbox — most servers search bodies without an index.": "Utlös bara när meddelandetexten innehåller det här. Långsammare än de andra filtren på en stor brevlåda — de flesta servrar söker i brödtext utan index.",
+  "Only fire when the subject line contains this.": "Utlös bara när ämnesraden innehåller det här.",
+  "Only mail still marked unread. Watching never marks anything read by itself.": "Bara mejl som fortfarande är markerade som olästa. Bevakning markerar aldrig något som läst av sig själv.",
+  "Pace how fast items are STARTED, for a loop that calls someone else's API — 5 means a fifth of a second between starts, 0.5 means one every two seconds. Leave blank for no pacing. Concurrency still bounds how many run at once; this bounds how often a new one begins.": "Bestäm hur snabbt poster STARTAS, för en loop som anropar någon annans API — 5 betyder en femtedels sekund mellan starter, 0,5 betyder en varannan sekund. Lämna tomt för ingen takt. Parallellitet begränsar fortfarande hur många som körs samtidigt; det här begränsar hur ofta en ny börjar.",
+  "The columns that say which row this is — an id, an order number, a message id. Leave empty to use every column, which means a row counts as new again the moment any cell in it changes.": "Kolumnerna som säger vilken rad det här är — ett id, ett ordernummer, ett meddelande-id. Lämna tomt för att använda alla kolumner, vilket betyder att en rad räknas som ny igen så fort någon cell i den ändras.",
+  "Which folder to watch, e.g. \"INBOX\" or \"INBOX/Invoices\". Leave blank to use the folder set on the Mailbox page.": "Vilken mapp som ska bevakas, t.ex. \"INBOX\" eller \"INBOX/Fakturor\". Lämna tomt för att använda mappen som ställts in på Brevlåde-sidan.",
+  "Which memory to use. Empty means this step's own, which is what you want. Name one and every step naming the same one shares it — two flows that must not both act on the same row, or a watch you rebuilt and want to carry on where the old one left off.": "Vilket minne som ska användas. Tomt betyder stegets eget, vilket är det du vill ha. Namnge ett så delar alla steg som anger samma namn på det — två flöden som inte båda får agera på samma rad, eller en bevakning du byggt om och vill låta fortsätta där den gamla slutade.",
   "About how many changed events one check takes. A check that finds more takes the oldest changes and leaves the rest for the next one, so nothing is dropped — it just arrives a check later.": "Ungefär hur många ändrade händelser en kontroll tar. En kontroll som hittar fler tar de äldsta ändringarna och lämnar resten till nästa, så inget tappas — det kommer bara en kontroll senare.",
   "All-day events have no start time of their own. Include them and they count from midnight, which means a day's notice reaches them at midnight the night before.": "Heldagshändelser har ingen egen starttid. Ta med dem och de räknas från midnatt, vilket betyder att ett dygns varsel når dem vid midnatt kvällen före.",
   "How long before the start to fire, in minutes. 0 fires as the event begins. A day is the most that can be asked for; longer notice is better built as a Schedule step reading the week ahead with List events.": "Hur långt före starten det ska utlösa, i minuter. 0 utlöser när händelsen börjar. Ett dygn är det mesta som kan begäras; längre varsel byggs bättre som ett Schema-steg som läser veckan framåt med Lista händelser.",
@@ -1024,6 +1047,8 @@ export const SV_FIELD_HELP: Record<string, string> = {
 };
 
 export const SV_ENUM_LABELS: Record<string, string> = {
+  "Emit everything": "Skicka ut allt",
+  "Record what's there, emit nothing": "Registrera det som finns, skicka inget",
   "Any change": "Alla ändringar",
   "Newly booked": "Nybokad",
   "Changed": "Ändrad",

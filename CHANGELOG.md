@@ -12,6 +12,31 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Added
 
+- **"When an email arrives" is a trigger now, not an assembly.** Searching a
+  mailbox could already do it — Gmail and Mailbox have carried an "only new
+  since last run" watermark for months — but it sat in apps & services, so it
+  never appeared among the entry points, never made a flow live on its own, and
+  needed a Schedule wired up beside it. The commonest thing anyone automates
+  was a two-step build. Both now have a watch of their own that fires on
+  arrival, filters by the search you would have typed anyway, and reports each
+  email exactly once. They wrap the search rather than reimplementing it, so
+  there is still one place where "which mail is new" is decided.
+
+- **Any list can now be a source of new things.** Five steps had grown a private
+  memory of what they had already seen — a mailbox poll, a feed, a form, a
+  calendar. **Only what's new** is that memory on its own: rows in, the ones
+  this step has not seen before out, keyed on the column that is genuinely an
+  id. Put it after a query, a directory listing or a search and the flow acts
+  on each row once, however often it runs. Name a memory and two flows can
+  share it, so neither acts on a row the other already took.
+
+- **Bulk work in bulk.** **Batch rows** cuts a long list into groups of a fixed
+  size — a thousand rows as ten calls of a hundred, or twenty at a time into an
+  AI step so each prompt fits. Each batch knows its own number, so a subject
+  line can say "part 3 of 10" without counting. And For each can now be paced:
+  it bounded how many items ran at once and said nothing about how often a new
+  one started, which is the half a rate-limited API actually cares about.
+
 - **A long per-row script says how far it has got.** It reported nothing until
   the whole list was done, which on a few thousand rows is a long silence —
   especially as the console stops at 200 lines. It now reports through the run,

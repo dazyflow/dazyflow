@@ -89,6 +89,10 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "76d1996e",
     sv: "Skicka en prompt och få ett svar tillbaka — sammanfatta text från ett tidigare steg, klassificera ett indata eller generera text. Koppla in texten som ska bearbetas i ingången Prompt, eller skriv en prompt direkt på steget.",
   },
+  chunk_rows: {
+    en: "2f8c4d76",
+    sv: "Delar en lång lista i buntar av fast storlek, så att stegen efter arbetar på grupper i stället för på en rad i taget.\n\nDet här är vad ett API med en bulkslutpunkt vill ha: tusen rader som tio anrop om hundra, inte tusen anrop. Kombinera med För varje — ett varv per bunt — så ligger buntens rader på `rows` därinne. Det är också så en lång lista får plats i en modells kontext: hundra rader i taget genom ett AI-steg, i stället för en prompt som ingen kan läsa.\n\nVarje bunt bär sin position och sin storlek jämte raderna, så en ämnesrad eller en loggrad kan säga \"del 3 av 10\" utan att räkna något självt. Sista bunten är det som blir över — buntarna är lika stora sånär som på den.",
+  },
   claude: {
     en: "76d1996e",
     sv: "Skicka en prompt och få ett svar tillbaka — sammanfatta text från ett tidigare steg, klassificera ett indata eller generera text. Koppla in texten som ska bearbetas i ingången Prompt, eller skriv en prompt direkt på steget.",
@@ -321,6 +325,10 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
     en: "00e45a5f",
     sv: "Läs alla meddelanden i en konversation, äldst först, och — det användbara — få veta om någon har svarat än. Besvarad är Nej så länge det nyaste meddelandet i tråden fortfarande är ditt eget, vilket är precis det \"de har inte hört av sig\"-test ett uppföljningsflöde behöver. Koppla Matchande mejl från Sök mejl in i en För varje och lägg det här steget i Loopens innehåll med Konversation = radens threadId. Sammanfattning är en rad per konversation (ämne, vem som skrev sist, när, hur många meddelanden, besvarad) — samla dem med Samla resultat från loopen för att få en tabell över vad som är obesvarat.",
   },
+  gmail_on_new_message: {
+    en: "18e3c38e",
+    sv: "Bevakar den anslutna brevlådan och startar flödet när mejl kommer in — alla, eller bara de som en sökning matchar, skriven precis som du skulle skriva den i Gmails eget sökfält: `from:faktura@leverantor.se`, `has:attachment`, `is:unread`.\n\nVarje mejl rapporteras en gång. Den första kontrollen efter att du publicerat noterar var brevlådan står och utlöser ingenting, så att slå på en bevakning betar inte av allt som redan ligger i inkorgen. Därefter ser en kontroll bara det som kommit in sedan den förra.\n\nEn skur större än \"Högst antal mejl\" fördröjs i stället för att hoppas över: äldsta väntande mejl går först, i den ordning de kom, och resten följer vid nästa kontroller.\n\nGmails egen push kräver ett Cloud Pub/Sub-ämne och en verifierad domän för att alls nå en installation, så det här pollar — en sökning per kontroll, vare sig något kommit in eller inte.",
+  },
   gmail_search_messages: {
     en: "9977ee19",
     sv: "Hitta mejl i den anslutna brevlådan. Sökningen fungerar precis som Gmails eget sökfält (t.ex. 'from:chefen@foretaget.se is:unread' eller 'newer_than:1d'). Varje träff kommer ut som ett riktigt mejl — datum, avsändare, ämne och innehåll — färdigt att logga till ett kalkylblad, loopa över med För varje, eller koppla in i Gmail · Läs mejl för att ta det senaste.",
@@ -404,6 +412,10 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   imap_mark_seen: {
     en: "6a959c22",
     sv: "Markera ett mejl som läst när flödet har tagit hand om det. Lägg det här sist i ett sorterings- eller arkiveringsflöde — efter Slack-inlägget, efter att bilagan är sparad — så att mejlet inte längre ligger oläst i inkorgen, och en sökning med \"Bara olästa\" inte plockar upp det igen. Koppla Matchande mejl från Sök mejl in i en För varje och lägg det här steget i loopkroppen med Mejl = radens id. Att göra det två gånger är harmlöst: läst är läst.",
+  },
+  imap_on_new_message: {
+    en: "a66b9e1a",
+    sv: "Bevakar en mapp i den anslutna brevlådan och startar flödet när mejl kommer in i den — allt, eller bara det som filtren nedan matchar: en avsändare, ett ämne, ord i brödtexten, bara olästa.\n\nVarje mejl rapporteras en gång. Den första kontrollen efter att du publicerat noterar var mappen står och utlöser ingenting, så att slå på en bevakning betar inte av mappens hela historik. Därefter ser en kontroll bara det som kommit in sedan den förra, och inget markeras någonsin som läst på köpet — använd Markera som läst till det, med avsikt.\n\nEn skur större än \"Högst antal mejl\" fördröjs i stället för att hoppas över: äldsta väntande mejl går först, i ankomstordning, och resten följer vid nästa kontroller.\n\nIMAP har en egen push (IDLE), men den kräver en uppkoppling som hålls öppen per mapp så länge flödet lever, så det här pollar i stället — en sökning per kontroll.",
   },
   imap_search_messages: {
     en: "e564466a",
@@ -636,6 +648,10 @@ export const SV_DESCRIPTIONS: DescriptionMap = {
   secret_set: {
     en: "0b7ba489",
     sv: "Spara ett värde i din organisations krypterade hemlighetslager under det angivna namnet. Kombinera det med mallsubstitution (${secret.namn}) för att läsa tillbaka värdet i senare flödeskörningar — det klassiska användningsfallet är att lagra en markör för pollande flöden som behöver minnas 'vad var det sista jag bearbetade' över omstarter.",
+  },
+  seen_before: {
+    en: "06ebef50",
+    sv: "Behåller de rader som det här steget inte har sett tidigare och släpper resten — skillnaden mot Ta bort dubbletter, som glömmer allt i samma stund som en körning tar slut, och det här, som minns mellan körningar.\n\nDet är så vilken lista som helst blir en källa till nya saker. En fråga, en kataloglistning, en sökning, ett flöde: lägg det här efter och flödet agerar på varje rad exakt en gång, hur ofta det än körs. Stegen som redan gör det här på egen hand — en brevlådebevakning, en kalenderbevakning — fick var och en odla sitt eget minne; det här är det minnet, för sig, till allt annat.\n\nRader identifieras av kolumnerna du anger. Ange den som verkligen är ett id och inget annat — en rad vars beskrivning ändras är fortfarande samma rad, och att nyckla på hela raden skulle rapportera den som ny.\n\nDet som minns är en lista med nycklar, inte raderna, så den håller sig liten. Gamla nycklar faller av i slutet när listan är full, vilket gör gränsen till en minneslängd: håll fler än källan hinner producera mellan två körningar, annars ser något gammalt nog att ha glömts bort nytt ut igen.\n\nSom standard skickar första körningen ut allt, eftersom inget har setts än. Ställ in den på att lära sig i stället, så registrerar första körningen vad som finns och skickar inget — så slår du på en livlig källa utan att beta av hela dess historik.",
   },
   sftp_download_file: {
     en: "1f85822f",

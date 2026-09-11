@@ -454,6 +454,23 @@
       "sk-…"
     ]
   },
+  "chunk_rows": {
+    "description": "Cuts a long list into batches of a fixed size, so the steps after it work on groups rather than on one row at a time.\n\nThis is what an API with a bulk endpoint wants: a thousand rows as ten calls of a hundred, not a thousand calls. Pair it with For each — one iteration per batch — and the batch's rows are on `rows` inside it. It is also how a long list fits inside a model's context: a hundred rows a time through an AI step, rather than one prompt nothing can read.\n\nEach batch carries its position and its size alongside its rows, so a subject line or a log entry can say \"part 3 of 10\" without counting anything itself. The last batch is whatever is left over — batches are equal except that one.",
+    "ports": [
+      "Batch count",
+      "Batches",
+      "Pass-through",
+      "Rows"
+    ],
+    "label": "Batch rows",
+    "subtitle": "Into groups of N",
+    "titles": [
+      "Rows per batch"
+    ],
+    "help": [
+      "How many rows go in each batch. The last one takes whatever is left over."
+    ]
+  },
   "claude": {
     "description": "Send a prompt and get a response back — summarise text from an earlier step, classify an input, or generate text. Connect the text to work on into the Prompt input, or type a prompt on the step.",
     "ports": [
@@ -1258,10 +1275,12 @@
     "label": "For each",
     "titles": [
       "Concurrency",
+      "Start at most (per second)",
       "Stop on first error"
     ],
     "help": [
       "How many items to process at once. Higher is faster but hits rate limits sooner.",
+      "Pace how fast items are STARTED, for a loop that calls someone else's API — 5 means a fifth of a second between starts, 0.5 means one every two seconds. Leave blank for no pacing. Concurrency still bounds how many run at once; this bounds how often a new one begins.",
       "Stop the whole loop as soon as one item fails, instead of continuing with the rest."
     ]
   },
@@ -2189,6 +2208,29 @@
       "The conversation to read. Overridden by the Conversation input when connected."
     ]
   },
+  "gmail_on_new_message": {
+    "description": "Watches the connected mailbox and starts the flow when email arrives — every message, or only the ones a search matches, written exactly as you would type it into Gmail's own search box: `from:faktura@leverantor.se`, `has:attachment`, `is:unread`.\n\nEach email is reported once. The first check after you publish records where the mailbox is up to and fires nothing, so switching a watch on doesn't work through everything already in the inbox. After that a check sees only what arrived since the one before it.\n\nA burst bigger than \"Max emails\" is delayed rather than skipped: the oldest waiting mail goes first, in the order it arrived, and the rest follow on the next checks.\n\nGmail's own push needs a Cloud Pub/Sub topic and a verified domain to reach a deployment at all, so this polls — one search per check, whether anything arrived or not.",
+    "ports": [
+      "Count",
+      "New emails",
+      "Time"
+    ],
+    "label": "Gmail",
+    "subtitle": "When an email arrives",
+    "integration": "Gmail",
+    "titles": [
+      "Check every",
+      "Max emails",
+      "Only emails matching"
+    ],
+    "help": [
+      "Hard deadline for the request, in milliseconds.",
+      "How many emails one check may take. The oldest waiting ones go first, in arrival order, so a burst bigger than this is delayed rather than skipped.",
+      "How often to check for new mail once the flow is published. Leave blank to only check when you press Run (for testing).",
+      "Leave blank to fire on every email. Otherwise works exactly like Gmail's search box, e.g. 'is:unread', 'from:someone@example.com', 'has:attachment'.",
+      "Override the API host (testing)."
+    ]
+  },
   "gmail_search_messages": {
     "description": "Find emails in the connected mailbox. The search works exactly like Gmail's own search box (e.g. 'from:boss@company.com is:unread' or 'newer_than:1d'). Each match comes out as a real email — date, sender, subject and body — ready to log to a sheet, loop over with For each, or connect into Gmail · Read email to take the newest one.",
     "ports": [
@@ -2852,6 +2894,56 @@
       "Hard deadline for the change, in milliseconds.",
       "Which email to mark read — the id from a Search emails match. Overridden by the 'Email' input when connected.",
       "Which folder the email is in, e.g. \"INBOX\". Leave blank to use the folder set on the Mailbox page. An email's id only means anything inside the folder it came from."
+    ],
+    "connection": [
+      "993 (SSL/TLS) or 143 (STARTTLS)",
+      "Connection security",
+      "Folder",
+      "INBOX",
+      "Mail server (IMAP)",
+      "Password",
+      "Port",
+      "Username",
+      "Which folder the steps read by default. A step can point at another one.",
+      "Your mailbox password — or, on a provider with two-factor sign-in (Gmail, Fastmail, iCloud), an app password generated for this.",
+      "imap.example.com",
+      "implicit",
+      "implicit for 993, starttls for 143",
+      "none",
+      "starttls",
+      "usually your email address"
+    ]
+  },
+  "imap_on_new_message": {
+    "description": "Watches a folder on the connected mailbox and starts the flow when email arrives in it — everything, or only what the filters below match: a sender, a subject, words in the body, unread only.\n\nEach email is reported once. The first check after you publish records where the folder is up to and fires nothing, so switching a watch on doesn't work through a folder's whole history. After that a check sees only what arrived since the one before it, and nothing is ever marked read as a side effect — use Mark as read for that, deliberately.\n\nA burst bigger than \"Max emails\" is delayed rather than skipped: the oldest waiting mail goes first, in arrival order, and the rest follow on the next checks.\n\nIMAP has a push of its own (IDLE), but it needs a connection held open per folder for as long as the flow lives, so this polls instead — one search per check.",
+    "ports": [
+      "Count",
+      "New emails",
+      "Time"
+    ],
+    "label": "Mailbox",
+    "subtitle": "When an email arrives",
+    "integration": "Mailbox",
+    "titles": [
+      "Body contains",
+      "Check every",
+      "Folder",
+      "From",
+      "Max emails",
+      "Subject contains",
+      "To",
+      "Unread only"
+    ],
+    "help": [
+      "Hard deadline for the whole check, in milliseconds.",
+      "How many emails one check may take. The oldest waiting ones go first, in arrival order, so a burst bigger than this is delayed rather than skipped.",
+      "How often to check for new mail once the flow is published. Leave blank to only check when you press Run (for testing).",
+      "Only fire for mail to this address — useful on a shared mailbox that receives several.",
+      "Only fire for this sender. Any part of the address or name counts, so \"@customer.com\" covers everyone at that company.",
+      "Only fire when the message text contains this. Slower than the other filters on a large mailbox — most servers search bodies without an index.",
+      "Only fire when the subject line contains this.",
+      "Only mail still marked unread. Watching never marks anything read by itself.",
+      "Which folder to watch, e.g. \"INBOX\" or \"INBOX/Invoices\". Leave blank to use the folder set on the Mailbox page."
     ],
     "connection": [
       "993 (SSL/TLS) or 143 (STARTTLS)",
@@ -4423,6 +4515,34 @@
     "help": [
       "Secret name. Stored as an organization secret; reference it as ${secret.\u003cname\u003e}. Allowed characters: [A-Za-z0-9_.-], up to 128 chars.",
       "Value to store. Overridden by the 'value' input port when connected."
+    ]
+  },
+  "seen_before": {
+    "description": "Keeps the rows this step has not seen before and drops the rest — the difference between Remove duplicates, which forgets everything the moment a run ends, and this, which remembers across runs.\n\nIt is what turns any list into a source of new things. A query, a directory listing, a search, a feed: put this after it and the flow acts on each row exactly once, however often it runs. The steps that already do this privately — a mailbox poll, a calendar watch — each had to grow their own memory; this is that memory, on its own, for everything else.\n\nRows are identified by the columns you name. Name the one that is genuinely an id and nothing else — a row whose description changes is still the same row, and keying on the whole row would report it as new.\n\nWhat it remembers is a list of keys, not the rows, so it stays small. Old keys fall off the end once the list is full, which makes the limit a length of memory: keep more than a source can produce between two runs, or something old enough to be forgotten will look new again.\n\nBy default the first run emits everything, because nothing has been seen yet. Set it to learn instead and the first run records what is there and emits nothing — how you switch a busy source on without processing its whole back catalogue.",
+    "ports": [
+      "Count",
+      "New rows",
+      "Pass-through",
+      "Rows",
+      "Seen before"
+    ],
+    "label": "Only what's new",
+    "subtitle": "Skip what this step has already seen",
+    "titles": [
+      "Identify a row by",
+      "Keys to remember",
+      "Memory name",
+      "On the first run"
+    ],
+    "help": [
+      "How many keys to keep before the oldest falls off. Keep more than the source can produce between two runs.",
+      "Nothing has been seen yet, so everything is new — which is right for a list you want to work through. Choose the other when you are switching a watch on and the source already holds a backlog nobody wants processed.",
+      "The columns that say which row this is — an id, an order number, a message id. Leave empty to use every column, which means a row counts as new again the moment any cell in it changes.",
+      "Which memory to use. Empty means this step's own, which is what you want. Name one and every step naming the same one shares it — two flows that must not both act on the same row, or a watch you rebuilt and want to carry on where the old one left off."
+    ],
+    "enum_names": [
+      "Emit everything",
+      "Record what's there, emit nothing"
     ]
   },
   "sftp_download_file": {
