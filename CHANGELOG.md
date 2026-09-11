@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.42.2] - 2026-09-11
+
 ### Added
 
 - **Adding a server is a guide now, not a form of nine fields.** Setting one up
