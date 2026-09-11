@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.42.4] - 2026-09-12
+
 ### Added
 
 - **"When a file lands" is a trigger now.** List files could already do it — the
