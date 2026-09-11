@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.42.3] - 2026-09-11
+
 ### Added
 
 - **Logins and servers are two things now.** They were one record, so a deploy
