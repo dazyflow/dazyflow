@@ -1724,6 +1724,8 @@
   "schemaForm": {
     "required": "required",
     "requiredHint": "Required",
+    "expand": "Expand",
+    "expandHint": "Open {{field}} in a bigger window",
     "trackingHint": "Contains tracking parameters ({{params}}) — usually safe to remove.",
     "trackingStrip": "Remove them",
     "rowCond": {

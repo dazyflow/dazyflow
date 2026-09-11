@@ -15,7 +15,15 @@
 // Python one share a comment character and nothing else, so guessing from the
 // content would colour half of either one wrongly.
 
-export type ScriptLang = "shell" | "python" | "powershell" | "js" | "sql" | "yaml" | "json";
+export type ScriptLang =
+  | "shell"
+  | "python"
+  | "powershell"
+  | "js"
+  | "sql"
+  | "yaml"
+  | "json"
+  | "html";
 
 // scriptLangFor maps a step's language param onto a highlighter.
 //
@@ -43,6 +51,9 @@ export function scriptLangFor(lang: string | undefined): ScriptLang {
       return "yaml";
     case "json":
       return "json";
+    case "html":
+    case "htm":
+      return "html";
     default:
       return "shell";
   }
@@ -65,7 +76,10 @@ type LangSpec = {
   sigil?: string;
 };
 
-const LANGS: Record<ScriptLang, LangSpec> = {
+// Every language the one scanner below can read. HTML is not among them — see
+// tokenizeHTML — and the Exclude is what makes that a compile error rather than
+// a missing entry nobody notices.
+const LANGS: Record<Exclude<ScriptLang, "html">, LangSpec> = {
   shell: {
     lineComment: "#",
     quotes: [
@@ -179,6 +193,7 @@ const NUMBER = /^(?:0[xX][0-9a-fA-F]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/;
 const SIGIL_NAME = /^(?:\{[^}]*\}?|[A-Za-z_][A-Za-z0-9_]*|[0-9?@*#$!-])/;
 
 export function tokenizeScript(src: string, lang: ScriptLang): ScriptToken[] {
+  if (lang === "html") return tokenizeHTML(src);
   const spec = LANGS[lang];
   const out: ScriptToken[] = [];
   let plain = "";
@@ -291,4 +306,121 @@ function readString(
     i += 1;
   }
   return src.slice(from);
+}
+
+// A Go template action — {{.name}}, {{range .items}}, {{end}} — which the
+// daemon fills in before the markup is ever sent. Unclosed actions stop at the
+// end of the line for the same reason an unterminated string does: a half-typed
+// {{ should colour one line, not the rest of the document.
+const ACTION = /^\{\{(?:[\s\S]*?\}\}|[^\n]*)/;
+
+const TAG_NAME = /^<\/?[A-Za-z][A-Za-z0-9:._-]*/;
+const DECLARATION = /^<![A-Za-z][A-Za-z0-9]*/; // <!DOCTYPE html>
+
+// tokenizeHTML reads markup, and it is the one language here that the scanner
+// above cannot express.
+//
+// Two reasons, both visible on the first template anyone writes. A quote means
+// "string" only inside a tag: the apostrophe in <p>it's shipped</p> would
+// otherwise open one that runs to the end of the line. And the part most worth
+// seeing in this box is not the markup at all — it is the {{.name}} actions
+// that get filled in, which are marked as `var`, the same as a ${reference},
+// because they are the same idea: the bit that is not the language it sits in.
+//
+// Nothing nests: the body of a <script> or <style> is plain text, since a
+// second language inside this one buys little and costs a state machine.
+function tokenizeHTML(src: string): ScriptToken[] {
+  const out: ScriptToken[] = [];
+  let plain = "";
+  let i = 0;
+  // Inside a tag, where quotes open attribute values; and which quote a value
+  // is currently open on, so {{…}} inside it is still marked.
+  let inTag = false;
+  let attrQuote: string | null = null;
+
+  const flush = () => {
+    if (plain) out.push(plain);
+    plain = "";
+  };
+  const push = (kind: TokenKind, text: string) => {
+    flush();
+    out.push({ kind, text });
+    i += text.length;
+  };
+
+  while (i < src.length) {
+    const rest = src.slice(i);
+
+    const action = ACTION.exec(rest);
+    if (action) {
+      push("var", action[0]);
+      continue;
+    }
+    const ref = VAR_REF.exec(rest);
+    if (ref) {
+      push("var", ref[0]);
+      continue;
+    }
+
+    if (attrQuote) {
+      if (rest.startsWith(attrQuote)) {
+        push("string", attrQuote);
+        attrQuote = null;
+        continue;
+      }
+      // Up to the closing quote or the next thing worth its own colour,
+      // whichever comes first. An unclosed value runs to the end, which is what
+      // a reader who forgot a quote needs to see.
+      push("string", src.slice(i, nextStop(src, i, [attrQuote, "{{", "${"])));
+      continue;
+    }
+
+    if (rest.startsWith("<!--")) {
+      const end = src.indexOf("-->", i + 4);
+      push("comment", end === -1 ? rest : src.slice(i, end + 3));
+      continue;
+    }
+
+    if (!inTag) {
+      const tag = TAG_NAME.exec(rest) ?? DECLARATION.exec(rest);
+      if (tag) {
+        push("keyword", tag[0]);
+        inTag = true;
+        continue;
+      }
+      // A bare "<" is a less-than, not a tag: `a < b` is ordinary text.
+      plain += src[i];
+      i += 1;
+      continue;
+    }
+
+    if (rest.startsWith("/>") || rest.startsWith(">")) {
+      push("keyword", rest.startsWith("/>") ? "/>" : ">");
+      inTag = false;
+      continue;
+    }
+    if (rest.startsWith('"') || rest.startsWith("'")) {
+      attrQuote = src[i];
+      push("string", attrQuote);
+      continue;
+    }
+    // Attribute names, "=", whitespace: plain. Colouring them too would leave
+    // the tag no quieter than the text around it.
+    plain += src[i];
+    i += 1;
+  }
+  flush();
+  return out;
+}
+
+// nextStop is the index of the earliest of `marks` at or after `from`, or the
+// end of the string. Never `from` itself — the caller has already ruled that
+// out, and returning it would push an empty token and loop forever.
+function nextStop(src: string, from: number, marks: string[]): number {
+  let at = src.length;
+  for (const m of marks) {
+    const found = src.indexOf(m, from + 1);
+    if (found !== -1 && found < at) at = found;
+  }
+  return at;
 }

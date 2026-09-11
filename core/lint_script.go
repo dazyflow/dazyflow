@@ -43,7 +43,7 @@ func ClassifyScriptLanguage(name string) ScriptLanguage {
 		return ScriptLanguage{Family: "powershell", Runnable: true, Known: true}
 	case "node", "javascript", "js":
 		return ScriptLanguage{Family: "javascript", Runnable: true, Known: true}
-	case "sql", "yaml", "yml", "json":
+	case "sql", "yaml", "yml", "json", "html":
 		return ScriptLanguage{Family: name, Runnable: false, Known: true}
 	case "plain", "":
 		return ScriptLanguage{Known: true}

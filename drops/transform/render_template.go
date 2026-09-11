@@ -66,9 +66,9 @@ func init() {
 					"template": {
 						"type":"string",
 						"format":"multiline",
+						"x_lang":"html",
 						"title":"Template",
 						"x_advanced":true,
-						"x_mono":true,
 						"description":"HTML template (Go html/template). {{.field}} inserts a value from the data, {{range .items}}…{{end}} loops, {{if .x}}…{{end}} branches. Helpers: default, upper, lower, join. Values are auto-escaped. Overridden by the 'Template' input."
 					},
 					"data": {

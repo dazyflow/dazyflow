@@ -29,6 +29,14 @@ describe("tokenizeScript", () => {
       ["js", "/* never closed"],
       ["shell", "$"],
       ["shell", ""],
+      [
+        "html",
+        '<!-- hi -->\n<p class="x">it\'s {{.name}} & co</p>\n{{range .items}}<li>{{.n}}</li>{{end}}\n',
+      ],
+      ["html", '<a href="{{.url}}'],
+      ["html", "{{ unclosed\nnext line"],
+      ["html", "<!-- never closed"],
+      ["html", "a < b and 3 > 2"],
     ];
     for (const [lang, src] of samples) {
       expect(flat(src, lang), `${lang}: ${JSON.stringify(src)}`).toBe(src);
@@ -43,6 +51,54 @@ describe("tokenizeScript", () => {
       ["keyword", "then"],
       ["comment", "# check"],
     ]);
+  });
+
+  // What this box is actually for: an HTML email template, where the markup is
+  // the quiet part and the {{…}} actions are the part being edited.
+  it("marks HTML tags, comments and attribute values", () => {
+    expect(kinds('<!-- head -->\n<p class="lead">hi</p>', "html")).toEqual([
+      ["comment", "<!-- head -->"],
+      ["keyword", "<p"],
+      ["string", '"'],
+      ["string", "lead"],
+      ["string", '"'],
+      ["keyword", ">"],
+      ["keyword", "</p"],
+      ["keyword", ">"],
+    ]);
+  });
+
+  it("marks a template action like a reference, inside an attribute too", () => {
+    expect(kinds('<a href="{{.url}}">{{.name}}</a>', "html")).toEqual([
+      ["keyword", "<a"],
+      ["string", '"'],
+      ["var", "{{.url}}"],
+      ["string", '"'],
+      ["keyword", ">"],
+      ["var", "{{.name}}"],
+      ["keyword", "</a"],
+      ["keyword", ">"],
+    ]);
+  });
+
+  // The reason HTML cannot go through the generic scanner: outside a tag a
+  // quote is punctuation, and reading it as a string would colour the rest of
+  // the line — on the most ordinary sentence in an email.
+  it("leaves an apostrophe in body text alone", () => {
+    expect(kinds("<p>it's your order</p>", "html")).toEqual([
+      ["keyword", "<p"],
+      ["keyword", ">"],
+      ["keyword", "</p"],
+      ["keyword", ">"],
+    ]);
+  });
+
+  it("reads a less-than in text as text, not as a tag", () => {
+    expect(kinds("a < b", "html")).toEqual([]);
+  });
+
+  it("stops an unclosed action at the end of its line", () => {
+    expect(kinds("{{.name\nrest", "html")).toEqual([["var", "{{.name"]]);
   });
 
   it("does not read a keyword out of the middle of a word", () => {

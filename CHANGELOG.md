@@ -20,6 +20,32 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   position in the log, alongside the text — so a flow can mail just the errors,
   or a person can find the print they are reading.
 
+- **The template and its rendering, side by side.** The live preview sat in the
+  inspector column and the markup behind the Advanced disclosure below it, so
+  editing the layout meant scrolling away from the thing it produced. Expand
+  now opens both at once: the template on the left, the rendered email on the
+  right, updating as you type — and the same **Expand** sits at the top of the
+  preview panel, so the markup is one click away rather than one disclosure and
+  a scroll. The sample data is shared between the two, so opening the window no
+  longer means typing your test data a second time.
+
+- **Any long field opens in a window of its own.** A template, a script, a
+  prompt — the longest things a flow author writes, written in a column beside a
+  canvas. Every multi-line field now carries **Expand** on its label row, which
+  opens that same field as a full window: the same editor, the same syntax
+  colours, and the same value edited live, so there is no draft to save and
+  nothing to lose by closing it. Escape, the backdrop and the close button all
+  do the same thing. On a phone the window is the whole screen.
+
+- **The template step has a real editor.** Fill a template's **Template** field
+  was a four-row box in a monospace font — for an HTML email layout, which is
+  the longest thing most flows will ever write. It is now the same
+  syntax-coloured editor the script steps use: markup, comments and attribute
+  values separated, and every `{{.name}}` marked the way a `${reference}` is,
+  because they are the same idea — the part that gets filled in, standing out
+  from the part that stays. **HTML** joins the Text step's "Written in" list as
+  well, so a template kept in a Text step and wired across reads the same.
+
 - **The Code step wears the JavaScript mark.** It shared the generic code glyph
   with everything else that looks like code, which is no help at all on a canvas
   where the question is "which of these two steps is the script?". It now shows

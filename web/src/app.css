@@ -4421,6 +4421,55 @@ button.warning:hover:not(:disabled) {
   background: var(--surface-2);
 }
 
+/* The expanded field editor: as much window as there is, because what it holds
+   — a layout, a script — is the longest thing a flow author writes, and the
+   inspector it came from is a column beside a canvas. */
+.modal.dz-bigedit {
+  max-width: min(1200px, calc(100vw - 32px));
+  height: min(900px, calc(100vh - 64px));
+}
+.dz-bigedit-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+/* Two panes of equal weight when there is a preview, one pane filling the
+   window when there is not — sized here, on the panes themselves, so neither
+   half can win the argument by carrying a more specific selector. */
+.dz-bigedit-pane,
+.dz-bigedit-preview {
+  flex: 1 1 50%;
+  min-width: 0;
+  min-height: 0;
+}
+.dz-bigedit-pane {
+  display: flex;
+}
+.dz-bigedit-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+/* The editor fills its pane rather than standing at its declared row count,
+   and stops offering a resize handle it has no room to honour. */
+.dz-bigedit-pane .dz-code-editor,
+.dz-bigedit-pane .dz-bigedit-plain {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  resize: none;
+}
+.dz-bigedit-split {
+  gap: var(--space-4);
+}
+/* The rendered page takes whatever height is left, rather than the fixed strip
+   it stands at in the inspector column. */
+.dz-bigedit-preview .rtp-frame {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
 .modal.dz-datamodal {
   max-width: min(1100px, calc(100vw - 32px));
   max-height: 85vh;
@@ -4493,13 +4542,35 @@ button.warning:hover:not(:disabled) {
   color: var(--faint);
 }
 @media (max-width: 768px) {
-  .modal-backdrop:has(.dz-datamodal) {
+  .modal-backdrop:has(.dz-datamodal),
+  .modal-backdrop:has(.dz-bigedit) {
     padding: 0;
   }
   .modal.dz-datamodal {
     width: 100vw;
     max-width: none;
     height: 100dvh;
+    max-height: none;
+    border: none;
+    border-radius: 0;
+  }
+  .dz-bigedit-split {
+    flex-direction: column;
+    overflow: auto;
+  }
+  /* Stacked, the two panes need a height of their own — a flex child in a
+     scrolling column would otherwise collapse to its content. */
+  .dz-bigedit-split > .dz-bigedit-pane,
+  .dz-bigedit-split > .dz-bigedit-preview {
+    flex: 0 0 auto;
+    min-height: 240px;
+  }
+  .modal.dz-bigedit {
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    /* The base modal keeps 60px of backdrop below itself; on a phone that is
+       three lines of the thing being written. */
     max-height: none;
     border: none;
     border-radius: 0;
@@ -9814,6 +9885,13 @@ a.pa-card:hover {
   padding-top: var(--space-3);
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
+}
+/* The panel's first row: what it is, and the way into the big window. */
+.rtp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
 }
 .rtp-label {

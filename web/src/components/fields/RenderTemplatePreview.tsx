@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "../../auth";
-import { api } from "../../api";
-import { explainApiError } from "../../lib/explainApiError";
+import i18n from "../../i18n";
+import { fieldTitle } from "../../lib/dropText";
+import { ExpandedEditor } from "../ui/ExpandedEditor";
+import { TemplateFrame, parseSample } from "./TemplateFrame";
 
 type Starter = { key: string; template: string; sample: string };
 const STARTERS: Starter[] = [
@@ -53,72 +54,46 @@ const STARTERS: Starter[] = [
   },
 ];
 
+// What a freshly picked layout previews against, so it shows a greeting rather
+// than a page of empty fields. Exported because the sample is the inspector's
+// to hold — see the props below.
+export const DEFAULT_SAMPLE = STARTERS[0].sample;
+
 export function RenderTemplatePreview({
   template,
+  sample,
+  onSampleChange,
   onInsertTemplate,
 }: {
   template: string;
+  // The sample data belongs to the caller rather than to this panel: the
+  // expanded editor shows the same preview beside the markup, and test data
+  // that reset itself the moment a window opened would be data typed twice.
+  sample: string;
+  onSampleChange: (sample: string) => void;
   onInsertTemplate: (template: string) => void;
 }) {
   const { t } = useTranslation();
-  const { token } = useAuth();
   const [starter, setStarter] = useState<string>("");
-  const [sample, setSample] = useState<string>(STARTERS[0].sample);
-  const [html, setHtml] = useState<string>("");
-  const [serverErr, setServerErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const seq = useRef(0);
-
-  const jsonError = useMemo(() => {
-    if (sample.trim() === "") return null;
-    try {
-      JSON.parse(sample);
-      return null;
-    } catch (e) {
-      return (e as Error).message;
-    }
-  }, [sample]);
-
-  const empty = template.trim() === "";
-
-  useEffect(() => {
-    if (empty || jsonError || !token) {
-      setHtml("");
-      setServerErr(null);
-      return;
-    }
-    const id = ++seq.current;
-    const handle = setTimeout(() => {
-      let data: unknown = {};
-      try {
-        data = sample.trim() === "" ? {} : JSON.parse(sample);
-      } catch {
-        return;
-      }
-      setBusy(true);
-      api
-        .previewRenderTemplate(token, template, data)
-        .then((r) => {
-          if (id !== seq.current) return; // a newer keystroke superseded us
-          setServerErr(r.error ?? null);
-          setHtml(r.error ? "" : (r.html ?? ""));
-        })
-        .catch((e: unknown) => {
-          if (id !== seq.current) return;
-          setServerErr(explainApiError(e, t));
-        })
-        .finally(() => {
-          if (id === seq.current) setBusy(false);
-        });
-    }, 350);
-    return () => clearTimeout(handle);
-  }, [template, sample, jsonError, empty, token, t]);
+  const jsonError = parseSample(sample).error;
 
   return (
     <div className="rtp">
-      <label className="rtp-label" htmlFor="rtp-starter">
-        {t("renderPreview.starters")}
-      </label>
+      <div className="rtp-head">
+        <label className="rtp-label" htmlFor="rtp-starter">
+          {t("renderPreview.starters")}
+        </label>
+        {/* The markup itself lives behind the Advanced disclosure below, which
+            is the right place for it and a long way from here. This opens the
+            same field as a window, with this same preview beside it. */}
+        <ExpandedEditor
+          title={fieldTitle("Template", i18n.language)}
+          value={template}
+          lang="html"
+          onChange={onInsertTemplate}
+          preview={<TemplateFrame template={template} sample={sample} />}
+        />
+      </div>
       <select
         id="rtp-starter"
         className="rtp-type"
@@ -129,7 +104,7 @@ export function RenderTemplatePreview({
           const s = STARTERS.find((x) => x.key === key);
           if (s) {
             onInsertTemplate(s.template);
-            setSample(s.sample);
+            onSampleChange(s.sample);
           }
         }}
       >
@@ -149,30 +124,12 @@ export function RenderTemplatePreview({
         className="rtp-sample"
         spellCheck={false}
         value={sample}
-        onChange={(e) => setSample(e.target.value)}
+        onChange={(e) => onSampleChange(e.target.value)}
         rows={6}
       />
       {jsonError && <div className="rtp-warn">{t("renderPreview.badJson")}</div>}
 
-      <div className="rtp-label rtp-preview-head">
-        {t("renderPreview.preview")}
-        {busy && <span className="rtp-busy">{t("renderPreview.rendering")}</span>}
-      </div>
-      {empty ? (
-        <div className="rtp-hint">{t("renderPreview.typeToPreview")}</div>
-      ) : serverErr ? (
-        <div className="rtp-error">{serverErr}</div>
-      ) : (
-        // sandbox="" fully neutralizes the preview: no scripts, no forms, no
-        // same-origin access — it only paints HTML/CSS, so tenant-authored
-        // markup can't run in our origin.
-        <iframe
-          className="rtp-frame"
-          title={t("renderPreview.preview")}
-          sandbox=""
-          srcDoc={html}
-        />
-      )}
+      <TemplateFrame template={template} sample={sample} />
     </div>
   );
 }

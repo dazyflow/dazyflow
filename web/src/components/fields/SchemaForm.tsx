@@ -40,6 +40,7 @@ import {
 } from "../editor/nodeCardShared";
 import { JsonEditor, isInvalidJSON } from "../ui/JsonEditor";
 import { ScriptEditor } from "../ui/ScriptEditor";
+import { ExpandedEditor } from "../ui/ExpandedEditor";
 import { scriptLangFor } from "../../lib/scriptHighlight";
 import { GeoPointField } from "./GeoPointField";
 import { TimezoneField } from "./TimezoneField";
@@ -89,6 +90,11 @@ type Props = {
   tokenLabels?: TokenLabels;
   missingKeys?: Iterable<string>;
   geoRunCoordinate?: string;
+  // What a long field's expanded window shows beside the editor, asked for by
+  // param key. The form holds the second pane and knows nothing about what
+  // goes in it — a template has a picture to show, a script has nothing — so
+  // the answer comes from the caller, which knows which step this is.
+  previewFor?: (key: string) => React.ReactNode;
 };
 
 type FormCtx = {
@@ -100,6 +106,7 @@ type FormCtx = {
   missingKeys?: Set<string>;
   wired?: Set<string>;
   geoRunCoordinate?: string;
+  previewFor?: (key: string) => React.ReactNode;
 };
 
 const FormContext = createContext<FormCtx>({});
@@ -120,12 +127,13 @@ export function SchemaForm({
   tokenLabels,
   missingKeys,
   geoRunCoordinate,
+  previewFor,
 }: Props) {
   const { t } = useTranslation();
   const wired = new Set(wiredKeys ?? []);
   const omit = new Set(omitKeys ?? []);
   const missing = new Set(missingKeys ?? []);
-  const formCtx: FormCtx = { workspace, accountPicker, references, extraReferenceItems, tokenLabels, missingKeys: missing, wired, geoRunCoordinate };
+  const formCtx: FormCtx = { workspace, accountPicker, references, extraReferenceItems, tokenLabels, missingKeys: missing, wired, geoRunCoordinate, previewFor };
   // Unreachable as the product stands; kept so a new caller cannot break it.
   if (schema.type !== "object" || !schema.properties) {
     return (
@@ -231,6 +239,7 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
     tokenLabels,
     wired: wiredSiblings,
     geoRunCoordinate,
+    previewFor,
   } = useFormCtx();
   const { t } = useTranslation();
   // Decided by the incoming wire, so the editor is read-only.
@@ -489,12 +498,27 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       })();
       if (schema.format === "script") {
         const text = (value as string) ?? (schema.default as string | undefined) ?? "";
+        const write = (v: string) => onChange(v === "" && !required ? undefined : v);
         return (
-          <FieldWrap name={name} schema={schema} required={required} value={value}>
+          <FieldWrap
+            name={name}
+            schema={schema}
+            required={required}
+            value={value}
+            action={
+              <ExpandedEditor
+                title={fieldLabel(name, schema)}
+                value={text}
+                lang={scriptLangFor(chosenLang)}
+                onChange={write}
+                preview={previewFor?.(name)}
+              />
+            }
+          >
             <ScriptEditor
               value={text}
               lang={scriptLangFor(chosenLang)}
-              onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+              onChange={write}
               rows={10}
             />
           </FieldWrap>
@@ -582,29 +606,52 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
             />
           </div>
         ) : undefined;
-        if (chosenLang && chosenLang !== "plain") {
+        const text = (value as string) ?? (schema.default as string | undefined) ?? "";
+        const write = (v: string) => onChange(v === "" && !required ? undefined : v);
+        // Undefined is prose, and prose opens in a plain box. The rule lives
+        // here, once, so the field and the window it expands into can never
+        // disagree about what is being written.
+        const lang =
+          chosenLang && chosenLang !== "plain" ? scriptLangFor(chosenLang) : undefined;
+        const expand = (
+          <ExpandedEditor
+            title={fieldLabel(name, schema)}
+            value={text}
+            lang={lang}
+            placeholder={schema.default ? String(schema.default) : undefined}
+            onChange={write}
+            preview={previewFor?.(name)}
+          />
+        );
+        if (lang) {
           return (
-            <FieldWrap name={name} schema={schema} required={required} value={value} footer={celFooter}>
-              <ScriptEditor
-                value={(value as string) ?? (schema.default as string | undefined) ?? ""}
-                lang={scriptLangFor(chosenLang)}
-                onChange={(v) => onChange(v === "" && !required ? undefined : v)}
-                rows={8}
-              />
+            <FieldWrap
+              name={name}
+              schema={schema}
+              required={required}
+              value={value}
+              footer={celFooter}
+              action={expand}
+            >
+              <ScriptEditor value={text} lang={lang} onChange={write} rows={8} />
             </FieldWrap>
           );
         }
         return (
-          <FieldWrap name={name} schema={schema} required={required} value={value} footer={celFooter}>
+          <FieldWrap
+            name={name}
+            schema={schema}
+            required={required}
+            value={value}
+            footer={celFooter}
+            action={expand}
+          >
             <textarea
               className={schema.x_mono ? "sf-mono" : undefined}
               rows={4}
-              value={(value as string) ?? (schema.default as string | undefined) ?? ""}
+              value={text}
               placeholder={schema.default ? String(schema.default) : undefined}
-              onChange={(e) => {
-                const v = e.target.value;
-                onChange(v === "" && !required ? undefined : v);
-              }}
+              onChange={(e) => write(e.target.value)}
               style={{ resize: "both" }}
             />
           </FieldWrap>
@@ -900,6 +947,13 @@ function valueMatches(value: unknown, schema: JSONSchema): boolean {
   return false;
 }
 
+// What the field is called on screen. Shared because the expanded editor titles
+// its window with it, and a window headed something other than the field it
+// came from is a window you cannot place.
+function fieldLabel(name: string, schema: JSONSchema): string {
+  return schema.title ? fieldTitle(schema.title, i18n.language) : humanize(name);
+}
+
 function FieldWrap({
   name,
   schema,
@@ -907,6 +961,7 @@ function FieldWrap({
   stack,
   value,
   footer,
+  action,
   children,
 }: {
   name: string;
@@ -915,6 +970,9 @@ function FieldWrap({
   stack?: boolean;
   value?: unknown;
   footer?: React.ReactNode;
+  // Sits at the far end of the label row, opposite the name: a control that
+  // acts on this field rather than editing it.
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const { t } = useTranslation();
@@ -937,11 +995,7 @@ function FieldWrap({
     <div className={missing ? "sf-field sf-field-missing" : "sf-field"}>
       <div className="label-row">
         <span className="sf-label-group">
-          <label htmlFor={controlId}>
-            {schema.title
-              ? fieldTitle(schema.title, i18n.language)
-              : humanize(name)}
-          </label>
+          <label htmlFor={controlId}>{fieldLabel(name, schema)}</label>
           {/* Always-on required marker so a field that needs a value reads
               as such while configuring — not only after a failed Run. A muted
               chip (not the red error pill below) — required but not yet flagged. */}
@@ -967,6 +1021,7 @@ function FieldWrap({
             />
           )}
         </span>
+        {action}
       </div>
       {stack ? <div>{labelledChildren}</div> : labelledChildren}
       {example !== undefined && (

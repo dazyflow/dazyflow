@@ -23,12 +23,15 @@ export function ScriptEditor({
   lang,
   rows = 10,
   placeholder,
+  autoFocus,
 }: {
   value: string;
   onChange: (v: string) => void;
   lang: ScriptLang;
   rows?: number;
   placeholder?: string;
+  /** For the editor a window was opened around: the caret belongs in it. */
+  autoFocus?: boolean;
 }) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
@@ -66,6 +69,7 @@ export function ScriptEditor({
       <textarea
         ref={taRef}
         className="dz-code-ta"
+        autoFocus={autoFocus}
         // Belt and braces with `white-space: pre` in the stylesheet: this is the
         // HTML-level switch for soft wrapping, and it is unambiguous. A wrapped
         // line is a line the <pre> behind this has to break at the same

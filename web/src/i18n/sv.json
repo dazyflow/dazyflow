@@ -1724,6 +1724,8 @@
   "schemaForm": {
     "required": "obligatoriskt",
     "requiredHint": "Obligatoriskt",
+    "expand": "Förstora",
+    "expandHint": "Öppna {{field}} i ett större fönster",
     "trackingHint": "Innehåller spårningsparametrar ({{params}}) — går oftast bra att ta bort.",
     "trackingStrip": "Ta bort dem",
     "rowCond": {

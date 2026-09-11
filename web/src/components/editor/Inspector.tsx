@@ -17,7 +17,8 @@ import {
 } from "../fields/SchemaForm";
 import { LiveConsole } from "./LiveConsole";
 import { ConfirmModal } from "../ui/ConfirmModal";
-import { RenderTemplatePreview } from "../fields/RenderTemplatePreview";
+import { RenderTemplatePreview, DEFAULT_SAMPLE } from "../fields/RenderTemplatePreview";
+import { TemplateFrame } from "../fields/TemplateFrame";
 import { RenderTextPreview } from "../fields/RenderTextPreview";
 import { RenderTableColumns } from "../fields/RenderTableColumns";
 import { CelInput } from "./CelInput";
@@ -147,6 +148,11 @@ export function Inspector({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [mode, setMode] = useState<Mode>("form");
   const [jsonText, setJsonText] = useState("");
+  // The template preview's sample data. Held here rather than in the preview
+  // panel because two places show that preview — the panel, and the window the
+  // Template field expands into — and they must agree about what they are
+  // rendering against.
+  const [templateSample, setTemplateSample] = useState(DEFAULT_SAMPLE);
   const [jsonError, setJsonError] = useState<string | null>(null);
   const { hasPerm } = useAuth();
 
@@ -183,6 +189,8 @@ export function Inspector({
   }));
 
   const currentParams = selected ? (paramsByID[selected.id] ?? {}) : {};
+  const templateText =
+    typeof currentParams.template === "string" ? currentParams.template : "";
   useEffect(() => {
     if (!selected) {
       setJsonText("");
@@ -541,11 +549,9 @@ export function Inspector({
                 render_text step does the same for a list → one string. */}
             {d.moduleID === "render_template" && (
               <RenderTemplatePreview
-                template={
-                  typeof currentParams.template === "string"
-                    ? currentParams.template
-                    : ""
-                }
+                template={templateText}
+                sample={templateSample}
+                onSampleChange={setTemplateSample}
                 onInsertTemplate={(tmpl) =>
                   onParamsChange(selected.id, { ...currentParams, template: tmpl })
                 }
@@ -608,6 +614,18 @@ export function Inspector({
               tokenLabels={tokenLabels}
               missingKeys={missingKeys}
               geoRunCoordinate={runCoordinate}
+              // What a field's expanded window shows beside the editor. Asked
+              // for by key, answered here: the form knows how to hold a second
+              // pane, and this is the layer that knows a template has a picture
+              // to show and a script does not.
+              previewFor={
+                d.moduleID === "render_template"
+                  ? (key) =>
+                      key === "template" ? (
+                        <TemplateFrame template={templateText} sample={templateSample} />
+                      ) : undefined
+                  : undefined
+              }
               onChange={(v) => onParamsChange(selected.id, v)}
             />
           </>

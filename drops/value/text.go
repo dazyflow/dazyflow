@@ -69,8 +69,8 @@ func init() {
       "type": "string",
       "title": "Written in",
       "default": "plain",
-      "enum": ["plain", "shell", "python", "javascript", "sql", "yaml", "json", "powershell"],
-      "enumNames": ["Plain text", "Shell", "Python", "JavaScript", "SQL", "YAML", "JSON", "PowerShell"],
+      "enum": ["plain", "html", "shell", "python", "javascript", "sql", "yaml", "json", "powershell"],
+      "enumNames": ["Plain text", "HTML", "Shell", "Python", "JavaScript", "SQL", "YAML", "JSON", "PowerShell"],
       "description": "Changes the EDITOR, not the value: pick a language and the box above becomes monospace, syntax-coloured, and stops wrapping long lines. What comes out is the same plain string either way. Leave it on plain text for prose — a system prompt or an email body reads worse in a monospace font, not better."
     }
   },
