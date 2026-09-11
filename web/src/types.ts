@@ -828,12 +828,24 @@ export type SSHCredential = {
   account: string;
   host?: string;
   port?: string;
+  login?: string;
   username?: string;
   directory?: string;
   has_password: boolean;
   has_ssh_key: boolean;
   has_passphrase: boolean;
   has_host_key: boolean;
+};
+
+// Who the SSH and SFTP steps sign in as. Reusable across servers: one key,
+// stored and rotated once.
+export type SSHLogin = {
+  name: string;
+  username?: string;
+  public_key?: string;
+  has_password: boolean;
+  has_ssh_key: boolean;
+  has_passphrase: boolean;
 };
 
 export type GitMirror = {

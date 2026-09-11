@@ -13,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	gossh "golang.org/x/crypto/ssh"
-
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/internal/sshutil"
 )
@@ -31,19 +29,26 @@ import (
 // SFTP. Two stores would mean configuring that machine twice and rotating its
 // key in two places.
 //
+// A server is the machine; who signs in to it is an SSHLogin next door, named
+// here. The auth fields remain readable because servers saved before the split
+// carried their own key, and those keep working untouched — but nothing writes
+// them any more.
+//
 //	sshcred.<account>.host         (required)
 //	sshcred.<account>.port         (optional, defaults to 22)
-//	sshcred.<account>.username     (required)
-//	sshcred.<account>.password     (secret; one of password/private_key)
-//	sshcred.<account>.private_key  (secret; preferred where the server allows it)
-//	sshcred.<account>.passphrase   (secret; only if the key is encrypted)
+//	sshcred.<account>.login        (which sshlogin.<name> signs in)
+//	sshcred.<account>.username     (optional override of the login's username)
 //	sshcred.<account>.fingerprint  (host key pin)
 //	sshcred.<account>.known_hosts  (host key pin, the OpenSSH way)
 //	sshcred.<account>.directory    (SFTP's default folder; ignored by SSH)
+//	sshcred.<account>.password     (pre-split: the server's own credential)
+//	sshcred.<account>.private_key  (pre-split)
+//	sshcred.<account>.passphrase   (pre-split)
 const (
 	secretSSHCredPrefix = "sshcred."
 	sshCredFieldHost    = "host"
 	sshCredFieldPort    = "port"
+	sshCredFieldLogin   = "login"
 	sshCredFieldUser    = "username"
 	sshCredFieldPass    = "password"
 	sshCredFieldKey     = "private_key"
@@ -58,9 +63,9 @@ const (
 const sshVerifyTimeout = 20 * time.Second
 
 var sshCredFields = []string{
-	sshCredFieldHost, sshCredFieldPort, sshCredFieldUser, sshCredFieldPass,
-	sshCredFieldKey, sshCredFieldPhrase, sshCredFieldFinger, sshCredFieldHosts,
-	sshCredFieldDir,
+	sshCredFieldHost, sshCredFieldPort, sshCredFieldLogin, sshCredFieldUser,
+	sshCredFieldPass, sshCredFieldKey, sshCredFieldPhrase, sshCredFieldFinger,
+	sshCredFieldHosts, sshCredFieldDir,
 }
 
 // Same slug rule as the git credentials: a dot is the field separator in the
@@ -82,15 +87,17 @@ func sshCredStorageName(account, field string) string {
 // are what make one account tellable from another in a picker; the key, the
 // password and the passphrase are never returned, only reported as present.
 type SSHCredential struct {
-	Account       string `json:"account"`
-	Host          string `json:"host,omitempty"`
-	Port          string `json:"port,omitempty"`
-	Username      string `json:"username,omitempty"`
-	Directory     string `json:"directory,omitempty"`
-	HasPassword   bool   `json:"has_password"`
-	HasSSHKey     bool   `json:"has_ssh_key"`
-	HasPassphrase bool   `json:"has_passphrase"`
-	HasHostKey    bool   `json:"has_host_key"`
+	Account   string `json:"account"`
+	Host      string `json:"host,omitempty"`
+	Port      string `json:"port,omitempty"`
+	Login     string `json:"login,omitempty"`
+	Username  string `json:"username,omitempty"`
+	Directory string `json:"directory,omitempty"`
+	// Pre-split servers carry their own credential; the page offers to move one.
+	HasPassword   bool `json:"has_password"`
+	HasSSHKey     bool `json:"has_ssh_key"`
+	HasPassphrase bool `json:"has_passphrase"`
+	HasHostKey    bool `json:"has_host_key"`
 }
 
 func listSSHCredentials(ctx context.Context, secrets *EncryptedSecrets, tenant string) ([]SSHCredential, error) {
@@ -130,6 +137,8 @@ func listSSHCredentials(ctx context.Context, secrets *EncryptedSecrets, tenant s
 			c.Host = plain(ctx, n)
 		case sshCredFieldPort:
 			c.Port = plain(ctx, n)
+		case sshCredFieldLogin:
+			c.Login = plain(ctx, n)
 		case sshCredFieldUser:
 			c.Username = plain(ctx, n)
 		case sshCredFieldDir:
@@ -155,6 +164,7 @@ func listSSHCredentials(ctx context.Context, secrets *EncryptedSecrets, tenant s
 type sshCredInput struct {
 	Host        string
 	Port        string
+	Login       string
 	Username    string
 	Password    string
 	PrivateKey  string
@@ -172,42 +182,38 @@ func putSSHCredential(ctx context.Context, secrets *EncryptedSecrets, tenant, ac
 	if host == "" {
 		return errors.New("enter the server's address")
 	}
-	user := strings.TrimSpace(in.Username)
-	if user == "" {
-		return errors.New("enter the username to sign in with")
-	}
 	if _, err := sshutil.ParsePort(in.Port); err != nil {
 		return err
 	}
-	key := strings.TrimSpace(in.PrivateKey)
-	password := in.Password
-	if key == "" && strings.TrimSpace(password) == "" {
-		return errors.New("enter either a password or an SSH private key — the server needs one of them to let you in")
+	login := strings.TrimSpace(in.Login)
+	user := strings.TrimSpace(in.Username)
+	key, err := parseSSHPrivateKey(in.PrivateKey, in.Passphrase)
+	if err != nil {
+		return err
 	}
-	// Parsed before it is stored: a key that cannot be read is a credential that
-	// fails at 03:00 in a flow rather than here, where somebody is looking.
-	if key != "" {
-		pem := key + "\n"
-		if in.Passphrase != "" {
-			if _, err := gossh.ParsePrivateKeyWithPassphrase([]byte(pem), []byte(in.Passphrase)); err != nil {
-				return fmt.Errorf("private key + passphrase don't parse: %w", err)
-			}
-		} else {
-			if _, err := gossh.ParsePrivateKey([]byte(pem)); err != nil {
-				var missing *gossh.PassphraseMissingError
-				if errors.As(err, &missing) {
-					return errors.New("private key is passphrase-protected; provide the passphrase")
-				}
-				return fmt.Errorf("private key doesn't parse: %w", err)
-			}
+	ownCredential := key != "" || strings.TrimSpace(in.Password) != ""
+	if login == "" && !ownCredential {
+		return errors.New("choose the login this server signs in with — set one up on the Logins page")
+	}
+	if login != "" {
+		if err := validateSSHLoginName(login); err != nil {
+			return err
 		}
-		key = pem
+		// A server pointed at a login nobody created fails at run time with
+		// nothing to look at; the name is checked while somebody is here.
+		l, err := secrets.GetExact(ctx, tenant, sshLoginStorageName(login, sshLoginFieldUser))
+		if err != nil || strings.TrimSpace(l) == "" {
+			return fmt.Errorf("there is no login called %q — set it up on the Logins page first", login)
+		}
+	} else if user == "" {
+		return errors.New("enter the username to sign in with")
 	}
 	for field, val := range map[string]string{
 		sshCredFieldHost:   host,
 		sshCredFieldPort:   strings.TrimSpace(in.Port),
+		sshCredFieldLogin:  login,
 		sshCredFieldUser:   user,
-		sshCredFieldPass:   password,
+		sshCredFieldPass:   in.Password,
 		sshCredFieldKey:    key,
 		sshCredFieldPhrase: in.Passphrase,
 		sshCredFieldFinger: strings.TrimSpace(in.Fingerprint),
@@ -254,10 +260,11 @@ func (secrets *EncryptedSecrets) LookupSSHCredential(ctx context.Context, accoun
 		}
 		return v, nil
 	}
+	var port, login string
 	fields := map[string]*string{}
-	var port string
 	fields[sshCredFieldHost] = &cfg.Host
 	fields[sshCredFieldPort] = &port
+	fields[sshCredFieldLogin] = &login
 	fields[sshCredFieldUser] = &cfg.Username
 	fields[sshCredFieldPass] = &cfg.Password
 	fields[sshCredFieldKey] = &cfg.PrivateKey
@@ -275,6 +282,42 @@ func (secrets *EncryptedSecrets) LookupSSHCredential(ctx context.Context, accoun
 	if cfg.Host == "" {
 		return sshutil.Config{}, nil // not configured
 	}
+	// The two halves meet here. A server's username wins over the login's, so
+	// one key can reach a fleet where one machine calls the account something
+	// else; everything secret comes from the login and nowhere else.
+	if login != "" {
+		l := func(field string) (string, error) {
+			v, e := secrets.GetExact(ctx, tenant, sshLoginStorageName(login, field))
+			if e != nil {
+				if errors.Is(e, ErrSecretNotFound) {
+					return "", nil
+				}
+				return "", e
+			}
+			return v, nil
+		}
+		user, err := l(sshLoginFieldUser)
+		if err != nil {
+			return sshutil.Config{}, err
+		}
+		if user == "" {
+			return sshutil.Config{}, fmt.Errorf("this server signs in with the login %q, which no longer exists", login)
+		}
+		if cfg.Username == "" {
+			cfg.Username = user
+		}
+		for field, dst := range map[string]*string{
+			sshLoginFieldPass:   &cfg.Password,
+			sshLoginFieldKey:    &cfg.PrivateKey,
+			sshLoginFieldPhrase: &cfg.Passphrase,
+		} {
+			v, err := l(field)
+			if err != nil {
+				return sshutil.Config{}, err
+			}
+			*dst = v
+		}
+	}
 	n, err := sshutil.ParsePort(port)
 	if err != nil {
 		return sshutil.Config{}, err
@@ -286,6 +329,7 @@ func (secrets *EncryptedSecrets) LookupSSHCredential(ctx context.Context, accoun
 type putSSHCredBody struct {
 	Host        string `json:"host"`
 	Port        string `json:"port"`
+	Login       string `json:"login"`
 	Username    string `json:"username"`
 	Password    string `json:"password"`
 	PrivateKey  string `json:"private_key"`

@@ -10,28 +10,34 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
-## [0.42.2] - 2026-09-11
-
 ### Added
 
-- **Adding a server is a guide now, not a form of nine fields.** Setting one up
-  meant knowing which of "private key / passphrase / password / fingerprint /
-  known_hosts" applied to you, and filling in the right ones. The Servers page
-  now asks three questions instead: the server, how it signs in, and whether you
-  trust it. **Paste SSH key**, **Import from file** and **Generate new SSH key**
-  are three named buttons rather than one box you are expected to fill from
-  somewhere else. Generate makes an ed25519 pair, keeps the private half, and
-  shows the public line to add to the server's authorized_keys.
+- **Logins and servers are two things now.** They were one record, so a deploy
+  key shared by ten machines was pasted ten times and rotated in ten places, on
+  a form of nine fields that mixed "who signs in" with "which machine" and gave
+  no hint which was which. A **login** is a username and either a key or a
+  password, named once. A **server** is an address, a port and a host key, and
+  it picks a login by name. Rotating a key is one edit. Servers saved before the
+  split keep their own credential and go on working untouched.
+
+- **Setting up a login is three named buttons, not a box you are expected to
+  fill from somewhere else.** **Paste SSH key**, **Import from file** and
+  **Generate new SSH key** — nothing is shown until one is picked. Generate
+  makes an ed25519 pair, keeps the private half, and shows the public line; the
+  list goes on showing that line afterwards, because every further server this
+  login reaches needs it added to authorized_keys, and a private key cannot be
+  shown again to derive it from. Importing checks the file is a private key
+  rather than failing after Save.
 
 - **The host key is fetched on the screen that needs it.** Host-key checking has
   no default and cannot be turned off, so the only way to learn a server's
   fingerprint used to be to save a credential, watch it refuse, and read the
-  value out of the failure. **Check the server** now asks the server directly —
-  no credential, no authentication, the handshake stops at the key — and shows
-  the fingerprint to compare against what your provider published before you
-  accept it. Ed25519 is asked for first, because that is the key providers
-  publish; left to chance a server offers its ecdsa key instead and an honest
-  comparison looks like an attack. Accepting stores both the fingerprint and the
+  value out of the failure. **Check the server** asks the server directly — no
+  credential, no authentication, the handshake stops at the key — and shows the
+  fingerprint to compare against what your provider published before you accept
+  it. Ed25519 is asked for first, because that is the key providers publish;
+  left to chance a server offers its ecdsa key instead and an honest comparison
+  looks like an attack. Accepting stores both the fingerprint and the
   known_hosts line. A server is tried the moment it is saved, because saving is
   not the same as working.
 

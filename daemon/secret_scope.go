@@ -66,6 +66,7 @@ func isReservedSecretName(name string) bool {
 		strings.HasPrefix(name, "httpcache.") ||
 		strings.HasPrefix(name, secretGitCredPrefix) ||
 		strings.HasPrefix(name, secretSSHCredPrefix) ||
+		strings.HasPrefix(name, secretSSHLoginPrefix) ||
 		strings.HasPrefix(name, secretResourcePrefix) ||
 		strings.HasPrefix(name, secretEmailTmplPrefix) ||
 		strings.HasPrefix(name, "cfg:")

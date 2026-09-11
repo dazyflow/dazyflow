@@ -131,7 +131,8 @@ func TestPutSSHCredential_Validation(t *testing.T) {
 	}{
 		{"no host", "a", sshCredInput{Username: "u", Password: "p"}, "address"},
 		{"no username", "a", sshCredInput{Host: "h", Password: "p"}, "username"},
-		{"no way in", "a", sshCredInput{Host: "h", Username: "u"}, "password or an SSH private key"},
+		{"no way in", "a", sshCredInput{Host: "h", Username: "u"}, "choose the login"},
+		{"a login nobody created", "a", sshCredInput{Host: "h", Login: "ghost"}, "no login called"},
 		{"bad port", "a", sshCredInput{Host: "h", Username: "u", Password: "p", Port: "nope"}, "port"},
 		{"unparseable key", "a", sshCredInput{Host: "h", Username: "u", PrivateKey: "-----BEGIN OPENSSH PRIVATE KEY-----\nnope\n"}, "doesn't parse"},
 		// A dot would collide with the field separator in the storage name.
@@ -220,6 +221,9 @@ func TestSSHCredsAPI_RefusesWithoutAStore(t *testing.T) {
 		{"POST", "/api/v1/ssh/credentials/acct/verify"},
 		{"POST", "/api/v1/ssh/host-key"},
 		{"POST", "/api/v1/ssh/keypair"},
+		{"GET", "/api/v1/ssh/logins"},
+		{"PUT", "/api/v1/ssh/logins/deploy"},
+		{"DELETE", "/api/v1/ssh/logins/deploy"},
 	} {
 		if rw := h.do(t, tc.method, tc.path, map[string]any{"host": "h"}); rw.Code != http.StatusNotImplemented {
 			t.Errorf("%s %s without a store = %d, want 501", tc.method, tc.path, rw.Code)
@@ -292,5 +296,186 @@ func TestSSHHostKeyAPI_RefusesNonsense(t *testing.T) {
 	}
 	if got.OK || got.Error == "" {
 		t.Errorf("blank host = %+v, want ok:false with a reason", got)
+	}
+}
+
+// The split: a server names a login, and the two halves meet at lookup. The
+// server's username wins so one key can reach a fleet where one machine calls
+// the account something else.
+func TestSSHCredential_ResolvesThroughItsLogin(t *testing.T) {
+	t.Parallel()
+	es := testEncryptedSecrets(t)
+	ctx := core.WithTenant(t.Context(), "acme")
+	keyPEM := testSSHKeyPEM(t)
+
+	if err := putSSHLogin(ctx, es, "acme", "deploy-key", sshLoginInput{
+		Username: "deploy", PrivateKey: strings.TrimSpace(keyPEM), PublicKey: "ssh-ed25519 AAAA deploy",
+	}); err != nil {
+		t.Fatalf("put login: %v", err)
+	}
+	for _, srv := range []struct{ account, host, user string }{
+		{"web-1", "10.0.0.5", ""},
+		{"web-2", "10.0.0.6", "ubuntu"}, // this one calls the account something else
+	} {
+		if err := putSSHCredential(ctx, es, "acme", srv.account, sshCredInput{
+			Host: srv.host, Login: "deploy-key", Username: srv.user, Fingerprint: "SHA256:x",
+		}); err != nil {
+			t.Fatalf("put %s: %v", srv.account, err)
+		}
+	}
+
+	one, err := es.LookupSSHCredential(ctx, "web-1")
+	if err != nil {
+		t.Fatalf("lookup web-1: %v", err)
+	}
+	if one.Username != "deploy" || one.PrivateKey == "" || one.Host != "10.0.0.5" {
+		t.Errorf("web-1 = %+v, want deploy@10.0.0.5 with the login's key", one)
+	}
+	two, err := es.LookupSSHCredential(ctx, "web-2")
+	if err != nil {
+		t.Fatalf("lookup web-2: %v", err)
+	}
+	if two.Username != "ubuntu" {
+		t.Errorf("web-2 username = %q, want the server's own override", two.Username)
+	}
+	if two.PrivateKey != one.PrivateKey {
+		t.Error("both servers should be reaching the same key — that is the point of the split")
+	}
+
+	// One place to rotate: the login.
+	if err := putSSHLogin(ctx, es, "acme", "deploy-key", sshLoginInput{
+		Username: "deploy", Password: "now-a-password",
+	}); err != nil {
+		t.Fatalf("rotate: %v", err)
+	}
+	after, err := es.LookupSSHCredential(ctx, "web-1")
+	if err != nil {
+		t.Fatalf("lookup after rotate: %v", err)
+	}
+	if after.Password != "now-a-password" || after.PrivateKey != "" {
+		t.Errorf("rotating the login did not reach the server: %+v", after)
+	}
+}
+
+// Servers saved before the split carry their own key. Nothing rewrites them, so
+// they have to keep working exactly as they did.
+func TestSSHCredential_PreSplitServerStillResolves(t *testing.T) {
+	t.Parallel()
+	es := testEncryptedSecrets(t)
+	ctx := core.WithTenant(t.Context(), "acme")
+
+	if err := putSSHCredential(ctx, es, "acme", "old-1", sshCredInput{
+		Host: "10.0.0.9", Username: "root", Password: "p", Directory: "/incoming",
+	}); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	got, err := es.LookupSSHCredential(ctx, "old-1")
+	if err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	if got.Username != "root" || got.Password != "p" || got.Directory != "/incoming" {
+		t.Errorf("pre-split server = %+v, want its own credential intact", got)
+	}
+}
+
+// A login that vanished under a server is a configuration error somebody has to
+// see, not a connection attempted with no credential at all.
+func TestSSHCredential_SaysSoWhenItsLoginIsGone(t *testing.T) {
+	t.Parallel()
+	es := testEncryptedSecrets(t)
+	ctx := core.WithTenant(t.Context(), "acme")
+
+	if err := putSSHLogin(ctx, es, "acme", "temp", sshLoginInput{Username: "u", Password: "p"}); err != nil {
+		t.Fatalf("put login: %v", err)
+	}
+	if err := putSSHCredential(ctx, es, "acme", "web-1", sshCredInput{Host: "h", Login: "temp"}); err != nil {
+		t.Fatalf("put server: %v", err)
+	}
+	if err := deleteSSHLogin(ctx, es, "acme", "temp"); err != nil {
+		t.Fatalf("delete login: %v", err)
+	}
+	if _, err := es.LookupSSHCredential(ctx, "web-1"); err == nil {
+		t.Fatal("a server whose login is gone resolved anyway")
+	}
+}
+
+func TestSSHLogin_RoundTripAndValidation(t *testing.T) {
+	t.Parallel()
+	es := testEncryptedSecrets(t)
+	ctx := core.WithTenant(t.Context(), "acme")
+	keyPEM := testSSHKeyPEM(t)
+
+	if err := putSSHLogin(ctx, es, "acme", "deploy-key", sshLoginInput{
+		Username: "deploy", PrivateKey: strings.TrimSpace(keyPEM), PublicKey: "ssh-ed25519 AAAA deploy",
+	}); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	logins, err := listSSHLogins(ctx, es, "acme")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(logins) != 1 {
+		t.Fatalf("listed %d logins, want 1", len(logins))
+	}
+	got := logins[0]
+	if got.Name != "deploy-key" || got.Username != "deploy" || !got.HasSSHKey || got.HasPassword {
+		t.Errorf("listing = %+v", got)
+	}
+	// The public half comes back, because every further server needs that line.
+	if got.PublicKey != "ssh-ed25519 AAAA deploy" {
+		t.Errorf("public key = %q, want it returned", got.PublicKey)
+	}
+
+	for _, tc := range []struct{ name, login, want string }{
+		{"no username", "a", "username"},
+		{"dotted name", "a.b", "login name"},
+	} {
+		in := sshLoginInput{Password: "p"}
+		if tc.name == "dotted name" {
+			in.Username = "u"
+		}
+		if err := putSSHLogin(ctx, es, "acme", tc.login, in); err == nil {
+			t.Errorf("%s: accepted, want rejected", tc.name)
+		} else if !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: error %q does not mention %q", tc.name, err, tc.want)
+		}
+	}
+	if err := putSSHLogin(ctx, es, "acme", "no-way-in", sshLoginInput{Username: "u"}); err == nil {
+		t.Error("a login with neither key nor password was accepted")
+	}
+}
+
+// Deleting a login out from under a server is the one destructive mistake this
+// page can make, so the route refuses and names what is in the way.
+func TestSSHLoginsAPI_RefusesToDeleteOneInUse(t *testing.T) {
+	t.Parallel()
+	h := newSecretsHarness(t)
+	ctx := core.WithTenant(t.Context(), "t")
+
+	if err := putSSHLogin(ctx, h.gw.EncryptedSecrets, "t", "deploy-key", sshLoginInput{
+		Username: "deploy", Password: "p",
+	}); err != nil {
+		t.Fatalf("put login: %v", err)
+	}
+	if err := putSSHCredential(ctx, h.gw.EncryptedSecrets, "t", "web-1", sshCredInput{
+		Host: "h", Login: "deploy-key",
+	}); err != nil {
+		t.Fatalf("put server: %v", err)
+	}
+
+	rw := h.do(t, "DELETE", "/api/v1/ssh/logins/deploy-key", nil)
+	if rw.Code != http.StatusConflict {
+		t.Fatalf("delete in-use login = %d, want 409", rw.Code)
+	}
+	if !strings.Contains(rw.Body.String(), "web-1") {
+		t.Errorf("refusal does not name the server in the way: %s", rw.Body.String())
+	}
+
+	// Freed up, it goes.
+	if err := deleteSSHCredential(ctx, h.gw.EncryptedSecrets, "t", "web-1"); err != nil {
+		t.Fatalf("delete server: %v", err)
+	}
+	if rw := h.do(t, "DELETE", "/api/v1/ssh/logins/deploy-key", nil); rw.Code != http.StatusNoContent {
+		t.Errorf("delete freed login = %d, want 204: %s", rw.Code, rw.Body.String())
 	}
 }

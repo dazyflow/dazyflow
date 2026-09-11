@@ -141,6 +141,9 @@ const EmailTemplates = lazy(() =>
 const AdminSSHCredentials = lazy(() =>
   import("./pages/admin/AdminSSHCredentials").then((m) => ({ default: m.AdminSSHCredentials })),
 );
+const AdminSSHLogins = lazy(() =>
+  import("./pages/admin/AdminSSHLogins").then((m) => ({ default: m.AdminSSHLogins })),
+);
 const AdminGitCredentials = lazy(() =>
   import("./pages/admin/AdminGitCredentials").then((m) => ({ default: m.AdminGitCredentials })),
 );
@@ -319,6 +322,7 @@ export function App() {
           <Route path="/admin/email-templates" element={<EmailTemplates />} />
           <Route path="/admin/git-credentials" element={<AdminGitCredentials />} />
           <Route path="/admin/ssh-credentials" element={<AdminSSHCredentials />} />
+          <Route path="/admin/ssh-logins" element={<AdminSSHLogins />} />
           <Route path="/admin/mcp-servers" element={<AdminMCPServers />} />
           <Route path="/admin/web-apis" element={<AdminWebAPIs />} />
           <Route path="/admin/runners" element={<AdminRunners />} />

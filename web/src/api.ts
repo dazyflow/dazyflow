@@ -46,6 +46,7 @@ import type {
   PublishInfo,
   GitCredential,
   SSHCredential,
+  SSHLogin,
   MCPServer,
   MCPServerInput,
   StepSourceUsage,
@@ -836,6 +837,7 @@ export const api = {
     body: {
       host?: string;
       port?: string;
+      login?: string;
       username?: string;
       password?: string;
       private_key?: string;
@@ -862,6 +864,21 @@ export const api = {
       "POST",
       `/ssh/credentials/${encodeURIComponent(account)}/verify`,
     ),
+  listSSHLogins: (token: string) =>
+    request<{ logins: SSHLogin[] }>(token, "GET", "/ssh/logins"),
+  putSSHLogin: (
+    token: string,
+    name: string,
+    body: {
+      username: string;
+      password?: string;
+      private_key?: string;
+      passphrase?: string;
+      public_key?: string;
+    },
+  ) => request<void>(token, "PUT", `/ssh/logins/${encodeURIComponent(name)}`, body),
+  deleteSSHLogin: (token: string, name: string) =>
+    request<void>(token, "DELETE", `/ssh/logins/${encodeURIComponent(name)}`),
   // What a server offers, before a credential exists to verify. Resolves with
   // ok:false rather than throwing: an address nobody answers on is an answer.
   scanSSHHostKey: (token: string, host: string, port: string) =>
