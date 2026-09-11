@@ -334,6 +334,72 @@ describe("nodeSetupNeeded", () => {
   });
 });
 
+// The SSH step and the SFTP steps pick a server from one named store, which is
+// an admin page rather than an Apps card. SFTP keeps its own connection as what
+// a step uses when it names no server; SSH has no such fallback.
+describe("nodeSetupNeeded — named servers", () => {
+  const hostField: ConnectionField = { key: "host", label: "Server", required: true };
+  const servers = "/admin/ssh-credentials";
+
+  function serverManifest(id: string, integration: string, blankIsConnection: boolean): Manifest {
+    return {
+      id,
+      version: "1",
+      label: id,
+      integration,
+      params_schema: {
+        type: "object",
+        properties: {
+          account: blankIsConnection
+            ? { type: "string", format: "ssh-account", x_blank_connection: true }
+            : { type: "string", format: "ssh-account" },
+        },
+      },
+      ...(blankIsConnection ? { connection_fields: [hostField] } : {}),
+    };
+  }
+
+  const ssh = serverManifest("ssh_run", "SSH", false);
+  const sftp = serverManifest("sftp_list_files", "SFTP", true);
+
+  it("sends an SSH step with no servers saved to the Servers page", () => {
+    expect(nodeSetupNeeded(ssh, {}, [], [], [])).toEqual({
+      integration: "SSH",
+      slug: "ssh",
+      path: servers,
+    });
+  });
+
+  it("leaves an SSH step alone once there is a server to pick", () => {
+    expect(nodeSetupNeeded(ssh, {}, [], [], ["web-1"])).toBeNull();
+    expect(nodeSetupNeeded(ssh, { account: "web-1" }, [], [], ["web-1"])).toBeNull();
+  });
+
+  it("flags a step pointed at a server that is not there", () => {
+    expect(nodeSetupNeeded(ssh, { account: "web-9" }, [], [], ["web-1"])).toEqual({
+      integration: "SSH",
+      slug: "ssh",
+      path: servers,
+    });
+  });
+
+  it("says nothing while the server list is unknown", () => {
+    expect(nodeSetupNeeded(ssh, {}, [], [], null)).toBeNull();
+  });
+
+  it("does not ask an SFTP step for a connection it isn't using", () => {
+    expect(nodeSetupNeeded(sftp, { account: "bank-sftp" }, [], [], ["bank-sftp"])).toBeNull();
+  });
+
+  it("still asks for the SFTP connection when a step names no server", () => {
+    expect(nodeSetupNeeded(sftp, {}, [], [], [])).toEqual({
+      integration: "File server",
+      slug: "sftp",
+    });
+    expect(nodeSetupNeeded(sftp, {}, [], ["conn.sftp.host"], [])).toBeNull();
+  });
+});
+
 describe("missingConnectionApps", () => {
   const apiKeyField: ConnectionField = { key: "api_key", label: "API key", required: true };
 
@@ -361,15 +427,21 @@ describe("missingConnectionApps", () => {
 // adds one. Target and label are derived together here so they can't drift.
 describe("setupDestination", () => {
   it("deep-links the one app that needs connecting", () => {
-    expect(setupDestination(["fortnox"], [], true)).toEqual({
+    expect(setupDestination([{ slug: "fortnox" }], [], true)).toEqual({
       to: "/apps/fortnox",
       labelKey: "connGate.connect",
     });
-    expect(setupDestination(["slack", "slack"], [], true).to).toBe("/apps/slack");
+    expect(setupDestination([{ slug: "slack" }, { slug: "slack" }], [], true).to).toBe("/apps/slack");
+  });
+
+  it("follows a need that names its own page", () => {
+    expect(
+      setupDestination([{ slug: "ssh", path: "/admin/ssh-credentials" }], [], true).to,
+    ).toBe("/admin/ssh-credentials");
   });
 
   it("falls back to the Apps list for several apps", () => {
-    expect(setupDestination(["slack", "gmail"], [], true)).toEqual({
+    expect(setupDestination([{ slug: "slack" }, { slug: "gmail" }], [], true)).toEqual({
       to: "/apps",
       labelKey: "connGate.connect",
     });
@@ -395,14 +467,14 @@ describe("setupDestination", () => {
   it("prefers the app page when both an app and a secret are missing", () => {
     // Connecting the app is the bigger, more likely blocker, and the Apps list
     // is the honest destination when one page can't fix everything.
-    expect(setupDestination(["slack"], ["TOKEN"], true)).toEqual({
+    expect(setupDestination([{ slug: "slack" }], ["TOKEN"], true)).toEqual({
       to: "/apps",
       labelKey: "connGate.connect",
     });
   });
 
   it("defaults to the Apps list when nothing is user-fixable", () => {
-    expect(setupDestination(["slack"], [], false)).toEqual({
+    expect(setupDestination([{ slug: "slack" }], [], false)).toEqual({
       to: "/apps",
       labelKey: "connGate.connect",
     });

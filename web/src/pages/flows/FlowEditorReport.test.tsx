@@ -89,6 +89,7 @@ vi.mock("../../api", () => {
       cancelRun: () => Promise.resolve({}),
       sampleNode: () => Promise.resolve({}),
       listProviders: () => Promise.resolve({ providers: [] }),
+      listSSHCredentials: () => Promise.resolve({ credentials: [] }),
       watchFlow: () => Promise.resolve({}),
       publishFlow: () => Promise.resolve({}),
       labelRevision: () => Promise.resolve({}),

@@ -1517,6 +1517,8 @@
     "saveBtn": "Save server",
     "saveHint": "An address, a username, and either a password or a key are required.",
     "useConnection": "The SFTP connection",
+    "chooseServer": "Choose a server",
+    "noneYet": "No servers yet",
     "addLink": "Add a server",
     "manageLink": "Manage servers"
   },

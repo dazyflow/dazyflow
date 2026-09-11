@@ -1517,6 +1517,8 @@
     "saveBtn": "Spara servern",
     "saveHint": "Adress, användarnamn och antingen ett lösenord eller en nyckel krävs.",
     "useConnection": "SFTP-anslutningen",
+    "chooseServer": "Välj en server",
+    "noneYet": "Inga servrar än",
     "addLink": "Lägg till en server",
     "manageLink": "Hantera servrar"
   },

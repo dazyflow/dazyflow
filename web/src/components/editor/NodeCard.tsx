@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { memo, useEffect, useState } from "react";
+import { setupPath } from "../../lib/requiredConnections";
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
 import { AlertTriangle, Braces, Check, ChevronDown, ChevronRight, Database, FileCode, FileText, Lock, Maximize2, Minimize2, MinusCircle, Play, Plug, Repeat, ShieldOff, Terminal, Unplug, X } from "lucide-react";
 import i18n from "../../i18n";
@@ -878,7 +879,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
           return (
             <a
               className="dz-node-setup nodrag"
-              href={`/apps/${d.setupNeeded.slug}`}
+              href={setupPath(d.setupNeeded)}
               title={i18n.t("nodeCard.needsSetup", { name })}
               aria-label={i18n.t("nodeCard.needsSetupAria")}
               onClick={(e) => e.stopPropagation()}

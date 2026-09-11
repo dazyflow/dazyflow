@@ -46,7 +46,7 @@ import {
   nodeStateText,
 } from "../../lib/dropText";
 import { oauthProviderForIntegration } from "../../integrationMeta";
-import type { SetupNeed } from "../../lib/requiredConnections";
+import { setupPath, type SetupNeed } from "../../lib/requiredConnections";
 import type { OAuthProviderStatus, Graph, GraphTrigger, Manifest } from "../../types";
 
 type Props = {
@@ -378,7 +378,7 @@ export function Inspector({
                   type="button"
                   variant="primary"
                   className="inspector-connect-cta"
-                  onClick={() => navigate(`/apps/${setupNeeded.slug}`)}
+                  onClick={() => navigate(setupPath(setupNeeded))}
                 >
                   {brandLogo ? (
                     <img src={brandLogo} alt="" draggable={false} />

@@ -309,6 +309,9 @@ function EditorInner() {
   const [graphLoading, setGraphLoading] = useState(true);
   const [providers, setProviders] = useState<OAuthProviderStatus[] | null>(null);
   const [secrets, setSecrets] = useState<string[] | null>(null);
+  // The org's named SSH/SFTP servers, so a step that has none to pick from
+  // says so on the card instead of looking configured.
+  const [sshAccounts, setSSHAccounts] = useState<string[] | null>(null);
   const [gateOpen, setGateOpen] = useState(false);
   const [orphanWarnOpen, setOrphanWarnOpen] = useState(false);
   const [deletePending, setDeletePending] = useState<{
@@ -739,6 +742,14 @@ function EditorInner() {
       })
       .catch(() => {
         if (!cancelled) setProviders(null);
+      });
+    api
+      .listSSHCredentials(token)
+      .then((r) => {
+        if (!cancelled) setSSHAccounts((r.credentials ?? []).map((c) => c.account));
+      })
+      .catch(() => {
+        if (!cancelled) setSSHAccounts(null);
       });
     Promise.all([
       api.listSecrets(token, undefined, undefined, true),
@@ -1642,11 +1653,11 @@ function EditorInner() {
     for (const n of nodes) {
       const man = n.data.manifest;
       if (!man || disabledNodes.has(n.id)) continue;
-      const need = nodeSetupNeeded(man, paramsByID[n.id] ?? {}, providers, secrets);
+      const need = nodeSetupNeeded(man, paramsByID[n.id] ?? {}, providers, secrets, sshAccounts);
       if (need) out.set(n.id, need);
     }
     return out;
-  }, [nodes, paramsByID, providers, secrets, disabledNodes]);
+  }, [nodes, paramsByID, providers, secrets, sshAccounts, disabledNodes]);
 
   const orphanedNodeIDs = useMemo(() => {
     if (nodes.length < 2) return [] as string[];
@@ -2796,8 +2807,8 @@ function EditorInner() {
     [enabledNodes, paramsByID],
   );
   const missingSetups = useMemo(
-    () => missingConnectionApps(enabledNodes, manifestByID, paramsByID, secrets),
-    [enabledNodes, manifestByID, paramsByID, secrets],
+    () => missingConnectionApps(enabledNodes, manifestByID, paramsByID, secrets, sshAccounts),
+    [enabledNodes, manifestByID, paramsByID, secrets, sshAccounts],
   );
   const userFixableSetup =
     missingConnections.length > 0 ||
@@ -2811,7 +2822,7 @@ function EditorInner() {
   const { to: setupTarget, labelKey: setupLabelKey } = useMemo(
     () =>
       setupDestination(
-        [...setupNeededByNode.values()].map((s) => s.slug),
+        [...setupNeededByNode.values()],
         missingSecrets,
         userFixableSetup,
       ),

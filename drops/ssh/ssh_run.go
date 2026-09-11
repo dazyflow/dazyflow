@@ -57,7 +57,6 @@ func init() {
 			Integration: integration,
 			Category:    "system",
 			Icon:        "terminal",
-			BrandLogo:   "/brands/ssh.svg",
 			Color:       brandColor,
 			Provider:    "internal",
 			Tags: []string{
@@ -125,7 +124,7 @@ func init() {
 				"type":"object",
 				"required":["command"],
 				"properties":{
-					"account":{"type":"string","title":"Server","format":"ssh-account","default":"default","description":"Which of the org's saved servers to run this on. Set them up on the Servers page — the address, the login and the host key live there, never in the flow. The SFTP steps pick from the same list."},
+					"account":{"type":"string","title":"Server","format":"ssh-account","description":"Which of the org's saved servers to run this on. Set them up on the Servers page — the address, the login and the host key live there, never in the flow. The SFTP steps pick from the same list."},
 					"command":{"type":"string","title":"Command","format":"script","examples":["sudo -n systemctl restart nginx"],"description":"What to run, as you would type it into a shell on that server. Connect the 'Command' input instead to have an earlier step build it."},
 					"working_dir":{"type":"string","title":"Run it in folder","examples":["/srv/app"],"description":"Change to this folder first. The step fails rather than carrying on in the home directory if the folder isn't there. Leave blank for the account's home directory."},
 					"env":{"type":"object","title":"Environment variables","additionalProperties":{"type":"string"},"x_confirm_remove":true,"description":"Values the command reads from its environment — $NAME in a shell. Use ${secret.NAME} for anything sensitive: the value reaches the server but is never written into the flow, and is blanked out of the run's output and logs."},
@@ -141,9 +140,13 @@ func init() {
 }
 
 func executeSSHRun(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
-	account := strings.TrimSpace(params.StringDefault(job.Params, "account", "default"))
+	// No fallback name: there is no conventional "default" server, so an unset
+	// account is a step nobody has pointed anywhere yet, not a lookup to try.
+	account := strings.TrimSpace(params.StringDefault(job.Params, "account", ""))
 	if account == "" {
-		account = "default"
+		return params.Err(job, "no_server",
+			"this step has no server chosen — pick one on the step, "+
+				"or add one on the Servers page"), nil
 	}
 	cfg, configured, err := sshcreds.Get(ctx, account)
 	if err != nil {

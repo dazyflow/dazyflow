@@ -36,7 +36,11 @@ func TestSSHRun_Registered(t *testing.T) {
 	if !ok {
 		t.Fatal("ssh_run is not registered")
 	}
-	if m.Integration != integration || m.BrandLogo != "/brands/ssh.svg" {
+	// No brand mark: SSH is a protocol, like SFTP next door, and the OpenSSH
+	// ring of dots read as a loading spinner at card size and vanished on the
+	// violet Connect banner. The lucide terminal glyph takes its colour from
+	// whatever it sits on.
+	if m.Integration != integration || m.BrandLogo != "" || m.Icon != "terminal" {
 		t.Errorf("manifest identity wrong: %+v", m)
 	}
 	// Running a command changes the server, so a resumed run must not silently
@@ -106,6 +110,16 @@ func TestSSHRun_RefusesBeforeDialling(t *testing.T) {
 				"account": "web-1", "command": "true", "on_nonzero_exit": "maybe",
 			}},
 			"bad_param",
+		},
+		{
+			"no server chosen",
+			core.Job{ID: "j", Params: map[string]any{"command": "uptime"}},
+			"no_server",
+		},
+		{
+			"blank server",
+			core.Job{ID: "j", Params: map[string]any{"account": "  ", "command": "uptime"}},
+			"no_server",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

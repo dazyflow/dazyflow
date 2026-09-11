@@ -10,6 +10,34 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The server picker no longer names a server you never saved.** The SSH step
+  arrived pointed at a server called "default", which is not a name the Servers
+  page suggests or the store creates — so a fresh step looked configured, and
+  with no servers saved at all that phantom was the only thing in the dropdown.
+  It now holds nothing until you pick something, and says whether that is
+  because nothing is saved yet or because you have not chosen. A step left
+  unpointed says so when it runs, instead of reporting a missing "default".
+
+- **An SSH step with nowhere to run says so on the card.** SFTP has always shown
+  a Connect button when its connection was missing; SSH showed nothing at all,
+  because its servers live on the Servers page rather than behind an Apps card.
+  Both now flag a step whose named server is not there, and lead to the page
+  that fixes it. The same check stops an SFTP step that names a saved server
+  from being asked for the SFTP connection it is not using.
+
+- **The SSH step wears its own glyph.** The OpenSSH ring of dots read as a
+  loading spinner at card size, and on the violet Connect banner it was black
+  on purple — all but invisible. SSH is a protocol rather than a vendor, like
+  SFTP next door, so it takes the chipped terminal glyph, which picks up
+  whatever it sits on.
+
+- **Saved servers stay off the Credentials page.** Their stored fields — the
+  private key among them — were listed there as ordinary organization secrets,
+  editable in a place that knows nothing about host keys. Git credentials were
+  already hidden for the same reason.
+
 ## [0.42.0] - 2026-09-11
 
 ### Added

@@ -3,6 +3,7 @@
 
 // Non-component exports, kept out of the component file so fast-refresh works.
 import i18n from "../../i18n";
+import type { SetupNeed } from "../../lib/requiredConnections";
 import type { Manifest, Ref } from "../../types";
 
 export type TokenLabels = Record<string, string>;
@@ -103,7 +104,7 @@ export type DazyNodeData = {
   outputs?: Record<string, Ref>;
   dataView?: boolean;
   configErrors?: { key: string; message: string }[];
-  setupNeeded?: { integration: string; slug: string };
+  setupNeeded?: SetupNeed;
   canConnect?: boolean;
   loopOwned?: boolean;
   disabled?: boolean;

@@ -66,6 +66,7 @@ vi.mock("../../api", () => {
       dropSuggestions: () => Promise.resolve([]),
       listSecrets: () => Promise.resolve({ secrets: [] }),
       listProviders: () => Promise.resolve({ providers: [] }),
+      listSSHCredentials: () => Promise.resolve({ credentials: [] }),
       getPublishedInfo: () => Promise.resolve({ published: false }),
       flowHistory: () => Promise.resolve({ revisions: [] }),
       streamJob: (...a: Parameters<typeof stream.streamJob>) => stream.streamJob(...a),

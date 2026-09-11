@@ -272,11 +272,11 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
     return (
       <FieldWrap name={name} schema={schema} required={required}>
         <SSHCredAccountField
-          value={(value as string) ?? (schema.default as string | undefined) ?? ""}
-          // The SFTP steps declare no default, and that blank is meaningful:
-          // it is the single pre-existing connection those flows already use.
-          // The SSH step defaults to "default" and has no such fallback.
-          allowConnection={schema.default === undefined}
+          value={(value as string) ?? ""}
+          // Blank is meaningful on the SFTP steps: it is the single
+          // pre-existing connection those flows already use. Everywhere else
+          // it means no server has been chosen yet.
+          allowConnection={schema.x_blank_connection === true}
           onChange={onChange}
         />
       </FieldWrap>
@@ -3527,16 +3527,34 @@ function SSHCredAccountField({
   };
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
-        {allowConnection && <option value="">{t("sshCreds.useConnection")}</option>}
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)" }}>
+      <select
+        style={{ maxWidth: "100%" }}
+        value={value}
+        onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
+      >
+        {/* Blank is always offered, and is what an unpointed step shows. With
+            no servers saved there is nothing else in here: naming one would
+            name a server that does not exist. */}
+        <option value="">
+          {allowConnection
+            ? t("sshCreds.useConnection")
+            : creds !== null && names.length === 0
+              ? t("sshCreds.noneYet")
+              : t("sshCreds.chooseServer")}
+        </option>
         {[...names, ...extra].map((a) => (
           <option key={a} value={a}>
             {describe(a)}
           </option>
         ))}
       </select>
-      <Link to="/admin/ssh-credentials" style={{ fontSize: "var(--text-sm)" }}>
+      {/* The link keeps its own line rather than breaking across two: the row
+          wraps when a server's name and address outgrow the column. */}
+      <Link
+        to="/admin/ssh-credentials"
+        style={{ fontSize: "var(--text-sm)", whiteSpace: "nowrap" }}
+      >
         {known.length === 0 ? t("sshCreds.addLink") : t("sshCreds.manageLink")}
       </Link>
     </div>
@@ -3576,15 +3594,18 @@ function GitCredAccountField({
   );
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-      <select value={current} onChange={(e) => onChange(e.target.value)}>
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)" }}>
+      <select style={{ maxWidth: "100%" }} value={current} onChange={(e) => onChange(e.target.value)}>
         {opts.map((a) => (
           <option key={a} value={a}>
             {a}
           </option>
         ))}
       </select>
-      <Link to="/admin/git-credentials" style={{ fontSize: "var(--text-sm)" }}>
+      <Link
+        to="/admin/git-credentials"
+        style={{ fontSize: "var(--text-sm)", whiteSpace: "nowrap" }}
+      >
         {accounts && accounts.length === 0
           ? t("gitCreds.addLink")
           : t("gitCreds.manageLink")}
