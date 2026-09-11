@@ -23,6 +23,48 @@ describe("ScriptEditor", () => {
     expect(container.textContent).toContain("<img src=x onerror=alert(1)>");
   });
 
+  // The console tells a reader which line printed a message ("3 │ …"), which
+  // is only useful if the editor can be read the same way.
+  it("numbers every line of the script", () => {
+    const { container } = render(
+      <ScriptEditor value={"one\ntwo\nthree"} onChange={() => {}} lang="js" />,
+    );
+    const gutter = container.querySelector(".dz-code-gutter");
+    expect(gutter?.textContent).toBe(" 1\n 2\n 3");
+  });
+
+  it("counts a trailing newline as the line it leaves you on", () => {
+    const { container } = render(
+      <ScriptEditor value={"one\n"} onChange={() => {}} lang="js" />,
+    );
+    // The textarea shows an empty second line to type on; the gutter numbers it.
+    expect(container.querySelector(".dz-code-gutter")?.textContent).toBe(" 1\n 2");
+  });
+
+  it("widens the column when the numbers do", () => {
+    const { container } = render(
+      <ScriptEditor
+        value={Array.from({ length: 120 }, (_, i) => `line ${i}`).join("\n")}
+        onChange={() => {}}
+        lang="js"
+      />,
+    );
+    const gutter = container.querySelector(".dz-code-gutter");
+    expect(gutter?.textContent?.split("\n").at(-1)).toBe("120");
+    // Three digits' worth of column, and the code padded clear of it — read off
+    // the editor rather than the gutter, since one variable sets both.
+    expect(container.querySelector<HTMLElement>(".dz-code-editor")?.style.getPropertyValue("--dz-gutter-w")).toBe("calc(3ch + 14px)");
+  });
+
+  // The textarea already carries the script; a screen reader that also walked
+  // the gutter would read a column of bare numbers over it.
+  it("keeps the numbers out of the accessibility tree", () => {
+    const { container } = render(
+      <ScriptEditor value={"one\ntwo"} onChange={() => {}} lang="js" />,
+    );
+    expect(container.querySelector(".dz-code-gutter")).toHaveAttribute("aria-hidden", "true");
+  });
+
   it("indents with Tab instead of leaving the field", async () => {
     const onChange = vi.fn();
     render(<ScriptEditor value="" onChange={onChange} lang="python" />);

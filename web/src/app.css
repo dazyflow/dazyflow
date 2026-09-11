@@ -9387,7 +9387,8 @@ a.pa-card:hover {
 .dz-json-editor .dz-json-pre,
 .dz-json-editor .dz-json-ta,
 .dz-code-editor .dz-code-pre,
-.dz-code-editor .dz-code-ta {
+.dz-code-editor .dz-code-ta,
+.dz-code-editor .dz-code-gutter {
   margin: 0;
   border: 0;
   padding: 8px;
@@ -9445,12 +9446,45 @@ a.pa-card:hover {
 
 .dz-code-editor {
   resize: vertical;
+  /* Widened per editor from the script's own line count (ScriptEditor sets it
+     inline); this is the resting width, two digits' worth. */
+  --dz-gutter-w: calc(2ch + 14px);
 }
 .dz-code-editor .dz-code-pre,
 .dz-code-editor .dz-code-ta {
   white-space: pre;
   word-break: normal;
   overflow-wrap: normal;
+  /* Room for the gutter. The textarea needs it as much as the highlight does:
+     both layers have to break their lines at the same character, so anything
+     that moves the text has to move it in both. */
+  padding-left: calc(var(--dz-gutter-w) + 8px);
+}
+/* The line numbers. Deliberately the same kind of layer as the highlight — an
+   aria-hidden <pre> — and it takes its font, size, line height and vertical
+   padding from the rule above rather than restating them, because a row that
+   is laid out by a second set of declarations is a row that can drift out of
+   step with the line it numbers. (It did: `.inspector pre` outweighed a bare
+   `.dz-code-gutter` and gave the column a 12px pad and another mono stack, so
+   every number sat 4px below its line.) Only what genuinely differs is set
+   here — and it is scoped like its siblings, so the same rule cannot reach it.
+   Opaque because the code scrolls underneath it rather than beside it. */
+.dz-code-editor .dz-code-gutter {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--dz-gutter-w);
+  padding-right: 6px;
+  padding-left: 4px;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  white-space: pre;
+  color: var(--muted);
+  background: var(--code-bg);
+  border-right: 1px solid var(--border);
+}
+.dz-code-editor .dz-code-gutter code {
+  font: inherit;
 }
 .dz-s-comment {
   color: var(--script-comment);

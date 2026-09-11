@@ -49,13 +49,16 @@ export function consoleLine(
     scriptLine && scriptLine > 0
       ? String(scriptLine).padStart(GUTTER)
       : " ".repeat(GUTTER);
-  const tag = level === "log" ? " ".repeat(TAG) : level.padEnd(TAG);
+  const prefix = `${DIM}${gutter} │${RESET} `;
+  // `log` prints no tag and reserves no room for one either. Holding the
+  // column open put six blank spaces in front of every ordinary line — most of
+  // what a script prints, pushed across the screen to keep the occasional
+  // error's message in a column with it. The levels that DO print a tag still
+  // line up with each other, which is where alignment is worth having.
+  if (level === "log") return prefix + message;
+  const tag = level.padEnd(TAG);
   const color = LEVEL_COLOR[level];
-  return (
-    `${DIM}${gutter} │${RESET} ` +
-    (color ? `${color}${tag}${RESET}` : tag) +
-    ` ${message}`
-  );
+  return prefix + (color ? `${color}${tag}${RESET}` : tag) + ` ${message}`;
 }
 
 // consoleLines renders what a finished step recorded on its logs port. The

@@ -24,8 +24,10 @@ describe("consoleLine", () => {
     );
   });
 
-  it("leaves the tag blank for console.log, which is most of a script", () => {
-    expect(consoleLine("hello", "log", 1)).toBe(`${DIM}  1 │${RESET}       hello`);
+  // The common case pays nothing for the rare one: no tag, and no room held
+  // open for the tag it does not print.
+  it("puts console.log's message straight after the gutter", () => {
+    expect(consoleLine("hello", "log", 1)).toBe(`${DIM}  1 │${RESET} hello`);
   });
 
   it("claims no line number when the sandbox itself speaks", () => {

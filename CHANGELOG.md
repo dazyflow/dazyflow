@@ -10,6 +10,24 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **The script editor numbers its lines.** The console says which line of a
+  script printed each message, which is only worth knowing if the script can be
+  read the same way — and it could not: finding line 23 meant counting. Every
+  code box now carries a numbered gutter, in the editor's own font and line
+  height so the numbers sit on their lines, scrolling with the script
+  vertically and staying put when a long line is scrolled sideways.
+
+### Fixed
+
+- **A printed line no longer starts six spaces in.** Every console line held a
+  column open for the level it was printed at — and `console.log`, which is
+  most of what a script prints, has no level to put there, so the ordinary case
+  paid a blank column to keep the occasional error's message aligned with it.
+  A log line's message now follows its line number directly; the levels that do
+  print a tag still line up with each other.
+
 ## [0.41.11] - 2026-09-11
 
 ### Added
