@@ -79,15 +79,12 @@ func executeSFTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 	if err != nil {
 		return params.Err(job, "not_connected", err.Error()), nil
 	}
-	remote, ok := resolveRemotePath(job)
+	remote, ok := resolveTarget(job, cfg)
 	if !ok {
 		return params.Err(job, "bad_input", "input port 'path' must be a file path or a list of files"), nil
 	}
-	if remote = strings.TrimSpace(remote); remote == "" {
+	if remote == "" {
 		return params.Err(job, "bad_param", "'path' is required — set it or connect the 'File' input"), nil
-	}
-	if !strings.HasPrefix(remote, "/") && !strings.Contains(remote, "/") {
-		remote = path.Join(cfg.Directory, remote)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(params.TimeoutMS(job, 120000))*time.Millisecond)

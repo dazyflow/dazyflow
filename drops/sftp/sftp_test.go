@@ -211,6 +211,30 @@ func TestSFTPList_OnlyNew_EmitsOnlyWhatArrivedSince(t *testing.T) {
 	}
 }
 
+// An empty folder is the normal state of a drop box nobody has used yet, and
+// the watermark used to record nothing for one: with no cursor written, the
+// next check baselined again and ate the arrival. The first file ever to land
+// in a watched folder disappeared, once, silently, and never came back.
+func TestSFTPList_OnlyNew_EmptyFolderStillRecordsThatItWasSeen(t *testing.T) {
+	memCursors(t)
+	s := startSFTP(t)
+
+	if res := run(t, executeSFTPList, s.job(t, map[string]any{"only_new": true})); len(res.Output) != 0 {
+		t.Fatalf("the first check on an empty folder emitted %v", res.Output)
+	}
+
+	s.writeFile(t, "first.csv", "a")
+	s.touch(t, "first.csv", 5000)
+
+	rows := files(t, run(t, executeSFTPList, s.job(t, map[string]any{"only_new": true})))
+	if got := names(rows); len(got) != 1 || got[0] != "first.csv" {
+		t.Fatalf("emitted %v, want the first file to land after the watch started", got)
+	}
+	if res := run(t, executeSFTPList, s.job(t, map[string]any{"only_new": true})); len(res.Output) != 0 {
+		t.Fatalf("that file came round a second time: %v", res.Output)
+	}
+}
+
 // The case a bare timestamp watermark loses. SFTP reports whole seconds and a
 // feed drops a batch inside one: if a poll runs between two files sharing a
 // second, a "strictly newer" comparison records that second and skips every

@@ -80,6 +80,7 @@ const POLL_TRIGGER_MODULES = new Set([
   "gcal_on_event_start",
   "gmail_on_new_message",
   "imap_on_new_message",
+  "sftp_on_new_file",
 ]);
 
 // The modules that can start a flow at all, however they are fired. Mirrors

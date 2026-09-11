@@ -183,6 +183,26 @@ func sortByModified(rows []map[string]any) {
 
 func sortStrings(s []string) { sort.Strings(s) }
 
+// resolveTarget is the whole path-resolving half a step that names one file
+// does: the input port or the param, with a bare name joined to the folder the
+// connection works in. ok=false means the input carried something that cannot
+// be a path; an empty path with ok=true is "nothing was set", which the caller
+// reports in its own words.
+func resolveTarget(job core.Job, cfg sshutil.Config) (string, bool) {
+	remote, ok := resolveRemotePath(job)
+	if !ok {
+		return "", false
+	}
+	remote = strings.TrimSpace(remote)
+	if remote == "" {
+		return "", true
+	}
+	if !strings.HasPrefix(remote, "/") && !strings.Contains(remote, "/") {
+		remote = path.Join(cfg.Directory, remote)
+	}
+	return remote, true
+}
+
 // resolveRemotePath works out which file a step was pointed at. It accepts a
 // path (text, e.g. ${item.path} inside a For each) or a List files record
 // wired straight in — in which case its `path` is used, so the obvious drag

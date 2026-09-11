@@ -230,7 +230,13 @@ func emitOnlyNew(ctx context.Context, job core.Job, dir string, rows []map[strin
 			names[name] = true
 		}
 	}
-	if !next.IsZero() && (next.After(mark.newest) || len(names) != len(mark.names)) {
+	// A folder that is empty when the watch starts still has to record that it
+	// HAS been seen. Without that write there is no cursor, so the next check
+	// baselines again and consumes whatever arrived in between — the first file
+	// ever to land in a watched folder disappeared, silently and for good, which
+	// is the failure this whole watermark exists to prevent.
+	moved := next.After(mark.newest) || len(names) != len(mark.names)
+	if mark.baseline || (!next.IsZero() && moved) {
 		werr := cursor.Write(ctx, job.Tenant, cursorName(job, dir), formatWatermark(next, names))
 		if werr != nil && mark.baseline {
 			return cursor.FailBaseline(job, werr)

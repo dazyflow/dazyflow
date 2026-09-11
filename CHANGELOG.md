@@ -10,6 +10,60 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **"When a file lands" is a trigger now.** List files could already do it — the
+  watermark has been there since the integration shipped — but it sat in apps &
+  services, so the thing corporate integration actually is ("a file lands on an
+  SFTP server at 03:00") was a Schedule wired to a step rather than something a
+  flow starts from. Same move as When an email arrives, and it wraps List files
+  rather than reimplementing anything, so there is still one place deciding
+  which file is new. Nothing is moved or deleted as a side effect.
+
+- **Delete file and Move file.** Most counterparties' protocol is "take the
+  file, then tidy up" — delete what you took, or move it to /processed so the
+  folder is the list of what is still outstanding and both sides can see what
+  was handled. Neither was possible on an account restricted to file transfer,
+  which is a common restriction and exactly the shape this integration is for:
+  the SSH step can run `rm`, but only where SSH is allowed at all. Move renames
+  on the server, so nothing is transferred and a half-moved file cannot happen;
+  it creates a dated destination folder for you, and refuses to land on a file
+  that already exists unless you say otherwise, because on most servers the
+  other file is simply lost. Both refuse a folder, and both fail on a file that
+  has already gone unless you ask them to carry on.
+
+- **Sync folder, which is the honest answer to "do you support rsync".** Copy a
+  whole folder either way — server to workspace or back — moving only the files
+  that differ, compared on size and modified time the way rsync itself compares
+  by default. Subfolders come along, a pattern narrows what counts on both
+  sides, and 'Files' carries just what this run moved, so the step after it acts
+  on the changes rather than the whole folder. Deleting what is no longer on the
+  other side is opt-in, and bounded by the pattern: a mirror will not remove
+  something it was told not to look at.
+
+  Not the rsync protocol, which is a binary that must exist on both ends and
+  would mean writing a private key to disk to hand it one — something nothing
+  in this codebase does. Its block-by-block trick pays off on a large file that
+  mostly didn't change, and a feed that drops a new file each night has nothing
+  for it to save. For an actual rsync between two machines you own, the SSH step
+  runs one today.
+
+### Fixed
+
+- **A watch on an empty folder swallowed the first file to land in it.** The
+  watermark recorded a position only when there was a file to derive one from,
+  so a folder that was empty when the watch started wrote no cursor at all — and
+  the next check baselined again and consumed whatever had arrived in between.
+  One file, gone silently and for good, in exactly the case every new drop box
+  starts in. An empty folder now records that it has been seen.
+
+- **SSH wears its own mark again.** It was dropped in 0.42.1 because the mark
+  vanished into the violet Connect bar, which was the wrong half to remove: the
+  bar is violet in BOTH themes, while the rule that lightens a monochrome logo
+  follows the page theme. So the logo is back, and monochrome marks — SSH's,
+  GitHub's, SMHI's, YAML's — are now lightened by the surface they sit on rather
+  than by the theme of the page around it.
+
 ## [0.42.3] - 2026-09-11
 
 ### Added
@@ -42,15 +96,6 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   looks like an attack. Accepting stores both the fingerprint and the
   known_hosts line. A server is tried the moment it is saved, because saving is
   not the same as working.
-
-### Fixed
-
-- **SSH wears its own mark again.** It was dropped in 0.42.1 because the mark
-  vanished into the violet Connect bar, which was the wrong half to remove: the
-  bar is violet in BOTH themes, while the rule that lightens a monochrome logo
-  follows the page theme. So the logo is back, and monochrome marks — SSH's,
-  GitHub's, SMHI's, YAML's — are now lightened by the surface they sit on rather
-  than by the theme of the page around it.
 
 ## [0.42.1] - 2026-09-11
 

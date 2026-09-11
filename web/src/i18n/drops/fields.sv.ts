@@ -20,6 +20,15 @@
 // conflict_columns and STRIPE_API_KEY are what the user types.
 
 export const SV_FIELD_TITLES: Record<string, string> = {
+  "Folder on the server": "Mapp på servern",
+  "Folder in the workspace": "Mapp i arbetsytan",
+  "Include subfolders": "Ta med undermappar",
+  "Delete what is not on the other side": "Ta bort det som inte finns på andra sidan",
+  "Max files per run": "Max antal filer per körning",
+  "Create the folder if it isn't there": "Skapa mappen om den inte finns",
+  "If it isn't there": "Om den inte finns",
+  "Move to": "Flytta till",
+  "Replace a file already there": "Ersätt en fil som redan finns",
   Command: "Kommando",
   "If the command exits non-zero":
     "Om kommandot avslutas med en kod som inte är noll",
@@ -368,6 +377,30 @@ export const SV_FIELD_TITLES: Record<string, string> = {
 };
 
 export const SV_FIELD_HELP: Record<string, string> = {
+  "Whether to bring the server's folder down into the workspace, or push the workspace folder up to the server. The side you copy FROM is never changed.": "Om serverns mapp ska hämtas ner till arbetsytan, eller om arbetsytans mapp ska skickas upp till servern. Sidan du kopierar FRÅN ändras aldrig.",
+  "The remote folder. Leave blank to use the folder set on the server.": "Fjärrmappen. Lämna tomt för att använda mappen som är angiven på servern.",
+  "The workspace folder this keeps in step with the server's.": "Mappen i arbetsytan som hålls i takt med serverns.",
+  "Shell-style pattern a file name must match, e.g. \"*.csv\". Case-insensitive. Leave blank for every file. Files that don't match are ignored on both sides — including by 'Delete what is not on the other side', which will not remove something it was told not to look at.": "Mönster i skalstil som ett filnamn måste matcha, t.ex. \"*.csv\". Skiftlägesokänsligt. Lämna tomt för alla filer. Filer som inte matchar ignoreras på båda sidor — även av 'Ta bort det som inte finns på andra sidan', som inte tar bort något den blivit tillsagd att inte titta på.",
+  "Copy the folder's whole tree. Turn it off to sync only the files sitting directly in it.": "Kopiera mappens hela träd. Stäng av för att bara synka filerna som ligger direkt i den.",
+  "Remove files from the destination that are no longer on the source, making this a true mirror. Off by default: it is also what empties a folder when a pattern is wrong, and the files it removes are not recoverable from here.": "Ta bort filer på målet som inte längre finns på källan, vilket gör det här till en riktig spegling. Avstängt som standard: det är också det som tömmer en mapp när ett mönster är fel, och filerna den tar bort går inte att få tillbaka härifrån.",
+  "How many files one run may transfer. What is left over is picked up by the next run — a sync resumes by its nature, because everything already moved is skipped.": "Hur många filer en körning får överföra. Det som blir över tas av nästa körning — en synk återupptas av sig själv, eftersom allt som redan flyttats hoppas över.",
+  "Hard deadline for the whole sync, in milliseconds.": "Hård tidsgräns för hela synken, i millisekunder.",
+  "A file that has already gone usually means something else is working the same folder, so this fails by default. Choose 'Carry on' when this step runs after something that may have moved it already.": "En fil som redan är borta betyder oftast att något annat arbetar i samma mapp, så det här misslyckas som standard. Välj 'Fortsätt' när steget körs efter något som kan ha flyttat den redan.",
+  "A file that has already gone usually means something else is working the same folder, so this fails by default. Choose 'Carry on' when this step runs after something that may have removed it already, and a second attempt should be quiet rather than loud.": "En fil som redan är borta betyder oftast att något annat arbetar i samma mapp, så det här misslyckas som standard. Välj 'Fortsätt' när steget körs efter något som kan ha tagit bort den redan, och ett andra försök ska vara tyst i stället för högljutt.",
+  "A folder to move the file into, keeping its name — or a full path ending in a file name to rename it at the same time.": "En mapp att flytta filen till, med namnet kvar — eller en fullständig sökväg som slutar med ett filnamn för att byta namn samtidigt.",
+  "Create the destination folder when it doesn't exist yet, which is what makes a dated archive folder work without a step of its own. Turn it off to fail instead, when the folder existing is the thing you want checked.": "Skapa målmappen när den inte finns än, vilket är det som får en datummärkt arkivmapp att fungera utan ett eget steg. Stäng av för att misslyckas i stället, när det är just mappens existens du vill ha kontrollerad.",
+  "Folder to resolve a bare file name against. Leave blank to use the folder set on the server.": "Mapp att tolka ett ensamt filnamn mot. Lämna tomt för att använda mappen som är angiven på servern.",
+  "Hard deadline for the delete, in milliseconds.": "Hård tidsgräns för borttagningen, i millisekunder.",
+  "Hard deadline for the move, in milliseconds.": "Hård tidsgräns för flytten, i millisekunder.",
+  "Move onto an existing file. Off by default because the file already there is simply lost — turn it on only where the destination is a scratch name you own.": "Flytta ovanpå en fil som finns. Avstängt som standard eftersom filen som redan ligger där helt enkelt går förlorad — slå på det bara där målet är ett eget arbetsnamn.",
+  "Which file to delete — a full remote path, or just a name to take it from the folder. Overridden by the 'File' input when connected.": "Vilken fil som ska tas bort — en fullständig fjärrsökväg, eller bara ett namn för att hämta den ur mappen. Åsidosätts av ingången 'Fil' när den är kopplad.",
+  "Which file to move — a full remote path, or just a name to take it from the folder. Overridden by the 'File' input when connected.": "Vilken fil som ska flyttas — en fullständig fjärrsökväg, eller bara ett namn för att hämta den ur mappen. Åsidosätts av ingången 'Fil' när den är kopplad.",
+  "Which saved server to use. Leave blank to use the single connection from the SFTP integration page. Manage them on the Servers page; the SSH step picks from the same list.": "Vilken sparad server som ska användas. Lämna tomt för att använda den enda anslutningen från SFTP-integrationssidan. Du hanterar dem på sidan Servrar; SSH-steget väljer ur samma lista.",
+  "How many files one check may take. The oldest waiting ones go first, in arrival order, so a burst bigger than this is delayed rather than skipped.": "Hur många filer en kontroll får ta. Äldsta väntande går först, i ankomstordning, så en skur större än så här fördröjs i stället för att hoppas över.",
+  "How often to check the folder once the flow is published. Leave blank to only check when you press Run (for testing).": "Hur ofta mappen ska kontrolleras när flödet är publicerat. Lämna tomt för att bara kontrollera när du trycker på Kör (för test).",
+  "Shell-style pattern the file name must match, e.g. \"*.csv\". Case-insensitive. Leave blank to fire for every file.": "Mönster i skalstil som filnamnet måste matcha, t.ex. \"*.csv\". Skiftlägesokänsligt. Lämna tomt för att utlösa för varje fil.",
+  "Which remote folder to watch. Leave blank to use the folder set on the server.": "Vilken fjärrmapp som ska bevakas. Lämna tomt för att använda mappen som är angiven på servern.",
+  "Which saved server to watch. Leave blank to use the single connection from the SFTP integration page. Manage them on the Servers page; the SSH step picks from the same list.": "Vilken sparad server som ska bevakas. Lämna tomt för att använda den enda anslutningen från SFTP-integrationssidan. Du hanterar dem på sidan Servrar; SSH-steget väljer ur samma lista.",
   "What to run, as you would type it into a shell on that server. Connect the 'Command' input instead to have an earlier step build it.":
     "Det som ska köras, så som du skulle skriva det i ett skal på den servern. Koppla in ingången Kommando i stället om ett tidigare steg ska bygga det.",
   "Which of the org's saved servers to run this on. Set them up on the Servers page — the address, the login and the host key live there, never in the flow. The SFTP steps pick from the same list.":
@@ -1525,6 +1558,10 @@ export const SV_FIELD_HELP: Record<string, string> = {
 };
 
 export const SV_ENUM_LABELS: Record<string, string> = {
+  "Server → workspace": "Server → arbetsyta",
+  "Workspace → server": "Arbetsyta → server",
+  "Carry on — there is nothing to delete": "Fortsätt — det finns inget att ta bort",
+  "Carry on — there is nothing to move": "Fortsätt — det finns inget att flytta",
   "Emit everything": "Skicka ut allt",
   "Record what's there, emit nothing": "Registrera det som finns, skicka inget",
   "Any change": "Alla ändringar",
