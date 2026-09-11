@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-09-11
+
 ### Added
 
 - **"When an email arrives" is a trigger now, not an assembly.** Searching a
