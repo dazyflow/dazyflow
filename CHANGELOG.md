@@ -43,6 +43,15 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   known_hosts line. A server is tried the moment it is saved, because saving is
   not the same as working.
 
+### Fixed
+
+- **SSH wears its own mark again.** It was dropped in 0.42.1 because the mark
+  vanished into the violet Connect bar, which was the wrong half to remove: the
+  bar is violet in BOTH themes, while the rule that lightens a monochrome logo
+  follows the page theme. So the logo is back, and monochrome marks — SSH's,
+  GitHub's, SMHI's, YAML's — are now lightened by the surface they sit on rather
+  than by the theme of the page around it.
+
 ## [0.42.1] - 2026-09-11
 
 ### Fixed

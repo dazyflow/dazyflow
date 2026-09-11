@@ -5166,6 +5166,7 @@ button.warning:hover:not(:disabled) {
   object-fit: contain;
   flex-shrink: 0;
 }
+
 .editor-issues-btn {
   display: inline-flex;
   align-items: center;
@@ -5634,6 +5635,25 @@ img[src$="/brands/yaml.svg"] {
 :root[data-theme="dark"] img[src$="/brands/smhi.svg"],
 :root[data-theme="dark"] img[src$="/brands/ssh.svg"],
 :root[data-theme="dark"] img[src$="/brands/yaml.svg"] {
+  filter: invert(1);
+}
+/* Those inversions follow the PAGE theme, which is right wherever the mark sits
+   on the page's own background — and wrong on the two Connect surfaces, which
+   are violet in BOTH themes (measured: #6d28d9 light, #470696 dark). A mark is
+   an <img>, so unlike the glyph beside it, it cannot take the surface's colour
+   on its own, and a monochrome one disappears into the bar.
+
+   Repeating invert(1) where the rule above already applies it is deliberate:
+   one declaration wins either way, so the mark is inverted once rather than
+   flipped back to black in dark theme. */
+.dz-node-setup img[src$="/brands/github.svg"],
+.dz-node-setup img[src$="/brands/smhi.svg"],
+.dz-node-setup img[src$="/brands/ssh.svg"],
+.dz-node-setup img[src$="/brands/yaml.svg"],
+.inspector-connect-cta img[src$="/brands/github.svg"],
+.inspector-connect-cta img[src$="/brands/smhi.svg"],
+.inspector-connect-cta img[src$="/brands/ssh.svg"],
+.inspector-connect-cta img[src$="/brands/yaml.svg"] {
   filter: invert(1);
 }
 

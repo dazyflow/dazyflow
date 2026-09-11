@@ -36,11 +36,7 @@ func TestSSHRun_Registered(t *testing.T) {
 	if !ok {
 		t.Fatal("ssh_run is not registered")
 	}
-	// No brand mark: SSH is a protocol, like SFTP next door, and the OpenSSH
-	// ring of dots read as a loading spinner at card size and vanished on the
-	// violet Connect banner. The lucide terminal glyph takes its colour from
-	// whatever it sits on.
-	if m.Integration != integration || m.BrandLogo != "" || m.Icon != "terminal" {
+	if m.Integration != integration || m.BrandLogo != "/brands/ssh.svg" {
 		t.Errorf("manifest identity wrong: %+v", m)
 	}
 	// Running a command changes the server, so a resumed run must not silently

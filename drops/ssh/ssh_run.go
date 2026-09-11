@@ -57,6 +57,7 @@ func init() {
 			Integration: integration,
 			Category:    "system",
 			Icon:        "terminal",
+			BrandLogo:   "/brands/ssh.svg",
 			Color:       brandColor,
 			Provider:    "internal",
 			Tags: []string{
