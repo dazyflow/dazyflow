@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.41.11] - 2026-09-11
+
 ### Added
 
 - **A flow can start from the calendar.** Google Calendar could be read,
