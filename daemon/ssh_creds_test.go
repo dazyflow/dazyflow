@@ -4,9 +4,12 @@
 package daemon
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
+
+	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/dazyflow/dazyflow/core"
 )
@@ -215,9 +218,79 @@ func TestSSHCredsAPI_RefusesWithoutAStore(t *testing.T) {
 		{"PUT", "/api/v1/ssh/credentials/acct"},
 		{"DELETE", "/api/v1/ssh/credentials/acct"},
 		{"POST", "/api/v1/ssh/credentials/acct/verify"},
+		{"POST", "/api/v1/ssh/host-key"},
+		{"POST", "/api/v1/ssh/keypair"},
 	} {
 		if rw := h.do(t, tc.method, tc.path, map[string]any{"host": "h"}); rw.Code != http.StatusNotImplemented {
 			t.Errorf("%s %s without a store = %d, want 501", tc.method, tc.path, rw.Code)
 		}
+	}
+}
+
+// The guide's Generate button. The pair has to be usable by the two things that
+// consume it: putSSHCredential parses the private half before storing it, and a
+// server's authorized_keys takes the public half verbatim.
+func TestSSHKeypairAPI_MakesAStorablePair(t *testing.T) {
+	t.Parallel()
+	h := newSecretsHarness(t)
+
+	rw := h.do(t, "POST", "/api/v1/ssh/keypair", map[string]any{"comment": "dazyflow web-1"})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("keypair = %d, want 200: %s", rw.Code, rw.Body.String())
+	}
+	var got struct {
+		PrivateKey string `json:"private_key"`
+		PublicKey  string `json:"public_key"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	signer, err := gossh.ParsePrivateKey([]byte(got.PrivateKey))
+	if err != nil {
+		t.Fatalf("private half does not parse: %v", err)
+	}
+	pub, comment, _, _, err := gossh.ParseAuthorizedKey([]byte(got.PublicKey))
+	if err != nil {
+		t.Fatalf("public half is not an authorized_keys line: %v", err)
+	}
+	if comment != "dazyflow web-1" {
+		t.Errorf("comment = %q, want the one asked for", comment)
+	}
+	if gossh.FingerprintSHA256(pub) != gossh.FingerprintSHA256(signer.PublicKey()) {
+		t.Error("the halves do not belong together")
+	}
+
+	ctx := core.WithTenant(t.Context(), "t")
+	if err := putSSHCredential(ctx, h.gw.EncryptedSecrets, "t", "web-1", sshCredInput{
+		Host: "h", Username: "u", PrivateKey: strings.TrimSpace(got.PrivateKey),
+	}); err != nil {
+		t.Errorf("a generated key is not storable: %v", err)
+	}
+}
+
+// A scan dials an address of the caller's choosing, so a port that is not a
+// port is refused before anything is opened.
+func TestSSHHostKeyAPI_RefusesNonsense(t *testing.T) {
+	t.Parallel()
+	h := newSecretsHarness(t)
+
+	if rw := h.do(t, "POST", "/api/v1/ssh/host-key", map[string]any{"host": "h", "port": "no"}); rw.Code != http.StatusBadRequest {
+		t.Errorf("a non-numeric port = %d, want 400", rw.Code)
+	}
+	// An address nobody answers on is an answer, not a failure: ok:false so the
+	// guide can say what happened next to the field.
+	rw := h.do(t, "POST", "/api/v1/ssh/host-key", map[string]any{"host": "", "port": ""})
+	if rw.Code != http.StatusOK {
+		t.Fatalf("a blank host = %d, want 200 with ok:false", rw.Code)
+	}
+	var got struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.OK || got.Error == "" {
+		t.Errorf("blank host = %+v, want ok:false with a reason", got)
 	}
 }

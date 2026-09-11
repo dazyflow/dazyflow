@@ -11,6 +11,7 @@ import {
   nodeSetupNeeded,
   missingConnectionApps,
   setupDestination,
+  connectedIntegrations,
 } from "./requiredConnections";
 import type { ConnectionField, Manifest, OAuthProviderStatus } from "../types";
 
@@ -351,7 +352,7 @@ describe("nodeSetupNeeded — named servers", () => {
         type: "object",
         properties: {
           account: blankIsConnection
-            ? { type: "string", format: "ssh-account", x_blank_connection: true }
+            ? { type: "string", format: "ssh-account", x_blank_connection: "sftp" }
             : { type: "string", format: "ssh-account" },
         },
       },
@@ -389,6 +390,13 @@ describe("nodeSetupNeeded — named servers", () => {
 
   it("does not ask an SFTP step for a connection it isn't using", () => {
     expect(nodeSetupNeeded(sftp, { account: "bank-sftp" }, [], [], ["bank-sftp"])).toBeNull();
+  });
+
+  it("reads the configured connections off the secret names", () => {
+    expect([
+      ...connectedIntegrations(["conn.sftp.host", "conn.sftp.username", "conn.claude.api_key", "MY_TOKEN"]),
+    ]).toEqual(["sftp", "claude"]);
+    expect(connectedIntegrations(null).size).toBe(0);
   });
 
   it("still asks for the SFTP connection when a step names no server", () => {

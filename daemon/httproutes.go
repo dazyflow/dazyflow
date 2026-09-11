@@ -221,6 +221,8 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/ssh/credentials/{account}", h.requireAuth(secretsapi.putSSHCredMe))
 	mux.HandleFunc("DELETE /api/v1/ssh/credentials/{account}", h.requireAuth(secretsapi.deleteSSHCredMe))
 	mux.HandleFunc("POST /api/v1/ssh/credentials/{account}/verify", h.requireAuth(secretsapi.verifySSHCredMe))
+	mux.HandleFunc("POST /api/v1/ssh/host-key", h.requireAuth(secretsapi.scanSSHHostKeyMe))
+	mux.HandleFunc("POST /api/v1/ssh/keypair", h.requireAuth(secretsapi.generateSSHKeyMe))
 
 	mux.HandleFunc("GET /api/v1/git/mirror", h.requireAuth(gitmirror.getGitMirrorMe))
 	mux.HandleFunc("PUT /api/v1/git/mirror", h.requireAuth(gitmirror.putGitMirrorMe))

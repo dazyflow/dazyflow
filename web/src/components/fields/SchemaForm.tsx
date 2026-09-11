@@ -91,6 +91,9 @@ type Props = {
   tokenLabels?: TokenLabels;
   missingKeys?: Iterable<string>;
   geoRunCoordinate?: string;
+  // Integration slugs whose own connection is set up. A field whose blank
+  // falls back to one needs to know whether there is anything to fall back to.
+  connectedIntegrations?: Set<string>;
   // What a long field's expanded window shows beside the editor, asked for by
   // param key. The form holds the second pane and knows nothing about what
   // goes in it — a template has a picture to show, a script has nothing — so
@@ -107,6 +110,7 @@ type FormCtx = {
   missingKeys?: Set<string>;
   wired?: Set<string>;
   geoRunCoordinate?: string;
+  connectedIntegrations?: Set<string>;
   previewFor?: (key: string) => React.ReactNode;
 };
 
@@ -128,13 +132,14 @@ export function SchemaForm({
   tokenLabels,
   missingKeys,
   geoRunCoordinate,
+  connectedIntegrations,
   previewFor,
 }: Props) {
   const { t } = useTranslation();
   const wired = new Set(wiredKeys ?? []);
   const omit = new Set(omitKeys ?? []);
   const missing = new Set(missingKeys ?? []);
-  const formCtx: FormCtx = { workspace, accountPicker, references, extraReferenceItems, tokenLabels, missingKeys: missing, wired, geoRunCoordinate, previewFor };
+  const formCtx: FormCtx = { workspace, accountPicker, references, extraReferenceItems, tokenLabels, missingKeys: missing, wired, geoRunCoordinate, connectedIntegrations, previewFor };
   // Unreachable as the product stands; kept so a new caller cannot break it.
   if (schema.type !== "object" || !schema.properties) {
     return (
@@ -274,9 +279,10 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
         <SSHCredAccountField
           value={(value as string) ?? ""}
           // Blank is meaningful on the SFTP steps: it is the single
-          // pre-existing connection those flows already use. Everywhere else
-          // it means no server has been chosen yet.
-          allowConnection={schema.x_blank_connection === true}
+          // pre-existing connection those flows already use — but only while
+          // that connection exists. Everywhere else, and there, it means no
+          // server has been chosen yet.
+          connectionSlug={schema.x_blank_connection}
           onChange={onChange}
         />
       </FieldWrap>
@@ -3487,16 +3493,20 @@ function AccountField({
 // and picking the wrong server is the mistake this field exists to prevent.
 function SSHCredAccountField({
   value,
-  allowConnection,
+  connectionSlug,
   onChange,
 }: {
   value: string;
-  allowConnection: boolean;
+  connectionSlug?: string;
   onChange: (v: unknown) => void;
 }) {
   const { t } = useTranslation();
   const { token } = useAuth();
+  const { connectedIntegrations } = useFormCtx();
   const [creds, setCreds] = useState<SSHCredential[] | null>(null);
+  // Blank falls back to the integration's own connection, but only while that
+  // connection exists; until it does, blank points at nothing.
+  const hasConnection = !!connectionSlug && !!connectedIntegrations?.has(connectionSlug);
 
   useEffect(() => {
     if (!token) return;
@@ -3537,7 +3547,7 @@ function SSHCredAccountField({
             no servers saved there is nothing else in here: naming one would
             name a server that does not exist. */}
         <option value="">
-          {allowConnection
+          {hasConnection
             ? t("sshCreds.useConnection")
             : creds !== null && names.length === 0
               ? t("sshCreds.noneYet")

@@ -208,9 +208,9 @@ export type JSONSchema = {
   // A fixed language for a script box, when the step runs only one.
   x_lang?: string;
   x_columns_source?: "collection";
-  // A blank ssh-account picks the integration's own single connection
-  // rather than meaning "nothing chosen yet".
-  x_blank_connection?: boolean;
+  // Slug of the integration whose own single connection a blank ssh-account
+  // falls back to. Absent, a blank means "nothing chosen yet".
+  x_blank_connection?: string;
 };
 
 export type Permission =

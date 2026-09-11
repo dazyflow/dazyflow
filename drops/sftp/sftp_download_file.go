@@ -60,7 +60,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"account":{"type":"string","title":"Server","format":"ssh-account","x_blank_connection":true,"description":"Which saved server to use. Leave blank to use the single connection from the SFTP integration page — the way this step worked before saved servers existed. Manage them on the Servers page; the SSH step picks from the same list."},
+					"account":{"type":"string","title":"Server","format":"ssh-account","x_blank_connection":"sftp","description":"Which saved server to use. Leave blank to use the single connection from the SFTP integration page — the way this step worked before saved servers existed. Manage them on the Servers page; the SSH step picks from the same list."},
 					"directory":{"type":"string","title":"Folder","description":"Folder to resolve a bare file name against. Leave blank to use the folder set on the SFTP page."},
 					"path":{"type":"string","title":"File","examples":["/incoming/statement.csv"],"description":"Which file to fetch — a full remote path, or just a name to take it from the folder. Overridden by the 'File' input when connected."},
 					"save_into":{"type":"string","title":"Save into","format":"workspace-path","description":"Workspace folder to save the file in, so it outlives the run. Leave blank to keep it in the run's scratch area — fine when a later step reads or files it."},

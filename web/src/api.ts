@@ -862,6 +862,22 @@ export const api = {
       "POST",
       `/ssh/credentials/${encodeURIComponent(account)}/verify`,
     ),
+  // What a server offers, before a credential exists to verify. Resolves with
+  // ok:false rather than throwing: an address nobody answers on is an answer.
+  scanSSHHostKey: (token: string, host: string, port: string) =>
+    request<{
+      ok: boolean;
+      error?: string;
+      fingerprint?: string;
+      key_type?: string;
+      known_hosts?: string;
+    }>(token, "POST", "/ssh/host-key", { host, port }),
+  // The private half is saved with the rest of the form; the public half is
+  // what goes into the server's authorized_keys.
+  generateSSHKey: (token: string, comment: string) =>
+    request<{ private_key: string; public_key: string }>(token, "POST", "/ssh/keypair", {
+      comment,
+    }),
   getGitMirror: (token: string) => request<GitMirror>(token, "GET", "/git/mirror"),
   // The remote must be an SSH URL.
   putGitMirror: (

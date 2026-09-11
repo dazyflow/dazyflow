@@ -88,6 +88,7 @@ type Props = {
   providers?: OAuthProviderStatus[] | null;
   onConnect?: () => void;
   setupNeeded?: SetupNeed;
+  connectedIntegrations?: Set<string>;
   running?: boolean;
   cancelling?: boolean;
   onStopRun?: () => void;
@@ -133,6 +134,7 @@ export function Inspector({
   providers,
   onConnect,
   setupNeeded,
+  connectedIntegrations,
   running,
   cancelling,
   onStopRun,
@@ -599,6 +601,7 @@ export function Inspector({
               value={currentParams}
               workspace={workspace}
               accountPicker={accountPicker}
+              connectedIntegrations={connectedIntegrations}
               wiredKeys={wiredPorts}
               omitKeys={
                 d.moduleID === "render_table"

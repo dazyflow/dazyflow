@@ -89,6 +89,7 @@ import {
   nodeSetupNeeded,
   missingConnectionApps,
   setupDestination,
+  connectedIntegrations,
   type SetupNeed,
 } from "../../lib/requiredConnections";
 import { mimeCompatible, spawnPort, portsConnectable, inputHasRoom, connectionHint, PASS_PORT } from "../../lib/ports";
@@ -1658,6 +1659,8 @@ function EditorInner() {
     }
     return out;
   }, [nodes, paramsByID, providers, secrets, sshAccounts, disabledNodes]);
+
+  const connectedApps = useMemo(() => connectedIntegrations(secrets), [secrets]);
 
   const orphanedNodeIDs = useMemo(() => {
     if (nodes.length < 2) return [] as string[];
@@ -4304,6 +4307,7 @@ function EditorInner() {
           setupNeeded={
             inspectorSelected ? setupNeededByNode.get(inspectorSelected.id) : undefined
           }
+          connectedIntegrations={connectedApps}
           running={running || !!lockedRunID}
           cancelling={cancelling}
           onStopRun={stopRun}

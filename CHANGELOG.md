@@ -10,6 +10,29 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Added
+
+- **Adding a server is a guide now, not a form of nine fields.** Setting one up
+  meant knowing which of "private key / passphrase / password / fingerprint /
+  known_hosts" applied to you, and filling in the right ones. The Servers page
+  now asks three questions instead: the server, how it signs in, and whether you
+  trust it. **Paste SSH key**, **Import from file** and **Generate new SSH key**
+  are three named buttons rather than one box you are expected to fill from
+  somewhere else. Generate makes an ed25519 pair, keeps the private half, and
+  shows the public line to add to the server's authorized_keys.
+
+- **The host key is fetched on the screen that needs it.** Host-key checking has
+  no default and cannot be turned off, so the only way to learn a server's
+  fingerprint used to be to save a credential, watch it refuse, and read the
+  value out of the failure. **Check the server** now asks the server directly —
+  no credential, no authentication, the handshake stops at the key — and shows
+  the fingerprint to compare against what your provider published before you
+  accept it. Ed25519 is asked for first, because that is the key providers
+  publish; left to chance a server offers its ecdsa key instead and an honest
+  comparison looks like an attack. Accepting stores both the fingerprint and the
+  known_hosts line. A server is tried the moment it is saved, because saving is
+  not the same as working.
+
 ## [0.42.1] - 2026-09-11
 
 ### Fixed

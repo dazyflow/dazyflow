@@ -397,3 +397,76 @@ func (h *secretsAPI) sshCredsReady(rw http.ResponseWriter, p core.Principal, per
 	}
 	return true
 }
+
+type scanHostKeyBody struct {
+	Host string `json:"host"`
+	Port string `json:"port"`
+}
+
+// scanSSHHostKeyMe is POST /api/v1/ssh/host-key — what the server offers, for
+// an address that need not be saved yet.
+//
+// The partner of verifySSHCredMe, and the reason the setup guide can ask for a
+// host key at the moment it is needed rather than after a deliberate failure.
+// It reads a key; it does not trust one. Nothing is stored, and the operator
+// still has to accept the fingerprint against what their provider published.
+func (h *secretsAPI) scanSSHHostKeyMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	// Dialling an address of the caller's choosing, like verify: write.
+	if !h.sshCredsReady(rw, p, core.PermSecretWrite) {
+		return
+	}
+	body, ok := decodeRequestJSON[scanHostKeyBody](rw, r)
+	if !ok {
+		return
+	}
+	port, err := sshutil.ParsePort(body.Port)
+	if err != nil {
+		writeAPIError(rw, http.StatusBadRequest, "invalid_port", err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), sshVerifyTimeout)
+	defer cancel()
+	key, err := sshutil.ScanHostKey(ctx, body.Host, port)
+	if err != nil {
+		writeJSON(rw, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	h.audit(r.Context(), p, "ssh.hostkey.scan", strings.TrimSpace(body.Host), "")
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"ok":          true,
+		"fingerprint": key.Fingerprint,
+		"key_type":    key.Type,
+		"known_hosts": key.KnownHosts,
+	})
+}
+
+type generateKeyBody struct {
+	Comment string `json:"comment"`
+}
+
+// generateSSHKeyMe is POST /api/v1/ssh/keypair — a new ed25519 pair.
+//
+// The private half comes back so it can be saved with the rest of the form in
+// one step, the same way a pasted key is sent; it is never stored by this call.
+// The public half is the whole point: it is what the operator adds to the
+// server's authorized_keys, and until they do, the credential cannot sign in.
+func (h *secretsAPI) generateSSHKeyMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+	if !h.sshCredsReady(rw, p, core.PermSecretWrite) {
+		return
+	}
+	body, ok := decodeRequestJSON[generateKeyBody](rw, r)
+	if !ok {
+		return
+	}
+	comment := strings.TrimSpace(body.Comment)
+	if comment == "" {
+		comment = "dazyflow"
+	}
+	priv, pub, err := sshutil.GenerateKeyPair(comment)
+	if err != nil {
+		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	h.audit(r.Context(), p, "ssh.keypair.generate", comment, "")
+	writeJSON(rw, http.StatusOK, map[string]any{"private_key": priv, "public_key": pub})
+}

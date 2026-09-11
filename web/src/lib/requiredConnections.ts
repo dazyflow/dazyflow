@@ -114,6 +114,17 @@ function setupFor(manifest: Manifest): SetupNeed {
 export const setupPath = (need: Pick<SetupNeed, "slug" | "path">) =>
   need.path ?? `/apps/${need.slug}`;
 
+// Which integrations have their own connection set up, read off the conn.
+// secret names the editor already holds.
+export function connectedIntegrations(secrets: string[] | null): Set<string> {
+  const out = new Set<string>();
+  for (const name of secrets ?? []) {
+    const parts = name.split(".");
+    if (parts.length >= 3 && parts[0] === "conn" && parts[1]) out.add(parts[1]);
+  }
+  return out;
+}
+
 // The SSH and SFTP steps share the org's named servers, which live on their own
 // admin page rather than behind an Apps card.
 const SERVERS_PATH = "/admin/ssh-credentials";
