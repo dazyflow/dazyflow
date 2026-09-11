@@ -21,11 +21,13 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:          "build_yaml",
-			Version:     "1.0",
-			Label:       "Write YAML",
-			Subtitle:    "Rows into YAML text",
-			Icon:        "file-code",
+			ID:       "build_yaml",
+			Version:  "1.0",
+			Label:    "Write YAML",
+			Subtitle: "Rows into YAML text",
+			Icon:     "file-code",
+			// The format's own mark, as on Read YAML.
+			BrandLogo:   "/brands/yaml.svg",
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "yaml", "export", "rows", "config", "serialize"},

@@ -17,11 +17,15 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:          "parse_json",
-			Version:     "1.0",
-			Label:       "Read JSON",
-			Subtitle:    "Read fields from text",
-			Icon:        "braces",
+			ID:       "parse_json",
+			Version:  "1.0",
+			Label:    "Read JSON",
+			Subtitle: "Read fields from text",
+			Icon:     "braces",
+			// The format's own mark: Read JSON, Read CSV, Read XML and Read YAML
+			// are otherwise four near-identical cards, told apart only by a glyph
+			// and a word. See also drops/value/json.go.
+			BrandLogo:   "/brands/json.svg",
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "json", "parse", "rows", "etl"},

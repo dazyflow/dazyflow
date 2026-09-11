@@ -42,8 +42,11 @@ func init() {
 			Label:    "Read a web page",
 			Subtitle: "Pick values out of HTML",
 			Icon:     "file-code",
-			Category: "transformation",
-			Provider: "internal",
+			// The shield says "a web page" at 28px in a way file-code does not —
+			// and the glyph was shared with Read YAML until both took their own.
+			BrandLogo: "/brands/html5.svg",
+			Category:  "transformation",
+			Provider:  "internal",
 			Tags: []string{
 				"transform", "html", "parse", "scrape", "scraping", "selector", "css",
 				"web", "extract", "rows", "table",

@@ -16,11 +16,14 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:          "build_json",
-			Version:     "1.0",
-			Label:       "Write JSON",
-			Subtitle:    "Rows into JSON text",
-			Icon:        "braces",
+			ID:       "build_json",
+			Version:  "1.0",
+			Label:    "Write JSON",
+			Subtitle: "Rows into JSON text",
+			Icon:     "braces",
+			// The format's own mark, as on Read JSON — the write side of the
+			// family is as hard to tell apart as the read side.
+			BrandLogo:   "/brands/json.svg",
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "json", "export", "rows", "etl", "serialize", "api"},

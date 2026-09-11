@@ -15,11 +15,16 @@ import (
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:          "json",
-			Version:     "1.0",
-			Label:       "JSON",
-			Color:       "#888",
-			Icon:        "braces",
+			ID:      "json",
+			Version: "1.0",
+			Label:   "JSON",
+			Color:   "#888",
+			Icon:    "braces",
+			// The format's own mark rather than the generic braces glyph: this is
+			// the card you reach for when you mean "a JSON value", and on a canvas
+			// of thirty steps the logo says so before the label is read. The lucide
+			// icon stays as the fallback for anywhere the asset does not load.
+			BrandLogo:   "/brands/json.svg",
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"json", "object", "array", "constant", "literal", "blocks"},

@@ -24,11 +24,15 @@ const maxYAMLDocuments = 1000
 func init() {
 	engine.Register(engine.NativeDrop{
 		Manifest: core.Manifest{
-			ID:          "parse_yaml",
-			Version:     "1.0",
-			Label:       "Read YAML",
-			Subtitle:    "YAML text into rows",
-			Icon:        "file-code",
+			ID:       "parse_yaml",
+			Version:  "1.0",
+			Label:    "Read YAML",
+			Subtitle: "YAML text into rows",
+			Icon:     "file-code",
+			// The format's own mark, as on Read JSON: file-code was also Read a
+			// web page's glyph, so the two cards were telling each other apart by
+			// their labels alone.
+			BrandLogo:   "/brands/yaml.svg",
 			Category:    "transformation",
 			Provider:    "internal",
 			Tags:        []string{"transform", "yaml", "parse", "rows", "config", "etl"},
