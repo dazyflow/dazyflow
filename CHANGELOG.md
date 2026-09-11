@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.42.1] - 2026-09-11
+
 ### Fixed
 
 - **The server picker no longer names a server you never saved.** The SSH step
