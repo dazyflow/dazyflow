@@ -12,6 +12,14 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Added
 
+- **A long per-row script says how far it has got.** It reported nothing until
+  the whole list was done, which on a few thousand rows is a long silence —
+  especially as the console stops at 200 lines. It now reports through the run,
+  and the step's description states the three limits that were only in the code
+  before: the console's 200 lines, the absent `Intl`, and the sandbox shared by
+  every row (which is what lets a running total survive from one row to the
+  next).
+
 - **The script editor numbers its lines.** The console says which line of a
   script printed each message, which is only worth knowing if the script can be
   read the same way — and it could not: finding line 23 meant counting. Every
@@ -20,6 +28,38 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   vertically and staying put when a long line is scrolled sideways.
 
 ### Fixed
+
+- **A JavaScript step could run long past its time limit.** The watchdog fired
+  once. In per-row mode with failures routed aside, the first row to overrun
+  spent the whole step's clock — and every row after it then ran with nothing
+  left to stop it: a step set to 200 milliseconds was measured taking nine and
+  a half seconds, and reporting success. The deadline is now spent once and
+  stays spent, and a timeout (or a cancelled run) fails the step instead of
+  being filed as that row's fault, which it never was.
+
+- **A script that returned a Promise silently returned nothing.** An `async`
+  function or a `.then()` chain handed back an empty object, with no error and
+  no console line, and the step passed `{}` on to whatever came next. There is
+  no event loop in the sandbox and there cannot be one, so the step now says so
+  instead — and its description says it up front, alongside the other things
+  that are not in there.
+
+- **The console emptied itself exactly when it was worth reading.** Print
+  statements go into a script because it is failing, and a failing step dropped
+  every line it had recorded: the run left an error and a blank console. The
+  lines now travel with the failure.
+
+- **"on row 3" and `index: 2` were the same row.** The message counted from one
+  and the routed row counted from zero, so filtering the failed rows on the
+  number in the error picked the wrong row. The message now names both.
+
+- **Errors blamed the script for things the script did not do.** Reaching into
+  an input that was never wired up read as a TypeError about `undefined`;
+  wiring a single value into a per-row step read as a JSON decoder complaining
+  about a stray character; using `input` where the step wanted `row` said only
+  that `input` was not defined. Each now says what was actually wrong, and the
+  two variable names name the mode they belong to. A parse error keeps its line
+  and column and loses the internal filename.
 
 - **A printed line no longer starts six spaces in.** Every console line held a
   column open for the level it was printed at — and `console.log`, which is

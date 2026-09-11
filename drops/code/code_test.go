@@ -198,3 +198,163 @@ func TestTimeoutIsClamped(t *testing.T) {
 		}
 	}
 }
+
+// --- Fixes found in QA. Each of these shipped broken once. ---
+
+// A timeout is not a row's fault. Routing one would report success with the
+// offending row rejected — and, because the watchdog fires once, let every row
+// after it run with no limit left to stop it. Measured at 9.5 seconds under a
+// 200ms limit before this.
+func TestEach_TimeoutIsNeverRoutedAsARowFailure(t *testing.T) {
+	rows := []any{
+		map[string]any{"n": 0}, map[string]any{"n": 1},
+		map[string]any{"n": 2}, map[string]any{"n": 3},
+	}
+	start := time.Now()
+	res := run(t, map[string]any{
+		"mode": "each", "on_row_error": "route", "timeout_ms": 200,
+		"code": `if (row.n === 0) { for (;;) {} } return row;`,
+	}, rows)
+
+	failsWith(t, res, "timeout")
+	if !strings.Contains(res.Error.Message, "row 1") {
+		t.Errorf("error = %q, want the row named", res.Error.Message)
+	}
+	// The rows after the overrun must not have run at all.
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Errorf("step took %v under a 200ms limit — the deadline stopped being enforced", elapsed)
+	}
+}
+
+// The sandbox's clock is spent once. Anything asked of it afterwards has to
+// fail the same way rather than run unmeasured.
+func TestEach_RowsAfterATimeoutDoNotRunUnbounded(t *testing.T) {
+	rows := []any{map[string]any{"n": 0}, map[string]any{"n": 1}, map[string]any{"n": 2}}
+	start := time.Now()
+	res := run(t, map[string]any{
+		"mode": "each", "on_row_error": "route", "timeout_ms": 150,
+		"code": `if (row.n === 0) { for (;;) {} }
+let x = 0; for (let i = 0; i < 40000000; i++) x += i; return { x: x };`,
+	}, rows)
+	failsWith(t, res, "timeout")
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Errorf("step took %v — later rows ran without a deadline", elapsed)
+	}
+}
+
+// An async function or a .then() chain hands back a Promise, which exported as
+// an empty object: the step succeeded and passed `{}` on, silently.
+func TestOnce_APromiseIsRefusedRatherThanEmptied(t *testing.T) {
+	for name, code := range map[string]string{
+		"async function": "async function main() { return { total: 42 }; }\nreturn main();",
+		"then chain":     `return Promise.resolve([1, 2, 3]).then(a => a.length);`,
+		"bare promise":   `return Promise.resolve(5);`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			res := run(t, map[string]any{"code": code}, nil)
+			failsWith(t, res, "eval")
+			if !strings.Contains(res.Error.Message, "Promise") {
+				t.Errorf("error = %q, want it to name the Promise", res.Error.Message)
+			}
+		})
+	}
+}
+
+// Print statements are added to a script BECAUSE it is failing, so the console
+// has to survive the failure that prompted it.
+func TestFailure_KeepsTheConsole(t *testing.T) {
+	res := run(t, map[string]any{
+		"code": "console.log('checkpoint 1');\nconsole.warn('about to break');\nthrow new Error('boom');",
+	}, nil)
+	failsWith(t, res, "eval")
+	logs, ok := res.Output["logs"].Inline.([]any)
+	if !ok || len(logs) != 2 {
+		t.Fatalf("logs on failure = %#v, want the two lines printed before the throw", res.Output["logs"].Inline)
+	}
+	first, _ := logs[0].(map[string]any)
+	if first["message"] != "checkpoint 1" || first["line"] != 1 {
+		t.Errorf("first line = %v", first)
+	}
+}
+
+// "on row 3" and `index: 2` are the same row. Saying only one of them left a
+// reader filtering the failed list on the wrong number.
+func TestEach_NamesTheRowTheSameWayInBothPlaces(t *testing.T) {
+	rows := []any{map[string]any{"ok": true}, map[string]any{"bad": true}}
+	code := `if (row.bad) throw new Error('nope'); return row;`
+
+	failing := run(t, map[string]any{"mode": "each", "code": code}, rows)
+	failsWith(t, failing, "eval")
+	if !strings.Contains(failing.Error.Message, "row 2 (index 1)") {
+		t.Errorf("error = %q, want both numberings", failing.Error.Message)
+	}
+
+	routed := run(t, map[string]any{"mode": "each", "on_row_error": "route", "code": code}, rows)
+	failed, _ := routed.Output["failed"].Inline.([]any)
+	if len(failed) != 1 {
+		t.Fatalf("failed = %#v", routed.Output["failed"].Inline)
+	}
+	if got := failed[0].(map[string]any)["index"]; got != 1 {
+		t.Errorf("failed index = %v, want 1 — the row the message called 'row 2'", got)
+	}
+}
+
+// The two variable names swap with the mode, which makes using the wrong one
+// the most likely mistake this step invites.
+func TestErrors_PointAtTheModeWhenTheVariableIsWrong(t *testing.T) {
+	each := run(t, map[string]any{"mode": "each", "code": `return input.length;`},
+		[]any{map[string]any{"v": 1}})
+	failsWith(t, each, "eval")
+	if !strings.Contains(each.Error.Message, "Once per row") {
+		t.Errorf("error = %q, want the mode named", each.Error.Message)
+	}
+
+	once := run(t, map[string]any{"code": `return row.v;`}, []any{map[string]any{"v": 1}})
+	failsWith(t, once, "eval")
+	if !strings.Contains(once.Error.Message, "Once, over everything") {
+		t.Errorf("error = %q, want the mode named", once.Error.Message)
+	}
+}
+
+// A TypeError about `undefined` blamed the script for a missing edge.
+func TestErrors_SayWhenNothingIsWiredIn(t *testing.T) {
+	res := run(t, map[string]any{"code": `return input.name;`}, nil)
+	failsWith(t, res, "eval")
+	if !strings.Contains(res.Error.Message, "wired into 'Input'") {
+		t.Errorf("error = %q, want the unwired input named", res.Error.Message)
+	}
+}
+
+// A decoder's complaint about a stray character described the symptom of a
+// wiring mistake rather than the mistake.
+func TestEach_ExplainsWhatAListMeans(t *testing.T) {
+	res := run(t, map[string]any{"mode": "each", "code": `return row;`}, "just a string")
+	failsWith(t, res, "bad_input")
+	for _, want := range []string{"needs a list of rows", "Once, over everything"} {
+		if !strings.Contains(res.Error.Message, want) {
+			t.Errorf("error = %q, missing %q", res.Error.Message, want)
+		}
+	}
+}
+
+// Rows share a sandbox, so a global outlives the row that set it. That is a
+// documented affordance now — a running total across rows — and this pins it,
+// because it is equally a way to leak state by accident.
+func TestEach_GlobalsSurviveFromRowToRow(t *testing.T) {
+	got := ok(t, run(t, map[string]any{
+		"mode": "each",
+		"code": `if (typeof running === 'undefined') { running = 0; }
+running += row.v;
+return { running: running };`,
+	}, []any{
+		map[string]any{"v": 1}, map[string]any{"v": 2}, map[string]any{"v": 3},
+	}))
+	list, _ := got.([]any)
+	if len(list) != 3 {
+		t.Fatalf("rows out = %#v", got)
+	}
+	last, _ := list[2].(map[string]any)
+	if last["running"] != int64(6) && last["running"] != 6.0 {
+		t.Errorf("running total = %v (%T), want 6", last["running"], last["running"])
+	}
+}

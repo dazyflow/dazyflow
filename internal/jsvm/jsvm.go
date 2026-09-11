@@ -118,7 +118,7 @@ func New(ctx context.Context, code string, opt Options) (*Sandbox, error) {
 	}
 	prog, err := goja.Compile(scriptName, "(function(){"+code+"\n})()", false)
 	if err != nil {
-		return nil, fmt.Errorf("the script does not parse: %s", cleanErr(err))
+		return nil, fmt.Errorf("the script does not parse: %s", cleanCompileErr(err))
 	}
 
 	s := &Sandbox{rt: goja.New(), prog: prog, stop: make(chan struct{})}
@@ -158,6 +158,14 @@ func (s *Sandbox) interrupt(err error) {
 // yields nil, which callers read as "no result" (the per-row mode drops the
 // row).
 func (s *Sandbox) Eval(vars map[string]any) (any, error) {
+	// The deadline is spent once and stays spent. goja clears its interrupt
+	// flag as soon as it reports one, and the watchdog fires a single time, so
+	// without this check the SECOND Eval after a timeout would run with no
+	// limit at all — which is exactly what a per-row script that routes its
+	// failures does. A 200ms limit was measured taking 9.5 seconds that way.
+	if why, ok := s.why.Load().(error); ok && why != nil {
+		return nil, why
+	}
 	for k, v := range vars {
 		if err := s.rt.Set(k, v); err != nil {
 			return nil, fmt.Errorf("cannot pass %q into the script: %v", k, err)
@@ -202,12 +210,21 @@ func result(v goja.Value) (any, error) {
 		return nil, nil
 	}
 	exported := v.Export()
+	// An async function or a .then() chain hands back a Promise, which exports
+	// as an object with nothing in it — so the step used to succeed and emit
+	// `{}`, silently, to whatever came next. There is no event loop here to
+	// settle it and there cannot be one, so say so instead of shipping the
+	// empty object.
+	if _, isPromise := exported.(*goja.Promise); isPromise {
+		return nil, errors.New("the script returned a Promise, and this sandbox has no event loop to " +
+			"settle it — there is no async/await here, so do the work synchronously and return the value itself")
+	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&limitWriter{w: &buf, left: MaxResultBytes})
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(exported); err != nil {
 		if errors.Is(err, errTooBig) {
-			return nil, fmt.Errorf("the script returned more than %d bytes", MaxResultBytes)
+			return nil, fmt.Errorf("the script returned more than %d MB of data", MaxResultBytes>>20)
 		}
 		return nil, errors.New("the script returned something that is not data — " +
 			"return an object, an array, a string, a number or a boolean " +
@@ -308,6 +325,19 @@ func (l *limitWriter) Write(p []byte) (int, error) {
 
 // cleanErr keeps a runtime's error to one line: goja attaches a JS stack to
 // exceptions, which belongs in a debugger, not in a node's error message.
+// cleanCompileErr keeps the line and column, which are the useful half of a
+// parse error, and drops the two halves that are not: the internal script name
+// (the author never named a file) and goja's "(and N more errors)" tail, which
+// counts consequences of the first mistake rather than mistakes.
+func cleanCompileErr(err error) string {
+	s := cleanErr(err)
+	s = strings.Replace(s, scriptName+": ", "", 1)
+	if i := strings.Index(s, " (and "); i >= 0 && strings.HasSuffix(s, "errors)") {
+		s = s[:i]
+	}
+	return s
+}
+
 func cleanErr(v any) string {
 	s := strings.TrimSpace(fmt.Sprint(v))
 	if i := strings.IndexByte(s, '\n'); i >= 0 {

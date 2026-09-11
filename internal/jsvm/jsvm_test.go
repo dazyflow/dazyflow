@@ -160,8 +160,10 @@ func TestEval_RejectsWhatIsNotData(t *testing.T) {
 
 func TestEval_ResultSizeIsCapped(t *testing.T) {
 	_, err := run(t, `return "x".repeat(9 * 1024 * 1024);`, nil, Options{Timeout: 5 * time.Second})
-	if err == nil || !strings.Contains(err.Error(), "bytes") {
-		t.Fatalf("err = %v, want a size-limit error", err)
+	// Stated in MB: the cap is a decision about how much data a step may carry,
+	// and 8388608 is not a number anyone made that decision in.
+	if err == nil || !strings.Contains(err.Error(), "8 MB") {
+		t.Fatalf("err = %v, want a size-limit error in MB", err)
 	}
 }
 

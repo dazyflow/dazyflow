@@ -58,12 +58,18 @@ func init() {
 				"it to reshape a payload, do arithmetic across a list, or build a value no other step can. " +
 				"'Once per row' runs your code for each row instead, with the row as `row` and its position " +
 				"as `index`, and collects what you return into a new list; return nothing for a row and that " +
-				"row is dropped, which makes this a filter as well as a transform.\n\n" +
+				"row is dropped, which makes this a filter as well as a transform. Every row runs in the same " +
+				"sandbox, so a value you leave on a global outlives the row that set it — which is how you " +
+				"carry a running total from one row to the next.\n\n" +
 				"It runs inside Dazyflow with no way out: no network, no files, no libraries to import. " +
 				"That is deliberate — call an API with the Web request step and read files with the file " +
-				"steps, then wire the result in here. Scripts are held to a few seconds by default (raise " +
-				"'Time limit' up to 30 seconds) and to 8 MB of returned data. If you need a real runtime, a " +
-				"library, or a network, use 'Run on your machine' instead.\n\n" +
+				"steps, then wire the result in here. There is no clock to wait on either: no timers, and no " +
+				"promises or async/await, so do the work in order and return the value itself rather than a " +
+				"promise of one. `Intl` is absent too, which means `toLocaleString('sv-SE')` throws instead " +
+				"of formatting — write the format you want, or let the Date & time step do it. Scripts are " +
+				"held to a few seconds by default (raise 'Time limit' up to 30 seconds), to 8 MB of returned " +
+				"data, and to the first 200 console lines. If you need a real runtime, a library, or a " +
+				"network, use 'Run on your machine' instead.\n\n" +
 				"For a single value — a bit of arithmetic, one field pulled out — the Expression step is " +
 				"lighter, and 'Add a calculated column' does the same per row without any code at all.",
 			Summary: "Run sandboxed JavaScript over the input, once or per row, and emit what it returns.",
@@ -111,7 +117,7 @@ func init() {
 				"type":"object",
 				"properties":{
 					"code":{"type":"string","format":"script","x_lang":"javascript","title":"JavaScript","description":"The script. 'input' is the value wired into 'in' (or 'row' and 'index' in per-row mode); whatever you return leaves on 'out'. console.log writes to the step's console and to the 'logs' output, each line carrying its level and the line of script that printed it. No network, no files, no imports. Overridden by the 'Script' input."},
-					"mode":{"type":"string","enum":["once","each"],"enumNames":["Once, over everything","Once per row"],"default":"once","title":"Run it","description":"Once, with the whole input as 'input' — or once per row, with each row as 'row' and its position as 'index'. Per-row collects what you return into a list, and drops any row you return nothing for."},
+					"mode":{"type":"string","enum":["once","each"],"enumNames":["Once, over everything","Once per row"],"default":"once","title":"Run it","description":"Once, with the whole input as 'input' — or once per row, with each row as 'row' and its position as 'index'. Per-row collects what you return into a list, and drops any row you return nothing for. Every row runs in the same sandbox, so a global you set outlives the row that set it — useful for a running total, and worth knowing if you did not mean to."},
 					"on_row_error":{"type":"string","enum":["fail","route"],"enumNames":["Fail the step","Send the row to 'Failed rows'"],"default":"fail","title":"If a row's script throws","description":"Per-row mode only. Fail the step on the first row that throws, or keep going and send that row — with its error — out the 'Failed rows' output. Routing lets 199 good rows through when row 7 is malformed."},
 					"timeout_ms":{"type":"integer","default":5000,"minimum":100,"maximum":30000,"title":"Time limit (ms)","description":"How long the script may run in total, per-row runs included. Past it the step fails rather than holding the flow up. Maximum 30000."}
 				},
@@ -162,9 +168,35 @@ func executeCode(ctx context.Context, job core.Job, progress chan<- core.Progres
 	}
 	value, err := sandbox.Eval(map[string]any{"input": input})
 	if err != nil {
-		return fail(job, err, ""), nil
+		return fail(job, err, "", log, hint(err, mode, hasInput(job))), nil
 	}
 	return emit(job, value, log), nil
+}
+
+// hasInput reports whether anything is wired into 'in'. A script reaching into
+// an input that was never connected throws a TypeError about `undefined`, which
+// blames the script for what is really a missing edge.
+func hasInput(job core.Job) bool {
+	ref, ok := job.Input["in"]
+	return ok && ref.Inline != nil
+}
+
+// hint is the sentence that turns a true error into an actionable one. Each
+// case is a mistake the step's own shape invites: the two variable names swap
+// with the mode, and the input is `undefined` whenever nothing is wired in.
+func hint(err error, mode string, wired bool) string {
+	msg := err.Error()
+	switch {
+	case mode == "each" && strings.Contains(msg, "input is not defined"):
+		return " — this step is set to \"Once per row\", where the row is `row` and its position is `index`; " +
+			"`input` only exists in \"Once, over everything\""
+	case mode == "once" && (strings.Contains(msg, "row is not defined") || strings.Contains(msg, "index is not defined")):
+		return " — this step is set to \"Once, over everything\", where the whole input is `input`; " +
+			"`row` only exists in \"Once per row\""
+	case !wired && strings.Contains(msg, "of undefined"):
+		return " — nothing is wired into 'Input', so `input` is undefined"
+	}
+	return ""
 }
 
 // eachRow runs the script once per row and collects the results. A row the
@@ -184,18 +216,25 @@ func executeCode(ctx context.Context, job core.Job, progress chan<- core.Progres
 func eachRow(job core.Job, sandbox *jsvm.Sandbox, input any, log *logRecorder, progress chan<- core.Progress) (core.Result, error) {
 	list, err := rows.Normalize(input, rows.Options{Cap: capRows, AllowSingleObject: true})
 	if err != nil {
-		return params.Err(job, "bad_input", err.Error()), nil
+		return params.Err(job, "bad_input", perRowInput(input, err)), nil
 	}
 	routeErrors := params.StringDefault(job.Params, "on_row_error", "fail") == "route"
 
 	out := make([]any, 0, len(list))
 	var failed []any
 	dropped := 0
+	every := progressEvery(len(list))
 	for i, row := range list {
 		value, err := sandbox.Eval(map[string]any{"row": row, "index": i})
 		if err != nil {
-			if !routeErrors {
-				return fail(job, err, fmt.Sprintf(" on row %d", i+1)), nil
+			// A timeout or a cancellation is not this row's fault and not
+			// something the next row can survive: the sandbox's clock is spent,
+			// so every row after this one would be "failed" too. Routing them
+			// would turn one overrun into a step that reports success with
+			// every row rejected — and used to let the rest of the rows run
+			// with no time limit left to stop them.
+			if !routeErrors || errors.Is(err, jsvm.ErrTimeout) || errors.Is(err, jsvm.ErrCancelled) {
+				return fail(job, err, atRow(i), log, hint(err, "each", true)), nil
 			}
 			failed = append(failed, map[string]any{"index": i, "row": row, "error": err.Error()})
 			continue
@@ -205,6 +244,14 @@ func eachRow(job core.Job, sandbox *jsvm.Sandbox, input any, log *logRecorder, p
 			continue
 		}
 		out = append(out, value)
+		// Something to watch on a long list. Without this the console is the
+		// only sign of life until the whole thing finishes, and the console
+		// stops at 200 lines.
+		if every > 0 && (i+1)%every == 0 {
+			params.EmitProgress(progress, job, float64(i+1)/float64(len(list)),
+				fmt.Sprintf("row %d of %d · kept %d · dropped %d · failed %d",
+					i+1, len(list), len(out), dropped, len(failed)))
+		}
 	}
 
 	params.EmitProgress(progress, job, 1, rowTally(len(list), len(out), dropped, len(failed)))
@@ -216,6 +263,37 @@ func eachRow(job core.Job, sandbox *jsvm.Sandbox, input any, log *logRecorder, p
 		res.Output["failed"] = core.Ref{MIME: "application/json", Inline: failedRows(failed)}
 	}
 	return res, nil
+}
+
+// atRow names a row the same way in both places it can be named. The error
+// message counts from 1, the way a person counts rows; 'failed' carries the
+// 0-based index, the way a list is addressed. Saying both once here is what
+// stops "on row 3" and `index: 2` looking like two different rows.
+func atRow(i int) string { return fmt.Sprintf(" on row %d (index %d)", i+1, i) }
+
+// progressEvery spaces updates out to about twenty over the whole list: enough
+// to see it moving, not so many that the run stream carries more progress than
+// work. Zero for a list short enough that the final tally says it all.
+func progressEvery(n int) int {
+	if n < 40 {
+		return 0
+	}
+	return n / 20
+}
+
+// perRowInput explains what "Once per row" needed and did not get. The
+// underlying error is a decoder's ("invalid character 'j'"), which describes
+// the symptom of a wiring mistake rather than the mistake.
+func perRowInput(input any, err error) string {
+	switch input.(type) {
+	case string:
+		return "\"Once per row\" needs a list of rows, and the input is a single piece of text — " +
+			"wire a list in, or set \"Run it\" to \"Once, over everything\" and read it as `input`"
+	case float64, int, int64, bool:
+		return fmt.Sprintf("\"Once per row\" needs a list of rows, and the input is a single %T — "+
+			"wire a list in, or set \"Run it\" to \"Once, over everything\" and read it as `input`", input)
+	}
+	return err.Error()
 }
 
 func failedRows(xs []any) []any {
@@ -251,16 +329,31 @@ func capRows(n int) error {
 }
 
 // fail maps a sandbox failure onto the error codes the run view explains.
-// where names the row in per-row mode and is empty otherwise.
-func fail(job core.Job, err error, where string) core.Result {
+// where names the row in per-row mode and is empty otherwise; extra carries a
+// hint when the step can tell what the author meant.
+//
+// The console goes out WITH the failure. Print statements are added to a script
+// because it is failing, so dropping them on failure emptied the console at the
+// one moment it was worth reading — the lines were streamed live and then had
+// nowhere to live afterwards.
+func fail(job core.Job, err error, where string, log *logRecorder, extra string) core.Result {
+	var res core.Result
 	switch {
 	case errors.Is(err, jsvm.ErrTimeout):
-		return params.Err(job, "timeout", "the script ran past its time limit"+where)
+		res = params.Err(job, "timeout", "the script ran past its time limit"+where)
 	case errors.Is(err, jsvm.ErrCancelled):
-		return params.Err(job, "cancelled", "the run was cancelled")
+		res = params.Err(job, "cancelled", "the run was cancelled")
 	default:
-		return params.Err(job, "eval", err.Error()+where)
+		res = params.Err(job, "eval", err.Error()+where+extra)
 	}
+	if rows := log.rows(); len(rows) > 0 {
+		res.Output = map[string]core.Ref{"logs": {
+			MIME:    "application/json",
+			Inline:  rows,
+			Headers: []string{"index", "line", "level", "message"},
+		}}
+	}
+	return res
 }
 
 // emit types the output the way the Expression step does, so a script that
