@@ -14,6 +14,7 @@
 package sftp
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
@@ -24,7 +25,8 @@ import (
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
-	"github.com/dazyflow/dazyflow/internal/sftputil"
+	"github.com/dazyflow/dazyflow/drops/sshcreds"
+	"github.com/dazyflow/dazyflow/internal/sshutil"
 )
 
 const integration = "SFTP"
@@ -40,9 +42,11 @@ const brandColor = "#7c3aed"
 // takes the fields from whichever drop it finds first, so a drop declaring a
 // subset would render a page missing whatever it left out.
 //
-// One connection per tenant, like Postgres and Mailbox. Someone with a bank drop
-// box AND a supplier feed needs two, which this shape doesn't give them — the
-// named-credential store behind drops/git is the upgrade path if people ask.
+// One connection per tenant, like Postgres and Mailbox — and the reason the
+// `account` param now exists beside it: someone with a bank drop box AND a
+// supplier feed needs two, which this shape cannot give them. Named servers are
+// that upgrade, shared with the SSH step. This stays for the flows that predate
+// them, which keep working untouched; see sftpConfig for how the two meet.
 func connectionFields() []core.ConnectionField {
 	return []core.ConnectionField{
 		{Key: "host", Label: "Server", Required: true, Placeholder: "sftp.example.com"},
@@ -57,10 +61,47 @@ func connectionFields() []core.ConnectionField {
 	}
 }
 
-func configFromJob(job core.Job) (sftputil.Config, error) {
+// sftpConfig resolves which server this step talks to.
+//
+// Two eras coexist deliberately. A step with no `account` uses the single
+// connection from the SFTP integration page — what every flow saved before named
+// servers existed does, and what keeps them working with nothing to migrate. A
+// step naming an account reads the shared SSH/SFTP store instead, so one tenant
+// can reach the bank's drop box and a supplier's feed in the same flow.
+//
+// The engine guarantees the two cannot blend: a filled `account` suppresses
+// connection injection entirely, so none of the old connection's fields are
+// sitting in Params by the time we get here.
+func sftpConfig(ctx context.Context, job core.Job) (sshutil.Config, error) {
+	account := strings.TrimSpace(params.StringDefault(job.Params, "account", ""))
+	if account == "" {
+		return configFromJob(job)
+	}
+	cfg, configured, err := sshcreds.Get(ctx, account)
+	if err != nil {
+		return sshutil.Config{}, err
+	}
+	if !configured {
+		return sshutil.Config{}, fmt.Errorf("no saved server called %q — add it on the Servers page, or pick one that is already there", account)
+	}
+	if cfg.Username == "" {
+		return sshutil.Config{}, fmt.Errorf("the saved server %q has no username", account)
+	}
+	// The step's own folder wins over the server's default; the server's is the
+	// fallback, and the account's home directory the fallback for that.
+	if d := strings.TrimSpace(params.StringDefault(job.Params, "directory", "")); d != "" {
+		cfg.Directory = d
+	}
+	if strings.TrimSpace(cfg.Directory) == "" {
+		cfg.Directory = "."
+	}
+	return cfg, nil
+}
+
+func configFromJob(job core.Job) (sshutil.Config, error) {
 	host := strings.TrimSpace(params.StringDefault(job.Params, "host", ""))
 	if host == "" {
-		return sftputil.Config{}, fmt.Errorf("no SFTP server connected — set one up on the SFTP integration page")
+		return sshutil.Config{}, fmt.Errorf("no SFTP server connected — set one up on the SFTP integration page, or pick a saved server on this step")
 	}
 	// ConnectionFields inject the port as a string ("22"); a graph saved
 	// before the field existed may carry it as a number. Try the string form
@@ -71,11 +112,11 @@ func configFromJob(job core.Job) (sftputil.Config, error) {
 			portStr = strconv.Itoa(n)
 		}
 	}
-	port, err := sftputil.ParsePort(portStr)
+	port, err := sshutil.ParsePort(portStr)
 	if err != nil {
-		return sftputil.Config{}, err
+		return sshutil.Config{}, err
 	}
-	return sftputil.Config{
+	return sshutil.Config{
 		Host:        host,
 		Port:        port,
 		Username:    params.StringDefault(job.Params, "username", ""),

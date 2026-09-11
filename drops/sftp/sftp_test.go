@@ -15,7 +15,7 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/cursor"
 	"github.com/dazyflow/dazyflow/drops/internal/dropstest"
-	"github.com/dazyflow/dazyflow/internal/sftputil"
+	"github.com/dazyflow/dazyflow/internal/sshutil"
 )
 
 func TestMain(m *testing.M) { dropstest.EgressTestMain(m) }
@@ -26,7 +26,7 @@ func TestMain(m *testing.M) { dropstest.EgressTestMain(m) }
 // the private key.
 func TestSFTPDial_SSRFGuardBlocksPrivate(t *testing.T) {
 	dropstest.AssertSSRFBlocked(t, func() error {
-		_, err := sftputil.Dial(context.Background(), sftputil.Config{
+		_, err := sshutil.Dial(context.Background(), sshutil.Config{
 			Host: "127.0.0.1", Port: 22, Username: "u", Password: "p",
 			Fingerprint: "SHA256:whatever",
 		})
@@ -460,7 +460,7 @@ func TestSFTPUpload_NothingToUpload(t *testing.T) {
 func TestSFTPHostKey_UnverifiedServerFailsWithItsFingerprint(t *testing.T) {
 	s := startSFTP(t)
 
-	_, err := sftputil.Dial(context.Background(), sftputil.Config{
+	_, err := sshutil.Dial(context.Background(), sshutil.Config{
 		Host: s.host, Port: s.port, Username: testUser, Password: testPass,
 	})
 	if err == nil {
@@ -479,7 +479,7 @@ func TestSFTPHostKey_UnverifiedServerFailsWithItsFingerprint(t *testing.T) {
 func TestSFTPHostKey_WrongFingerprintIsRefused(t *testing.T) {
 	s := startSFTP(t)
 
-	_, err := sftputil.Dial(context.Background(), sftputil.Config{
+	_, err := sshutil.Dial(context.Background(), sshutil.Config{
 		Host: s.host, Port: s.port, Username: testUser, Password: testPass,
 		Fingerprint: "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 	})
@@ -498,7 +498,7 @@ func TestSFTPHostKey_FingerprintPrefixIsOptional(t *testing.T) {
 	s := startSFTP(t)
 
 	for _, fp := range []string{s.fingerprint, strings.TrimPrefix(s.fingerprint, "SHA256:")} {
-		c, err := sftputil.Dial(context.Background(), sftputil.Config{
+		c, err := sshutil.Dial(context.Background(), sshutil.Config{
 			Host: s.host, Port: s.port, Username: testUser, Password: testPass,
 			Fingerprint: fp,
 		})
@@ -514,7 +514,7 @@ func TestSFTPHostKey_FingerprintPrefixIsOptional(t *testing.T) {
 func TestSFTPDial_BadPasswordIsExplained(t *testing.T) {
 	s := startSFTP(t)
 
-	_, err := sftputil.Dial(context.Background(), sftputil.Config{
+	_, err := sshutil.Dial(context.Background(), sshutil.Config{
 		Host: s.host, Port: s.port, Username: testUser, Password: "wrong",
 		Fingerprint: s.fingerprint,
 	})
@@ -531,20 +531,20 @@ func TestSFTPDial_BadPasswordIsExplained(t *testing.T) {
 // the integration page.
 func TestSFTPVerify_CatchesAMistypedFolder(t *testing.T) {
 	s := startSFTP(t)
-	base := sftputil.Config{
+	base := sshutil.Config{
 		Host: s.host, Port: s.port, Username: testUser, Password: testPass,
 		Fingerprint: s.fingerprint,
 	}
 
 	ok := base
 	ok.Directory = "."
-	if err := sftputil.Verify(context.Background(), ok); err != nil {
+	if err := sshutil.Verify(context.Background(), ok); err != nil {
 		t.Fatalf("a good connection failed to verify: %v", err)
 	}
 
 	bad := base
 	bad.Directory = "/nope/missing"
-	err := sftputil.Verify(context.Background(), bad)
+	err := sshutil.Verify(context.Background(), bad)
 	if err == nil {
 		t.Fatal("a missing folder should fail verification")
 	}
@@ -555,7 +555,7 @@ func TestSFTPVerify_CatchesAMistypedFolder(t *testing.T) {
 
 // A cancelled context must return promptly rather than blocking on the
 // connection deadline — neither x/crypto/ssh nor pkg/sftp takes a context, so
-// cancellation arrives as a dead socket (sftputil.Dial's watcher).
+// cancellation arrives as a dead socket (sshutil.Dial's watcher).
 func TestSFTPList_RespectsCancelledContext(t *testing.T) {
 	s := startSFTP(t)
 	s.writeFile(t, "a.csv", "x")

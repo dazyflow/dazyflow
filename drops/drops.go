@@ -54,6 +54,7 @@ import (
 	_ "github.com/dazyflow/dazyflow/drops/slack"
 	_ "github.com/dazyflow/dazyflow/drops/smhi"
 	_ "github.com/dazyflow/dazyflow/drops/spotify"
+	_ "github.com/dazyflow/dazyflow/drops/ssh"
 	_ "github.com/dazyflow/dazyflow/drops/stripe"
 	_ "github.com/dazyflow/dazyflow/drops/ticketmaster"
 	_ "github.com/dazyflow/dazyflow/drops/transform"

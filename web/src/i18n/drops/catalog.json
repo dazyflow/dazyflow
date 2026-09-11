@@ -4559,12 +4559,14 @@
     "titles": [
       "File",
       "Folder",
-      "Save into"
+      "Save into",
+      "Server"
     ],
     "help": [
       "Folder to resolve a bare file name against. Leave blank to use the folder set on the SFTP page.",
       "Hard deadline for the transfer, in milliseconds. Raise it for large files.",
       "Which file to fetch — a full remote path, or just a name to take it from the folder. Overridden by the 'File' input when connected.",
+      "Which saved server to use. Leave blank to use the single connection from the SFTP integration page — the way this step worked before saved servers existed. Manage them on the Servers page; the SSH step picks from the same list.",
       "Workspace folder to save the file in, so it outlives the run. Leave blank to keep it in the run's scratch area — fine when a later step reads or files it."
     ],
     "connection": [
@@ -4604,14 +4606,16 @@
       "Folder",
       "Max files",
       "Only files like",
-      "Only new since last run"
+      "Only new since last run",
+      "Server"
     ],
     "help": [
       "Hard deadline for the listing, in milliseconds.",
       "How many files to bring back at most, oldest first.",
       "Shell-style pattern the file name must match, e.g. \"*.csv\". Case-insensitive. Leave blank to list every file.",
       "When on, each run emits only files that appeared since the previous run — nothing on the first run (it just remembers where the folder is up to). Turn this on when a published, polling flow acts on each file, so it doesn't re-process the folder every time. Leave off for ad-hoc listings that should return everything.",
-      "Which remote folder to list. Leave blank to use the folder set on the SFTP page. Overridden by the 'Folder' input."
+      "Which remote folder to list. Leave blank to use the folder set on the SFTP page. Overridden by the 'Folder' input.",
+      "Which saved server to use. Leave blank to use the single connection from the SFTP integration page — the way this step worked before saved servers existed. Manage them on the Servers page; the SSH step picks from the same list."
     ],
     "connection": [
       "/incoming",
@@ -4649,12 +4653,14 @@
     "titles": [
       "File to upload",
       "Folder",
-      "Name on the server"
+      "Name on the server",
+      "Server"
     ],
     "help": [
       "Hard deadline for the transfer, in milliseconds. Raise it for large files.",
       "Remote folder to upload into. Leave blank to use the folder set on the SFTP page.",
       "What to call the file once it's there. Leave blank to keep the name it already has. Overridden by the 'Name' input.",
+      "Which saved server to use. Leave blank to use the single connection from the SFTP integration page — the way this step worked before saved servers existed. Manage them on the Servers page; the SSH step picks from the same list.",
       "Workspace file to upload. Overridden by the 'File' input when connected."
     ],
     "connection": [
@@ -5079,6 +5085,43 @@
       "Path to the SQLite database file in your workspace (created if missing).",
       "The table to write rows into.",
       "Which columns to overwrite when a row already exists. Empty = leave existing rows untouched (insert-only)."
+    ]
+  },
+  "ssh_run": {
+    "description": "Run a command on a server over SSH and carry on with what it printed. Pick the server by name — they are configured once on the Servers page, so no address, username or key is ever written into a flow. Whatever the command prints comes back on 'out', its error output on 'Error output', and the status it exited with on 'Exit code'.\n\nA non-zero exit fails the step by default, with the command's error output attached. Set 'If the command exits non-zero' to carry on instead and branch on 'Exit code' — the way exit codes are meant to work, where 2 might mean \"nothing to do today\" rather than \"broken\".\n\nPass values in as environment variables — ${secret.NAME} for a credential, which reaches the server without being written into the flow or into the run's log. The value wired into 'in' arrives on the command's standard input. Wire 'Server address' to run the same command across a fleet: the chosen server's username and key are reused against each address, so give that credential a known_hosts covering every machine rather than a single fingerprint.\n\nThere is no terminal attached, so a command that stops to ask a question waits until the step's time runs out — use 'sudo -n' and a NOPASSWD rule rather than plain 'sudo'. The command runs in the account's shell, so it is written the way you would write it in a POSIX shell.",
+    "ports": [
+      "Command",
+      "Error output",
+      "Exit code",
+      "Input",
+      "Output",
+      "Pass-through",
+      "Server address"
+    ],
+    "label": "SSH",
+    "subtitle": "Run a command",
+    "integration": "SSH",
+    "titles": [
+      "Command",
+      "Environment variables",
+      "Give up after (seconds)",
+      "If the command exits non-zero",
+      "Keep at most (KB of output)",
+      "Run it in folder",
+      "Server"
+    ],
+    "help": [
+      "A command that exits non-zero has failed, and by default so does this step. Choose 'Carry on' and the step succeeds instead, with the code on the 'Exit code' output for the flow to branch on. This covers ONLY a command that ran and returned a code: a server that cannot be reached, a login the server refused, or a command that outran its timeout still fail the step, because there is no exit code to hand you and inventing one would send the flow down the wrong path.",
+      "Change to this folder first. The step fails rather than carrying on in the home directory if the folder isn't there. Leave blank for the account's home directory.",
+      "How long the command may run before the step gives up and asks the server to stop it. Raise it for backups and migrations; a command with no terminal to answer a prompt will otherwise sit here until this elapses.",
+      "How much of each of the two output streams to keep. A command that prints more still runs to completion — the extra is dropped rather than the command stopped, and the step says so.",
+      "Values the command reads from its environment — $NAME in a shell. Use ${secret.NAME} for anything sensitive: the value reaches the server but is never written into the flow, and is blanked out of the run's output and logs.",
+      "What to run, as you would type it into a shell on that server. Connect the 'Command' input instead to have an earlier step build it.",
+      "Which of the org's saved servers to run this on. Set them up on the Servers page — the address, the login and the host key live there, never in the flow. The SFTP steps pick from the same list."
+    ],
+    "enum_names": [
+      "Carry on — the flow checks the exit code",
+      "Fail this step"
     ]
   },
   "stripe_cancel_subscription": {

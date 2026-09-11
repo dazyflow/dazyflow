@@ -34,6 +34,16 @@ func injectConnectionDefaults(ctx context.Context, providers map[string]core.Sec
 		return
 	}
 	declared := declaredParamKeys(m.ParamsSchema)
+	// A step that names a credential account is not using the tenant-wide
+	// connection, so nothing from it may leak in. Without this an SFTP step
+	// pointed at the saved server "supplier" would still take its FOLDER from
+	// the old single connection whenever the author left that field blank —
+	// uploading to the bank's drop box instead. Only drops offering both models
+	// (today: SFTP, mid-migration) can hit it; for every other drop the account
+	// param belongs to OAuth and there are no connection fields to skip.
+	if declared["account"] && paramFilled(job.Params, "account") {
+		return
+	}
 	for _, f := range m.ConnectionFields {
 		if declared[f.Key] && paramFilled(job.Params, f.Key) {
 			continue

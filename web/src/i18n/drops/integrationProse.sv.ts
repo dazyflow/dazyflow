@@ -17,7 +17,7 @@ import type { DescriptionMap } from "../../lib/dropText";
 export const SV_INTEGRATION_PROSE: DescriptionMap = {
   "46elks.description": {
     en: "9bc17c9e",
-    sv: "Skicka SMS direkt från ett flöde via 46elks, en svensk meddelandeleverantör som är populär i hela Norden. Skicka från ett alfanumeriskt avsändarnamn (som \"Acme\") för envägsaviseringar — orderuppdateringar, påminnelser, verifieringskoder — eller från ett av dina 46elks-nummer när du vill att mottagaren ska kunna svara. Med en testkörningsknapp kan du validera ett meddelande utan att skicka det eller bli fakturerad.",
+    sv: 'Skicka SMS direkt från ett flöde via 46elks, en svensk meddelandeleverantör som är populär i hela Norden. Skicka från ett alfanumeriskt avsändarnamn (som "Acme") för envägsaviseringar — orderuppdateringar, påminnelser, verifieringskoder — eller från ett av dina 46elks-nummer när du vill att mottagaren ska kunna svara. Med en testkörningsknapp kan du validera ett meddelande utan att skicka det eller bli fakturerad.',
   },
   "46elks.tagline": {
     en: "59f0b527",
@@ -37,7 +37,7 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
   },
   "calendar.technical_notes": {
     en: "f05734c4",
-    sv: "Kontot — serveradress, användarnamn och lösenord (eller ett app-lösenord hos en leverantör med tvåfaktorsinloggning) — ställs in en gång här och matas in i varje Calendar-steg vid körning; lösenordet ligger i den krypterade hemlighetslagringen. Adressen kan vara en upptäcktsrot, ett principal, eller en enskild kalenders egen sökväg: klienten går från det din leverantör publicerade ner till kalendersamlingarna under, eftersom ingen användare kan förväntas veta vilket av dem de fått. Om kontot har flera kalendrar, ange den du vill använda — Testa anslutning listar dem om du inte gör det. Händelser kommer ut i samma form som Google Calendar-steget ger, så ett flöde flyttas mellan de två genom att byta steg. Tidsfönster tar samma relativa former (\"tomorrow\", \"+7d\", \"tomorrow+9h\"), tolkade i den tidszon du anger.",
+    sv: 'Kontot — serveradress, användarnamn och lösenord (eller ett app-lösenord hos en leverantör med tvåfaktorsinloggning) — ställs in en gång här och matas in i varje Calendar-steg vid körning; lösenordet ligger i den krypterade hemlighetslagringen. Adressen kan vara en upptäcktsrot, ett principal, eller en enskild kalenders egen sökväg: klienten går från det din leverantör publicerade ner till kalendersamlingarna under, eftersom ingen användare kan förväntas veta vilket av dem de fått. Om kontot har flera kalendrar, ange den du vill använda — Testa anslutning listar dem om du inte gör det. Händelser kommer ut i samma form som Google Calendar-steget ger, så ett flöde flyttas mellan de två genom att byta steg. Tidsfönster tar samma relativa former ("tomorrow", "+7d", "tomorrow+9h"), tolkade i den tidszon du anger.',
   },
   "chatgpt.description": {
     en: "c65b2822",
@@ -117,7 +117,7 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
   },
   "fortnox.technical_notes": {
     en: "0f749f7f",
-    sv: "Fortnox OAuth 2.0 (authorize hos apps.fortnox.se/oauth-v1) med scope per resurs — customer, invoice och companyinformation täcker de steg som finns. Token-ändpunkten använder client_secret_basic (uppgifterna i en HTTP Basic-rubrik), och refresh-tokens roterar vid varje förnyelse; daemonen sparar den roterade token och förnyar vid utgång, så långlivade flöden fortsätter fungera — men ett konto som stått stilla längre än Fortnox fönster för refresh-tokens (~31 dagar) måste anslutas om. Anrop och svar använder Fortnox singulara PascalCase-hölje ({\"Customer\":…}, {\"Invoice\":…}). Fortnox har ingen idempotensnyckel, så skapa-stegen gör inga automatiska omförsök (ett omförsök skulle ge dubbletter); och inga webhooks, så 'utlös vid betald faktura' byggs som Schema → Lista fakturor (filter=fullypaid) → För varje → dubblettrensning på DocumentNumber.",
+    sv: 'Fortnox OAuth 2.0 (authorize hos apps.fortnox.se/oauth-v1) med scope per resurs — customer, invoice och companyinformation täcker de steg som finns. Token-ändpunkten använder client_secret_basic (uppgifterna i en HTTP Basic-rubrik), och refresh-tokens roterar vid varje förnyelse; daemonen sparar den roterade token och förnyar vid utgång, så långlivade flöden fortsätter fungera — men ett konto som stått stilla längre än Fortnox fönster för refresh-tokens (~31 dagar) måste anslutas om. Anrop och svar använder Fortnox singulara PascalCase-hölje ({"Customer":…}, {"Invoice":…}). Fortnox har ingen idempotensnyckel, så skapa-stegen gör inga automatiska omförsök (ett omförsök skulle ge dubbletter); och inga webhooks, så \'utlös vid betald faktura\' byggs som Schema → Lista fakturor (filter=fullypaid) → För varje → dubblettrensning på DocumentNumber.',
   },
   "spotify.description": {
     en: "d0b8cc59",
@@ -253,7 +253,7 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
   },
   "klarna.description": {
     en: "025ffa4d",
-    sv: "Hantera dina Klarna-ordrar direkt från ett flöde. Klarna är den nordiska \"köp nu, betala senare\"-kassan, och det här är baksidan av den: slå upp en order, ta betalningen när varorna skickas (helt eller delvis), och återbetala en retur. Kombinera återbetalningen med ett godkännandesteg för det klassiska flödet \"nicka i Slack, återbetala sedan\", eller kontrollera en orders status innan du agerar på den.",
+    sv: 'Hantera dina Klarna-ordrar direkt från ett flöde. Klarna är den nordiska "köp nu, betala senare"-kassan, och det här är baksidan av den: slå upp en order, ta betalningen när varorna skickas (helt eller delvis), och återbetala en retur. Kombinera återbetalningen med ett godkännandesteg för det klassiska flödet "nicka i Slack, återbetala sedan", eller kontrollera en orders status innan du agerar på den.',
   },
   "klarna.tagline": {
     en: "9fe66b55",
@@ -273,7 +273,7 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
   },
   "mailbox.technical_notes": {
     en: "5b2e1008",
-    sv: "Mejlkontot — server, port, säkerhet (implicit TLS på 993 / STARTTLS på 143 / ingen), användarnamn, lösenord och standardmapp — ställs in en gång här och matas in i varje Mailbox-steg vid körning; lösenordet ligger i den krypterade hemlighetslagringen. Medvetet skilt från Email-anslutningen (SMTP), eftersom de två använder olika servrar. Läsningar använder EXAMINE och BODY.PEEK, så en sökning markerar aldrig mejl som lästa. \"Bara nya sedan förra körningen\" följer mappens egna UIDVALIDITY och UID i stället för en tidsstämpel, så en publicerad pollning agerar på varje mejl exakt en gång och återhämtar sig rent om mappen någon gång skapas om. Använd \"Testa anslutning\" för att bekräfta server, inloggning och mappnamn innan du sparar. Observera att Microsoft 365 har stängt av lösenordsinloggning för IMAP: det kräver OAuth, vilket den här anslutningen ännu inte gör.",
+    sv: 'Mejlkontot — server, port, säkerhet (implicit TLS på 993 / STARTTLS på 143 / ingen), användarnamn, lösenord och standardmapp — ställs in en gång här och matas in i varje Mailbox-steg vid körning; lösenordet ligger i den krypterade hemlighetslagringen. Medvetet skilt från Email-anslutningen (SMTP), eftersom de två använder olika servrar. Läsningar använder EXAMINE och BODY.PEEK, så en sökning markerar aldrig mejl som lästa. "Bara nya sedan förra körningen" följer mappens egna UIDVALIDITY och UID i stället för en tidsstämpel, så en publicerad pollning agerar på varje mejl exakt en gång och återhämtar sig rent om mappen någon gång skapas om. Använd "Testa anslutning" för att bekräfta server, inloggning och mappnamn innan du sparar. Observera att Microsoft 365 har stängt av lösenordsinloggning för IMAP: det kräver OAuth, vilket den här anslutningen ännu inte gör.',
   },
   "mqtt.description": {
     en: "525c6395",
@@ -369,7 +369,7 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
   },
   "open-meteo.description": {
     en: "1d59e78f",
-    sv: "Läs vädret för vilken punkt som helst på kartan — kostnadsfritt för privat, icke-kommersiell användning, utan konto och API-nyckel. Ge ett steg en koordinat — skriven, eller inkopplad från en geokodning, ett formulärfält eller en enhets GPS — och få aktuellt väderläge (en sammanfattning på en rad, temperaturen och ett Clear/Rain/Snow-ord du kan förgrena på) eller en flerdygnsprognos. Bygg ett flöde som \"sms:a mig om det regnar i morgon\", en morgonbriefing eller en frostvarning för växthuset. För kommersiell användning lägger du till en API-nyckel, varpå den växlar till Open-Meteos betalda ändpunkt.",
+    sv: 'Läs vädret för vilken punkt som helst på kartan — kostnadsfritt för privat, icke-kommersiell användning, utan konto och API-nyckel. Ge ett steg en koordinat — skriven, eller inkopplad från en geokodning, ett formulärfält eller en enhets GPS — och få aktuellt väderläge (en sammanfattning på en rad, temperaturen och ett Clear/Rain/Snow-ord du kan förgrena på) eller en flerdygnsprognos. Bygg ett flöde som "sms:a mig om det regnar i morgon", en morgonbriefing eller en frostvarning för växthuset. För kommersiell användning lägger du till en API-nyckel, varpå den växlar till Open-Meteos betalda ändpunkt.',
   },
   "open-meteo.tagline": {
     en: "0c16c075",
@@ -393,7 +393,7 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
   },
   "openweather.description": {
     en: "61bbf141",
-    sv: "Läs vädret för vilken punkt som helst på kartan. Ge ett steg en koordinat — skriven, eller inkopplad från en geokodning, ett formulärfält eller en enhets GPS — och få aktuellt väderläge (en sammanfattning på en rad, temperaturen och ett Clear/Rain/Snow-ord du kan förgrena på) eller en 5-dygnsprognos. Bygg ett flöde som \"sms:a mig om det regnar i morgon\", en morgonbriefing eller en frostvarning för växthuset.",
+    sv: 'Läs vädret för vilken punkt som helst på kartan. Ge ett steg en koordinat — skriven, eller inkopplad från en geokodning, ett formulärfält eller en enhets GPS — och få aktuellt väderläge (en sammanfattning på en rad, temperaturen och ett Clear/Rain/Snow-ord du kan förgrena på) eller en 5-dygnsprognos. Bygg ett flöde som "sms:a mig om det regnar i morgon", en morgonbriefing eller en frostvarning för växthuset.',
   },
   "openweather.tagline": {
     en: "6b895a74",
@@ -424,8 +424,20 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
     sv: "Flytta filer till och från en server ditt team redan använder.",
   },
   "sftp.technical_notes": {
-    en: "afa387c4",
-    sv: "Servern — adress, port, användarnamn och antingen ett lösenord eller en SSH-privatnyckel — ställs in en gång här och matas in i varje SFTP-steg vid körning; lösenordet och nyckeln ligger i den krypterade hemlighetslagringen. Verifiering av värdnyckeln har ingen standard och går inte att stänga av: klistra in serverns \"SHA256:…\"-fingeravtryck (eller en known_hosts-rad), och till dess misslyckas Testa anslutning med det fingeravtryck servern faktiskt erbjöd, så att du kan kontrollera det och kopiera in det. Att acceptera vilken nyckel som helst skulle göra en tyst man-in-the-middle möjlig, och uppgifterna är vad den skulle samla in. \"Bara nya sedan förra körningen\" i Lista filer följer den senaste ändringstiden plus namnen som delar den sekunden, så ett flöde som släpper tjugo filer inom en sekund inte tappar de sista. En server per anslutning — en andra (en bank och en leverantör, säg) stöds inte ännu.",
+    en: "439522e1",
+    sv: "Servern — adress, port, användarnamn och antingen ett lösenord eller en privat SSH-nyckel — ställs in en gång här och matas in i varje SFTP-steg vid körning; lösenordet och nyckeln förvaras i det krypterade hemlighetslagret. Verifiering av värdnyckeln har ingen standard och går inte att stänga av: klistra in serverns ”SHA256:…”-fingeravtryck (eller en known_hosts-rad), och tills du gör det misslyckas Testa anslutning med det fingeravtryck servern faktiskt erbjöd, så att du kan stämma av det och kopiera in det. Att acceptera vilken nyckel som helst skulle göra en tyst man-in-the-middle möjlig, och det är inloggningsuppgifterna den skulle samla in. ”Bara nya sedan förra körningen” på Lista filer håller reda på den senaste ändringstiden plus namnen som delar den sekunden, så ett flöde som släpper tjugo filer inom en sekund inte tappar eftersläntrarna. En server per anslutning här, men ett steg är inte längre begränsat till den: sparade servrar på sidan Servrar är namngivna, det får finnas hur många som helst, och ett SFTP-steg väljer en med namn. Den här anslutningen är fortfarande vad ett steg använder när det inte namnger någon, så flöden byggda innan de fanns fungerar vidare oförändrat.",
+  },
+  "ssh.tagline": {
+    en: "999a0949",
+    sv: "Kör ett kommando på en av dina egna servrar.",
+  },
+  "ssh.description": {
+    en: "69dad2de",
+    sv: "Kör ett kommando på en server över SSH och gå vidare med det den skrev ut — starta om en tjänst, ta en säkerhetskopia, läs en logg, fråga hur fulla diskarna är. Det når allt som har en sshd och kräver inget installerat på maskinen, vilket är det som gör det till steget som fungerar på en apparat eller en burk du aldrig kommer få köra en agent på.",
+  },
+  "ssh.technical_notes": {
+    en: "b3c82b82",
+    sv: "Servrar namnges och ställs in en gång på sidan Servrar — adress, port, användarnamn och antingen ett lösenord eller en privat SSH-nyckel, förvarade i det krypterade hemlighetslagret — och ett steg väljer en med namn, så inget hamnar i ett flöde. SFTP-stegen väljer ur samma lista: det är samma maskin, samma inloggning och samma värdnyckel, och paret som visar det är att dumpa en databas över SSH och hämta filen över SFTP. Verifiering av värdnyckeln har ingen standard och går inte att stänga av: tills du klistrar in serverns ”SHA256:…”-fingeravtryck (eller en known_hosts-rad) misslyckas Testa anslutning med det fingeravtryck servern faktiskt erbjöd, så att du kan stämma av det och kopiera in det. Ingen TTY tilldelas, så ett kommando som stannar och frågar något — vanliga `sudo`, till exempel — väntar tills stegets tidsgräns i stället för att få svar; använd `sudo -n` med en NOPASSWD-regel. Miljövärden exporteras i skalet i stället för att skickas som SSH:s env-begäran, som en sshd med tom AcceptEnv tyst skulle kasta. En avslutningskod som inte är noll gör att steget misslyckas om du inte ber det fortsätta och förgrena på koden i stället, och varje utdataström har ett tak så att ett skenande kommando inte kan fylla körningsposten.",
   },
   "slack.description": {
     en: "5ab3ab5c",
@@ -481,7 +493,7 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
   },
   "mcp.technical_notes": {
     en: "ec20240d",
-    sv: "Verktygen läses vid handskakningen över streamable HTTP (MCP-revision 2025-11-25) och blir steg med id:t mcp:<server>:<verktyg>; ett verktygs argument blir stegets pinnar. Varje server tillhör den organisation som registrerade den och kan bara nås av den organisationens flöden. En server som slutar svara behåller sina steg beskrivna — de visar en \"Kräver anslutning\"-banner och vägrar att köra — så flöden som använder dem behåller sina kopplingar.",
+    sv: 'Verktygen läses vid handskakningen över streamable HTTP (MCP-revision 2025-11-25) och blir steg med id:t mcp:<server>:<verktyg>; ett verktygs argument blir stegets pinnar. Varje server tillhör den organisation som registrerade den och kan bara nås av den organisationens flöden. En server som slutar svara behåller sina steg beskrivna — de visar en "Kräver anslutning"-banner och vägrar att köra — så flöden som använder dem behåller sina kopplingar.',
   },
   "standard-library.description": {
     en: "086c5d7b",
@@ -517,7 +529,7 @@ export const SV_INTEGRATION_PROSE: DescriptionMap = {
   },
   "twilio.description": {
     en: "43d2e415",
-    sv: "Skicka SMS till vilken telefon som helst, direkt från ett flöde. Ta det när en avisering behöver landa i någons ficka — ett \"ordern är skickad\" eller en tidspåminnelse till en kund, en verifieringskod, ett jourlarm, eller ett tips i samma stund en trigger utlöses.",
+    sv: 'Skicka SMS till vilken telefon som helst, direkt från ett flöde. Ta det när en avisering behöver landa i någons ficka — ett "ordern är skickad" eller en tidspåminnelse till en kund, en verifieringskod, ett jourlarm, eller ett tips i samma stund en trigger utlöses.',
   },
   "twilio.tagline": {
     en: "0db066b3",

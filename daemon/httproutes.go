@@ -217,6 +217,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/git/credentials", h.requireAuth(secretsapi.listGitCredsMe))
 	mux.HandleFunc("PUT /api/v1/git/credentials/{account}", h.requireAuth(secretsapi.putGitCredMe))
 	mux.HandleFunc("DELETE /api/v1/git/credentials/{account}", h.requireAuth(secretsapi.deleteGitCredMe))
+	mux.HandleFunc("GET /api/v1/ssh/credentials", h.requireAuth(secretsapi.listSSHCredsMe))
+	mux.HandleFunc("PUT /api/v1/ssh/credentials/{account}", h.requireAuth(secretsapi.putSSHCredMe))
+	mux.HandleFunc("DELETE /api/v1/ssh/credentials/{account}", h.requireAuth(secretsapi.deleteSSHCredMe))
+	mux.HandleFunc("POST /api/v1/ssh/credentials/{account}/verify", h.requireAuth(secretsapi.verifySSHCredMe))
 
 	mux.HandleFunc("GET /api/v1/git/mirror", h.requireAuth(gitmirror.getGitMirrorMe))
 	mux.HandleFunc("PUT /api/v1/git/mirror", h.requireAuth(gitmirror.putGitMirrorMe))

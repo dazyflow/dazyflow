@@ -54,6 +54,7 @@ import (
 	"github.com/dazyflow/dazyflow/drops/sheets"
 	"github.com/dazyflow/dazyflow/drops/slack"
 	"github.com/dazyflow/dazyflow/drops/spotify"
+	"github.com/dazyflow/dazyflow/drops/sshcreds"
 	"github.com/dazyflow/dazyflow/drops/stripe"
 	"github.com/dazyflow/dazyflow/drops/trigger/gform"
 	"github.com/dazyflow/dazyflow/engine"
@@ -323,6 +324,9 @@ func main() {
 	runners, runnerTasks := setupRunners(ctx, pgPool, encryptedSecrets)
 	if encryptedSecrets != nil {
 		es := encryptedSecrets
+		// One store, two drops: the SSH step runs commands on these servers and
+		// the SFTP steps move files over the same connection.
+		sshcreds.SetLookup(es.LookupSSHCredential)
 		gitdrop.SetGitCredLookup(func(ctx context.Context, account string) (gitdrop.GitCred, error) {
 			rc, err := es.LookupGitCredential(ctx, account)
 			if err != nil {

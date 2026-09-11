@@ -45,6 +45,7 @@ import type {
   ScheduleEntry,
   PublishInfo,
   GitCredential,
+  SSHCredential,
   MCPServer,
   MCPServerInput,
   StepSourceUsage,
@@ -827,6 +828,40 @@ export const api = {
     ),
   deleteGitCredential: (token: string, account: string) =>
     request<void>(token, "DELETE", `/git/credentials/${encodeURIComponent(account)}`),
+  listSSHCredentials: (token: string) =>
+    request<{ credentials: SSHCredential[] }>(token, "GET", "/ssh/credentials"),
+  putSSHCredential: (
+    token: string,
+    account: string,
+    body: {
+      host?: string;
+      port?: string;
+      username?: string;
+      password?: string;
+      private_key?: string;
+      passphrase?: string;
+      fingerprint?: string;
+      known_hosts?: string;
+      directory?: string;
+    },
+  ) =>
+    request<void>(
+      token,
+      "PUT",
+      `/ssh/credentials/${encodeURIComponent(account)}`,
+      body,
+    ),
+  deleteSSHCredential: (token: string, account: string) =>
+    request<void>(token, "DELETE", `/ssh/credentials/${encodeURIComponent(account)}`),
+  // Resolves rather than throws on a failed connection: the FIRST run of this is
+  // expected to fail, because a server with no host key pinned yet refuses the
+  // connection and quotes the fingerprint to paste in. That text is the point.
+  verifySSHCredential: (token: string, account: string) =>
+    request<{ ok: boolean; error?: string }>(
+      token,
+      "POST",
+      `/ssh/credentials/${encodeURIComponent(account)}/verify`,
+    ),
   getGitMirror: (token: string) => request<GitMirror>(token, "GET", "/git/mirror"),
   // The remote must be an SSH URL.
   putGitMirror: (

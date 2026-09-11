@@ -1,8 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The SSH/SFTP connection dance shared by the SFTP drops.
-package sftputil
+// Package sshutil is the SSH connection dance — the handshake, the auth and the
+// host-key checking — shared by everything that speaks SSH: the SFTP drops move
+// files over it, the SSH drop runs commands over it.
+//
+// It was internal/sftputil until commands joined files; the SFTP subsystem is
+// now one of two things you can layer on a connection, which is why Dial and
+// DialSSH are separate. A server that permits SSH but not SFTP is common enough
+// (and the error message at the bottom of Dial old enough) that asking for the
+// subsystem you do not need is a real failure, not a wasted round trip.
+package sshutil
 
 import (
 	"context"
@@ -187,13 +195,41 @@ func fingerprintCallback(want string) ssh.HostKeyCallback {
 // Never accepts: it reports the key so a human can pin it deliberately.
 func learnHostKey(cfg Config) ssh.HostKeyCallback {
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-		return fmt.Errorf("%s hasn't been verified yet: its SSH key is %s. Copy that into \"Host key fingerprint\" on the SFTP page to accept it — check it against what your provider published, or against `ssh-keyscan %s`, before you do", cfg.Host, ssh.FingerprintSHA256(key), cfg.Host)
+		return fmt.Errorf("%s hasn't been verified yet: its SSH key is %s. Copy that into \"Host key fingerprint\" to accept it — check it against what your provider published, or against `ssh-keyscan %s`, before you do", cfg.Host, ssh.FingerprintSHA256(key), cfg.Host)
 	}
 }
 
-func Dial(ctx context.Context, cfg Config) (*Client, error) {
+// SSHClient is a connection with nothing layered on it yet. Both things you can
+// do with an SSH server start here: Dial puts the SFTP subsystem on top, Run
+// starts a command session.
+type SSHClient struct {
+	ssh       *ssh.Client
+	conn      net.Conn
+	stopWatch func()
+}
+
+func (c *SSHClient) Close() {
+	if c == nil {
+		return
+	}
+	if c.stopWatch != nil {
+		c.stopWatch()
+		c.stopWatch = nil
+	}
+	if c.ssh != nil {
+		_ = c.ssh.Close()
+		c.ssh = nil
+	}
+	if c.conn != nil {
+		_ = c.conn.Close()
+		c.conn = nil
+	}
+}
+
+// DialSSH authenticates and stops there — no subsystem requested.
+func DialSSH(ctx context.Context, cfg Config) (*SSHClient, error) {
 	if cfg.Host == "" {
-		return nil, errors.New("no SFTP server configured")
+		return nil, errors.New("no server configured")
 	}
 	auth, err := authMethods(cfg)
 	if err != nil {
@@ -244,19 +280,24 @@ func Dial(ctx context.Context, cfg Config) (*Client, error) {
 		_ = conn.Close()
 		return nil, sshError(cfg, err)
 	}
-	sshClient := ssh.NewClient(sshConn, chans, reqs)
+	return &SSHClient{ssh: ssh.NewClient(sshConn, chans, reqs), conn: conn, stopWatch: stopWatch}, nil
+}
+
+func Dial(ctx context.Context, cfg Config) (*Client, error) {
+	s, err := DialSSH(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	// No deadline on the transfer: a large file legitimately takes a long time.
-	_ = conn.SetDeadline(time.Time{})
+	_ = s.conn.SetDeadline(time.Time{})
 
-	sftpClient, err := sftp.NewClient(sshClient)
+	sftpClient, err := sftp.NewClient(s.ssh)
 	if err != nil {
-		stopWatch()
-		_ = sshClient.Close()
-		_ = conn.Close()
+		s.Close()
 		return nil, fmt.Errorf("%s accepted the login but wouldn't start an SFTP session — some servers allow SSH without SFTP, or restrict it per account (%w)", cfg.Host, err)
 	}
-	return &Client{Client: sftpClient, ssh: sshClient, conn: conn, stopWatch: stopWatch}, nil
+	return &Client{Client: sftpClient, ssh: s.ssh, conn: s.conn, stopWatch: s.stopWatch}, nil
 }
 
 func sshError(cfg Config, err error) error {

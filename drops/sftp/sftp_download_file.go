@@ -17,7 +17,7 @@ import (
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/drops/internal/sandbox"
 	"github.com/dazyflow/dazyflow/engine"
-	"github.com/dazyflow/dazyflow/internal/sftputil"
+	"github.com/dazyflow/dazyflow/internal/sshutil"
 )
 
 // maxDownloadBytes caps one file, so a mis-pointed step can't fill the run's
@@ -60,6 +60,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
+					"account":{"type":"string","title":"Server","format":"ssh-account","description":"Which saved server to use. Leave blank to use the single connection from the SFTP integration page — the way this step worked before saved servers existed. Manage them on the Servers page; the SSH step picks from the same list."},
 					"directory":{"type":"string","title":"Folder","description":"Folder to resolve a bare file name against. Leave blank to use the folder set on the SFTP page."},
 					"path":{"type":"string","title":"File","examples":["/incoming/statement.csv"],"description":"Which file to fetch — a full remote path, or just a name to take it from the folder. Overridden by the 'File' input when connected."},
 					"save_into":{"type":"string","title":"Save into","format":"workspace-path","description":"Workspace folder to save the file in, so it outlives the run. Leave blank to keep it in the run's scratch area — fine when a later step reads or files it."},
@@ -74,7 +75,7 @@ func init() {
 }
 
 func executeSFTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	cfg, err := configFromJob(job)
+	cfg, err := sftpConfig(ctx, job)
 	if err != nil {
 		return params.Err(job, "not_connected", err.Error()), nil
 	}
@@ -92,7 +93,7 @@ func executeSFTPDownload(ctx context.Context, job core.Job, _ chan<- core.Progre
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(params.TimeoutMS(job, 120000))*time.Millisecond)
 	defer cancel()
 
-	client, err := sftputil.Dial(ctx, cfg)
+	client, err := sshutil.Dial(ctx, cfg)
 	if err != nil {
 		return params.Err(job, "sftp_error", err.Error()), nil
 	}

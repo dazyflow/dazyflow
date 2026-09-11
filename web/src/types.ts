@@ -818,6 +818,21 @@ export type GitCredential = {
   username?: string;
 };
 
+// A named SSH/SFTP server. The address and login identify it in a picker; the
+// key, password and passphrase are never sent to the browser, only reported as
+// present.
+export type SSHCredential = {
+  account: string;
+  host?: string;
+  port?: string;
+  username?: string;
+  directory?: string;
+  has_password: boolean;
+  has_ssh_key: boolean;
+  has_passphrase: boolean;
+  has_host_key: boolean;
+};
+
 export type GitMirror = {
   configured: boolean;
   remote_url?: string;

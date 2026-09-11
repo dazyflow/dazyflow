@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { SV_DESCRIPTIONS } from "./descriptions.sv";
-import { SV_INTEGRATION_NAMES, SV_INTEGRATION_PROSE } from "./integrationProse.sv";
+import {
+  SV_INTEGRATION_NAMES,
+  SV_INTEGRATION_PROSE,
+} from "./integrationProse.sv";
 import {
   SV_CONNECTION_TEXT,
   SV_ENUM_LABELS,
@@ -11,7 +14,6 @@ import {
   SV_NODE_STATE,
 } from "./fields.sv";
 import type { Vocabulary } from "../../lib/dropText";
-
 
 // Localized drop vocabulary.
 //
@@ -40,14 +42,14 @@ export const SV_LABELS: Record<string, string> = {
   "Batch rows": "Bunta rader",
   "Only what's new": "Bara det som är nytt",
   "Change a number": "Ändra ett tal",
-  "Knowledge": "Kunskap",
+  Knowledge: "Kunskap",
   "Change text": "Ändra text",
   "Look up": "Slå upp",
   "A AND B": "A OCH B",
   "A OR B": "A ELLER B",
-  "Calendar": "Kalender",
+  Calendar: "Kalender",
   "Is it up?": "Är den uppe?",
-  "Mailbox": "Brevlåda",
+  Mailbox: "Brevlåda",
   NOT: "INTE",
   "Add a calculated column": "Lägg till en beräknad kolumn",
   Branch: "Förgrening",
@@ -107,6 +109,7 @@ export const SV_LABELS: Record<string, string> = {
 };
 
 export const SV_SUBTITLES: Record<string, string> = {
+  "Run a command": "Kör ett kommando",
   "Into groups of N": "I grupper om N",
   "Skip what this step has already seen": "Hoppa över det steget redan sett",
   "When an email arrives": "När ett mejl kommer in",
@@ -123,7 +126,8 @@ export const SV_SUBTITLES: Record<string, string> = {
   "Delete rows": "Ta bort rader",
   "A script, on a runner you host": "Ett skript, på en körnod du driver",
   "Add comment": "Lägg till kommentar",
-  "Alert when a site breaks, and when it's back": "Larma när en sajt går ner, och när den är tillbaka",
+  "Alert when a site breaks, and when it's back":
+    "Larma när en sajt går ner, och när den är tillbaka",
   "Followed artists": "Följda artister",
   Ask: "Fråga",
   "CSV text into rows": "CSV-text till rader",
@@ -241,21 +245,23 @@ export const SV_SUBTITLES: Record<string, string> = {
 // spot an entry no drop reaches any more — a question portLabel() cannot be
 // asked, since it is only ever handed labels that DO exist.
 export const SV_PORTS: Record<string, string> = {
+  "Server address": "Serveradress",
+  Command: "Kommando",
   "Batch count": "Antal buntar",
-  "Batches": "Buntar",
+  Batches: "Buntar",
   "New emails": "Nya mejl",
   "New rows": "Nya rader",
   "Seen before": "Sedda tidigare",
   "Changed events": "Ändrade händelser",
   "Starting soon": "Börjar snart",
   "Passages forgotten": "Glömda avsnitt",
-  "Passages": "Avsnitt",
+  Passages: "Avsnitt",
   "Passages stored": "Lagrade avsnitt",
-  "Question": "Fråga",
+  Question: "Fråga",
   "Where it came from": "Varifrån det kom",
   "No match": "Ingen träff",
-  "Pieces": "Delar",
-  "Entries": "Poster",
+  Pieces: "Delar",
+  Entries: "Poster",
   "Entries added": "Tillagda poster",
   "Nothing there": "Inget där",
   "Rows deleted": "Borttagna rader",
@@ -309,7 +315,7 @@ export const SV_PORTS: Record<string, string> = {
   Conditions: "Väderläge",
   Confidence: "Säkerhet",
   Content: "Innehåll",
-  "Conversation": "Konversation",
+  Conversation: "Konversation",
   Coordinate: "Koordinat",
   Count: "Antal",
   Country: "Land",
@@ -398,7 +404,7 @@ export const SV_PORTS: Record<string, string> = {
   "Merged list": "Sammanslagen lista",
   Message: "Meddelande",
   "Message ID": "Meddelande-ID",
-  "Messages": "Meddelanden",
+  Messages: "Meddelanden",
   Name: "Namn",
   "Name in Drive": "Namn i Drive",
   "National number": "Nationellt nummer",
@@ -443,7 +449,7 @@ export const SV_PORTS: Record<string, string> = {
   "Remaining authorized (cents/öre)": "Kvar reserverat (cent/öre)",
   "Rendered HTML": "Renderad HTML",
   "Rendered text": "Renderad text",
-  "Replied": "Besvarad",
+  Replied: "Besvarad",
   Reply: "Svar",
   "Reply in thread": "Svara i tråden",
   Repository: "Repo",
@@ -471,7 +477,7 @@ export const SV_PORTS: Record<string, string> = {
   "Shipment ID": "Försändelse-ID",
   Size: "Storlek",
   "Source branch": "Källgren",
-  "Spreadsheet": "Kalkylblad",
+  Spreadsheet: "Kalkylblad",
   "Spreadsheet ID": "Kalkylblads-ID",
   "Start of window": "Fönstrets början",
   State: "Status",

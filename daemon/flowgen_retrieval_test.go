@@ -141,7 +141,11 @@ var retrievalCases = []retrievalCase{
 	{"open a github issue", []string{"github_create_issue"}},
 	{"add a page in notion", []string{"notion_create_page"}},
 	{"turn the lights on", []string{"homeassistant_call_service"}},
-	{"run a script on my own server", []string{"run_on_runner"}},
+	// Two right answers since the SSH step landed, and the ask does not say
+	// which: "my own server" is a runner if you can install the agent on it
+	// and an SSH host if you cannot. Pinning either one alone would make the
+	// other look like a retrieval bug.
+	{"run a script on my own server", []string{"run_on_runner", "ssh_run"}},
 	{"call an api", []string{"http_request"}},
 	{"what are the coordinates of this address", []string{"geo_location"}},
 }

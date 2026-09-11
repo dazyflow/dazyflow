@@ -30,6 +30,7 @@ import type {
   ReferenceGroups,
   ReferenceItem,
   RunnerTarget,
+  SSHCredential,
 } from "../../types";
 import {
   type TokenLabels,
@@ -263,6 +264,20 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           providerLabel={accountPicker.providerLabel}
           onConnect={accountPicker.onConnect}
           onChange={(v) => onChange(v === "" && !required ? undefined : v)}
+        />
+      </FieldWrap>
+    );
+  }
+  if (schema.format === "ssh-account" && schema.type === "string") {
+    return (
+      <FieldWrap name={name} schema={schema} required={required}>
+        <SSHCredAccountField
+          value={(value as string) ?? (schema.default as string | undefined) ?? ""}
+          // The SFTP steps declare no default, and that blank is meaningful:
+          // it is the single pre-existing connection those flows already use.
+          // The SSH step defaults to "default" and has no such fallback.
+          allowConnection={schema.default === undefined}
+          onChange={onChange}
         />
       </FieldWrap>
     );
@@ -3463,6 +3478,67 @@ function AccountField({
       <Button variant="link" className="sf-account-connect" onClick={onConnect}>
         {t("schemaForm.accountConnectAnother")}
       </Button>
+    </div>
+  );
+}
+
+// The picker for a named SSH/SFTP server. Unlike the git equivalent it shows
+// user@host beside the name: "bank" and "supplier" mean nothing six months on,
+// and picking the wrong server is the mistake this field exists to prevent.
+function SSHCredAccountField({
+  value,
+  allowConnection,
+  onChange,
+}: {
+  value: string;
+  allowConnection: boolean;
+  onChange: (v: unknown) => void;
+}) {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [creds, setCreds] = useState<SSHCredential[] | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    api
+      .listSSHCredentials(token)
+      .then((r) => {
+        if (!cancelled) setCreds(r.credentials ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setCreds([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const known = creds ?? [];
+  const names = known.map((c) => c.account);
+  // The saved value stays selectable even when the listing has not arrived or
+  // the account has since been deleted, so opening a flow never silently
+  // repoints a step at a different server.
+  const extra = value && !names.includes(value) ? [value] : [];
+  const describe = (account: string) => {
+    const c = known.find((k) => k.account === account);
+    if (!c?.host) return account;
+    return `${account} — ${c.username ? `${c.username}@` : ""}${c.host}`;
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {allowConnection && <option value="">{t("sshCreds.useConnection")}</option>}
+        {[...names, ...extra].map((a) => (
+          <option key={a} value={a}>
+            {describe(a)}
+          </option>
+        ))}
+      </select>
+      <Link to="/admin/ssh-credentials" style={{ fontSize: "var(--text-sm)" }}>
+        {known.length === 0 ? t("sshCreds.addLink") : t("sshCreds.manageLink")}
+      </Link>
     </div>
   );
 }

@@ -96,7 +96,9 @@ const integrationToProvider: Record<string, string> = {
   spotify: "spotify",
 };
 
-export function oauthProviderForIntegration(integration?: string): string | null {
+export function oauthProviderForIntegration(
+  integration?: string,
+): string | null {
   if (!integration) return null;
   return integrationToProvider[integrationSlug(integration)] ?? null;
 }
@@ -142,7 +144,8 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   "google-forms": {
     name: "Google Forms",
-    tagline: "Turn every form response into something that happens automatically.",
+    tagline:
+      "Turn every form response into something that happens automatically.",
     description:
       "Fire a flow when a Google Form gets new responses, each keyed by its question title — connect it straight into a Sheets append to log submissions, or into any step that takes records.",
     technical_notes:
@@ -172,7 +175,8 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
   },
   github: {
     name: "GitHub",
-    tagline: "Open issues, leave comments, and react to what lands in your repo.",
+    tagline:
+      "Open issues, leave comments, and react to what lands in your repo.",
     description:
       "Create issues, comment on existing ones, and trigger flows on push or new-PR events. Common patterns: route an incoming alert into a tracked issue, post a deploy notification when commits land on main, kick off a triage flow when a contributor opens a PR.",
     technical_notes:
@@ -347,7 +351,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Read and write a calendar that isn't Google's — Fastmail, iCloud, Nextcloud, or one you run yourself. List tomorrow's bookings and message everyone, or put a call in the diary straight from a form.",
     technical_notes:
-      "The account — server address, username and password (or an app password on a provider with two-factor sign-in) — is configured once here and injected into every Calendar step at run time; the password is held in the encrypted secret store. The address can be a discovery root, a principal, or one calendar's own path: the client walks from whatever your provider published to the calendar collections underneath, because no user can be expected to know which of those they were handed. If the account holds several calendars, name the one you want — Test connection lists them for you if you don't. Events come out in the same shape the Google Calendar step emits, so a flow moves between the two by swapping the step. Time windows accept the same relative forms (\"tomorrow\", \"+7d\", \"tomorrow+9h\"), resolved in the timezone you set.",
+      'The account — server address, username and password (or an app password on a provider with two-factor sign-in) — is configured once here and injected into every Calendar step at run time; the password is held in the encrypted secret store. The address can be a discovery root, a principal, or one calendar\'s own path: the client walks from whatever your provider published to the calendar collections underneath, because no user can be expected to know which of those they were handed. If the account holds several calendars, name the one you want — Test connection lists them for you if you don\'t. Events come out in the same shape the Google Calendar step emits, so a flow moves between the two by swapping the step. Time windows accept the same relative forms ("tomorrow", "+7d", "tomorrow+9h"), resolved in the timezone you set.',
   },
   pdf: {
     name: "PDF",
@@ -363,7 +367,15 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     description:
       "Move files to and from a file server (SFTP). This is how a lot of business still works: a supplier or a bank drops a file overnight, and something has to pick it up, read it and act on it.",
     technical_notes:
-      "The server — address, port, username, and either a password or an SSH private key — is configured once here and injected into every SFTP step at run time; the password and key are held in the encrypted secret store. Host-key verification has no default and cannot be turned off: paste the server's \"SHA256:…\" fingerprint (or a known_hosts line), and until you do, Test connection fails with the fingerprint the server actually offered so you can check it and copy it in. Accepting any key would make a silent man-in-the-middle possible, and the credentials are what it would collect. 'Only new since last run' on List files tracks the newest modified time plus the names sharing that second, so a feed that drops twenty files inside one second doesn't lose the stragglers. One server per connection — a second one (a bank and a supplier, say) isn't supported yet.",
+      "The server — address, port, username, and either a password or an SSH private key — is configured once here and injected into every SFTP step at run time; the password and key are held in the encrypted secret store. Host-key verification has no default and cannot be turned off: paste the server's \"SHA256:…\" fingerprint (or a known_hosts line), and until you do, Test connection fails with the fingerprint the server actually offered so you can check it and copy it in. Accepting any key would make a silent man-in-the-middle possible, and the credentials are what it would collect. 'Only new since last run' on List files tracks the newest modified time plus the names sharing that second, so a feed that drops twenty files inside one second doesn't lose the stragglers. One server per connection here, but a step is no longer limited to it: saved servers on the Servers page are named, there can be as many as you like, and an SFTP step picks one by name. This connection remains what a step uses when it names none, so flows built before they existed keep working untouched.",
+  },
+  ssh: {
+    name: "SSH",
+    tagline: "Run a command on one of your own servers.",
+    description:
+      "Run a command on a server over SSH and carry on with what it printed — restart a service, take a backup, read a log, ask how full the disks are. It reaches anything with an sshd and needs nothing installed on it, which is what makes it the one that works on an appliance or a box you will never be allowed to run an agent on.",
+    technical_notes:
+      "Servers are named and configured once on the Servers page — address, port, username, and either a password or an SSH private key, held in the encrypted secret store — and a step picks one by name, so nothing reaches a flow. The SFTP steps choose from the same list: it is the same machine, the same login and the same host key, and the pairing that proves it is dumping a database over SSH and fetching the file over SFTP. Host-key verification has no default and cannot be turned off: until you paste the server's \"SHA256:…\" fingerprint (or a known_hosts line), Test connection fails with the fingerprint the server actually offered, for you to check and copy in. No TTY is allocated, so a command that stops to ask a question — plain `sudo`, say — waits until the step's timeout rather than answering it; use `sudo -n` with a NOPASSWD rule. Environment values are exported in the shell rather than sent as SSH env requests, which a default sshd's empty AcceptEnv would silently drop. A non-zero exit fails the step unless you ask it to carry on and branch on the exit code instead, and each output stream is capped so a runaway command cannot fill the run record.",
   },
   ntfy: {
     name: "ntfy",
@@ -406,7 +418,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
     name: "46elks",
     tagline: "Send Swedish text messages, and make calls.",
     description:
-      "Send SMS text messages straight from a flow via 46elks, a Swedish messaging provider popular across the Nordics. Send from an alphanumeric sender name (like \"Acme\") for one-way alerts — order updates, reminders, verification codes — or from one of your 46elks numbers when you want the recipient to be able to reply. A dry-run switch lets you validate a message without sending or being billed.",
+      'Send SMS text messages straight from a flow via 46elks, a Swedish messaging provider popular across the Nordics. Send from an alphanumeric sender name (like "Acme") for one-way alerts — order updates, reminders, verification codes — or from one of your 46elks numbers when you want the recipient to be able to reply. A dry-run switch lets you validate a message without sending or being billed.',
     technical_notes:
       "Authenticated with your 46elks API username and password (HTTP Basic), entered once as the 46elks connection on this page (stored encrypted as conn.46elks.*) and injected at run time — no credentials on the step or in the flow. Sends a form-encoded POST to 46elks' /a1/sms endpoint. 'From' is either E.164 (repliable) or an alphanumeric sender ID (max 11 chars, must contain a letter, no replies). 46elks has no idempotency key, so the step never auto-retries and the engine dedupes recovered runs — a resend would double-bill.",
     docs_url: "https://46elks.com/docs",

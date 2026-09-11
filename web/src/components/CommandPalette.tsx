@@ -32,6 +32,7 @@ import {
   Settings as SettingsIcon,
   ShieldCheck,
   Users,
+  Server,
 } from "lucide-react";
 import { FlowIcon, ICON } from "../icons";
 import { useAuth } from "../auth";
@@ -123,6 +124,7 @@ export function CommandPalette({
       admin.push(
         // The git page hosts both credentials and the workspace mirror, and
         // "back up my flows" is what people actually search for.
+        { id: "admin:ssh", label: t("admin.cardSSHTitle"), icon: <Server size={ICON.md} />, group: "admin", keywords: "ssh sftp server host key fingerprint known_hosts credential login servrar server nyckel inloggning", run: () => go("/admin/ssh-credentials") },
         { id: "admin:git", label: t("admin.cardGitTitle"), icon: <GitBranch size={ICON.md} />, group: "admin", keywords: "mirror backup sync export deploy key ssh github gitlab spegling spegla säkerhetskopia synk nyckel", run: () => go("/admin/git-credentials") },
         { id: "admin:index", label: t("nav.admin"), icon: <ShieldCheck size={ICON.md} />, group: "admin", keywords: "administration organization org inställningar organisation", run: () => go("/admin") },
         { id: "admin:users", label: t("admin.cardUsersTitle"), icon: <Users size={ICON.md} />, group: "admin", keywords: "members invite team roles personer bjud in medlemmar roller", run: () => go("/admin/users") },

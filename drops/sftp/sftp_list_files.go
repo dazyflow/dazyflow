@@ -15,7 +15,7 @@ import (
 	"github.com/dazyflow/dazyflow/drops/cursor"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
-	"github.com/dazyflow/dazyflow/internal/sftputil"
+	"github.com/dazyflow/dazyflow/internal/sshutil"
 	"github.com/dazyflow/dazyflow/pollstate"
 )
 
@@ -58,6 +58,7 @@ func init() {
 			ParamsSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
+					"account":{"type":"string","title":"Server","format":"ssh-account","description":"Which saved server to use. Leave blank to use the single connection from the SFTP integration page — the way this step worked before saved servers existed. Manage them on the Servers page; the SSH step picks from the same list."},
 					"directory":{"type":"string","title":"Folder","examples":["/incoming"],"description":"Which remote folder to list. Leave blank to use the folder set on the SFTP page. Overridden by the 'Folder' input."},
 					"pattern":{"type":"string","title":"Only files like","examples":["*.csv","statement-*.xml"],"description":"Shell-style pattern the file name must match, e.g. \"*.csv\". Case-insensitive. Leave blank to list every file."},
 					"only_new":{"type":"boolean","title":"Only new since last run","default":false,"description":"When on, each run emits only files that appeared since the previous run — nothing on the first run (it just remembers where the folder is up to). Turn this on when a published, polling flow acts on each file, so it doesn't re-process the folder every time. Leave off for ad-hoc listings that should return everything."},
@@ -72,7 +73,7 @@ func init() {
 }
 
 func executeSFTPList(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	cfg, err := configFromJob(job)
+	cfg, err := sftpConfig(ctx, job)
 	if err != nil {
 		return params.Err(job, "not_connected", err.Error()), nil
 	}
@@ -90,7 +91,7 @@ func executeSFTPList(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(params.TimeoutMS(job, 30000))*time.Millisecond)
 	defer cancel()
 
-	client, err := sftputil.Dial(ctx, cfg)
+	client, err := sshutil.Dial(ctx, cfg)
 	if err != nil {
 		return params.Err(job, "sftp_error", err.Error()), nil
 	}

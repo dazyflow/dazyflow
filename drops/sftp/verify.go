@@ -12,7 +12,7 @@ import (
 
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 	"github.com/dazyflow/dazyflow/engine"
-	"github.com/dazyflow/dazyflow/internal/sftputil"
+	"github.com/dazyflow/dazyflow/internal/sshutil"
 )
 
 func init() {
@@ -22,7 +22,7 @@ func init() {
 const verifyTimeout = 20 * time.Second
 
 // verifySFTP connects, authenticates, and stats the configured folder, then
-// hangs up without transferring anything (sftputil.Verify).
+// hangs up without transferring anything (sshutil.Verify).
 //
 // This button carries more weight here than on the other integrations,
 // because host-key verification has no default: with no fingerprint or
@@ -31,7 +31,7 @@ const verifyTimeout = 20 * time.Second
 // connection" is one that fails usefully, handing the operator the value to
 // paste. Worth knowing before reading the error as a bug.
 func verifySFTP(ctx context.Context, conn map[string]string) error {
-	cfg, err := sftputil.ConfigFromConn(conn)
+	cfg, err := sshutil.ConfigFromConn(conn)
 	if err != nil {
 		return err
 	}
@@ -45,5 +45,5 @@ func verifySFTP(ctx context.Context, conn map[string]string) error {
 
 	ctx, cancel := context.WithTimeout(ctx, verifyTimeout)
 	defer cancel()
-	return sftputil.Verify(ctx, cfg)
+	return sshutil.Verify(ctx, cfg)
 }

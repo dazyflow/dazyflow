@@ -361,3 +361,52 @@ func TestResolveSlice_WholeResourceElement_Cov(t *testing.T) {
 func resolveSecrets(ctx context.Context, providers map[string]core.SecretProvider, job *core.Job) error {
 	return resolveTemplates(ctx, providers, core.Graph{}, nil, job)
 }
+
+// A step that names a credential account must take NOTHING from the tenant-wide
+// connection. The SFTP steps offer both models during the migration to named
+// servers, and the field that bites is the folder: left blank on a step pointed
+// at the saved server "supplier", an injected folder from the old connection
+// would send the upload to the bank's drop box instead.
+func TestInjectConnectionDefaults_AnAccountSuppressesTheConnection(t *testing.T) {
+	m := core.Manifest{
+		Integration: "SFTP",
+		ConnectionFields: []core.ConnectionField{
+			{Key: "host"},
+			{Key: "directory"},
+			{Key: "password", Secret: true},
+		},
+		ParamsSchema: json.RawMessage(`{"type":"object","properties":{
+			"account":{"type":"string"},"directory":{"type":"string"}}}`),
+	}
+	providers := newProviders(stubProvider{
+		scheme: "secret",
+		values: map[string]string{
+			core.ConnectionSecretKey("SFTP", "host"):      "old.example",
+			core.ConnectionSecretKey("SFTP", "directory"): "/bank-dropbox",
+			core.ConnectionSecretKey("SFTP", "password"):  "p",
+		},
+	})
+
+	named := core.Job{Params: map[string]any{"account": "supplier"}}
+	injectConnectionDefaults(context.Background(), providers, m, &named)
+	for _, k := range []string{"host", "directory", "password"} {
+		if v, ok := named.Params[k]; ok {
+			t.Errorf("a step naming an account was given %s = %v", k, v)
+		}
+	}
+
+	// The other half of the contract: a step naming NO account still gets the
+	// connection, which is what keeps flows saved before this untouched.
+	legacy := core.Job{Params: map[string]any{}}
+	injectConnectionDefaults(context.Background(), providers, m, &legacy)
+	if legacy.Params["host"] != "old.example" || legacy.Params["directory"] != "/bank-dropbox" {
+		t.Errorf("a step with no account lost the connection: %+v", legacy.Params)
+	}
+
+	// An account param that is present but blank is not a choice.
+	blank := core.Job{Params: map[string]any{"account": "  "}}
+	injectConnectionDefaults(context.Background(), providers, m, &blank)
+	if blank.Params["host"] != "old.example" {
+		t.Errorf("a blank account suppressed the connection: %+v", blank.Params)
+	}
+}

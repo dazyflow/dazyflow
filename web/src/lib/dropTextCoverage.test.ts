@@ -212,7 +212,7 @@ const SAME_WORD = new Set([
   "Hex",
   "JSON", "Kelvin (K, m/s)", "MD5", "MQTT", "Metadata", "PDF", "Port",
   "Prompt", "QoS", "Regex", "Region", "SFTP", "SHA-1", "SHA-256", "SHA-512",
-  "SQL", "Server", "Standard", "Start", "Status", "Svenska", "Test", "Text",
+  "SQL", "SSH", "Server", "Standard", "Start", "Status", "Svenska", "Test", "Text",
   "URL", "Webhook", "YAML",
 ]);
 

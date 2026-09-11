@@ -15,6 +15,7 @@ import {
   Send,
   Lock,
   Mail,
+  Server,
   ServerCog,
   PowerOff,
   Layers,
@@ -77,6 +78,7 @@ export function Admin() {
         <AdminCard to="/admin/email-templates" icon={<Mail size={ICON.lg} />} title={t("admin.cardEmailTemplatesTitle", "Email templates")} desc={t("admin.cardEmailTemplatesDesc", "Reusable HTML layouts the email steps wrap messages in.")} />
         <AdminCard to="/admin/google" icon={<img src="/brands/google-g.svg" alt="" width={18} height={18} />} title={t("admin.cardGoogleTitle")} desc={t("admin.cardGoogleDesc")} />
         <AdminCard to="/admin/git-credentials" icon={<KeyRound size={ICON.lg} />} title={t("admin.cardGitTitle")} desc={t("admin.cardGitDesc")} />
+        <AdminCard to="/admin/ssh-credentials" icon={<Server size={ICON.lg} />} title={t("admin.cardSSHTitle")} desc={t("admin.cardSSHDesc")} />
         <AdminCard to="/admin/runners" icon={<Plug size={ICON.lg} />} title={t("runners.title")} desc={t("admin.cardRunnersDesc")} />
         <AdminCard to="/admin/mcp-servers" icon={<Blocks size={ICON.lg} />} title={t("mcp.title")} desc={t("admin.cardMCPDesc")} />
         <AdminCard to="/admin/web-apis" icon={<Globe size={ICON.lg} />} title={t("webapi.title")} desc={t("admin.cardWebAPIDesc")} />

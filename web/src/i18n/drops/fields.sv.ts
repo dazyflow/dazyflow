@@ -20,6 +20,11 @@
 // conflict_columns and STRIPE_API_KEY are what the user types.
 
 export const SV_FIELD_TITLES: Record<string, string> = {
+  Command: "Kommando",
+  "If the command exits non-zero":
+    "Om kommandot avslutas med en kod som inte är noll",
+  "Keep at most (KB of output)": "Behåll högst (KB utdata)",
+  "Run it in folder": "Kör det i mappen",
   "Identify a row by": "Identifiera en rad med",
   "Keys to remember": "Nycklar att minnas",
   "Memory name": "Minnets namn",
@@ -27,22 +32,22 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Only emails matching": "Bara mejl som matchar",
   "Rows per batch": "Rader per bunt",
   "Start at most (per second)": "Starta som mest (per sekund)",
-  "Notice": "Varsel",
+  Notice: "Varsel",
   "Which changes": "Vilka ändringar",
   "Include all-day events": "Ta med heldagshändelser",
   "Forget the whole base": "Glöm hela basen",
-  "Decimals": "Decimaler",
+  Decimals: "Decimaler",
   "Group the thousands": "Gruppera tusentalen",
   "Which way": "Åt vilket håll",
   "Between passages": "Mellan avsnitten",
   "How many passages": "Hur många avsnitt",
   "Knowledge base": "Kunskapsbas",
   "Least score": "Lägsta poäng",
-  "Overlap": "Överlapp",
+  Overlap: "Överlapp",
   "Passage length": "Avsnittets längd",
   "Where it came from": "Varifrån det kom",
-  "Condition": "Villkor",
-  "Find": "Sök efter",
+  Condition: "Villkor",
+  Find: "Sök efter",
   "How many characters": "Hur många tecken",
   "Match capitalisation": "Skilj på stora och små bokstäver",
   "Replace with": "Ersätt med",
@@ -63,88 +68,88 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Where the next page is": "Var nästa sida finns",
   "Run it": "Kör det",
   "Time limit (ms)": "Tidsgräns (ms)",
-  "Rules": "Regler",
+  Rules: "Regler",
   "Route to send it down": "Vägen de ska ta",
   "Where the leftovers go": "Var resten hamnar",
   "Response code": "Svarskod",
   "What to keep": "Vad som ska behållas",
   "What to send back": "Vad som ska skickas tillbaka",
-  "Address": "Adress",
+  Address: "Adress",
   "All-day event": "Heldagshändelse",
   "API version": "API-version",
   "Accepted status codes": "Godkända statuskoder",
-  "Account": "Konto",
+  Account: "Konto",
   "Add to database": "Lägg i databas",
   "Add to existing sheet": "Lägg till i befintligt blad",
   "Add under page": "Lägg under sida",
   "Adding rows": "Lägga till rader",
   "Advanced query": "Avancerad fråga",
   "After id": "Efter id",
-  "Algorithm": "Algoritm",
-  "Allow \"none of these\"": "Tillåt \"ingen av dessa\"",
+  Algorithm: "Algoritm",
+  'Allow "none of these"': 'Tillåt "ingen av dessa"',
   "Allow private networks": "Tillåt privata nät",
-  "Alphabet": "Alfabet",
-  "Amount": "Belopp",
+  Alphabet: "Alfabet",
+  Amount: "Belopp",
   "Amount (cents/öre)": "Belopp (cent/öre)",
   "Anything to include?": "Något att ta med?",
-  "Assignee": "Tilldelad",
-  "Assignees": "Tilldelade",
-  "Attendees": "Deltagare",
+  Assignee: "Tilldelad",
+  Assignees: "Tilldelade",
+  Attendees: "Deltagare",
   "Avatar URL": "Avatar-URL",
-  "BCC": "Hemlig kopia",
+  BCC: "Hemlig kopia",
   "Blank page between documents": "Tom sida mellan dokument",
-  "Body": "Innehåll",
+  Body: "Innehåll",
   "Body blocks (Notion JSON)": "Innehållsblock (Notion-JSON)",
   "Body contains": "Brödtexten innehåller",
   "Body format": "Innehållsformat",
   "Branch, tag, or commit": "Gren, tagg eller commit",
-  "CC": "Kopia",
+  CC: "Kopia",
   "Cache key": "Cachenyckel",
-  "Calendar": "Kalender",
-  "Matches": "Träffar",
-  "Categories": "Kategorier",
-  "Category": "Kategori",
-  "Cells": "Celler",
-  "Channel": "Kanal",
+  Calendar: "Kalender",
+  Matches: "Träffar",
+  Categories: "Kategorier",
+  Category: "Kategori",
+  Cells: "Celler",
+  Channel: "Kanal",
   "Check every": "Kontrollera var",
   "Client ID": "Klient-ID",
   "Clone depth": "Klondjup",
-  "Collection": "Samling",
+  Collection: "Samling",
   "Column mapping": "Kolumnmappning",
   "Column names": "Kolumnnamn",
   "Column types": "Kolumntyper",
-  "Columns": "Kolumner",
+  Columns: "Kolumner",
   "Columns to write": "Kolumner att skriva",
-  "Comment": "Kommentar",
+  Comment: "Kommentar",
   "Compare from": "Jämför från",
   "Compare the words, not the code": "Jämför orden, inte koden",
   "Compare to": "Jämför med",
-  "Concurrency": "Samtidighet",
+  Concurrency: "Samtidighet",
   "Content type": "Innehållstyp",
-  "Conversation": "Konversation",
-  "Country": "Land",
+  Conversation: "Konversation",
+  Country: "Land",
   "Country bias": "Landsviktning",
   "Create missing folders": "Skapa mappar som saknas",
-  "Currency": "Valuta",
-  "Customer": "Kund",
+  Currency: "Valuta",
+  Customer: "Kund",
   "Database ID": "Databas-ID",
   "Database file": "Databasfil",
-  "Days": "Dagar",
+  Days: "Dagar",
   "Days until due": "Dagar till förfall",
   "Default region": "Standardregion",
-  "Delimiter": "Avgränsare",
-  "Description": "Beskrivning",
-  "Direction": "Ordning",
+  Delimiter: "Avgränsare",
+  Description: "Beskrivning",
+  Direction: "Ordning",
   "Dry run": "Testkörning",
-  "Email": "E-post",
+  Email: "E-post",
   "Email these people": "Mejla de här personerna",
-  "End": "Slut",
+  End: "Slut",
   "End of window": "Fönstrets slut",
-  "Entity": "Enhet",
+  Entity: "Enhet",
   "Value to look for": "Värde att leta efter",
-  "Event": "Händelse",
+  Event: "Händelse",
   "Event types": "Händelsetyper",
-  "Every": "Var",
+  Every: "Var",
   "Expand recurring events": "Expandera återkommande händelser",
   "Expected status": "Förväntad status",
   "Export as": "Exportera som",
@@ -154,27 +159,27 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Field in the value": "Fält i värdet",
   "Field name": "Fältnamn",
   "Fields to extract": "Fält att extrahera",
-  "File": "Fil",
+  File: "Fil",
   "File name": "Filnamn",
   "File to upload": "Fil att ladda upp",
   "File type (MIME)": "Filtyp (MIME)",
-  "Filename": "Filnamn",
+  Filename: "Filnamn",
   "Filter (Notion JSON)": "Filter (Notion-JSON)",
   "First row is header": "Första raden är rubrik",
   "First row is headers": "Första raden är rubriker",
   "Flow ID": "Flödes-ID",
-  "Folder": "Mapp",
-  "Form": "Formulär",
+  Folder: "Mapp",
+  Form: "Formulär",
   "Form field name": "Formulärfältets namn",
   "Form fields": "Formulärfält",
   "Form title": "Formulärets rubrik",
   "Formula (CEL)": "Formel (CEL)",
-  "From": "Från",
+  From: "Från",
   "From field": "Från-fält",
   "Git credential": "Git-uppgifter",
   "Give up after (seconds)": "Ge upp efter (sekunder)",
   "HMAC key": "HMAC-nyckel",
-  "Headers": "Rubriker",
+  Headers: "Rubriker",
   "If a field isn't found": "Om ett fält inte hittas",
   "If a row's script throws": "Om en rads skript ger fel",
   "If there are no rows": "Om det inte finns några rader",
@@ -184,20 +189,20 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Include pull requests": "Inkludera pull requests",
   "Include row numbers": "Ta med radnummer",
   "Include trashed": "Ta med borttagna",
-  "Indent": "Indrag",
+  Indent: "Indrag",
   "Inline file bytes": "Bädda in filens byte",
   "Into folder": "Till mapp",
   "Issue or PR number": "Ärende- eller PR-nummer",
   Keep: "Behåll",
   "Keep numbers as numbers": "Behåll tal som tal",
   "What to match on": "Vad som ska matchas",
-  "Labels": "Etiketter",
-  "Language": "Språk",
-  "Latitude": "Latitud",
-  "Limit": "Gräns",
+  Labels: "Etiketter",
+  Language: "Språk",
+  Latitude: "Latitud",
+  Limit: "Gräns",
   "Link to open": "Länk att öppna",
-  "Location": "Plats",
-  "Longitude": "Longitud",
+  Location: "Plats",
+  Longitude: "Longitud",
   "Max channels": "Max antal kanaler",
   "Max commits": "Max antal commits",
   "Max download bytes": "Max nedladdade byte",
@@ -208,23 +213,23 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Max results": "Max antal träffar",
   "Max rows": "Max antal rader",
   "Max tokens": "Max antal tokens",
-  "Message": "Meddelande",
+  Message: "Meddelande",
   "Message ID": "Meddelande-ID",
   "Message to reply to": "Meddelande att svara på",
-  "Method": "Metod",
+  Method: "Metod",
   "Milestone number": "Milstolpenummer",
-  "Mode": "Läge",
-  "Model": "Modell",
+  Mode: "Läge",
+  Model: "Modell",
   "Must contain": "Måste innehålla",
-  "Name": "Namn",
+  Name: "Namn",
   "Name contains": "Namnet innehåller",
   "Name in Drive": "Namn i Drive",
   "Name on the server": "Namn på servern",
   "Name prefix": "Namnprefix",
-  "Number": "Tal",
+  Number: "Tal",
   "At time of day": "Tid på dygnet",
   "Custom format": "Eget format",
-  "Offset": "Förskjutning",
+  Offset: "Förskjutning",
   "Match on": "Matcha på",
   "Only files like": "Bara filer som matchar",
   "Only in channel": "Bara i kanal",
@@ -237,110 +242,111 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "Org number": "Organisationsnummer",
   "Output encoding": "Utdatakodning",
   "Output language": "Utdataspråk",
-  "Page": "Sida",
+  Page: "Sida",
   "Page address": "Sidans adress",
   "Page body": "Sidinnehåll",
   "Page size": "Sidstorlek",
   "Page token": "Sidtoken",
   "Pages per file": "Sidor per fil",
-  "Path": "Sökväg",
-  "Pattern": "Mönster",
-  "Payload": "Nyttolast",
-  "Payment": "Betalning",
-  "Phone": "Telefon",
-  "Place": "Plats",
+  Path: "Sökväg",
+  Pattern: "Mönster",
+  Payload: "Nyttolast",
+  Payment: "Betalning",
+  Phone: "Telefon",
+  Place: "Plats",
   "Pretty-print": "Läsvänlig formatering",
-  "Price": "Pris",
-  "Priority": "Prioritet",
+  Price: "Pris",
+  Priority: "Prioritet",
   "Properties (Notion JSON)": "Egenskaper (Notion-JSON)",
-  "Quantity": "Antal",
-  "Query": "Fråga",
+  Quantity: "Antal",
+  Query: "Fråga",
   "Query values": "Frågevärden",
   "Question to ask": "Fråga att ställa",
-  "Reason": "Orsak",
-  "Replacement": "Ersättning",
-  "Replacements": "Ersättningar",
+  Reason: "Orsak",
+  Replacement: "Ersättning",
+  Replacements: "Ersättningar",
   "Reply in thread": "Svara i tråden",
   "Reply language": "Svarsspråk",
   "Repo name": "Repons namn",
   "Repo owner": "Repons ägare",
   "Repository URL": "Repo-URL",
   "Repository folder": "Repo-mapp",
-  "Retain": "Behåll (retain)",
+  Retain: "Behåll (retain)",
   "Root element": "Rotelement",
   "Roughly how many words": "Ungefär hur många ord",
   "Row element": "Radelement",
   "Row limit": "Radgräns",
   "Row-number column": "Kolumn med radnummer",
-  "Rows": "Rader",
+  Rows: "Rader",
   "Environment variables": "Miljövariabler",
-  "Script": "Skript",
+  Script: "Skript",
   "Separate documents": "Separata dokument",
   "Single mapping": "En enda mappning",
   "Single object": "Ett enda objekt",
   "Subject contains": "Ämnet innehåller",
-  "Summary": "Sammanfattning",
+  Summary: "Sammanfattning",
   "Unread only": "Bara olästa",
   "When there are several documents": "När det finns flera dokument",
   "Written in": "Skrivet i",
-  "If the script exits non-zero": "Om skriptet avslutas med en kod som inte är noll",
+  "If the script exits non-zero":
+    "Om skriptet avslutas med en kod som inte är noll",
   "Run it with": "Kör det med",
   "Where to run it": "Var det ska köras",
-  "Runs": "Körs",
+  Runs: "Körs",
   "Save into": "Spara i",
   "Save to": "Spara till",
-  "Search": "Sök",
+  Search: "Sök",
   "Search text": "Söktext",
   "Secret keys": "Hemliga nycklar",
   "Send as form upload": "Skicka som formuläruppladdning",
   "Sender name": "Avsändarnamn",
-  "Service": "Tjänst",
+  Service: "Tjänst",
   "Service data": "Tjänstdata",
-  "Sheet": "Blad",
+  Sheet: "Blad",
   "Sheet column": "Kolumn i bladet",
-  "Shipment": "Försändelse",
+  Shipment: "Försändelse",
   "Shipment ID": "Försändelse-ID",
   "Show map on card": "Visa karta på kortet",
-  "Signature": "Signatur",
+  Signature: "Signatur",
   "Since common ancestor": "Sedan gemensam förfader",
   "Skip archived channels": "Hoppa över arkiverade kanaler",
   "Skip rows": "Hoppa över rader",
   "Path to send it down": "Vägen den ska ta",
   "Sort (Notion JSON)": "Sortering (Notion-JSON)",
   "Sort by": "Sortera på",
-  "Spreadsheet": "Kalkylblad",
+  Spreadsheet: "Kalkylblad",
   "Start at": "Börja vid",
   "Start cursor": "Startmarkör",
   "Start of window": "Fönstrets början",
-  "State": "Status",
+  State: "Status",
   "Status filter": "Statusfilter",
   "Stop on first error": "Stoppa vid första felet",
-  "Style": "Stil",
-  "Subject": "Ämne",
-  "Subscription": "Prenumeration",
-  "Substring": "Deltext",
+  Style: "Stil",
+  Subject: "Ämne",
+  Subscription: "Prenumeration",
+  Substring: "Deltext",
   "System prompt": "Systemprompt",
-  "Tab": "Flik",
-  "Table": "Tabell",
+  Tab: "Flik",
+  Table: "Tabell",
   "Table name": "Tabellnamn",
-  "Tags": "Taggar",
-  "Temperature": "Temperatur",
-  "Template": "Mall",
+  Tags: "Taggar",
+  Temperature: "Temperatur",
+  Template: "Mall",
   "Text to classify": "Text att klassificera",
   "Text to read": "Text att läsa",
   "Text to search": "Text att söka i",
   "Text to summarize": "Text att sammanfatta",
   "Thread ID": "Tråd-ID",
   "Time zone": "Tidszon",
-  "Timezone": "Tidszon",
-  "Title": "Rubrik",
-  "To": "Till",
+  Timezone: "Tidszon",
+  Title: "Rubrik",
+  To: "Till",
   "Time column": "Tidskolumn",
-  "Tone": "Tonläge",
-  "Topic": "Ämne (topic)",
-  "Type": "Typ",
+  Tone: "Tonläge",
+  Topic: "Ämne (topic)",
+  Type: "Typ",
   "Unique by": "Unik enligt",
-  "Units": "Enheter",
+  Units: "Enheter",
   "Updated after": "Uppdaterad efter",
   "Value format": "Värdeformat",
   "Wait (milliseconds)": "Vänta (millisekunder)",
@@ -349,54 +355,89 @@ export const SV_FIELD_TITLES: Record<string, string> = {
   "What it is": "Vad det är",
   "When to cancel": "När den ska avslutas",
   "When to use it": "När man använder det",
-  "Where": "Var",
+  Where: "Var",
   "Which channels": "Vilka kanaler",
-  "Attraction ID":
-    "Attraktions-ID",
-  "City":
-    "Stad",
-  "Kind of event":
-    "Typ av evenemang",
-  "Search for":
-    "Sök efter",
-  "Until":
-    "Till",
+  "Attraction ID": "Attraktions-ID",
+  City: "Stad",
+  "Kind of event": "Typ av evenemang",
+  "Search for": "Sök efter",
+  Until: "Till",
   "Accept calls with no key": "Ta emot anrop utan nyckel",
   "Answer calls with no key": "Svara på anrop utan nyckel",
   "Let an API key approve this": "Låt en API-nyckel godkänna det här",
 };
 
 export const SV_FIELD_HELP: Record<string, string> = {
-  "Hard deadline for the whole check, in milliseconds.": "Absolut tidsgräns för hela kontrollen, i millisekunder.",
-  "How many emails one check may take. The oldest waiting ones go first, in arrival order, so a burst bigger than this is delayed rather than skipped.": "Hur många mejl en kontroll får ta. De äldsta väntande går först, i ankomstordning, så en skur större än så fördröjs i stället för att hoppas över.",
-  "How many keys to keep before the oldest falls off. Keep more than the source can produce between two runs.": "Hur många nycklar som ska sparas innan den äldsta faller av. Håll fler än källan hinner producera mellan två körningar.",
-  "How many rows go in each batch. The last one takes whatever is left over.": "Hur många rader som ryms i varje bunt. Den sista tar det som blir över.",
-  "How often to check for new mail once the flow is published. Leave blank to only check when you press Run (for testing).": "Hur ofta det kontrolleras om nya mejl kommit när flödet är publicerat. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
-  "Leave blank to fire on every email. Otherwise works exactly like Gmail's search box, e.g. 'is:unread', 'from:someone@example.com', 'has:attachment'.": "Lämna tomt för att utlösa på varje mejl. Annars fungerar det precis som Gmails sökfält, t.ex. 'is:unread', 'from:nagon@example.com', 'has:attachment'.",
-  "Nothing has been seen yet, so everything is new — which is right for a list you want to work through. Choose the other when you are switching a watch on and the source already holds a backlog nobody wants processed.": "Inget har setts än, så allt är nytt — vilket är rätt för en lista du vill beta av. Välj det andra när du slår på en bevakning och källan redan rymmer en hög som ingen vill ha behandlad.",
-  "Only fire for mail to this address — useful on a shared mailbox that receives several.": "Utlös bara för mejl till den här adressen — användbart på en delad brevlåda som tar emot flera.",
-  "Only fire for this sender. Any part of the address or name counts, so \"@customer.com\" covers everyone at that company.": "Utlös bara för den här avsändaren. Vilken del som helst av adressen eller namnet räknas, så \"@kund.se\" täcker alla på det företaget.",
-  "Only fire when the message text contains this. Slower than the other filters on a large mailbox — most servers search bodies without an index.": "Utlös bara när meddelandetexten innehåller det här. Långsammare än de andra filtren på en stor brevlåda — de flesta servrar söker i brödtext utan index.",
-  "Only fire when the subject line contains this.": "Utlös bara när ämnesraden innehåller det här.",
-  "Only mail still marked unread. Watching never marks anything read by itself.": "Bara mejl som fortfarande är markerade som olästa. Bevakning markerar aldrig något som läst av sig själv.",
-  "Pace how fast items are STARTED, for a loop that calls someone else's API — 5 means a fifth of a second between starts, 0.5 means one every two seconds. Leave blank for no pacing. Concurrency still bounds how many run at once; this bounds how often a new one begins.": "Bestäm hur snabbt poster STARTAS, för en loop som anropar någon annans API — 5 betyder en femtedels sekund mellan starter, 0,5 betyder en varannan sekund. Lämna tomt för ingen takt. Parallellitet begränsar fortfarande hur många som körs samtidigt; det här begränsar hur ofta en ny börjar.",
-  "The columns that say which row this is — an id, an order number, a message id. Leave empty to use every column, which means a row counts as new again the moment any cell in it changes.": "Kolumnerna som säger vilken rad det här är — ett id, ett ordernummer, ett meddelande-id. Lämna tomt för att använda alla kolumner, vilket betyder att en rad räknas som ny igen så fort någon cell i den ändras.",
-  "Which folder to watch, e.g. \"INBOX\" or \"INBOX/Invoices\". Leave blank to use the folder set on the Mailbox page.": "Vilken mapp som ska bevakas, t.ex. \"INBOX\" eller \"INBOX/Fakturor\". Lämna tomt för att använda mappen som ställts in på Brevlåde-sidan.",
-  "Which memory to use. Empty means this step's own, which is what you want. Name one and every step naming the same one shares it — two flows that must not both act on the same row, or a watch you rebuilt and want to carry on where the old one left off.": "Vilket minne som ska användas. Tomt betyder stegets eget, vilket är det du vill ha. Namnge ett så delar alla steg som anger samma namn på det — två flöden som inte båda får agera på samma rad, eller en bevakning du byggt om och vill låta fortsätta där den gamla slutade.",
-  "About how many changed events one check takes. A check that finds more takes the oldest changes and leaves the rest for the next one, so nothing is dropped — it just arrives a check later.": "Ungefär hur många ändrade händelser en kontroll tar. En kontroll som hittar fler tar de äldsta ändringarna och lämnar resten till nästa, så inget tappas — det kommer bara en kontroll senare.",
-  "All-day events have no start time of their own. Include them and they count from midnight, which means a day's notice reaches them at midnight the night before.": "Heldagshändelser har ingen egen starttid. Ta med dem och de räknas från midnatt, vilket betyder att ett dygns varsel når dem vid midnatt kvällen före.",
-  "How long before the start to fire, in minutes. 0 fires as the event begins. A day is the most that can be asked for; longer notice is better built as a Schedule step reading the week ahead with List events.": "Hur långt före starten det ska utlösa, i minuter. 0 utlöser när händelsen börjar. Ett dygn är det mesta som kan begäras; längre varsel byggs bättre som ett Schema-steg som läser veckan framåt med Lista händelser.",
-  "How many events inside the notice window one check looks at. Anything past the cut is never announced, so raise it if a window can hold more events than this.": "Hur många händelser inne i varselfönstret en kontroll tittar på. Allt bortom gränsen aviseras aldrig, så höj den om ett fönster kan innehålla fler händelser än så.",
-  "How often to check for changes once the flow is published. Leave blank to only check when you press Run (for testing).": "Hur ofta det kontrolleras om något ändrats när flödet är publicerat. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
-  "How often to check once the flow is published. Keep it no longer than the notice asked for above, or an event can start between two checks and be reached late or not at all. Leave blank to only check when you press Run (for testing).": "Hur ofta det kontrolleras när flödet är publicerat. Håll det inte längre än varselet du ber om ovan, annars kan en händelse börja mellan två kontroller och nås sent eller inte alls. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
-  "IANA timezone that all-day events take their midnight from, e.g. \"Europe/Stockholm\". Empty = UTC.": "IANA-tidszonen som heldagshändelser tar sin midnatt från, t.ex. \"Europe/Stockholm\". Tomt = UTC.",
-  "Which changes are worth starting the flow for. A check costs the same either way — this decides what reaches the rest of the flow, and a check whose changes are all filtered out skips it.": "Vilka ändringar som är värda att starta flödet för. En kontroll kostar lika mycket oavsett — det här avgör vad som når resten av flödet, och en kontroll vars ändringar alla filtreras bort hoppar över det.",
+  "What to run, as you would type it into a shell on that server. Connect the 'Command' input instead to have an earlier step build it.":
+    "Det som ska köras, så som du skulle skriva det i ett skal på den servern. Koppla in ingången Kommando i stället om ett tidigare steg ska bygga det.",
+  "Which of the org's saved servers to run this on. Set them up on the Servers page — the address, the login and the host key live there, never in the flow. The SFTP steps pick from the same list.":
+    "Vilken av organisationens sparade servrar det här ska köras på. De ställs in på sidan Servrar — adressen, inloggningen och värdnyckeln finns där, aldrig i flödet. SFTP-stegen väljer ur samma lista.",
+  "Which saved server to use. Leave blank to use the single connection from the SFTP integration page — the way this step worked before saved servers existed. Manage them on the Servers page; the SSH step picks from the same list.":
+    "Vilken sparad server som ska användas. Lämna tomt för att använda den enda anslutningen från SFTP-integrationssidan — så som det här steget fungerade innan sparade servrar fanns. De hanteras på sidan Servrar; SSH-steget väljer ur samma lista.",
+  "Change to this folder first. The step fails rather than carrying on in the home directory if the folder isn't there. Leave blank for the account's home directory.":
+    "Byt till den här mappen först. Steget misslyckas i stället för att fortsätta i hemmappen om mappen inte finns. Lämna tomt för kontots hemmapp.",
+  "Values the command reads from its environment — $NAME in a shell. Use ${secret.NAME} for anything sensitive: the value reaches the server but is never written into the flow, and is blanked out of the run's output and logs.":
+    "Värden som kommandot läser från sin miljö — $NAMN i ett skal. Använd ${secret.NAMN} för allt känsligt: värdet når servern men skrivs aldrig in i flödet, och maskas bort ur körningens utdata och loggar.",
+  "A command that exits non-zero has failed, and by default so does this step. Choose 'Carry on' and the step succeeds instead, with the code on the 'Exit code' output for the flow to branch on. This covers ONLY a command that ran and returned a code: a server that cannot be reached, a login the server refused, or a command that outran its timeout still fail the step, because there is no exit code to hand you and inventing one would send the flow down the wrong path.":
+    "Ett kommando som avslutas med en kod som inte är noll har misslyckats, och som standard gör steget det också. Välj ”Fortsätt” så lyckas steget i stället, med koden på utgången Avslutningskod att förgrena på. Det här gäller ENBART ett kommando som kördes och lämnade en kod: en server som inte går att nå, en inloggning servern nekade, eller ett kommando som överskred sin tidsgräns gör fortfarande att steget misslyckas, eftersom det inte finns någon avslutningskod att ge dig och att hitta på en skulle skicka flödet åt fel håll.",
+  "How long the command may run before the step gives up and asks the server to stop it. Raise it for backups and migrations; a command with no terminal to answer a prompt will otherwise sit here until this elapses.":
+    "Hur länge kommandot får köra innan steget ger upp och ber servern att stoppa det. Höj den för säkerhetskopior och migreringar; ett kommando utan terminal som kan svara på en fråga blir annars stående här tills tiden går ut.",
+  "How much of each of the two output streams to keep. A command that prints more still runs to completion — the extra is dropped rather than the command stopped, and the step says so.":
+    "Hur mycket av var och en av de två utdataströmmarna som ska behållas. Ett kommando som skriver ut mer körs ändå färdigt — det överskjutande kastas i stället för att kommandot stoppas, och steget säger till om det.",
+  "Hard deadline for the whole check, in milliseconds.":
+    "Absolut tidsgräns för hela kontrollen, i millisekunder.",
+  "How many emails one check may take. The oldest waiting ones go first, in arrival order, so a burst bigger than this is delayed rather than skipped.":
+    "Hur många mejl en kontroll får ta. De äldsta väntande går först, i ankomstordning, så en skur större än så fördröjs i stället för att hoppas över.",
+  "How many keys to keep before the oldest falls off. Keep more than the source can produce between two runs.":
+    "Hur många nycklar som ska sparas innan den äldsta faller av. Håll fler än källan hinner producera mellan två körningar.",
+  "How many rows go in each batch. The last one takes whatever is left over.":
+    "Hur många rader som ryms i varje bunt. Den sista tar det som blir över.",
+  "How often to check for new mail once the flow is published. Leave blank to only check when you press Run (for testing).":
+    "Hur ofta det kontrolleras om nya mejl kommit när flödet är publicerat. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
+  "Leave blank to fire on every email. Otherwise works exactly like Gmail's search box, e.g. 'is:unread', 'from:someone@example.com', 'has:attachment'.":
+    "Lämna tomt för att utlösa på varje mejl. Annars fungerar det precis som Gmails sökfält, t.ex. 'is:unread', 'from:nagon@example.com', 'has:attachment'.",
+  "Nothing has been seen yet, so everything is new — which is right for a list you want to work through. Choose the other when you are switching a watch on and the source already holds a backlog nobody wants processed.":
+    "Inget har setts än, så allt är nytt — vilket är rätt för en lista du vill beta av. Välj det andra när du slår på en bevakning och källan redan rymmer en hög som ingen vill ha behandlad.",
+  "Only fire for mail to this address — useful on a shared mailbox that receives several.":
+    "Utlös bara för mejl till den här adressen — användbart på en delad brevlåda som tar emot flera.",
+  'Only fire for this sender. Any part of the address or name counts, so "@customer.com" covers everyone at that company.':
+    'Utlös bara för den här avsändaren. Vilken del som helst av adressen eller namnet räknas, så "@kund.se" täcker alla på det företaget.',
+  "Only fire when the message text contains this. Slower than the other filters on a large mailbox — most servers search bodies without an index.":
+    "Utlös bara när meddelandetexten innehåller det här. Långsammare än de andra filtren på en stor brevlåda — de flesta servrar söker i brödtext utan index.",
+  "Only fire when the subject line contains this.":
+    "Utlös bara när ämnesraden innehåller det här.",
+  "Only mail still marked unread. Watching never marks anything read by itself.":
+    "Bara mejl som fortfarande är markerade som olästa. Bevakning markerar aldrig något som läst av sig själv.",
+  "Pace how fast items are STARTED, for a loop that calls someone else's API — 5 means a fifth of a second between starts, 0.5 means one every two seconds. Leave blank for no pacing. Concurrency still bounds how many run at once; this bounds how often a new one begins.":
+    "Bestäm hur snabbt poster STARTAS, för en loop som anropar någon annans API — 5 betyder en femtedels sekund mellan starter, 0,5 betyder en varannan sekund. Lämna tomt för ingen takt. Parallellitet begränsar fortfarande hur många som körs samtidigt; det här begränsar hur ofta en ny börjar.",
+  "The columns that say which row this is — an id, an order number, a message id. Leave empty to use every column, which means a row counts as new again the moment any cell in it changes.":
+    "Kolumnerna som säger vilken rad det här är — ett id, ett ordernummer, ett meddelande-id. Lämna tomt för att använda alla kolumner, vilket betyder att en rad räknas som ny igen så fort någon cell i den ändras.",
+  'Which folder to watch, e.g. "INBOX" or "INBOX/Invoices". Leave blank to use the folder set on the Mailbox page.':
+    'Vilken mapp som ska bevakas, t.ex. "INBOX" eller "INBOX/Fakturor". Lämna tomt för att använda mappen som ställts in på Brevlåde-sidan.',
+  "Which memory to use. Empty means this step's own, which is what you want. Name one and every step naming the same one shares it — two flows that must not both act on the same row, or a watch you rebuilt and want to carry on where the old one left off.":
+    "Vilket minne som ska användas. Tomt betyder stegets eget, vilket är det du vill ha. Namnge ett så delar alla steg som anger samma namn på det — två flöden som inte båda får agera på samma rad, eller en bevakning du byggt om och vill låta fortsätta där den gamla slutade.",
+  "About how many changed events one check takes. A check that finds more takes the oldest changes and leaves the rest for the next one, so nothing is dropped — it just arrives a check later.":
+    "Ungefär hur många ändrade händelser en kontroll tar. En kontroll som hittar fler tar de äldsta ändringarna och lämnar resten till nästa, så inget tappas — det kommer bara en kontroll senare.",
+  "All-day events have no start time of their own. Include them and they count from midnight, which means a day's notice reaches them at midnight the night before.":
+    "Heldagshändelser har ingen egen starttid. Ta med dem och de räknas från midnatt, vilket betyder att ett dygns varsel når dem vid midnatt kvällen före.",
+  "How long before the start to fire, in minutes. 0 fires as the event begins. A day is the most that can be asked for; longer notice is better built as a Schedule step reading the week ahead with List events.":
+    "Hur långt före starten det ska utlösa, i minuter. 0 utlöser när händelsen börjar. Ett dygn är det mesta som kan begäras; längre varsel byggs bättre som ett Schema-steg som läser veckan framåt med Lista händelser.",
+  "How many events inside the notice window one check looks at. Anything past the cut is never announced, so raise it if a window can hold more events than this.":
+    "Hur många händelser inne i varselfönstret en kontroll tittar på. Allt bortom gränsen aviseras aldrig, så höj den om ett fönster kan innehålla fler händelser än så.",
+  "How often to check for changes once the flow is published. Leave blank to only check when you press Run (for testing).":
+    "Hur ofta det kontrolleras om något ändrats när flödet är publicerat. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
+  "How often to check once the flow is published. Keep it no longer than the notice asked for above, or an event can start between two checks and be reached late or not at all. Leave blank to only check when you press Run (for testing).":
+    "Hur ofta det kontrolleras när flödet är publicerat. Håll det inte längre än varselet du ber om ovan, annars kan en händelse börja mellan två kontroller och nås sent eller inte alls. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
+  'IANA timezone that all-day events take their midnight from, e.g. "Europe/Stockholm". Empty = UTC.':
+    'IANA-tidszonen som heldagshändelser tar sin midnatt från, t.ex. "Europe/Stockholm". Tomt = UTC.',
+  "Which changes are worth starting the flow for. A check costs the same either way — this decides what reaches the rest of the flow, and a check whose changes are all filtered out skips it.":
+    "Vilka ändringar som är värda att starta flödet för. En kontroll kostar lika mycket oavsett — det här avgör vad som når resten av flödet, och en kontroll vars ändringar alla filtreras bort hoppar över det.",
   "Confirms that a step with no document named really is meant to empty the base. Ignored when a document is named.":
     "Bekräftar att ett steg utan angivet dokument verkligen är tänkt att tömma basen. Ignoreras när ett dokument anges.",
-  "How to compare A against B. Mind the last four: \"is set\" asks only whether there is a value at all, so an empty list or empty text IS set — reach for \"is empty\" when you mean nothing in it.":
-    "Hur A ska jämföras med B. Se upp med de fyra sista: \"har ett värde\" frågar bara om det finns något värde alls, så en tom lista eller tom text HAR ett värde — ta \"är tomt\" när du menar att det inte finns något i det.",
-  "How to test the Value against Compare to. Mind the last four: \"is set\" asks only whether there is a value at all, so an empty list or empty text IS set — reach for \"is empty\" when you mean nothing in it, which is what stops a report going out with no rows.":
-    "Hur Värdet ska testas mot Jämför med. Se upp med de fyra sista: \"har ett värde\" frågar bara om det finns något värde alls, så en tom lista eller tom text HAR ett värde — ta \"är tomt\" när du menar att det inte finns något i det, vilket är det som hindrar en rapport från att gå ut utan rader.",
+  'How to compare A against B. Mind the last four: "is set" asks only whether there is a value at all, so an empty list or empty text IS set — reach for "is empty" when you mean nothing in it.':
+    'Hur A ska jämföras med B. Se upp med de fyra sista: "har ett värde" frågar bara om det finns något värde alls, så en tom lista eller tom text HAR ett värde — ta "är tomt" när du menar att det inte finns något i det.',
+  'How to test the Value against Compare to. Mind the last four: "is set" asks only whether there is a value at all, so an empty list or empty text IS set — reach for "is empty" when you mean nothing in it, which is what stops a report going out with no rows.':
+    'Hur Värdet ska testas mot Jämför med. Se upp med de fyra sista: "har ett värde" frågar bara om det finns något värde alls, så en tom lista eller tom text HAR ett värde — ta "är tomt" när du menar att det inte finns något i det, vilket är det som hindrar en rapport från att gå ut utan rader.',
   "Keep only this many rows, taken AFTER sorting — which is what makes a top-five: sort by score descending, then cap at 5. Empty keeps every row.":
     "Behåll bara så här många rader, tagna EFTER sorteringen — vilket är det som ger en topp fem: sortera på poäng nedåt, och kapa sedan vid 5. Tomt behåller alla rader.",
   "Keep only this many rows, taken after the filters. Empty keeps every row.":
@@ -435,478 +476,828 @@ export const SV_FIELD_HELP: Record<string, string> = {
     "Vad som identifierar det här dokumentet — ett filnamn, en URL, ett ärendenummer. Läggs samma källa till igen ersätts dess avsnitt. Tomt betyder textens eget fingeravtryck, så samma dokument två gånger lagras en gång.",
   "What this collection of documents is called — handbook, prices, policies. Made the first time you add to it.":
     "Vad den här samlingen dokument heter — handbok, priser, policyer. Skapas första gången du lägger till i den.",
-  "Which collection of documents to search.": "Vilken samling dokument som ska sökas igenom.",
-  "Value to store. Overridden by the 'value' input port when connected.": "Värdet som ska sparas. Ingången 'value' vinner över detta när den är inkopplad.",
+  "Which collection of documents to search.":
+    "Vilken samling dokument som ska sökas igenom.",
+  "Value to store. Overridden by the 'value' input port when connected.":
+    "Värdet som ska sparas. Ingången 'value' vinner över detta när den är inkopplad.",
   "The condition that has to hold for this path to be taken — row.amount > 100, or row.status == 'paid' && row.country == 'SE'. The incoming value is 'row'; a plain number or text reads as row.value. Set this OR a value to look for, not both.":
     "Villkoret som måste gälla för att den här vägen ska tas — row.amount > 100, eller row.status == 'paid' && row.country == 'SE'. Det inkommande värdet är 'row'; ett vanligt tal eller en text läses som row.value. Sätt det här ELLER ett värde att leta efter, inte båda.",
-  "What has to be equal for this path to be taken — one value (\"paid\", 200, true), or a list ([200,201,204]) if several values should all take the same path. Use a condition instead when equality cannot say what you mean.":
-    "Vad som måste vara lika för att den här vägen ska tas — ett värde (\"paid\", 200, true), eller en lista ([200,201,204]) om flera värden ska ta samma väg. Använd ett villkor i stället när likhet inte kan säga det du menar.",
+  'What has to be equal for this path to be taken — one value ("paid", 200, true), or a list ([200,201,204]) if several values should all take the same path. Use a condition instead when equality cannot say what you mean.':
+    'Vad som måste vara lika för att den här vägen ska tas — ett värde ("paid", 200, true), eller en lista ([200,201,204]) om flera värden ska ta samma väg. Använd ett villkor i stället när likhet inte kan säga det du menar.',
   "Cut to this many characters. An ellipsis is added only when something was actually cut.":
     "Klipp till så här många tecken. En ellips läggs till bara när något faktiskt klipptes.",
-  "Off (the default) means \"se\", \"SE\" and \"Se\" all find the same row. On means they are three different keys.":
-    "Av (standard) betyder att \"se\", \"SE\" och \"Se\" hittar samma rad. På betyder att de är tre olika nycklar.",
+  'Off (the default) means "se", "SE" and "Se" all find the same row. On means they are three different keys.':
+    'Av (standard) betyder att "se", "SE" och "Se" hittar samma rad. På betyder att de är tre olika nycklar.',
   "The one change to make. For pattern matching use the Regex step instead.":
     "Den enda ändring som ska göras. För mönstermatchning använder du steget Regex i stället.",
   "The pairs to look through: what comes in on the left, what comes out on the right.":
     "Paren som ska letas igenom: det som kommer in till vänster, det som kommer ut till höger.",
-  "The separator to cut on — a comma, a semicolon, \" | \". Use \\n for one piece per line. Spaces around each piece are trimmed.":
-    "Avgränsaren att klippa vid — ett komma, ett semikolon, \" | \". Använd \\n för en del per rad. Mellanslag runt varje del tas bort.",
+  'The separator to cut on — a comma, a semicolon, " | ". Use \\n for one piece per line. Spaces around each piece are trimmed.':
+    'Avgränsaren att klippa vid — ett komma, ett semikolon, " | ". Använd \\n för en del per rad. Mellanslag runt varje del tas bort.',
   "The text to look for, taken literally — a full stop means a full stop.":
     "Texten att leta efter, tagen bokstavligt — en punkt betyder en punkt.",
   "What to put in its place. Leave empty to remove what you found.":
     "Vad som ska sättas i stället. Lämna tomt för att ta bort det du sökte efter.",
   "What to send out for a value the table does not list. Leave empty and unlisted values leave on the 'No match' output instead.":
-    "Vad som ska skickas ut för ett värde som tabellen inte listar. Lämna tomt så går olistade värden ut på utgången \"Ingen träff\" i stället.",
+    'Vad som ska skickas ut för ett värde som tabellen inte listar. Lämna tomt så går olistade värden ut på utgången "Ingen träff" i stället.',
   "What to send out when the text is empty or nothing but spaces.":
     "Vad som ska skickas ut när texten är tom eller bara innehåller mellanslag.",
   "Confirms that a step with no condition really is meant to empty the whole collection. Ignored when a condition is set.":
     "Bekräftar att ett steg utan villkor verkligen är tänkt att tömma hela samlingen. Ignoreras när ett villkor är satt.",
   "Delete only the rows that match these conditions. Leave empty to mean every row — which the step will not do unless 'Delete every row' is also on.":
-    "Ta bara bort de rader som matchar de här villkoren. Lämnar du tomt menas varje rad — vilket steget inte gör om inte \"Ta bort varje rad\" också är på.",
+    'Ta bara bort de rader som matchar de här villkoren. Lämnar du tomt menas varje rad — vilket steget inte gör om inte "Ta bort varje rad" också är på.',
   "How long to pause before continuing, in milliseconds (1000 = 1 second). Use 'Wait until' instead to hold for a named moment.":
-    "Hur länge pausen ska vara innan flödet fortsätter, i millisekunder (1000 = 1 sekund). Använd \"Vänta till\" i stället för att vänta på en bestämd tidpunkt.",
+    'Hur länge pausen ska vara innan flödet fortsätter, i millisekunder (1000 = 1 sekund). Använd "Vänta till" i stället för att vänta på en bestämd tidpunkt.',
   "Name of the collection to delete from. Overridden by a value connected into the Collection input.":
     "Namnet på samlingen som rader ska tas bort ur. Ett värde som kopplas in på ingången Samling vinner över det här.",
-  "The moment to carry on at: \"tomorrow\", \"tomorrow+9h\", \"now+2h\", \"+3d\", or a timestamp (2026-06-16T09:00:00Z). A moment already past carries straight on. The 'Wait until' input overrides this when connected.":
-    "Tidpunkten då flödet ska fortsätta: \"tomorrow\", \"tomorrow+9h\", \"now+2h\", \"+3d\", eller en tidsstämpel (2026-06-16T09:00:00Z). En tidpunkt som redan passerat fortsätter direkt. Ingången \"Vänta till\" vinner över det här när den är kopplad.",
+  'The moment to carry on at: "tomorrow", "tomorrow+9h", "now+2h", "+3d", or a timestamp (2026-06-16T09:00:00Z). A moment already past carries straight on. The \'Wait until\' input overrides this when connected.':
+    'Tidpunkten då flödet ska fortsätta: "tomorrow", "tomorrow+9h", "now+2h", "+3d", eller en tidsstämpel (2026-06-16T09:00:00Z). En tidpunkt som redan passerat fortsätter direkt. Ingången "Vänta till" vinner över det här när den är kopplad.',
   "The pile to take, named the same as in the flow that adds to it.":
     "Högen som ska hämtas, med samma namn som i flödet som lägger till i den.",
-  "What this pile is called. The flow that sends it later takes the same name. Stored as a collection called \"digest_<name>\".":
-    "Vad den här högen heter. Flödet som skickar den senare anger samma namn. Sparas som en samling som heter \"digest_<namn>\".",
-  "Which zone the day boundaries of \"today\" and \"tomorrow\" are taken in, e.g. \"Europe/Stockholm\". Empty = UTC. Ignored for a full timestamp.":
-    "Vilken zon dygnsgränserna för \"today\" och \"tomorrow\" räknas i, t.ex. \"Europe/Stockholm\". Tomt = UTC. Ignoreras för en fullständig tidsstämpel.",
-  "One entry per value you want: the name it comes out under, and the CSS selector that finds it. Write \"selector@attribute\" to take an attribute instead of the text — \"a@href\", \"img@src\", \"@data-id\" for the row element's own attribute, \"@html\" for its inner HTML. Leave the selector empty to mean the row element itself. Nothing matched comes out as empty text.":
-    "En rad per värde du vill ha: namnet det kommer ut under, och CSS-väljaren som hittar det. Skriv \"väljare@attribut\" för att ta ett attribut i stället för texten — \"a@href\", \"img@src\", \"@data-id\" för radelementets eget attribut, \"@html\" för dess inre HTML. Lämna väljaren tom för att mena radelementet självt. Träffas ingenting kommer värdet ut som tom text.",
-  "The selector for the thing that repeats — \".product\", \"table tbody tr\", \"article\". You get one row per match, with every field read inside it. Leave it empty to read the fields once from the whole page.":
-    "Väljaren för det som upprepas — \".product\", \"table tbody tr\", \"article\". Du får en rad per träff, där varje fält läses inuti den. Lämna tomt för att läsa fälten en gång från hela sidan.",
+  'What this pile is called. The flow that sends it later takes the same name. Stored as a collection called "digest_<name>".':
+    'Vad den här högen heter. Flödet som skickar den senare anger samma namn. Sparas som en samling som heter "digest_<namn>".',
+  'Which zone the day boundaries of "today" and "tomorrow" are taken in, e.g. "Europe/Stockholm". Empty = UTC. Ignored for a full timestamp.':
+    'Vilken zon dygnsgränserna för "today" och "tomorrow" räknas i, t.ex. "Europe/Stockholm". Tomt = UTC. Ignoreras för en fullständig tidsstämpel.',
+  'One entry per value you want: the name it comes out under, and the CSS selector that finds it. Write "selector@attribute" to take an attribute instead of the text — "a@href", "img@src", "@data-id" for the row element\'s own attribute, "@html" for its inner HTML. Leave the selector empty to mean the row element itself. Nothing matched comes out as empty text.':
+    'En rad per värde du vill ha: namnet det kommer ut under, och CSS-väljaren som hittar det. Skriv "väljare@attribut" för att ta ett attribut i stället för texten — "a@href", "img@src", "@data-id" för radelementets eget attribut, "@html" för dess inre HTML. Lämna väljaren tom för att mena radelementet självt. Träffas ingenting kommer värdet ut som tom text.',
+  'The selector for the thing that repeats — ".product", "table tbody tr", "article". You get one row per match, with every field read inside it. Leave it empty to read the fields once from the whole page.':
+    'Väljaren för det som upprepas — ".product", "table tbody tr", "article". Du får en rad per träff, där varje fält läses inuti den. Lämna tomt för att läsa fälten en gång från hela sidan.',
   "The address the HTML came from. With it set, a link or image you pull comes out as a full address instead of the relative half the page carries.":
     "Adressen som HTML-koden kom från. Med den satt kommer varje länk eller bild du plockar ut som en fullständig adress i stället för den halva som sidan bär.",
   "Most APIs hand back one page at a time. Turn this on and the step keeps fetching until the pages run out, then gives you every item as one list. Pick how that API says where the next page is: a Link header (GitHub and friends), a field in the response (most modern APIs — name it below), or a page number that climbs until a page comes back empty. Status and Headers then describe the last page fetched.":
     "De flesta API:er lämnar ut en sida i taget. Slår du på det här fortsätter steget hämta tills sidorna tar slut, och ger dig alla poster som en enda lista. Välj hur det API:et talar om var nästa sida finns: en Link-rubrik (GitHub och liknande), ett fält i svaret (de flesta moderna API:er — namnge det nedan) eller ett sidnummer som räknas upp tills en sida kommer tillbaka tom. Status och Rubriker beskriver då den sista hämtade sidan.",
-  "The field on each page holding the list, written with dots — \"data\", \"result.items\". Leave it empty when the API answers with a bare list. Every page's items are joined into one list on the Response output; without it you get the pages themselves, one after another.":
-    "Fältet på varje sida som håller listan, skrivet med punkter — \"data\", \"result.items\". Lämna tomt när API:et svarar med en ren lista. Posterna från alla sidor slås ihop till en enda lista på utgången Svar; utan det får du sidorna i sig, en efter en.",
-  "The field holding the next page's address or cursor, written with dots — \"next\", \"meta.next_cursor\", \"paging.next\". Paging stops when that field is missing or empty. If it holds a cursor rather than a web address, name the query parameter to send it as below.":
-    "Fältet som håller nästa sidas adress eller markör, skrivet med punkter — \"next\", \"meta.next_cursor\", \"paging.next\". Hämtningen slutar när fältet saknas eller är tomt. Håller det en markör i stället för en webbadress namnger du frågeparametern att skicka den som nedan.",
-  "The query parameter that carries the position — \"cursor\" or \"page_token\" when following a cursor field, \"page\" or \"offset\" when climbing a number. Climbing defaults to \"page\" and starts from whatever the address already says.":
-    "Frågeparametern som bär positionen — \"cursor\" eller \"page_token\" när du följer ett markörfält, \"page\" eller \"offset\" när du räknar upp ett tal. Uppräkning använder \"page\" som standard och utgår från det som adressen redan säger.",
+  'The field on each page holding the list, written with dots — "data", "result.items". Leave it empty when the API answers with a bare list. Every page\'s items are joined into one list on the Response output; without it you get the pages themselves, one after another.':
+    'Fältet på varje sida som håller listan, skrivet med punkter — "data", "result.items". Lämna tomt när API:et svarar med en ren lista. Posterna från alla sidor slås ihop till en enda lista på utgången Svar; utan det får du sidorna i sig, en efter en.',
+  'The field holding the next page\'s address or cursor, written with dots — "next", "meta.next_cursor", "paging.next". Paging stops when that field is missing or empty. If it holds a cursor rather than a web address, name the query parameter to send it as below.':
+    'Fältet som håller nästa sidas adress eller markör, skrivet med punkter — "next", "meta.next_cursor", "paging.next". Hämtningen slutar när fältet saknas eller är tomt. Håller det en markör i stället för en webbadress namnger du frågeparametern att skicka den som nedan.',
+  'The query parameter that carries the position — "cursor" or "page_token" when following a cursor field, "page" or "offset" when climbing a number. Climbing defaults to "page" and starts from whatever the address already says.':
+    'Frågeparametern som bär positionen — "cursor" eller "page_token" när du följer ett markörfält, "page" eller "offset" när du räknar upp ett tal. Uppräkning använder "page" som standard och utgår från det som adressen redan säger.',
   "Stop after this many pages even if the API offers more, so a runaway feed cannot hold the flow up. The time limit and the response size limit are spent across all the pages together, not granted afresh for each one.":
     "Sluta efter så här många sidor även om API:et erbjuder fler, så att ett skenande flöde av sidor inte kan hålla upp flödet. Tidsgränsen och gränsen för svarsstorlek delas av alla sidorna tillsammans, inte på nytt för varje sida.",
   "The script. 'input' is the value wired into 'in' (or 'row' and 'index' in per-row mode); whatever you return leaves on 'out'. console.log writes to the step's console and to the 'logs' output, each line carrying its level and the line of script that printed it. No network, no files, no imports. Overridden by the 'Script' input.":
     "Skriptet. 'input' är värdet som kopplas in på 'in' (eller 'row' och 'index' i läget en gång per rad); det du returnerar går ut på 'out'. console.log skriver till stegets konsol och till utgången 'logs', och varje rad bär sin nivå och den rad i skriptet som skrev den. Inget nätverk, inga filer, inga importer. Ingången Skript vinner över detta.",
   "Per-row mode only. Fail the step on the first row that throws, or keep going and send that row — with its error — out the 'Failed rows' output. Routing lets 199 good rows through when row 7 is malformed.":
     "Endast i läget en gång per rad. Låt steget misslyckas vid den första raden som ger fel, eller fortsätt och skicka den raden — med sitt felmeddelande — ut på utgången 'Misslyckade rader'. Att skicka vidare släpper igenom 199 fungerande rader när rad 7 är trasig.",
-  "Once, with the whole input as 'input' — or once per row, with each row as 'row' and its position as 'index'. Per-row collects what you return into a list, and drops any row you return nothing for. Every row runs in the same sandbox, so a global you set outlives the row that set it — useful for a running total, and worth knowing if you did not mean to.": "En gång, med hela indatat som 'input' — eller en gång per rad, med varje rad som 'row' och dess position som 'index'. Per rad samlas det du returnerar i en lista, och varje rad du inte returnerar något för faller bort. Varje rad körs i samma sandlåda, så en global du sätter överlever raden som satte den — användbart för en löpande summa, och värt att veta om du inte menade det.",
+  "Once, with the whole input as 'input' — or once per row, with each row as 'row' and its position as 'index'. Per-row collects what you return into a list, and drops any row you return nothing for. Every row runs in the same sandbox, so a global you set outlives the row that set it — useful for a running total, and worth knowing if you did not mean to.":
+    "En gång, med hela indatat som 'input' — eller en gång per rad, med varje rad som 'row' och dess position som 'index'. Per rad samlas det du returnerar i en lista, och varje rad du inte returnerar något för faller bort. Varje rad körs i samma sandlåda, så en global du sätter överlever raden som satte den — användbart för en löpande summa, och värt att veta om du inte menade det.",
   "How long the script may run in total, per-row runs included. Past it the step fails rather than holding the flow up. Maximum 30000.":
     "Hur länge skriptet får köra totalt, körningarna per rad inräknade. Därefter misslyckas steget i stället för att hålla upp flödet. Högst 30000.",
   "Keys a caller may send to start this flow, either as an Authorization: Bearer header or as ?key=… on the end of the address — use the address form for senders that only let you paste a URL. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime.":
     "Nycklar som en avsändare kan skicka för att starta flödet, antingen som rubriken Authorization: Bearer eller som ?key=… sist i adressen — använd adressformen för avsändare som bara låter dig klistra in en URL. Adressen godtar VILKEN som helst av nycklarna i listan, så du kan lägga till en ny nyckel, flytta över avsändarna och sedan återkalla den gamla utan avbrott.",
   "Let anyone who knows this flow's address start it, with no key at all. Only for senders that can carry neither a header nor a key in the URL — the address becomes the only thing standing between the flow and the internet. Off by default, and a key-less step stays inert until you turn this on.":
     "Låt vem som helst som känner till flödets adress starta det, helt utan nyckel. Bara för avsändare som varken kan skicka en rubrik eller en nyckel i adressen — adressen blir då det enda som står mellan flödet och internet. Av som standard, och ett steg utan nyckel tar inte emot något förrän du slår på det här.",
-  "Heading shown at the top of the form. Defaults to the flow's name.": "Rubrik som visas överst i formuläret. Utan värde används flödets namn.",
-  "The questions the form asks, one per field. Each becomes a key on the Body output, so later steps know the columns before the first submission arrives. Defaults to name, email, message.": "Frågorna formuläret ställer, en per fält. Varje fält blir en nyckel på utgången Innehåll, så senare steg känner till kolumnerna redan innan det första svaret kommer in. Standard är name, email, message.",
+  "Heading shown at the top of the form. Defaults to the flow's name.":
+    "Rubrik som visas överst i formuläret. Utan värde används flödets namn.",
+  "The questions the form asks, one per field. Each becomes a key on the Body output, so later steps know the columns before the first submission arrives. Defaults to name, email, message.":
+    "Frågorna formuläret ställer, en per fält. Varje fält blir en nyckel på utgången Innehåll, så senare steg känner till kolumnerna redan innan det första svaret kommer in. Standard är name, email, message.",
   "Keys a caller may send to call this flow, either as an Authorization: Bearer header or as ?key=… on the end of the address — use the address form for systems that only let you paste a URL. The endpoint accepts ANY listed key, so you can add a new key, migrate callers, then revoke the old one with zero downtime.":
     "Nycklar som en anropare kan skicka för att anropa flödet, antingen som rubriken Authorization: Bearer eller som ?key=… sist i adressen — använd adressformen för system som bara låter dig klistra in en URL. Adressen godtar VILKEN som helst av nycklarna i listan, så du kan lägga till en ny nyckel, flytta över anroparna och sedan återkalla den gamla utan avbrott.",
   "Let anyone who knows this flow's address call it, with no key at all. Weigh this more carefully than on a Webhook step: this address answers, so an open one hands your Reply to whoever asks. Only for a caller that can send neither a header nor a key in the URL. Off by default, and a key-less step stays inert until you turn this on.":
     "Låt vem som helst som känner till flödets adress anropa det, helt utan nyckel. Väg det här tyngre än på ett Webhook-steg: den här adressen svarar, så en öppen adress lämnar ut ditt Svar till den som frågar. Bara för en anropare som varken kan skicka en rubrik eller en nyckel i adressen. Av som standard, och ett steg utan nyckel tar inte emot något förrän du slår på det här.",
-  "The HTTP status the caller receives. 200 unless you need to signal something specific (201 created, 202 accepted, 422 rejected).": "HTTP-statusen som anroparen får. 200 om du inte behöver signalera något särskilt (201 skapad, 202 mottagen, 422 avvisad).",
-  "The text the caller receives. Supports ${...} references. Ignored when something is wired into the Body input, which keeps its own type.": "Texten som anroparen får. Stöder ${...}-referenser. Ignoreras när något är kopplat till ingången Innehåll, vars värde behåller sin egen typ.",
-  "1-based page number. Overridden by the 'Page' input.": "Sidnummer som börjar på 1. Ingången Sida vinner över detta.",
-  "A 46elks number (E.164) the recipient can reply to, or an alphanumeric sender name (max 11 chars, must contain a letter; no replies).": "Ett 46elks-nummer (E.164) som mottagaren kan svara till, eller ett alfanumeriskt avsändarnamn (max 11 tecken, måste innehålla en bokstav; går inte att svara på).",
-  "A CEL expression. The variable 'input' is the connected value and 'now' is the current timestamp; the expression's value is emitted on 'out'.": "Ett CEL-uttryck. Variabeln 'input' är det inkopplade värdet och 'now' är aktuell tidsstämpel; uttryckets värde skickas ut på 'out'.",
-  "A JSON value — e.g. an array of Slack Block Kit blocks like [ {…}, {…} ]. Parsed and emitted decoded on 'out'.": "Ett JSON-värde — t.ex. en array med Slack Block Kit-block som [ {…}, {…} ]. Tolkas och skickas ut avkodat på 'out'.",
-  "A SELECT to run against your Collections.": "En SELECT att köra mot dina Samlingar.",
-  "A city or address. When set, it's geocoded and overrides the map pin. The Place input overrides this typed value.": "En stad eller adress. När den är angiven geokodas den och övertrumfar kartnålen. Ingången Plats vinner över det skrivna värdet.",
-  "A name you pick for this notification channel — letters, numbers, dashes or underscores, no spaces. To receive the messages, subscribe to this same topic in the ntfy app or open ntfy.sh/<your-topic> in a browser.": "Ett namn du väljer för den här notiskanalen — bokstäver, siffror, bindestreck eller understreck, inga blanksteg. För att få meddelandena prenumererar du på samma ämne i ntfy-appen eller öppnar ntfy.sh/<ditt-ämne> i en webbläsare.",
-  "A note shown on the customer's Klarna statement (e.g. \"Order shipped\").": "En notering som visas på kundens Klarna-kontoutdrag (t.ex. \"Order skickad\").",
-  "A note shown on the customer's Klarna statement (e.g. \"Returned\").": "En notering som visas på kundens Klarna-kontoutdrag (t.ex. \"Returnerad\").",
-  "A web address starting with http:// or https://. Type it here, or connect a string into the 'url' input.": "En webbadress som börjar med http:// eller https://. Skriv den här, eller koppla in en sträng i ingången 'url'.",
-  "Add a _row column holding each row's real position in the sheet. Feed those rows to Update cells to write a value back to the row it came from — how you mark something done.": "Lägg till en kolumn _row med varje rads verkliga position i bladet. Skicka de raderna vidare till Uppdatera celler för att skriva tillbaka ett värde till raden det kom från — så markerar du något som klart.",
-  "An email address — plain (ada@acme.com) or with a display name (Ada Lovelace <ada@acme.com>). Type it here, or connect a string into the 'email' input.": "En e-postadress — enkel (ada@acme.com) eller med visningsnamn (Ada Lovelace <ada@acme.com>). Skriv den här, eller koppla in en sträng i ingången 'email'.",
-  "A phone number — local (070-123 45 67) or international (+46701234567). Type it here, or connect a string into the 'phone' input.": "Ett telefonnummer — lokalt (070-123 45 67) eller internationellt (+46701234567). Skriv det här, eller koppla in en sträng i ingången 'phone'.",
-  "Abort if the download exceeds this many bytes. Default 100 MiB; 0 = unlimited (still bounded by quota).": "Avbryt om nedladdningen överstiger så här många byte. Standard 100 MiB; 0 = obegränsat (ändå begränsat av kvoten).",
-  "Add the rows under what's already on the sheet instead of replacing it.": "Lägg raderna under det som redan finns i bladet i stället för att ersätta det.",
-  "An optional name for the table, shown as a caption above the header row. Leave blank for no caption. Takes a reference, so it can name the run's own data — e.g. \"Orders for ${upstream.today.out}\".": "Ett valfritt namn på tabellen, som visas som rubrik ovanför rubrikraden. Lämna tomt för ingen rubrik. Tar en referens, så namnet kan komma från körningens egna data — t.ex. \"Ordrar för ${upstream.today.out}\".",
+  "The HTTP status the caller receives. 200 unless you need to signal something specific (201 created, 202 accepted, 422 rejected).":
+    "HTTP-statusen som anroparen får. 200 om du inte behöver signalera något särskilt (201 skapad, 202 mottagen, 422 avvisad).",
+  "The text the caller receives. Supports ${...} references. Ignored when something is wired into the Body input, which keeps its own type.":
+    "Texten som anroparen får. Stöder ${...}-referenser. Ignoreras när något är kopplat till ingången Innehåll, vars värde behåller sin egen typ.",
+  "1-based page number. Overridden by the 'Page' input.":
+    "Sidnummer som börjar på 1. Ingången Sida vinner över detta.",
+  "A 46elks number (E.164) the recipient can reply to, or an alphanumeric sender name (max 11 chars, must contain a letter; no replies).":
+    "Ett 46elks-nummer (E.164) som mottagaren kan svara till, eller ett alfanumeriskt avsändarnamn (max 11 tecken, måste innehålla en bokstav; går inte att svara på).",
+  "A CEL expression. The variable 'input' is the connected value and 'now' is the current timestamp; the expression's value is emitted on 'out'.":
+    "Ett CEL-uttryck. Variabeln 'input' är det inkopplade värdet och 'now' är aktuell tidsstämpel; uttryckets värde skickas ut på 'out'.",
+  "A JSON value — e.g. an array of Slack Block Kit blocks like [ {…}, {…} ]. Parsed and emitted decoded on 'out'.":
+    "Ett JSON-värde — t.ex. en array med Slack Block Kit-block som [ {…}, {…} ]. Tolkas och skickas ut avkodat på 'out'.",
+  "A SELECT to run against your Collections.":
+    "En SELECT att köra mot dina Samlingar.",
+  "A city or address. When set, it's geocoded and overrides the map pin. The Place input overrides this typed value.":
+    "En stad eller adress. När den är angiven geokodas den och övertrumfar kartnålen. Ingången Plats vinner över det skrivna värdet.",
+  "A name you pick for this notification channel — letters, numbers, dashes or underscores, no spaces. To receive the messages, subscribe to this same topic in the ntfy app or open ntfy.sh/<your-topic> in a browser.":
+    "Ett namn du väljer för den här notiskanalen — bokstäver, siffror, bindestreck eller understreck, inga blanksteg. För att få meddelandena prenumererar du på samma ämne i ntfy-appen eller öppnar ntfy.sh/<ditt-ämne> i en webbläsare.",
+  'A note shown on the customer\'s Klarna statement (e.g. "Order shipped").':
+    'En notering som visas på kundens Klarna-kontoutdrag (t.ex. "Order skickad").',
+  'A note shown on the customer\'s Klarna statement (e.g. "Returned").':
+    'En notering som visas på kundens Klarna-kontoutdrag (t.ex. "Returnerad").',
+  "A web address starting with http:// or https://. Type it here, or connect a string into the 'url' input.":
+    "En webbadress som börjar med http:// eller https://. Skriv den här, eller koppla in en sträng i ingången 'url'.",
+  "Add a _row column holding each row's real position in the sheet. Feed those rows to Update cells to write a value back to the row it came from — how you mark something done.":
+    "Lägg till en kolumn _row med varje rads verkliga position i bladet. Skicka de raderna vidare till Uppdatera celler för att skriva tillbaka ett värde till raden det kom från — så markerar du något som klart.",
+  "An email address — plain (ada@acme.com) or with a display name (Ada Lovelace <ada@acme.com>). Type it here, or connect a string into the 'email' input.":
+    "En e-postadress — enkel (ada@acme.com) eller med visningsnamn (Ada Lovelace <ada@acme.com>). Skriv den här, eller koppla in en sträng i ingången 'email'.",
+  "A phone number — local (070-123 45 67) or international (+46701234567). Type it here, or connect a string into the 'phone' input.":
+    "Ett telefonnummer — lokalt (070-123 45 67) eller internationellt (+46701234567). Skriv det här, eller koppla in en sträng i ingången 'phone'.",
+  "Abort if the download exceeds this many bytes. Default 100 MiB; 0 = unlimited (still bounded by quota).":
+    "Avbryt om nedladdningen överstiger så här många byte. Standard 100 MiB; 0 = obegränsat (ändå begränsat av kvoten).",
+  "Add the rows under what's already on the sheet instead of replacing it.":
+    "Lägg raderna under det som redan finns i bladet i stället för att ersätta det.",
+  'An optional name for the table, shown as a caption above the header row. Leave blank for no caption. Takes a reference, so it can name the run\'s own data — e.g. "Orders for ${upstream.today.out}".':
+    'Ett valfritt namn på tabellen, som visas som rubrik ovanför rubrikraden. Lämna tomt för ingen rubrik. Tar en referens, så namnet kan komma från körningens egna data — t.ex. "Ordrar för ${upstream.today.out}".',
   "Appended to the end of the reply.": "Läggs till i slutet av svaret.",
-  "Appended to the joined text when at least one row is rendered.": "Läggs till efter den sammanfogade texten när minst en rad renderas.",
-  "At period end: the subscription stays active until the period the customer already paid for ends. Immediately: cancel right now.": "Vid periodens slut: prenumerationen fortsätter gälla till slutet av den period kunden redan betalat för. Omedelbart: avsluta direkt.",
-  "Auto-create the table (with a UNIQUE on conflict_columns) when missing. Defaults true.": "Skapa tabellen automatiskt (med UNIQUE på conflict_columns) om den saknas. Standard: på.",
-  "Auto-create the table from headers when missing. Defaults true.": "Skapa tabellen automatiskt utifrån rubrikerna om den saknas. Standard: på.",
-  "Auto-create the table from the supplied headers if it doesn't exist. Set false to fail loudly when the table is missing.": "Skapa tabellen automatiskt utifrån de angivna rubrikerna om den inte finns. Sätt false för att misslyckas tydligt när tabellen saknas.",
-  "Blind-copy recipient(s), comma-separated. Hidden from the other recipients.": "Mottagare för hemlig kopia, kommaseparerade. Syns inte för de andra mottagarna.",
-  "Body text. Overridden by the 'Body' input.": "Innehållstext. Ingången Innehåll vinner över detta.",
-  "Body to send with a POST request. The Body input overrides this when connected. May include ${secret.NAME} placeholders.": "Innehåll att skicka med en POST-förfrågan. Ingången Innehåll vinner över detta när den är inkopplad. Får innehålla platshållare som ${secret.NAMN}.",
-  "Broker keeps this as the topic's last known message for new subscribers.": "Mäklaren behåller detta som ämnets senast kända meddelande för nya prenumeranter.",
-  "CEL expression rendering one line per row. Sees the row as 'row' and the current time as 'now'. Non-string results are stringified. Takes precedence over 'column'.": "CEL-uttryck som renderar en rad per post. Ser raden som 'row' och aktuell tid som 'now'. Resultat som inte är text görs om till text. Vinner över 'column'.",
+  "Appended to the joined text when at least one row is rendered.":
+    "Läggs till efter den sammanfogade texten när minst en rad renderas.",
+  "At period end: the subscription stays active until the period the customer already paid for ends. Immediately: cancel right now.":
+    "Vid periodens slut: prenumerationen fortsätter gälla till slutet av den period kunden redan betalat för. Omedelbart: avsluta direkt.",
+  "Auto-create the table (with a UNIQUE on conflict_columns) when missing. Defaults true.":
+    "Skapa tabellen automatiskt (med UNIQUE på conflict_columns) om den saknas. Standard: på.",
+  "Auto-create the table from headers when missing. Defaults true.":
+    "Skapa tabellen automatiskt utifrån rubrikerna om den saknas. Standard: på.",
+  "Auto-create the table from the supplied headers if it doesn't exist. Set false to fail loudly when the table is missing.":
+    "Skapa tabellen automatiskt utifrån de angivna rubrikerna om den inte finns. Sätt false för att misslyckas tydligt när tabellen saknas.",
+  "Blind-copy recipient(s), comma-separated. Hidden from the other recipients.":
+    "Mottagare för hemlig kopia, kommaseparerade. Syns inte för de andra mottagarna.",
+  "Body text. Overridden by the 'Body' input.":
+    "Innehållstext. Ingången Innehåll vinner över detta.",
+  "Body to send with a POST request. The Body input overrides this when connected. May include ${secret.NAME} placeholders.":
+    "Innehåll att skicka med en POST-förfrågan. Ingången Innehåll vinner över detta när den är inkopplad. Får innehålla platshållare som ${secret.NAMN}.",
+  "Broker keeps this as the topic's last known message for new subscribers.":
+    "Mäklaren behåller detta som ämnets senast kända meddelande för nya prenumeranter.",
+  "CEL expression rendering one line per row. Sees the row as 'row' and the current time as 'now'. Non-string results are stringified. Takes precedence over 'column'.":
+    "CEL-uttryck som renderar en rad per post. Ser raden som 'row' och aktuell tid som 'now'. Resultat som inte är text görs om till text. Vinner över 'column'.",
   "The condition a row has to satisfy to take this route — row.country == 'SE', say, or row.total > 1000. Written as a CEL expression, in which 'row' is the row and row.<column name> is one of its columns.":
     "Villkoret en rad måste uppfylla för att ta den här rutten — row.country == 'SE', till exempel, eller row.total > 1000. Skrivs som ett CEL-uttryck, där 'row' är raden och row.<kolumnnamn> är en av dess kolumner.",
-  "CEL expression that must evaluate to a bool. Rows where it returns false are dropped.": "CEL-uttryck som måste ge en bool. Rader där det blir falskt tas bort.",
-  "CEL expression that must return a bool. Rows where it's true land on 'matched', false on 'unmatched'.": "CEL-uttryck som måste returnera en bool. Rader där det är sant hamnar på 'matched', falskt på 'unmatched'.",
-  "Cap on how long the reply can be. Higher allows longer answers.": "Gräns för hur långt svaret får bli. Högre tillåter längre svar.",
-  "Carbon-copy recipient(s), comma-separated. Everyone on the email sees who's CC'd.": "Mottagare för kopia, kommaseparerade. Alla på mejlet ser vilka som fått kopia.",
-  "Column rename map {old_name: new_name}. Applied AFTER select/drop/default so other ops can still refer to original names.": "Namnbyten för kolumner {gammalt_namn: nytt_namn}. Tillämpas EFTER select/drop/default, så övriga operationer kan fortsätta använda originalnamnen.",
-  "Column to sort by. Leave blank to keep the order rows were saved in.": "Kolumn att sortera på. Lämna tomt för att behålla ordningen raderna sparades i.",
-  "Columns that define duplicate identity. Absent = use every column in the headers (or, if no headers, every key of the row).": "Kolumner som avgör vad som räknas som en dubblett. Utan värde används alla kolumner i rubrikerna (eller, om rubriker saknas, radens alla nycklar).",
-  "Columns that identify an existing row; a match updates it instead of inserting a duplicate (e.g. [\"email\"]).": "Kolumner som identifierar en befintlig rad; en träff uppdaterar den i stället för att lägga in en dubblett (t.ex. [\"email\"]).",
-  "Columns to group by. Empty list = a single group covering all input rows.": "Kolumner att gruppera på. Tom lista = en enda grupp som täcker alla inkommande rader.",
-  "Columns to keep (mutually exclusive with drop). If absent and drop is absent, all input columns are kept.": "Kolumner att behålla (kan inte kombineras med drop). Om både denna och drop saknas behålls alla inkommande kolumner.",
-  "Columns to remove (mutually exclusive with select).": "Kolumner att ta bort (kan inte kombineras med select).",
-  "Comma-separated attendee email addresses.": "Kommaseparerade e-postadresser till deltagarna.",
-  "Comma-separated column names in priority order; earlier names win ties. E.g. \"revenue,created_at\". To override Direction for one column, prefix it with '-' (descending) or '+' (ascending).": "Kommaseparerade kolumnnamn i prioritetsordning; tidigare namn avgör lika fall. T.ex. \"revenue,created_at\". Vill du frångå Ordning för en enskild kolumn sätter du '-' (fallande) eller '+' (stigande) före namnet.",
-  "Comma-separated email addresses to invite. Whether they receive an invitation is up to the calendar server. Overridden by the 'Attendees' input.": "Kommaseparerade e-postadresser att bjuda in. Om de får en inbjudan avgörs av kalenderservern. Ingången Deltagare vinner över detta.",
-  "Comma-separated email addresses to notify when the flow reaches this step, and again once someone decides. Leave blank and no email is sent — deliver the Approval link yourself, or let people work the Approvals inbox. The email carries the same Approval link the pending_url output does — anyone who opens it can decide, so list only the people who should.": "Kommaseparerade e-postadresser som ska aviseras när flödet når det här steget, och igen när någon har beslutat. Lämna tomt så skickas inget mejl — dela godkännandelänken själv, eller låt folk arbeta i inkorgen Godkännanden. Mejlet innehåller samma godkännandelänk som utgången pending_url — alla som öppnar den kan besluta, så ange bara de personer som ska göra det.",
-  "Comma-separated file extensions to keep, e.g. \"pdf\". Leave blank to take every attachment. Inline signature images are always skipped.": "Kommaseparerade filändelser att behålla, t.ex. \"pdf\". Lämna tomt för att ta alla bilagor. Inbäddade signaturbilder hoppas alltid över.",
-  "Company name to search for. Overridden by the 'Query' input.": "Företagsnamn att söka efter. Ingången Fråga vinner över detta.",
-  "Compare from where the two refs diverged (git's three-dot A...B) so you see only what changed on the 'to' side. Off compares the two refs directly, which can show unrelated changes from the 'from' side.": "Jämför från den punkt där de två referenserna gick isär (gits tre punkter A...B), så att du bara ser vad som ändrats på 'to'-sidan. Av jämför de två referenserna direkt, vilket kan visa orelaterade ändringar från 'from'-sidan.",
-  "Content type to store. Defaults to a guess from the file extension.": "Innehållstyp att lagra. Gissas som standard utifrån filändelsen.",
-  "Content-Type for a direct upload. Defaults to a guess from the file extension.": "Content-Type för en direkt uppladdning. Gissas som standard utifrån filändelsen.",
-  "Content-Type sent with a text body.": "Content-Type som skickas med ett textinnehåll.",
-  "Create the folders in 'Save to' if they don't exist yet.": "Skapa mapparna i 'Spara till' om de inte finns än.",
-  "Creativity dial (0–1): lower is more focused and repeatable, higher more varied.": "Kreativitetsratt (0–1): lägre är mer fokuserat och förutsägbart, högre mer varierat.",
-  "Customer email. Overridden by the 'Email' input.": "Kundens e-post. Ingången E-post vinner över detta.",
-  "Customer name. Overridden by the 'Name' input.": "Kundens namn. Ingången Namn vinner över detta.",
-  "Database file kept in your workspace. Created automatically on first save.": "Databasfil som ligger i din arbetsyta. Skapas automatiskt vid första sparningen.",
-  "Default values for missing or null cells, keyed by INPUT column name.": "Standardvärden för celler som saknas eller är null, med INDATATS kolumnnamn som nyckel.",
-  "Every saved row is stamped with the time it was saved, in a column called saved_at, so you can sort newest-first. Rename it here, or set it to empty to turn the stamp off. If your own rows already include a column of that name, yours is kept.": "Varje sparad rad stämplas med tiden den sparades, i en kolumn som heter saved_at, så att du kan sortera nyast först. Byt namn på den här, eller lämna tomt för att stänga av stämpeln. Om dina egna rader redan har en kolumn med det namnet behålls din.",
-  "Folder to resolve a bare file name against. Leave blank to use the folder set on the SFTP page.": "Mappen som ett filnamn utan sökväg tolkas mot. Lämna tomt för att använda mappen som är inställd på SFTP-sidan.",
-  "For \"is within range\": include the lower bound.": "För \"ligger inom intervallet\": ta med den nedre gränsen.",
-  "For \"is within range\": include the upper bound.": "För \"ligger inom intervallet\": ta med den övre gränsen.",
-  "For replace mode: the substitution text. $1 / ${name} insert capture groups. Ignored when a Replacements table is filled in.": "För läget replace: ersättningstexten. $1 / ${name} sätter in innehållet från grupperna. Ignoreras när en Ersättningar-tabell är ifylld.",
-  "Hard deadline for each download, in milliseconds.": "Absolut tidsgräns för varje nedladdning, i millisekunder.",
-  "Hard deadline for reading the email, in milliseconds.": "Absolut tidsgräns för att läsa mejlet, i millisekunder.",
-  "Hard deadline for the change, in milliseconds.": "Absolut tidsgräns för ändringen, i millisekunder.",
-  "Hard deadline for the fetch, in milliseconds.": "Absolut tidsgräns för hämtningen, i millisekunder.",
-  "Hard deadline for the listing, in milliseconds.": "Absolut tidsgräns för listningen, i millisekunder.",
-  "Hard deadline for the transfer, in milliseconds. Raise it for large files.": "Absolut tidsgräns för överföringen, i millisekunder. Höj den för stora filer.",
-  "Hard deadline for the whole search, in milliseconds.": "Absolut tidsgräns för hela sökningen, i millisekunder.",
-  "How long to wait before calling it down, in milliseconds.": "Hur länge det ska väntas innan sajten räknas som nere, i millisekunder.",
-  "How many events to bring back at most, earliest first.": "Hur många händelser som som mest hämtas, tidigast först.",
-  "How many files to bring back at most, oldest first.": "Hur många filer som som mest hämtas, äldst först.",
+  "CEL expression that must evaluate to a bool. Rows where it returns false are dropped.":
+    "CEL-uttryck som måste ge en bool. Rader där det blir falskt tas bort.",
+  "CEL expression that must return a bool. Rows where it's true land on 'matched', false on 'unmatched'.":
+    "CEL-uttryck som måste returnera en bool. Rader där det är sant hamnar på 'matched', falskt på 'unmatched'.",
+  "Cap on how long the reply can be. Higher allows longer answers.":
+    "Gräns för hur långt svaret får bli. Högre tillåter längre svar.",
+  "Carbon-copy recipient(s), comma-separated. Everyone on the email sees who's CC'd.":
+    "Mottagare för kopia, kommaseparerade. Alla på mejlet ser vilka som fått kopia.",
+  "Column rename map {old_name: new_name}. Applied AFTER select/drop/default so other ops can still refer to original names.":
+    "Namnbyten för kolumner {gammalt_namn: nytt_namn}. Tillämpas EFTER select/drop/default, så övriga operationer kan fortsätta använda originalnamnen.",
+  "Column to sort by. Leave blank to keep the order rows were saved in.":
+    "Kolumn att sortera på. Lämna tomt för att behålla ordningen raderna sparades i.",
+  "Columns that define duplicate identity. Absent = use every column in the headers (or, if no headers, every key of the row).":
+    "Kolumner som avgör vad som räknas som en dubblett. Utan värde används alla kolumner i rubrikerna (eller, om rubriker saknas, radens alla nycklar).",
+  'Columns that identify an existing row; a match updates it instead of inserting a duplicate (e.g. ["email"]).':
+    'Kolumner som identifierar en befintlig rad; en träff uppdaterar den i stället för att lägga in en dubblett (t.ex. ["email"]).',
+  "Columns to group by. Empty list = a single group covering all input rows.":
+    "Kolumner att gruppera på. Tom lista = en enda grupp som täcker alla inkommande rader.",
+  "Columns to keep (mutually exclusive with drop). If absent and drop is absent, all input columns are kept.":
+    "Kolumner att behålla (kan inte kombineras med drop). Om både denna och drop saknas behålls alla inkommande kolumner.",
+  "Columns to remove (mutually exclusive with select).":
+    "Kolumner att ta bort (kan inte kombineras med select).",
+  "Comma-separated attendee email addresses.":
+    "Kommaseparerade e-postadresser till deltagarna.",
+  "Comma-separated column names in priority order; earlier names win ties. E.g. \"revenue,created_at\". To override Direction for one column, prefix it with '-' (descending) or '+' (ascending).":
+    "Kommaseparerade kolumnnamn i prioritetsordning; tidigare namn avgör lika fall. T.ex. \"revenue,created_at\". Vill du frångå Ordning för en enskild kolumn sätter du '-' (fallande) eller '+' (stigande) före namnet.",
+  "Comma-separated email addresses to invite. Whether they receive an invitation is up to the calendar server. Overridden by the 'Attendees' input.":
+    "Kommaseparerade e-postadresser att bjuda in. Om de får en inbjudan avgörs av kalenderservern. Ingången Deltagare vinner över detta.",
+  "Comma-separated email addresses to notify when the flow reaches this step, and again once someone decides. Leave blank and no email is sent — deliver the Approval link yourself, or let people work the Approvals inbox. The email carries the same Approval link the pending_url output does — anyone who opens it can decide, so list only the people who should.":
+    "Kommaseparerade e-postadresser som ska aviseras när flödet når det här steget, och igen när någon har beslutat. Lämna tomt så skickas inget mejl — dela godkännandelänken själv, eller låt folk arbeta i inkorgen Godkännanden. Mejlet innehåller samma godkännandelänk som utgången pending_url — alla som öppnar den kan besluta, så ange bara de personer som ska göra det.",
+  'Comma-separated file extensions to keep, e.g. "pdf". Leave blank to take every attachment. Inline signature images are always skipped.':
+    'Kommaseparerade filändelser att behålla, t.ex. "pdf". Lämna tomt för att ta alla bilagor. Inbäddade signaturbilder hoppas alltid över.',
+  "Company name to search for. Overridden by the 'Query' input.":
+    "Företagsnamn att söka efter. Ingången Fråga vinner över detta.",
+  "Compare from where the two refs diverged (git's three-dot A...B) so you see only what changed on the 'to' side. Off compares the two refs directly, which can show unrelated changes from the 'from' side.":
+    "Jämför från den punkt där de två referenserna gick isär (gits tre punkter A...B), så att du bara ser vad som ändrats på 'to'-sidan. Av jämför de två referenserna direkt, vilket kan visa orelaterade ändringar från 'from'-sidan.",
+  "Content type to store. Defaults to a guess from the file extension.":
+    "Innehållstyp att lagra. Gissas som standard utifrån filändelsen.",
+  "Content-Type for a direct upload. Defaults to a guess from the file extension.":
+    "Content-Type för en direkt uppladdning. Gissas som standard utifrån filändelsen.",
+  "Content-Type sent with a text body.":
+    "Content-Type som skickas med ett textinnehåll.",
+  "Create the folders in 'Save to' if they don't exist yet.":
+    "Skapa mapparna i 'Spara till' om de inte finns än.",
+  "Creativity dial (0–1): lower is more focused and repeatable, higher more varied.":
+    "Kreativitetsratt (0–1): lägre är mer fokuserat och förutsägbart, högre mer varierat.",
+  "Customer email. Overridden by the 'Email' input.":
+    "Kundens e-post. Ingången E-post vinner över detta.",
+  "Customer name. Overridden by the 'Name' input.":
+    "Kundens namn. Ingången Namn vinner över detta.",
+  "Database file kept in your workspace. Created automatically on first save.":
+    "Databasfil som ligger i din arbetsyta. Skapas automatiskt vid första sparningen.",
+  "Default values for missing or null cells, keyed by INPUT column name.":
+    "Standardvärden för celler som saknas eller är null, med INDATATS kolumnnamn som nyckel.",
+  "Every saved row is stamped with the time it was saved, in a column called saved_at, so you can sort newest-first. Rename it here, or set it to empty to turn the stamp off. If your own rows already include a column of that name, yours is kept.":
+    "Varje sparad rad stämplas med tiden den sparades, i en kolumn som heter saved_at, så att du kan sortera nyast först. Byt namn på den här, eller lämna tomt för att stänga av stämpeln. Om dina egna rader redan har en kolumn med det namnet behålls din.",
+  "Folder to resolve a bare file name against. Leave blank to use the folder set on the SFTP page.":
+    "Mappen som ett filnamn utan sökväg tolkas mot. Lämna tomt för att använda mappen som är inställd på SFTP-sidan.",
+  'For "is within range": include the lower bound.':
+    'För "ligger inom intervallet": ta med den nedre gränsen.',
+  'For "is within range": include the upper bound.':
+    'För "ligger inom intervallet": ta med den övre gränsen.',
+  "For replace mode: the substitution text. $1 / ${name} insert capture groups. Ignored when a Replacements table is filled in.":
+    "För läget replace: ersättningstexten. $1 / ${name} sätter in innehållet från grupperna. Ignoreras när en Ersättningar-tabell är ifylld.",
+  "Hard deadline for each download, in milliseconds.":
+    "Absolut tidsgräns för varje nedladdning, i millisekunder.",
+  "Hard deadline for reading the email, in milliseconds.":
+    "Absolut tidsgräns för att läsa mejlet, i millisekunder.",
+  "Hard deadline for the change, in milliseconds.":
+    "Absolut tidsgräns för ändringen, i millisekunder.",
+  "Hard deadline for the fetch, in milliseconds.":
+    "Absolut tidsgräns för hämtningen, i millisekunder.",
+  "Hard deadline for the listing, in milliseconds.":
+    "Absolut tidsgräns för listningen, i millisekunder.",
+  "Hard deadline for the transfer, in milliseconds. Raise it for large files.":
+    "Absolut tidsgräns för överföringen, i millisekunder. Höj den för stora filer.",
+  "Hard deadline for the whole search, in milliseconds.":
+    "Absolut tidsgräns för hela sökningen, i millisekunder.",
+  "How long to wait before calling it down, in milliseconds.":
+    "Hur länge det ska väntas innan sajten räknas som nere, i millisekunder.",
+  "How many events to bring back at most, earliest first.":
+    "Hur många händelser som som mest hämtas, tidigast först.",
+  "How many files to bring back at most, oldest first.":
+    "Hur många filer som som mest hämtas, äldst först.",
   "How many emails to bring back at most. An ad-hoc search returns the newest ones. With 'Only new since last run' on it works through the OLDEST waiting emails first, in the order they arrived, and the rest follow on the next polls — so a burst bigger than this is delayed, never skipped.":
     "Hur många e-postmeddelanden som som mest hämtas. En tillfällig sökning returnerar de nyaste. Med ”Bara nya sedan förra körningen” påslaget arbetar steget i stället av de ÄLDSTA väntande meddelandena först, i den ordning de kom in, och resten följer vid nästa kontroller — så en skur som är större än detta fördröjs, den hoppas aldrig över.",
   "How many matches to bring back at most. An ad-hoc search returns the newest ones. With 'Only new since last run' on it takes the OLDEST waiting emails instead, in arrival order, and the rest follow on the next polls — so a burst bigger than this is delayed, never skipped.":
     "Hur många träffar som som mest hämtas. En tillfällig sökning returnerar de nyaste. Med ”Bara nya sedan förra körningen” påslaget tas i stället de ÄLDSTA väntande meddelandena, i ankomstordning, och resten följer vid nästa kontroller — så en skur som är större än detta fördröjs, den hoppas aldrig över.",
-  "How many pages each piece gets. 1 makes a file per page.": "Hur många sidor varje del får. 1 ger en fil per sida.",
-  "How many spaces each level is indented by. 2 is the convention almost everything uses.": "Hur många blanksteg varje nivå dras in med. 2 är den konvention nästan allt använder.",
-  "How to treat a file with \"---\" separators. \"One row per document\" suits a manifest bundle; \"Only the first\" suits a file whose later documents are overrides you don't want.": "Hur en fil med \"---\"-avgränsare ska hanteras. \"En rad per dokument\" passar en samling manifest; \"Bara det första\" passar en fil vars senare dokument är överstyrningar du inte vill ha.",
-  "IANA timezone relative times are resolved in, e.g. \"Europe/Stockholm\". Empty = UTC.": "IANA-tidszonen som relativa tider räknas i, t.ex. \"Europe/Stockholm\". Tomt = UTC.",
-  "IANA timezone relative times are resolved in. Empty = UTC.": "IANA-tidszonen som relativa tider räknas i. Tomt = UTC.",
-  "IANA timezone the day boundaries of \"today\"/\"tomorrow\" are taken in, e.g. \"Europe/Stockholm\". Empty = UTC. Ignored for absolute timestamps.": "IANA-tidszonen som dygnsgränserna för \"today\"/\"tomorrow\" räknas i, t.ex. \"Europe/Stockholm\". Tomt = UTC. Ignoreras för absoluta tidsstämplar.",
-  "Ignore anything older than this many days. Leave blank to search the whole folder.": "Strunta i allt som är äldre än så här många dagar. Lämna tomt för att söka i hela mappen.",
-  "Insert a blank page between each document, so it's obvious where one invoice ends and the next begins on paper.": "Lägg in en tom sida mellan varje dokument, så att det på papper syns var en faktura slutar och nästa börjar.",
-  "Which rows come out. \"Only rows that matched\" keeps the pairs. \"Every row from the first list\" keeps them all, filling in the second list's columns where there was a match. \"Everything from both lists\" keeps every row on either side. \"Only first-list rows with NO match\" answers \"which of these haven't I dealt with yet?\" — those rows come out carrying their own columns only.":
-    "Vilka rader som kommer ut. \"Bara rader som matchade\" behåller paren. \"Varje rad från första listan\" behåller alla, och fyller i den andra listans kolumner där det fanns en träff. \"Allt från båda listorna\" behåller varje rad på båda sidor. \"Bara rader ur första listan UTAN träff\" svarar på frågan \"vilka av de här har jag inte tagit hand om än?\" — de raderna kommer ut med bara sina egna kolumner.",
-  "Lay the JSON out over several lines. Easier to read in a file or a log; leave off for an API body.": "Lägg ut JSON:en över flera rader. Lättare att läsa i en fil eller en logg; lämna av för en API-kropp.",
-  "Lay the XML out over several lines. Easier to read in a file; leave off to keep a payload small.": "Lägg ut XML:en över flera rader. Lättare att läsa i en fil; lämna av för att hålla nyttolasten liten.",
-  "Literal value for A when the A input isn't connected. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text.": "Fast värde för A när ingången A inte är inkopplad. Tolkas som JSON när det går (t.ex. 200, true), annars som text.",
-  "Literal value for B when the B input isn't connected. Parsed as JSON when possible (e.g. 1000).": "Fast värde för B när ingången B inte är inkopplad. Tolkas som JSON när det går (t.ex. 1000).",
-  "Literal value for B when the B input isn't connected. Parsed as JSON when possible — a number, or a list like [200,201,204] for one_of, or [min,max] for in_range.": "Fast värde för B när ingången B inte är inkopplad. Tolkas som JSON när det går — ett tal, eller en lista som [200,201,204] för one_of, eller [min,max] för in_range.",
-  "Longer notes on the event. Overridden by the 'Description' input.": "Längre anteckningar om händelsen. Ingången Beskrivning vinner över detta.",
-  "Make it an all-day entry rather than a timed one — a holiday, a deadline, a delivery date. The time of day in Start and End is ignored; End is the day AFTER the last day, which is how calendars represent a span.": "Gör den till en heldagspost i stället för en med klockslag — en helgdag, en deadline, ett leveransdatum. Klockslaget i Start och Slut ignoreras; Slut är dagen EFTER den sista dagen, vilket är så kalendrar beskriver en period.",
-  "Map each incoming field to a sheet column. Both sides are picked from dropdowns — the sheet's own columns and the incoming record's fields. Each value is written under the column you choose (the row order here doesn't matter); a column the sheet doesn't have yet is added at the end. When set, this replaces the 'headers' input. Leave empty to use the row keys / 'headers' input.": "Koppla varje inkommande fält till en kolumn i bladet. Båda sidorna väljs i listor — bladets egna kolumner och fälten i den inkommande posten. Varje värde skrivs under den kolumn du väljer (ordningen här spelar ingen roll); en kolumn som bladet inte har än läggs till sist. När detta är satt ersätter det ingången 'headers'. Lämna tomt för att använda radens nycklar / ingången 'headers'.",
-  "Map of output_column_name → {op, column?}. column is required for sum/avg/min/max/first/last/collect; omitted for count. The short form {\"revenue\":\"sum\"} is also accepted: the op alone, with the output name doubling as the source column.": "Tabell över utgående_kolumnnamn → {op, column?}. column krävs för sum/avg/min/max/first/last/collect; utelämnas för count. Kortformen {\"revenue\":\"sum\"} går också: bara operationen, där utdatanamnet samtidigt är källkolumnen.",
-  "Match a recipient — useful on a shared mailbox that receives several addresses.": "Matcha en mottagare — användbart på en delad brevlåda som tar emot flera adresser.",
-  "Match the sender. Any part of the address or name counts, so \"@customer.com\" finds everyone at that company. Overridden by the 'From' input.": "Matcha avsändaren. Vilken del som helst av adressen eller namnet räknas, så \"@customer.com\" hittar alla på det företaget. Ingången Från vinner över detta.",
-  "Match words in the message text. Slower than the other fields on a large mailbox — most servers search bodies without an index.": "Matcha ord i meddelandetexten. Långsammare än de andra fälten på en stor brevlåda — de flesta servrar söker i brödtext utan index.",
-  "Match words in the subject line. Overridden by the 'Subject' input.": "Matcha ord i ämnesraden. Ingången Ämne vinner över detta.",
-  "Merge data the template sees as the root context, so {{.name}} reads data.name. Usually connected in via the 'Data' input (which overrides this); set here for fixed or test content.": "Kopplingsdata som mallen ser som rotkontext, så att {{.name}} läser data.name. Kopplas oftast in via ingången Data (som vinner över detta); ange här för fast innehåll eller test.",
-  "Name of the collection to read from, e.g. leads or invoices. Overridden by a value connected into the Collection input.": "Namnet på samlingen som ska läsas, t.ex. leads eller fakturor. Ett värde inkopplat i ingången Samling vinner över detta.",
-  "Name of the collection to save into, e.g. leads or signups. Pick one you already have, or type a new name and it's created the first time rows arrive.": "Namnet på samlingen som ska sparas i, t.ex. leads eller anmälningar. Välj en du redan har, eller skriv ett nytt namn — då skapas den första gången rader kommer in.",
-  "New end. Leave blank to keep the current one — or, if you moved the start and left this blank, the event keeps its original length.": "Ny sluttid. Lämna tomt för att behålla den nuvarande — eller, om du flyttat starten och lämnat detta tomt, behåller händelsen sin ursprungliga längd.",
-  "New location. Leave blank to keep the current one.": "Ny plats. Lämna tomt för att behålla den nuvarande.",
-  "New notes. Leave blank to keep the current ones.": "Nya anteckningar. Lämna tomt för att behålla de nuvarande.",
-  "New start. Accepts the same relative forms as the other calendar steps. Leave blank to keep the current one.": "Ny starttid. Godtar samma relativa former som de andra kalenderstegen. Lämna tomt för att behålla den nuvarande.",
-  "New title. Leave blank to keep the current one.": "Ny rubrik. Lämna tomt för att behålla den nuvarande.",
-  "On: strip the HTML and compare the visible text, so invisible markup churn doesn't count as a change. Off: compare the raw response exactly as it arrives (right for JSON or a plain-text endpoint).": "På: skala bort HTML:en och jämför den synliga texten, så att osynliga ändringar i markup inte räknas som en förändring. Av: jämför svaret exakt som det kommer in (rätt för JSON eller en ändpunkt med ren text).",
-  "Only emails still marked unread. Searching never marks anything read by itself.": "Bara mejl som fortfarande är markerade som olästa. Att söka markerar aldrig något som läst av sig själv.",
-  "Only events ending at or after this time. Accepts a relative value — now, today, tomorrow, yesterday, +3d, -2h30m, tomorrow+9h — or an absolute timestamp. Leave blank for no lower bound.": "Bara händelser som slutar vid eller efter den här tiden. Godtar ett relativt värde — now, today, tomorrow, yesterday, +3d, -2h30m, tomorrow+9h — eller en absolut tidsstämpel. Lämna tomt för ingen nedre gräns.",
-  "Only events starting before this time. Same forms as the start of the window. Leave blank for no upper bound.": "Bara händelser som börjar före den här tiden. Samma former som fönstrets början. Lämna tomt för ingen övre gräns.",
+  "How many pages each piece gets. 1 makes a file per page.":
+    "Hur många sidor varje del får. 1 ger en fil per sida.",
+  "How many spaces each level is indented by. 2 is the convention almost everything uses.":
+    "Hur många blanksteg varje nivå dras in med. 2 är den konvention nästan allt använder.",
+  'How to treat a file with "---" separators. "One row per document" suits a manifest bundle; "Only the first" suits a file whose later documents are overrides you don\'t want.':
+    'Hur en fil med "---"-avgränsare ska hanteras. "En rad per dokument" passar en samling manifest; "Bara det första" passar en fil vars senare dokument är överstyrningar du inte vill ha.',
+  'IANA timezone relative times are resolved in, e.g. "Europe/Stockholm". Empty = UTC.':
+    'IANA-tidszonen som relativa tider räknas i, t.ex. "Europe/Stockholm". Tomt = UTC.',
+  "IANA timezone relative times are resolved in. Empty = UTC.":
+    "IANA-tidszonen som relativa tider räknas i. Tomt = UTC.",
+  'IANA timezone the day boundaries of "today"/"tomorrow" are taken in, e.g. "Europe/Stockholm". Empty = UTC. Ignored for absolute timestamps.':
+    'IANA-tidszonen som dygnsgränserna för "today"/"tomorrow" räknas i, t.ex. "Europe/Stockholm". Tomt = UTC. Ignoreras för absoluta tidsstämplar.',
+  "Ignore anything older than this many days. Leave blank to search the whole folder.":
+    "Strunta i allt som är äldre än så här många dagar. Lämna tomt för att söka i hela mappen.",
+  "Insert a blank page between each document, so it's obvious where one invoice ends and the next begins on paper.":
+    "Lägg in en tom sida mellan varje dokument, så att det på papper syns var en faktura slutar och nästa börjar.",
+  'Which rows come out. "Only rows that matched" keeps the pairs. "Every row from the first list" keeps them all, filling in the second list\'s columns where there was a match. "Everything from both lists" keeps every row on either side. "Only first-list rows with NO match" answers "which of these haven\'t I dealt with yet?" — those rows come out carrying their own columns only.':
+    'Vilka rader som kommer ut. "Bara rader som matchade" behåller paren. "Varje rad från första listan" behåller alla, och fyller i den andra listans kolumner där det fanns en träff. "Allt från båda listorna" behåller varje rad på båda sidor. "Bara rader ur första listan UTAN träff" svarar på frågan "vilka av de här har jag inte tagit hand om än?" — de raderna kommer ut med bara sina egna kolumner.',
+  "Lay the JSON out over several lines. Easier to read in a file or a log; leave off for an API body.":
+    "Lägg ut JSON:en över flera rader. Lättare att läsa i en fil eller en logg; lämna av för en API-kropp.",
+  "Lay the XML out over several lines. Easier to read in a file; leave off to keep a payload small.":
+    "Lägg ut XML:en över flera rader. Lättare att läsa i en fil; lämna av för att hålla nyttolasten liten.",
+  "Literal value for A when the A input isn't connected. Parsed as JSON when possible (e.g. 200, true), otherwise treated as text.":
+    "Fast värde för A när ingången A inte är inkopplad. Tolkas som JSON när det går (t.ex. 200, true), annars som text.",
+  "Literal value for B when the B input isn't connected. Parsed as JSON when possible (e.g. 1000).":
+    "Fast värde för B när ingången B inte är inkopplad. Tolkas som JSON när det går (t.ex. 1000).",
+  "Literal value for B when the B input isn't connected. Parsed as JSON when possible — a number, or a list like [200,201,204] for one_of, or [min,max] for in_range.":
+    "Fast värde för B när ingången B inte är inkopplad. Tolkas som JSON när det går — ett tal, eller en lista som [200,201,204] för one_of, eller [min,max] för in_range.",
+  "Longer notes on the event. Overridden by the 'Description' input.":
+    "Längre anteckningar om händelsen. Ingången Beskrivning vinner över detta.",
+  "Make it an all-day entry rather than a timed one — a holiday, a deadline, a delivery date. The time of day in Start and End is ignored; End is the day AFTER the last day, which is how calendars represent a span.":
+    "Gör den till en heldagspost i stället för en med klockslag — en helgdag, en deadline, ett leveransdatum. Klockslaget i Start och Slut ignoreras; Slut är dagen EFTER den sista dagen, vilket är så kalendrar beskriver en period.",
+  "Map each incoming field to a sheet column. Both sides are picked from dropdowns — the sheet's own columns and the incoming record's fields. Each value is written under the column you choose (the row order here doesn't matter); a column the sheet doesn't have yet is added at the end. When set, this replaces the 'headers' input. Leave empty to use the row keys / 'headers' input.":
+    "Koppla varje inkommande fält till en kolumn i bladet. Båda sidorna väljs i listor — bladets egna kolumner och fälten i den inkommande posten. Varje värde skrivs under den kolumn du väljer (ordningen här spelar ingen roll); en kolumn som bladet inte har än läggs till sist. När detta är satt ersätter det ingången 'headers'. Lämna tomt för att använda radens nycklar / ingången 'headers'.",
+  'Map of output_column_name → {op, column?}. column is required for sum/avg/min/max/first/last/collect; omitted for count. The short form {"revenue":"sum"} is also accepted: the op alone, with the output name doubling as the source column.':
+    'Tabell över utgående_kolumnnamn → {op, column?}. column krävs för sum/avg/min/max/first/last/collect; utelämnas för count. Kortformen {"revenue":"sum"} går också: bara operationen, där utdatanamnet samtidigt är källkolumnen.',
+  "Match a recipient — useful on a shared mailbox that receives several addresses.":
+    "Matcha en mottagare — användbart på en delad brevlåda som tar emot flera adresser.",
+  "Match the sender. Any part of the address or name counts, so \"@customer.com\" finds everyone at that company. Overridden by the 'From' input.":
+    'Matcha avsändaren. Vilken del som helst av adressen eller namnet räknas, så "@customer.com" hittar alla på det företaget. Ingången Från vinner över detta.',
+  "Match words in the message text. Slower than the other fields on a large mailbox — most servers search bodies without an index.":
+    "Matcha ord i meddelandetexten. Långsammare än de andra fälten på en stor brevlåda — de flesta servrar söker i brödtext utan index.",
+  "Match words in the subject line. Overridden by the 'Subject' input.":
+    "Matcha ord i ämnesraden. Ingången Ämne vinner över detta.",
+  "Merge data the template sees as the root context, so {{.name}} reads data.name. Usually connected in via the 'Data' input (which overrides this); set here for fixed or test content.":
+    "Kopplingsdata som mallen ser som rotkontext, så att {{.name}} läser data.name. Kopplas oftast in via ingången Data (som vinner över detta); ange här för fast innehåll eller test.",
+  "Name of the collection to read from, e.g. leads or invoices. Overridden by a value connected into the Collection input.":
+    "Namnet på samlingen som ska läsas, t.ex. leads eller fakturor. Ett värde inkopplat i ingången Samling vinner över detta.",
+  "Name of the collection to save into, e.g. leads or signups. Pick one you already have, or type a new name and it's created the first time rows arrive.":
+    "Namnet på samlingen som ska sparas i, t.ex. leads eller anmälningar. Välj en du redan har, eller skriv ett nytt namn — då skapas den första gången rader kommer in.",
+  "New end. Leave blank to keep the current one — or, if you moved the start and left this blank, the event keeps its original length.":
+    "Ny sluttid. Lämna tomt för att behålla den nuvarande — eller, om du flyttat starten och lämnat detta tomt, behåller händelsen sin ursprungliga längd.",
+  "New location. Leave blank to keep the current one.":
+    "Ny plats. Lämna tomt för att behålla den nuvarande.",
+  "New notes. Leave blank to keep the current ones.":
+    "Nya anteckningar. Lämna tomt för att behålla de nuvarande.",
+  "New start. Accepts the same relative forms as the other calendar steps. Leave blank to keep the current one.":
+    "Ny starttid. Godtar samma relativa former som de andra kalenderstegen. Lämna tomt för att behålla den nuvarande.",
+  "New title. Leave blank to keep the current one.":
+    "Ny rubrik. Lämna tomt för att behålla den nuvarande.",
+  "On: strip the HTML and compare the visible text, so invisible markup churn doesn't count as a change. Off: compare the raw response exactly as it arrives (right for JSON or a plain-text endpoint).":
+    "På: skala bort HTML:en och jämför den synliga texten, så att osynliga ändringar i markup inte räknas som en förändring. Av: jämför svaret exakt som det kommer in (rätt för JSON eller en ändpunkt med ren text).",
+  "Only emails still marked unread. Searching never marks anything read by itself.":
+    "Bara mejl som fortfarande är markerade som olästa. Att söka markerar aldrig något som läst av sig själv.",
+  "Only events ending at or after this time. Accepts a relative value — now, today, tomorrow, yesterday, +3d, -2h30m, tomorrow+9h — or an absolute timestamp. Leave blank for no lower bound.":
+    "Bara händelser som slutar vid eller efter den här tiden. Godtar ett relativt värde — now, today, tomorrow, yesterday, +3d, -2h30m, tomorrow+9h — eller en absolut tidsstämpel. Lämna tomt för ingen nedre gräns.",
+  "Only events starting before this time. Same forms as the start of the window. Leave blank for no upper bound.":
+    "Bara händelser som börjar före den här tiden. Samma former som fönstrets början. Lämna tomt för ingen övre gräns.",
   "Which field of the incoming value to compare — status, say, or customer.country for a field inside a field. Leave it empty to compare the whole value. Either way the whole value travels onward; this only decides which path it takes.":
     "Vilket fält i det inkommande värdet som ska jämföras — status, till exempel, eller customer.country för ett fält inuti ett fält. Lämna tomt för att jämföra hela värdet. Hela värdet färdas vidare oavsett; det här avgör bara vilken väg det tar.",
-  "Optional dot-path into the parsed YAML before rows are built, e.g. \"spec.containers\". Each segment indexes a mapping key. Point it at a mapping or a list of mappings to get rows; point it at a single value (a version, a name) and 'Rows' comes out empty while 'Value' carries what you asked for.": "Valfri punktnotationssökväg in i den tolkade YAML:en innan raderna byggs, t.ex. \"spec.containers\". Varje del pekar ut en nyckel i en mappning. Peka den på en mappning eller en lista av mappningar för att få rader; peka den på ett enskilt värde (en version, ett namn) och 'Rader' blir tom medan 'Värde' bär det du frågade efter.",
-  "Optional dot-path into the Value when it is a JSON object (e.g. status). Empty tests the whole value. The full payload still routes — only the test reads the field.": "Valfri punktnotationssökväg in i värdet när det är ett JSON-objekt (t.ex. status). Tomt testar hela värdet. Hela nyttolasten dirigeras ändå — bara testet läser fältet.",
-  "Optional explicit field order/subset. When empty, the rows' own column order is used.": "Valfri uttalad ordning eller delmängd av fälten. När det är tomt används radernas egen kolumnordning.",
-  "Optional. A pattern picking out the one part of the page to compare — the first bracketed group, or the whole match if there are no brackets. Leave blank to compare the whole page.": "Valfritt. Ett mönster som plockar ut den enda del av sidan som ska jämföras — den första parentesgruppen, eller hela träffen om det inte finns några parenteser. Lämna tomt för att jämföra hela sidan.",
-  "Optional. Text the response must contain — catches a server that answers 200 with an error page.": "Valfritt. Text som svaret måste innehålla — fångar en server som svarar 200 med en felsida.",
-  "Or connect it into the Message input.": "Eller koppla in det i ingången Meddelande.",
+  "Optional dot-path into the parsed YAML before rows are built, e.g. \"spec.containers\". Each segment indexes a mapping key. Point it at a mapping or a list of mappings to get rows; point it at a single value (a version, a name) and 'Rows' comes out empty while 'Value' carries what you asked for.":
+    "Valfri punktnotationssökväg in i den tolkade YAML:en innan raderna byggs, t.ex. \"spec.containers\". Varje del pekar ut en nyckel i en mappning. Peka den på en mappning eller en lista av mappningar för att få rader; peka den på ett enskilt värde (en version, ett namn) och 'Rader' blir tom medan 'Värde' bär det du frågade efter.",
+  "Optional dot-path into the Value when it is a JSON object (e.g. status). Empty tests the whole value. The full payload still routes — only the test reads the field.":
+    "Valfri punktnotationssökväg in i värdet när det är ett JSON-objekt (t.ex. status). Tomt testar hela värdet. Hela nyttolasten dirigeras ändå — bara testet läser fältet.",
+  "Optional explicit field order/subset. When empty, the rows' own column order is used.":
+    "Valfri uttalad ordning eller delmängd av fälten. När det är tomt används radernas egen kolumnordning.",
+  "Optional. A pattern picking out the one part of the page to compare — the first bracketed group, or the whole match if there are no brackets. Leave blank to compare the whole page.":
+    "Valfritt. Ett mönster som plockar ut den enda del av sidan som ska jämföras — den första parentesgruppen, eller hela träffen om det inte finns några parenteser. Lämna tomt för att jämföra hela sidan.",
+  "Optional. Text the response must contain — catches a server that answers 200 with an error page.":
+    "Valfritt. Text som svaret måste innehålla — fångar en server som svarar 200 med en felsida.",
+  "Or connect it into the Message input.":
+    "Eller koppla in det i ingången Meddelande.",
   "Or connect it into the Text input.": "Eller koppla in det i ingången Text.",
-  "Plain text for the page body — blank lines start a new paragraph. Overridden by the 'Page body' input when connected.": "Vanlig text till sidans innehåll — tomma rader startar ett nytt stycke. Ingången Sidans innehåll vinner över detta när den är inkopplad.",
-  "RE2 regular expression. Inline flags like (?i) work; capture groups become columns in extract mode. Can be left empty in replace mode when a Replacements table is filled in — the words to look for are then the table's own.": "Reguljärt uttryck i RE2-syntax. Inbyggda flaggor som (?i) fungerar; grupper blir kolumner i läget extract. Kan lämnas tomt i läget replace när en Ersättningar-tabell är ifylld — orden att leta efter är då tabellens egna.",
-  "Remote folder to upload into. Leave blank to use the folder set on the SFTP page.": "Fjärrmappen att ladda upp till. Lämna tomt för att använda mappen som är inställd på SFTP-sidan.",
-  "Require this exact response code. Leave blank to accept any success (200–299).": "Kräv exakt den här svarskoden. Lämna tomt för att godta alla lyckade svar (200–299).",
-  "Shell-style pattern the file name must match, e.g. \"*.csv\". Case-insensitive. Leave blank to list every file.": "Mönster i skalstil som filnamnet måste matcha, t.ex. \"*.csv\". Skiftlägesokänsligt. Lämna tomt för att lista alla filer.",
-  "The .xlsx file in the workspace. Ignored when a 'File' input is connected.": "xlsx-filen i arbetsytan. Ignoreras när en Fil-ingång är inkopplad.",
-  "The address to check. Can also be connected into the Address input.": "Adressen som ska kontrolleras. Kan också kopplas in i ingången Adress.",
-  "The calendar the event is on — pick from your account's calendars, or 'primary' for your own.": "Kalendern som händelsen ligger i — välj bland kontots kalendrar, eller 'primary' för din egen.",
-  "The column holding each row's position in the sheet. Read range adds _row when 'Include row numbers' is on.": "Kolumnen som innehåller varje rads position i bladet. Läs område lägger till _row när \"Ta med radnummer\" är på.",
-  "The conversation to read. Overridden by the Conversation input when connected.": "Konversationen som ska läsas. Ingången Konversation vinner över detta när den är inkopplad.",
-  "The cus_… id to look up. Overridden by the Customer input.": "cus_…-id:t som ska slås upp. Ingången Kund vinner över detta.",
+  "Plain text for the page body — blank lines start a new paragraph. Overridden by the 'Page body' input when connected.":
+    "Vanlig text till sidans innehåll — tomma rader startar ett nytt stycke. Ingången Sidans innehåll vinner över detta när den är inkopplad.",
+  "RE2 regular expression. Inline flags like (?i) work; capture groups become columns in extract mode. Can be left empty in replace mode when a Replacements table is filled in — the words to look for are then the table's own.":
+    "Reguljärt uttryck i RE2-syntax. Inbyggda flaggor som (?i) fungerar; grupper blir kolumner i läget extract. Kan lämnas tomt i läget replace när en Ersättningar-tabell är ifylld — orden att leta efter är då tabellens egna.",
+  "Remote folder to upload into. Leave blank to use the folder set on the SFTP page.":
+    "Fjärrmappen att ladda upp till. Lämna tomt för att använda mappen som är inställd på SFTP-sidan.",
+  "Require this exact response code. Leave blank to accept any success (200–299).":
+    "Kräv exakt den här svarskoden. Lämna tomt för att godta alla lyckade svar (200–299).",
+  'Shell-style pattern the file name must match, e.g. "*.csv". Case-insensitive. Leave blank to list every file.':
+    'Mönster i skalstil som filnamnet måste matcha, t.ex. "*.csv". Skiftlägesokänsligt. Lämna tomt för att lista alla filer.',
+  "The .xlsx file in the workspace. Ignored when a 'File' input is connected.":
+    "xlsx-filen i arbetsytan. Ignoreras när en Fil-ingång är inkopplad.",
+  "The address to check. Can also be connected into the Address input.":
+    "Adressen som ska kontrolleras. Kan också kopplas in i ingången Adress.",
+  "The calendar the event is on — pick from your account's calendars, or 'primary' for your own.":
+    "Kalendern som händelsen ligger i — välj bland kontots kalendrar, eller 'primary' för din egen.",
+  "The column holding each row's position in the sheet. Read range adds _row when 'Include row numbers' is on.":
+    'Kolumnen som innehåller varje rads position i bladet. Läs område lägger till _row när "Ta med radnummer" är på.',
+  "The conversation to read. Overridden by the Conversation input when connected.":
+    "Konversationen som ska läsas. Ingången Konversation vinner över detta när den är inkopplad.",
+  "The cus_… id to look up. Overridden by the Customer input.":
+    "cus_…-id:t som ska slås upp. Ingången Kund vinner över detta.",
   "The element each row becomes.": "Elementet som varje rad blir.",
   "The element everything is wrapped in.": "Elementet som allt omsluts av.",
-  "The event's id, as emitted by List events or Create event. Overridden by the 'Event' input when connected.": "Händelsens id, som det skickas ut av Lista händelser eller Skapa händelse. Ingången Händelse vinner över detta när den är inkopplad.",
-  "The event's title, as it appears in the calendar. Overridden by the 'Summary' input.": "Händelsens rubrik, som den visas i kalendern. Ingången Sammanfattning vinner över detta.",
-  "The page title. Overridden by the 'Title' input when connected.": "Sidans rubrik. Ingången Rubrik vinner över detta när den är inkopplad.",
-  "The page to watch. Can also be connected into the Page address input.": "Sidan som ska bevakas. Kan också kopplas in i ingången Sidans adress.",
-  "The RSS or Atom feed URL. Can also be connected into the 'url' input.": "URL till RSS- eller Atom-flödet. Kan också kopplas in i ingången 'url'.",
+  "The event's id, as emitted by List events or Create event. Overridden by the 'Event' input when connected.":
+    "Händelsens id, som det skickas ut av Lista händelser eller Skapa händelse. Ingången Händelse vinner över detta när den är inkopplad.",
+  "The event's title, as it appears in the calendar. Overridden by the 'Summary' input.":
+    "Händelsens rubrik, som den visas i kalendern. Ingången Sammanfattning vinner över detta.",
+  "The page title. Overridden by the 'Title' input when connected.":
+    "Sidans rubrik. Ingången Rubrik vinner över detta när den är inkopplad.",
+  "The page to watch. Can also be connected into the Page address input.":
+    "Sidan som ska bevakas. Kan också kopplas in i ingången Sidans adress.",
+  "The RSS or Atom feed URL. Can also be connected into the 'url' input.":
+    "URL till RSS- eller Atom-flödet. Kan också kopplas in i ingången 'url'.",
   "The spreadsheet to write to.": "Kalkylbladet som ska skrivas till.",
   "The tab the rows came from.": "Fliken som raderna kom från.",
-  "The text to look for inside the Text, when the Substring input isn't connected.": "Texten att leta efter inuti Text, när ingången Deltext inte är kopplad.",
-  "The text to run the pattern over. Or connect the Text input, which overrides this. Inside a For each, type the field to read — e.g. ${item.description}.": "Texten som mönstret ska köras över. Eller koppla in ingången Text, som vinner över detta. Inuti ett För varje skriver du fältet som ska läsas — t.ex. ${item.description}.",
-  "The workspace file to send (or connect the File input). scratch:// supported.": "Filen i arbetsytan som ska skickas (eller koppla in ingången Fil). scratch:// stöds.",
-  "Timestamp of a parent message to reply under. Connect the Reply-in-thread input to answer the message that started the flow — an On mention trigger's Timestamp, say.": "Tidsstämpeln för det meddelande du vill svara under. Koppla in ingången Svara i tråden för att svara på meddelandet som startade flödet — t.ex. Tidsstämpel från en När du omnämns-trigger.",
-  "Web address opened when the notification is tapped. Connect an Await approval step's 'Approval link' into the matching input so the recipient can approve straight from the notification.": "Webbadressen som öppnas när notisen trycks. Koppla in Godkännandelänken från ett Vänta på godkännande-steg i motsvarande ingång, så att mottagaren kan godkänna direkt från notisen.",
+  "The text to look for inside the Text, when the Substring input isn't connected.":
+    "Texten att leta efter inuti Text, när ingången Deltext inte är kopplad.",
+  "The text to run the pattern over. Or connect the Text input, which overrides this. Inside a For each, type the field to read — e.g. ${item.description}.":
+    "Texten som mönstret ska köras över. Eller koppla in ingången Text, som vinner över detta. Inuti ett För varje skriver du fältet som ska läsas — t.ex. ${item.description}.",
+  "The workspace file to send (or connect the File input). scratch:// supported.":
+    "Filen i arbetsytan som ska skickas (eller koppla in ingången Fil). scratch:// stöds.",
+  "Timestamp of a parent message to reply under. Connect the Reply-in-thread input to answer the message that started the flow — an On mention trigger's Timestamp, say.":
+    "Tidsstämpeln för det meddelande du vill svara under. Koppla in ingången Svara i tråden för att svara på meddelandet som startade flödet — t.ex. Tidsstämpel från en När du omnämns-trigger.",
+  "Web address opened when the notification is tapped. Connect an Await approval step's 'Approval link' into the matching input so the recipient can approve straight from the notification.":
+    "Webbadressen som öppnas när notisen trycks. Koppla in Godkännandelänken från ett Vänta på godkännande-steg i motsvarande ingång, så att mottagaren kan godkänna direkt från notisen.",
   "What starts the script on that machine. 'The machine's own shell' is /bin/sh on a unix box and cmd on Windows — the behaviour a runner has always had. Anything else writes the script to a temporary file and starts that interpreter with it, so choose Python and write Python. An agent older than this Dazyflow release does not know how to do that and will use the machine's shell regardless — re-run the install command on the machine to upgrade it.":
     "Vad som startar skriptet på maskinen. 'Maskinens eget skal' är /bin/sh på en unix-maskin och cmd på Windows — det en körnod alltid har gjort. Allt annat skriver skriptet till en tillfällig fil och startar den tolken med den, så väljer du Python skriver du Python. En agent som är äldre än den här Dazyflow-versionen känner inte till det och använder maskinens skal ändå — kör om installationskommandot på maskinen för att uppgradera den.",
   "Defaults to 600. The runner kills the script when this elapses.":
     "Standard är 600. Körnoden avbryter skriptet när tiden gått ut.",
-  "Defaults to PUT for a direct upload, POST for a form upload.": "Standard är PUT för en direkt uppladdning, POST för en formuläruppladdning.",
-  "Delivery guarantee: 0 at-most-once, 1 at-least-once, 2 exactly-once.": "Leveransgaranti: 0 högst en gång, 1 minst en gång, 2 exakt en gång.",
-  "Disable the private-address guard. Only enable when calling a local service intentionally.": "Stäng av skyddet mot privata adresser. Slå bara på det när du medvetet anropar en lokal tjänst.",
-  "Disable the private-address guard. Only for intentional local targets.": "Stäng av skyddet mot privata adresser. Bara för medvetet valda lokala mål.",
-  "Drop results whose status is error. When false, failed items emit a row {_error_code, _error_message, _index} instead.": "Ta bort resultat vars status är fel. När det är av skickar misslyckade poster i stället ut en rad {_error_code, _error_message, _index}.",
-  "Drop rows where any listed (column == value). String-compared.": "Ta bort rader där något av de listade villkoren (kolumn == värde) stämmer. Jämförs som text.",
-  "Email body text. Overridden by the 'Body' input.": "Mejlets innehållstext. Ingången Innehåll vinner över detta.",
+  "Defaults to PUT for a direct upload, POST for a form upload.":
+    "Standard är PUT för en direkt uppladdning, POST för en formuläruppladdning.",
+  "Delivery guarantee: 0 at-most-once, 1 at-least-once, 2 exactly-once.":
+    "Leveransgaranti: 0 högst en gång, 1 minst en gång, 2 exakt en gång.",
+  "Disable the private-address guard. Only enable when calling a local service intentionally.":
+    "Stäng av skyddet mot privata adresser. Slå bara på det när du medvetet anropar en lokal tjänst.",
+  "Disable the private-address guard. Only for intentional local targets.":
+    "Stäng av skyddet mot privata adresser. Bara för medvetet valda lokala mål.",
+  "Drop results whose status is error. When false, failed items emit a row {_error_code, _error_message, _index} instead.":
+    "Ta bort resultat vars status är fel. När det är av skickar misslyckade poster i stället ut en rad {_error_code, _error_message, _index}.",
+  "Drop rows where any listed (column == value). String-compared.":
+    "Ta bort rader där något av de listade villkoren (kolumn == värde) stämmer. Jämförs som text.",
+  "Email body text. Overridden by the 'Body' input.":
+    "Mejlets innehållstext. Ingången Innehåll vinner över detta.",
   "Emoji/tag shortcodes.": "Kortkoder för emoji/taggar.",
-  "End point. Defaults to the latest commit (HEAD).": "Slutpunkt. Standard är den senaste commiten (HEAD).",
+  "End point. Defaults to the latest commit (HEAD).":
+    "Slutpunkt. Standard är den senaste commiten (HEAD).",
   "Event title.": "Händelsens rubrik.",
-  "Expand recurring events into individual instances.": "Expandera återkommande händelser till enskilda tillfällen.",
-  "Extra request headers (one per key). Values may include ${secret.NAME} placeholders that resolve to stored secrets.": "Extra rubriker i förfrågan (en per nyckel). Värdena får innehålla platshållare som ${secret.NAMN}, vilka slås upp mot lagrade hemligheter.",
+  "Expand recurring events into individual instances.":
+    "Expandera återkommande händelser till enskilda tillfällen.",
+  "Extra request headers (one per key). Values may include ${secret.NAME} placeholders that resolve to stored secrets.":
+    "Extra rubriker i förfrågan (en per nyckel). Värdena får innehålla platshållare som ${secret.NAMN}, vilka slås upp mot lagrade hemligheter.",
   "Extra request headers (one per key), for an API that needs a key or a particular Accept. Values may include ${secret.NAME} placeholders that resolve to stored secrets.":
     "Extra rubriker i förfrågan (en per nyckel), för ett API som kräver en nyckel eller ett visst Accept. Värdena får innehålla platshållare som ${secret.NAMN}, vilka slås upp mot lagrade hemligheter.",
   "Extra request headers.": "Extra rubriker i förfrågan.",
-  "Extra service options passed through as-is — e.g. {\"brightness_pct\":50} or {\"temperature\":21}.": "Extra tjänstinställningar som skickas vidare som de är — t.ex. {\"brightness_pct\":50} eller {\"temperature\":21}.",
-  "Fail responses larger than this. Default 10 MiB.": "Misslyckas på svar större än detta. Standard 10 MiB.",
-  "Field name used for a form upload.": "Fältnamn som används vid en formuläruppladdning.",
-  "Field separator. Use \"\\t\" or \"tab\" for TSV, \";\" for European CSVs. A single character.": "Fältavgränsare. Använd \"\\t\" eller \"tab\" för TSV, \";\" för europeiska CSV-filer. Ett enda tecken.",
-  "Filename sent with a form upload. Defaults to the file's own name.": "Filnamn som skickas med en formuläruppladdning. Standard är filens eget namn.",
-  "Folder to upload into — pick from your account's folders. Leave blank for the account's My Drive root.": "Mapp att ladda upp till — välj bland kontots mappar. Lämna tomt för kontots rot i Min enhet.",
-  "For in_range: include the lower bound. Defaults to true (like Unreal's InRange).": "För in_range: ta med den nedre gränsen. Standard är true (som Unreals InRange).",
-  "For in_range: include the upper bound. Defaults to true (like Unreal's InRange).": "För in_range: ta med den övre gränsen. Standard är true (som Unreals InRange).",
-  "Free-text search over event fields. Leave blank to match all.": "Fritextsökning över händelsernas fält. Lämna tomt för att matcha alla.",
-  "Full conversation history ({role, content}); overrides the prompt.": "Hela samtalshistoriken ({role, content}); vinner över prompten.",
-  "GET fetches the file; POST sends the Body along (for export-style endpoints).": "GET hämtar filen; POST skickar med Innehållet (för ändpunkter av exporttyp).",
+  'Extra service options passed through as-is — e.g. {"brightness_pct":50} or {"temperature":21}.':
+    'Extra tjänstinställningar som skickas vidare som de är — t.ex. {"brightness_pct":50} eller {"temperature":21}.',
+  "Fail responses larger than this. Default 10 MiB.":
+    "Misslyckas på svar större än detta. Standard 10 MiB.",
+  "Field name used for a form upload.":
+    "Fältnamn som används vid en formuläruppladdning.",
+  'Field separator. Use "\\t" or "tab" for TSV, ";" for European CSVs. A single character.':
+    'Fältavgränsare. Använd "\\t" eller "tab" för TSV, ";" för europeiska CSV-filer. Ett enda tecken.',
+  "Filename sent with a form upload. Defaults to the file's own name.":
+    "Filnamn som skickas med en formuläruppladdning. Standard är filens eget namn.",
+  "Folder to upload into — pick from your account's folders. Leave blank for the account's My Drive root.":
+    "Mapp att ladda upp till — välj bland kontots mappar. Lämna tomt för kontots rot i Min enhet.",
+  "For in_range: include the lower bound. Defaults to true (like Unreal's InRange).":
+    "För in_range: ta med den nedre gränsen. Standard är true (som Unreals InRange).",
+  "For in_range: include the upper bound. Defaults to true (like Unreal's InRange).":
+    "För in_range: ta med den övre gränsen. Standard är true (som Unreals InRange).",
+  "Free-text search over event fields. Leave blank to match all.":
+    "Fritextsökning över händelsernas fält. Lämna tomt för att matcha alla.",
+  "Full conversation history ({role, content}); overrides the prompt.":
+    "Hela samtalshistoriken ({role, content}); vinner över prompten.",
+  "GET fetches the file; POST sends the Body along (for export-style endpoints).":
+    "GET hämtar filen; POST skickar med Innehållet (för ändpunkter av exporttyp).",
   "GitHub usernames to assign.": "GitHub-användarnamn att tilldela.",
-  "GitHub's issues API also returns pull requests. Off (default) filters them out so you get only real issues.": "GitHubs ärende-API returnerar även pull requests. Av (standard) filtrerar bort dem så att du bara får riktiga ärenden.",
+  "GitHub's issues API also returns pull requests. Off (default) filters them out so you get only real issues.":
+    "GitHubs ärende-API returnerar även pull requests. Av (standard) filtrerar bort dem så att du bara får riktiga ärenden.",
   "Gmail thread ID to reply within.": "Gmail-tråd-ID att svara i.",
-  "HTML template (Go html/template). {{.field}} inserts a value from the data, {{range .items}}…{{end}} loops, {{if .x}}…{{end}} branches. Helpers: default, upper, lower, join. Values are auto-escaped. Overridden by the 'Template' input.": "HTML-mall (Go html/template). {{.field}} sätter in ett värde ur datat, {{range .items}}…{{end}} loopar, {{if .x}}…{{end}} förgrenar. Hjälpfunktioner: default, upper, lower, join. Värden escapas automatiskt. Ingången Mall vinner över detta.",
-  "Hard deadline for a Place lookup, in milliseconds.": "Absolut tidsgräns för en platsuppslagning, i millisekunder.",
-  "Hard deadline for connect + publish, in milliseconds.": "Absolut tidsgräns för anslutning + publicering, i millisekunder.",
-  "Hard deadline for the AI request, in milliseconds.": "Absolut tidsgräns för AI-förfrågan, i millisekunder.",
-  "Hard deadline for the full request, in milliseconds.": "Absolut tidsgräns för hela förfrågan, i millisekunder.",
-  "Hard deadline for the request, in milliseconds.": "Absolut tidsgräns för förfrågan, i millisekunder.",
-  "Hard deadline for the upload, in milliseconds.": "Absolut tidsgräns för uppladdningen, i millisekunder.",
-  "Hard deadline for the whole download, in milliseconds.": "Absolut tidsgräns för hela nedladdningen, i millisekunder.",
-  "Hard deadline for the whole upload, in milliseconds.": "Absolut tidsgräns för hela uppladdningen, i millisekunder.",
-  "Hash algorithm. Use sha256 or stronger for security; sha1/md5 are for checksums/compatibility only.": "Hash-algoritm. Använd sha256 eller starkare av säkerhetsskäl; sha1/md5 är bara för kontrollsummor och kompatibilitet.",
-  "How many commits to return at most.": "Hur många commits som som mest returneras.",
-  "How many days to return, counting from today (1..10).": "Hur många dagar som returneras, räknat från i dag (1..10).",
-  "How many days to return, counting from today (1..16).": "Hur många dagar som returneras, räknat från i dag (1..16).",
-  "How many days to return, counting from today (1..5).": "Hur många dagar som returneras, räknat från i dag (1..5).",
-  "How many issues to request per page while paginating.": "Hur många ärenden som hämtas per sida vid bläddring.",
-  "How many items to process at once. Higher is faster but hits rate limits sooner.": "Hur många poster som bearbetas samtidigt. Högre är snabbare men slår i tjänstens gränser tidigare.",
-  "How many rows to return at most (Notion caps this at 100).": "Hur många rader som som mest returneras (Notion begränsar detta till 100).",
-  "How much of the message to fetch (advanced).": "Hur mycket av meddelandet som hämtas (avancerat).",
-  "How often to check for a change once the flow is published. Leave blank to only check when you press Run (for testing).": "Hur ofta det kontrolleras om något ändrats när flödet är publicerat. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
-  "How often to check for new responses once the flow is published. Leave blank to only check when you press Run (for testing).": "Hur ofta det kontrolleras om nya svar kommit när flödet är publicerat. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
-  "How the body is sent. HTML renders formatting and links; Text sends it exactly as typed.": "Hur innehållet skickas. HTML visar formatering och länkar; Text skickar det exakt som du skrivit.",
-  "How urgently it buzzes. Leave unset for the normal level.": "Hur enträget den låter. Lämna oställt för normal nivå.",
-  "IANA time zone for timed events. Optional when the timestamp carries an offset.": "IANA-tidszon för händelser med klockslag. Valfritt när tidsstämpeln bär en tidsförskjutning.",
-  "IANA time zone the schedule is read in, e.g. \"Europe/Stockholm\". Empty = UTC. The editor stamps your browser's zone here automatically; search the list to change it.": "IANA-tidszon som schemat läses i, t.ex. \"Europe/Stockholm\". Tomt = UTC. Redigeraren fyller automatiskt i din webbläsares zon här; sök i listan för att byta.",
-  "What to call the combined file. \".pdf\" is added if you leave it off.": "Vad den sammanslagna filen ska heta. \".pdf\" läggs till om du utelämnar det.",
-  "What to call the file in Drive. Connect the Name input to compute it — a dated backup, say. Defaults to the source file's own name.": "Vad filen ska heta i Drive. Koppla in ingången Namn för att räkna fram det — en daterad säkerhetskopia, till exempel. Standard är källfilens eget namn.",
-  "What to call the file once it's there. Leave blank to keep the name it already has. Overridden by the 'Name' input.": "Vad filen ska heta när den kommit fram. Lämna tomt för att behålla namnet den redan har. Ingången Namn vinner över detta.",
-  "What to call the pieces — they get \"-1\", \"-2\" and so on. Leave blank to use \"page\".": "Vad delarna ska heta — de får \"-1\", \"-2\" och så vidare. Lämna tomt för att använda \"page\".",
-  "What to compare the Value against, used when the Compare to input isn't connected. Parsed as JSON when possible — a number, or a list like [200,201,204] for \"is one of\", or [min,max] for \"is within range\".": "Vad värdet ska jämföras med, används när ingången Jämför med inte är kopplad. Tolkas som JSON när det går — ett tal, eller en lista som [200,201,204] för \"är någon av\", eller [min,max] för \"ligger inom intervallet\".",
-  "When it ends. Same forms as Start. Leave blank for an hour after the start.": "När den slutar. Samma former som Start. Lämna tomt för en timme efter starten.",
-  "When it ends: a timestamp, a plain date (exclusive) for an all-day event, or a relative value. Overridden by the End input when connected.": "När den slutar: en tidsstämpel, ett enkelt datum (exklusivt) för en heldagshändelse, eller ett relativt värde. Ingången Slut vinner över detta när den är inkopplad.",
-  "When it starts. Accepts a relative value — now, tomorrow+9h, +2h — or an absolute timestamp. Overridden by the 'Start' input.": "När den börjar. Godtar ett relativt värde — now, tomorrow+9h, +2h — eller en absolut tidsstämpel. Ingången Start vinner över detta.",
-  "When it starts: a timestamp, a plain date for an all-day event, or a relative value like \"tomorrow+9h\". Overridden by the Start input when connected.": "När den börjar: en tidsstämpel, ett enkelt datum för en heldagshändelse, eller ett relativt värde som \"tomorrow+9h\". Ingången Start vinner över detta när den är inkopplad.",
-  "When on and there is exactly one row, emit that mapping on its own instead of a list holding it. What a config file usually wants.": "När detta är på och det finns exakt en rad skickas den mappningen ut för sig i stället för en lista som innehåller den. Vad en konfigurationsfil oftast vill ha.",
-  "When on and there is exactly one row, emit that object on its own instead of an array holding it. What most APIs that create one thing expect.": "När detta är på och det finns exakt en rad skickas det objektet ut för sig i stället för en array som innehåller det. Vad de flesta API:er som skapar en sak förväntar sig.",
-  "When on, each run emits only emails that arrived since the previous run — nothing on the first run (it just remembers where the folder is up to). Turn this on when a published, polling flow acts on each match, so it doesn't re-process the same emails on every poll. Leave off for ad-hoc searches that should return every match.": "När detta är på skickar varje körning bara ut mejl som kommit sedan den förra körningen — inget vid första körningen (då sparas bara hur långt mappen är läst). Slå på det när ett publicerat, pollande flöde gör något med varje träff, så att det inte bearbetar samma mejl vid varje pollning. Lämna av för tillfälliga sökningar som ska returnera alla träffar.",
-  "When on, each run emits only files that appeared since the previous run — nothing on the first run (it just remembers where the folder is up to). Turn this on when a published, polling flow acts on each file, so it doesn't re-process the folder every time. Leave off for ad-hoc listings that should return everything.": "När detta är på skickar varje körning bara ut filer som tillkommit sedan den förra körningen — inget vid första körningen (då sparas bara hur långt mappen är läst). Slå på det när ett publicerat, pollande flöde gör något med varje fil, så att det inte bearbetar mappen om och om igen. Lämna av för tillfälliga listningar som ska returnera allt.",
-  "When set, compute a keyed HMAC with this secret instead of a plain hash. Connect a ${secret.NAME} in rather than pasting the key.": "När detta är satt beräknas en nycklad HMAC med den här hemligheten i stället för en vanlig hash. Koppla in en ${secret.NAMN} i stället för att klistra in nyckeln.",
-  "Where it is — a room, an address, a call link. Overridden by the 'Location' input.": "Var den är — ett rum, en adress, en möteslänk. Ingången Plats vinner över detta.",
-  "Where to save the .xlsx in the workspace. Ignored when a 'File' input is connected.": "Var xlsx-filen ska sparas i arbetsytan. Ignoreras när en Fil-ingång är inkopplad.",
-  "Which calendar the event is on when the account has several. Leave blank to use the one set on the Calendar page.": "Vilken kalender händelsen ligger i när kontot har flera. Lämna tomt för att använda den som är inställd på Kalender-sidan.",
-  "Which calendar to read when the account has several. Leave blank to use the one set on the Calendar page.": "Vilken kalender som ska läsas när kontot har flera. Lämna tomt för att använda den som är inställd på Kalender-sidan.",
-  "Which calendar to write to when the account has several. Leave blank to use the one set on the Calendar page.": "Vilken kalender som ska skrivas till när kontot har flera. Lämna tomt för att använda den som är inställd på Kalender-sidan.",
-  "Which columns to change. Leave empty to write every column the rows carry (except the row-number column).": "Vilka kolumner som ska ändras. Lämna tomt för att skriva alla kolumner raderna bär (utom radnummerkolumnen).",
-  "Which database to read — paste its ID. Overridden by the 'Database ID' input when connected.": "Vilken databas som ska läsas — klistra in dess ID. Ingången Databas-ID vinner över detta när den är inkopplad.",
-  "Which email to mark read — the id from a Search emails match. Overridden by the 'Email' input when connected.": "Vilket mejl som ska markeras som läst — id:t från en träff i Sök mejl. Ingången E-post vinner över detta när den är inkopplad.",
-  "Which email to read — the id from a Search emails match. Overridden by the 'Email' input when connected.": "Vilket mejl som ska läsas — id:t från en träff i Sök mejl. Ingången E-post vinner över detta när den är inkopplad.",
-  "Which email to read. Overridden by the Message ID input when connected.": "Vilket mejl som ska läsas. Ingången Meddelande-ID vinner över detta när den är inkopplad.",
-  "Which email to take the files from — the id from a Search emails match. Overridden by the 'Email' input when connected.": "Vilket mejl filerna ska tas från — id:t från en träff i Sök mejl. Ingången E-post vinner över detta när den är inkopplad.",
-  "Which email to take the files from. Overridden by the Email input when connected.": "Vilket mejl filerna ska tas från. Ingången E-post vinner över detta när den är inkopplad.",
-  "Which file to fetch — a full remote path, or just a name to take it from the folder. Overridden by the 'File' input when connected.": "Vilken fil som ska hämtas — en fullständig fjärrsökväg, eller bara ett namn för att ta den ur mappen. Ingången Fil vinner över detta när den är inkopplad.",
-  "Which folder the email is in, e.g. \"INBOX\". Leave blank to use the folder set on the Mailbox page.": "Vilken mapp mejlet ligger i, t.ex. \"INBOX\". Lämna tomt för att använda mappen som är inställd på Brevlåda-sidan.",
-  "Which folder the email is in, e.g. \"INBOX\". Leave blank to use the folder set on the Mailbox page. An email's id only means anything inside the folder it came from.": "Vilken mapp mejlet ligger i, t.ex. \"INBOX\". Lämna tomt för att använda mappen som är inställd på Brevlåda-sidan. Ett mejls id betyder bara något inuti den mapp det kom från.",
-  "Which folder to search, e.g. \"INBOX\" or \"INBOX/Invoices\". Leave blank to use the folder set on the Mailbox page.": "Vilken mapp som ska sökas i, t.ex. \"INBOX\" eller \"INBOX/Invoices\". Lämna tomt för att använda mappen som är inställd på Brevlåda-sidan.",
-  "Which language day and month names are written in — Thursday/August, torsdag/augusti. Leave it on the flow's language (Settings → General) unless this one step should differ. Only names are affected: numbers, and the ISO/Unix/email formats, are the same in every language.": "Vilket språk namn på veckodagar och månader skrivs på — Thursday/August, torsdag/augusti. Låt det följa flödets språk (Inställningar → Allmänt) om inte just det här steget ska skilja sig. Bara namn påverkas: siffror, och ISO-, Unix- och e-postformaten, är samma på alla språk.",
-  "Which remote folder to list. Leave blank to use the folder set on the SFTP page. Overridden by the 'Folder' input.": "Vilken fjärrmapp som ska listas. Lämna tomt för att använda mappen som är inställd på SFTP-sidan. Ingången Mapp vinner över detta.",
-  "Which timezone the output is written in — it decides the date at midnight, which weekday that is, and the hour on the clock. Any IANA name: search the list, or type one (\"Europe/Stockholm\", \"Pacific/Auckland\"). \"Local\" is the server's own zone, which on a hosted instance is not yours.": "Vilken tidszon utdatat skrivs i — den avgör vilket datum det är vid midnatt, vilken veckodag det blir och vad klockan är. Vilket IANA-namn som helst: sök i listan eller skriv ett (\"Europe/Stockholm\", \"Pacific/Auckland\"). \"Local\" är serverns egen zon, som på en driftad instans inte är din.",
-  "ISO 3166 alpha-2 country code (SE, NO, DK, FI, GB…) to assume when the number isn't written in +international form. Ignored for a number that already starts with +.": "ISO 3166 alfa-2-landskod (SE, NO, DK, FI, GB …) som antas när numret inte är skrivet i internationell +-form. Ignoreras för ett nummer som redan börjar med +.",
-  "ISO country of the register (Roaring is per-country). Defaults to Sweden.": "ISO-land för registret (Roaring är per land). Standard är Sverige.",
-  "In the smallest currency unit (12000 = 120.00). Overridden by the 'Amount' input.": "I valutans minsta enhet (12000 = 120,00). Ingången Belopp vinner över detta.",
+  "HTML template (Go html/template). {{.field}} inserts a value from the data, {{range .items}}…{{end}} loops, {{if .x}}…{{end}} branches. Helpers: default, upper, lower, join. Values are auto-escaped. Overridden by the 'Template' input.":
+    "HTML-mall (Go html/template). {{.field}} sätter in ett värde ur datat, {{range .items}}…{{end}} loopar, {{if .x}}…{{end}} förgrenar. Hjälpfunktioner: default, upper, lower, join. Värden escapas automatiskt. Ingången Mall vinner över detta.",
+  "Hard deadline for a Place lookup, in milliseconds.":
+    "Absolut tidsgräns för en platsuppslagning, i millisekunder.",
+  "Hard deadline for connect + publish, in milliseconds.":
+    "Absolut tidsgräns för anslutning + publicering, i millisekunder.",
+  "Hard deadline for the AI request, in milliseconds.":
+    "Absolut tidsgräns för AI-förfrågan, i millisekunder.",
+  "Hard deadline for the full request, in milliseconds.":
+    "Absolut tidsgräns för hela förfrågan, i millisekunder.",
+  "Hard deadline for the request, in milliseconds.":
+    "Absolut tidsgräns för förfrågan, i millisekunder.",
+  "Hard deadline for the upload, in milliseconds.":
+    "Absolut tidsgräns för uppladdningen, i millisekunder.",
+  "Hard deadline for the whole download, in milliseconds.":
+    "Absolut tidsgräns för hela nedladdningen, i millisekunder.",
+  "Hard deadline for the whole upload, in milliseconds.":
+    "Absolut tidsgräns för hela uppladdningen, i millisekunder.",
+  "Hash algorithm. Use sha256 or stronger for security; sha1/md5 are for checksums/compatibility only.":
+    "Hash-algoritm. Använd sha256 eller starkare av säkerhetsskäl; sha1/md5 är bara för kontrollsummor och kompatibilitet.",
+  "How many commits to return at most.":
+    "Hur många commits som som mest returneras.",
+  "How many days to return, counting from today (1..10).":
+    "Hur många dagar som returneras, räknat från i dag (1..10).",
+  "How many days to return, counting from today (1..16).":
+    "Hur många dagar som returneras, räknat från i dag (1..16).",
+  "How many days to return, counting from today (1..5).":
+    "Hur många dagar som returneras, räknat från i dag (1..5).",
+  "How many issues to request per page while paginating.":
+    "Hur många ärenden som hämtas per sida vid bläddring.",
+  "How many items to process at once. Higher is faster but hits rate limits sooner.":
+    "Hur många poster som bearbetas samtidigt. Högre är snabbare men slår i tjänstens gränser tidigare.",
+  "How many rows to return at most (Notion caps this at 100).":
+    "Hur många rader som som mest returneras (Notion begränsar detta till 100).",
+  "How much of the message to fetch (advanced).":
+    "Hur mycket av meddelandet som hämtas (avancerat).",
+  "How often to check for a change once the flow is published. Leave blank to only check when you press Run (for testing).":
+    "Hur ofta det kontrolleras om något ändrats när flödet är publicerat. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
+  "How often to check for new responses once the flow is published. Leave blank to only check when you press Run (for testing).":
+    "Hur ofta det kontrolleras om nya svar kommit när flödet är publicerat. Lämna tomt för att bara kontrollera när du trycker Kör (för test).",
+  "How the body is sent. HTML renders formatting and links; Text sends it exactly as typed.":
+    "Hur innehållet skickas. HTML visar formatering och länkar; Text skickar det exakt som du skrivit.",
+  "How urgently it buzzes. Leave unset for the normal level.":
+    "Hur enträget den låter. Lämna oställt för normal nivå.",
+  "IANA time zone for timed events. Optional when the timestamp carries an offset.":
+    "IANA-tidszon för händelser med klockslag. Valfritt när tidsstämpeln bär en tidsförskjutning.",
+  'IANA time zone the schedule is read in, e.g. "Europe/Stockholm". Empty = UTC. The editor stamps your browser\'s zone here automatically; search the list to change it.':
+    'IANA-tidszon som schemat läses i, t.ex. "Europe/Stockholm". Tomt = UTC. Redigeraren fyller automatiskt i din webbläsares zon här; sök i listan för att byta.',
+  'What to call the combined file. ".pdf" is added if you leave it off.':
+    'Vad den sammanslagna filen ska heta. ".pdf" läggs till om du utelämnar det.',
+  "What to call the file in Drive. Connect the Name input to compute it — a dated backup, say. Defaults to the source file's own name.":
+    "Vad filen ska heta i Drive. Koppla in ingången Namn för att räkna fram det — en daterad säkerhetskopia, till exempel. Standard är källfilens eget namn.",
+  "What to call the file once it's there. Leave blank to keep the name it already has. Overridden by the 'Name' input.":
+    "Vad filen ska heta när den kommit fram. Lämna tomt för att behålla namnet den redan har. Ingången Namn vinner över detta.",
+  'What to call the pieces — they get "-1", "-2" and so on. Leave blank to use "page".':
+    'Vad delarna ska heta — de får "-1", "-2" och så vidare. Lämna tomt för att använda "page".',
+  'What to compare the Value against, used when the Compare to input isn\'t connected. Parsed as JSON when possible — a number, or a list like [200,201,204] for "is one of", or [min,max] for "is within range".':
+    'Vad värdet ska jämföras med, används när ingången Jämför med inte är kopplad. Tolkas som JSON när det går — ett tal, eller en lista som [200,201,204] för "är någon av", eller [min,max] för "ligger inom intervallet".',
+  "When it ends. Same forms as Start. Leave blank for an hour after the start.":
+    "När den slutar. Samma former som Start. Lämna tomt för en timme efter starten.",
+  "When it ends: a timestamp, a plain date (exclusive) for an all-day event, or a relative value. Overridden by the End input when connected.":
+    "När den slutar: en tidsstämpel, ett enkelt datum (exklusivt) för en heldagshändelse, eller ett relativt värde. Ingången Slut vinner över detta när den är inkopplad.",
+  "When it starts. Accepts a relative value — now, tomorrow+9h, +2h — or an absolute timestamp. Overridden by the 'Start' input.":
+    "När den börjar. Godtar ett relativt värde — now, tomorrow+9h, +2h — eller en absolut tidsstämpel. Ingången Start vinner över detta.",
+  'When it starts: a timestamp, a plain date for an all-day event, or a relative value like "tomorrow+9h". Overridden by the Start input when connected.':
+    'När den börjar: en tidsstämpel, ett enkelt datum för en heldagshändelse, eller ett relativt värde som "tomorrow+9h". Ingången Start vinner över detta när den är inkopplad.',
+  "When on and there is exactly one row, emit that mapping on its own instead of a list holding it. What a config file usually wants.":
+    "När detta är på och det finns exakt en rad skickas den mappningen ut för sig i stället för en lista som innehåller den. Vad en konfigurationsfil oftast vill ha.",
+  "When on and there is exactly one row, emit that object on its own instead of an array holding it. What most APIs that create one thing expect.":
+    "När detta är på och det finns exakt en rad skickas det objektet ut för sig i stället för en array som innehåller det. Vad de flesta API:er som skapar en sak förväntar sig.",
+  "When on, each run emits only emails that arrived since the previous run — nothing on the first run (it just remembers where the folder is up to). Turn this on when a published, polling flow acts on each match, so it doesn't re-process the same emails on every poll. Leave off for ad-hoc searches that should return every match.":
+    "När detta är på skickar varje körning bara ut mejl som kommit sedan den förra körningen — inget vid första körningen (då sparas bara hur långt mappen är läst). Slå på det när ett publicerat, pollande flöde gör något med varje träff, så att det inte bearbetar samma mejl vid varje pollning. Lämna av för tillfälliga sökningar som ska returnera alla träffar.",
+  "When on, each run emits only files that appeared since the previous run — nothing on the first run (it just remembers where the folder is up to). Turn this on when a published, polling flow acts on each file, so it doesn't re-process the folder every time. Leave off for ad-hoc listings that should return everything.":
+    "När detta är på skickar varje körning bara ut filer som tillkommit sedan den förra körningen — inget vid första körningen (då sparas bara hur långt mappen är läst). Slå på det när ett publicerat, pollande flöde gör något med varje fil, så att det inte bearbetar mappen om och om igen. Lämna av för tillfälliga listningar som ska returnera allt.",
+  "When set, compute a keyed HMAC with this secret instead of a plain hash. Connect a ${secret.NAME} in rather than pasting the key.":
+    "När detta är satt beräknas en nycklad HMAC med den här hemligheten i stället för en vanlig hash. Koppla in en ${secret.NAMN} i stället för att klistra in nyckeln.",
+  "Where it is — a room, an address, a call link. Overridden by the 'Location' input.":
+    "Var den är — ett rum, en adress, en möteslänk. Ingången Plats vinner över detta.",
+  "Where to save the .xlsx in the workspace. Ignored when a 'File' input is connected.":
+    "Var xlsx-filen ska sparas i arbetsytan. Ignoreras när en Fil-ingång är inkopplad.",
+  "Which calendar the event is on when the account has several. Leave blank to use the one set on the Calendar page.":
+    "Vilken kalender händelsen ligger i när kontot har flera. Lämna tomt för att använda den som är inställd på Kalender-sidan.",
+  "Which calendar to read when the account has several. Leave blank to use the one set on the Calendar page.":
+    "Vilken kalender som ska läsas när kontot har flera. Lämna tomt för att använda den som är inställd på Kalender-sidan.",
+  "Which calendar to write to when the account has several. Leave blank to use the one set on the Calendar page.":
+    "Vilken kalender som ska skrivas till när kontot har flera. Lämna tomt för att använda den som är inställd på Kalender-sidan.",
+  "Which columns to change. Leave empty to write every column the rows carry (except the row-number column).":
+    "Vilka kolumner som ska ändras. Lämna tomt för att skriva alla kolumner raderna bär (utom radnummerkolumnen).",
+  "Which database to read — paste its ID. Overridden by the 'Database ID' input when connected.":
+    "Vilken databas som ska läsas — klistra in dess ID. Ingången Databas-ID vinner över detta när den är inkopplad.",
+  "Which email to mark read — the id from a Search emails match. Overridden by the 'Email' input when connected.":
+    "Vilket mejl som ska markeras som läst — id:t från en träff i Sök mejl. Ingången E-post vinner över detta när den är inkopplad.",
+  "Which email to read — the id from a Search emails match. Overridden by the 'Email' input when connected.":
+    "Vilket mejl som ska läsas — id:t från en träff i Sök mejl. Ingången E-post vinner över detta när den är inkopplad.",
+  "Which email to read. Overridden by the Message ID input when connected.":
+    "Vilket mejl som ska läsas. Ingången Meddelande-ID vinner över detta när den är inkopplad.",
+  "Which email to take the files from — the id from a Search emails match. Overridden by the 'Email' input when connected.":
+    "Vilket mejl filerna ska tas från — id:t från en träff i Sök mejl. Ingången E-post vinner över detta när den är inkopplad.",
+  "Which email to take the files from. Overridden by the Email input when connected.":
+    "Vilket mejl filerna ska tas från. Ingången E-post vinner över detta när den är inkopplad.",
+  "Which file to fetch — a full remote path, or just a name to take it from the folder. Overridden by the 'File' input when connected.":
+    "Vilken fil som ska hämtas — en fullständig fjärrsökväg, eller bara ett namn för att ta den ur mappen. Ingången Fil vinner över detta när den är inkopplad.",
+  'Which folder the email is in, e.g. "INBOX". Leave blank to use the folder set on the Mailbox page.':
+    'Vilken mapp mejlet ligger i, t.ex. "INBOX". Lämna tomt för att använda mappen som är inställd på Brevlåda-sidan.',
+  'Which folder the email is in, e.g. "INBOX". Leave blank to use the folder set on the Mailbox page. An email\'s id only means anything inside the folder it came from.':
+    'Vilken mapp mejlet ligger i, t.ex. "INBOX". Lämna tomt för att använda mappen som är inställd på Brevlåda-sidan. Ett mejls id betyder bara något inuti den mapp det kom från.',
+  'Which folder to search, e.g. "INBOX" or "INBOX/Invoices". Leave blank to use the folder set on the Mailbox page.':
+    'Vilken mapp som ska sökas i, t.ex. "INBOX" eller "INBOX/Invoices". Lämna tomt för att använda mappen som är inställd på Brevlåda-sidan.',
+  "Which language day and month names are written in — Thursday/August, torsdag/augusti. Leave it on the flow's language (Settings → General) unless this one step should differ. Only names are affected: numbers, and the ISO/Unix/email formats, are the same in every language.":
+    "Vilket språk namn på veckodagar och månader skrivs på — Thursday/August, torsdag/augusti. Låt det följa flödets språk (Inställningar → Allmänt) om inte just det här steget ska skilja sig. Bara namn påverkas: siffror, och ISO-, Unix- och e-postformaten, är samma på alla språk.",
+  "Which remote folder to list. Leave blank to use the folder set on the SFTP page. Overridden by the 'Folder' input.":
+    "Vilken fjärrmapp som ska listas. Lämna tomt för att använda mappen som är inställd på SFTP-sidan. Ingången Mapp vinner över detta.",
+  'Which timezone the output is written in — it decides the date at midnight, which weekday that is, and the hour on the clock. Any IANA name: search the list, or type one ("Europe/Stockholm", "Pacific/Auckland"). "Local" is the server\'s own zone, which on a hosted instance is not yours.':
+    'Vilken tidszon utdatat skrivs i — den avgör vilket datum det är vid midnatt, vilken veckodag det blir och vad klockan är. Vilket IANA-namn som helst: sök i listan eller skriv ett ("Europe/Stockholm", "Pacific/Auckland"). "Local" är serverns egen zon, som på en driftad instans inte är din.',
+  "ISO 3166 alpha-2 country code (SE, NO, DK, FI, GB…) to assume when the number isn't written in +international form. Ignored for a number that already starts with +.":
+    "ISO 3166 alfa-2-landskod (SE, NO, DK, FI, GB …) som antas när numret inte är skrivet i internationell +-form. Ignoreras för ett nummer som redan börjar med +.",
+  "ISO country of the register (Roaring is per-country). Defaults to Sweden.":
+    "ISO-land för registret (Roaring är per land). Standard är Sverige.",
+  "In the smallest currency unit (12000 = 120.00). Overridden by the 'Amount' input.":
+    "I valutans minsta enhet (12000 = 120,00). Ingången Belopp vinner över detta.",
   "Include files in the trash.": "Ta med filer i papperskorgen.",
-  "Injected from the ChatGPT connection — leave unset.": "Sätts automatiskt från ChatGPT-anslutningen — lämna oställt.",
-  "Injected from the Ollama connection — leave unset.": "Sätts automatiskt från Ollama-anslutningen — lämna oställt.",
-  "Injected from the Gemini connection — leave unset.": "Sätts automatiskt från Gemini-anslutningen — lämna oställt.",
-  "Injected from the Claude connection — leave unset.": "Sätts automatiskt från Claude-anslutningen — lämna oställt.",
-  "Invoice rows as Fortnox InvoiceRow objects (Description, Price, DeliveredQuantity, ArticleNumber, VAT…). Overridden by the 'Rows' input.": "Fakturarader som Fortnox InvoiceRow-objekt (Description, Price, DeliveredQuantity, ArticleNumber, VAT …). Ingången Rader vinner över detta.",
-  "Issue text (Markdown works). Overridden by the 'Body' input.": "Ärendets text (Markdown fungerar). Ingången Innehåll vinner över detta.",
-  "Issue title. Overridden by the 'Title' input.": "Ärendets rubrik. Ingången Rubrik vinner över detta.",
-  "Which column on the first list pairs with which column on the second — {\"customer_id\": \"id\"} matches each order's customer_id against a customer's id. Add more entries to match on several columns at once.":
-    "Vilken kolumn i första listan som hör samman med vilken kolumn i den andra — {\"customer_id\": \"id\"} matchar varje orders customer_id mot en kunds id. Lägg till fler par för att matcha på flera kolumner samtidigt.",
-  "Keep only rows that match these conditions. Leave empty to return every row.": "Behåll bara rader som uppfyller dessa villkor. Lämna tomt för att returnera alla rader.",
-  "Keep only rows where every listed (column == value). String-compared, so 30 matches \"30\".": "Behåll bara rader där alla listade villkor (kolumn == värde) stämmer. Jämförs som text, så 30 matchar \"30\".",
-  "Keep only rows where every listed column's value appears in the given list. String-compared.": "Behåll bara rader där varje listad kolumns värde finns i den angivna listan. Jämförs som text.",
-  "Labels to attach — they must already exist on the repo.": "Etiketter att sätta — de måste redan finnas i repot.",
-  "Language to write the reply in. Blank matches the incoming message.": "Språk som svaret ska skrivas på. Tomt följer det inkommande meddelandet.",
-  "Latitude of the point, -90..90. Overridden by a \"lat,lon\" value on the Coordinate input.": "Punktens latitud, -90..90. Ett \"lat,lon\"-värde på ingången Koordinat vinner över detta.",
-  "Leave blank to match the input's language.": "Lämna tomt för att följa indatats språk.",
-  "Leave empty to capture the whole remaining authorized amount. For a partial capture, enter the amount in the currency's smallest unit — e.g. 2500 = 25.00. Overridden by the 'Amount' input.": "Lämna tomt för att debitera hela det återstående reserverade beloppet. För en delvis debitering anger du beloppet i valutans minsta enhet — t.ex. 2500 = 25,00. Ingången Belopp vinner över detta.",
-  "Leave empty to refund the whole payment. For a partial refund, enter the amount in the currency's smallest unit — e.g. 500 = 5.00 USD/EUR (cents), but 500 = 500 JPY (yen has no smaller unit). Overridden by the 'Amount' input when connected.": "Lämna tomt för att återbetala hela betalningen. För en delvis återbetalning anger du beloppet i valutans minsta enhet — t.ex. 500 = 5,00 USD/EUR (cent), men 500 = 500 JPY (yen har ingen mindre enhet). Ingången Belopp vinner över detta när den är inkopplad.",
-  "Leave empty to refund the whole remaining refundable amount (captured minus already refunded). For a partial refund, enter the amount in the currency's smallest unit — e.g. 500 = 5.00. Overridden by the 'Amount' input.": "Lämna tomt för att återbetala hela det återstående återbetalningsbara beloppet (debiterat minus redan återbetalat). För en delvis återbetalning anger du beloppet i valutans minsta enhet — t.ex. 500 = 5,00. Ingången Belopp vinner över detta.",
-  "Let the AI answer 'none' when no category fits, instead of forcing a pick.": "Låt AI:n svara 'none' när ingen kategori passar, i stället för att tvinga fram ett val.",
-  "Load the file into memory now (needed for remote modules that don't share the workspace). Default off so large files don't sit in memory.": "Läs in filen i minnet nu (behövs för fjärrmoduler som inte delar arbetsytan). Av som standard, så att stora filer inte ligger i minnet.",
-  "Longitude of the point, -180..180. Overridden by the Coordinate input.": "Punktens longitud, -180..180. Ingången Koordinat vinner över detta.",
-  "MQTT client id. Defaults to a dazyflow-derived id.": "MQTT-klient-id. Standard är ett id som härleds från dazyflow.",
-  "Map of {output_column: CEL expression}. The expression's value becomes that cell. Existing columns are overwritten; new columns are added to the output schema.": "Tabell över {utgående_kolumn: CEL-uttryck}. Uttryckets värde blir cellens innehåll. Befintliga kolumner skrivs över; nya kolumner läggs till i utdatats schema.",
-  "Match files whose name contains this text. Leave blank to match any name.": "Matcha filer vars namn innehåller den här texten. Lämna tomt för att matcha alla namn.",
+  "Injected from the ChatGPT connection — leave unset.":
+    "Sätts automatiskt från ChatGPT-anslutningen — lämna oställt.",
+  "Injected from the Ollama connection — leave unset.":
+    "Sätts automatiskt från Ollama-anslutningen — lämna oställt.",
+  "Injected from the Gemini connection — leave unset.":
+    "Sätts automatiskt från Gemini-anslutningen — lämna oställt.",
+  "Injected from the Claude connection — leave unset.":
+    "Sätts automatiskt från Claude-anslutningen — lämna oställt.",
+  "Invoice rows as Fortnox InvoiceRow objects (Description, Price, DeliveredQuantity, ArticleNumber, VAT…). Overridden by the 'Rows' input.":
+    "Fakturarader som Fortnox InvoiceRow-objekt (Description, Price, DeliveredQuantity, ArticleNumber, VAT …). Ingången Rader vinner över detta.",
+  "Issue text (Markdown works). Overridden by the 'Body' input.":
+    "Ärendets text (Markdown fungerar). Ingången Innehåll vinner över detta.",
+  "Issue title. Overridden by the 'Title' input.":
+    "Ärendets rubrik. Ingången Rubrik vinner över detta.",
+  'Which column on the first list pairs with which column on the second — {"customer_id": "id"} matches each order\'s customer_id against a customer\'s id. Add more entries to match on several columns at once.':
+    'Vilken kolumn i första listan som hör samman med vilken kolumn i den andra — {"customer_id": "id"} matchar varje orders customer_id mot en kunds id. Lägg till fler par för att matcha på flera kolumner samtidigt.',
+  "Keep only rows that match these conditions. Leave empty to return every row.":
+    "Behåll bara rader som uppfyller dessa villkor. Lämna tomt för att returnera alla rader.",
+  'Keep only rows where every listed (column == value). String-compared, so 30 matches "30".':
+    'Behåll bara rader där alla listade villkor (kolumn == värde) stämmer. Jämförs som text, så 30 matchar "30".',
+  "Keep only rows where every listed column's value appears in the given list. String-compared.":
+    "Behåll bara rader där varje listad kolumns värde finns i den angivna listan. Jämförs som text.",
+  "Labels to attach — they must already exist on the repo.":
+    "Etiketter att sätta — de måste redan finnas i repot.",
+  "Language to write the reply in. Blank matches the incoming message.":
+    "Språk som svaret ska skrivas på. Tomt följer det inkommande meddelandet.",
+  'Latitude of the point, -90..90. Overridden by a "lat,lon" value on the Coordinate input.':
+    'Punktens latitud, -90..90. Ett "lat,lon"-värde på ingången Koordinat vinner över detta.',
+  "Leave blank to match the input's language.":
+    "Lämna tomt för att följa indatats språk.",
+  "Leave empty to capture the whole remaining authorized amount. For a partial capture, enter the amount in the currency's smallest unit — e.g. 2500 = 25.00. Overridden by the 'Amount' input.":
+    "Lämna tomt för att debitera hela det återstående reserverade beloppet. För en delvis debitering anger du beloppet i valutans minsta enhet — t.ex. 2500 = 25,00. Ingången Belopp vinner över detta.",
+  "Leave empty to refund the whole payment. For a partial refund, enter the amount in the currency's smallest unit — e.g. 500 = 5.00 USD/EUR (cents), but 500 = 500 JPY (yen has no smaller unit). Overridden by the 'Amount' input when connected.":
+    "Lämna tomt för att återbetala hela betalningen. För en delvis återbetalning anger du beloppet i valutans minsta enhet — t.ex. 500 = 5,00 USD/EUR (cent), men 500 = 500 JPY (yen har ingen mindre enhet). Ingången Belopp vinner över detta när den är inkopplad.",
+  "Leave empty to refund the whole remaining refundable amount (captured minus already refunded). For a partial refund, enter the amount in the currency's smallest unit — e.g. 500 = 5.00. Overridden by the 'Amount' input.":
+    "Lämna tomt för att återbetala hela det återstående återbetalningsbara beloppet (debiterat minus redan återbetalat). För en delvis återbetalning anger du beloppet i valutans minsta enhet — t.ex. 500 = 5,00. Ingången Belopp vinner över detta.",
+  "Let the AI answer 'none' when no category fits, instead of forcing a pick.":
+    "Låt AI:n svara 'none' när ingen kategori passar, i stället för att tvinga fram ett val.",
+  "Load the file into memory now (needed for remote modules that don't share the workspace). Default off so large files don't sit in memory.":
+    "Läs in filen i minnet nu (behövs för fjärrmoduler som inte delar arbetsytan). Av som standard, så att stora filer inte ligger i minnet.",
+  "Longitude of the point, -180..180. Overridden by the Coordinate input.":
+    "Punktens longitud, -180..180. Ingången Koordinat vinner över detta.",
+  "MQTT client id. Defaults to a dazyflow-derived id.":
+    "MQTT-klient-id. Standard är ett id som härleds från dazyflow.",
+  "Map of {output_column: CEL expression}. The expression's value becomes that cell. Existing columns are overwritten; new columns are added to the output schema.":
+    "Tabell över {utgående_kolumn: CEL-uttryck}. Uttryckets värde blir cellens innehåll. Befintliga kolumner skrivs över; nya kolumner läggs till i utdatats schema.",
+  "Match files whose name contains this text. Leave blank to match any name.":
+    "Matcha filer vars namn innehåller den här texten. Lämna tomt för att matcha alla namn.",
   "Max events per poll.": "Max antal händelser per pollning.",
   "Max invoices per page.": "Max antal fakturor per sida.",
-  "Message body. Overridden by the 'Payload' input.": "Meddelandets innehåll. Ingången Nyttolast vinner över detta.",
+  "Message body. Overridden by the 'Payload' input.":
+    "Meddelandets innehåll. Ingången Nyttolast vinner över detta.",
   "Milestone number (not name).": "Milstolpens nummer (inte namn).",
-  "Name of a single column to take each line from. Used when 'template' is absent.": "Namnet på en enskild kolumn som varje rad hämtas från. Används när 'template' saknas.",
-  "Name of the connected Slack workspace.": "Namnet på den anslutna Slack-arbetsytan.",
+  "Name of a single column to take each line from. Used when 'template' is absent.":
+    "Namnet på en enskild kolumn som varje rad hämtas från. Används när 'template' saknas.",
+  "Name of the connected Slack workspace.":
+    "Namnet på den anslutna Slack-arbetsytan.",
   "Notification title.": "Notisens rubrik.",
-  "Off = send the file bytes directly (what upload links expect). On = send as a form attachment for services that ask for one.": "Av = skicka filens byte direkt (vilket uppladdningslänkar förväntar sig). På = skicka som en formulärbilaga för tjänster som vill ha det.",
-  "On: remember what's been emitted and fire only for new items (the first poll baselines silently). Off: emit the whole current feed every run.": "På: minns vad som redan skickats ut och utlös bara för nya poster (den första pollningen sätter tyst en utgångspunkt). Av: skicka ut hela det aktuella flödet vid varje körning.",
-  "One of your Stripe Prices, listed from your account once the STRIPE_API_KEY secret is set (Products → Pricing in the dashboard). Overridden by the 'Price' input when connected.": "Ett av dina Stripe-priser, hämtade från ditt konto när hemligheten STRIPE_API_KEY är satt (Products → Pricing i kontrollpanelen). Ingången Pris vinner över detta när den är inkopplad.",
-  "One of your Twilio phone numbers (E.164). Leave blank if using a Messaging Service SID.": "Ett av dina Twilio-telefonnummer (E.164). Lämna tomt om du använder ett Messaging Service SID.",
-  "Only events newer than this event id (evt_…). Overridden by the 'After id' input — usually a saved cursor secret.": "Bara händelser nyare än det här händelse-id:t (evt_…). Ingången Efter id vinner över detta — oftast en sparad markörhemlighet.",
-  "Only issues assigned to this username. 'none' = unassigned, '*' = any.": "Bara ärenden tilldelade det här användarnamnet. 'none' = otilldelade, '*' = vilket som.",
-  "Only issues carrying ALL of these labels.": "Bara ärenden som har ALLA dessa etiketter.",
-  "Only used for Google Docs, Sheets and Slides (which have no raw download) — they're exported to this format. PDF works for all; docx/txt/html for Docs, xlsx/csv for Sheets, pptx for Slides. Ignored for regular files.": "Används bara för Google Docs, Sheets och Slides (som inte går att ladda ner i råformat) — de exporteras till det här formatet. PDF fungerar för alla; docx/txt/html för Docs, xlsx/csv för Sheets, pptx för Slides. Ignoreras för vanliga filer.",
-  "Optional ISO language code for the per-day conditions (e.g. sv, de, es). Defaults to English.": "Valfri ISO-språkkod för väderläget per dag (t.ex. sv, de, es). Standard är engelska.",
-  "Optional ISO language code for the returned place name (e.g. sv, de).": "Valfri ISO-språkkod för platsnamnet som returneras (t.ex. sv, de).",
-  "Optional ISO language code for the weather Description (e.g. sv, de, es). Defaults to English.": "Valfri ISO-språkkod för väderbeskrivningen (t.ex. sv, de, es). Standard är engelska.",
-  "Optional cap on how many rows to return (applied after filtering).": "Valfri gräns för hur många rader som returneras (tillämpas efter filtreringen).",
-  "Optional cap on how many rows to return.": "Valfri gräns för hur många rader som returneras.",
-  "Optional cap on the number of rows returned.": "Valfri gräns för antalet rader som returneras.",
-  "Optional cell range within the sheet. Leave blank to read the whole sheet.": "Valfritt cellområde i bladet. Lämna tomt för att läsa hela bladet.",
-  "Optional cell range within the tab (A1 notation). Leave blank to read the whole tab.": "Valfritt cellområde i fliken (A1-notation). Lämna tomt för att läsa hela fliken.",
-  "Optional comma-separated ISO country codes to bias geocoding of the Place (e.g. \"us\" or \"se,no\").": "Valfria kommaseparerade ISO-landskoder som viktar geokodningen av Plats (t.ex. \"us\" eller \"se,no\").",
-  "Optional dot-path into A when A is a JSON object (e.g. priority). Empty compares the whole value.": "Valfri punktnotationssökväg in i A när A är ett JSON-objekt (t.ex. priority). Tomt jämför hela värdet.",
-  "Optional dot-path into the parsed JSON before rows are built, e.g. \"data.items\". Each segment indexes an object key. Point it at an object or a list of objects to get rows; point it at a single value (a version string, an id) and 'Rows' comes out empty while 'Value' carries what you asked for.": "Valfri punktnotationssökväg in i den tolkade JSON:en innan raderna byggs, t.ex. \"data.items\". Varje del pekar på en objektnyckel. Peka den på ett objekt eller en lista med objekt för att få rader; peka den på ett enskilt värde (en versionssträng, ett id) så blir Rader tomt medan Värde bär det du bad om.",
-  "Optional dot-path into the parsed document (relative to the root's children) before rows are built, e.g. \"channel.item\". Each segment indexes a child element name.": "Valfri punktnotationssökväg in i det tolkade dokumentet (relativ till rotens barn) innan raderna byggs, t.ex. \"channel.item\". Varje del pekar på ett underelements namn.",
+  "Off = send the file bytes directly (what upload links expect). On = send as a form attachment for services that ask for one.":
+    "Av = skicka filens byte direkt (vilket uppladdningslänkar förväntar sig). På = skicka som en formulärbilaga för tjänster som vill ha det.",
+  "On: remember what's been emitted and fire only for new items (the first poll baselines silently). Off: emit the whole current feed every run.":
+    "På: minns vad som redan skickats ut och utlös bara för nya poster (den första pollningen sätter tyst en utgångspunkt). Av: skicka ut hela det aktuella flödet vid varje körning.",
+  "One of your Stripe Prices, listed from your account once the STRIPE_API_KEY secret is set (Products → Pricing in the dashboard). Overridden by the 'Price' input when connected.":
+    "Ett av dina Stripe-priser, hämtade från ditt konto när hemligheten STRIPE_API_KEY är satt (Products → Pricing i kontrollpanelen). Ingången Pris vinner över detta när den är inkopplad.",
+  "One of your Twilio phone numbers (E.164). Leave blank if using a Messaging Service SID.":
+    "Ett av dina Twilio-telefonnummer (E.164). Lämna tomt om du använder ett Messaging Service SID.",
+  "Only events newer than this event id (evt_…). Overridden by the 'After id' input — usually a saved cursor secret.":
+    "Bara händelser nyare än det här händelse-id:t (evt_…). Ingången Efter id vinner över detta — oftast en sparad markörhemlighet.",
+  "Only issues assigned to this username. 'none' = unassigned, '*' = any.":
+    "Bara ärenden tilldelade det här användarnamnet. 'none' = otilldelade, '*' = vilket som.",
+  "Only issues carrying ALL of these labels.":
+    "Bara ärenden som har ALLA dessa etiketter.",
+  "Only used for Google Docs, Sheets and Slides (which have no raw download) — they're exported to this format. PDF works for all; docx/txt/html for Docs, xlsx/csv for Sheets, pptx for Slides. Ignored for regular files.":
+    "Används bara för Google Docs, Sheets och Slides (som inte går att ladda ner i råformat) — de exporteras till det här formatet. PDF fungerar för alla; docx/txt/html för Docs, xlsx/csv för Sheets, pptx för Slides. Ignoreras för vanliga filer.",
+  "Optional ISO language code for the per-day conditions (e.g. sv, de, es). Defaults to English.":
+    "Valfri ISO-språkkod för väderläget per dag (t.ex. sv, de, es). Standard är engelska.",
+  "Optional ISO language code for the returned place name (e.g. sv, de).":
+    "Valfri ISO-språkkod för platsnamnet som returneras (t.ex. sv, de).",
+  "Optional ISO language code for the weather Description (e.g. sv, de, es). Defaults to English.":
+    "Valfri ISO-språkkod för väderbeskrivningen (t.ex. sv, de, es). Standard är engelska.",
+  "Optional cap on how many rows to return (applied after filtering).":
+    "Valfri gräns för hur många rader som returneras (tillämpas efter filtreringen).",
+  "Optional cap on how many rows to return.":
+    "Valfri gräns för hur många rader som returneras.",
+  "Optional cap on the number of rows returned.":
+    "Valfri gräns för antalet rader som returneras.",
+  "Optional cell range within the sheet. Leave blank to read the whole sheet.":
+    "Valfritt cellområde i bladet. Lämna tomt för att läsa hela bladet.",
+  "Optional cell range within the tab (A1 notation). Leave blank to read the whole tab.":
+    "Valfritt cellområde i fliken (A1-notation). Lämna tomt för att läsa hela fliken.",
+  'Optional comma-separated ISO country codes to bias geocoding of the Place (e.g. "us" or "se,no").':
+    'Valfria kommaseparerade ISO-landskoder som viktar geokodningen av Plats (t.ex. "us" eller "se,no").',
+  "Optional dot-path into A when A is a JSON object (e.g. priority). Empty compares the whole value.":
+    "Valfri punktnotationssökväg in i A när A är ett JSON-objekt (t.ex. priority). Tomt jämför hela värdet.",
+  "Optional dot-path into the parsed JSON before rows are built, e.g. \"data.items\". Each segment indexes an object key. Point it at an object or a list of objects to get rows; point it at a single value (a version string, an id) and 'Rows' comes out empty while 'Value' carries what you asked for.":
+    'Valfri punktnotationssökväg in i den tolkade JSON:en innan raderna byggs, t.ex. "data.items". Varje del pekar på en objektnyckel. Peka den på ett objekt eller en lista med objekt för att få rader; peka den på ett enskilt värde (en versionssträng, ett id) så blir Rader tomt medan Värde bär det du bad om.',
+  'Optional dot-path into the parsed document (relative to the root\'s children) before rows are built, e.g. "channel.item". Each segment indexes a child element name.':
+    'Valfri punktnotationssökväg in i det tolkade dokumentet (relativ till rotens barn) innan raderna byggs, t.ex. "channel.item". Varje del pekar på ett underelements namn.',
   "Optional event details.": "Valfria detaljer om händelsen.",
-  "Optional explicit column order/subset. When empty, the rows' own column order is used.": "Valfri uttalad kolumnordning eller delmängd. När det är tomt används radernas egen kolumnordning.",
-  "Optional instruction that frames the reply.": "Valfri instruktion som ramar in svaret.",
+  "Optional explicit column order/subset. When empty, the rows' own column order is used.":
+    "Valfri uttalad kolumnordning eller delmängd. När det är tomt används radernas egen kolumnordning.",
+  "Optional instruction that frames the reply.":
+    "Valfri instruktion som ramar in svaret.",
   "Optional location text.": "Valfri platstext.",
-  "Optional reusable HTML template to wrap the body in (logo, header, footer). HTML format only. Leave blank to send the body as-is.": "Valfri återanvändbar HTML-mall att lägga runt innehållet (logotyp, sidhuvud, sidfot). Bara för HTML-format. Lämna tomt för att skicka innehållet som det är.",
-  "Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. Leave empty to write every field. For row filtering or defaults, use a Map rows step first.": "Valfritt. Välj vilka inkommande fält som skrivs och namnge deras kolumner — {inkommande fält: kolumnnamn}. Bara listade fält skrivs (övriga tas bort); lämna ett kolumnnamn tomt för att hoppa över ett fält. Lämna tomt för att skriva alla fält. För radfiltrering eller standardvärden använder du ett Välj och byt namn på kolumner-steg först.",
-  "Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. conflict_columns refer to the mapped (output) names. Leave empty to write every field.": "Valfritt. Välj vilka inkommande fält som skrivs och namnge deras kolumner — {inkommande fält: kolumnnamn}. Bara listade fält skrivs (övriga tas bort); lämna ett kolumnnamn tomt för att hoppa över ett fält. conflict_columns syftar på de mappade (utgående) namnen. Lämna tomt för att skriva alla fält.",
-  "Optional. Column(s) that identify a row, e.g. date. When set, re-saving a row with the same key updates it in place instead of adding a duplicate, so re-running the flow is idempotent. Leave empty to always append.": "Valfritt. Kolumn(er) som identifierar en rad, t.ex. datum. När det är satt uppdateras en rad med samma nyckel på plats i stället för att bli en dubblett, så att en ny körning av flödet är idempotent. Lämna tomt för att alltid lägga till.",
-  "Optional: force a column's SQL type (e.g. {\"id\":\"bigint\"}). Columns default to text otherwise.": "Valfritt: tvinga en kolumns SQL-typ (t.ex. {\"id\":\"bigint\"}). Annars blir kolumner text som standard.",
-  "Optional: force a column's SQL type (e.g. {\"total\":\"DECIMAL(10,2)\"}). Columns default to text otherwise.": "Valfritt: tvinga en kolumns SQL-typ (t.ex. {\"total\":\"DECIMAL(10,2)\"}). Annars blir kolumner text som standard.",
-  "Optional: force a column's SQL type. Columns default to text otherwise.": "Valfritt: tvinga en kolumns SQL-typ. Annars blir kolumner text som standard.",
-  "Optional: force a column's type (e.g. {\"age\":\"INTEGER\"}). Everything defaults to text, which is fine for most things.": "Valfritt: tvinga en kolumns typ (t.ex. {\"age\":\"INTEGER\"}). Allt blir text som standard, vilket räcker för det mesta.",
+  "Optional reusable HTML template to wrap the body in (logo, header, footer). HTML format only. Leave blank to send the body as-is.":
+    "Valfri återanvändbar HTML-mall att lägga runt innehållet (logotyp, sidhuvud, sidfot). Bara för HTML-format. Lämna tomt för att skicka innehållet som det är.",
+  "Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. Leave empty to write every field. For row filtering or defaults, use a Map rows step first.":
+    "Valfritt. Välj vilka inkommande fält som skrivs och namnge deras kolumner — {inkommande fält: kolumnnamn}. Bara listade fält skrivs (övriga tas bort); lämna ett kolumnnamn tomt för att hoppa över ett fält. Lämna tomt för att skriva alla fält. För radfiltrering eller standardvärden använder du ett Välj och byt namn på kolumner-steg först.",
+  "Optional. Choose which incoming fields to write and name their columns — {incoming field: column name}. Only listed fields are written (others dropped); blank a column name to skip a field. conflict_columns refer to the mapped (output) names. Leave empty to write every field.":
+    "Valfritt. Välj vilka inkommande fält som skrivs och namnge deras kolumner — {inkommande fält: kolumnnamn}. Bara listade fält skrivs (övriga tas bort); lämna ett kolumnnamn tomt för att hoppa över ett fält. conflict_columns syftar på de mappade (utgående) namnen. Lämna tomt för att skriva alla fält.",
+  "Optional. Column(s) that identify a row, e.g. date. When set, re-saving a row with the same key updates it in place instead of adding a duplicate, so re-running the flow is idempotent. Leave empty to always append.":
+    "Valfritt. Kolumn(er) som identifierar en rad, t.ex. datum. När det är satt uppdateras en rad med samma nyckel på plats i stället för att bli en dubblett, så att en ny körning av flödet är idempotent. Lämna tomt för att alltid lägga till.",
+  'Optional: force a column\'s SQL type (e.g. {"id":"bigint"}). Columns default to text otherwise.':
+    'Valfritt: tvinga en kolumns SQL-typ (t.ex. {"id":"bigint"}). Annars blir kolumner text som standard.',
+  'Optional: force a column\'s SQL type (e.g. {"total":"DECIMAL(10,2)"}). Columns default to text otherwise.':
+    'Valfritt: tvinga en kolumns SQL-typ (t.ex. {"total":"DECIMAL(10,2)"}). Annars blir kolumner text som standard.',
+  "Optional: force a column's SQL type. Columns default to text otherwise.":
+    "Valfritt: tvinga en kolumns SQL-typ. Annars blir kolumner text som standard.",
+  'Optional: force a column\'s type (e.g. {"age":"INTEGER"}). Everything defaults to text, which is fine for most things.':
+    'Valfritt: tvinga en kolumns typ (t.ex. {"age":"INTEGER"}). Allt blir text som standard, vilket räcker för det mesta.',
   "The rules, in order. Each row takes the FIRST rule it satisfies and leaves on that rule's route; a row satisfying none leaves on Everything else. Order matters — put the most specific rule first, or a looser one above it will swallow the rows it was meant to catch.":
     "Reglerna, i ordning. Varje rad tar den FÖRSTA regel den uppfyller och lämnar steget på den regelns rutt; en rad som inte uppfyller någon lämnar det på Allt annat. Ordningen spelar roll — sätt den mest specifika regeln först, annars sväljer en lösare regel ovanför den de rader den var tänkt att fånga.",
   "The matches, in order. Whatever comes in leaves on the FIRST one whose value it equals; if it equals none of them it leaves on Everything else. Order matters when two could apply — the earlier one takes it.":
     "Träffarna, i ordning. Det som kommer in lämnar steget på den FÖRSTA vars värde det är lika med; är det inte lika med någon av dem lämnar det steget på Allt annat. Ordningen spelar roll när två skulle kunna gälla — den tidigare tar det.",
-  "How the date is written on the 'out' port. Pick Custom to write your own — a field for it appears below.": "Hur datumet skrivs på porten 'out'. Välj Eget för att skriva ett eget — då visas ett fält för det nedanför.",
-  "Build it from tokens: YYYY (2026) YY (26) MM (08) M (8) DD (27) D (27) HH (14) mm (05) ss (09), MMM/MMMM for a month name (Aug/August), ddd/dddd for a weekday (Thu/Thursday), hh with A for a 12-hour clock (02 PM), Z for the zone offset. Everything else — slashes, dots, spaces — is kept as typed, and literal words go in square brackets: \"[week of] D MMM\" → \"week of 27 Aug\". Tokens are case-sensitive (MM is the month, mm the minute); an unknown one fails the step rather than being printed as-is.": "Bygg det av tokens: YYYY (2026) YY (26) MM (08) M (8) DD (27) D (27) HH (14) mm (05) ss (09), MMM/MMMM för ett månadsnamn (Aug/August), ddd/dddd för en veckodag (Thu/Thursday), hh med A för 12-timmarsklocka (02 PM), Z för tidszonens avvikelse. Allt annat — snedstreck, punkter, mellanslag — behålls som du skrivit det, och bokstavlig text sätts inom hakparenteser: \"[week of] D MMM\" → \"week of 27 Aug\". Tokens är skiftlägeskänsliga (MM är månaden, mm minuten); en okänd token gör att steget misslyckas i stället för att skrivas ut som den är.",
-  "Output numbers and TRUE/FALSE as real values instead of text.": "Skicka ut tal och TRUE/FALSE som riktiga värden i stället för text.",
-  "Which output it leaves on when this match wins. \"case_1\" is the pin labelled Match 1, \"case_2\" is Match 2, and so on up to \"case_8\".":
-    "Vilken utgång det lämnar steget på när den här träffen vinner. \"case_1\" är stiftet som heter Träff 1, \"case_2\" är Träff 2, och så vidare upp till \"case_8\".",
-  "Which output the matching rows leave on. \"rows_1\" is the pin labelled Route 1, \"rows_2\" is Route 2, and so on up to \"rows_8\".":
-    "Vilken utgång de matchande raderna lämnar steget på. \"rows_1\" är stiftet som heter Rutt 1, \"rows_2\" är Rutt 2, och så vidare upp till \"rows_8\".",
-  "Overridden by the 'Description' input.": "Ingången Beskrivning vinner över detta.",
+  "How the date is written on the 'out' port. Pick Custom to write your own — a field for it appears below.":
+    "Hur datumet skrivs på porten 'out'. Välj Eget för att skriva ett eget — då visas ett fält för det nedanför.",
+  'Build it from tokens: YYYY (2026) YY (26) MM (08) M (8) DD (27) D (27) HH (14) mm (05) ss (09), MMM/MMMM for a month name (Aug/August), ddd/dddd for a weekday (Thu/Thursday), hh with A for a 12-hour clock (02 PM), Z for the zone offset. Everything else — slashes, dots, spaces — is kept as typed, and literal words go in square brackets: "[week of] D MMM" → "week of 27 Aug". Tokens are case-sensitive (MM is the month, mm the minute); an unknown one fails the step rather than being printed as-is.':
+    'Bygg det av tokens: YYYY (2026) YY (26) MM (08) M (8) DD (27) D (27) HH (14) mm (05) ss (09), MMM/MMMM för ett månadsnamn (Aug/August), ddd/dddd för en veckodag (Thu/Thursday), hh med A för 12-timmarsklocka (02 PM), Z för tidszonens avvikelse. Allt annat — snedstreck, punkter, mellanslag — behålls som du skrivit det, och bokstavlig text sätts inom hakparenteser: "[week of] D MMM" → "week of 27 Aug". Tokens är skiftlägeskänsliga (MM är månaden, mm minuten); en okänd token gör att steget misslyckas i stället för att skrivas ut som den är.',
+  "Output numbers and TRUE/FALSE as real values instead of text.":
+    "Skicka ut tal och TRUE/FALSE som riktiga värden i stället för text.",
+  'Which output it leaves on when this match wins. "case_1" is the pin labelled Match 1, "case_2" is Match 2, and so on up to "case_8".':
+    'Vilken utgång det lämnar steget på när den här träffen vinner. "case_1" är stiftet som heter Träff 1, "case_2" är Träff 2, och så vidare upp till "case_8".',
+  'Which output the matching rows leave on. "rows_1" is the pin labelled Route 1, "rows_2" is Route 2, and so on up to "rows_8".':
+    'Vilken utgång de matchande raderna lämnar steget på. "rows_1" är stiftet som heter Rutt 1, "rows_2" är Rutt 2, och så vidare upp till "rows_8".',
+  "Overridden by the 'Description' input.":
+    "Ingången Beskrivning vinner över detta.",
   "Overridden by the 'Email' input.": "Ingången E-post vinner över detta.",
   "Overridden by the 'Name' input.": "Ingången Namn vinner över detta.",
-  "Override per-column type (e.g. {\"age\":\"INTEGER\",\"created_at\":\"DATETIME\"}). Defaults to TEXT for every header.": "Ange typ per kolumn (t.ex. {\"age\":\"INTEGER\",\"created_at\":\"DATETIME\"}). Standard är TEXT för varje rubrik.",
-  "Override the API host (proxy / self-hosted / testing).": "Ange en annan API-värd (proxy / egen server / test).",
+  'Override per-column type (e.g. {"age":"INTEGER","created_at":"DATETIME"}). Defaults to TEXT for every header.':
+    'Ange typ per kolumn (t.ex. {"age":"INTEGER","created_at":"DATETIME"}). Standard är TEXT för varje rubrik.',
+  "Override the API host (proxy / self-hosted / testing).":
+    "Ange en annan API-värd (proxy / egen server / test).",
   "Override the API host (testing).": "Ange en annan API-värd (test).",
   "Override the API host.": "Ange en annan API-värd.",
-  "Override the avatar shown for this message.": "Ange en annan avatar för det här meddelandet.",
-  "Override the file's type. Defaults to a generic binary type.": "Ange en annan filtyp. Standard är en generisk binärtyp.",
-  "Override the file's type. Defaults to a guess from the file extension.": "Ange en annan filtyp. Gissas som standard utifrån filändelsen.",
-  "Override the name shown for this message. Leave blank for the webhook's default.": "Ange ett annat namn för det här meddelandet. Lämna tomt för webhookens standardnamn.",
-  "Pagination cursor from a prior run's next_cursor output (advanced).": "Bläddringsmarkör från en tidigare körnings next_cursor-utgång (avancerat).",
-  "Pagination token from a prior run's next_page_token output (advanced).": "Bläddringstoken från en tidigare körnings next_page_token-utgång (avancerat).",
-  "Path to the SQLite database file in your workspace (created if missing).": "Sökväg till SQLite-databasfilen i din arbetsyta (skapas om den saknas).",
-  "Path to the SQLite database file in your workspace.": "Sökväg till SQLite-databasfilen i din arbetsyta.",
-  "Payment terms — when the invoice falls due.": "Betalningsvillkor — när fakturan förfaller.",
-  "Permit sending to private/internal addresses. Only takes effect if the operator has enabled private egress.": "Tillåt utskick till privata/interna adresser. Får bara effekt om operatören tillåtit utgående trafik dit.",
-  "Pick a channel from your connected workspace, or type a name like #general / a channel ID. The bot must already be a member. Overridden by the 'Channel' input.": "Välj en kanal i din anslutna arbetsyta, eller skriv ett namn som #general / ett kanal-ID. Boten måste redan vara medlem. Ingången Kanal vinner över detta.",
-  "Pick a customer to list only their subscriptions, or leave empty for the whole account (e.g. a past-due sweep). Listed once the STRIPE_API_KEY secret is set. Overridden by the 'Customer' input.": "Välj en kund för att bara lista dennes prenumerationer, eller lämna tomt för hela kontot (t.ex. en genomgång av förfallna). Listan hämtas när hemligheten STRIPE_API_KEY är satt. Ingången Kund vinner över detta.",
+  "Override the avatar shown for this message.":
+    "Ange en annan avatar för det här meddelandet.",
+  "Override the file's type. Defaults to a generic binary type.":
+    "Ange en annan filtyp. Standard är en generisk binärtyp.",
+  "Override the file's type. Defaults to a guess from the file extension.":
+    "Ange en annan filtyp. Gissas som standard utifrån filändelsen.",
+  "Override the name shown for this message. Leave blank for the webhook's default.":
+    "Ange ett annat namn för det här meddelandet. Lämna tomt för webhookens standardnamn.",
+  "Pagination cursor from a prior run's next_cursor output (advanced).":
+    "Bläddringsmarkör från en tidigare körnings next_cursor-utgång (avancerat).",
+  "Pagination token from a prior run's next_page_token output (advanced).":
+    "Bläddringstoken från en tidigare körnings next_page_token-utgång (avancerat).",
+  "Path to the SQLite database file in your workspace (created if missing).":
+    "Sökväg till SQLite-databasfilen i din arbetsyta (skapas om den saknas).",
+  "Path to the SQLite database file in your workspace.":
+    "Sökväg till SQLite-databasfilen i din arbetsyta.",
+  "Payment terms — when the invoice falls due.":
+    "Betalningsvillkor — när fakturan förfaller.",
+  "Permit sending to private/internal addresses. Only takes effect if the operator has enabled private egress.":
+    "Tillåt utskick till privata/interna adresser. Får bara effekt om operatören tillåtit utgående trafik dit.",
+  "Pick a channel from your connected workspace, or type a name like #general / a channel ID. The bot must already be a member. Overridden by the 'Channel' input.":
+    "Välj en kanal i din anslutna arbetsyta, eller skriv ett namn som #general / ett kanal-ID. Boten måste redan vara medlem. Ingången Kanal vinner över detta.",
+  "Pick a customer to list only their subscriptions, or leave empty for the whole account (e.g. a past-due sweep). Listed once the STRIPE_API_KEY secret is set. Overridden by the 'Customer' input.":
+    "Välj en kund för att bara lista dennes prenumerationer, eller lämna tomt för hela kontot (t.ex. en genomgång av förfallna). Listan hämtas när hemligheten STRIPE_API_KEY är satt. Ingången Kund vinner över detta.",
   "Pick a file from the workspace.": "Välj en fil i arbetsytan.",
-  "Pick the customer to bill — listed from your account once the STRIPE_API_KEY secret is set. Overridden by the 'Customer' input when connected.": "Välj kunden som ska faktureras — hämtas från ditt konto när hemligheten STRIPE_API_KEY är satt. Ingången Kund vinner över detta när den är inkopplad.",
-  "Pick the customer to bill — listed from your connected account. Overridden by the 'Customer number' input when connected.": "Välj kunden som ska faktureras — hämtas från ditt anslutna konto. Ingången Kundnummer vinner över detta när den är inkopplad.",
-  "Pick the events to watch for. Empty = every event. Need one that's not listed? Add it as a custom type (Stripe's dotted name, e.g. payout.failed).": "Välj vilka händelser som ska bevakas. Tomt = alla händelser. Behöver du en som inte finns i listan? Lägg till den som egen typ (Stripes punktnotation, t.ex. payout.failed).",
-  "Pick the payment to refund — your account's succeeded payments, listed once the STRIPE_API_KEY secret is set. Overridden by the 'Payment intent' input when connected.": "Välj betalningen som ska återbetalas — kontots lyckade betalningar, hämtade när hemligheten STRIPE_API_KEY är satt. Ingången Betalningsavsikt vinner över detta när den är inkopplad.",
-  "Pick the subscription to cancel — listed from your account once the STRIPE_API_KEY secret is set. Overridden by the 'Subscription' input when connected.": "Välj prenumerationen som ska avslutas — hämtas från ditt konto när hemligheten STRIPE_API_KEY är satt. Ingången Prenumeration vinner över detta när den är inkopplad.",
-  "Post into an existing thread in the channel instead of the main channel.": "Lägg upp i en befintlig tråd i kanalen i stället för i huvudkanalen.",
-  "Prepended to the joined text when at least one row is rendered.": "Läggs till före den sammanfogade texten när minst en rad renderas.",
-  "RFC3339 timestamp; only issues updated after this.": "RFC3339-tidsstämpel; bara ärenden uppdaterade efter denna.",
-  "Raw Drive query expression ANDed with the other filters (e.g. \"starred = true\").": "Rått Drive-frågeuttryck som kombineras med de andra filtren via AND (t.ex. \"starred = true\").",
-  "Raw Notion block objects for the page body (advanced).": "Råa Notion-blockobjekt till sidans innehåll (avancerat).",
-  "Raw Notion filter object, passed through verbatim (advanced).": "Rått Notion-filterobjekt som skickas vidare oförändrat (avancerat).",
-  "Raw Notion properties object for extra database columns, passed through verbatim and merged with Title (advanced).": "Rått Notion-egenskapsobjekt för extra databaskolumner, skickas vidare oförändrat och slås samman med Rubrik (avancerat).",
-  "Raw Notion sorts array, passed through verbatim (advanced).": "Rå Notion-sorteringsarray som skickas vidare oförändrad (avancerat).",
-  "Raw Notion token; overrides 'account'.": "Rå Notion-token; vinner över 'account'.",
-  "Raw access token; overrides 'account'.": "Rå åtkomsttoken; vinner över 'account'.",
-  "Raw bot token (xoxb-…). Overrides 'account'.": "Rå bot-token (xoxb-…). Vinner över 'account'.",
+  "Pick the customer to bill — listed from your account once the STRIPE_API_KEY secret is set. Overridden by the 'Customer' input when connected.":
+    "Välj kunden som ska faktureras — hämtas från ditt konto när hemligheten STRIPE_API_KEY är satt. Ingången Kund vinner över detta när den är inkopplad.",
+  "Pick the customer to bill — listed from your connected account. Overridden by the 'Customer number' input when connected.":
+    "Välj kunden som ska faktureras — hämtas från ditt anslutna konto. Ingången Kundnummer vinner över detta när den är inkopplad.",
+  "Pick the events to watch for. Empty = every event. Need one that's not listed? Add it as a custom type (Stripe's dotted name, e.g. payout.failed).":
+    "Välj vilka händelser som ska bevakas. Tomt = alla händelser. Behöver du en som inte finns i listan? Lägg till den som egen typ (Stripes punktnotation, t.ex. payout.failed).",
+  "Pick the payment to refund — your account's succeeded payments, listed once the STRIPE_API_KEY secret is set. Overridden by the 'Payment intent' input when connected.":
+    "Välj betalningen som ska återbetalas — kontots lyckade betalningar, hämtade när hemligheten STRIPE_API_KEY är satt. Ingången Betalningsavsikt vinner över detta när den är inkopplad.",
+  "Pick the subscription to cancel — listed from your account once the STRIPE_API_KEY secret is set. Overridden by the 'Subscription' input when connected.":
+    "Välj prenumerationen som ska avslutas — hämtas från ditt konto när hemligheten STRIPE_API_KEY är satt. Ingången Prenumeration vinner över detta när den är inkopplad.",
+  "Post into an existing thread in the channel instead of the main channel.":
+    "Lägg upp i en befintlig tråd i kanalen i stället för i huvudkanalen.",
+  "Prepended to the joined text when at least one row is rendered.":
+    "Läggs till före den sammanfogade texten när minst en rad renderas.",
+  "RFC3339 timestamp; only issues updated after this.":
+    "RFC3339-tidsstämpel; bara ärenden uppdaterade efter denna.",
+  'Raw Drive query expression ANDed with the other filters (e.g. "starred = true").':
+    'Rått Drive-frågeuttryck som kombineras med de andra filtren via AND (t.ex. "starred = true").',
+  "Raw Notion block objects for the page body (advanced).":
+    "Råa Notion-blockobjekt till sidans innehåll (avancerat).",
+  "Raw Notion filter object, passed through verbatim (advanced).":
+    "Rått Notion-filterobjekt som skickas vidare oförändrat (avancerat).",
+  "Raw Notion properties object for extra database columns, passed through verbatim and merged with Title (advanced).":
+    "Rått Notion-egenskapsobjekt för extra databaskolumner, skickas vidare oförändrat och slås samman med Rubrik (avancerat).",
+  "Raw Notion sorts array, passed through verbatim (advanced).":
+    "Rå Notion-sorteringsarray som skickas vidare oförändrad (avancerat).",
+  "Raw Notion token; overrides 'account'.":
+    "Rå Notion-token; vinner över 'account'.",
+  "Raw access token; overrides 'account'.":
+    "Rå åtkomsttoken; vinner över 'account'.",
+  "Raw bot token (xoxb-…). Overrides 'account'.":
+    "Rå bot-token (xoxb-…). Vinner över 'account'.",
   "Raw bot token; overrides 'account'.": "Rå bot-token; vinner över 'account'.",
-  "React only to mentions in this one channel — pick it from your connected workspace (or type a channel ID like C0123). Mentions elsewhere are ignored. Leave empty to react everywhere the bot is mentioned.": "Reagera bara på omnämnanden i den här enda kanalen — välj den i din anslutna arbetsyta (eller skriv ett kanal-ID som C0123). Omnämnanden på andra håll ignoreras. Lämna tomt för att reagera överallt där boten nämns.",
-  "Recipient phone number in E.164 format. Overridden by the 'To' input.": "Mottagarens telefonnummer i E.164-format. Ingången Till vinner över detta.",
-  "Recipient(s), comma-separated. Overridden by the 'To' input.": "Mottagare, kommaseparerade. Ingången Till vinner över detta.",
-  "Rename headers: the column as it appears in the data on the left, the heading you want on the right. Columns you don't list keep their own name, and listing one does not hide the others — this only changes the text in the header row.": "Byt rubriker: kolumnen som den heter i datat till vänster, rubriken du vill ha till höger. Kolumner du inte listar behåller sina egna namn, och att lista en döljer inte de andra — det här ändrar bara texten i rubrikraden.",
-  "Render the digest as lowercase hex (default) or standard Base64.": "Skriv ut summan som gemener i hex (standard) eller som vanlig Base64.",
-  "Replace mode, many words at once: what to look for on the left, what to write on the right. Each match becomes whatever its row says; a match no row mentions is left as it is. Leave Pattern empty and the words are looked for literally, or write a pattern (e.g. with (?i)) and each match is looked up in this table.": "Läget replace, många ord på en gång: vad som ska letas efter till vänster, vad som ska skrivas till höger. Varje träff blir det som dess rad säger; en träff som ingen rad nämner lämnas som den är. Lämna Mönster tomt så letas orden efter ordagrant, eller skriv ett mönster (t.ex. med (?i)) så slås varje träff upp i den här tabellen.",
-  "Request headers (e.g. Authorization). Values may include ${secret.NAME} secrets.": "Rubriker i förfrågan (t.ex. Authorization). Värdena får innehålla hemligheter som ${secret.NAMN}.",
-  "Request headers. Values may include ${secret.NAME} secret placeholders (e.g. an Authorization bearer token).": "Rubriker i förfrågan. Värdena får innehålla platshållare för hemligheter som ${secret.NAMN} (t.ex. en Authorization-bearer-token).",
-  "Restrict to files inside this folder — pick from your account's folders. Leave blank to search all of Drive.": "Begränsa till filer i den här mappen — välj bland kontots mappar. Lämna tomt för att söka i hela Drive.",
-  "Restrict to files of this MIME type. Leave blank for any type.": "Begränsa till filer av den här MIME-typen. Lämna tomt för alla typer.",
-  "Restrict to invoices of this status. Empty = all.": "Begränsa till fakturor med den här statusen. Tomt = alla.",
-  "Roaring Company Overview API version segment.": "Versionsdel för Roarings Company Overview-API.",
-  "Roaring Company Search API version segment.": "Versionsdel för Roarings Company Search-API.",
-  "Rough target length for the summary.": "Ungefärlig önskad längd på sammanfattningen.",
-  "Secret name. Stored as an organization secret; reference it as ${secret.<name>}. Allowed characters: [A-Za-z0-9_.-], up to 128 chars.": "Hemlighetens namn. Sparas som en organisationshemlighet; hänvisa till den som ${secret.<namn>}. Tillåtna tecken: [A-Za-z0-9_.-], upp till 128 tecken.",
-  "Send via a Twilio Messaging Service instead of a single 'From' number.": "Skicka via en Twilio Messaging Service i stället för ett enda 'Från'-nummer.",
-  "Set this on a GET you poll repeatedly to skip re-downloading unchanged data: the step remembers the server's ETag/Last-Modified and sends them next time. When nothing changed the server replies fast with status 304 and an empty Response — branch on status to skip work. Use a unique name per polled URL.": "Sätt detta på en GET som du pollar upprepade gånger för att slippa ladda ner oförändrad data igen: steget minns serverns ETag/Last-Modified och skickar dem nästa gång. När inget ändrats svarar servern snabbt med status 304 och ett tomt Svar — förgrena på statusen för att hoppa över arbetet. Använd ett unikt namn per pollad URL.",
-  "Set this to run the flow automatically every N minutes/hours/days — e.g. every 5 minutes. Leave it empty and the flow never runs on its own; it runs only when you press Run.": "Sätt detta för att köra flödet automatiskt var N:e minut/timme/dag — t.ex. var 5:e minut. Lämnar du det tomt körs flödet aldrig av sig själv; det körs bara när du trycker Kör.",
-  "Set this to run the flow automatically on a schedule — picked with the schedule editor. (Stored as a 5-field cron expression; \"0 9 * * *\" = every day at 09:00.) Leave it empty and the flow never runs on its own; it runs only when you press Run.": "Sätt detta för att köra flödet automatiskt enligt ett schema — som du väljer i schemaredigeraren. (Sparas som ett cron-uttryck med 5 fält; \"0 9 * * *\" = varje dag kl. 09:00.) Lämnar du det tomt körs flödet aldrig av sig själv; det körs bara när du trycker Kör.",
-  "Shallow-clone depth. 0 (default) clones the full history.": "Djup för ytlig klon. 0 (standard) klonar hela historiken.",
-  "Shift the time by an offset, e.g. \"3d\", \"-2h30m\", \"1w\" — \"1d\" is tomorrow. Units: w (weeks), d (days), h, m, s. Empty = no shift.": "Flytta tiden med en förskjutning, t.ex. \"3d\", \"-2h30m\", \"1w\" — \"1d\" är i morgon. Enheter: w (veckor), d (dagar), h, m, s. Tomt = ingen förskjutning.",
-  "Set the clock to this time of day, e.g. \"09:00\" or \"17:30:15\". Applied after the offset and in the output timezone, so Offset \"1d\" with At \"09:00\" is tomorrow morning rather than 24 hours from now. Empty keeps the time it already had.": "Sätt klockan till den här tiden på dygnet, t.ex. \"09:00\" eller \"17:30:15\". Tillämpas efter förskjutningen och i utdatats tidszon, så Förskjutning \"1d\" med Tid på dygnet \"09:00\" blir i morgon bitti i stället för 24 timmar från nu. Tomt behåller tiden som den var.",
-  "Show the interactive map on the step card. Turn off for a compact card — you can still pick in the inspector or drive it with the Coordinate input.": "Visa den interaktiva kartan på stegkortet. Slå av för ett kompakt kort — du kan fortfarande välja i inspektorn eller styra det med ingången Koordinat.",
-  "Show the interactive map on the step card. Turn off for a compact card — you can still pick in the inspector or drive it with the Place input.": "Visa den interaktiva kartan på stegkortet. Slå av för ett kompakt kort — du kan fortfarande välja i inspektorn eller styra det med ingången Plats.",
-  "Single user message (used when no Prompt input and no messages).": "Ett enda användarmeddelande (används när det varken finns en Prompt-ingång eller messages).",
-  "Skip this many rows at the top (e.g. a title banner) before reading.": "Hoppa över så här många rader i början (t.ex. en rubrikbanner) före läsningen.",
-  "Slack Block Kit layout for rich messages; replaces the plain text rendering.": "Slack Block Kit-layout för rika meddelanden; ersätter renderingen som vanlig text.",
-  "Which output catches the rows that satisfy no rule at all. \"default\" is the pin labelled Everything else; name one of rows_1..rows_8 here instead to fold the leftovers in with a route you are already using.":
-    "Vilken utgång som fångar raderna som inte uppfyller någon regel alls. \"default\" är stiftet som heter Allt annat; ange en av rows_1..rows_8 här i stället för att lägga resten ihop med en rutt du redan använder.",
-  "Which way to sort. Applies to every column in 'Sort by' except ones prefixed with '-' or '+', which keep their own direction.": "Hur sorteringen ska göras. Gäller varje kolumn i \"Sortera på\" utom de som har '-' eller '+' före namnet — de behåller sin egen ordning.",
-  "Sort direction. Only applies when a sort column is set.": "Sorteringsordning. Gäller bara när en sorteringskolumn är angiven.",
-  "Sort order (a Drive orderBy expression).": "Sorteringsordning (ett Drive orderBy-uttryck).",
-  "Starting point — branch, tag, or commit SHA. Defaults to the commit before the latest (HEAD~1).": "Startpunkt — gren, tagg eller commit-SHA. Standard är commiten före den senaste (HEAD~1).",
-  "Status codes treated as success. Empty defaults to 2xx.": "Statuskoder som räknas som lyckade. Tomt betyder 2xx.",
-  "Stop after this many issues, fetching across pages as needed.": "Stanna efter så här många ärenden och hämta över flera sidor om det behövs.",
-  "Stop the whole loop as soon as one item fails, instead of continuing with the rest.": "Stoppa hela loopen så snart en post misslyckas, i stället för att fortsätta med resten.",
-  "String placed between rendered lines. Defaults to a newline.": "Text som placeras mellan de renderade raderna. Standard är en radbrytning.",
-  "Strip a leading/trailing Markdown code fence and surrounding prose before parsing. On by default so raw LLM output parses cleanly.": "Ta bort inledande/avslutande Markdown-kodstaket och omgivande prosa före tolkningen. På som standard, så att rå LLM-utdata tolkas rent.",
-  "Stripe search syntax, e.g. email:'a@b.com'. Overridden by the 'Query' input.": "Stripes frågesyntax, t.ex. email:'a@b.com'. Ingången Fråga vinner över detta.",
-  "Stripe's refund-reason label, shown in the dashboard.": "Stripes etikett för återbetalningsorsak, visas i kontrollpanelen.",
+  "React only to mentions in this one channel — pick it from your connected workspace (or type a channel ID like C0123). Mentions elsewhere are ignored. Leave empty to react everywhere the bot is mentioned.":
+    "Reagera bara på omnämnanden i den här enda kanalen — välj den i din anslutna arbetsyta (eller skriv ett kanal-ID som C0123). Omnämnanden på andra håll ignoreras. Lämna tomt för att reagera överallt där boten nämns.",
+  "Recipient phone number in E.164 format. Overridden by the 'To' input.":
+    "Mottagarens telefonnummer i E.164-format. Ingången Till vinner över detta.",
+  "Recipient(s), comma-separated. Overridden by the 'To' input.":
+    "Mottagare, kommaseparerade. Ingången Till vinner över detta.",
+  "Rename headers: the column as it appears in the data on the left, the heading you want on the right. Columns you don't list keep their own name, and listing one does not hide the others — this only changes the text in the header row.":
+    "Byt rubriker: kolumnen som den heter i datat till vänster, rubriken du vill ha till höger. Kolumner du inte listar behåller sina egna namn, och att lista en döljer inte de andra — det här ändrar bara texten i rubrikraden.",
+  "Render the digest as lowercase hex (default) or standard Base64.":
+    "Skriv ut summan som gemener i hex (standard) eller som vanlig Base64.",
+  "Replace mode, many words at once: what to look for on the left, what to write on the right. Each match becomes whatever its row says; a match no row mentions is left as it is. Leave Pattern empty and the words are looked for literally, or write a pattern (e.g. with (?i)) and each match is looked up in this table.":
+    "Läget replace, många ord på en gång: vad som ska letas efter till vänster, vad som ska skrivas till höger. Varje träff blir det som dess rad säger; en träff som ingen rad nämner lämnas som den är. Lämna Mönster tomt så letas orden efter ordagrant, eller skriv ett mönster (t.ex. med (?i)) så slås varje träff upp i den här tabellen.",
+  "Request headers (e.g. Authorization). Values may include ${secret.NAME} secrets.":
+    "Rubriker i förfrågan (t.ex. Authorization). Värdena får innehålla hemligheter som ${secret.NAMN}.",
+  "Request headers. Values may include ${secret.NAME} secret placeholders (e.g. an Authorization bearer token).":
+    "Rubriker i förfrågan. Värdena får innehålla platshållare för hemligheter som ${secret.NAMN} (t.ex. en Authorization-bearer-token).",
+  "Restrict to files inside this folder — pick from your account's folders. Leave blank to search all of Drive.":
+    "Begränsa till filer i den här mappen — välj bland kontots mappar. Lämna tomt för att söka i hela Drive.",
+  "Restrict to files of this MIME type. Leave blank for any type.":
+    "Begränsa till filer av den här MIME-typen. Lämna tomt för alla typer.",
+  "Restrict to invoices of this status. Empty = all.":
+    "Begränsa till fakturor med den här statusen. Tomt = alla.",
+  "Roaring Company Overview API version segment.":
+    "Versionsdel för Roarings Company Overview-API.",
+  "Roaring Company Search API version segment.":
+    "Versionsdel för Roarings Company Search-API.",
+  "Rough target length for the summary.":
+    "Ungefärlig önskad längd på sammanfattningen.",
+  "Secret name. Stored as an organization secret; reference it as ${secret.<name>}. Allowed characters: [A-Za-z0-9_.-], up to 128 chars.":
+    "Hemlighetens namn. Sparas som en organisationshemlighet; hänvisa till den som ${secret.<namn>}. Tillåtna tecken: [A-Za-z0-9_.-], upp till 128 tecken.",
+  "Send via a Twilio Messaging Service instead of a single 'From' number.":
+    "Skicka via en Twilio Messaging Service i stället för ett enda 'Från'-nummer.",
+  "Set this on a GET you poll repeatedly to skip re-downloading unchanged data: the step remembers the server's ETag/Last-Modified and sends them next time. When nothing changed the server replies fast with status 304 and an empty Response — branch on status to skip work. Use a unique name per polled URL.":
+    "Sätt detta på en GET som du pollar upprepade gånger för att slippa ladda ner oförändrad data igen: steget minns serverns ETag/Last-Modified och skickar dem nästa gång. När inget ändrats svarar servern snabbt med status 304 och ett tomt Svar — förgrena på statusen för att hoppa över arbetet. Använd ett unikt namn per pollad URL.",
+  "Set this to run the flow automatically every N minutes/hours/days — e.g. every 5 minutes. Leave it empty and the flow never runs on its own; it runs only when you press Run.":
+    "Sätt detta för att köra flödet automatiskt var N:e minut/timme/dag — t.ex. var 5:e minut. Lämnar du det tomt körs flödet aldrig av sig själv; det körs bara när du trycker Kör.",
+  'Set this to run the flow automatically on a schedule — picked with the schedule editor. (Stored as a 5-field cron expression; "0 9 * * *" = every day at 09:00.) Leave it empty and the flow never runs on its own; it runs only when you press Run.':
+    'Sätt detta för att köra flödet automatiskt enligt ett schema — som du väljer i schemaredigeraren. (Sparas som ett cron-uttryck med 5 fält; "0 9 * * *" = varje dag kl. 09:00.) Lämnar du det tomt körs flödet aldrig av sig själv; det körs bara när du trycker Kör.',
+  "Shallow-clone depth. 0 (default) clones the full history.":
+    "Djup för ytlig klon. 0 (standard) klonar hela historiken.",
+  'Shift the time by an offset, e.g. "3d", "-2h30m", "1w" — "1d" is tomorrow. Units: w (weeks), d (days), h, m, s. Empty = no shift.':
+    'Flytta tiden med en förskjutning, t.ex. "3d", "-2h30m", "1w" — "1d" är i morgon. Enheter: w (veckor), d (dagar), h, m, s. Tomt = ingen förskjutning.',
+  'Set the clock to this time of day, e.g. "09:00" or "17:30:15". Applied after the offset and in the output timezone, so Offset "1d" with At "09:00" is tomorrow morning rather than 24 hours from now. Empty keeps the time it already had.':
+    'Sätt klockan till den här tiden på dygnet, t.ex. "09:00" eller "17:30:15". Tillämpas efter förskjutningen och i utdatats tidszon, så Förskjutning "1d" med Tid på dygnet "09:00" blir i morgon bitti i stället för 24 timmar från nu. Tomt behåller tiden som den var.',
+  "Show the interactive map on the step card. Turn off for a compact card — you can still pick in the inspector or drive it with the Coordinate input.":
+    "Visa den interaktiva kartan på stegkortet. Slå av för ett kompakt kort — du kan fortfarande välja i inspektorn eller styra det med ingången Koordinat.",
+  "Show the interactive map on the step card. Turn off for a compact card — you can still pick in the inspector or drive it with the Place input.":
+    "Visa den interaktiva kartan på stegkortet. Slå av för ett kompakt kort — du kan fortfarande välja i inspektorn eller styra det med ingången Plats.",
+  "Single user message (used when no Prompt input and no messages).":
+    "Ett enda användarmeddelande (används när det varken finns en Prompt-ingång eller messages).",
+  "Skip this many rows at the top (e.g. a title banner) before reading.":
+    "Hoppa över så här många rader i början (t.ex. en rubrikbanner) före läsningen.",
+  "Slack Block Kit layout for rich messages; replaces the plain text rendering.":
+    "Slack Block Kit-layout för rika meddelanden; ersätter renderingen som vanlig text.",
+  'Which output catches the rows that satisfy no rule at all. "default" is the pin labelled Everything else; name one of rows_1..rows_8 here instead to fold the leftovers in with a route you are already using.':
+    'Vilken utgång som fångar raderna som inte uppfyller någon regel alls. "default" är stiftet som heter Allt annat; ange en av rows_1..rows_8 här i stället för att lägga resten ihop med en rutt du redan använder.',
+  "Which way to sort. Applies to every column in 'Sort by' except ones prefixed with '-' or '+', which keep their own direction.":
+    "Hur sorteringen ska göras. Gäller varje kolumn i \"Sortera på\" utom de som har '-' eller '+' före namnet — de behåller sin egen ordning.",
+  "Sort direction. Only applies when a sort column is set.":
+    "Sorteringsordning. Gäller bara när en sorteringskolumn är angiven.",
+  "Sort order (a Drive orderBy expression).":
+    "Sorteringsordning (ett Drive orderBy-uttryck).",
+  "Starting point — branch, tag, or commit SHA. Defaults to the commit before the latest (HEAD~1).":
+    "Startpunkt — gren, tagg eller commit-SHA. Standard är commiten före den senaste (HEAD~1).",
+  "Status codes treated as success. Empty defaults to 2xx.":
+    "Statuskoder som räknas som lyckade. Tomt betyder 2xx.",
+  "Stop after this many issues, fetching across pages as needed.":
+    "Stanna efter så här många ärenden och hämta över flera sidor om det behövs.",
+  "Stop the whole loop as soon as one item fails, instead of continuing with the rest.":
+    "Stoppa hela loopen så snart en post misslyckas, i stället för att fortsätta med resten.",
+  "String placed between rendered lines. Defaults to a newline.":
+    "Text som placeras mellan de renderade raderna. Standard är en radbrytning.",
+  "Strip a leading/trailing Markdown code fence and surrounding prose before parsing. On by default so raw LLM output parses cleanly.":
+    "Ta bort inledande/avslutande Markdown-kodstaket och omgivande prosa före tolkningen. På som standard, så att rå LLM-utdata tolkas rent.",
+  "Stripe search syntax, e.g. email:'a@b.com'. Overridden by the 'Query' input.":
+    "Stripes frågesyntax, t.ex. email:'a@b.com'. Ingången Fråga vinner över detta.",
+  "Stripe's refund-reason label, shown in the dashboard.":
+    "Stripes etikett för återbetalningsorsak, visas i kontrollpanelen.",
   "When both lists carry a column of the same name, this is added to the second list's copy so neither is lost. The columns you matched on are exempt — they hold the same value on both sides, so only the first list's copy comes out.":
     "När båda listorna har en kolumn med samma namn läggs detta till på den andra listans kopia så att ingen av dem tappas. Kolumnerna du matchade på är undantagna — de har samma värde på båda sidor, så bara första listans kopia kommer ut.",
-  "Text emitted when there are zero input rows. Defaults to the empty string.": "Text som skickas ut när det inte finns några inkommande rader. Standard är den tomma strängen.",
-  "Text to send with the request (POST/PUT/PATCH). The Body input overrides this when connected.": "Text att skicka med förfrågan (POST/PUT/PATCH). Ingången Innehåll vinner över detta när den är inkopplad.",
-  "Text to send. The Body input overrides this when connected.": "Text att skicka. Ingången Innehåll vinner över detta när den är inkopplad.",
-  "The Drive file to download — pick from your account's files. The File ID input overrides this when connected.": "Drive-filen som ska laddas ner — välj bland kontots filer. Ingången Fil-ID vinner över detta när den är inkopplad.",
-  "The Google Form to watch for new responses.": "Google-formuläret som ska bevakas för nya svar.",
+  "Text emitted when there are zero input rows. Defaults to the empty string.":
+    "Text som skickas ut när det inte finns några inkommande rader. Standard är den tomma strängen.",
+  "Text to send with the request (POST/PUT/PATCH). The Body input overrides this when connected.":
+    "Text att skicka med förfrågan (POST/PUT/PATCH). Ingången Innehåll vinner över detta när den är inkopplad.",
+  "Text to send. The Body input overrides this when connected.":
+    "Text att skicka. Ingången Innehåll vinner över detta när den är inkopplad.",
+  "The Drive file to download — pick from your account's files. The File ID input overrides this when connected.":
+    "Drive-filen som ska laddas ner — välj bland kontots filer. Ingången Fil-ID vinner över detta när den är inkopplad.",
+  "The Google Form to watch for new responses.":
+    "Google-formuläret som ska bevakas för nya svar.",
   "A script that exits non-zero has failed, and by default so does this step. Choose 'Carry on' and the step succeeds instead, with the script's exit code on the 'Exit code' output for the flow to branch on — the way a script author expects exit codes to work (2 might mean 'nothing to do today' rather than 'broken'). This covers ONLY a script that ran and returned a code: a machine that is switched off, an agent that refused the script, or a script the runner had to stop still fail the step, because there is no exit code to hand you and pretending otherwise would send the flow down the wrong path.":
     "Ett skript som avslutas med en kod som inte är noll har misslyckats, och som standard gör det här steget det också. Välj 'Fortsätt' och steget lyckas i stället, med skriptets avslutningskod på utgången Avslutningskod som flödet kan förgrena på — så som den som skriver skript förväntar sig att avslutningskoder fungerar (2 kan betyda 'inget att göra i dag' snarare än 'trasigt'). Det här gäller BARA ett skript som kördes och returnerade en kod: en maskin som är avstängd, en agent som vägrade skriptet eller ett skript som körnoden fick avbryta gör fortfarande att steget misslyckas, eftersom det inte finns någon avslutningskod att ge dig och att låtsas annat skulle skicka flödet fel väg.",
   "Changes the EDITOR, not the value: pick a language and the box above becomes monospace, syntax-coloured, and stops wrapping long lines. What comes out is the same plain string either way. Leave it on plain text for prose — a system prompt or an email body reads worse in a monospace font, not better.":
@@ -917,111 +1308,198 @@ export const SV_FIELD_HELP: Record<string, string> = {
     "Etiketter som maskinen måste ha — ALLA av dem. En etikett skickar arbetet till vilken ledig maskin som helst med den; en till smalnar av till maskiner som har båda. Varje maskins eget namn är också en etikett, så att välja ett namn låser steget till just den maskinen.",
   "The script to run on that machine. It runs as the user the runner agent runs as, in the agent's working directory. Connect the 'script' input instead to have an earlier step supply it.":
     "Skriptet som ska köras på maskinen. Det körs som den användare körnodsagenten körs som, i agentens arbetskatalog. Koppla in ingången 'script' i stället för att låta ett tidigare steg leverera det.",
-  "The ID of the flow to run as a step.": "ID:t på flödet som ska köras som ett steg.",
-  "The Klarna order id to look up. Overridden by the 'Order ID' input.": "Klarna-order-id:t som ska hämtas. Ingången Order-ID vinner över detta.",
-  "The Klarna order to capture. Overridden by the 'Order ID' input.": "Klarna-ordern som ska debiteras. Ingången Order-ID vinner över detta.",
-  "The Klarna order to refund. Overridden by the 'Order ID' input.": "Klarna-ordern som ska återbetalas. Ingången Order-ID vinner över detta.",
-  "The Postgres schema the table lives in.": "Postgres-schemat som tabellen ligger i.",
-  "The SELECT query to run. Use $1, $2 … placeholders for values and supply them under 'Query values'.": "SELECT-frågan som ska köras. Använd platshållarna $1, $2 … för värden och ange dem under Frågevärden.",
-  "The SELECT query to run. Use ? placeholders for values and supply them under 'Query values'.": "SELECT-frågan som ska köras. Använd ?-platshållare för värden och ange dem under Frågevärden.",
-  "The buckets to sort text into. Give each a name and a short 'when to use it' so the AI picks well.": "Facken som texten ska sorteras i. Ge varje ett namn och en kort beskrivning av när det används, så att AI:n väljer rätt.",
-  "The calendar to add the event to — pick from your account's calendars, or 'primary' for your own.": "Kalendern som händelsen ska läggas i — välj bland kontots kalendrar, eller 'primary' för din egen.",
-  "The calendar to read — pick from your account's calendars, or 'primary' for your own.": "Kalendern som ska läsas — välj bland kontots kalendrar, eller 'primary' för din egen.",
-  "The database the page goes into (as a new row) — paste its ID. Set this or 'Add under page', not both.": "Databasen som sidan hamnar i (som en ny rad) — klistra in dess ID. Ange det här eller 'Lägg under sida', inte båda.",
-  "The email's subject line — e.g. \"Re: your submission\". Leave blank and it sends as \"(no subject)\". Overridden by the 'Subject' input.": "Mejlets ämnesrad — t.ex. \"Re: din anmälan\". Lämnar du den tom skickas det som \"(no subject)\". Ingången Ämne vinner över detta.",
-  "The fields to pull out — give each a name and what it is; the result is one object with those fields.": "Fälten som ska plockas ut — ge varje ett namn och vad det är; resultatet är ett objekt med de fälten.",
-  "The invoice's single line item, shown to the customer. Overridden by the 'Description' input.": "Fakturans enda rad, som visas för kunden. Ingången Beskrivning vinner över detta.",
-  "The map pin as \"lat,lon\". Use the map to set it. Overridden by the Coordinate input.": "Kartnålen som \"lat,lon\". Använd kartan för att sätta den. Ingången Koordinat vinner över detta.",
-  "The map pin as \"lat,lon\". Use the map to set it. Overridden when a Place is provided.": "Kartnålen som \"lat,lon\". Använd kartan för att sätta den. En angiven Plats vinner över detta.",
-  "The message text (up to 2000 characters). Overridden by the 'Content' input.": "Meddelandetexten (upp till 2000 tecken). Ingången Innehåll vinner över detta.",
-  "The nShift shipment id to delete. Overridden by the 'Shipment ID' input.": "nShift-försändelse-id:t som ska tas bort. Ingången Försändelse-ID vinner över detta.",
-  "The nShift shipment id to look up. Overridden by the 'Shipment ID' input.": "nShift-försändelse-id:t som ska hämtas. Ingången Försändelse-ID vinner över detta.",
-  "The number from the issue/PR link — issues and PRs share one number space.": "Numret från ärende-/PR-länken — ärenden och PR:er delar samma nummerserie.",
-  "The number to emit (e.g. 200 or 0.95).": "Talet som ska skickas ut (t.ex. 200 eller 0,95).",
-  "The organisation number to look up. Overridden by the 'Org number' input.": "Organisationsnumret som ska slås upp. Ingången Organisationsnummer vinner över detta.",
-  "The page the new page goes under (as a subpage) — paste its ID. Set this or 'Add to database', not both.": "Sidan som den nya sidan hamnar under (som undersida) — klistra in dess ID. Ange det här eller 'Lägg i databas', inte båda.",
-  "The question shown on the approval page — e.g. 'A reply is ready to send. Approve?'. Note: anyone who opens the Approval link can approve or reject; the link is the only key, so share it only with the people who should decide. The flow records who clicked on the Approver output.": "Frågan som visas på godkännandesidan — t.ex. 'Ett svar är klart att skicka. Godkänner du?'. Observera: alla som öppnar Godkännandelänken kan godkänna eller avslå; länken är den enda nyckeln, så dela den bara med dem som ska besluta. Flödet registrerar vem som klickade på utgången Godkännare.",
+  "The ID of the flow to run as a step.":
+    "ID:t på flödet som ska köras som ett steg.",
+  "The Klarna order id to look up. Overridden by the 'Order ID' input.":
+    "Klarna-order-id:t som ska hämtas. Ingången Order-ID vinner över detta.",
+  "The Klarna order to capture. Overridden by the 'Order ID' input.":
+    "Klarna-ordern som ska debiteras. Ingången Order-ID vinner över detta.",
+  "The Klarna order to refund. Overridden by the 'Order ID' input.":
+    "Klarna-ordern som ska återbetalas. Ingången Order-ID vinner över detta.",
+  "The Postgres schema the table lives in.":
+    "Postgres-schemat som tabellen ligger i.",
+  "The SELECT query to run. Use $1, $2 … placeholders for values and supply them under 'Query values'.":
+    "SELECT-frågan som ska köras. Använd platshållarna $1, $2 … för värden och ange dem under Frågevärden.",
+  "The SELECT query to run. Use ? placeholders for values and supply them under 'Query values'.":
+    "SELECT-frågan som ska köras. Använd ?-platshållare för värden och ange dem under Frågevärden.",
+  "The buckets to sort text into. Give each a name and a short 'when to use it' so the AI picks well.":
+    "Facken som texten ska sorteras i. Ge varje ett namn och en kort beskrivning av när det används, så att AI:n väljer rätt.",
+  "The calendar to add the event to — pick from your account's calendars, or 'primary' for your own.":
+    "Kalendern som händelsen ska läggas i — välj bland kontots kalendrar, eller 'primary' för din egen.",
+  "The calendar to read — pick from your account's calendars, or 'primary' for your own.":
+    "Kalendern som ska läsas — välj bland kontots kalendrar, eller 'primary' för din egen.",
+  "The database the page goes into (as a new row) — paste its ID. Set this or 'Add under page', not both.":
+    "Databasen som sidan hamnar i (som en ny rad) — klistra in dess ID. Ange det här eller 'Lägg under sida', inte båda.",
+  'The email\'s subject line — e.g. "Re: your submission". Leave blank and it sends as "(no subject)". Overridden by the \'Subject\' input.':
+    'Mejlets ämnesrad — t.ex. "Re: din anmälan". Lämnar du den tom skickas det som "(no subject)". Ingången Ämne vinner över detta.',
+  "The fields to pull out — give each a name and what it is; the result is one object with those fields.":
+    "Fälten som ska plockas ut — ge varje ett namn och vad det är; resultatet är ett objekt med de fälten.",
+  "The invoice's single line item, shown to the customer. Overridden by the 'Description' input.":
+    "Fakturans enda rad, som visas för kunden. Ingången Beskrivning vinner över detta.",
+  'The map pin as "lat,lon". Use the map to set it. Overridden by the Coordinate input.':
+    'Kartnålen som "lat,lon". Använd kartan för att sätta den. Ingången Koordinat vinner över detta.',
+  'The map pin as "lat,lon". Use the map to set it. Overridden when a Place is provided.':
+    'Kartnålen som "lat,lon". Använd kartan för att sätta den. En angiven Plats vinner över detta.',
+  "The message text (up to 2000 characters). Overridden by the 'Content' input.":
+    "Meddelandetexten (upp till 2000 tecken). Ingången Innehåll vinner över detta.",
+  "The nShift shipment id to delete. Overridden by the 'Shipment ID' input.":
+    "nShift-försändelse-id:t som ska tas bort. Ingången Försändelse-ID vinner över detta.",
+  "The nShift shipment id to look up. Overridden by the 'Shipment ID' input.":
+    "nShift-försändelse-id:t som ska hämtas. Ingången Försändelse-ID vinner över detta.",
+  "The number from the issue/PR link — issues and PRs share one number space.":
+    "Numret från ärende-/PR-länken — ärenden och PR:er delar samma nummerserie.",
+  "The number to emit (e.g. 200 or 0.95).":
+    "Talet som ska skickas ut (t.ex. 200 eller 0,95).",
+  "The organisation number to look up. Overridden by the 'Org number' input.":
+    "Organisationsnumret som ska slås upp. Ingången Organisationsnummer vinner över detta.",
+  "The page the new page goes under (as a subpage) — paste its ID. Set this or 'Add to database', not both.":
+    "Sidan som den nya sidan hamnar under (som undersida) — klistra in dess ID. Ange det här eller 'Lägg i databas', inte båda.",
+  "The question shown on the approval page — e.g. 'A reply is ready to send. Approve?'. Note: anyone who opens the Approval link can approve or reject; the link is the only key, so share it only with the people who should decide. The flow records who clicked on the Approver output.":
+    "Frågan som visas på godkännandesidan — t.ex. 'Ett svar är klart att skicka. Godkänner du?'. Observera: alla som öppnar Godkännandelänken kan godkänna eller avslå; länken är den enda nyckeln, så dela den bara med dem som ska besluta. Flödet registrerar vem som klickade på utgången Godkännare.",
   "The repo's name, without the owner part.": "Repons namn, utan ägardelen.",
-  "The sheet (tab) to read. Leave blank for the first sheet.": "Bladet (fliken) som ska läsas. Lämna tomt för det första bladet.",
+  "The sheet (tab) to read. Leave blank for the first sheet.":
+    "Bladet (fliken) som ska läsas. Lämna tomt för det första bladet.",
   "The sheet (tab) to write.": "Bladet (fliken) som ska skrivas.",
-  "The sheet tab or named range to read.": "Bladfliken eller det namngivna området som ska läsas.",
+  "The sheet tab or named range to read.":
+    "Bladfliken eller det namngivna området som ska läsas.",
   "The sheet tab the append targets.": "Bladfliken som raderna läggs till i.",
-  "The shipment payload (sender / receiver / parcels / service), following nShift's /shipments schema. Overridden by the 'Shipment' input.": "Försändelsens nyttolast (avsändare / mottagare / kolli / tjänst), enligt nShifts /shipments-schema. Ingången Försändelse vinner över detta.",
+  "The shipment payload (sender / receiver / parcels / service), following nShift's /shipments schema. Overridden by the 'Shipment' input.":
+    "Försändelsens nyttolast (avsändare / mottagare / kolli / tjänst), enligt nShifts /shipments-schema. Ingången Försändelse vinner över detta.",
   "The spreadsheet to append to.": "Kalkylbladet som raderna läggs till i.",
   "The spreadsheet to export.": "Kalkylbladet som ska exporteras.",
   "The spreadsheet to read.": "Kalkylbladet som ska läsas.",
-  "The table to write rows into (created automatically if it doesn't exist).": "Tabellen som raderna skrivs till (skapas automatiskt om den inte finns).",
+  "The table to write rows into (created automatically if it doesn't exist).":
+    "Tabellen som raderna skrivs till (skapas automatiskt om den inte finns).",
   "The table to write rows into.": "Tabellen som raderna skrivs till.",
   "The text to emit.": "Texten som ska skickas ut.",
-  "The text to send. Optional if you connect a Message input from another step.": "Texten som ska skickas. Valfritt om du kopplar in en Meddelande-ingång från ett annat steg.",
-  "The text to send. Overridden by the 'Body' input.": "Texten som ska skickas. Ingången Innehåll vinner över detta.",
-  "The text to send. Overridden by the 'Message' input.": "Texten som ska skickas. Ingången Meddelande vinner över detta.",
-  "The username or organization the repo lives under.": "Användaren eller organisationen som repot ligger under.",
-  "The web address to call. The URL input overrides this when connected.": "Webbadressen som ska anropas. Ingången URL vinner över detta när den är inkopplad.",
-  "The web address to download. The URL input overrides this when connected.": "Webbadressen som ska laddas ner. Ingången URL vinner över detta när den är inkopplad.",
+  "The text to send. Optional if you connect a Message input from another step.":
+    "Texten som ska skickas. Valfritt om du kopplar in en Meddelande-ingång från ett annat steg.",
+  "The text to send. Overridden by the 'Body' input.":
+    "Texten som ska skickas. Ingången Innehåll vinner över detta.",
+  "The text to send. Overridden by the 'Message' input.":
+    "Texten som ska skickas. Ingången Meddelande vinner över detta.",
+  "The username or organization the repo lives under.":
+    "Användaren eller organisationen som repot ligger under.",
+  "The web address to call. The URL input overrides this when connected.":
+    "Webbadressen som ska anropas. Ingången URL vinner över detta när den är inkopplad.",
+  "The web address to download. The URL input overrides this when connected.":
+    "Webbadressen som ska laddas ner. Ingången URL vinner över detta när den är inkopplad.",
   "The web address to upload to.": "Webbadressen som filen laddas upp till.",
-  "The webhook address to send to. The URL input overrides this when connected.": "Webhook-adressen som datat skickas till. Ingången URL vinner över detta när den är inkopplad.",
+  "The webhook address to send to. The URL input overrides this when connected.":
+    "Webhook-adressen som datat skickas till. Ingången URL vinner över detta när den är inkopplad.",
   "The workspace file to read.": "Filen i arbetsytan som ska läsas.",
-  "Three-letter ISO code (stored lowercase). Pick a common one, type any Stripe-supported code, or use a reference like ${item.currency} for a per-row currency.": "Trebokstavig ISO-kod (sparas i gemener). Välj en vanlig, skriv in vilken Stripe-stödd kod som helst, eller använd en hänvisning som ${item.currency} för en valuta per rad.",
-  "Topic to publish to. Overridden by the 'Topic' input.": "Ämnet som ska publiceras till. Ingången Ämne (topic) vinner över detta.",
-  "Treat the first row as column headers.": "Behandla första raden som kolumnrubriker.",
-  "Units of the price (1–999999, Stripe's per-line-item limit). Overridden by the 'Quantity' input.": "Antal enheter av priset (1–999999, Stripes gräns per fakturarad). Ingången Antal vinner över detta.",
-  "Upper bound on events returned.": "Övre gräns för antalet händelser som returneras.",
-  "Upper bound on files returned.": "Övre gräns för antalet filer som returneras.",
-  "Validate the request with 46elks without sending or being billed.": "Validera förfrågan hos 46elks utan att skicka eller bli fakturerad.",
-  "Values for any ? placeholders in the SQL, in order.": "Värden till eventuella ?-platshållare i SQL:en, i ordning.",
-  "Values for the $1, $2 … placeholders in the SQL, in order.": "Värden till platshållarna $1, $2 … i SQL:en, i ordning.",
-  "Values for the ? placeholders in the SQL, in order.": "Värden till ?-platshållarna i SQL:en, i ordning.",
-  "What kind of request to make. GET fetches data; POST/PUT/PATCH send the Body along.": "Vilken typ av förfrågan som ska göras. GET hämtar data; POST/PUT/PATCH skickar med Innehållet.",
-  "What to call the PDF — also the attachment name when emailed. '.pdf' is added for you; leave blank for an automatic name.": "Vad PDF:en ska heta — även bilagans namn när den mejlas. '.pdf' läggs till automatiskt; lämna tomt för ett automatiskt namn.",
-  "What to call the downloaded file — also the attachment name when emailed. Leave blank to use the file's own name in the run's scratch space.": "Vad den nedladdade filen ska heta — även bilagans namn när den mejlas. Lämna tomt för att använda filens eget namn i körningens tillfälliga utrymme.",
-  "What to do, as domain.service — e.g. light.turn_on, switch.toggle, scene.turn_on, script.run. Overridden by the 'Service' input.": "Vad som ska göras, som domain.service — t.ex. light.turn_on, switch.toggle, scene.turn_on, script.run. Ingången Tjänst vinner över detta.",
-  "What to say (Markdown works). Overridden by the 'Comment' input.": "Vad som ska sägas (Markdown fungerar). Ingången Kommentar vinner över detta.",
-  "What to show instead of an empty table when the input has zero rows — plain text or HTML, e.g. \"No results yet\". Leave blank to output nothing at all.": "Vad som visas i stället för en tom tabell när indatat inte har några rader — vanlig text eller HTML, t.ex. \"Inga träffar än\". Lämna tomt för att inte skicka ut något alls.",
-  "What to switch to after fetching. Leave empty for the repo's default branch.": "Vad som ska checkas ut efter hämtningen. Lämna tomt för repons standardgren.",
-  "When on, each run emits only emails that arrived since the previous run — nothing on the first run (it just remembers the newest email as the starting point). Turn this on when a published, polling flow acts on each match (e.g. sends a reply), so it doesn't re-process the same emails on every poll or blast the whole mailbox on publish. Leave off for ad-hoc searches that should return every match.": "När detta är på skickar varje körning bara ut mejl som kommit sedan den förra körningen — inget vid första körningen (då sparas bara det nyaste mejlet som utgångspunkt). Slå på det när ett publicerat, pollande flöde gör något med varje träff (t.ex. skickar ett svar), så att det inte bearbetar samma mejl vid varje pollning eller sveper hela brevlådan vid publicering. Lämna av för tillfälliga sökningar som ska returnera alla träffar.",
-  "When true the first line lists the column names.": "När detta är sant listar första raden kolumnnamnen.",
-  "When true the first line names the columns; when false columns are named col1, col2, …": "När detta är sant namnger första raden kolumnerna; när det är falskt heter kolumnerna col1, col2, …",
-  "Where the repository lives (https or ssh address). Use ${secret.NAME} placeholders for tokens embedded in the URL.": "Var repot finns (https- eller ssh-adress). Använd platshållare som ${secret.NAMN} för tokens inne i URL:en.",
-  "Where to save the file in the workspace.": "Var filen ska sparas i arbetsytan.",
-  "Where to save the file in the workspace. Prefix with scratch:// for an in-between file that's cleaned up after the run.": "Var filen ska sparas i arbetsytan. Sätt scratch:// före för en mellanfil som städas bort efter körningen.",
-  "Where to start walking back from — branch, tag, or commit SHA. Defaults to the latest commit (HEAD).": "Var bakåtvandringen ska börja — gren, tagg eller commit-SHA. Standard är den senaste commiten (HEAD).",
-  "Which body step to extract from each result. Optional when the for_each body is a single step.": "Vilket steg i loopinnehållet som ska plockas ut ur varje resultat. Valfritt när loopinnehållet är ett enda steg.",
-  "Which columns to include, in order. A plain name uses the data's own column name as the header; {\"column\":\"customer_email\",\"label\":\"Customer\"} keeps reading that column but heads it \"Customer\". Leave empty to use every column the data has, in its natural order. The inspector's column editor writes this for you.": "Vilka kolumner som ska ingå, i ordning. Ett vanligt namn använder datats eget kolumnnamn som rubrik; {\"column\":\"customer_email\",\"label\":\"Kund\"} läser fortfarande den kolumnen men sätter rubriken \"Kund\". Lämna tomt för att använda alla kolumner datat har, i sin naturliga ordning. Inspektorns kolumnredigerare skriver det här för dig.",
-  "Which columns to overwrite when a row already exists. Empty = leave existing rows untouched (insert-only).": "Vilka kolumner som skrivs över när en rad redan finns. Tomt = låt befintliga rader vara (bara nya rader läggs in).",
-  "Which connected Fortnox account to use (for multiple connections).": "Vilket anslutet Fortnox-konto som ska användas (vid flera anslutningar).",
-  "Which entity it acts on — e.g. light.living_room. Leave empty for services that don't target one. Overridden by the 'Entity' input.": "Vilken enhet det gäller — t.ex. light.living_room. Lämna tomt för tjänster som inte riktas mot någon. Ingången Enhet vinner över detta.",
-  "Which entity to read — e.g. sensor.kitchen_temperature, light.living_room, binary_sensor.front_door. Overridden by the 'Entity' input.": "Vilken enhet som ska läsas — t.ex. sensor.kitchen_temperature, light.living_room, binary_sensor.front_door. Ingången Enhet vinner över detta.",
-  "Which entity to watch — e.g. binary_sensor.front_door, light.living_room, sensor.kitchen_temperature.": "Vilken enhet som ska bevakas — t.ex. binary_sensor.front_door, light.living_room, sensor.kitchen_temperature.",
-  "Which member of a duplicate group survives.": "Vilken post i en dubblettgrupp som får leva vidare.",
-  "Which output port of the body step to extract from each result. Optional when that step has exactly one output port.": "Vilken utgångsport på steget i loopinnehållet som ska plockas ut ur varje resultat. Valfritt när det steget har exakt en utgång.",
-  "Which saved Git credential to authenticate with — an SSH key for git@/ssh:// URLs, or an access token (PAT) for https:// URLs. Manage these on the Git credentials page. Public repos need none.": "Vilka sparade Git-uppgifter som ska användas för autentisering — en SSH-nyckel för git@/ssh://-URL:er, eller en åtkomsttoken (PAT) för https://-URL:er. Du hanterar dem på sidan för Git-uppgifter. Publika repon behöver inga.",
-  "Which subscription states to list.": "Vilka prenumerationstillstånd som ska listas.",
-  "Which table to save into. Created from the row columns when create_table=true (the default).": "Vilken tabell som ska sparas i. Skapas utifrån radernas kolumner när create_table=true (standard).",
-  "Works exactly like Gmail's search box, e.g. 'is:unread', 'newer_than:1d', 'from:someone@example.com'.": "Fungerar precis som Gmails sökfält, t.ex. 'is:unread', 'newer_than:1d', 'from:nagon@example.com'.",
-  "Workspace file to upload. Overridden by the 'File' input when connected.": "Filen i arbetsytan som ska laddas upp. Ingången Fil vinner över detta när den är inkopplad.",
-  "Workspace folder holding the repository — pick a checked-out repo folder. Overridden by the 'Repository folder' input.": "Mappen i arbetsytan som innehåller repot — välj en utcheckad repo-mapp. Ingången Repo-mapp vinner över detta.",
-  "Workspace folder to save it in, so it outlives the run. Leave blank to keep it in the run's scratch area — fine when a later step emails or files it.": "Mappen i arbetsytan att spara den i, så att den överlever körningen. Lämna tomt för att behålla den i körningens tillfälliga utrymme — vilket räcker när ett senare steg mejlar eller arkiverar den.",
-  "Workspace folder to save the file in, so it outlives the run. Leave blank to keep it in the run's scratch area — fine when a later step reads or files it.": "Mappen i arbetsytan att spara filen i, så att den överlever körningen. Lämna tomt för att behålla den i körningens tillfälliga utrymme — vilket räcker när ett senare steg läser eller arkiverar den.",
-  "Workspace folder to save the files in, so they outlive the run. Leave blank to keep them in the run's scratch area — fine when a later step files them somewhere else.": "Mappen i arbetsytan att spara filerna i, så att de överlever körningen. Lämna tomt för att behålla dem i körningens tillfälliga utrymme — vilket räcker när ett senare steg arkiverar dem någon annanstans.",
-  "Workspace folder to save the pieces in, so they outlive the run. Leave blank to keep them in the run's scratch area.": "Mappen i arbetsytan att spara delarna i, så att de överlever körningen. Lämna tomt för att behålla dem i körningens tillfälliga utrymme.",
-  "Write each row as its own document, separated by \"---\". How a bundle of Kubernetes manifests is shaped. Ignored when 'Single mapping' applies.": "Skriv varje rad som ett eget dokument, avgränsat med \"---\". Så en samling Kubernetes-manifest är uppbyggd. Ignoreras när \"En enda mappning\" gäller.",
-  "Write the XML declaration at the top. Most systems that read XML files expect it; some APIs reject it inside a request body.": "Skriv XML-deklarationen först. De flesta system som läser XML-filer förväntar sig den; vissa API:er avvisar den inuti en förfrågningskropp.",
-  "Your own key/value labels on the customer (e.g. a CRM id).": "Dina egna nyckel/värde-etiketter på kunden (t.ex. ett CRM-id).",
-  "e.g. 'offer a refund', 'point them to the docs'.": "t.ex. 'erbjud en återbetalning', 'hänvisa till dokumentationen'.",
-  "encode text → Base64, or decode Base64 → text.": "encode text → Base64, eller decode Base64 → text.",
-  "extract matches (rows + first on 'out'), replace (text), split by the pattern (list), or match/test (boolean).": "extract plockar ut träffar (rader + den första på 'out'), replace ersätter (text), split delar på mönstret (lista) och match testar (Ja/Nej).",
-  "map of parent input port → child step ID (the step receives the Ref as its only input)": "tabell över förälderns ingång → steg-ID i barnflödet (steget får referensen som sitt enda indata)",
-  "map of parent output port → {node, port} in the child": "tabell över förälderns utgång → {node, port} i barnflödet",
-  "standard Base64, or the URL-safe alphabet (- and _ instead of + and /).": "vanlig Base64, eller det URL-säkra alfabetet (- och _ i stället för + och /).",
+  "Three-letter ISO code (stored lowercase). Pick a common one, type any Stripe-supported code, or use a reference like ${item.currency} for a per-row currency.":
+    "Trebokstavig ISO-kod (sparas i gemener). Välj en vanlig, skriv in vilken Stripe-stödd kod som helst, eller använd en hänvisning som ${item.currency} för en valuta per rad.",
+  "Topic to publish to. Overridden by the 'Topic' input.":
+    "Ämnet som ska publiceras till. Ingången Ämne (topic) vinner över detta.",
+  "Treat the first row as column headers.":
+    "Behandla första raden som kolumnrubriker.",
+  "Units of the price (1–999999, Stripe's per-line-item limit). Overridden by the 'Quantity' input.":
+    "Antal enheter av priset (1–999999, Stripes gräns per fakturarad). Ingången Antal vinner över detta.",
+  "Upper bound on events returned.":
+    "Övre gräns för antalet händelser som returneras.",
+  "Upper bound on files returned.":
+    "Övre gräns för antalet filer som returneras.",
+  "Validate the request with 46elks without sending or being billed.":
+    "Validera förfrågan hos 46elks utan att skicka eller bli fakturerad.",
+  "Values for any ? placeholders in the SQL, in order.":
+    "Värden till eventuella ?-platshållare i SQL:en, i ordning.",
+  "Values for the $1, $2 … placeholders in the SQL, in order.":
+    "Värden till platshållarna $1, $2 … i SQL:en, i ordning.",
+  "Values for the ? placeholders in the SQL, in order.":
+    "Värden till ?-platshållarna i SQL:en, i ordning.",
+  "What kind of request to make. GET fetches data; POST/PUT/PATCH send the Body along.":
+    "Vilken typ av förfrågan som ska göras. GET hämtar data; POST/PUT/PATCH skickar med Innehållet.",
+  "What to call the PDF — also the attachment name when emailed. '.pdf' is added for you; leave blank for an automatic name.":
+    "Vad PDF:en ska heta — även bilagans namn när den mejlas. '.pdf' läggs till automatiskt; lämna tomt för ett automatiskt namn.",
+  "What to call the downloaded file — also the attachment name when emailed. Leave blank to use the file's own name in the run's scratch space.":
+    "Vad den nedladdade filen ska heta — även bilagans namn när den mejlas. Lämna tomt för att använda filens eget namn i körningens tillfälliga utrymme.",
+  "What to do, as domain.service — e.g. light.turn_on, switch.toggle, scene.turn_on, script.run. Overridden by the 'Service' input.":
+    "Vad som ska göras, som domain.service — t.ex. light.turn_on, switch.toggle, scene.turn_on, script.run. Ingången Tjänst vinner över detta.",
+  "What to say (Markdown works). Overridden by the 'Comment' input.":
+    "Vad som ska sägas (Markdown fungerar). Ingången Kommentar vinner över detta.",
+  'What to show instead of an empty table when the input has zero rows — plain text or HTML, e.g. "No results yet". Leave blank to output nothing at all.':
+    'Vad som visas i stället för en tom tabell när indatat inte har några rader — vanlig text eller HTML, t.ex. "Inga träffar än". Lämna tomt för att inte skicka ut något alls.',
+  "What to switch to after fetching. Leave empty for the repo's default branch.":
+    "Vad som ska checkas ut efter hämtningen. Lämna tomt för repons standardgren.",
+  "When on, each run emits only emails that arrived since the previous run — nothing on the first run (it just remembers the newest email as the starting point). Turn this on when a published, polling flow acts on each match (e.g. sends a reply), so it doesn't re-process the same emails on every poll or blast the whole mailbox on publish. Leave off for ad-hoc searches that should return every match.":
+    "När detta är på skickar varje körning bara ut mejl som kommit sedan den förra körningen — inget vid första körningen (då sparas bara det nyaste mejlet som utgångspunkt). Slå på det när ett publicerat, pollande flöde gör något med varje träff (t.ex. skickar ett svar), så att det inte bearbetar samma mejl vid varje pollning eller sveper hela brevlådan vid publicering. Lämna av för tillfälliga sökningar som ska returnera alla träffar.",
+  "When true the first line lists the column names.":
+    "När detta är sant listar första raden kolumnnamnen.",
+  "When true the first line names the columns; when false columns are named col1, col2, …":
+    "När detta är sant namnger första raden kolumnerna; när det är falskt heter kolumnerna col1, col2, …",
+  "Where the repository lives (https or ssh address). Use ${secret.NAME} placeholders for tokens embedded in the URL.":
+    "Var repot finns (https- eller ssh-adress). Använd platshållare som ${secret.NAMN} för tokens inne i URL:en.",
+  "Where to save the file in the workspace.":
+    "Var filen ska sparas i arbetsytan.",
+  "Where to save the file in the workspace. Prefix with scratch:// for an in-between file that's cleaned up after the run.":
+    "Var filen ska sparas i arbetsytan. Sätt scratch:// före för en mellanfil som städas bort efter körningen.",
+  "Where to start walking back from — branch, tag, or commit SHA. Defaults to the latest commit (HEAD).":
+    "Var bakåtvandringen ska börja — gren, tagg eller commit-SHA. Standard är den senaste commiten (HEAD).",
+  "Which body step to extract from each result. Optional when the for_each body is a single step.":
+    "Vilket steg i loopinnehållet som ska plockas ut ur varje resultat. Valfritt när loopinnehållet är ett enda steg.",
+  'Which columns to include, in order. A plain name uses the data\'s own column name as the header; {"column":"customer_email","label":"Customer"} keeps reading that column but heads it "Customer". Leave empty to use every column the data has, in its natural order. The inspector\'s column editor writes this for you.':
+    'Vilka kolumner som ska ingå, i ordning. Ett vanligt namn använder datats eget kolumnnamn som rubrik; {"column":"customer_email","label":"Kund"} läser fortfarande den kolumnen men sätter rubriken "Kund". Lämna tomt för att använda alla kolumner datat har, i sin naturliga ordning. Inspektorns kolumnredigerare skriver det här för dig.',
+  "Which columns to overwrite when a row already exists. Empty = leave existing rows untouched (insert-only).":
+    "Vilka kolumner som skrivs över när en rad redan finns. Tomt = låt befintliga rader vara (bara nya rader läggs in).",
+  "Which connected Fortnox account to use (for multiple connections).":
+    "Vilket anslutet Fortnox-konto som ska användas (vid flera anslutningar).",
+  "Which entity it acts on — e.g. light.living_room. Leave empty for services that don't target one. Overridden by the 'Entity' input.":
+    "Vilken enhet det gäller — t.ex. light.living_room. Lämna tomt för tjänster som inte riktas mot någon. Ingången Enhet vinner över detta.",
+  "Which entity to read — e.g. sensor.kitchen_temperature, light.living_room, binary_sensor.front_door. Overridden by the 'Entity' input.":
+    "Vilken enhet som ska läsas — t.ex. sensor.kitchen_temperature, light.living_room, binary_sensor.front_door. Ingången Enhet vinner över detta.",
+  "Which entity to watch — e.g. binary_sensor.front_door, light.living_room, sensor.kitchen_temperature.":
+    "Vilken enhet som ska bevakas — t.ex. binary_sensor.front_door, light.living_room, sensor.kitchen_temperature.",
+  "Which member of a duplicate group survives.":
+    "Vilken post i en dubblettgrupp som får leva vidare.",
+  "Which output port of the body step to extract from each result. Optional when that step has exactly one output port.":
+    "Vilken utgångsport på steget i loopinnehållet som ska plockas ut ur varje resultat. Valfritt när det steget har exakt en utgång.",
+  "Which saved Git credential to authenticate with — an SSH key for git@/ssh:// URLs, or an access token (PAT) for https:// URLs. Manage these on the Git credentials page. Public repos need none.":
+    "Vilka sparade Git-uppgifter som ska användas för autentisering — en SSH-nyckel för git@/ssh://-URL:er, eller en åtkomsttoken (PAT) för https://-URL:er. Du hanterar dem på sidan för Git-uppgifter. Publika repon behöver inga.",
+  "Which subscription states to list.":
+    "Vilka prenumerationstillstånd som ska listas.",
+  "Which table to save into. Created from the row columns when create_table=true (the default).":
+    "Vilken tabell som ska sparas i. Skapas utifrån radernas kolumner när create_table=true (standard).",
+  "Works exactly like Gmail's search box, e.g. 'is:unread', 'newer_than:1d', 'from:someone@example.com'.":
+    "Fungerar precis som Gmails sökfält, t.ex. 'is:unread', 'newer_than:1d', 'from:nagon@example.com'.",
+  "Workspace file to upload. Overridden by the 'File' input when connected.":
+    "Filen i arbetsytan som ska laddas upp. Ingången Fil vinner över detta när den är inkopplad.",
+  "Workspace folder holding the repository — pick a checked-out repo folder. Overridden by the 'Repository folder' input.":
+    "Mappen i arbetsytan som innehåller repot — välj en utcheckad repo-mapp. Ingången Repo-mapp vinner över detta.",
+  "Workspace folder to save it in, so it outlives the run. Leave blank to keep it in the run's scratch area — fine when a later step emails or files it.":
+    "Mappen i arbetsytan att spara den i, så att den överlever körningen. Lämna tomt för att behålla den i körningens tillfälliga utrymme — vilket räcker när ett senare steg mejlar eller arkiverar den.",
+  "Workspace folder to save the file in, so it outlives the run. Leave blank to keep it in the run's scratch area — fine when a later step reads or files it.":
+    "Mappen i arbetsytan att spara filen i, så att den överlever körningen. Lämna tomt för att behålla den i körningens tillfälliga utrymme — vilket räcker när ett senare steg läser eller arkiverar den.",
+  "Workspace folder to save the files in, so they outlive the run. Leave blank to keep them in the run's scratch area — fine when a later step files them somewhere else.":
+    "Mappen i arbetsytan att spara filerna i, så att de överlever körningen. Lämna tomt för att behålla dem i körningens tillfälliga utrymme — vilket räcker när ett senare steg arkiverar dem någon annanstans.",
+  "Workspace folder to save the pieces in, so they outlive the run. Leave blank to keep them in the run's scratch area.":
+    "Mappen i arbetsytan att spara delarna i, så att de överlever körningen. Lämna tomt för att behålla dem i körningens tillfälliga utrymme.",
+  "Write each row as its own document, separated by \"---\". How a bundle of Kubernetes manifests is shaped. Ignored when 'Single mapping' applies.":
+    'Skriv varje rad som ett eget dokument, avgränsat med "---". Så en samling Kubernetes-manifest är uppbyggd. Ignoreras när "En enda mappning" gäller.',
+  "Write the XML declaration at the top. Most systems that read XML files expect it; some APIs reject it inside a request body.":
+    "Skriv XML-deklarationen först. De flesta system som läser XML-filer förväntar sig den; vissa API:er avvisar den inuti en förfrågningskropp.",
+  "Your own key/value labels on the customer (e.g. a CRM id).":
+    "Dina egna nyckel/värde-etiketter på kunden (t.ex. ett CRM-id).",
+  "e.g. 'offer a refund', 'point them to the docs'.":
+    "t.ex. 'erbjud en återbetalning', 'hänvisa till dokumentationen'.",
+  "encode text → Base64, or decode Base64 → text.":
+    "encode text → Base64, eller decode Base64 → text.",
+  "extract matches (rows + first on 'out'), replace (text), split by the pattern (list), or match/test (boolean).":
+    "extract plockar ut träffar (rader + den första på 'out'), replace ersätter (text), split delar på mönstret (lista) och match testar (Ja/Nej).",
+  "map of parent input port → child step ID (the step receives the Ref as its only input)":
+    "tabell över förälderns ingång → steg-ID i barnflödet (steget får referensen som sitt enda indata)",
+  "map of parent output port → {node, port} in the child":
+    "tabell över förälderns utgång → {node, port} i barnflödet",
+  "standard Base64, or the URL-safe alphabet (- and _ instead of + and /).":
+    "vanlig Base64, eller det URL-säkra alfabetet (- och _ i stället för + och /).",
   "Artist id to continue from — the previous run's 'Next cursor'. Overridden by the 'After ID' input when connected. Leave empty to start at the beginning.":
     "Artist-id att fortsätta från — föregående körnings Nästa markör. Ingången After ID vinner över detta när den är kopplad. Lämna tomt för att börja från början.",
   "How many artists to return at most (Spotify caps this at 50).":
     "Hur många artister som som mest ska hämtas (Spotify tillåter högst 50).",
   "Which connected Spotify account to use (for multiple connections).":
     "Vilket anslutet Spotify-konto som ska användas (om du har flera anslutningar).",
-  "Artist, team or event name to search for — e.g. \"Robyn\". Leave empty to list everything matching the other filters.":
-    "Artist, lag eller evenemangsnamn att söka efter — t.ex. \"Robyn\". Lämna tomt för att lista allt som matchar övriga filter.",
+  'Artist, team or event name to search for — e.g. "Robyn". Leave empty to list everything matching the other filters.':
+    'Artist, lag eller evenemangsnamn att söka efter — t.ex. "Robyn". Lämna tomt för att lista allt som matchar övriga filter.',
   "City to search in — e.g. Stockholm. Combine with the country code for the tightest result.":
     "Stad att söka i — t.ex. Stockholm. Kombinera med landskoden för smalast träfflista.",
   "How many events each check looks at. Raise it if the watched search has more results than this — anything past the cut is never seen.":
@@ -1051,7 +1529,7 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "Record what's there, emit nothing": "Registrera det som finns, skicka inget",
   "Any change": "Alla ändringar",
   "Newly booked": "Nybokad",
-  "Changed": "Ändrad",
+  Changed: "Ändrad",
   "is set": "har ett värde",
   "is not set": "har inget värde",
   "has something in it": "innehåller något",
@@ -1083,16 +1561,18 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "Once per row": "En gång per rad",
   "Every row from the first list": "Varje rad från första listan",
   "Every row from the second list": "Varje rad från andra listan",
-  "English": "Engelska",
+  English: "Engelska",
   "Everything from both lists": "Allt från båda listorna",
   "Imperial (°F, mph)": "Imperiellt (°F, mph)",
-  "Interpret like typing (dates, formulas)": "Tolka som om du skrev (datum, formler)",
+  "Interpret like typing (dates, formulas)":
+    "Tolka som om du skrev (datum, formler)",
   "ISO-8601 (2026-08-27T14:05:09Z)": "ISO 8601 (2026-08-27T14:05:09Z)",
   "Date (2026-08-27)": "Datum (2026-08-27)",
   "Date and time (2026-08-27 14:05:09)": "Datum och tid (2026-08-27 14:05:09)",
   "Metric (°C, m/s)": "Metriskt (°C, m/s)",
   "One row per document": "En rad per dokument",
-  "Only first-list rows with NO match": "Bara rader ur första listan UTAN träff",
+  "Only first-list rows with NO match":
+    "Bara rader ur första listan UTAN träff",
   "Only rows that matched": "Bara rader som matchade",
   "Only the first": "Bara det första",
   "Store exactly as given": "Lagra exakt som angivet",
@@ -1103,7 +1583,8 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "Follow the flow's language": "Följ flödets språk",
   "Unix seconds": "Unix-sekunder",
   "Unix milliseconds": "Unix-millisekunder",
-  "Email/HTTP (Thu, 27 Aug 2026 14:05:09 UTC)": "E-post/HTTP (Thu, 27 Aug 2026 14:05:09 UTC)",
+  "Email/HTTP (Thu, 27 Aug 2026 14:05:09 UTC)":
+    "E-post/HTTP (Thu, 27 Aug 2026 14:05:09 UTC)",
   "Custom…": "Eget…",
   "Extract matches": "Plocka ut träffar",
   "Replace matches": "Ersätt träffar",
@@ -1124,7 +1605,8 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "Plain text": "Vanlig text",
   Shell: "Skal",
   "Fail this step": "Låt steget misslyckas",
-  "Carry on — the flow checks the exit code": "Fortsätt — flödet kontrollerar avslutningskoden",
+  "Carry on — the flow checks the exit code":
+    "Fortsätt — flödet kontrollerar avslutningskoden",
   "(none)": "(ingen)",
   "The machine's own shell": "Maskinens eget skal",
   "sh (POSIX shell)": "sh (POSIX-skal)",
@@ -1146,13 +1628,13 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "A is one of B": "A är någon av B",
   "A is outside range B": "A ligger utanför intervallet B",
   "A is within range B": "A ligger inom intervallet B",
-  "equals": "är lika med",
+  equals: "är lika med",
   "does not equal": "är inte lika med",
   "is greater than": "är större än",
   "is greater than or equal to": "är större än eller lika med",
   "is less than": "är mindre än",
   "is less than or equal to": "är mindre än eller lika med",
-  "contains": "innehåller",
+  contains: "innehåller",
   "does not contain": "innehåller inte",
   "is one of": "är någon av",
   "is not one of": "är inte någon av",
@@ -1169,14 +1651,15 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "AUD — Australian Dollar": "AUD — Australisk dollar",
   "AWG — Aruban Florin": "AWG — Arubansk florin",
   "AZN — Azerbaijani Manat": "AZN — Azerbajdzjansk manat",
-  "Active": "Aktiv",
-  "All": "Alla",
+  Active: "Aktiv",
+  All: "Alla",
   "All states": "Alla tillstånd",
-  "Apologetic": "Urskuldande",
+  Apologetic: "Urskuldande",
   "As displayed": "Som det visas",
   "Ascending (A→Z, low→high)": "Stigande (A→Ö, lågt→högt)",
   "At period end": "Vid periodens slut",
-  "BAM — Bosnia-Herzegovina Convertible Mark": "BAM — Bosnisk-hercegovinsk konvertibel mark",
+  "BAM — Bosnia-Herzegovina Convertible Mark":
+    "BAM — Bosnisk-hercegovinsk konvertibel mark",
   "BBD — Barbadian Dollar": "BBD — Barbadisk dollar",
   "BDT — Bangladeshi Taka": "BDT — Bangladeshisk taka",
   "BGN — Bulgarian Lev": "BGN — Bulgarisk lev",
@@ -1199,32 +1682,32 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "CRC — Costa Rican Colón": "CRC — Costarikansk colón",
   "CVE — Cape Verdean Escudo": "CVE — Kapverdisk escudo",
   "CZK — Czech Koruna": "CZK — Tjeckisk koruna",
-  "Canceled": "Avslutad",
-  "Cancelled": "Avslutad",
+  Canceled: "Avslutad",
+  Cancelled: "Avslutad",
   "Charge refunded": "Betalning återbetald",
   "Checkout completed": "Kassan slutförd",
-  "Closed": "Stängd",
-  "Concise": "Kortfattad",
+  Closed: "Stängd",
+  Concise: "Kortfattad",
   "Customer created": "Kund skapad",
   "DJF — Djiboutian Franc": "DJF — Djiboutisk franc",
   "DKK — Danish Krone": "DKK — Dansk krona",
   "DOP — Dominican Peso": "DOP — Dominikansk peso",
   "DZD — Algerian Dinar": "DZD — Algerisk dinar",
-  "Date": "Datum",
+  Date: "Datum",
   "Descending (Z→A, high→low)": "Fallande (Ö→A, högt→lågt)",
   "Direct messages": "Direktmeddelanden",
   "Dispute opened": "Tvist öppnad",
-  "Duplicate": "Dubblett",
+  Duplicate: "Dubblett",
   "EGP — Egyptian Pound": "EGP — Egyptiskt pund",
   "ETB — Ethiopian Birr": "ETB — Etiopisk birr",
   "Everything the bot can see": "Allt boten kan se",
   "FJD — Fijian Dollar": "FJD — Fijiansk dollar",
   "FKP — Falkland Islands Pound": "FKP — Falklandspund",
   "Fail the step": "Låt steget misslyckas",
-  "Formal": "Formell",
-  "Formulas": "Formler",
-  "Fraudulent": "Bedrägeri",
-  "Friendly": "Vänlig",
+  Formal: "Formell",
+  Formulas: "Formler",
+  Fraudulent: "Bedrägeri",
+  Friendly: "Vänlig",
   "Fully paid": "Helt betald",
   "GBP — British Pound": "GBP — Brittiskt pund",
   "GEL — Georgian Lari": "GEL — Georgisk lari",
@@ -1241,7 +1724,7 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "ILS — Israeli New Shekel": "ILS — Israelisk ny shekel",
   "INR — Indian Rupee": "INR — Indisk rupie",
   "ISK — Icelandic Króna": "ISK — Isländsk krona",
-  "Immediately": "Omedelbart",
+  Immediately: "Omedelbart",
   "Insert new rows": "Infoga nya rader",
   "Invoice paid": "Faktura betald",
   "Invoice payment failed": "Fakturabetalning misslyckades",
@@ -1280,10 +1763,10 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "NOK — Norwegian Krone": "NOK — Norsk krona",
   "NPR — Nepalese Rupee": "NPR — Nepalesisk rupie",
   "NZD — New Zealand Dollar": "NZD — Nyzeeländsk dollar",
-  "Number": "Tal",
+  Number: "Tal",
   "On trial": "Provperiod",
   "One sentence": "En mening",
-  "Open": "Öppen",
+  Open: "Öppen",
   "Overwrite existing cells": "Skriv över befintliga celler",
   "PAB — Panamanian Balboa": "PAB — Panamansk balboa",
   "PEN — Peruvian Sol": "PEN — Peruansk sol",
@@ -1293,7 +1776,7 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "PLN — Polish Złoty": "PLN — Polsk zloty",
   "PYG — Paraguayan Guarani": "PYG — Paraguayansk guarani",
   "Past due": "Förfallen",
-  "Paused": "Pausad",
+  Paused: "Pausad",
   "Payment failed": "Betalning misslyckades",
   "Payment succeeded": "Betalning lyckades",
   "Payout paid": "Utbetalning gjord",
@@ -1332,8 +1815,8 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "USD — US Dollar": "USD — US-dollar",
   "UYU — Uruguayan Peso": "UYU — Uruguayansk peso",
   "UZS — Uzbekistani Som": "UZS — Uzbekisk som",
-  "Unbooked": "Obokad",
-  "Unpaid": "Obetald",
+  Unbooked: "Obokad",
+  Unpaid: "Obetald",
   "Unpaid & overdue": "Obetald och förfallen",
   "VND — Vietnamese Dong": "VND — Vietnamesisk dong",
   "VUV — Vanuatu Vatu": "VUV — Vanuatisk vatu",
@@ -1346,16 +1829,11 @@ export const SV_ENUM_LABELS: Record<string, string> = {
   "Yes/No": "Ja/Nej",
   "ZAR — South African Rand": "ZAR — Sydafrikansk rand",
   "ZMW — Zambian Kwacha": "ZMW — Zambisk kwacha",
-  "Anything":
-    "Allt",
-  "Arts & theatre":
-    "Konst och teater",
-  "Music":
-    "Musik",
-  "Other":
-    "Övrigt",
-  "Sports":
-    "Sport",
+  Anything: "Allt",
+  "Arts & theatre": "Konst och teater",
+  Music: "Musik",
+  Other: "Övrigt",
+  Sports: "Sport",
 };
 
 export const SV_CONNECTION_TEXT: Record<string, string> = {
@@ -1371,11 +1849,13 @@ export const SV_CONNECTION_TEXT: Record<string, string> = {
   "The key for the service above. Leave it empty for Ollama, which runs on your own machine.":
     "Nyckeln till tjänsten ovan. Lämna tom för Ollama, som kör på din egen maskin.",
   "993 (SSL/TLS) or 143 (STARTTLS)": "993 (SSL/TLS) eller 143 (STARTTLS)",
-  "An alternative to the fingerprint, if you already have an OpenSSH known_hosts line for this server.": "Ett alternativ till fingeravtrycket, om du redan har en OpenSSH-known_hosts-rad för den här servern.",
-  "Calendar": "Kalender",
+  "An alternative to the fingerprint, if you already have an OpenSSH known_hosts line for this server.":
+    "Ett alternativ till fingeravtrycket, om du redan har en OpenSSH-known_hosts-rad för den här servern.",
+  Calendar: "Kalender",
   "Calendar server": "Kalenderserver",
-  "Fill in either a password or a private key below — whichever the server expects.": "Fyll i antingen ett lösenord eller en privatnyckel nedan — det som servern förväntar sig.",
-  "Folder": "Mapp",
+  "Fill in either a password or a private key below — whichever the server expects.":
+    "Fyll i antingen ett lösenord eller en privatnyckel nedan — det som servern förväntar sig.",
+  Folder: "Mapp",
   "Host key fingerprint": "Värdnyckelns fingeravtryck",
   "implicit for 993, starttls for 143": "implicit för 993, starttls för 143",
   "Key passphrase": "Nyckelns lösenfras",
@@ -1387,13 +1867,13 @@ export const SV_CONNECTION_TEXT: Record<string, string> = {
   "API username": "API-användarnamn",
   "Access token": "Åtkomsttoken",
   "Auth token": "Autentiseringstoken",
-  "Broker": "Mäklare",
+  Broker: "Mäklare",
   "Connection security": "Anslutningssäkerhet",
   "Connection string": "Anslutningssträng",
   "Create one in Home Assistant under Profile → Long-Lived Access Tokens.":
     "Skapa en i Home Assistant under Profil → Long-Lived Access Tokens.",
   "Custom API URL": "Egen API-URL",
-  "Environment": "Miljö",
+  Environment: "Miljö",
   "From address": "Från-adress",
   "Geocoding backend": "Geokodningstjänst",
   "Instance URL": "Instans-URL",
@@ -1401,38 +1881,50 @@ export const SV_CONNECTION_TEXT: Record<string, string> = {
   "Notion integration token": "Notion-integrationstoken",
   "Mail server": "E-postserver",
   "Mail server (IMAP)": "E-postserver (IMAP)",
-  "Only if the private key is encrypted.": "Bara om privatnyckeln är krypterad.",
-  "only if your instance is behind a proxy": "bara om din instans står bakom en proxy",
-  "Optional — only for Open-Meteo's commercial (paid) plan. Leave blank for free non-commercial use.": "Valfritt — bara för Open-Meteos kommersiella (betalda) plan. Lämna tomt för kostnadsfri, icke-kommersiell användning.",
+  "Only if the private key is encrypted.":
+    "Bara om privatnyckeln är krypterad.",
+  "only if your instance is behind a proxy":
+    "bara om din instans står bakom en proxy",
+  "Optional — only for Open-Meteo's commercial (paid) plan. Leave blank for free non-commercial use.":
+    "Valfritt — bara för Open-Meteos kommersiella (betalda) plan. Lämna tomt för kostnadsfri, icke-kommersiell användning.",
   "Optional — the base URL of your self-hosted Nominatim, Photon or LocationIQ.":
     "Valfritt — bas-URL till din egen Nominatim, Photon eller LocationIQ.",
   "From the Klarna Merchant Portal.": "Från Klarna Merchant Portal.",
-  "Password": "Lösenord",
-  "Proves you're talking to the right server. Leave it blank and Test connection will show you the server's fingerprint to paste in.": "Bevisar att du pratar med rätt server. Lämna tomt, så visar Testa anslutning serverns fingeravtryck som du kan klistra in.",
+  Password: "Lösenord",
+  "Proves you're talking to the right server. Leave it blank and Test connection will show you the server's fingerprint to paste in.":
+    "Bevisar att du pratar med rätt server. Lämna tomt, så visar Testa anslutning serverns fingeravtryck som du kan klistra in.",
   "Required for LocationIQ. Leave blank for Nominatim or Photon.":
     "Krävs för LocationIQ. Lämna tomt för Nominatim eller Photon.",
   "Secret API key": "Hemlig API-nyckel",
   "Server URL": "Server-URL",
   "SSH private key": "SSH-privatnyckel",
-  "The CalDAV address your provider publishes. Nextcloud looks like https://cloud.example.com/remote.php/dav/.": "CalDAV-adressen som din leverantör publicerar. Nextcloud ser ut som https://cloud.example.com/remote.php/dav/.",
-  "The remote folder the steps work in by default. A step can point at another one.": "Fjärrmappen som stegen utgår från. Ett steg kan peka på en annan.",
-  "The whole key including the BEGIN/END lines. Preferred over a password where the server allows it.": "Hela nyckeln inklusive BEGIN/END-raderna. Föredras framför lösenord när servern tillåter det.",
-  "Username": "Användarnamn",
+  "The CalDAV address your provider publishes. Nextcloud looks like https://cloud.example.com/remote.php/dav/.":
+    "CalDAV-adressen som din leverantör publicerar. Nextcloud ser ut som https://cloud.example.com/remote.php/dav/.",
+  "The remote folder the steps work in by default. A step can point at another one.":
+    "Fjärrmappen som stegen utgår från. Ett steg kan peka på en annan.",
+  "The whole key including the BEGIN/END lines. Preferred over a password where the server allows it.":
+    "Hela nyckeln inklusive BEGIN/END-raderna. Föredras framför lösenord när servern tillåter det.",
+  Username: "Användarnamn",
   "Webhook URL": "Webhook-URL",
   "Webhook signing secret": "Webhook-signeringshemlighet",
-  "Where Ollama is listening. A localhost address also needs DAZYFLOW_ALLOW_PRIVATE_EGRESS set on the daemon.": "Var Ollama lyssnar. En localhost-adress kräver dessutom att DAZYFLOW_ALLOW_PRIVATE_EGRESS är satt på daemonen.",
-  "Which calendar to use when the account has several. Leave blank if there's only one; Test connection will list them if there are more.": "Vilken kalender som ska användas när kontot har flera. Lämna tomt om det bara finns en; Testa anslutning listar dem om det finns fler.",
-  "Which folder the steps read by default. A step can point at another one.": "Vilken mapp stegen läser som standard. Ett steg kan peka på en annan.",
-  "Your calendar password — or, on a provider with two-factor sign-in (Fastmail, iCloud), an app password generated for this.": "Lösenordet till din kalender — eller, hos en leverantör med tvåfaktorsinloggning (Fastmail, iCloud), ett app-lösenord skapat för detta.",
-  "Your mailbox password — or, on a provider with two-factor sign-in (Gmail, Fastmail, iCloud), an app password generated for this.": "Lösenordet till din brevlåda — eller, hos en leverantör med tvåfaktorsinloggning (Gmail, Fastmail, iCloud), ett app-lösenord skapat för detta.",
+  "Where Ollama is listening. A localhost address also needs DAZYFLOW_ALLOW_PRIVATE_EGRESS set on the daemon.":
+    "Var Ollama lyssnar. En localhost-adress kräver dessutom att DAZYFLOW_ALLOW_PRIVATE_EGRESS är satt på daemonen.",
+  "Which calendar to use when the account has several. Leave blank if there's only one; Test connection will list them if there are more.":
+    "Vilken kalender som ska användas när kontot har flera. Lämna tomt om det bara finns en; Testa anslutning listar dem om det finns fler.",
+  "Which folder the steps read by default. A step can point at another one.":
+    "Vilken mapp stegen läser som standard. Ett steg kan peka på en annan.",
+  "Your calendar password — or, on a provider with two-factor sign-in (Fastmail, iCloud), an app password generated for this.":
+    "Lösenordet till din kalender — eller, hos en leverantör med tvåfaktorsinloggning (Fastmail, iCloud), ett app-lösenord skapat för detta.",
+  "Your mailbox password — or, on a provider with two-factor sign-in (Gmail, Fastmail, iCloud), an app password generated for this.":
+    "Lösenordet till din brevlåda — eller, hos en leverantör med tvåfaktorsinloggning (Gmail, Fastmail, iCloud), ett app-lösenord skapat för detta.",
   "Your OpenWeather API key. The free plan works — no paid subscription needed.":
     "Din OpenWeather-API-nyckel. Den kostnadsfria planen fungerar — ingen betald prenumeration behövs.",
   "From the Roaring portal under Development → Access keys.":
     "Från Roaring-portalen under Development → Access keys.",
   "Generated in nShift Delivery under API settings.":
     "Genereras i nShift Delivery under API settings.",
-  "The sender recipients see. Add a display name with \"Reports <reports@example.com>\" — most providers require the address itself to match your login.":
-    "Avsändaren som mottagarna ser. Lägg till ett visningsnamn med \"Reports <reports@example.com>\" — de flesta leverantörer kräver att själva adressen stämmer med din inloggning.",
+  'The sender recipients see. Add a display name with "Reports <reports@example.com>" — most providers require the address itself to match your login.':
+    'Avsändaren som mottagarna ser. Lägg till ett visningsnamn med "Reports <reports@example.com>" — de flesta leverantörer kräver att själva adressen stämmer med din inloggning.',
   "Your mail server password, or an app password if the provider issues one.":
     "Lösenordet till din e-postserver, eller ett app-lösenord om leverantören utfärdar ett.",
   "starttls, implicit, or none": "starttls, implicit eller none",
@@ -1444,9 +1936,12 @@ export const SV_CONNECTION_TEXT: Record<string, string> = {
 };
 
 export const SV_NODE_STATE: Record<string, string> = {
-  "Forget what the page said last time. The next check records the page as it is then, and only later changes fire.": "Glöm vad sidan sa förra gången. Nästa kontroll registrerar sidan som den är då, och bara ändringar efter det utlöser.",
-  "Forget whether the site was last seen up or down. The next check treats what it finds as the starting point (and still alerts if it finds it down).": "Glöm om sajten senast sågs som uppe eller nere. Nästa kontroll behandlar det den hittar som utgångspunkt (och larmar ändå om den hittar den nere).",
-  "Forget which items it has already emitted. The next run baselines again (recording current items, emitting none), then fires only for items published after that.": "Glöm vilka poster som redan skickats ut. Nästa körning sätter en ny utgångspunkt (registrerar aktuella poster utan att skicka ut något) och utlöser sedan bara för poster som publiceras efter det.",
+  "Forget what the page said last time. The next check records the page as it is then, and only later changes fire.":
+    "Glöm vad sidan sa förra gången. Nästa kontroll registrerar sidan som den är då, och bara ändringar efter det utlöser.",
+  "Forget whether the site was last seen up or down. The next check treats what it finds as the starting point (and still alerts if it finds it down).":
+    "Glöm om sajten senast sågs som uppe eller nere. Nästa kontroll behandlar det den hittar som utgångspunkt (och larmar ändå om den hittar den nere).",
+  "Forget which items it has already emitted. The next run baselines again (recording current items, emitting none), then fires only for items published after that.":
+    "Glöm vilka poster som redan skickats ut. Nästa körning sätter en ny utgångspunkt (registrerar aktuella poster utan att skicka ut något) och utlöser sedan bara för poster som publiceras efter det.",
   "Remembered items": "Sparade poster",
   "Remembered up/down state": "Sparat uppe/nere-läge",
   "What the page last said": "Vad sidan sa senast",

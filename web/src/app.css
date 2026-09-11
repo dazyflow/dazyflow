@@ -5626,11 +5626,13 @@ button.warning:hover:not(:disabled) {
 }
 img[src$="/brands/github.svg"],
 img[src$="/brands/smhi.svg"],
+img[src$="/brands/ssh.svg"],
 img[src$="/brands/yaml.svg"] {
   background: transparent !important;
 }
 :root[data-theme="light"] img[src$="/brands/github.svg"],
 :root[data-theme="dark"] img[src$="/brands/smhi.svg"],
+:root[data-theme="dark"] img[src$="/brands/ssh.svg"],
 :root[data-theme="dark"] img[src$="/brands/yaml.svg"] {
   filter: invert(1);
 }
