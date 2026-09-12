@@ -15,7 +15,7 @@ import { glyphFor, languageOf, type LangGlyph } from "../../lib/langBadge";
 import { ScriptEditor } from "../ui/ScriptEditor";
 import { scriptLangFor, type ScriptLang } from "../../lib/scriptHighlight";
 import { TokenText } from "./TokenText";
-import { dropSubtitle, enumOptionLabel, enumValueLabel, fieldTitle, nodeStateText, portLabel } from "../../lib/dropText";
+import { dropSubtitle, enumOptionLabel, enumValueLabel, fieldTitle, integrationName, nodeStateText, portLabel } from "../../lib/dropText";
 import { humanize } from "../fields/SchemaForm";
 import { isFieldVisible } from "../../lib/schemaFields";
 import { isRunnerStep, runnerTargetOf } from "../../lib/runnerStep";
@@ -860,7 +860,9 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
       {!d.manifest?.unavailable &&
         d.setupNeeded &&
         (() => {
-          const name = d.setupNeeded.integration;
+          // The catalog is authored in English; an app's name is localised at
+          // render time like every other bit of its vocabulary.
+          const name = integrationName(d.setupNeeded.integration, i18n.language);
           const locked = d.canConnect === false;
           const icon = d.manifest?.brand_logo ? (
             <img src={d.manifest.brand_logo} alt="" className="dz-node-setup-logo" draggable={false} />

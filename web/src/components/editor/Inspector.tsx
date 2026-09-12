@@ -387,7 +387,7 @@ export function Inspector({
                   ) : (
                     <Glyph size={ICON.sm} strokeWidth={2.2} />
                   )}
-                  {t("nodeCard.connect", { name: setupNeeded.integration })}
+                  {t("nodeCard.connect", { name: integrationName(setupNeeded.integration, i18n.language) })}
                 </Button>
                 <div className="desc">{t("inspector.connectHint")}</div>
               </>

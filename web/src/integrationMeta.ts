@@ -362,7 +362,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
       "Backed by pdfcpu, in-process and pure Go — no external binary, no browser engine, and about 3 MB on the daemon binary. Deliberately NOT text extraction: pdfcpu doesn't do it, and the pure-Go alternatives manage simple text-layer documents and fall over on a real invoice with a table and embedded fonts. To read what a PDF SAYS, connect it to an AI step's Files input instead — the model reads the rendered pages, so a scan works as well as a text PDF. Every step here checks the %PDF header before handing bytes to the parser, so the wrong file wired in reports itself rather than surfacing as a corrupt-document error. Splitting is capped at 200 pieces and each step at 32 MiB of input, so a mis-wired step can't fill the run's scratch area.",
   },
   sftp: {
-    name: "File server",
+    name: "FTP server",
     tagline: "Move files to and from a server your team already uses.",
     description:
       "Move files to and from a file server (SFTP). This is how a lot of business still works: a supplier or a bank drops a file overnight, and something has to pick it up, read it and act on it.",
@@ -370,7 +370,7 @@ export const integrationMeta: Record<string, IntegrationMeta> = {
       "The server — address, port, username, and either a password or an SSH private key — is configured once here and injected into every SFTP step at run time; the password and key are held in the encrypted secret store. Host-key verification has no default and cannot be turned off: paste the server's \"SHA256:…\" fingerprint (or a known_hosts line), and until you do, Test connection fails with the fingerprint the server actually offered so you can check it and copy it in. Accepting any key would make a silent man-in-the-middle possible, and the credentials are what it would collect. 'Only new since last run' on List files tracks the newest modified time plus the names sharing that second, so a feed that drops twenty files inside one second doesn't lose the stragglers. One server per connection here, but a step is no longer limited to it: saved servers on the Servers page are named, there can be as many as you like, and an SFTP step picks one by name. This connection remains what a step uses when it names none, so flows built before they existed keep working untouched.",
   },
   ssh: {
-    name: "SSH",
+    name: "SSH server",
     tagline: "Run a command on one of your own servers.",
     description:
       "Run a command on a server over SSH and carry on with what it printed — restart a service, take a backup, read a log, ask how full the disks are. It reaches anything with an sshd and needs nothing installed on it, which is what makes it the one that works on an appliance or a box you will never be allowed to run an agent on.",

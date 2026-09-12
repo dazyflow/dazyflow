@@ -365,7 +365,7 @@ describe("nodeSetupNeeded — named servers", () => {
 
   it("sends an SSH step with no servers saved to the Servers page", () => {
     expect(nodeSetupNeeded(ssh, {}, [], [], [])).toEqual({
-      integration: "SSH",
+      integration: "SSH server",
       slug: "ssh",
       path: servers,
     });
@@ -378,7 +378,7 @@ describe("nodeSetupNeeded — named servers", () => {
 
   it("flags a step pointed at a server that is not there", () => {
     expect(nodeSetupNeeded(ssh, { account: "web-9" }, [], [], ["web-1"])).toEqual({
-      integration: "SSH",
+      integration: "SSH server",
       slug: "ssh",
       path: servers,
     });
@@ -401,7 +401,7 @@ describe("nodeSetupNeeded — named servers", () => {
 
   it("still asks for the SFTP connection when a step names no server", () => {
     expect(nodeSetupNeeded(sftp, {}, [], [], [])).toEqual({
-      integration: "File server",
+      integration: "FTP server",
       slug: "sftp",
     });
     expect(nodeSetupNeeded(sftp, {}, [], ["conn.sftp.host"], [])).toBeNull();
