@@ -474,8 +474,19 @@ func TestOnEventStart_ShortIntervalStillToleratesALateCheck(t *testing.T) {
 	}
 }
 
+const allDayZone = "Europe/Stockholm"
+
 func TestOnEventStart_AllDayEventsOnlyWhenAskedFor(t *testing.T) {
-	tomorrow := time.Now().UTC().Add(24 * time.Hour).Format("2006-01-02")
+	// Tomorrow in the zone the step is GIVEN, not in UTC. An all-day event
+	// starts at midnight where it is, so a date built from UTC put the event's
+	// Stockholm midnight in the past for the two hours a day between 22:00 UTC
+	// and midnight — the step correctly refused to announce a start that had
+	// already happened, and this test called that a failure.
+	loc, lerr := time.LoadLocation(allDayZone)
+	if lerr != nil {
+		t.Fatalf("load %s: %v", allDayZone, lerr)
+	}
+	tomorrow := time.Now().In(loc).AddDate(0, 0, 1).Format("2006-01-02")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		eventsJSON(t, w, map[string]any{
 			"id": "holiday", "status": "confirmed", "summary": "Holiday",
@@ -499,7 +510,7 @@ func TestOnEventStart_AllDayEventsOnlyWhenAskedFor(t *testing.T) {
 	withTriggerEnv(t, srv.URL) // a fresh record of what has been announced
 	res, err = executeOnEventStart(context.Background(), triggerJob(map[string]any{
 		"lead_minutes": startMaxLeadMinutes, "interval_seconds": 300,
-		"include_all_day": true, "tz": "Europe/Stockholm",
+		"include_all_day": true, "tz": allDayZone,
 	}), nil)
 	if err != nil || res.Status != core.StatusOK {
 		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
