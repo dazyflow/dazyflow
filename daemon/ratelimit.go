@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dazyflow/dazyflow/core"
 )
 
 // Per-client-IP token bucket for the unauthenticated surfaces.
@@ -26,6 +28,30 @@ const (
 	// Polled, not called: an idle agent asks for work continuously.
 	defaultRunnerRatePerMin = 600
 	defaultRunnerRateBurst  = 120
+
+	// Generating a flow is a dozen model calls behind one request, so this
+	// limit guards a bill rather than a CPU. It is keyed by TENANT, not by IP:
+	// the spend belongs to the tenant, a leaked key used from five hundred
+	// addresses would walk through a per-IP bucket untouched, and an office
+	// behind one NAT should not be throttled as though it were one person.
+	//
+	// One generation takes many seconds, so no human working the button can
+	// reach this; a script reaches it immediately. It bounds the burst, not
+	// the monthly bill — that wants an entitlement beside RunsPerMonth.
+	defaultGenerateRatePerMin = 10
+	defaultGenerateRateBurst  = 5
+
+	// Reaching out to a server on request — scanning a host key, testing a
+	// saved one — holds a socket and a goroutine for up to sshVerifyTimeout,
+	// and the address on the host-key route comes from the request body. So
+	// this guards two things at once: the daemon's own sockets, and the
+	// operator's address being used to knock on port 22 across the internet.
+	// The SSRF guard already refuses loopback and private ranges; this bounds
+	// the rest. Keyed by tenant for the same reason as generation — the abuse
+	// is attributable to the organization, not to whichever address it came
+	// from.
+	defaultProbeRatePerMin = 12
+	defaultProbeRateBurst  = 4
 	// Without a cap the map itself is the memory-exhaustion vector.
 	maxRateLimiterBuckets = 50_000
 )
@@ -205,6 +231,32 @@ func (h *HTTPGateway) rateLimitAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(rw, r)
 	}
+}
+
+type authedHandler = func(rw http.ResponseWriter, r *http.Request, p core.Principal)
+
+// limitByTenant wraps an AUTHENTICATED handler, because the thing it keys on is
+// only known once the caller has been identified. Used where the cost of a
+// request lands on the organization rather than on whoever sent it.
+func limitByTenant(l *ipRateLimiter, msg string, next authedHandler) authedHandler {
+	return func(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+		if l != nil && !l.Allow(p.Tenant) {
+			rw.Header().Set("Retry-After", "60")
+			writeJSONError(rw, http.StatusTooManyRequests, msg)
+			return
+		}
+		next(rw, r, p)
+	}
+}
+
+func (h *HTTPGateway) rateLimitGenerate(next authedHandler) authedHandler {
+	return limitByTenant(h.GenerateRateLimit,
+		"too many flow generations in a row — wait a moment and try again", next)
+}
+
+func (h *HTTPGateway) rateLimitProbe(next authedHandler) authedHandler {
+	return limitByTenant(h.ProbeRateLimit,
+		"too many connection checks in a row — wait a moment and try again", next)
 }
 
 func (h *HTTPGateway) rateLimitWebhook(next http.HandlerFunc) http.HandlerFunc {

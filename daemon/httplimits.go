@@ -5,7 +5,9 @@ package daemon
 
 import (
 	"fmt"
+	"net"
 	"net/http"
+	"sync"
 
 	"github.com/dazyflow/dazyflow/core"
 )
@@ -72,4 +74,59 @@ func (h *limitsAPI) workspaceLimits(rw http.ResponseWriter, r *http.Request, p c
 		out["quota"] = q
 	}
 	writeJSON(rw, http.StatusOK, out)
+}
+
+// defaultMaxConnections is the ceiling on simultaneously accepted connections.
+// Generous on purpose: it is a backstop against socket and goroutine growth,
+// not a capacity plan. Each idle connection costs a goroutine and a read
+// buffer, so a thousand is a few tens of megabytes — and a browser holds
+// several open at once under keep-alive, so a tight cap would lock out real
+// users long before it inconvenienced anyone else.
+const defaultMaxConnections = 1024
+
+// limitListener stops accepting once maxConns are open, so excess connections
+// wait in the kernel's backlog and time out there rather than each buying a
+// goroutine and a buffer inside the process.
+//
+// Written here rather than pulled from x/net/netutil, which is the same thirty
+// lines: this package already keeps its own token bucket for the same reason.
+//
+// The trade to know about: when the cap is reached NOTHING is accepted, health
+// checks included, so a daemon at its ceiling looks dead to an orchestrator
+// rather than busy. That is why the default is high enough that reaching it
+// means something is wrong rather than merely popular.
+type limitListener struct {
+	net.Listener
+	sem chan struct{}
+}
+
+func newLimitListener(ln net.Listener, maxConns int) net.Listener {
+	if maxConns <= 0 {
+		return ln
+	}
+	return &limitListener{Listener: ln, sem: make(chan struct{}, maxConns)}
+}
+
+func (l *limitListener) Accept() (net.Conn, error) {
+	l.sem <- struct{}{}
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		<-l.sem
+		return nil, err
+	}
+	// OnceFunc because a net.Conn may be closed more than once — by the
+	// server's own teardown and by a handler's defer — and a slot released
+	// twice would let the cap drift upwards for the life of the process.
+	return &limitConn{Conn: conn, release: sync.OnceFunc(func() { <-l.sem })}, nil
+}
+
+type limitConn struct {
+	net.Conn
+	release func()
+}
+
+func (c *limitConn) Close() error {
+	err := c.Conn.Close()
+	c.release()
+	return err
 }

@@ -220,8 +220,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/ssh/credentials", h.requireAuth(secretsapi.listSSHCredsMe))
 	mux.HandleFunc("PUT /api/v1/ssh/credentials/{account}", h.requireAuth(secretsapi.putSSHCredMe))
 	mux.HandleFunc("DELETE /api/v1/ssh/credentials/{account}", h.requireAuth(secretsapi.deleteSSHCredMe))
-	mux.HandleFunc("POST /api/v1/ssh/credentials/{account}/verify", h.requireAuth(secretsapi.verifySSHCredMe))
-	mux.HandleFunc("POST /api/v1/ssh/host-key", h.requireAuth(secretsapi.scanSSHHostKeyMe))
+	mux.HandleFunc("POST /api/v1/ssh/credentials/{account}/verify",
+		h.requireAuth(h.rateLimitProbe(secretsapi.verifySSHCredMe)))
+	mux.HandleFunc("POST /api/v1/ssh/host-key",
+		h.requireAuth(h.rateLimitProbe(secretsapi.scanSSHHostKeyMe)))
 	mux.HandleFunc("POST /api/v1/ssh/keypair", h.requireAuth(secretsapi.generateSSHKeyMe))
 	mux.HandleFunc("GET /api/v1/ssh/logins", h.requireAuth(secretsapi.listSSHLoginsMe))
 	mux.HandleFunc("PUT /api/v1/ssh/logins/{name}", h.requireAuth(secretsapi.putSSHLoginMe))
@@ -266,8 +268,10 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/tools/expression/validate", h.requireAuth(flowapi.validateExpression))
 	mux.HandleFunc("POST /api/v1/tools/render-template/assist", h.requireAuth(flowapi.renderTemplateAssist))
 	mux.HandleFunc("GET /api/v1/tools/llm-providers", h.requireAuth(flowapi.renderTemplateLLMProviders))
-	mux.HandleFunc("POST /api/v1/tools/flow/generate", h.requireAuth(flowapi.renderFlowGenerate))
-	mux.HandleFunc("POST /api/v1/tools/flow/generate/stream", h.requireAuth(flowapi.renderFlowGenerateStream))
+	mux.HandleFunc("POST /api/v1/tools/flow/generate",
+		h.requireAuth(h.rateLimitGenerate(flowapi.renderFlowGenerate)))
+	mux.HandleFunc("POST /api/v1/tools/flow/generate/stream",
+		h.requireAuth(h.rateLimitGenerate(flowapi.renderFlowGenerateStream)))
 	mux.HandleFunc("POST /api/v1/validate/graph", h.requireAuth(flowapi.validateGraphLiteral))
 	mux.HandleFunc("POST /api/v1/events/slack/{tenant}", h.rateLimitWebhook(runctl.slackEvents))
 	mux.HandleFunc("POST /api/v1/events/github/{tenant}", h.rateLimitWebhook(runctl.githubEvents))

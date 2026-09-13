@@ -203,6 +203,10 @@ func (h *flowAPI) renderFlowGenerate(rw http.ResponseWriter, r *http.Request, p 
 		})
 		return
 	}
+	if qerr := h.svc.checkGenerationQuota(ctx, p.Tenant); qerr != nil {
+		writeJSONError(rw, http.StatusPaymentRequired, qerr.Error())
+		return
+	}
 	mans, err := h.svc.SearchDrops(r.Context(), p, DropSearch{})
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, "could not load the step catalog: "+err.Error())
@@ -210,9 +214,13 @@ func (h *flowAPI) renderFlowGenerate(rw http.ResponseWriter, r *http.Request, p 
 	}
 	graph, issues, gerr := h.generateFlow(ctx, chosen.info.Name, chosen.key, desc, mans, p.Tenant, p.Workspace, body.TZ, nil)
 	if gerr != nil {
+		// Counted on success only: a generation that failed produced no flow,
+		// and charging a month's allowance for the provider's bad day would be
+		// the kind of thing people notice.
 		writeJSON(rw, http.StatusOK, map[string]any{"error": gerr.Error()})
 		return
 	}
+	h.svc.recordGeneration(ctx, p.Tenant)
 	writeJSON(rw, http.StatusOK, map[string]any{"graph": graph, "issues": issues, "provider": chosen.info.Name})
 }
 
@@ -255,6 +263,12 @@ func (h *flowAPI) renderFlowGenerateStream(rw http.ResponseWriter, r *http.Reque
 		})
 		return
 	}
+	// The header is already out, so the refusal is an SSE error rather than a
+	// status code — the client reads both the same way.
+	if qerr := h.svc.checkGenerationQuota(ctx, p.Tenant); qerr != nil {
+		emit("error", map[string]any{"message": qerr.Error(), "plan_limit": true})
+		return
+	}
 	mans, err := h.svc.SearchDrops(r.Context(), p, DropSearch{})
 	if err != nil {
 		emit("error", map[string]any{"message": "could not load the step catalog"})
@@ -268,6 +282,7 @@ func (h *flowAPI) renderFlowGenerateStream(rw http.ResponseWriter, r *http.Reque
 		emit("error", map[string]any{"message": gerr.Error()})
 		return
 	}
+	h.svc.recordGeneration(ctx, p.Tenant)
 	emit("done", map[string]any{"graph": graph, "issues": issues, "provider": chosen.info.Name})
 }
 

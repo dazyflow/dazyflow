@@ -1234,6 +1234,7 @@
       "new": "New tier",
       "builtIn": "Built-in",
       "runs": "Runs/mo",
+      "generations": "AI generations",
       "concurrency": "Concurrent runs",
       "retention": "Retention (days)",
       "nodes": "Steps",

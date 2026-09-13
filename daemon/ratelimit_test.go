@@ -5,10 +5,13 @@ package daemon
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func reloadTrustedProxiesForTest() {
@@ -220,5 +223,120 @@ func TestIPRateLimiter_GCKeepsIdleButStillIndebtedBucket(t *testing.T) {
 	l.mu.Unlock()
 	if !kept {
 		t.Error("a bucket that has NOT refilled must be kept so its throttle survives")
+	}
+}
+
+// Generating a flow is a dozen model calls behind one request, so the bucket
+// guards a bill. Everything here is about WHAT it counts by.
+func TestRateLimitGenerate_CountsByTenantNotByCaller(t *testing.T) {
+	t.Parallel()
+	h := &HTTPGateway{GenerateRateLimit: newIPRateLimiter(60, 2)}
+	calls := 0
+	guarded := h.rateLimitGenerate(func(http.ResponseWriter, *http.Request, core.Principal) {
+		calls++
+	})
+	ask := func(tenant, addr string) int {
+		rw := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/api/v1/tools/flow/generate", nil)
+		r.RemoteAddr = addr
+		guarded(rw, r, core.Principal{Tenant: tenant})
+		return rw.Code
+	}
+
+	// A leaked key sprayed across many addresses is the case a per-IP bucket
+	// would wave through: same tenant, a new source every time.
+	if got := ask("acme", "203.0.113.1:1"); got != http.StatusOK {
+		t.Fatalf("first call = %d, want 200", got)
+	}
+	if got := ask("acme", "203.0.113.2:1"); got != http.StatusOK {
+		t.Fatalf("second call = %d, want 200 (burst is 2)", got)
+	}
+	if got := ask("acme", "203.0.113.3:1"); got != http.StatusTooManyRequests {
+		t.Fatalf("third call from a THIRD address = %d, want 429 — the bucket must be the tenant's", got)
+	}
+	if calls != 2 {
+		t.Errorf("handler ran %d times, want 2", calls)
+	}
+
+	// And one tenant burning its own budget must not spend anyone else's.
+	if got := ask("other", "203.0.113.1:1"); got != http.StatusOK {
+		t.Errorf("a different tenant = %d, want 200", got)
+	}
+}
+
+func TestRateLimitGenerate_SaysHowLongToWait(t *testing.T) {
+	t.Parallel()
+	h := &HTTPGateway{GenerateRateLimit: newIPRateLimiter(60, 1)}
+	guarded := h.rateLimitGenerate(func(http.ResponseWriter, *http.Request, core.Principal) {})
+	for range 2 {
+		rw := httptest.NewRecorder()
+		guarded(rw, httptest.NewRequest(http.MethodPost, "/x", nil), core.Principal{Tenant: "acme"})
+		if rw.Code == http.StatusTooManyRequests && rw.Header().Get("Retry-After") == "" {
+			t.Error("a 429 with no Retry-After leaves the caller guessing")
+		}
+	}
+}
+
+// An unconfigured limiter must not close the door: the gateway builds one by
+// default, but a zero value has to stay open rather than refuse everything.
+func TestRateLimitGenerate_UnsetLimiterAllows(t *testing.T) {
+	t.Parallel()
+	h := &HTTPGateway{}
+	ran := false
+	h.rateLimitGenerate(func(http.ResponseWriter, *http.Request, core.Principal) { ran = true })(
+		httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/x", nil), core.Principal{Tenant: "acme"})
+	if !ran {
+		t.Error("no limiter configured, yet the request was refused")
+	}
+}
+
+// Both dial-out routes share one bucket on purpose: they cost the same socket
+// held for the same twenty seconds, so spending the budget on one has to spend
+// it for the other.
+func TestRateLimitProbe_SharesOneBudgetAcrossBothDialRoutes(t *testing.T) {
+	t.Parallel()
+	h := &HTTPGateway{ProbeRateLimit: newIPRateLimiter(60, 2)}
+	scan := h.rateLimitProbe(func(http.ResponseWriter, *http.Request, core.Principal) {})
+	verify := h.rateLimitProbe(func(http.ResponseWriter, *http.Request, core.Principal) {})
+	ask := func(handler authedHandler) int {
+		rw := httptest.NewRecorder()
+		handler(rw, httptest.NewRequest(http.MethodPost, "/x", nil), core.Principal{Tenant: "acme"})
+		return rw.Code
+	}
+
+	if got := ask(scan); got != http.StatusOK {
+		t.Fatalf("first scan = %d, want 200", got)
+	}
+	if got := ask(verify); got != http.StatusOK {
+		t.Fatalf("first verify = %d, want 200 (burst is 2)", got)
+	}
+	if got := ask(scan); got != http.StatusTooManyRequests {
+		t.Fatalf("third dial = %d, want 429 — one budget covers both routes", got)
+	}
+}
+
+// The two limiters must not share a bucket: checking a server should never
+// spend the budget for generating a flow.
+func TestRateLimits_GenerateAndProbeAreSeparateBudgets(t *testing.T) {
+	t.Parallel()
+	h := &HTTPGateway{
+		ProbeRateLimit:    newIPRateLimiter(60, 1),
+		GenerateRateLimit: newIPRateLimiter(60, 1),
+	}
+	ask := func(handler authedHandler) int {
+		rw := httptest.NewRecorder()
+		handler(rw, httptest.NewRequest(http.MethodPost, "/x", nil), core.Principal{Tenant: "acme"})
+		return rw.Code
+	}
+	noop := func(http.ResponseWriter, *http.Request, core.Principal) {}
+
+	if got := ask(h.rateLimitProbe(noop)); got != http.StatusOK {
+		t.Fatalf("probe = %d, want 200", got)
+	}
+	if got := ask(h.rateLimitProbe(noop)); got != http.StatusTooManyRequests {
+		t.Fatalf("second probe = %d, want 429", got)
+	}
+	if got := ask(h.rateLimitGenerate(noop)); got != http.StatusOK {
+		t.Errorf("generation = %d, want 200 — a spent probe budget must not close it", got)
 	}
 }

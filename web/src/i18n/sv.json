@@ -1214,6 +1214,7 @@
       "new": "Ny nivå",
       "builtIn": "Inbyggd",
       "runs": "Körningar/mån",
+      "generations": "AI-genereringar",
       "concurrency": "Samtidiga körningar",
       "retention": "Lagringstid (dagar)",
       "nodes": "Steg",

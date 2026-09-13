@@ -104,6 +104,15 @@ type HTTPGateway struct {
 
 	RunnerRateLimit *ipRateLimiter
 
+	// Keyed by tenant: it guards an LLM bill, not a CPU.
+	GenerateRateLimit *ipRateLimiter
+
+	// Keyed by tenant: it guards outbound dials, not a CPU.
+	ProbeRateLimit *ipRateLimiter
+
+	// Simultaneously accepted connections; 0 means the default, <0 unlimited.
+	MaxConnections int
+
 	TrustProxyHeaders bool
 
 	Metrics *Metrics
@@ -129,13 +138,15 @@ type HTTPGateway struct {
 
 func NewHTTPGateway(svc *Service) *HTTPGateway {
 	return &HTTPGateway{
-		svc:              svc,
-		logger:           log.New(log.Writer(), "http-api: ", log.LstdFlags),
-		idempotency:      newIdempotencyStore(),
-		Ephemeral:        auth.NewMemEphemeralStore(),
-		SupportRateLimit: newIPRateLimiter(defaultSupportRatePerMin, defaultSupportRateBurst),
-		WebhookRateLimit: newIPRateLimiter(defaultWebhookRatePerMin, defaultWebhookRateBurst),
-		RunnerRateLimit:  newIPRateLimiter(defaultRunnerRatePerMin, defaultRunnerRateBurst),
+		svc:               svc,
+		logger:            log.New(log.Writer(), "http-api: ", log.LstdFlags),
+		idempotency:       newIdempotencyStore(),
+		Ephemeral:         auth.NewMemEphemeralStore(),
+		SupportRateLimit:  newIPRateLimiter(defaultSupportRatePerMin, defaultSupportRateBurst),
+		WebhookRateLimit:  newIPRateLimiter(defaultWebhookRatePerMin, defaultWebhookRateBurst),
+		RunnerRateLimit:   newIPRateLimiter(defaultRunnerRatePerMin, defaultRunnerRateBurst),
+		GenerateRateLimit: newIPRateLimiter(defaultGenerateRatePerMin, defaultGenerateRateBurst),
+		ProbeRateLimit:    newIPRateLimiter(defaultProbeRatePerMin, defaultProbeRateBurst),
 	}
 }
 
@@ -146,6 +157,11 @@ func NewHTTPGateway(svc *Service) *HTTPGateway {
 
 func (h *HTTPGateway) ServeListener(ctx context.Context, ln net.Listener) error {
 	go auth.WarmPasswordTiming()
+	maxConns := h.MaxConnections
+	if maxConns == 0 {
+		maxConns = defaultMaxConnections
+	}
+	ln = newLimitListener(ln, maxConns)
 	mux := http.NewServeMux()
 	h.mountRoutes(mux)
 	srv := &http.Server{
@@ -156,7 +172,11 @@ func (h *HTTPGateway) ServeListener(ctx context.Context, ln net.Listener) error 
 	}
 	errC := make(chan error, 1)
 	go func() {
-		h.logger.Printf("listening on %s", ln.Addr())
+		if maxConns > 0 {
+			h.logger.Printf("listening on %s (max %d connections)", ln.Addr(), maxConns)
+		} else {
+			h.logger.Printf("listening on %s (connection limit disabled)", ln.Addr())
+		}
 		errC <- srv.Serve(ln)
 	}()
 	select {

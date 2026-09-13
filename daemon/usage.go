@@ -19,6 +19,9 @@ type UsageCounters struct {
 	NodeExecutions int64  `json:"node_executions"`
 	// Refused fires are counted, or an org over its cap looks simply idle.
 	SkippedRuns int64 `json:"skipped_runs"`
+	// Flow generations: a dozen model calls each, counted separately because
+	// what they spend is money rather than machine.
+	FlowGenerations int64 `json:"flow_generations"`
 }
 
 // Implementations must be safe for concurrent use.
@@ -26,6 +29,7 @@ type UsageStore interface {
 	AddRun(ctx context.Context, tenant string, now time.Time) error
 	AddNodeExecutions(ctx context.Context, tenant string, n int, now time.Time) error
 	AddSkippedRun(ctx context.Context, tenant string, now time.Time) error
+	AddFlowGeneration(ctx context.Context, tenant string, now time.Time) error
 	Usage(ctx context.Context, tenant string, months int) ([]UsageCounters, error)
 }
 
@@ -72,6 +76,13 @@ func (m *MemUsageStore) AddRun(_ context.Context, tenant string, now time.Time) 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.bucket(tenant, now).GraphRuns++
+	return nil
+}
+
+func (m *MemUsageStore) AddFlowGeneration(_ context.Context, tenant string, now time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.bucket(tenant, now).FlowGenerations++
 	return nil
 }
 
@@ -139,6 +150,13 @@ func NewBufferedUsage(inner UsageStore) *BufferedUsage {
 
 func (b *BufferedUsage) AddRun(ctx context.Context, tenant string, now time.Time) error {
 	return b.inner.AddRun(ctx, tenant, now)
+}
+
+// Not buffered, for the reason runs are not: the cap has to be authoritative
+// at the moment it is checked, and a generation is expensive enough that
+// losing a count to a crash would be losing real money.
+func (b *BufferedUsage) AddFlowGeneration(ctx context.Context, tenant string, now time.Time) error {
+	return b.inner.AddFlowGeneration(ctx, tenant, now)
 }
 
 // Runs are never buffered: the cap has to be authoritative at submit time.

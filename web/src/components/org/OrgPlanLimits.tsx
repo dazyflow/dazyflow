@@ -80,6 +80,8 @@ export function PlanLimitsSection({ tenant }: { tenant: string }) {
             <dd>{eff.tier_id || "—"}</dd>
             <dt>{t("admin.platformTiers.runs")}</dt>
             <dd>{fmt(eff.runs_per_month)}</dd>
+            <dt>{t("admin.platformTiers.generations")}</dt>
+            <dd>{fmt(eff.generations_per_month)}</dd>
             <dt>{t("common.members")}</dt>
             <dd>{fmt(eff.max_members)}</dd>
             <dt>{t("admin.platformTiers.concurrency")}</dt>
@@ -147,6 +149,7 @@ function EntitlementEditor({
   const [trial, setTrial] = useState(ent.trial_ends_at ? ent.trial_ends_at.slice(0, 10) : "");
   const str = (v: number | null | undefined) => (v === null || v === undefined ? "" : String(v));
   const [runs, setRuns] = useState(str(ent.runs_per_month));
+  const [generations, setGenerations] = useState(str(ent.generations_per_month));
   const [members, setMembers] = useState(str(ent.max_members));
   const [concurrency, setConcurrency] = useState(str(ent.max_concurrency));
   const [retention, setRetention] = useState(str(ent.retention_days));
@@ -176,6 +179,7 @@ function EntitlementEditor({
       comped,
       trial_ends_at: trial ? new Date(trial + "T00:00:00Z").toISOString() : null,
       runs_per_month: numOrNull(runs),
+      generations_per_month: numOrNull(generations),
       max_members: numOrNull(members),
       max_concurrency: numOrNull(concurrency),
       retention_days: numOrNull(retention),
@@ -241,6 +245,7 @@ function EntitlementEditor({
             <input type="date" value={trial} onChange={(e) => setTrial(e.target.value)} />
           </label>
           {overrideInput(t("admin.platformTiers.runs"), runs, setRuns)}
+          {overrideInput(t("admin.platformTiers.generations"), generations, setGenerations)}
           {overrideInput(t("common.members"), members, setMembers)}
           {overrideInput(t("admin.platformTiers.concurrency"), concurrency, setConcurrency)}
           {overrideInput(t("admin.platformTiers.retention"), retention, setRetention)}

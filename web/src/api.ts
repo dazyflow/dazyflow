@@ -2181,6 +2181,7 @@ export type PlatformTier = {
   name: string;
   plan: string; // "free" | "pro"
   runs_per_month: number;
+  generations_per_month: number;
   disk_quota_bytes: number;
   max_graph_nodes: number;
   max_flows: number;
@@ -2200,6 +2201,7 @@ export type TenantEntitlement = {
   comped?: boolean;
   trial_ends_at?: string | null;
   runs_per_month?: number | null;
+  generations_per_month?: number | null;
   disk_quota_bytes?: number | null;
   max_graph_nodes?: number | null;
   max_flows?: number | null;
@@ -2214,6 +2216,7 @@ export type TenantEntitlement = {
 export type EffectiveLimits = {
   plan: string;
   runs_per_month: number;
+  generations_per_month: number;
   disk_quota_bytes: number;
   max_graph_nodes: number;
   max_flows: number;
@@ -2229,6 +2232,7 @@ export type EffectiveLimits = {
 
 export type PlanLimits = {
   runs_per_month: number;
+  generations_per_month: number;
   max_flows: number;
   max_graph_nodes: number;
   disk_quota_bytes: number;

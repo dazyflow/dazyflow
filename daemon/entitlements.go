@@ -16,17 +16,20 @@ import (
 )
 
 type Tier struct {
-	ID                string `json:"id"`
-	Name              string `json:"name"`
-	Plan              string `json:"plan"` // "free" | "pro" — the plan level this tier grants
-	RunsPerMonth      int    `json:"runs_per_month"`
-	DiskQuotaBytes    int64  `json:"disk_quota_bytes"`
-	MaxGraphNodes     int    `json:"max_graph_nodes"`
-	MaxFlows          int    `json:"max_flows"`
-	MaxTimeoutSeconds int    `json:"max_timeout_seconds"`
-	RetentionDays     int    `json:"retention_days"`
-	MaxConcurrency    int    `json:"max_concurrency"`
-	MaxMembers        int    `json:"max_members"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Plan         string `json:"plan"` // "free" | "pro" — the plan level this tier grants
+	RunsPerMonth int    `json:"runs_per_month"`
+	// A generation is a dozen model calls, so this bounds a bill rather than
+	// a machine. 0 = no cap, like every limit here.
+	GenerationsPerMonth int   `json:"generations_per_month"`
+	DiskQuotaBytes      int64 `json:"disk_quota_bytes"`
+	MaxGraphNodes       int   `json:"max_graph_nodes"`
+	MaxFlows            int   `json:"max_flows"`
+	MaxTimeoutSeconds   int   `json:"max_timeout_seconds"`
+	RetentionDays       int   `json:"retention_days"`
+	MaxConcurrency      int   `json:"max_concurrency"`
+	MaxMembers          int   `json:"max_members"`
 	// PollingAllowed gates scheduled / poll triggers for orgs on this tier.
 	// nil = inherit the deployment-global default (Service.FreePollingDisabled,
 	// i.e. the DAZYFLOW_FREE_POLLING_TRIGGERS knob) — matching the 0 = inherit
@@ -46,64 +49,71 @@ type TenantEntitlement struct {
 	Comped       bool       `json:"comped,omitempty"`
 	TrialEndsAt  *time.Time `json:"trial_ends_at,omitempty"`
 
-	RunsPerMonth      *int   `json:"runs_per_month,omitempty"`
-	DiskQuotaBytes    *int64 `json:"disk_quota_bytes,omitempty"`
-	MaxGraphNodes     *int   `json:"max_graph_nodes,omitempty"`
-	MaxFlows          *int   `json:"max_flows,omitempty"`
-	MaxTimeoutSeconds *int   `json:"max_timeout_seconds,omitempty"`
-	RetentionDays     *int   `json:"retention_days,omitempty"`
-	MaxConcurrency    *int   `json:"max_concurrency,omitempty"`
-	MaxMembers        *int   `json:"max_members,omitempty"`
-	PollingAllowed    *bool  `json:"polling_allowed,omitempty"`
+	RunsPerMonth        *int   `json:"runs_per_month,omitempty"`
+	GenerationsPerMonth *int   `json:"generations_per_month,omitempty"`
+	DiskQuotaBytes      *int64 `json:"disk_quota_bytes,omitempty"`
+	MaxGraphNodes       *int   `json:"max_graph_nodes,omitempty"`
+	MaxFlows            *int   `json:"max_flows,omitempty"`
+	MaxTimeoutSeconds   *int   `json:"max_timeout_seconds,omitempty"`
+	RetentionDays       *int   `json:"retention_days,omitempty"`
+	MaxConcurrency      *int   `json:"max_concurrency,omitempty"`
+	MaxMembers          *int   `json:"max_members,omitempty"`
+	PollingAllowed      *bool  `json:"polling_allowed,omitempty"`
 
 	Notes     string    `json:"notes,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type LimitDefaults struct {
-	RunsPerMonth      int
-	DiskQuotaBytes    int64
-	MaxGraphNodes     int
-	MaxFlows          int
-	MaxTimeoutSeconds int
-	RetentionDays     int
-	MaxConcurrency    int
-	MaxMembers        int
-	PollingAllowed    bool
+	RunsPerMonth        int
+	GenerationsPerMonth int
+	DiskQuotaBytes      int64
+	MaxGraphNodes       int
+	MaxFlows            int
+	MaxTimeoutSeconds   int
+	RetentionDays       int
+	MaxConcurrency      int
+	MaxMembers          int
+	PollingAllowed      bool
 }
 
 type EffectiveLimits struct {
-	Plan              string     `json:"plan"`
-	RunsPerMonth      int        `json:"runs_per_month"`
-	DiskQuotaBytes    int64      `json:"disk_quota_bytes"`
-	MaxGraphNodes     int        `json:"max_graph_nodes"`
-	MaxFlows          int        `json:"max_flows"`
-	MaxTimeoutSeconds int        `json:"max_timeout_seconds"`
-	RetentionDays     int        `json:"retention_days"`
-	MaxConcurrency    int        `json:"max_concurrency"`
-	MaxMembers        int        `json:"max_members"`
-	PollingAllowed    bool       `json:"polling_allowed"`
-	TierID            string     `json:"tier_id,omitempty"`
-	TrialEndsAt       *time.Time `json:"trial_ends_at,omitempty"`
-	Comped            bool       `json:"comped,omitempty"`
+	Plan                string     `json:"plan"`
+	RunsPerMonth        int        `json:"runs_per_month"`
+	GenerationsPerMonth int        `json:"generations_per_month"`
+	DiskQuotaBytes      int64      `json:"disk_quota_bytes"`
+	MaxGraphNodes       int        `json:"max_graph_nodes"`
+	MaxFlows            int        `json:"max_flows"`
+	MaxTimeoutSeconds   int        `json:"max_timeout_seconds"`
+	RetentionDays       int        `json:"retention_days"`
+	MaxConcurrency      int        `json:"max_concurrency"`
+	MaxMembers          int        `json:"max_members"`
+	PollingAllowed      bool       `json:"polling_allowed"`
+	TierID              string     `json:"tier_id,omitempty"`
+	TrialEndsAt         *time.Time `json:"trial_ends_at,omitempty"`
+	Comped              bool       `json:"comped,omitempty"`
 }
 
 func ResolveEffective(ent *TenantEntitlement, tier *Tier, def LimitDefaults, stripePlan string, now time.Time) EffectiveLimits {
 	eff := EffectiveLimits{
-		RunsPerMonth:      def.RunsPerMonth,
-		DiskQuotaBytes:    def.DiskQuotaBytes,
-		MaxGraphNodes:     def.MaxGraphNodes,
-		MaxFlows:          def.MaxFlows,
-		MaxTimeoutSeconds: def.MaxTimeoutSeconds,
-		RetentionDays:     def.RetentionDays,
-		MaxConcurrency:    def.MaxConcurrency,
-		MaxMembers:        def.MaxMembers,
-		PollingAllowed:    def.PollingAllowed,
+		RunsPerMonth:        def.RunsPerMonth,
+		GenerationsPerMonth: def.GenerationsPerMonth,
+		DiskQuotaBytes:      def.DiskQuotaBytes,
+		MaxGraphNodes:       def.MaxGraphNodes,
+		MaxFlows:            def.MaxFlows,
+		MaxTimeoutSeconds:   def.MaxTimeoutSeconds,
+		RetentionDays:       def.RetentionDays,
+		MaxConcurrency:      def.MaxConcurrency,
+		MaxMembers:          def.MaxMembers,
+		PollingAllowed:      def.PollingAllowed,
 	}
 	if tier != nil {
 		eff.TierID = tier.ID
 		if tier.RunsPerMonth != 0 {
 			eff.RunsPerMonth = tier.RunsPerMonth
+		}
+		if tier.GenerationsPerMonth != 0 {
+			eff.GenerationsPerMonth = tier.GenerationsPerMonth
 		}
 		if tier.DiskQuotaBytes != 0 {
 			eff.DiskQuotaBytes = tier.DiskQuotaBytes
@@ -137,6 +147,9 @@ func ResolveEffective(ent *TenantEntitlement, tier *Tier, def LimitDefaults, str
 	if ent != nil {
 		if ent.RunsPerMonth != nil {
 			eff.RunsPerMonth = *ent.RunsPerMonth
+		}
+		if ent.GenerationsPerMonth != nil {
+			eff.GenerationsPerMonth = *ent.GenerationsPerMonth
 		}
 		if ent.DiskQuotaBytes != nil {
 			eff.DiskQuotaBytes = *ent.DiskQuotaBytes

@@ -10,6 +10,56 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Security
+
+- **Generating a flow is rate limited.** One request is a dozen model calls, and
+  nothing bounded how fast they could be asked for: a single valid token —
+  leaked, or just a script in a loop — could run up the bill unattended. Ten
+  generations a minute per organization now, bursting five, which no one
+  clicking the button can reach because one generation takes many seconds. The
+  bucket is keyed by ORGANIZATION rather than by IP address, because the spend
+  belongs to the organization and a key sprayed across five hundred addresses
+  would walk through a per-address limit untouched. Over the limit answers 429
+  with Retry-After; the flow builder already says "You're going a bit fast".
+
+  This bounds a burst, not a month — see the monthly ceiling below.
+
+- **Flow generations have a monthly ceiling.** A new entitlement beside
+  runs-per-month: fifty a month on the free plan, `DAZYFLOW_FREE_GENERATIONS_PER_MONTH`
+  to change that, 0 for no cap, and per-tier and per-organization values under
+  Platform → Tiers. One generation is about a dozen model calls against your
+  provider key, so this is the ceiling on what a signup can spend of your money,
+  where the per-minute limiter only bounds how fast they can spend it.
+
+  Counted per UTC calendar month in the usage table beside runs. A generation
+  that FAILS is not counted — the provider's bad day should not cost a month's
+  allowance. The check runs after the provider is chosen, so an organization
+  that never connected one is told to connect it rather than told it is out of
+  allowance. Over the ceiling answers 402 with what was used out of what, and
+  the streaming route says the same thing as an SSE error. Reading the usage
+  table is best-effort: if it cannot be read the request goes through, because a
+  degraded database should not become an outage.
+
+- **Checking a server is rate limited.** Fetching a host key and testing a saved
+  server both dial out on request and hold a socket for up to twenty seconds —
+  and the host-key route takes its address from the request body, so it is the
+  one route that can be pointed anywhere. Twelve checks a minute per
+  organization now, bursting four, which is far more than setting a server up
+  takes and far less than a scanner wants. The SSRF guard already refuses
+  loopback and private ranges; this bounds the rest, and keeps the operator's
+  address from being used to knock on port 22 across the internet. Both routes
+  share one budget, because they cost the same socket.
+
+- **The gateway holds a bounded number of connections.** Nothing capped how
+  many could be open at once, so each one bought a goroutine and a read buffer
+  with no ceiling. A thousand now, `DAZYFLOW_MAX_CONNECTIONS` to change it, a
+  negative value to turn it off. Past the cap nothing is accepted and the
+  connection waits in the kernel's backlog instead — which costs the daemon
+  nothing, and is why the default is high enough that reaching it means
+  something is wrong rather than that the day went well. It is the
+  direct-exposure guard: behind a reverse proxy it bounds the proxy's pool, not
+  your visitors, because one upstream connection carries many people's requests.
+
 ## [0.42.4] - 2026-09-12
 
 ### Added

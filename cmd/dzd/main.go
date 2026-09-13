@@ -496,36 +496,37 @@ func main() {
 		log.Printf("OIDC bearer auth enabled (issuer %s) — IdP-issued JWTs authenticate API calls", oidcIssuer)
 	}
 	svc := &daemon.Service{
-		Auth:                   authChain,
-		Workspaces:             workspaces,
-		Jobs:                   jobs,
-		Wake:                   daemon.NewWorkSignal(),
-		Schedules:              stores.schedules,
-		Engine:                 eng,
-		Bus:                    bus,
-		WorkerID:               instanceID,
-		AdminKeys:              ks,
-		DropSwitches:           dropSwitches,
-		Entitlements:           entitlements,
-		MaxGraphTimeoutSeconds: int(maxGraphTimeout.Seconds()),
-		MaxGraphNodes:          maxGraphNodes,
-		MaxGraphEdges:          maxGraphEdges,
-		EncryptedSecrets:       encryptedSecrets,
-		PublicBaseURL:          publicBaseURL,
-		SupportContact:         supportContact,
-		Logger:                 log.New(log.Writer(), "service: ", log.LstdFlags),
-		Usage:                  stores.usage,
-		Plans:                  stores.plans,
-		FreeRunsPerMonth:       freeRunsPerMonth,
-		FreePollingDisabled:    freePollingDisabled,
-		FreeRetentionDays:      freeRetentionDays,
-		FreeMaxConcurrency:     freeMaxConcurrency,
-		FreeMaxMembers:         freeMaxMembers,
-		Mailer:                 mailer,
-		RunLogs:                stores.runLogs,
-		Shares:                 stores.shares,
-		CollectionShares:       stores.collectionShares,
-		Users:                  users,
+		Auth:                    authChain,
+		Workspaces:              workspaces,
+		Jobs:                    jobs,
+		Wake:                    daemon.NewWorkSignal(),
+		Schedules:               stores.schedules,
+		Engine:                  eng,
+		Bus:                     bus,
+		WorkerID:                instanceID,
+		AdminKeys:               ks,
+		DropSwitches:            dropSwitches,
+		Entitlements:            entitlements,
+		MaxGraphTimeoutSeconds:  int(maxGraphTimeout.Seconds()),
+		MaxGraphNodes:           maxGraphNodes,
+		MaxGraphEdges:           maxGraphEdges,
+		EncryptedSecrets:        encryptedSecrets,
+		PublicBaseURL:           publicBaseURL,
+		SupportContact:          supportContact,
+		Logger:                  log.New(log.Writer(), "service: ", log.LstdFlags),
+		Usage:                   stores.usage,
+		Plans:                   stores.plans,
+		FreeRunsPerMonth:        freeRunsPerMonth,
+		FreeGenerationsPerMonth: envInt("DAZYFLOW_FREE_GENERATIONS_PER_MONTH", 50),
+		FreePollingDisabled:     freePollingDisabled,
+		FreeRetentionDays:       freeRetentionDays,
+		FreeMaxConcurrency:      freeMaxConcurrency,
+		FreeMaxMembers:          freeMaxMembers,
+		Mailer:                  mailer,
+		RunLogs:                 stores.runLogs,
+		Shares:                  stores.shares,
+		CollectionShares:        stores.collectionShares,
+		Users:                   users,
 	}
 
 	quota.LimitOverride = func(tenant string) int64 {
@@ -1370,6 +1371,8 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 	if d.enableMetrics {
 		log.Print("metrics endpoint enabled at GET /metrics (unauthenticated — restrict scrape access)")
 	}
+	// <0 disables the cap; 0 leaves the gateway's default in place.
+	gw.MaxConnections = envInt("DAZYFLOW_MAX_CONNECTIONS", 0)
 	gw.AuthRateLimit = daemon.NewAuthRateLimiter(d.authRatePerMin, d.authRateBurst)
 	if gw.AuthRateLimit != nil {
 		log.Printf("auth rate limit: %d/min per IP (burst %d)", d.authRatePerMin, d.authRateBurst)

@@ -136,6 +136,12 @@ func (s *Service) checkTriggerQuota(ctx context.Context, tenant string) error {
 func (s *Service) checkRunQuota(ctx context.Context, tenant string) error {
 	return s.billing().checkRunQuota(ctx, tenant)
 }
+func (s *Service) checkGenerationQuota(ctx context.Context, tenant string) error {
+	return s.billing().checkGenerationQuota(ctx, tenant)
+}
+func (s *Service) recordGeneration(ctx context.Context, tenant string) {
+	s.billing().recordGeneration(ctx, tenant)
+}
 func (s *Service) reserveRun(ctx context.Context, tenant string) (bool, error) {
 	return s.billing().reserveRun(ctx, tenant)
 }
@@ -243,6 +249,62 @@ func (b *BillingService) checkTriggerQuota(ctx context.Context, tenant string) e
 		return nil
 	}
 	return fmt.Errorf("%w: schedules and polling triggers are a Pro feature — manual runs still work", core.ErrPlanLimit)
+}
+
+func (b *BillingService) generationLimit(ctx context.Context, tenant string) int {
+	if b.effective != nil {
+		return b.effective(ctx, tenant).GenerationsPerMonth
+	}
+	return 0
+}
+
+func (b *BillingService) generationsThisMonth(ctx context.Context, tenant string) (int64, error) {
+	buckets, err := b.usage.Usage(ctx, tenant, 1)
+	if err != nil {
+		return 0, err
+	}
+	if len(buckets) > 0 && buckets[0].Period == usagePeriod(time.Now()) {
+		return buckets[0].FlowGenerations, nil
+	}
+	return 0, nil
+}
+
+// checkGenerationQuota is the ceiling the per-minute limiter cannot give: that
+// one bounds a burst, this one bounds a month. Generating a flow is a dozen
+// model calls, so the cost of getting this wrong is money rather than load.
+//
+// Fails OPEN on a storage error, like the run quota beside it: a usage table
+// that cannot be read is an operator's problem, and refusing everyone's work
+// over it turns a degraded database into an outage.
+func (b *BillingService) checkGenerationQuota(ctx context.Context, tenant string) error {
+	if b.usage == nil {
+		return nil
+	}
+	limit := b.generationLimit(ctx, tenant)
+	if limit <= 0 {
+		return nil // 0 = no cap
+	}
+	used, err := b.generationsThisMonth(ctx, tenant)
+	if err != nil {
+		if b.logger != nil {
+			b.logger.Printf("plan gate [%s]: read generation usage (failing open): %v", tenant, err)
+		}
+		return nil
+	}
+	if used >= int64(limit) {
+		return fmt.Errorf("%w: %d of %d flow generations used this month — upgrade for more, or build the flow by hand",
+			core.ErrPlanLimit, used, limit)
+	}
+	return nil
+}
+
+func (b *BillingService) recordGeneration(ctx context.Context, tenant string) {
+	if b.usage == nil {
+		return
+	}
+	if err := b.usage.AddFlowGeneration(ctx, tenant, time.Now()); err != nil && b.logger != nil {
+		b.logger.Printf("usage [%s]: record generation: %v", tenant, err)
+	}
 }
 
 func (b *BillingService) checkRunQuota(ctx context.Context, tenant string) error {

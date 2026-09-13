@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -210,4 +211,77 @@ func runsUsed(t *testing.T, usage UsageStore, tenant string) int64 {
 		return 0
 	}
 	return buckets[0].GraphRuns
+}
+
+// The monthly ceiling the per-minute limiter cannot give: that one bounds a
+// burst, this one bounds a bill.
+func TestCheckGenerationQuota(t *testing.T) {
+	t.Parallel()
+	newSvc := func(limit int) (*BillingService, *MemUsageStore) {
+		usage := NewMemUsageStore()
+		return &BillingService{
+			usage: usage,
+			effective: func(context.Context, string) EffectiveLimits {
+				return EffectiveLimits{GenerationsPerMonth: limit}
+			},
+		}, usage
+	}
+
+	t.Run("counts up to the limit and then refuses", func(t *testing.T) {
+		b, usage := newSvc(3)
+		ctx := context.Background()
+		for i := range 3 {
+			if err := b.checkGenerationQuota(ctx, "acme"); err != nil {
+				t.Fatalf("generation %d refused early: %v", i+1, err)
+			}
+			b.recordGeneration(ctx, "acme")
+		}
+		err := b.checkGenerationQuota(ctx, "acme")
+		if err == nil {
+			t.Fatal("a fourth generation was allowed past a limit of three")
+		}
+		if !errors.Is(err, core.ErrPlanLimit) {
+			t.Errorf("error %v, want it to wrap core.ErrPlanLimit so the UI can offer an upgrade", err)
+		}
+		if !strings.Contains(err.Error(), "3 of 3") {
+			t.Errorf("message %q should say where the org stands", err)
+		}
+		// Someone else's month is their own.
+		if err := b.checkGenerationQuota(ctx, "other"); err != nil {
+			t.Errorf("a different org was refused: %v", err)
+		}
+		if got, _ := usage.Usage(ctx, "acme", 1); len(got) != 1 || got[0].FlowGenerations != 3 {
+			t.Errorf("counted %+v, want 3 generations", got)
+		}
+	})
+
+	t.Run("zero means no cap", func(t *testing.T) {
+		b, _ := newSvc(0)
+		for range 50 {
+			b.recordGeneration(context.Background(), "acme")
+		}
+		if err := b.checkGenerationQuota(context.Background(), "acme"); err != nil {
+			t.Errorf("an uncapped org was refused: %v", err)
+		}
+	})
+
+	// A usage table that cannot be read is an operator's problem; refusing
+	// everyone's work over it turns a degraded database into an outage.
+	t.Run("fails open when usage cannot be read", func(t *testing.T) {
+		b := &BillingService{
+			usage: brokenUsage{},
+			effective: func(context.Context, string) EffectiveLimits {
+				return EffectiveLimits{GenerationsPerMonth: 1}
+			},
+		}
+		if err := b.checkGenerationQuota(context.Background(), "acme"); err != nil {
+			t.Errorf("a storage error closed the door: %v", err)
+		}
+	})
+}
+
+type brokenUsage struct{ UsageStore }
+
+func (brokenUsage) Usage(context.Context, string, int) ([]UsageCounters, error) {
+	return nil, errors.New("usage table unavailable")
 }

@@ -304,6 +304,10 @@ type Service struct {
 	// Enforced on the submit path, so a trigger is refused rather than queued.
 	FreeRunsPerMonth int
 
+	// Flow generations allowed a month on the free plan. A generation is a
+	// dozen model calls, so this is the ceiling on what a signup can spend.
+	FreeGenerationsPerMonth int
+
 	FreePollingDisabled bool
 
 	FreeRetentionDays  int
@@ -381,13 +385,14 @@ func (s *Service) orgSuspended(ctx context.Context, tenant string) bool {
 
 func (s *Service) limitDefaults() LimitDefaults {
 	return LimitDefaults{
-		RunsPerMonth:      s.FreeRunsPerMonth,
-		MaxGraphNodes:     s.MaxGraphNodes,
-		MaxTimeoutSeconds: s.MaxGraphTimeoutSeconds,
-		RetentionDays:     s.FreeRetentionDays,
-		MaxConcurrency:    s.FreeMaxConcurrency,
-		MaxMembers:        s.FreeMaxMembers,
-		PollingAllowed:    !s.FreePollingDisabled,
+		RunsPerMonth:        s.FreeRunsPerMonth,
+		GenerationsPerMonth: s.FreeGenerationsPerMonth,
+		MaxGraphNodes:       s.MaxGraphNodes,
+		MaxTimeoutSeconds:   s.MaxGraphTimeoutSeconds,
+		RetentionDays:       s.FreeRetentionDays,
+		MaxConcurrency:      s.FreeMaxConcurrency,
+		MaxMembers:          s.FreeMaxMembers,
+		PollingAllowed:      !s.FreePollingDisabled,
 	}
 }
 
