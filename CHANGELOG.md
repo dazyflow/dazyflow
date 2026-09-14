@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.42.5] - 2026-09-14
+
 ### Security
 
 - **Generating a flow is rate limited.** One request is a dozen model calls, and
