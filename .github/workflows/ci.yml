@@ -339,16 +339,17 @@ jobs:
         run: |
           # Pinned: @latest would let an upstream release change what CI runs
           # (and whether it passes) without a commit here. Bump deliberately.
+          # scripts/govulncheck.sh gates on symbol-level findings minus a
+          # reviewed, version-pinned allowlist (the DB can lag a shipped fix).
           go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
-          GV="$(go env GOPATH)/bin/govulncheck"
-          "$GV" ./...
+          scripts/govulncheck.sh ./...
           # Symbol scan of each shipped binary. docsgen is a build-time tool,
           # not shipped, so it is deliberately out of scope.
           mkdir -p /tmp/vulnbin
           for c in dzd dzctl dz-mcp; do
             go build -o "/tmp/vulnbin/$c" "./cmd/$c"
             echo "--- govulncheck -mode binary $c"
-            "$GV" -mode binary "/tmp/vulnbin/$c"
+            scripts/govulncheck.sh -mode binary "/tmp/vulnbin/$c"
           done
 
       # Software Bill of Materials (A.8.25 / A.8.29 supply chain). syft scans the

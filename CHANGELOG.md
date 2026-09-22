@@ -12,6 +12,14 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ### Security
 
+- **gRPC bumped to v1.83.2** (GO-2026-6443: a server panic when a request is
+  missing its `:authority`/`Host` header).
+- **govulncheck in CI now supports a reviewed allowlist** (`scripts/govulncheck.sh`).
+  Each entry is pinned to one exact module version. The first entry is
+  GO-2026-6452 on excelize v2.11.0: that release already contains the upstream
+  fix for the negative shared-string index panic, but the vuln DB records no
+  fixed version.
+
 - **An org admin can no longer mint an API key for someone else's identity.**
   `POST /api/v1/admin/api-keys` accepted any `subject` and any role but
   `platform:admin`, and every self-signup user is admin of their own org — so
