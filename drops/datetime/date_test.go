@@ -80,6 +80,19 @@ func TestDate_Timezone(t *testing.T) {
 	}
 }
 
+// A zoneless timestamp is read in the step's timezone, so it comes back as
+// written rather than shifted by the zone's UTC offset.
+func TestDate_ZonelessInputReadInTimezone(t *testing.T) {
+	res := runDate(t, "2026-06-16 09:00", map[string]any{"tz": "Europe/Stockholm", "format": "datetime"})
+	if got := outOf(t, res); got != "2026-06-16 09:00:00" {
+		t.Errorf("datetime = %q, want 2026-06-16 09:00:00", got)
+	}
+	res = runDate(t, "2026-06-16T09:00:00Z", map[string]any{"tz": "Europe/Stockholm", "format": "datetime"})
+	if got := outOf(t, res); got != "2026-06-16 11:00:00" {
+		t.Errorf("zoned input = %q, want 2026-06-16 11:00:00", got)
+	}
+}
+
 func TestDate_CustomLayout(t *testing.T) {
 	res := runDate(t, "2026-07-02T00:00:00Z", map[string]any{
 		"format": "custom", "custom_format": "ddd D MMM YYYY",

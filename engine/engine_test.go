@@ -287,7 +287,10 @@ func TestCloneNodeIO_DeepCopiesNestedParams(t *testing.T) {
 	}
 	env := map[string]string{"E": "1"}
 
-	gotParams, gotEnv := cloneNodeIO(params, env)
+	gotParams, gotEnv, err := cloneNodeIO(params, env)
+	if err != nil {
+		t.Fatalf("cloneNodeIO: %v", err)
+	}
 
 	gotParams["nested"].(map[string]any)["secret"] = "resolved-cleartext"
 	if orig := params["nested"].(map[string]any)["secret"]; orig != "${secret.token}" {

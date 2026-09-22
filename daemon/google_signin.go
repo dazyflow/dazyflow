@@ -9,6 +9,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -363,15 +364,31 @@ func (h *authAPI) googleSignInCallback(rw http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
+	if isNew && h.Blocklist != nil {
+		if blocked, _, err := h.Blocklist.IsBlocked(r.Context(), email); err == nil && blocked {
+			h.signInError(rw, r, st, "blocked", http.StatusForbidden, "this email address can't be used to sign up")
+			return
+		}
+	}
 	activeTenant, activeWorkspace, activeRoles, reason, status, msg := h.resolveActiveOrg(r, cfg, user, isNew, email, st)
 	if reason != "" {
 		h.signInError(rw, r, st, reason, status, msg)
+		return
+	}
+	if isNew && !h.persistNewSignInUser(rw, r, user) {
 		return
 	}
 	sessUser := user
 	sessUser.Tenant = activeTenant
 	sessUser.Workspace = activeWorkspace
 	sessUser.Roles = activeRoles
+	// Google just proved control of the address, so this session counts as
+	// verified for elevation — without persisting it onto an existing record
+	// whose password someone else may hold.
+	if !sessUser.EmailVerified() {
+		now := time.Now().UTC()
+		sessUser.VerifiedAt = &now
+	}
 	if _, locked := h.signInLockout(r.Context(), sessUser); locked {
 		h.signInError(rw, r, st, "suspended", http.StatusForbidden, "your account or organization has been suspended")
 		return
@@ -489,26 +506,46 @@ func validateGoogleClaims(vc verifiedGoogleClaims, cfg auth.OrgAuthConfig) (reas
 	return "", 0, ""
 }
 
+// A first-time user is NOT persisted here: they get their own personal tenant
+// (as with password signup) and join st.Tenant only through resolveActiveOrg's
+// invite/domain + seat path, so the account is created by persistNewSignInUser
+// once that admission succeeds.
 func (h *authAPI) resolveSignInUser(rw http.ResponseWriter, r *http.Request, email string, st googleSignInState) (user auth.User, isNew, ok bool) {
 	user, err := h.Users.GetByEmail(r.Context(), email)
-	isNew = err != nil
-	if !isNew {
+	if err == nil {
 		return user, false, true
 	}
+	if !errors.Is(err, auth.ErrUnknownUser) {
+		writeJSONError(rw, http.StatusServiceUnavailable, "could not look up your account right now — please try again")
+		return auth.User{}, false, false
+	}
+	tenant, err := h.mintFreshTenantID(r.Context(), mintTenantID)
+	if err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("mint tenant: %v", err))
+		return auth.User{}, false, false
+	}
+	now := time.Now().UTC()
 	user = auth.User{
 		Email:     email,
 		Subject:   email,
-		Tenant:    st.Tenant,
+		Tenant:    tenant,
 		Workspace: "main",
 		Roles:     defaultSignupRoles(),
-		CreatedAt: time.Now().UTC(),
+		CreatedAt: now,
+		// Google verified the address (validateGoogleClaims), and a Google-only
+		// account has no password another party could know.
+		VerifiedAt: &now,
 	}
+	return user, true, true
+}
+
+func (h *authAPI) persistNewSignInUser(rw http.ResponseWriter, r *http.Request, user auth.User) bool {
 	if err := h.Users.PutUser(r.Context(), user); err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("create user: %v", err))
-		return auth.User{}, false, false
+		return false
 	}
 	if h.Profiles != nil {
-		if name := auth.DefaultOrgDisplayName(email); name != "" {
+		if name := auth.DefaultOrgDisplayName(user.Email); name != "" {
 			_ = h.Profiles.PutOrgProfile(r.Context(), auth.OrgProfile{
 				Tenant:      user.Tenant,
 				DisplayName: name,
@@ -516,11 +553,20 @@ func (h *authAPI) resolveSignInUser(rw http.ResponseWriter, r *http.Request, ema
 			})
 		}
 	}
-	return user, true, true
+	return true
 }
 
 func (h *authAPI) resolveActiveOrg(r *http.Request, cfg auth.OrgAuthConfig, user auth.User, isNew bool, email string, st googleSignInState) (tenant, workspace string, roles []core.Role, reason string, status int, msg string) {
-	if isNew || user.Tenant == st.Tenant || h.Memberships == nil {
+	// A new user's home is their fresh personal tenant, never st.Tenant, so they
+	// always fall through to the membership path below.
+	if !isNew && user.Tenant == st.Tenant {
+		return user.Tenant, user.Workspace, user.Roles, "", 0, ""
+	}
+	if h.Memberships == nil {
+		if isNew {
+			return "", "", nil, "not_invited", http.StatusForbidden,
+				"your account isn't a member of this organization — ask an admin to invite you"
+		}
 		return user.Tenant, user.Workspace, user.Roles, "", 0, ""
 	}
 	if m, err := h.Memberships.GetMembership(r.Context(), email, st.Tenant); err == nil {

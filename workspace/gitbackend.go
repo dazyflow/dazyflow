@@ -613,6 +613,32 @@ func (s *gitBackend) resolveHash(ref string) (plumbing.Hash, error) {
 	return plumbing.ZeroHash, fmt.Errorf("could not resolve %q", ref)
 }
 
+// flowRevisionAt names the newest commit at or before commit that touched
+// graphID's file — the flow's own revision current at that commit — or "" when
+// there is none.
+func (s *gitBackend) flowRevisionAt(graphID, commit string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	hash, err := s.resolveHash(commit)
+	if err != nil {
+		return "", err
+	}
+	rel := graphPath(graphID)
+	iter, err := s.repo.Log(&git.LogOptions{From: hash, FileName: &rel, Order: git.LogOrderCommitterTime})
+	if err != nil {
+		return "", fmt.Errorf("log %s: %w", rel, err)
+	}
+	defer iter.Close()
+	c, err := iter.Next()
+	if errors.Is(err, io.EOF) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("walk history: %w", err)
+	}
+	return c.Hash.String(), nil
+}
+
 func graphPath(id string) string        { return "graphs/" + id + ".json" }
 func envTag(graphID, env string) string { return "graphs/" + graphID + "/" + env }
 

@@ -134,7 +134,7 @@ func executeWebhookSend(ctx context.Context, job core.Job, _ chan<- core.Progres
 		return params.Err(job, "cancelled", lerr.Error()), lerr
 	}
 	defer release()
-	resp, err := buildClient(timeout, reqAllowPrivate && PrivateEgressAllowed()).Do(req)
+	resp, err := SafeHTTPClient(timeout, reqAllowPrivate && PrivateEgressAllowed()).Do(req)
 	if err != nil {
 		return params.Err(job, "webhook_http_error", err.Error()), nil
 	}

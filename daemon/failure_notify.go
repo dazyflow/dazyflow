@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -110,7 +111,8 @@ func notifiableOutcome(rec core.JobRecord) bool {
 		return true
 	case core.JobStatusCancelled:
 		return rec.Result != nil && rec.Result.Error != nil &&
-			rec.Result.Error.Code != CancelCodeByPerson
+			rec.Result.Error.Code != CancelCodeByPerson &&
+			rec.Result.Error.Code != CancelCodeParent
 	default:
 		return false
 	}
@@ -118,14 +120,21 @@ func notifiableOutcome(rec core.JobRecord) bool {
 
 var FailureEmailWindow = time.Hour
 
-// Throttled per (flow, error) so a flow failing every minute sends one mail, not
-// sixty. A MANUAL run is never mailed about: someone is watching it.
-func (s *Service) failureEmailThrottled(ctx context.Context, graph core.Graph, runID string) (bool, int) {
-	if FailureEmailWindow <= 0 || s.Jobs == nil {
-		return false, 0
+// Throttled per flow so a flow failing every minute sends one mail per window,
+// not sixty. Manual runs are mailed about like any other (see
+// failure_notify_manual_test.go): the throttle is what keeps someone iterating
+// on a broken flow from getting one mail per attempt.
+//
+// The throttle counts mails SENT, from failureMailLedger, not other failed runs:
+// counting failures made two near-simultaneous failures each see the other and
+// both stay silent. The ledger is per process — the sweep's claim still keeps
+// each run to one notification fleet-wide, but replicas throttle independently,
+// so a fleet can send one mail per window per replica.
+func (s *Service) priorWindowFailures(ctx context.Context, graph core.Graph, runID string, window time.Time) int {
+	if s.Jobs == nil {
+		return 0
 	}
 	const scan = 200
-	window := time.Now().Truncate(FailureEmailWindow)
 	runs, err := core.ListRunSummaries(ctx, s.Jobs, core.ListGraphRunsOpts{
 		Tenant:    graph.Tenant,
 		Workspace: graph.Workspace,
@@ -133,23 +142,101 @@ func (s *Service) failureEmailThrottled(ctx context.Context, graph core.Graph, r
 		Status:    core.JobStatusFailed,
 		// EnqueuedAt is the only time the store filters on.
 		Since: window.Add(-FailureEmailWindow),
+		Until: window,
 		Limit: scan,
 	})
 	if err != nil {
-		return false, 0
+		return 0
 	}
-	thisWindow, previousWindow := 0, 0
+	n := 0
 	for _, r := range runs {
-		if r.ID == runID {
-			continue
-		}
-		if r.EnqueuedAt.Before(window) {
-			previousWindow++
-		} else {
-			thisWindow++
+		if r.ID != runID {
+			n++
 		}
 	}
-	return thisWindow > 0, previousWindow
+	return n
+}
+
+// failureMailLedger remembers which run holds each flow's mail for the current
+// window, and which channels each run has already been delivered on, so a retry
+// after a partial failure redoes only what failed rather than mailing twice.
+type failureMailLedger struct {
+	mu     sync.Mutex
+	holder map[string]failureMailHolder // flow key → the run mailed this window
+	sent   map[string]failureMailSent   // run ID → channels delivered
+}
+
+type failureMailHolder struct {
+	window time.Time
+	runID  string
+}
+
+type failureMailSent struct {
+	at       time.Time
+	channels map[string]bool
+}
+
+// admit reports whether runID may mail for the flow in this window, and takes
+// the window for it when it is free.
+func (l *failureMailLedger) admit(flow, runID string, window time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.holder == nil {
+		l.holder = map[string]failureMailHolder{}
+	}
+	if h, ok := l.holder[flow]; ok && h.window.Equal(window) && h.runID != runID {
+		return false
+	}
+	l.holder[flow] = failureMailHolder{window: window, runID: runID}
+	for k, h := range l.holder {
+		if h.window.Before(window) {
+			delete(l.holder, k)
+		}
+	}
+	return true
+}
+
+// release gives the window back when runID mailed nobody, so the next failure
+// is not throttled behind a mail that never went out.
+func (l *failureMailLedger) release(flow, runID string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if h, ok := l.holder[flow]; ok && h.runID == runID {
+		for ch := range l.sent[runID].channels {
+			if strings.HasPrefix(ch, "email:") {
+				return
+			}
+		}
+		delete(l.holder, flow)
+	}
+}
+
+func (l *failureMailLedger) delivered(runID, channel string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.sent[runID].channels[channel]
+}
+
+func (l *failureMailLedger) markDelivered(runID, channel string) {
+	now := time.Now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.sent == nil {
+		l.sent = map[string]failureMailSent{}
+	}
+	// A run is retried only inside the sweep's lookback, so older entries are dead.
+	keep := NotifySweepLookback + FailureEmailWindow + time.Hour
+	for id, e := range l.sent {
+		if now.Sub(e.at) > keep {
+			delete(l.sent, id)
+		}
+	}
+	e, ok := l.sent[runID]
+	if !ok {
+		e = failureMailSent{at: now, channels: map[string]bool{}}
+		l.sent[runID] = e
+	}
+	e.channels[channel] = true
 }
 
 func (s *Service) fireFailureNotification(
@@ -157,28 +244,53 @@ func (s *Service) fireFailureNotification(
 	graph core.Graph,
 	payload FailurePayload,
 ) error {
-	throttled, priorFailures := s.failureEmailThrottled(ctx, graph, payload.RunID)
-	if throttled && s.Logger != nil {
+	ledger := &s.failureMail
+	flow := graph.Tenant + "/" + graph.Workspace + "/" + graph.ID
+	admitted, priorFailures := true, 0
+	if FailureEmailWindow > 0 {
+		window := time.Now().Truncate(FailureEmailWindow)
+		admitted = ledger.admit(flow, payload.RunID, window)
+		if admitted {
+			priorFailures = s.priorWindowFailures(ctx, graph, payload.RunID, window)
+		}
+	}
+	if !admitted && s.Logger != nil {
 		s.Logger.Printf("failure email for %s/%s/%s throttled: already mailed this %s window",
 			graph.Tenant, graph.Workspace, graph.ID, FailureEmailWindow)
 	}
-	if !throttled {
+	if admitted {
 		perFlowEmail := ""
 		if graph.FailureNotify != nil {
 			perFlowEmail = graph.FailureNotify.Email
 		}
+		mail := func(to string) error {
+			ch := "email:" + strings.ToLower(to)
+			if ledger.delivered(payload.RunID, ch) {
+				return nil
+			}
+			if err := s.fireFailureEmail(ctx, graph, payload, to, priorFailures); err != nil {
+				ledger.release(flow, payload.RunID)
+				return err
+			}
+			ledger.markDelivered(payload.RunID, ch)
+			return nil
+		}
 		if perFlowEmail != "" {
-			if err := s.fireFailureEmail(ctx, graph, payload, perFlowEmail, priorFailures); err != nil {
+			if err := mail(perFlowEmail); err != nil {
 				return err
 			}
 		}
 		if to := s.ownerFailureEmail(ctx, graph); to != "" && !strings.EqualFold(to, perFlowEmail) {
-			if err := s.fireFailureEmail(ctx, graph, payload, to, priorFailures); err != nil {
+			if err := mail(to); err != nil {
 				return err
 			}
 		}
 	}
 	if graph.FailureNotify == nil || graph.FailureNotify.Webhook == "" {
+		return nil
+	}
+	webhookChannel := "webhook:" + graph.FailureNotify.Webhook
+	if ledger.delivered(payload.RunID, webhookChannel) {
 		return nil
 	}
 	url := graph.FailureNotify.Webhook
@@ -217,6 +329,7 @@ func (s *Service) fireFailureNotification(
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		s.logFailureNotifyError(graph, fmt.Errorf("non-2xx status %d", resp.StatusCode))
 	}
+	ledger.markDelivered(payload.RunID, webhookChannel)
 	return nil
 }
 

@@ -4,6 +4,7 @@
 package core
 
 import (
+	"container/heap"
 	"errors"
 	"sort"
 )
@@ -14,24 +15,40 @@ func TopologicalOrder(g Graph) ([]string, error) {
 	indeg, succ := buildAdjacency(g)
 	order := make([]string, 0, len(g.Nodes))
 
-	ready := readyNodes(indeg)
-	for len(ready) > 0 {
-		sort.Strings(ready)
-		next := ready[0]
-		ready = ready[1:]
+	// A min-heap keeps the lexicographic tie-break without re-sorting the ready
+	// set every step.
+	ready := stringHeap(readyNodes(indeg))
+	heap.Init(&ready)
+	for ready.Len() > 0 {
+		next := heap.Pop(&ready).(string)
 		order = append(order, next)
 		for _, s := range succ[next] {
 			indeg[s]--
 			if indeg[s] == 0 {
-				ready = append(ready, s)
+				heap.Push(&ready, s)
 			}
 		}
 	}
 
-	if len(order) != len(g.Nodes) {
+	// Against the UNIQUE ids: a duplicate node ID is its own validation error and
+	// must not also surface as a phantom cycle.
+	if len(order) != len(indeg) {
 		return nil, ErrCycle
 	}
 	return order, nil
+}
+
+type stringHeap []string
+
+func (h stringHeap) Len() int           { return len(h) }
+func (h stringHeap) Less(i, j int) bool { return h[i] < h[j] }
+func (h stringHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *stringHeap) Push(x any)        { *h = append(*h, x.(string)) }
+func (h *stringHeap) Pop() any {
+	old := *h
+	x := old[len(old)-1]
+	*h = old[:len(old)-1]
+	return x
 }
 
 func ExecutionLayers(g Graph) ([][]string, error) {
@@ -57,7 +74,7 @@ func ExecutionLayers(g Graph) ([][]string, error) {
 		current = next
 	}
 
-	if processed != len(g.Nodes) {
+	if processed != len(indeg) {
 		return nil, ErrCycle
 	}
 	return layers, nil

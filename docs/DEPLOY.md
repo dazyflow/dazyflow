@@ -2,7 +2,7 @@
 
 Every knob below is a `DAZYFLOW_*` environment variable. `dzd` itself
 only has two flags, both one-shot operator commands that exit after
-running (`--rotate-master-key`, `--import-users-from-json`). For the
+running (`--rotate-master-key-file`, `--import-users-from-json`). For the
 canonical list see `.env.example`.
 
 ## TLS / reverse-proxy contract

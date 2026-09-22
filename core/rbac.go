@@ -50,9 +50,11 @@ func TeamRoleViewer() Role {
 	return Role{Name: "viewer", Permissions: []Permission{PermGraphRun}}
 }
 
+// Deliberately NOT graph:admin: that bypasses per-flow privacy (IsFlowAdminPrincipal)
+// and gates publishing, and editor is the default invite/signup role.
 func TeamRoleEditor() Role {
 	return Role{Name: "editor", Permissions: []Permission{
-		PermGraphRun, PermGraphEdit, PermGraphAdmin,
+		PermGraphRun, PermGraphEdit,
 		PermSecretRead, PermSecretWrite,
 	}}
 }
@@ -61,8 +63,58 @@ func TeamRoleEditor() Role {
 // never part of this catalog.
 func TeamRoleAdmin() Role {
 	return Role{Name: "admin", Permissions: append(
-		TeamRoleEditor().Permissions, PermOrganizationAdmin,
+		TeamRoleEditor().Permissions, PermGraphAdmin, PermOrganizationAdmin,
 	)}
+}
+
+// legacyEditorPermissions is what TeamRoleEditor granted before graph:admin was
+// removed from it. Roles are persisted as permission lists, so existing
+// sessions, keys, users and memberships still carry it.
+var legacyEditorPermissions = []Permission{
+	PermGraphRun, PermGraphEdit, PermGraphAdmin,
+	PermSecretRead, PermSecretWrite,
+}
+
+// UpgradeLegacyRoles replaces a stored "editor" role carrying exactly the old
+// catalog permission set with the current catalog editor, so a persisted role
+// cannot keep graph:admin. Custom roles (any other permission set) are kept
+// verbatim, and so is everything for an org admin, who is entitled to
+// graph:admin anyway (a legacy signup owner held it only via editor). Returns
+// roles itself when nothing changes.
+func UpgradeLegacyRoles(roles []Role) []Role {
+	for _, r := range roles {
+		if r.Has(PermOrganizationAdmin) {
+			return roles
+		}
+	}
+	var out []Role
+	for i, r := range roles {
+		if r.Name != "editor" || !samePermissionSet(r.Permissions, legacyEditorPermissions) {
+			continue
+		}
+		if out == nil {
+			out = slices.Clone(roles)
+		}
+		out[i] = TeamRoleEditor()
+	}
+	if out == nil {
+		return roles
+	}
+	return out
+}
+
+func samePermissionSet(a, b []Permission) bool {
+	for _, p := range a {
+		if !slices.Contains(b, p) {
+			return false
+		}
+	}
+	for _, p := range b {
+		if !slices.Contains(a, p) {
+			return false
+		}
+	}
+	return true
 }
 
 func TeamRoleByName(name string) (Role, bool) {

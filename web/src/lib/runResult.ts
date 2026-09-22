@@ -157,6 +157,23 @@ export function resultFilename(view: ResultView, flow: string): string {
 // which is the same node in a linear flow and the only option when the graph
 // can't be loaded.
 //
+// orderNodesOldestFirst turns the run's node list into a timeline. The node view
+// carries no enqueue time, only started/finished, and the store returns steps
+// newest-enqueued first — so the list is reversed (exact enqueue order) and then
+// stably sorted by when each step started, with steps that never started after
+// the rest in that same enqueue order.
+export function orderNodesOldestFirst(nodes: JobRecord[]): JobRecord[] {
+  const at = (n: JobRecord): number => {
+    const t = Date.parse(n.StartedAt ?? n.FinishedAt ?? n.EnqueuedAt ?? "");
+    return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
+  };
+  return [...nodes].reverse().sort((a, b) => {
+    const ta = at(a);
+    const tb = at(b);
+    return ta === tb ? 0 : ta < tb ? -1 : 1;
+  });
+}
+
 // The exception is why this is a function rather than an expression: a flow
 // whose end step emitted a FILE has no inline value there, and the fallback then
 // reaches backwards and presents an upstream step's value as "the result" — on a

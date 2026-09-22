@@ -146,6 +146,9 @@ func guardRepoURL(ctx context.Context, rawURL string) error {
 	// scp-like syntax carries no scheme, so it must be normalised before parsing.
 	if !strings.Contains(raw, "://") {
 		if host, ok := scpLikeHost(raw); ok {
+			if err := hfnet.EgressAllowedFor(ctx, "ssh://"+host); err != nil {
+				return err
+			}
 			return hfnet.CheckDialHost(host)
 		}
 		return fmt.Errorf("repo URL scheme not allowed (use https:// or ssh://)")
@@ -161,6 +164,11 @@ func guardRepoURL(ctx context.Context, rawURL string) error {
 		}
 		return hfnet.CheckDialHost(u.Host)
 	case "ssh":
+		// The dial itself is guarded too (sshDialGuard); this is the early,
+		// readable refusal.
+		if err := hfnet.EgressAllowedFor(ctx, raw); err != nil {
+			return err
+		}
 		return hfnet.CheckDialHost(u.Host)
 	default:
 		return fmt.Errorf("repo URL scheme %q not allowed (use https:// or ssh://)", u.Scheme)
@@ -206,12 +214,22 @@ func openOrClone(ctx context.Context, dst, url, ref string, depth int, progress 
 		if openErr != nil {
 			return nil, "not_a_repo", fmt.Errorf("open %q: %w", dst, openErr)
 		}
+		// Fetch from the url param — the one guardRepoURL checked — never from
+		// whatever origin the existing checkout records: the param may have
+		// changed since the first clone, and the checkout's config is workspace
+		// data a step could have rewritten.
+		if err := pointOriginAt(repo, url); err != nil {
+			return nil, "update_failed", err
+		}
 		emitLogProgress(progress, job, "git", "fetch "+url)
 		fetchErr := repo.FetchContext(ctx, &gogit.FetchOptions{
-			Depth:    depth,
-			Tags:     gogit.AllTags, // so a tag ref still resolves on re-runs
-			Progress: logSink,
-			Auth:     auth,
+			RemoteName:   "origin",
+			RemoteURL:    url,
+			Depth:        depth,
+			Tags:         gogit.AllTags, // so a tag ref still resolves on re-runs
+			Progress:     logSink,
+			Auth:         auth,
+			ProxyOptions: sshDialGuard(url),
 		})
 		if fetchErr != nil && fetchErr != gogit.NoErrAlreadyUpToDate {
 			return nil, "fetch_failed", fetchErr
@@ -226,7 +244,7 @@ func openOrClone(ctx context.Context, dst, url, ref string, depth int, progress 
 		return repo, "pulled", nil
 	}
 
-	opts := &gogit.CloneOptions{URL: url, Depth: depth, Progress: logSink, Auth: auth}
+	opts := &gogit.CloneOptions{URL: url, Depth: depth, Progress: logSink, Auth: auth, ProxyOptions: sshDialGuard(url)}
 	shallow := depth > 0
 	sha := ref != "" && looksLikeSHA(ref)
 
@@ -272,7 +290,7 @@ func remoteRefName(ctx context.Context, url, ref string, auth gogittransport.Aut
 		Name: "origin",
 		URLs: []string{url},
 	})
-	refs, err := rem.ListContext(ctx, &gogit.ListOptions{Auth: auth})
+	refs, err := rem.ListContext(ctx, &gogit.ListOptions{Auth: auth, ProxyOptions: sshDialGuard(url)})
 	if err != nil {
 		return "", fmt.Errorf("list remote refs: %w", err)
 	}
@@ -325,6 +343,32 @@ func checkout(repo *gogit.Repository, ref string) error {
 		return fmt.Errorf("ref %q not found (no matching branch, tag, or commit)", ref)
 	}
 	return wt.Checkout(&gogit.CheckoutOptions{Hash: *hash, Force: true})
+}
+
+// pointOriginAt makes the checkout's origin remote the given url, creating it
+// when missing, so what is recorded matches what is fetched.
+func pointOriginAt(repo *gogit.Repository, url string) error {
+	cfg, err := repo.Config()
+	if err != nil {
+		return fmt.Errorf("read repo config: %w", err)
+	}
+	rc, ok := cfg.Remotes["origin"]
+	switch {
+	case ok && len(rc.URLs) == 1 && rc.URLs[0] == url:
+		return nil
+	case ok:
+		rc.URLs = []string{url} // keep its refspecs (a single-branch clone narrows them)
+	default:
+		cfg.Remotes["origin"] = &config.RemoteConfig{
+			Name:  "origin",
+			URLs:  []string{url},
+			Fetch: []config.RefSpec{config.RefSpec(fmt.Sprintf(config.DefaultFetchRefSpec, "origin"))},
+		}
+	}
+	if err := repo.SetConfig(cfg); err != nil {
+		return fmt.Errorf("point origin at %q: %w", url, err)
+	}
+	return nil
 }
 
 func updateCurrentBranch(repo *gogit.Repository) error {

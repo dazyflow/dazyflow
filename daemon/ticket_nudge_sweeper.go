@@ -71,18 +71,43 @@ func (s *TicketNudgeSweeper) Sweep(ctx context.Context) (int, error) {
 		// failing recipient would be retried on every tick forever. Erring
 		// toward one lost reminder beats erring toward an unbounded loop.
 		waiting := now.Sub(lastHumanMessageAt(msgs))
+		if err := s.stampNudge(ctx, t.ID, side, now); err != nil {
+			continue // could not record it — do not send, or it repeats
+		}
 		if side == NudgeUser {
 			t.UserNudgedAt = now
 		} else {
 			t.SupportNudgedAt = now
 		}
-		if err := s.Tickets.Update(ctx, t); err != nil {
-			continue // could not record it — do not send, or it repeats
-		}
 		s.Notify(t, side, waiting)
 		sent++
 	}
 	return sent, nil
+}
+
+type ticketNudgeStamper interface {
+	StampNudge(ctx context.Context, ticketID string, userSide bool, at time.Time) error
+}
+
+// stampNudge writes only the nudge time. t is a snapshot from the start of the
+// sweep, and writing it back whole would revert anything changed on the ticket
+// since — a status change, an assignment, a read receipt.
+func (s *TicketNudgeSweeper) stampNudge(ctx context.Context, ticketID string, side NudgeSide, at time.Time) error {
+	if st, ok := s.Tickets.(ticketNudgeStamper); ok {
+		return st.StampNudge(ctx, ticketID, side == NudgeUser, at)
+	}
+	// No targeted write: re-read so the window for clobbering is one round trip,
+	// not the whole sweep.
+	fresh, err := s.Tickets.Get(ctx, ticketID)
+	if err != nil {
+		return err
+	}
+	if side == NudgeUser {
+		fresh.UserNudgedAt = at
+	} else {
+		fresh.SupportNudgedAt = at
+	}
+	return s.Tickets.Update(ctx, fresh)
 }
 
 func lastHumanMessageAt(msgs []core.TicketMessage) time.Time {

@@ -27,6 +27,7 @@ import type { FileEntry } from "../types";
 import { ErrorNotice } from "../components/ui/ErrorNotice";
 import { ICON } from "../icons";
 import { formatBytes } from "../lib/format";
+import { downloadBlob } from "../lib/download";
 import { Loading } from "../components/ui/Loading";
 import { Notice } from "../components/ui/Notice";
 
@@ -79,22 +80,39 @@ export function Files() {
 
   const ready = !!token && !!activeTenant && !!activeWorkspace;
 
+  // A folder path means nothing in another workspace: start over at its root.
+  useEffect(() => {
+    setCwd("");
+  }, [activeTenant, activeWorkspace]);
+
+  // Only the newest listing may land: opening folder A then B quickly would
+  // otherwise let A's slower answer fill B's view.
+  const listSeq = useRef(0);
   const refresh = useCallback(() => {
     // Files is editor-gated; viewers can't read it, so skip the (403-bound)
     // fetch entirely — the page renders a no-access notice instead.
     if (!ready || !canWrite) return;
+    const seq = ++listSeq.current;
     setError(null);
     setEntries(null);
     api
       .listWorkspaceFiles(token!, activeTenant, activeWorkspace, cwd)
-      .then((r) => setEntries(r.entries ?? []))
-      .catch((e) =>
-        setError(explainApiError(e, t)),
-      );
+      .then((r) => {
+        if (seq === listSeq.current) setEntries(r.entries ?? []);
+      })
+      .catch((e) => {
+        if (seq === listSeq.current) setError(explainApiError(e, t));
+      });
     api
       .workspaceFileUsage(token!, activeTenant, activeWorkspace)
-      .then(setUsage)
-      .catch(() => setUsage(null));
+      .then((u) => {
+        if (seq === listSeq.current) setUsage(u);
+      })
+      .catch(() => {
+        if (seq === listSeq.current) setUsage(null);
+      });
+    // `t` is left out: a language switch must not refetch the listing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, canWrite, token, activeTenant, activeWorkspace, cwd]);
 
   useEffect(refresh, [refresh]);
@@ -120,14 +138,7 @@ export function Files() {
         activeWorkspace,
         entry.path,
       );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = entry.name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, entry.name);
     } catch (e) {
       setError(explainApiError(e, t));
     }

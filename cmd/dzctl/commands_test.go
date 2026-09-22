@@ -239,3 +239,39 @@ func TestDaemonConn(t *testing.T) {
 		t.Error("daemonConn with bad CA should error")
 	}
 }
+
+// The bearer token must not cross the network in the clear by default: a
+// non-loopback --server without TLS is refused unless explicitly allowed.
+func TestDaemonConn_PlaintextOnlyToLoopback(t *testing.T) {
+	t.Setenv("DZCTL_TLS_CA", "")
+	t.Setenv("DZCTL_INSECURE", "")
+	for _, target := range []string{"localhost:50050", "127.0.0.1:1", "[::1]:50050", "dns:///localhost:50050", "unix:///tmp/dzd.sock"} {
+		conn, err := daemonConnReal(target)
+		if err != nil {
+			t.Errorf("daemonConnReal(%q): %v, want loopback plaintext allowed", target, err)
+			continue
+		}
+		conn.Close()
+	}
+	for _, target := range []string{"dzd.example.com:50050", "10.0.0.5:50050", "dns:///dzd.internal:443"} {
+		if _, err := daemonConnReal(target); err == nil || !strings.Contains(err.Error(), "--insecure") {
+			t.Errorf("daemonConnReal(%q) = %v, want refusal naming --insecure", target, err)
+		}
+	}
+
+	t.Setenv("DZCTL_INSECURE", "1")
+	conn, err := daemonConnReal("dzd.example.com:50050")
+	if err != nil {
+		t.Fatalf("DZCTL_INSECURE=1 should allow plaintext: %v", err)
+	}
+	conn.Close()
+
+	t.Setenv("DZCTL_INSECURE", "")
+	insecureFlag = true
+	t.Cleanup(func() { insecureFlag = false })
+	conn, err = daemonConnReal("dzd.example.com:50050")
+	if err != nil {
+		t.Fatalf("--insecure should allow plaintext: %v", err)
+	}
+	conn.Close()
+}

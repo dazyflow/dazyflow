@@ -24,6 +24,10 @@ func itoa64(n int64) string { return strconv.FormatInt(n, 10) }
 // ok is false when the port carries anything else — including a fractional
 // number, which is a wiring mistake (minor-unit amounts are integers), not
 // something to silently truncate. Mirrors the Stripe connector's amount reader.
+// amountUnset is the fallback that tells "no amount given" apart from an
+// explicit 0.
+const amountUnset = math.MinInt
+
 func wholeNumberInputOr(job core.Job, port string, fallback int) (int, bool) {
 	in, present := job.Input[port]
 	if !present || in.Inline == nil {

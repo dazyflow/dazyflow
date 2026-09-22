@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Trash2, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth";
@@ -41,14 +41,19 @@ export function MembersSection({ tenant }: { tenant: string }) {
   const [inviteRole, setInviteRole] = useState("editor");
   const [inviteToken, setInviteToken] = useState<string | null>(null);
 
+  // Only the newest listing lands, so switching org mid-fetch can't show the
+  // previous org's members under this one.
+  const refreshSeq = useRef(0);
   const refresh = useCallback(async () => {
     if (!token) return;
+    const seq = ++refreshSeq.current;
     try {
       const r = await api.listMembers(token, tenant);
+      if (seq !== refreshSeq.current) return;
       setMembers(r.members ?? []);
       setError(null);
     } catch (e) {
-      setError(explainApiError(e, t));
+      if (seq === refreshSeq.current) setError(explainApiError(e, t));
     }
   }, [token, tenant, t]);
 

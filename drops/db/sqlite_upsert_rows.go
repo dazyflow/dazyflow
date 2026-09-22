@@ -140,7 +140,13 @@ func executeSQLiteUpsertRows(ctx context.Context, job core.Job, _ chan<- core.Pr
 	}
 	probe.Close()
 
-	absPath := filepath.Join(job.WorkspaceRoot, path)
+	absPath, err := sandboxedRealPath(job.WorkspaceRoot, path)
+	if err != nil {
+		if core.IsSandboxEscape(err) {
+			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
+		}
+		return params.Err(job, "io", fmt.Sprintf("open %q: %v", path, err)), nil
+	}
 	db, err := sql.Open("sqlite", absPath)
 	if err != nil {
 		return params.Err(job, "db", fmt.Sprintf("open sqlite %q: %v", path, err)), nil

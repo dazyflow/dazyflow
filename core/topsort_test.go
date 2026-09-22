@@ -157,3 +157,35 @@ func TestExecutionLayers_Cycle(t *testing.T) {
 		t.Fatalf("got %v, want ErrCycle", err)
 	}
 }
+
+func TestTopologicalOrder_DuplicateIDsNotACycle(t *testing.T) {
+	g := Graph{
+		Nodes: []Node{{ID: "a"}, {ID: "a"}, {ID: "b"}},
+		Edges: []Edge{{From: "a", To: "b"}},
+	}
+	if _, err := TopologicalOrder(g); errors.Is(err, ErrCycle) {
+		t.Errorf("duplicate IDs reported as a cycle")
+	}
+	if _, err := ExecutionLayers(g); errors.Is(err, ErrCycle) {
+		t.Errorf("duplicate IDs reported as a cycle (layers)")
+	}
+	err := Validate(Graph{Nodes: []Node{{ID: "a", Module: "m"}, {ID: "a", Module: "m"}, {ID: "", Module: "m"}}})
+	if err == nil || errors.Is(err, ErrCycle) {
+		t.Errorf("want duplicate error without cycle, got %v", err)
+	}
+}
+
+func TestTopologicalOrder_DeterministicTieBreak(t *testing.T) {
+	g := Graph{
+		Nodes: []Node{{ID: "e"}, {ID: "c"}, {ID: "a"}, {ID: "d"}, {ID: "b"}},
+		Edges: []Edge{{From: "a", To: "e"}, {From: "c", To: "b"}},
+	}
+	got, err := TopologicalOrder(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"a", "c", "b", "d", "e"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}

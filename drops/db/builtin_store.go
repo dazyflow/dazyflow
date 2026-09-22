@@ -166,7 +166,11 @@ func openBuiltinStore(job core.Job, create bool) (*sql.DB, *core.Result) {
 		probe.Close()
 	}
 
-	absPath := filepath.Join(job.WorkspaceRoot, builtinStorePath)
+	absPath, err := sandboxedRealPath(job.WorkspaceRoot, builtinStorePath)
+	if err != nil {
+		r := params.Err(job, "io", fmt.Sprintf("open store: %v", err))
+		return nil, &r
+	}
 	db, err := sql.Open("sqlite", absPath)
 	if err != nil {
 		r := params.Err(job, "db", fmt.Sprintf("open store: %v", err))
@@ -432,8 +436,13 @@ func executeBuiltinStoreQuery(ctx context.Context, job core.Job, _ chan<- core.P
 		}, nil
 	}
 	defer db.Close()
+	conn, err := lockedQueryConn(ctx, db)
+	if err != nil {
+		return params.Err(job, "db", fmt.Sprintf("open store: %v", err)), nil
+	}
+	defer conn.Close()
 
-	rows, err := db.QueryContext(ctx, sqlText, args...)
+	rows, err := conn.QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return params.Err(job, "db", fmt.Sprintf("query: %v", err)), nil
 	}

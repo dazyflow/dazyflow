@@ -179,8 +179,11 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 				w.cfg.ID, rec.ID, rec.GraphRunID, r, debug.Stack())
 			jerr := &core.JobError{Code: "panic", Message: "internal error processing this step"}
 			fail := &core.Result{Status: core.StatusError, Error: jerr}
-			if cerr := w.store.Complete(jobCtx, rec.ID, core.JobStatusFailed, fail); cerr != nil {
+			// Owned: if the lease lapsed and another worker reclaimed the record, this
+			// write must not clobber its attempt.
+			if cerr := w.completeNode(jobCtx, rec.ID, core.JobStatusFailed, fail); cerr != nil {
 				w.cfg.Logger.Printf("[%s] panic-complete node %s: %v", w.cfg.ID, rec.ID, cerr)
+				return
 			}
 			if g, gerr := w.fetchGraph(jobCtx, rec.GraphRunID); gerr == nil {
 				w.dispatcher.AdvanceAfterCompletion(jobCtx, g, rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
@@ -222,6 +225,23 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		return
 	}
 	graph := run.graph
+
+	// Claim does not look at the run, so a node enqueued while the run was being
+	// cancelled (or timed out) can still be handed out. Refuse to execute it.
+	if runStatus, ok := w.terminalRunStatus(jobCtx, rec.GraphRunID); ok {
+		if stopLease() {
+			w.cfg.Logger.Printf("[%s] %s: lease lost; abandoning (reclaimed elsewhere)", w.cfg.ID, rec.ID)
+			return
+		}
+		jerr := &core.JobError{Code: CancelCodeByPerson, Message: fmt.Sprintf("run is %s", runStatus)}
+		if cerr := w.completeNode(jobCtx, rec.ID, core.JobStatusCancelled, &core.Result{Status: core.StatusError, Error: jerr}); cerr != nil {
+			w.cfg.Logger.Printf("[%s] cancel %s (run %s): %v", w.cfg.ID, rec.ID, runStatus, cerr)
+			return
+		}
+		w.cfg.Logger.Printf("[%s] %s not run: run is %s", w.cfg.ID, rec.ID, runStatus)
+		w.dispatcher.PublishNodeStatus(rec.GraphRunID, rec.NodeID, core.JobStatusCancelled, jerr)
+		return
+	}
 
 	if skip := w.skipCode(jobCtx, graph, rec); skip != "" {
 		if stopLease() {
@@ -265,7 +285,7 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 
 	if runErr == nil {
 		if at, ok := core.ResumeAt(result); ok {
-			if rerr := w.store.Requeue(jobCtx, rec.ID, at); rerr != nil {
+			if rerr := w.requeueNode(jobCtx, rec.ID, at); rerr != nil {
 				w.cfg.Logger.Printf("[%s] defer %s: %v", w.cfg.ID, rec.ID, rerr)
 				return
 			}
@@ -290,14 +310,10 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 		if isApprovalPause(&result) {
 			setRunParked(jobCtx, w.store, w.cfg.Logger, rec.GraphRunID, true)
 		}
-		if graph, gerr := w.fetchGraph(jobCtx, rec.GraphRunID); gerr == nil {
-			if w.cfg.OnNodeAwaiting != nil {
-				w.cfg.OnNodeAwaiting(jobCtx, graph, rec.GraphRunID, rec.NodeID, result)
-			}
-			w.dispatcher.AdvanceAfterCompletion(jobCtx, graph, rec.GraphRunID, rec.NodeID, core.JobStatusAwaiting, nil)
-		} else {
-			w.cfg.Logger.Printf("[%s] park %s: could not load graph to notify dependents: %v", w.cfg.ID, rec.ID, gerr)
+		if w.cfg.OnNodeAwaiting != nil {
+			w.cfg.OnNodeAwaiting(jobCtx, graph, rec.GraphRunID, rec.NodeID, result)
 		}
+		w.dispatcher.AdvanceAfterCompletion(jobCtx, graph, rec.GraphRunID, rec.NodeID, core.JobStatusAwaiting, nil)
 		w.maybeSubmitChild(jobCtx, rec, result)
 		return
 	}
@@ -341,9 +357,12 @@ func (w *Worker) processNodeJob(ctx context.Context, rec core.JobRecord) {
 
 	if status == core.JobStatusFailed && !skipRetry {
 		if when, reason := w.maybeScheduleRetry(graph, rec, retryHint.After()); !when.IsZero() {
-			if err := w.store.Requeue(jobCtx, rec.ID, when); err == nil {
+			if err := w.requeueNode(jobCtx, rec.ID, when); err == nil {
 				meterExecution() // this attempt ran under our lease and is being retried
 				w.cfg.Logger.Printf("[%s] retrying %s (attempt %d → next at %v)", w.cfg.ID, rec.ID, rec.Attempt, when.Format(time.RFC3339Nano))
+				return
+			} else if errors.Is(err, core.ErrConflict) {
+				w.cfg.Logger.Printf("[%s] %s: requeue fenced (lease lost or already terminal); abandoning", w.cfg.ID, rec.ID)
 				return
 			} else {
 				w.cfg.Logger.Printf("[%s] requeue %s failed (%v); falling back to terminal", w.cfg.ID, rec.ID, err)
@@ -458,6 +477,41 @@ func (w *Worker) triggerDidNotFire(ctx context.Context, graph core.Graph, rec co
 		return delivered
 	}
 	return delivered || scheduled
+}
+
+// terminalRunStatus reports the run's status when the run is already terminal.
+// A read error is not treated as terminal: the node runs, and the run-status
+// guard in CompleteAndEnqueue still keeps a cancelled run from advancing.
+func (w *Worker) terminalRunStatus(ctx context.Context, graphRunID string) (core.JobStatus, bool) {
+	sum, err := core.GetRunSummary(ctx, w.store, graphRunID)
+	if err != nil || !core.IsTerminalStatus(sum.Status) {
+		return "", false
+	}
+	return sum.Status, true
+}
+
+// ownedRequeuer has core.OwnedRequeuer's method set; asserting the method rather
+// than naming the core type keeps the worker independent of where it lives.
+type ownedRequeuer interface {
+	RequeueOwned(ctx context.Context, jobID, worker string, availableAt time.Time) error
+}
+
+// requeueNode puts the node back on the queue only while this worker still owns
+// it: a worker whose lease lapsed must not reset a record another worker has
+// since reclaimed. A store with a fenced requeue does it in one write; otherwise
+// the Renew is the ownership check — it fails with ErrConflict once the record
+// is someone else's or no longer running.
+func (w *Worker) requeueNode(ctx context.Context, jobID string, at time.Time) error {
+	if oq, ok := w.store.(ownedRequeuer); ok {
+		return oq.RequeueOwned(ctx, jobID, w.cfg.ID, at)
+	}
+	if err := w.store.Renew(ctx, jobID, w.cfg.ID, w.cfg.LeaseDuration); err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return core.ErrConflict
+		}
+		return err
+	}
+	return w.store.Requeue(ctx, jobID, at)
 }
 
 func (w *Worker) completeNode(ctx context.Context, jobID string, status core.JobStatus, result *core.Result) error {
@@ -751,8 +805,11 @@ func (w *Worker) failNode(ctx context.Context, rec core.JobRecord, code, msg str
 	ctx = context.WithoutCancel(ctx)
 	jerr := &core.JobError{Code: code, Message: msg}
 	result := &core.Result{Status: core.StatusError, Error: jerr}
-	if cerr := w.store.Complete(ctx, rec.ID, core.JobStatusFailed, result); cerr != nil {
+	// Owned, and nothing further on failure: a worker that no longer holds the
+	// record must neither overwrite the new owner's attempt nor fail the run.
+	if cerr := w.completeNode(ctx, rec.ID, core.JobStatusFailed, result); cerr != nil {
 		w.cfg.Logger.Printf("[%s] complete-failure %s: %v", w.cfg.ID, rec.ID, cerr)
+		return
 	}
 	if graph != nil {
 		w.dispatcher.AdvanceAfterCompletion(ctx, *graph, rec.GraphRunID, rec.NodeID, core.JobStatusFailed, jerr)
@@ -768,17 +825,33 @@ func (w *Worker) failNode(ctx context.Context, rec core.JobRecord, code, msg str
 	}
 }
 
+// renewLease calls onLost when the lease is gone: the store says another worker
+// holds the record, or renewals have kept failing until the last good lease is
+// about to expire — past that point another worker may reclaim the record
+// whatever the store's error said.
 func (w *Worker) renewLease(ctx context.Context, jobID string, onLost func()) {
 	ticker := time.NewTicker(w.cfg.LeaseRenewEvery)
 	defer ticker.Stop()
+	leaseUntil := time.Now().Add(w.cfg.LeaseDuration)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			attempted := time.Now()
 			err := w.store.Renew(ctx, jobID, w.cfg.ID, w.cfg.LeaseDuration)
 			if err == nil {
+				leaseUntil = attempted.Add(w.cfg.LeaseDuration)
 				continue
+			}
+			if ctx.Err() != nil {
+				return
+			}
+			// The next tick would land at or after expiry, so stop writing now.
+			if !time.Now().Add(w.cfg.LeaseRenewEvery).Before(leaseUntil) {
+				w.cfg.Logger.Printf("[%s] renew %s failed until lease expiry (%v); fencing execution", w.cfg.ID, jobID, err)
+				onLost()
+				return
 			}
 			if errors.Is(err, core.ErrConflict) || errors.Is(err, core.ErrNotFound) {
 				w.cfg.Logger.Printf("[%s] lost lease on %s (reclaimed elsewhere); fencing execution", w.cfg.ID, jobID)

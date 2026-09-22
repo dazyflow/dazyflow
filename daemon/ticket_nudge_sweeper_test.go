@@ -102,6 +102,41 @@ func TestNudgeSweep_RecordsTheReminderOnTheTicket(t *testing.T) {
 	}
 }
 
+// racingTicketStore changes the ticket while the sweep reads its thread — an
+// agent assigning it between the queue read and the nudge stamp.
+type racingTicketStore struct {
+	*support.MemTicketStore
+}
+
+func (r racingTicketStore) ListMessages(ctx context.Context, id string) ([]core.TicketMessage, error) {
+	if tk, err := r.Get(ctx, id); err == nil {
+		tk.AssignedTo = "bob"
+		_ = r.Update(ctx, tk)
+	}
+	return r.MemTicketStore.ListMessages(ctx, id)
+}
+
+// The stamp must touch only the nudge time: writing back the sweep's snapshot
+// of the ticket reverted whatever changed on it mid-sweep.
+func TestNudgeSweep_StampDoesNotRevertConcurrentChanges(t *testing.T) {
+	t.Parallel()
+	s, sent, store := nudgeFixture(t, fromUser(30))
+	s.Tickets = racingTicketStore{store.(*support.MemTicketStore)}
+	if _, err := s.Sweep(context.Background()); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if len(*sent) != 1 {
+		t.Fatalf("sent %d, want 1", len(*sent))
+	}
+	got, _ := store.Get(context.Background(), "tk1")
+	if got.AssignedTo != "bob" {
+		t.Errorf("assignment made mid-sweep was reverted (assigned to %q)", got.AssignedTo)
+	}
+	if got.SupportNudgedAt.IsZero() {
+		t.Error("the nudge was not recorded")
+	}
+}
+
 func TestNudgeSweep_DoesNothingWhenNotTheLeader(t *testing.T) {
 	t.Parallel()
 	s, sent, _ := nudgeFixture(t, fromUser(30))

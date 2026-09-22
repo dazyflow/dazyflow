@@ -289,3 +289,21 @@ func TestNewSupportBundleRecord(t *testing.T) {
 }
 
 func timeFixture() time.Time { return time.Unix(1_700_000_000, 0).UTC() }
+
+func TestRedactValue_MixedTemplateNotKeptVerbatim(t *testing.T) {
+	pure := "${secrets.api_key}"
+	if got := redactValue("header", pure, RedactStructureOnly); got != pure {
+		t.Errorf("pure template should be kept: %v", got)
+	}
+	twoRefs := "${secrets.a} ${env.b}"
+	if got := redactValue("x", twoRefs, RedactStructureOnly); got != twoRefs {
+		t.Errorf("template-only string should be kept: %v", got)
+	}
+	mixed := "Bearer hunter2-literal ${secrets.x}"
+	if got := redactValue("header", mixed, RedactStructureOnly); got == mixed {
+		t.Error("literal text next to a template must not be kept in structure-only mode")
+	}
+	if got := redactValue("api_key", mixed, RedactStructurePlusValues); got == mixed {
+		t.Error("mixed template under a secret key must be redacted")
+	}
+}

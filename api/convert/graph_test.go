@@ -4,6 +4,7 @@
 package convert
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -50,6 +51,76 @@ func TestGraphPBRoundTrip(t *testing.T) {
 	// This previously failed on the daemon's copy, which dropped it.
 	if got.Triggers[1].IntervalSeconds != 300 {
 		t.Errorf("poll IntervalSeconds = %d after round-trip, want 300", got.Triggers[1].IntervalSeconds)
+	}
+}
+
+// Every field of core.Graph (and the Node/Edge/Trigger/Frame structs it holds)
+// is filled with a non-zero value by reflection, so a field added to core
+// without being carried over the wire fails here instead of being silently
+// dropped on a dzctl load→save or an inline RunGraph (as Visibility, Disabled,
+// TimeoutSeconds, trigger TZ, ... once were).
+func TestGraphPBRoundTrip_AllFields(t *testing.T) {
+	var orig core.Graph
+	n := 0
+	fillNonZero(t, reflect.ValueOf(&orig).Elem(), "Graph", &n)
+	// Visibility and on_error are validated enums, not free strings.
+	orig.Visibility = core.VisibilityPrivate
+	for i := range orig.Edges {
+		orig.Edges[i].OnError = core.OnErrorSkip
+	}
+
+	pb, err := GraphToPB(orig)
+	if err != nil {
+		t.Fatalf("GraphToPB: %v", err)
+	}
+	got, err := GraphFromPB(pb)
+	if err != nil {
+		t.Fatalf("GraphFromPB: %v", err)
+	}
+	if !reflect.DeepEqual(orig, got) {
+		t.Errorf("round-trip dropped fields:\n orig: %+v\n got:  %+v", orig, got)
+	}
+}
+
+func fillNonZero(t *testing.T, v reflect.Value, path string, n *int) {
+	t.Helper()
+	*n++
+	switch v.Kind() {
+	case reflect.String:
+		v.SetString(fmt.Sprintf("s%d", *n))
+	case reflect.Bool:
+		v.SetBool(true)
+	case reflect.Int, reflect.Int32, reflect.Int64:
+		v.SetInt(int64(*n))
+	case reflect.Float64:
+		v.SetFloat(float64(*n) + 0.5)
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			fillNonZero(t, v.Field(i), path+"."+v.Type().Field(i).Name, n)
+		}
+	case reflect.Pointer:
+		v.Set(reflect.New(v.Type().Elem()))
+		fillNonZero(t, v.Elem(), path, n)
+	case reflect.Slice:
+		s := reflect.MakeSlice(v.Type(), 2, 2)
+		for i := 0; i < 2; i++ {
+			fillNonZero(t, s.Index(i), fmt.Sprintf("%s[%d]", path, i), n)
+		}
+		v.Set(s)
+	case reflect.Map:
+		m := reflect.MakeMap(v.Type())
+		k := reflect.New(v.Type().Key()).Elem()
+		fillNonZero(t, k, path+"<key>", n)
+		e := reflect.New(v.Type().Elem()).Elem()
+		if e.Kind() == reflect.Interface {
+			e = reflect.ValueOf(fmt.Sprintf("v%d", *n)) // JSON-stable param value
+		} else {
+			fillNonZero(t, e, path+"<val>", n)
+		}
+		m.SetMapIndex(k, e)
+		v.Set(m)
+	default:
+		t.Fatalf("fillNonZero: unhandled kind %s at %s — extend the test and the conversion", v.Kind(), path)
 	}
 }
 

@@ -52,7 +52,9 @@ const reapBatchLimit = 500
 func (d *Dispatcher) ReapStuckGraphRuns(ctx context.Context) (int, error) {
 	var runs []core.JobRecord
 	for _, st := range []core.JobStatus{core.JobStatusRunning, core.JobStatusAwaiting} {
-		batch, err := d.store.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+		// Oldest first: a stuck run only gets older, and a newest-first page of
+		// busy runs never reached it.
+		batch, err := listGraphRunsOldest(ctx, d.store, core.ListGraphRunsOpts{
 			Status: st,
 			Limit:  reapBatchLimit,
 		})

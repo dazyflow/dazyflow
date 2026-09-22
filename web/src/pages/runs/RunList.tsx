@@ -121,9 +121,14 @@ export function RunList() {
     [token, flowFilter, filter, since, until, activeTenant, activeWorkspace, me],
   );
 
+  // Bumped whenever the query (filters, scope) changes: a poll, load-more or
+  // refresh still in flight for the previous query must not land in this list.
+  const querySeq = useRef(0);
+
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
+    querySeq.current += 1;
     setLoading(true);
     setError(null);
     setSelected(new Set());
@@ -145,28 +150,28 @@ export function RunList() {
   }, [token, fetchRunsPage, t]);
 
   // Live polling whenever anything is in-flight — refresh only the first
-  // PAGE_SIZE rows so a long scrollback isn't repeatedly fetched.
+  // PAGE_SIZE rows and merge them over the loaded list, so a long scrollback is
+  // neither refetched nor truncated (the daemon caps a page's size).
   //
   // The interval depends on the derived `anyLive` boolean, NOT the whole
   // `runs` array — the tick calls setRuns, so depending on `runs` rebuilt
-  // the interval on every tick (a teardown + new timer per tick). The current
-  // row count (for the refresh limit) is read from a ref so the callback
-  // stays stable.
+  // the interval on every tick (a teardown + new timer per tick).
   const anyLive = runs.some(
     (r) =>
       r.status === "queued" ||
       r.status === "running" ||
       r.status === "awaiting",
   );
-  const runCountRef = useRef(runs.length);
-  runCountRef.current = runs.length;
   useEffect(() => {
     if (!token || !anyLive) return;
     const t = window.setInterval(() => {
-      fetchRunsPage(0, Math.max(PAGE_SIZE, runCountRef.current))
+      const seq = querySeq.current;
+      fetchRunsPage(0)
         .then((page) => {
-          setRuns(page);
-          setHasMore(page.length >= PAGE_SIZE);
+          if (seq !== querySeq.current) return;
+          setRuns((prev) => mergeHead(prev, page));
+          // New runs push older ones past the head, so a full head means more.
+          if (page.length === PAGE_SIZE) setHasMore(true);
         })
         .catch(() => {});
     }, POLL.live);
@@ -216,7 +221,12 @@ export function RunList() {
       if (failures > 0) {
         setError(t("runList.bulkRetryPartial", { failed: failures, total: ids.length }));
       }
-      setRuns(await fetchRunsPage(0));
+      const seq = querySeq.current;
+      const page = await fetchRunsPage(0);
+      if (seq === querySeq.current) {
+        setRuns(page);
+        setHasMore(page.length === PAGE_SIZE);
+      }
     } catch (e) {
       setError(explainApiError(e, t));
     } finally {
@@ -226,15 +236,21 @@ export function RunList() {
 
   const loadMore = async () => {
     if (!token || loading) return;
+    const seq = querySeq.current;
     setLoading(true);
     try {
       const next = await fetchRunsPage(runs.length);
-      setRuns((prev) => [...prev, ...next]);
+      if (seq !== querySeq.current) return;
+      // Offsets shift as new runs arrive, so a page can repeat rows already shown.
+      setRuns((prev) => {
+        const seen = new Set(prev.map((r) => r.id));
+        return [...prev, ...next.filter((r) => !seen.has(r.id))];
+      });
       setHasMore(next.length === PAGE_SIZE);
     } catch (e) {
-      setError(explainApiError(e, t));
+      if (seq === querySeq.current) setError(explainApiError(e, t));
     } finally {
-      setLoading(false);
+      if (seq === querySeq.current) setLoading(false);
     }
   };
 
@@ -586,6 +602,20 @@ export function RunList() {
   );
 }
 
+// mergeHead lays a freshly polled first page over the loaded list: the head is
+// replaced wholesale (so rows that left the filter go), and whatever was loaded
+// past the head's last known row is kept.
+export function mergeHead(prev: RunSummary[], head: RunSummary[]): RunSummary[] {
+  const ids = new Set(head.map((r) => r.id));
+  let last = -1;
+  prev.forEach((r, i) => {
+    if (ids.has(r.id)) last = i;
+  });
+  const tail = (last >= 0 ? prev.slice(last + 1) : prev.slice(head.length)).filter(
+    (r) => !ids.has(r.id),
+  );
+  return [...head, ...tail];
+}
 
 // dateParam reads a "YYYY-MM-DD" deep-link param into the date inputs.
 // Anything else is ignored rather than half-applied: <input type="date">

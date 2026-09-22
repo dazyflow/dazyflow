@@ -45,6 +45,7 @@ func TestSupportView_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issue agent key: %v", err)
 	}
+	_ = h.gw.SupportAgents.Grant(ctx, "agent-a", "root")
 
 	get := func(token string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest("GET", "/api/v1/support/flows/t/ws/flow1", nil)
@@ -92,6 +93,7 @@ func TestSupportView_EndToEnd(t *testing.T) {
 
 	_, otherTok, _ := auth.IssueAPIKey(h.ks, ctx, "k-agent-b", "", "", "agent-b",
 		[]core.Role{core.SupportAgentRole()}, nil)
+	_ = h.gw.SupportAgents.Grant(ctx, "agent-b", "root")
 	if rw := get(otherTok); rw.Code != 404 {
 		t.Errorf("agent without a grant should 404, got %d", rw.Code)
 	}

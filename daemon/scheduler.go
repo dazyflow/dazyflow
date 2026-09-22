@@ -198,8 +198,8 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		case <-tickT.C:
 			isLeader := s.isLeader()
 			if isLeader && !wasLeader {
-				// A follower's scheduleAt is frozen at whatever it was, so a takeover must
-				// re-anchor or the new leader fires on the dead one's stale clock.
+				// A follower's scheduleAt is frozen at whatever the last rescan set, so a
+				// takeover must re-anchor or the new leader fires on a stale clock.
 				s.reanchor(ctx, s.clock())
 			}
 			wasLeader = isLeader
@@ -306,11 +306,16 @@ func (s *Scheduler) entryFromSpec(spec ScheduleSpec) (*scheduledGraph, error) {
 }
 
 // Discards a frozen next-fire, which is what a takeover needs.
+//
+// A follower never fires, so its scheduleAt is not evidence of anything: it
+// stays wherever the last rescan put it while the old leader went on firing.
+// Reporting from it wrote a failed "missed fires" run — and so a failure email —
+// for every schedule on every handover. What the dead leader actually owed is
+// read from the store instead: the fires due after the flow's last recorded run.
 func (s *Scheduler) reanchor(ctx context.Context, now time.Time) {
 	s.mu.Lock()
 	stale := make([]*scheduledGraph, 0, len(s.tracked))
 	for k, e := range s.tracked {
-		// A past scheduleAt is a fire the dead leader owed and never made.
 		if !e.scheduleAt.IsZero() && !e.scheduleAt.After(now) {
 			carried := *e
 			stale = append(stale, &carried)
@@ -319,8 +324,42 @@ func (s *Scheduler) reanchor(ctx context.Context, now time.Time) {
 	}
 	s.mu.Unlock()
 	for _, e := range stale {
+		owed, ok := s.firstOwedFire(ctx, e, now)
+		if !ok {
+			continue
+		}
+		e.scheduleAt = owed
 		s.recordMissedFires(ctx, e, now)
 	}
+}
+
+// firstOwedFire is the first fire due after the flow's last recorded run, or
+// false when there is no evidence of a gap. It errs toward silence: no run on
+// record (or a failed lookup) proves nothing, and a poller is measured at its
+// widest backed-off interval, because a follower never saw its empty streak and a
+// false alarm mails a person.
+func (s *Scheduler) firstOwedFire(ctx context.Context, e *scheduledGraph, now time.Time) (time.Time, bool) {
+	if s.svc == nil || s.svc.Jobs == nil {
+		return time.Time{}, false
+	}
+	runs, err := s.svc.Jobs.ListGraphRuns(ctx, core.ListGraphRunsOpts{
+		Tenant: e.tenant, Workspace: e.workspace, GraphID: e.graphID, Limit: 1,
+	})
+	if err != nil {
+		s.logger.Printf("takeover %s/%s/%s: last run lookup: %v", e.tenant, e.workspace, e.graphID, err)
+		return time.Time{}, false
+	}
+	if len(runs) == 0 {
+		return time.Time{}, false
+	}
+	if e.interval > 0 {
+		e.emptyStreak = max(e.emptyStreak, pollBackoffGrace+16)
+	}
+	owed := e.nextFireFrom(runs[0].EnqueuedAt)
+	if owed.IsZero() || owed.After(now) {
+		return time.Time{}, false
+	}
+	return owed, true
 }
 
 const maxCountedMissedFires = 500

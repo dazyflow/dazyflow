@@ -490,6 +490,42 @@ func (s *PgUserStore) PutUser(ctx context.Context, u User) error {
 	return err
 }
 
+func (s *PgUserStore) execChanged(ctx context.Context, q string, args ...any) (bool, error) {
+	tag, err := s.pool.Exec(ctx, q, args...)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+// The guard is in the WHERE clause, so two logins racing with one TOTP code
+// cannot both advance past it.
+func (s *PgUserStore) AdvanceTOTPStep(ctx context.Context, email string, step int64) (bool, error) {
+	return s.execChanged(ctx,
+		`UPDATE users SET totp_last_step=$2 WHERE email=$1 AND totp_last_step < $2`,
+		strings.ToLower(strings.TrimSpace(email)), step)
+}
+
+func (s *PgUserStore) RemoveRecoveryCode(ctx context.Context, email, hash string) (bool, error) {
+	return s.execChanged(ctx,
+		`UPDATE users SET recovery_codes = recovery_codes - $2::text
+		 WHERE email=$1 AND recovery_codes ? $2::text`,
+		strings.ToLower(strings.TrimSpace(email)), hash)
+}
+
+func (s *PgUserStore) ReplacePasswordHash(ctx context.Context, email string, old, fresh []byte) (bool, error) {
+	return s.execChanged(ctx,
+		`UPDATE users SET password_hash=$3 WHERE email=$1 AND password_hash=$2`,
+		strings.ToLower(strings.TrimSpace(email)), old, fresh)
+}
+
+func (s *PgUserStore) MarkEmailVerified(ctx context.Context, email string, at time.Time) (bool, error) {
+	return s.execChanged(ctx,
+		`UPDATE users SET verified_at=$2, verify_token_hash=NULL, verify_expires_at=NULL
+		 WHERE email=$1 AND verified_at IS NULL`,
+		strings.ToLower(strings.TrimSpace(email)), at)
+}
+
 func (s *PgUserStore) ListUsers(ctx context.Context) ([]User, error) {
 	const q = `SELECT ` + userColumns + ` FROM users ORDER BY email`
 	return queryRows(ctx, s.pool, scanUser, q)

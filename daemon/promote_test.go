@@ -6,7 +6,9 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/engine"
@@ -116,6 +118,60 @@ func TestConcurrencyUncappedAdmitsAll(t *testing.T) {
 	}
 	if got := countGraphRuns(t, svc, "t", core.JobStatusRunning); got != 5 {
 		t.Fatalf("pro tenant running = %d, want 5", got)
+	}
+}
+
+// The sweep used to read one newest-first page of pending runs: 200 to find
+// tenants and 50 to pick a tenant's oldest. A tenant whose pending runs all sat
+// past the page was never visited, and a backlog's oldest run never promoted.
+func TestSweepPromotePending_ReachesOldestBacklog(t *testing.T) {
+	t.Parallel()
+	s := promoteSvc()
+	ctx := t.Context()
+	g := core.Graph{
+		ID: "g", Tenant: "old", Workspace: "ws",
+		Nodes: []core.Node{{ID: "n", Module: "delay", Params: map[string]any{"ms": 1}}},
+	}
+	payload, _ := json.Marshal(g)
+	base := time.Now().Add(-time.Hour)
+	enqueue := func(id, tenant string, at time.Time) {
+		t.Helper()
+		if err := s.Jobs.Enqueue(ctx, core.JobRecord{
+			ID: id, Kind: core.JobKindGraph, Tenant: tenant, Workspace: "ws", GraphID: "g",
+			NodeID: "*", Status: core.JobStatusQueued, GraphPayload: payload, EnqueuedAt: at,
+		}); err != nil {
+			t.Fatalf("enqueue %s: %v", id, err)
+		}
+	}
+	enqueue("oldest", "old", base)
+	// A newer backlog in a tenant with no pending-run cap, filling every page
+	// the old sweep read.
+	for i := 0; i < 250; i++ {
+		enqueue(fmt.Sprintf("busy-%03d", i), "busy", base.Add(time.Duration(i+1)*time.Second))
+	}
+
+	s.SweepPromotePending(ctx)
+
+	if rec, _ := s.Jobs.Get(ctx, "oldest"); rec.Status != core.JobStatusRunning {
+		t.Errorf("the oldest pending run is %s, want running", rec.Status)
+	}
+}
+
+// Promoters on two replicas must not both take the last slot.
+func TestMarkGraphRunningCapped_HoldsTheCap(t *testing.T) {
+	t.Parallel()
+	jobs := jobstore.NewMemory()
+	ctx := t.Context()
+	for _, id := range []string{"a", "b"} {
+		if err := jobs.Enqueue(ctx, core.JobRecord{ID: id, Kind: core.JobKindGraph, Tenant: "t", Status: core.JobStatusQueued}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if ok, atCap, err := jobs.MarkGraphRunningCapped(ctx, "a", "t", 1); !ok || atCap || err != nil {
+		t.Fatalf("first start = %v/%v/%v, want started", ok, atCap, err)
+	}
+	if ok, atCap, err := jobs.MarkGraphRunningCapped(ctx, "b", "t", 1); ok || !atCap || err != nil {
+		t.Fatalf("second start = %v/%v/%v, want refused at the cap", ok, atCap, err)
 	}
 }
 

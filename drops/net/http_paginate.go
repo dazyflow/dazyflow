@@ -112,7 +112,8 @@ func fetchAllPages(ctx context.Context, job core.Job, progress chan<- core.Progr
 	}
 	// One deadline for the whole step, not one per page: a hundred pages of
 	// thirty seconds each is not a request, it is an afternoon.
-	deadline := time.Now().Add(time.Duration(params.IntDefault(job.Params, "timeout_ms", defaultTimeoutMs)) * time.Millisecond)
+	stepTimeout := time.Duration(params.IntDefault(job.Params, "timeout_ms", defaultTimeoutMs)) * time.Millisecond
+	deadline := time.Now().Add(stepTimeout)
 
 	var (
 		items       []any
@@ -122,6 +123,7 @@ func fetchAllPages(ctx context.Context, job core.Job, progress chan<- core.Progr
 		seen        = map[string]bool{}
 		sawItems    bool
 	)
+	firstURL := url
 
 	for page := 1; page <= p.maxPages; page++ {
 		if seen[url] {
@@ -140,7 +142,7 @@ func fetchAllPages(ctx context.Context, job core.Job, progress chan<- core.Progr
 
 		params.EmitProgress(progress, job, pageProgress(page, p.maxPages), fmt.Sprintf("%s %s (page %d)", method, url, page))
 
-		status, raw, header, ferr := fetchPage(ctx, job, method, url, headers, body, page, remaining, budget+1, allowPrivate)
+		status, raw, header, ferr := fetchPage(ctx, job, method, url, headers, body, page, remaining, stepTimeout, budget+1, allowPrivate)
 		if ferr != nil {
 			return *ferr, nil
 		}
@@ -184,12 +186,16 @@ func fetchAllPages(ctx context.Context, job core.Job, progress chan<- core.Progr
 			break
 		}
 
-		next, nerr := nextPageURL(p, url, decoded, header)
+		next, nerr := nextPageURL(p, url, decoded, header, len(found))
 		if nerr != nil {
 			return params.Err(job, "bad_param", nerr.Error()), nil
 		}
 		if next == "" {
 			break
+		}
+		if !sameOrigin(firstURL, next) {
+			return params.Err(job, "cross_origin_next", fmt.Sprintf(
+				"page %d points the next page at %s, a different site from the one this step calls; not following it, since the step's headers (credentials included) would go along", page, params.Truncate(next, 120))), nil
 		}
 		url = next
 	}
@@ -222,7 +228,7 @@ func fetchPage(
 	headers map[string]string,
 	body []byte,
 	page int,
-	timeout time.Duration,
+	timeout, clientTimeout time.Duration,
 	maxBytes int64,
 	allowPrivate bool,
 ) (int, []byte, http.Header, *core.Result) {
@@ -252,7 +258,9 @@ func fetchPage(
 	}
 	defer release()
 
-	resp, err := buildClient(timeout, allowPrivate).Do(req)
+	// The cached client, sized to the whole step; reqCtx bounds this page to
+	// what is left of it. A client per page leaked connections and keep-alive.
+	resp, err := SafeHTTPClient(clientTimeout, allowPrivate).Do(req)
 	if err != nil {
 		res := classifyRequestError(ctx, job, err)
 		return 0, nil, nil, &res
@@ -273,7 +281,7 @@ func fetchPage(
 }
 
 // nextPageURL answers "where is the next page", or "" when there is none.
-func nextPageURL(p pagination, current string, decoded any, header http.Header) (string, error) {
+func nextPageURL(p pagination, current string, decoded any, header http.Header, pageItems int) (string, error) {
 	switch p.mode {
 	case pageLink:
 		return resolveAgainst(current, linkHeaderNext(header)), nil
@@ -306,13 +314,43 @@ func nextPageURL(p pagination, current string, decoded any, header http.Header) 
 		if err != nil {
 			return "", fmt.Errorf("cannot read the address to advance it: %v", err)
 		}
-		n, err := strconv.Atoi(u.Query().Get(name))
-		if err != nil || n < 1 {
-			n = 1
+		// An offset counts items, a page number counts pages. Either starts from
+		// what the address says (0-indexed APIs included); absent, the first
+		// request was page 1 / offset 0.
+		step, start := 1, 1
+		if isOffsetParam(name) {
+			step, start = pageItems, 0
 		}
-		return withQuery(current, name, strconv.Itoa(n+1))
+		n, err := strconv.Atoi(u.Query().Get(name))
+		if err != nil || n < 0 {
+			n = start
+		}
+		return withQuery(current, name, strconv.Itoa(n+step))
 	}
 	return "", nil
+}
+
+func isOffsetParam(name string) bool {
+	switch strings.ToLower(name) {
+	case "offset", "skip", "start", "from", "start_index", "startindex":
+		return true
+	}
+	return false
+}
+
+// sameOrigin reports whether next is on the scheme+host of first. The step's
+// headers — Authorization and API keys included — go on every page, and a
+// next address comes from the server's response.
+func sameOrigin(first, next string) bool {
+	a, err := neturl.Parse(first)
+	if err != nil {
+		return false
+	}
+	b, err := neturl.Parse(next)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Host, b.Host)
 }
 
 func withQuery(rawURL, key, value string) (string, error) {

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Bell, FilePlus2, LayoutTemplate, Mail, MessageSquare, Sheet, Sparkles } from "lucide-react";
@@ -108,6 +108,10 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
   );
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [refineText, setRefineText] = useState("");
+  // The generation stream in flight, closed when the page unmounts so leaving
+  // mid-generation stops the (billed) model call instead of streaming into nothing.
+  const genAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => genAbort.current?.abort(), []);
 
   useEffect(() => {
     if (!token) return;
@@ -211,6 +215,8 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
     let resultGraph: Graph | null = null;
     let resultIssues: GenIssue[] = [];
     let hadError = false;
+    const ctrl = new AbortController();
+    genAbort.current = ctrl;
     try {
       await api.streamFlowGenerate(
         token,
@@ -230,6 +236,7 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
             resultIssues = d.issues ?? [];
           }
         },
+        ctrl.signal,
       );
       if (resultGraph) {
         const actionable = resultIssues.filter(
@@ -241,6 +248,8 @@ function FromScratch({ mode }: { mode: "ai" | "blank" }) {
         setErr(t("createAI.empty"));
       }
     } catch (e) {
+      // Aborted because the page went away: nothing is left to report to.
+      if (ctrl.signal.aborted) return;
       setErr(explainApiError(e, t));
     }
     setBusy(false);

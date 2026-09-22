@@ -4,8 +4,10 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
@@ -13,11 +15,44 @@ import (
 
 type apiKeyAPI struct {
 	auditor
-	svc *Service
+	svc         *Service
+	Users       auth.UserStore
+	Memberships auth.MembershipStore
 }
 
 func (h *HTTPGateway) apiKeyAPI() *apiKeyAPI {
-	return &apiKeyAPI{auditor: h.auditor(), svc: h.svc}
+	return &apiKeyAPI{auditor: h.auditor(), svc: h.svc, Users: h.Users, Memberships: h.Memberships}
+}
+
+// A key's subject is the identity /me endpoints act as, so a tenant admin may
+// name only themselves, a member of the target tenant, or a non-email service
+// identity — never an arbitrary person's account.
+func (h *apiKeyAPI) subjectAllowed(ctx context.Context, p core.Principal, subject, tenant string) bool {
+	subject = strings.ToLower(strings.TrimSpace(subject))
+	if isPlatformAdmin(p) || subject == "" || subject == strings.ToLower(strings.TrimSpace(p.Subject)) {
+		return true
+	}
+	if tenant == "" {
+		tenant = p.Tenant
+	}
+	if h.Users != nil {
+		if u, err := h.Users.GetByEmail(ctx, subject); err == nil {
+			if u.Tenant == tenant {
+				return true
+			}
+		} else if !strings.Contains(subject, "@") {
+			return true // a service identity, not anyone's account
+		}
+	} else if !strings.Contains(subject, "@") {
+		return true
+	}
+	if h.Memberships != nil {
+		if _, err := h.Memberships.GetMembership(ctx, subject, tenant); err == nil {
+			return true
+		}
+	}
+	// Email-shaped with no user store to check against: nothing to impersonate.
+	return h.Users == nil && h.Memberships == nil
 }
 
 func (h *apiKeyAPI) listAPIKeys(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -41,6 +76,10 @@ func (h *apiKeyAPI) listTenants(rw http.ResponseWriter, r *http.Request, p core.
 func (h *apiKeyAPI) issueAPIKey(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	params, ok := decodeRequestJSON[IssueAPIKeyParams](rw, r)
 	if !ok {
+		return
+	}
+	if !h.subjectAllowed(r.Context(), p, params.Subject, params.Tenant) {
+		writeJSONError(rw, http.StatusForbidden, "subject must be yourself, a member of this organization, or a non-email service name")
 		return
 	}
 	issued, err := h.svc.IssueAPIKey(r.Context(), p, params)

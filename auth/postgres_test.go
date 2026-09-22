@@ -161,6 +161,52 @@ func TestPgUserStore_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestPgUserStore_FieldUpdaters(t *testing.T) {
+	pool, ctx := testPool(t)
+	store, err := NewPgUserStore(ctx, pool)
+	if err != nil {
+		t.Fatalf("NewPgUserStore: %v", err)
+	}
+	const email = "fields@example.com"
+	if err := store.PutUser(ctx, User{
+		Email: email, Subject: email, PasswordHash: []byte("old"),
+		RecoveryCodeHashes: []string{"h1", "h2"}, Status: StatusSuspended,
+	}); err != nil {
+		t.Fatalf("PutUser: %v", err)
+	}
+	check := func(name string, got bool, err error, want bool) {
+		t.Helper()
+		if err != nil || got != want {
+			t.Errorf("%s = %v, %v; want %v", name, got, err, want)
+		}
+	}
+	ok, err := store.AdvanceTOTPStep(ctx, email, 10)
+	check("AdvanceTOTPStep(10)", ok, err, true)
+	ok, err = store.AdvanceTOTPStep(ctx, email, 10)
+	check("AdvanceTOTPStep(10) replay", ok, err, false)
+	ok, err = store.RemoveRecoveryCode(ctx, email, "h1")
+	check("RemoveRecoveryCode(h1)", ok, err, true)
+	ok, err = store.RemoveRecoveryCode(ctx, email, "h1")
+	check("RemoveRecoveryCode(h1) replay", ok, err, false)
+	ok, err = store.ReplacePasswordHash(ctx, email, []byte("stale"), []byte("new"))
+	check("ReplacePasswordHash(stale)", ok, err, false)
+	ok, err = store.ReplacePasswordHash(ctx, email, []byte("old"), []byte("new"))
+	check("ReplacePasswordHash(old)", ok, err, true)
+	ok, err = store.MarkEmailVerified(ctx, email, time.Now())
+	check("MarkEmailVerified", ok, err, true)
+	ok, err = store.MarkEmailVerified(ctx, email, time.Now())
+	check("MarkEmailVerified again", ok, err, false)
+
+	u, err := store.GetByEmail(ctx, email)
+	if err != nil {
+		t.Fatalf("GetByEmail: %v", err)
+	}
+	if u.TOTPLastStep != 10 || len(u.RecoveryCodeHashes) != 1 || u.RecoveryCodeHashes[0] != "h2" ||
+		string(u.PasswordHash) != "new" || !u.EmailVerified() || !u.Suspended() {
+		t.Errorf("after targeted updates: %+v", u)
+	}
+}
+
 func covPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
 	url := os.Getenv("DAZYFLOW_TEST_DB")

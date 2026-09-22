@@ -518,10 +518,14 @@ func TestReanchor_RecordsWhatTheDeadLeaderOwed(t *testing.T) {
 		},
 	}
 
+	// The dead leader's last fire, half an hour ago: more fires were owed since
+	// than even a fully backed-off poller would have skipped.
+	seedScheduledRun(t, jobs, "g", now.Add(-30*time.Minute))
+
 	sched.reanchor(context.Background(), now)
 
-	if runs, _ := jobs.ListByGraph(t.Context(), "g"); len(runs) != 1 {
-		t.Errorf("takeover wrote %d marker(s) for the overdue entry, want 1", len(runs))
+	if n := missedFireMarkers(t, jobs, "g"); n != 1 {
+		t.Errorf("takeover wrote %d marker(s) for the overdue entry, want 1", n)
 	}
 	if runs, _ := jobs.ListByGraph(t.Context(), "fine"); len(runs) != 0 {
 		t.Errorf("takeover marked a healthy entry as having missed fires (%d)", len(runs))
@@ -531,4 +535,65 @@ func TestReanchor_RecordsWhatTheDeadLeaderOwed(t *testing.T) {
 			t.Errorf("%s was not re-anchored (scheduleAt %s)", k, e.scheduleAt)
 		}
 	}
+}
+
+// A follower never fires, so its scheduleAt sits wherever the last rescan put
+// it while the old leader keeps the schedule running. A routine handover must
+// not read that frozen value as fires owed: doing so wrote a failed run — and a
+// failure email — for every schedule on every takeover.
+func TestReanchor_HealthyHandoverRecordsNothing(t *testing.T) {
+	t.Parallel()
+	svc, _, jobs := fireGraphSvc(t)
+	sched := NewScheduler(svc)
+	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
+	sched.SetClock(func() time.Time { return now })
+	cronHourly, err := parseCronInTZ(sched.parser, "0 * * * *", "UTC")
+	if err != nil {
+		t.Fatalf("parse cron: %v", err)
+	}
+	sched.tracked = map[string]*scheduledGraph{
+		"acme/ws1/g": {
+			graphID: "g", tenant: "acme", workspace: "ws1",
+			interval:   time.Minute,
+			scheduleAt: now.Add(-3 * time.Hour), // frozen since the follower's rescan
+		},
+		"acme/ws1/hourly": {
+			graphID: "hourly", tenant: "acme", workspace: "ws1",
+			scheduleFn: cronHourly,
+			scheduleAt: now.Add(-3 * time.Hour),
+		},
+	}
+	// The old leader fired both on time right up to the handover.
+	seedScheduledRun(t, jobs, "g", now.Add(-40*time.Second))
+	seedScheduledRun(t, jobs, "hourly", now)
+
+	sched.reanchor(context.Background(), now)
+
+	for _, id := range []string{"g", "hourly"} {
+		if n := missedFireMarkers(t, jobs, id); n != 0 {
+			t.Errorf("%s: healthy handover wrote %d missed-fire marker(s)", id, n)
+		}
+	}
+}
+
+func seedScheduledRun(t *testing.T, jobs core.JobStore, graphID string, at time.Time) {
+	t.Helper()
+	if err := jobs.Enqueue(t.Context(), core.JobRecord{
+		ID: "seed-" + graphID, Kind: core.JobKindGraph, GraphID: graphID,
+		Tenant: "acme", Workspace: "ws1", Status: core.JobStatusSucceeded, EnqueuedAt: at,
+	}); err != nil {
+		t.Fatalf("seed run: %v", err)
+	}
+}
+
+func missedFireMarkers(t *testing.T, jobs core.JobStore, graphID string) int {
+	t.Helper()
+	runs, _ := jobs.ListByGraph(t.Context(), graphID)
+	n := 0
+	for _, r := range runs {
+		if r.Result != nil && r.Result.Error != nil && r.Result.Error.Code == "schedule_fires_missed" {
+			n++
+		}
+	}
+	return n
 }

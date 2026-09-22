@@ -169,6 +169,10 @@ func indexValue(value any, idx int) (any, error) {
 	return nil, fmt.Errorf("upstream path: expected array for [%d], got %T", idx, value)
 }
 
+// stringifyForTemplate is the one formatter for values spliced into a template
+// ({{upstream…}}, {{item…}}, {{resource…}}, trigger fields). Floats render in
+// plain decimal, never exponent form: fmt.Sprint turned a JSON 1234567 into
+// "1.234567e+06", and an integral value keeps no decimals.
 func stringifyForTemplate(v any) string {
 	if v == nil {
 		return ""
@@ -178,9 +182,14 @@ func stringifyForTemplate(v any) string {
 		return x
 	case []byte:
 		return string(x)
+	case json.Number:
+		return x.String()
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(x), 'f', -1, 32)
 	case int, int8, int16, int32, int64,
-		uint, uint8, uint16, uint32, uint64,
-		float32, float64, bool:
+		uint, uint8, uint16, uint32, uint64, bool:
 		return fmt.Sprint(x)
 	}
 	if b, err := json.Marshal(v); err == nil {

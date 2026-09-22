@@ -9,8 +9,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/mail"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -746,6 +749,35 @@ func TestBuildRFC822_Cov(t *testing.T) {
 	if !strings.Contains(multi, "<p>see attached</p>") {
 		t.Errorf("body part missing:\n%s", multi)
 	}
+
+	// It must parse as real MIME: headers end with a blank line, then the parts.
+	m, err := mail.ReadMessage(strings.NewReader(multi))
+	if err != nil {
+		t.Fatalf("read message: %v", err)
+	}
+	mt, mp, err := mime.ParseMediaType(m.Header.Get("Content-Type"))
+	if err != nil || mt != "multipart/mixed" {
+		t.Fatalf("content-type %q: %v", m.Header.Get("Content-Type"), err)
+	}
+	mr := multipart.NewReader(m.Body, mp["boundary"])
+	var parts []string
+	for {
+		p, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("part %d: %v", len(parts), err)
+		}
+		body, _ := io.ReadAll(p)
+		parts = append(parts, p.Header.Get("Content-Type"))
+		if len(parts) == 1 && !strings.Contains(string(body), "<p>see attached</p>") {
+			t.Errorf("first part body = %q", body)
+		}
+	}
+	if len(parts) != 2 || !strings.HasPrefix(parts[0], "text/html") || parts[1] != "application/pdf" {
+		t.Errorf("parts = %v, want the html body then the pdf", parts)
+	}
 }
 
 func TestGmailGetMessage_BadInput_Cov(t *testing.T) {
@@ -1396,6 +1428,38 @@ func TestGmailSearch_OnlyNew_QueryCarriesTheWatermark(t *testing.T) {
 	}
 	if gotQuery != "is:unread after:1700000000" {
 		t.Errorf("query = %q, want the search ANDed with the watermark bound", gotQuery)
+	}
+}
+
+// The first only_new run on a big mailbox baselines at the NEWEST email: it
+// must neither refuse (gmail_backlog_too_deep for ever) nor baseline at the
+// oldest page and replay the mailbox on the next run.
+func TestGmailSearch_OnlyNew_FirstRunBigMailboxBaselinesAtNewest(t *testing.T) {
+	store := memCursor(t)
+	total := backlogPageSize*maxBacklogPages + 10
+	ids := make([]string, 0, total)
+	dates := map[string]string{}
+	for i := total; i >= 1; i-- { // newest first
+		id := "e" + strconv.Itoa(i)
+		ids = append(ids, id)
+		dates[id] = strconv.FormatInt(1700000000000+int64(i)*1000, 10)
+	}
+	srv := backlogServer(t, ids, dates)
+	defer srv.Close()
+	withGmailEnv(t, srv.URL)
+
+	res, err := executeGmailSearch(context.Background(), core.Job{
+		Tenant: "acme", GraphID: "g1", NodeID: "n1",
+		Params: map[string]any{"query": "is:unread", "only_new": true, "max_results": 10},
+	}, nil)
+	if err != nil || res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if _, ok := res.Output["messages"]; ok {
+		t.Error("a baseline run emitted messages")
+	}
+	if got, want := store["acme|cursor.gmail_search.g1.n1"], dates["e"+strconv.Itoa(total)]; got != want {
+		t.Errorf("baseline = %q, want the newest email %q", got, want)
 	}
 }
 

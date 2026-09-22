@@ -106,10 +106,16 @@ func (h *authAPI) signIn(rw http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// At session-issue time: a grant takes effect on the target's NEXT sign-in.
+// At session-issue time: a grant takes effect on the target's NEXT sign-in —
+// and, on deployments that verify email, only once the address is verified.
 func (h *authAPI) elevatePlatformAdmin(ctx context.Context, u auth.User) auth.User {
 	env := h.isPlatformAdminEmail(u.Email)
 	if !env && !h.isPlatformAdminGranted(u.Email) {
+		return u
+	}
+	// The allowlist names an email, so whoever registers it first would get
+	// the role: require proof of the address wherever verification can run.
+	if h.svc != nil && h.verificationActive() && !u.EmailVerified() {
 		return u
 	}
 	for _, r := range u.Roles {

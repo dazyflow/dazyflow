@@ -123,6 +123,10 @@ func (s *Service) Approve(
 	if err := s.Jobs.Complete(ctx, nodeRecID, core.JobStatusSucceeded, resumeResult); err != nil {
 		return fmt.Errorf("complete: %w", err)
 	}
+	// The node is decided: from here on dispatch writes job records and must not be
+	// cut short when the HTTP request that carried the decision goes away (same as
+	// ResumeGraphRun), or the run stalls with the approval spent.
+	ctx = context.WithoutCancel(ctx)
 
 	graphRec, err := s.Jobs.Get(ctx, graphRunID)
 	if err != nil {

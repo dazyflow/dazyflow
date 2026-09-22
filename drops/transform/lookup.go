@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -92,6 +93,13 @@ func executeLookup(_ context.Context, job core.Job, _ chan<- core.Progress) (cor
 	if !ok {
 		return params.Err(job, "missing_input", "input port 'in' is required — wire in the value to look up"), nil
 	}
+	if ref.Inline == nil {
+		// Nothing to look up: never let it match a blank-keyed row by accident.
+		if fallback, set := params.StringOpt(job.Params, "fallback"); set && fallback != "" {
+			return lookupResult(job, "out", fallback), nil
+		}
+		return lookupResult(job, "unmatched", nil), nil
+	}
 	key := lookupKey(ref.Inline)
 
 	sensitive := params.BoolDefault(job.Params, "case_sensitive", false)
@@ -129,7 +137,8 @@ func lookupKey(v any) string {
 	case nil:
 		return ""
 	case float64:
-		return strings.TrimSpace(fmt.Sprintf("%g", t))
+		// In full: %g writes 1e+06 for 1000000, which no one types in a table.
+		return strconv.FormatFloat(t, 'f', -1, 64)
 	}
 	return strings.TrimSpace(fmt.Sprint(v))
 }

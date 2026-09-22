@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -106,9 +107,18 @@ func (h *orgAPI) switchOrg(rw http.ResponseWriter, r *http.Request, p core.Princ
 		writeJSONError(rw, http.StatusUnauthorized, "session not found")
 		return
 	}
+	// Re-run the sign-in elevation: platform-admin / support-agent roles are
+	// added per session, and swapping in the membership's roles would drop them.
+	elevated := user
+	elevated.Tenant = target
+	elevated.Workspace = newWorkspace
+	elevated.Roles = newRoles
+	if h.auth != nil {
+		elevated = h.auth.elevateSessionRoles(r.Context(), elevated)
+	}
 	sess.Tenant = target
 	sess.Workspace = newWorkspace
-	sess.Roles = newRoles
+	sess.Roles = elevated.Roles
 	if err := h.Sessions.PutSession(r.Context(), sess); err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("save session: %v", err))
 		return
@@ -168,7 +178,7 @@ func (h *orgAPI) createOrg(rw http.ResponseWriter, r *http.Request, p core.Princ
 		writeJSONError(rw, http.StatusBadRequest, "display_name must be 80 characters or fewer")
 		return
 	}
-	tenant, err := mintOrgTenantID()
+	tenant, err := h.auth.mintFreshTenantID(r.Context(), mintOrgTenantID)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("mint tenant: %v", err))
 		return
@@ -245,7 +255,6 @@ func (h *orgAPI) listMembers(rw http.ResponseWriter, r *http.Request, p core.Pri
 					CreatedAt: u.CreatedAt,
 					Home:      true,
 				})
-				break // single home per tenant
 			}
 		}
 	}
@@ -302,6 +311,7 @@ func (h *orgAPI) removeMember(rw http.ResponseWriter, r *http.Request, p core.Pr
 		return
 	}
 	h.revokeMemberSessions(r.Context(), email)
+	h.revokeMemberKeys(r.Context(), email, tenant, nil)
 	rw.WriteHeader(http.StatusNoContent)
 }
 
@@ -323,6 +333,16 @@ func (h *orgAPI) revokeMemberSessions(ctx context.Context, email string) {
 		h.logger.Printf("session sweep for %s: %v", email, err)
 	} else if n > 0 {
 		h.logger.Printf("session sweep for %s: %d session(s) revoked after membership change", email, n)
+	}
+}
+
+// API keys snapshot tenant and roles at issue time, so a membership change must
+// sweep them too or the member keeps the old access through a key.
+func (h *orgAPI) revokeMemberKeys(ctx context.Context, email, tenant string, keep func(auth.APIKey) bool) {
+	if n, err := h.svc.revokeSubjectKeys(ctx, email, tenant, keep); err != nil {
+		h.logger.Printf("api key sweep for %s in %s: %v", email, tenant, err)
+	} else if n > 0 {
+		h.logger.Printf("api key sweep for %s in %s: %d key(s) revoked after membership change", email, tenant, n)
 	}
 }
 
@@ -378,8 +398,8 @@ func capRolesToCaller(p core.Principal, roles []core.Role) error {
 	callerPerms := principalPermissions(p)
 	for _, role := range roles {
 		for _, perm := range role.Permissions {
-			if perm == core.PermPlatformAdmin {
-				return fmt.Errorf("only a platform admin may grant %q", core.PermPlatformAdmin)
+			if slices.Contains(platformScopedPermissions, perm) {
+				return fmt.Errorf("only a platform admin may grant %q", perm)
 			}
 			if _, ok := callerPerms[perm]; !ok {
 				return fmt.Errorf("cannot grant permission %q: it exceeds your own permissions", perm)
@@ -457,6 +477,9 @@ func (h *orgAPI) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p co
 		return
 	}
 	h.revokeMemberSessions(r.Context(), email)
+	// Keys still within the new roles keep working; anything broader goes.
+	newRoles := body.Roles
+	h.revokeMemberKeys(r.Context(), email, tenant, func(k auth.APIKey) bool { return keyWithinRoles(k, newRoles) })
 	roleNames := make([]string, 0, len(body.Roles))
 	for _, role := range body.Roles {
 		roleNames = append(roleNames, role.Name)
@@ -775,17 +798,18 @@ func (h *orgAPI) acceptInvitation(rw http.ResponseWriter, r *http.Request, p cor
 	}
 	if h.Users != nil {
 		if u, err := h.Users.GetByEmail(r.Context(), p.Subject); err == nil && !u.EmailVerified() {
-			u.VerifiedAt = &now
-			u.VerifyTokenHash = nil
-			u.VerifyExpiresAt = nil
-			if err := h.Users.PutUser(r.Context(), u); err != nil {
+			if changed, err := auth.MarkEmailVerified(r.Context(), h.Users, u.Email, now); err != nil {
 				h.logger.Printf("verify on invite accept for %s: %v", p.Subject, err)
-			} else {
+			} else if changed {
 				h.auditAuth(r.Context(), r, u.Tenant, u.Email, "auth.email_verified", "invite_accept")
 			}
 		}
 	}
 	if err := h.Invitations.MarkAccepted(r.Context(), token, now); err != nil {
+		if errors.Is(err, auth.ErrInvitationNotPending) {
+			writeJSONError(rw, http.StatusGone, "this invitation has already been used, revoked, or expired")
+			return
+		}
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}

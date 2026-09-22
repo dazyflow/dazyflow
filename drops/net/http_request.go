@@ -187,7 +187,7 @@ func executeHTTPRequest(ctx context.Context, job core.Job, progress chan<- core.
 	}
 	defer release()
 
-	client := buildClient(time.Duration(timeoutMs)*time.Millisecond, allowPrivate)
+	client := SafeHTTPClient(time.Duration(timeoutMs)*time.Millisecond, allowPrivate)
 	resp, err := client.Do(req)
 	if err != nil {
 		res := classifyRequestError(ctx, job, err)

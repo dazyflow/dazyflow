@@ -60,7 +60,22 @@ type pgMirror struct {
 	// mu serializes sync+push for this workspace. Cross-process safety comes
 	// from the caller electing a single mirroring replica; this guards the
 	// in-process case, where the mirror queue may coalesce concurrent triggers.
-	mu sync.Mutex
+	//
+	// Shared through mirrorLocks rather than owned: a pgMirror is built per
+	// mirror() call (and a Store per request), so a mutex of its own would
+	// serialize nothing.
+	mu *sync.Mutex
+}
+
+// mirrorLocks holds one mutex per (tenant, workspace, cache dir) for the life
+// of the process.
+var mirrorLocks sync.Map // mirrorLockKey -> *sync.Mutex
+
+type mirrorLockKey struct{ tenant, workspace, dir string }
+
+func mirrorLock(tenant, workspace, dir string) *sync.Mutex {
+	mu, _ := mirrorLocks.LoadOrStore(mirrorLockKey{tenant, workspace, dir}, new(sync.Mutex))
+	return mu.(*sync.Mutex)
 }
 
 func (m *pgMirror) push(ctx context.Context, remoteURL string, auth transport.AuthMethod, allowUnrelated bool) (PushResult, error) {

@@ -136,6 +136,22 @@ type mirrorPending struct {
 	timer   *time.Timer
 	running bool
 	dirty   bool
+
+	// The strongest trigger seen in the window the timer (trigger) or the
+	// running push (dirtyTrigger) covers. Keeping only the first dropped a
+	// publish that landed after a save, and a "save" push no-ops on a mirror that
+	// pushes on publish.
+	trigger      string
+	dirtyTrigger string
+}
+
+// strongerTrigger merges two triggers of one debounce window. Every trigger but
+// a save pushes whatever the mirror's push_on, so a save only survives alone.
+func strongerTrigger(have, next string) string {
+	if have == "" || have == PushOnSave {
+		return next
+	}
+	return have
 }
 
 // Schedules a debounced push; repeat calls collapse into the pending window.
@@ -160,18 +176,21 @@ func (p *MirrorPusher) Notify(tenant, workspace, trigger string) {
 	switch {
 	case st.running:
 		st.dirty = true
+		st.dirtyTrigger = strongerTrigger(st.dirtyTrigger, trigger)
 	case st.timer != nil:
+		st.trigger = strongerTrigger(st.trigger, trigger)
 	default:
+		st.trigger = trigger
 		p.wg.Add(1)
 		st.timer = time.AfterFunc(p.debounce(), func() {
 			defer p.wg.Done()
-			p.runQueued(tenant, workspace, trigger)
+			p.runQueued(tenant, workspace)
 		})
 	}
 	p.mu.Unlock()
 }
 
-func (p *MirrorPusher) runQueued(tenant, workspace, trigger string) {
+func (p *MirrorPusher) runQueued(tenant, workspace string) {
 	key := tenant + "/" + workspace
 	p.mu.Lock()
 	st := p.pending[key]
@@ -181,6 +200,8 @@ func (p *MirrorPusher) runQueued(tenant, workspace, trigger string) {
 	}
 	st.timer = nil
 	st.running = true
+	trigger := st.trigger
+	st.trigger = ""
 	p.mu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), mirrorPushTimeout)
@@ -194,10 +215,12 @@ func (p *MirrorPusher) runQueued(tenant, workspace, trigger string) {
 	again := st.dirty && !p.stopped
 	st.dirty = false
 	if again {
+		st.trigger = st.dirtyTrigger
+		st.dirtyTrigger = ""
 		p.wg.Add(1)
 		st.timer = time.AfterFunc(p.debounce(), func() {
 			defer p.wg.Done()
-			p.runQueued(tenant, workspace, trigger)
+			p.runQueued(tenant, workspace)
 		})
 	} else if st.timer == nil {
 		delete(p.pending, key)

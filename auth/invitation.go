@@ -59,11 +59,19 @@ type InvitationStore interface {
 	PutInvitation(ctx context.Context, inv Invitation) error
 	GetByToken(ctx context.Context, token string) (Invitation, error)
 	ListByTenant(ctx context.Context, tenant string) ([]Invitation, error)
+	// MarkAccepted claims a PENDING invitation (see IsPending at `at`);
+	// otherwise ErrInvitationNotPending, or ErrUnknownInvitation.
 	MarkAccepted(ctx context.Context, token string, at time.Time) error
 	MarkRevoked(ctx context.Context, token string, at time.Time) error
 }
 
 var ErrUnknownInvitation = errors.New("unknown invitation")
+
+// ErrInvitationNotPending is returned by MarkAccepted when the invitation was
+// already accepted, revoked, or had expired at the given time — the claim is
+// conditional, so two racing accepts (or an accept racing a revoke) cannot both
+// win.
+var ErrInvitationNotPending = errors.New("invitation is no longer pending")
 
 // MintInvitationToken returns a URL-safe random token long enough
 // that guessing is infeasible (32 hex chars = 128 bits of entropy).
@@ -189,6 +197,9 @@ func (s *JSONInvitationStore) MarkAccepted(_ context.Context, token string, at t
 	inv, ok := s.items[token]
 	if !ok {
 		return ErrUnknownInvitation
+	}
+	if !inv.IsPending(at) {
+		return ErrInvitationNotPending
 	}
 	inv.AcceptedAt = &at
 	s.items[token] = inv

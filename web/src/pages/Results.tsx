@@ -111,14 +111,15 @@ export function Results() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, activeTenant, activeWorkspace]);
+  }, [token, tenant, workspace]);
 
+  // A collection of the same name in another workspace is a different table, so
+  // a scope change starts over at the first page too.
   useEffect(() => {
     setOffset(0);
     setQuery("");
     setSort(null);
-  }, [selected]);
+  }, [selected, tenant, workspace]);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,8 +142,9 @@ export function Results() {
     return () => {
       cancelled = true;
     };
+    // `t` is left out: a language switch must not refetch the page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selected, offset]);
+  }, [token, selected, offset, tenant, workspace]);
 
   // What the table shows: the loaded rows, searched and then ordered. Search is
   // client-side over the loaded page (see the "first N loaded" note) and so is
@@ -169,7 +171,7 @@ export function Results() {
       : page.rows;
     if (!sort) return found;
     return sortRowsByColumn(found, sort.column, sort.desc, i18n.language);
-  }, [page, query, sort]);
+  }, [page, query, sort, i18n.language]);
 
   const hasMore = !!page && offset + page.rows.length < page.total;
   const paged = !!page && (offset > 0 || hasMore);
@@ -212,8 +214,14 @@ export function Results() {
     setError(null);
     try {
       await api.deleteBoardRow(token, selected, rowid, tenant, workspace);
-      const p = await api.getBoard(token, selected, { tenant, workspace });
-      setPage(p);
+      // Refetch the page on screen, not page 1: `offset` still points here.
+      const p = await api.getBoard(token, selected, { tenant, workspace, limit: PAGE_SIZE, offset });
+      if (p.rows.length === 0 && offset > 0) {
+        // The last row of a trailing page went; step back to the previous page.
+        setOffset(Math.max(0, offset - PAGE_SIZE));
+      } else {
+        setPage(p);
+      }
       reloadBoards();
     } catch (e) {
       setError(explainApiError(e, t));

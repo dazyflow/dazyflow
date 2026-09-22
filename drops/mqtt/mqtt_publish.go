@@ -104,6 +104,9 @@ func executePublish(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 
 	// Pre-dial SSRF check for a clean error; the dialer's Control hook is the
 	// rebinding-proof backstop on the actual connection.
+	if err := hfnet.EgressAllowedFor(ctx, broker); err != nil {
+		return params.Err(job, "egress_blocked", err.Error()), nil
+	}
 	if err := hfnet.CheckDialHost(brokerHostPort(broker)); err != nil {
 		return params.Err(job, "egress_blocked", err.Error()), nil
 	}

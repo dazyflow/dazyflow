@@ -151,6 +151,14 @@ func TestRefuseInlineOnlyFileRefs(t *testing.T) {
 	}); err != nil {
 		t.Errorf("a file was refused on a port that never declared InlineOnly: %v", err)
 	}
+	// A variadic port is keyed "port[idx]", one entry per edge; a file on any
+	// of them must be refused too.
+	if err := refuseInlineOnlyFileRefs(m, map[string]core.Ref{
+		"in[0]": {Inline: "ok"},
+		"in[1]": {Ref: "invoices/april.csv"},
+	}); err == nil || !strings.Contains(err.Error(), "invoices/april.csv") {
+		t.Errorf("a file on a variadic InlineOnly edge was not refused: %v", err)
+	}
 }
 
 // An inline value is the supported shape and must reach the runner.

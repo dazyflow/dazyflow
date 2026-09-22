@@ -170,6 +170,9 @@ export function useRunStream({
                 api
                   .getNodeRecord(token, runID, nodeID)
                   .then((r) => {
+                    // A newer run (or unmount) replaced this stream while the
+                    // record was loading: its result belongs to the old run.
+                    if (abort.signal.aborted) return;
                     const out = r.Result?.output as
                       | Record<string, Ref>
                       | undefined;
@@ -190,6 +193,7 @@ export function useRunStream({
                   })
                   .catch(() => {
                     /* 404 = node hasn't materialised yet; ignore */
+                    if (abort.signal.aborted) return;
                     if (failed) {
                       const label =
                         flow.current?.getNode(nodeID)?.data?.label || nodeID;

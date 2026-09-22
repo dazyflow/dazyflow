@@ -19,7 +19,7 @@ import { explainApiError } from "../../lib/explainApiError";
 import { skipCopy } from "../../lib/skipReason";
 import { ApprovalPanel } from "../../components/editor/ApprovalPanel";
 import { supportContactWithContext } from "../../lib/supportContact";
-import { pickResultNode, resultView } from "../../lib/runResult";
+import { orderNodesOldestFirst, pickResultNode, resultView } from "../../lib/runResult";
 import { collectArtifacts } from "../../lib/runArtifacts";
 import { RunResultPanel } from "./RunResultPanel";
 import { RunFilesPanel } from "./RunFilesPanel";
@@ -92,7 +92,9 @@ export function RunDetail() {
       cancelled = true;
     };
     // The two FIELDS, not `me` itself: a new object identity would re-run this.
-  }, [token, run?.GraphID, activeTenant, activeWorkspace, me?.tenant, me?.workspace]);
+    // `runID` because a retry is a new run of the SAME graph: the effect above
+    // cleared the definitions, and an unchanged GraphID alone would never reload them.
+  }, [token, runID, run?.GraphID, activeTenant, activeWorkspace, me?.tenant, me?.workspace]);
 
   const failedApp = (nodeID: string | undefined): AppContext | undefined => {
     if (!nodeID) return undefined;
@@ -243,11 +245,7 @@ export function RunDetail() {
     );
   }
 
-  const orderedNodes = [...nodes].sort((a, b) => {
-    const ta = Date.parse(timestamp(a, "EnqueuedAt", "enqueued_at"));
-    const tb = Date.parse(timestamp(b, "EnqueuedAt", "enqueued_at"));
-    return ta - tb;
-  });
+  const orderedNodes = orderNodesOldestFirst(nodes);
 
   const failedNode = orderedNodes.find((n) => n.Status === "failed");
 
@@ -634,15 +632,20 @@ function RunLogs({
   const cursor = useRef(0);
   const scroller = useRef<HTMLDivElement | null>(null);
   const stick = useRef(true);
+  // Bumped when the run changes, so a paging loop still running for the old run
+  // stops instead of writing its lines (and cursor) into the new run's log.
+  const generation = useRef(0);
 
   // A short page means the end; anything else keeps paging.
   const fetchMore = async () => {
+    const gen = generation.current;
     for (;;) {
       const before = cursor.current;
       const page = await api.listRunLogs(token, runID, {
         after: cursor.current,
         limit: 1000,
       });
+      if (gen !== generation.current) return;
       const logs = page.logs ?? [];
       if (logs.length > 0) {
         cursor.current = logs[logs.length - 1].seq;
@@ -659,6 +662,7 @@ function RunLogs({
   };
 
   useEffect(() => {
+    generation.current += 1;
     cursor.current = 0;
     setEntries([]);
     setLoaded(false);
@@ -1014,15 +1018,6 @@ function retryCountdown(iso: string | null | undefined): string {
   return `${Math.round(secs / 60)}${NBSP}min`;
 }
 
-
-// The wire carries either shape depending on the route's age.
-function timestamp(rec: JobRecord, ...keys: string[]): string {
-  for (const k of keys) {
-    const v = (rec as unknown as Record<string, string | null | undefined>)[k];
-    if (v) return v;
-  }
-  return "";
-}
 
 function previewValue(ref: Ref): string {
   if (ref.ref) return `→ ${ref.ref}`;

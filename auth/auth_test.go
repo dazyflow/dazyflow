@@ -193,6 +193,14 @@ func TestOIDC_AuthenticateWithFakeVerifier(t *testing.T) {
 	if !p.Has(core.PermGraphEdit) {
 		t.Errorf("editor should have graph:edit")
 	}
+	// A sub that looks like a local email must not become that user's subject.
+	if p.Subject == "user@example.com" || p.Subject != OIDCSubject("https://idp", "user@example.com") {
+		t.Errorf("subject = %q, want the issuer-qualified form", p.Subject)
+	}
+	auth.Verifier = stubVerifier{claims: Claims{Tenant: "acme"}}
+	if _, err := auth.Authenticate(t.Context(), "aaa.bbb.ccc"); err == nil {
+		t.Error("token without sub accepted")
+	}
 }
 
 type stubVerifier struct{ claims Claims }

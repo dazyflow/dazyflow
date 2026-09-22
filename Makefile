@@ -60,7 +60,7 @@ LDFLAGS := -s -w \
 
 .PHONY: help up down restart logs ps build rebuild env pg pg-down test-db dev web test vet fmt fmt-check env-check check ci \
 	runner-embed runner-test \
-        integration-catalog drop-catalog sv-aliases catalogs catalogs-check check-changelog flowgen-eval \
+        integration-catalog drop-catalog sv-aliases catalogs catalogs-check check-changelog flowgen-eval stress \
         links-check \
         docs-content docs-site docs-dev bin version latest major minor patch _bump upgrade
 
@@ -284,8 +284,13 @@ check-changelog: ## Fail if a released CHANGELOG section has been edited
 # exactly the moment an entry filed under the PREVIOUS version's heading gets
 # silently baked in — and the refusal below ("[Unreleased] is empty") is the
 # symptom people see instead of the cause.
+#
+# set -e: without it a failed `git commit` fell through to `git tag`, tagging
+# the PREVIOUS HEAD as the new release. CUR comes from LATEST_TAG (below), not
+# `git describe`, which would pick up a non-version or pre-release tag.
 _bump: check-changelog
-	@CUR=$$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0); \
+	@set -e; \
+	CUR=$$($(LATEST_TAG)); CUR=$${CUR:-0.0.0}; \
 	MAJOR=$$(echo "$$CUR" | cut -d. -f1); \
 	MINOR=$$(echo "$$CUR" | cut -d. -f2); \
 	PATCH=$$(echo "$$CUR" | cut -d. -f3); \

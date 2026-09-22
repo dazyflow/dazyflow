@@ -92,6 +92,10 @@ func extractStripeError(body []byte) string {
 }
 
 // A wired port overrides the param.
+// amountUnset is the fallback that tells "no amount given" apart from an
+// explicit 0.
+const amountUnset = math.MinInt
+
 func numberInputOr(job core.Job, port string, fallback int) (int, bool) {
 	in, present := job.Input[port]
 	if !present || in.Inline == nil {

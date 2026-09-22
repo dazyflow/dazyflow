@@ -319,8 +319,12 @@ export function SupportQueue() {
   const [error, setError] = useState<string | null>(null);
   const [claiming, setClaiming] = useState<string | null>(null);
 
+  // Only the latest refresh may land: switching chips quickly would otherwise
+  // let the slower, older queue overwrite the one the chip now names.
+  const refreshSeq = useRef(0);
   const refresh = useCallback(async () => {
     if (!token) return;
+    const seq = ++refreshSeq.current;
     setLoading(true);
     try {
       const [queue, counts] = await Promise.all([
@@ -331,13 +335,14 @@ export function SupportQueue() {
         }),
         api.ticketQueueSummary(token),
       ]);
+      if (seq !== refreshSeq.current) return;
       setTickets(queue.tickets ?? []);
       setSummary(counts);
       setError(null);
     } catch (e) {
-      setError(explainApiError(e, t));
+      if (seq === refreshSeq.current) setError(explainApiError(e, t));
     } finally {
-      setLoading(false);
+      if (seq === refreshSeq.current) setLoading(false);
     }
   }, [token, t, view]);
 
@@ -590,19 +595,35 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
   const [showBundle, setShowBundle] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  // Every write to `view` takes a number; a poll answers only if nothing newer
+  // started since. Otherwise a poll sent just before "Send" lands after it and
+  // the thread loses the message that was just posted (or shows the old ticket
+  // after navigating to another).
+  const viewSeq = useRef(0);
 
   const load = useCallback(async () => {
     if (!token) return;
+    const seq = ++viewSeq.current;
     try {
       const v = mode === "agent" ? await api.getSupportTicket(token, id) : await api.getMyTicket(token, id);
+      if (seq !== viewSeq.current) return;
       setView(v);
       setError(null);
     } catch (e) {
-      setError(explainApiError(e, t));
+      if (seq === viewSeq.current) setError(explainApiError(e, t));
     } finally {
-      setLoading(false);
+      if (seq === viewSeq.current) setLoading(false);
     }
   }, [token, id, mode, t]);
+
+  // A mutation's answer is the freshest view there is: it fences off the polls
+  // in flight both when it starts and when it lands.
+  const mutate = async (call: () => Promise<TicketView>) => {
+    viewSeq.current++;
+    const v = await call();
+    viewSeq.current++;
+    setView(v);
+  };
 
   useEffect(() => {
     void load();
@@ -649,11 +670,11 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
     if (!token || !draft.trim()) return;
     setBusy(true);
     try {
-      const v =
+      await mutate(() =>
         mode === "agent"
-          ? await api.postSupportTicketMessage(token, id, draft.trim())
-          : await api.postMyTicketMessage(token, id, draft.trim());
-      setView(v);
+          ? api.postSupportTicketMessage(token, id, draft.trim())
+          : api.postMyTicketMessage(token, id, draft.trim()),
+      );
       setDraft("");
     } catch (e) {
       setError(explainApiError(e, t));
@@ -666,7 +687,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
     if (!token) return;
     setBusy(true);
     try {
-      setView(await api.setSupportTicketStatus(token, id, status));
+      await mutate(() => api.setSupportTicketStatus(token, id, status));
     } catch (e) {
       setError(explainApiError(e, t));
     } finally {
@@ -678,7 +699,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
     if (!token) return;
     setBusy(true);
     try {
-      setView(await api.setMyTicketStatus(token, id, status));
+      await mutate(() => api.setMyTicketStatus(token, id, status));
     } catch (e) {
       setError(explainApiError(e, t));
     } finally {
@@ -690,7 +711,7 @@ export function TicketThread({ mode }: { mode: "user" | "agent" }) {
     if (!token) return;
     setBusy(true);
     try {
-      setView(await api.assignSupportTicket(token, id, assignee));
+      await mutate(() => api.assignSupportTicket(token, id, assignee));
     } catch (e) {
       setError(explainApiError(e, t));
     } finally {

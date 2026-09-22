@@ -1647,7 +1647,7 @@ function EditorInner() {
       }
     }
     return errs;
-  }, [nodes, paramsByID, connectedInputsByNode, edges, loopOwnerByNode]);
+  }, [nodes, paramsByID, connectedInputsByNode, edges, loopOwnerByNode, disabledNodes]);
 
   const setupNeededByNode = useMemo(() => {
     const out = new Map<string, SetupNeed>();
@@ -1882,6 +1882,7 @@ function EditorInner() {
         disabled,
         off,
         breakpoint,
+        keepGoing,
         collapsed,
         locked,
         paused,
@@ -1946,6 +1947,7 @@ function EditorInner() {
     setNodeParam,
     connectedInputsByNode,
     connectedOutputsByNode,
+    wiredPlaceByNode,
     nodeOutputs,
     dataView,
     configErrorsByNode,
@@ -1958,6 +1960,7 @@ function EditorInner() {
     offByCascade,
     tokenLabels,
     breakpoints,
+    continueOnError,
     collapsedNodes,
     lockedNodes,
     setNodeCollapsed,
@@ -2476,6 +2479,13 @@ function EditorInner() {
     loadFailedRef,
   } = autosave;
 
+  // A preview replaces the canvas and switches autosave off, so edits not yet
+  // saved would be silently dropped: write them first, and stay put if that fails
+  // (the save has already reported why).
+  const previewRevisionSaved = async (commit: string) => {
+    if (!previewRef && dirtyRef.current && !(await save(true))) return;
+    await previewRevision(commit);
+  };
 
   const buildHistoryDoc = (): Graph => {
     const g = buildGraph();
@@ -3900,7 +3910,7 @@ function EditorInner() {
                   <li key={rev.commit}>
                     <Button
                       className={`history-row${previewRef === rev.commit ? " active" : ""}`}
-                      onClick={() => void previewRevision(rev.commit)}
+                      onClick={() => void previewRevisionSaved(rev.commit)}
                       title={formatDateTime(rev.when)}
                     >
                       <span className="history-row-when">

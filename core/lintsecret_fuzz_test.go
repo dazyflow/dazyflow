@@ -21,6 +21,12 @@ func FuzzKnownSecretPrefilter(f *testing.F) {
 		"AIzaSyA1234567890abcdefghijklmnopqrstuv",
 		"-----BEGIN RSA PRIVATE KEY-----",
 		"-----BEGIN PRIVATE KEY-----",
+		"-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----",
+		"sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123",
+		"sk-proj-abcdefghijklmnopqrstuvwxyz0123",
+		"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N",
+		"aws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		"task-management-service-name-long",
 		// And the near-misses, where a marker is present but the value is not
 		// a credential — the pre-filter must hand these to the regex and the
 		// regex must decline them.

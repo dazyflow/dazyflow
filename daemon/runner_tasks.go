@@ -471,10 +471,16 @@ func (d *RunnerDispatcher) Dispatch(ctx context.Context, req DispatchRequest, on
 			if cur.State == TaskQueued {
 				reason := fmt.Sprintf("no machine tagged %s picked this step up within %s",
 					tagList(req.Tags), req.Timeout)
-				if _, cerr := d.Tasks.CancelQueued(ctx, req.Tenant, task.ID,
-					cancelledResult(reason), now); cerr != nil {
+				cancelled, cerr := d.Tasks.CancelQueued(ctx, req.Tenant, task.ID,
+					cancelledResult(reason), now)
+				if cerr != nil {
 					return RunnerTaskResult{}, fmt.Errorf(
 						"%s (and the queued task could not be closed: %v)", reason, cerr)
+				}
+				// A runner claimed it between the read and the cancel: re-read and report
+				// what actually happened rather than calling a picked-up task unpicked.
+				if !cancelled {
+					continue
 				}
 				return RunnerTaskResult{}, errors.New(reason)
 			}

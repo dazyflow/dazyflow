@@ -167,11 +167,10 @@ const vaultConfigSecretName = "cfg:secret-manager"
 
 // vaultAPIClient talks to OpenBao/Vault through OpenBao's official Go SDK
 // (github.com/openbao/openbao/api/v2) — so token handling, KV-v2 path munging,
-// namespaces, TLS, and retries are the SDK's job, not ours. It deliberately does
-// NOT use the flow-egress SSRF guard: a secret manager normally lives at an
-// internal/private address, and the address is admin-configured per tenant, not
-// attacker-controlled flow input. AppRole-derived tokens are cached until
-// shortly before their lease expires.
+// namespaces, TLS, and retries are the SDK's job, not ours. The tenant-supplied
+// address is dialled through the shared SSRF guard (see newClient); an operator
+// whose secret manager lives at a private address opts into private egress.
+// AppRole-derived tokens are cached until shortly before their lease expires.
 type vaultAPIClient struct {
 	timeout time.Duration
 

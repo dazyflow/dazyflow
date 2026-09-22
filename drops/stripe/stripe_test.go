@@ -240,6 +240,22 @@ func TestCreateRefund(t *testing.T) {
 		t.Errorf("fractional amount res = %+v", res)
 	}
 
+	// An explicit 0 (wired or set) must not turn into a full refund.
+	for _, tc := range []struct {
+		p  map[string]any
+		in map[string]core.Ref
+	}{
+		{map[string]any{"payment_intent": "pi_1", "amount": 0}, nil},
+		{map[string]any{"payment_intent": "pi_1"}, map[string]core.Ref{"amount": {Inline: float64(0)}}},
+		{map[string]any{"payment_intent": "pi_1"}, map[string]core.Ref{"amount": {Inline: "0"}}},
+	} {
+		f.lastForm = nil
+		res = run(t, f, "stripe_create_refund", tc.p, tc.in)
+		if res.Status != core.StatusError || res.Error.Code != "bad_input" || f.lastForm != nil {
+			t.Errorf("zero amount %v/%v: res = %+v form = %v", tc.p, tc.in, res, f.lastForm)
+		}
+	}
+
 	res = run(t, f, "stripe_create_refund", map[string]any{"payment_intent": "pi_missing"}, nil)
 	if res.Status != core.StatusError || !strings.Contains(res.Error.Message, "No such payment_intent") {
 		t.Errorf("missing pi res = %+v", res)
@@ -638,6 +654,15 @@ func TestFormatPriceAmount(t *testing.T) {
 	}
 	if got := formatPriceAmount(0, "usd"); got != "" {
 		t.Errorf("zero amount = %q", got)
+	}
+	if got := formatPriceAmount(-150, "eur"); got != "-1.50 EUR" {
+		t.Errorf("negative = %q, want -1.50 EUR", got)
+	}
+	if got := formatPriceAmount(-5, "eur"); got != "-0.05 EUR" {
+		t.Errorf("small negative = %q, want -0.05 EUR", got)
+	}
+	if got := formatPriceAmount(12345, "kwd"); got != "12.345 KWD" {
+		t.Errorf("kwd (three-decimal) = %q, want 12.345 KWD", got)
 	}
 	if got := formatPriceAmount(100, ""); got != "" {
 		t.Errorf("no currency = %q", got)

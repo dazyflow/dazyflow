@@ -49,7 +49,7 @@ func BenchmarkKnownSecretLenGuard(b *testing.B) {
 
 // Every alternative needs one of these substrings, so a string holding none of
 // them cannot match.
-var secretMarkers = []string{"sk_", "gh", "xox", "AKIA", "AIza", "-----BEGIN "}
+var secretMarkers = secretValueMarkers[:]
 
 func BenchmarkKnownSecretPrefilter(b *testing.B) {
 	benchScan(b, func(s string) bool {
@@ -65,7 +65,7 @@ func BenchmarkKnownSecretPrefilter(b *testing.B) {
 	})
 }
 
-var markerRe = regexp.MustCompile(`sk_|gh|xox|AKIA|AIza|-----BEGIN `)
+var markerRe = regexp.MustCompile(`sk_|gh|github_pat_|xox|AKIA|AIza|sk-|eyJ|aws_secret_access_key|AWS_SECRET_ACCESS_KEY|-----BEGIN `)
 
 func BenchmarkKnownSecretMarkerRegex(b *testing.B) {
 	benchScan(b, func(s string) bool {

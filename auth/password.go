@@ -4,10 +4,12 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -92,6 +94,42 @@ type UserStore interface {
 
 var ErrUnknownUser = errors.New("unknown user")
 
+// UserFieldUpdater is implemented by stores that can change single fields
+// atomically. The login paths use it instead of a whole-row PutUser, whose
+// read-modify-write would undo a concurrent suspension, password reset or 2FA
+// change with the stale row it read. Each method reports whether it changed
+// anything; false means its precondition no longer held.
+type UserFieldUpdater interface {
+	// Sets totp_last_step only if step is later than the stored one; false = replay.
+	AdvanceTOTPStep(ctx context.Context, email string, step int64) (bool, error)
+	// Removes one recovery-code hash; false = already consumed.
+	RemoveRecoveryCode(ctx context.Context, email, hash string) (bool, error)
+	// Swaps the password hash only if it is still old; false = changed meanwhile.
+	ReplacePasswordHash(ctx context.Context, email string, old, fresh []byte) (bool, error)
+	// Sets verified_at (clearing the verify token) only if not yet verified.
+	MarkEmailVerified(ctx context.Context, email string, at time.Time) (bool, error)
+}
+
+// MarkEmailVerified stamps the user's email as verified without rewriting the
+// rest of the row. Returns false when it already was. Stores without
+// UserFieldUpdater fall back to a read-modify-write.
+func MarkEmailVerified(ctx context.Context, store UserStore, email string, at time.Time) (bool, error) {
+	if up, ok := store.(UserFieldUpdater); ok {
+		return up.MarkEmailVerified(ctx, email, at)
+	}
+	u, err := store.GetByEmail(ctx, email)
+	if err != nil {
+		return false, err
+	}
+	if u.EmailVerified() {
+		return false, nil
+	}
+	u.VerifiedAt = &at
+	u.VerifyTokenHash = nil
+	u.VerifyExpiresAt = nil
+	return true, store.PutUser(ctx, u)
+}
+
 // The unknown-user path compares against this, so a missing account costs the
 // same bcrypt work as a wrong password and cannot be told apart by timing.
 var timingDummyHash = sync.OnceValue(func() []byte {
@@ -159,6 +197,11 @@ func UpgradePasswordCost(ctx context.Context, store UserStore, u User, password 
 	if err != nil {
 		return err
 	}
+	if up, ok := store.(UserFieldUpdater); ok {
+		// A false result means the hash changed meanwhile (a reset): keep that.
+		_, err := up.ReplacePasswordHash(ctx, u.Email, u.PasswordHash, fresh)
+		return err
+	}
 	u.PasswordHash = fresh
 	return store.PutUser(ctx, u)
 }
@@ -201,6 +244,66 @@ func (s *JSONUserStore) PutUser(_ context.Context, u User) error {
 	defer s.mu.Unlock()
 	s.items[u.Email] = u
 	return s.flushLocked()
+}
+
+// update applies fn to the stored user under the write lock and flushes when fn
+// reports a change.
+func (s *JSONUserStore) update(email string, fn func(*User) bool) (bool, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.items[email]
+	if !ok {
+		return false, ErrUnknownUser
+	}
+	if !fn(&u) {
+		return false, nil
+	}
+	s.items[email] = u
+	return true, s.flushLocked()
+}
+
+func (s *JSONUserStore) AdvanceTOTPStep(_ context.Context, email string, step int64) (bool, error) {
+	return s.update(email, func(u *User) bool {
+		if step <= u.TOTPLastStep {
+			return false
+		}
+		u.TOTPLastStep = step
+		return true
+	})
+}
+
+func (s *JSONUserStore) RemoveRecoveryCode(_ context.Context, email, hash string) (bool, error) {
+	return s.update(email, func(u *User) bool {
+		i := slices.Index(u.RecoveryCodeHashes, hash)
+		if i < 0 {
+			return false
+		}
+		u.RecoveryCodeHashes = slices.Delete(slices.Clone(u.RecoveryCodeHashes), i, i+1)
+		return true
+	})
+}
+
+func (s *JSONUserStore) ReplacePasswordHash(_ context.Context, email string, old, fresh []byte) (bool, error) {
+	return s.update(email, func(u *User) bool {
+		if !bytes.Equal(u.PasswordHash, old) {
+			return false
+		}
+		u.PasswordHash = fresh
+		return true
+	})
+}
+
+func (s *JSONUserStore) MarkEmailVerified(_ context.Context, email string, at time.Time) (bool, error) {
+	return s.update(email, func(u *User) bool {
+		if u.EmailVerified() {
+			return false
+		}
+		u.VerifiedAt = &at
+		u.VerifyTokenHash = nil
+		u.VerifyExpiresAt = nil
+		return true
+	})
 }
 
 func (s *JSONUserStore) ListUsers(_ context.Context) ([]User, error) {

@@ -50,7 +50,7 @@ FAKE_AGENT = """#!/usr/bin/env python3
 import json, os, sys
 args = sys.argv[1:]
 with open(os.environ["AGENT_CALLS"], "a") as fh:
-    fh.write(" ".join(args) + "\\n")
+    fh.write(" ".join(args) + " token=" + os.environ.get("DAZYFLOW_RUNNER_TOKEN", "") + "\\n")
 rc = int(os.environ.get("AGENT_EXIT", "0"))
 if rc == 0 and "--register-only" in args:
     # Registering saves the credential, which is what runner.sh looks for before
@@ -138,7 +138,7 @@ class SetupHarness(unittest.TestCase):
             "AGENT_CALLS": str(self.agent_calls),
             "SYSTEMCTL_CALLS": str(self.systemctl_calls),
             "LOGINCTL_CALLS": str(self.loginctl_calls),
-            "DAZYFLOW_URL": "https://dzd.example.com",
+            "DAZYFLOW_RUNNER_URL": "https://dzd.example.com",
         }
         self.stub("curl", STUB_CURL)
         self.stub("systemctl", STUB_SYSTEMCTL)
@@ -296,7 +296,10 @@ class TestRefusesBeforeSpendingTheToken(SetupHarness):
         self.unstub("systemctl")
         r = self.run_install("--token", "t")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("--token t", self.calls(self.agent_calls))
+        # Handed over in the environment, never on the agent's command line,
+        # where every user on the machine could read it.
+        self.assertIn("token=t", self.calls(self.agent_calls))
+        self.assertNotIn("--token", self.calls(self.agent_calls))
         self.assertFalse(self.unit.exists())
 
 
@@ -352,6 +355,21 @@ class TestLinger(SetupHarness):
 
 
 class TestArgumentHandling(SetupHarness):
+    def test_an_ambient_dazyflow_url_is_not_taken_as_the_server(self):
+        # DAZYFLOW_URL is a name other tooling sets. Picking it up would send
+        # the registration token (and then the credential) wherever it points,
+        # instead of to the server that served this script.
+        r = self.run_install("--token", "t", DAZYFLOW_RUNNER_URL="",
+                             DAZYFLOW_URL="https://elsewhere.example.com")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("no server address", r.stderr)
+        self.assertNotIn("elsewhere", self.calls(self.agent_calls))
+
+    def test_the_token_can_come_from_the_environment(self):
+        r = self.run_install("--name", "box", DAZYFLOW_RUNNER_TOKEN="dzrt_env")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("token=dzrt_env", self.calls(self.agent_calls))
+
     def test_a_missing_token_explains_where_to_get_one(self):
         r = self.run_install("--service")
         self.assertNotEqual(r.returncode, 0)

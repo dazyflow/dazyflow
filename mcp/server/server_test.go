@@ -147,6 +147,42 @@ func TestServer_NotificationProducesNoResponse(t *testing.T) {
 	}
 }
 
+// An oversized line used to end Serve with bufio.ErrTooLong, killing the
+// session. It must be answered with an error and the next line still served.
+func TestServer_OversizedLineIsRejectedAndServingContinues(t *testing.T) {
+	s := &server.Server{Name: "t", Version: "1"}
+	huge := `{"jsonrpc":"2.0","id":1,"method":"ping","params":{"x":"` +
+		strings.Repeat("a", 5*1024*1024) + `"}}`
+	out := runServer(t, s, huge+"\n"+`{"jsonrpc":"2.0","id":2,"method":"ping"}`+"\n")
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("got %d response lines, want 2: %q", len(lines), out)
+	}
+	if !strings.Contains(lines[0], "-32600") || !strings.Contains(lines[0], "exceeds") {
+		t.Errorf("first response = %q, want a too-large error", lines[0])
+	}
+	if !strings.Contains(lines[1], `"id":2`) || !strings.Contains(lines[1], `"result"`) {
+		t.Errorf("second response = %q, want the ping result", lines[1])
+	}
+}
+
+// MCP forbids a null id; it is refused rather than executed as a request.
+func TestServer_NullIDIsInvalidRequest(t *testing.T) {
+	s := &server.Server{Name: "t", Version: "1"}
+	out := runServer(t, s, `{"jsonrpc":"2.0","id":null,"method":"ping"}`+"\n")
+	if !strings.Contains(out, "-32600") || strings.Contains(out, `"result"`) {
+		t.Errorf("out = %q, want an Invalid Request error", out)
+	}
+}
+
+func TestServer_LastLineWithoutNewlineIsServed(t *testing.T) {
+	s := &server.Server{Name: "t", Version: "1"}
+	out := runServer(t, s, `{"jsonrpc":"2.0","id":3,"method":"ping"}`)
+	if !strings.Contains(out, `"id":3`) {
+		t.Errorf("out = %q", out)
+	}
+}
+
 func TestServer_Ping(t *testing.T) {
 	s := &server.Server{Name: "t", Version: "1"}
 	out := runServer(t, s, `{"jsonrpc":"2.0","id":7,"method":"ping"}`+"\n")

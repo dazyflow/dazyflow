@@ -99,6 +99,32 @@ func TestValidate_DuplicateReportBoundary(t *testing.T) {
 	}
 }
 
+// Unknown endpoints, empty ports, self-loops and bad on_error are capped like
+// the other per-edge rules.
+func TestValidate_PerEdgeRulesAreCapped(t *testing.T) {
+	const n = 3 * maxReportedPerRule
+	g := Graph{Nodes: []Node{{ID: "a", Module: "m"}}}
+	for i := range n {
+		g.Edges = append(g.Edges, Edge{From: fmt.Sprintf("x%d", i), To: fmt.Sprintf("y%d", i)})
+		g.Edges = append(g.Edges, Edge{From: "a", To: "a", FromPort: fmt.Sprint(i), ToPort: "p", OnError: "bogus"})
+	}
+	msg := Validate(g).Error()
+	for _, frag := range []string{"unknown source node", "unknown target node", "empty from_port", "empty to_port", "self-loop on node", "unknown on_error"} {
+		if got := strings.Count(msg, frag); got < maxReportedPerRule || got > maxReportedPerRule+1 {
+			t.Errorf("%q reported %d times, want %d (+1 summary)", frag, got, maxReportedPerRule)
+		}
+	}
+	for _, want := range []string{
+		fmt.Sprintf("%d connections have an unknown source node in total", n),
+		fmt.Sprintf("%d self-loops in total", n),
+		fmt.Sprintf("%d connections have an unknown on_error in total", n),
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("missing summary %q", want)
+		}
+	}
+}
+
 func TestValidate_WaypointOverrunReportBoundary(t *testing.T) {
 	over := make([]Position, MaxEdgeWaypoints+1)
 	build := func(edges int) Graph {

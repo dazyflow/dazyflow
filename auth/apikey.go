@@ -90,7 +90,7 @@ func (a *APIKeyAuthenticator) Authenticate(ctx context.Context, credential strin
 		Subject:   key.Subject,
 		Tenant:    key.Tenant,
 		Workspace: key.Workspace,
-		Roles:     key.Roles,
+		Roles:     core.UpgradeLegacyRoles(key.Roles),
 	}, nil
 }
 

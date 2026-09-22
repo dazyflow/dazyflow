@@ -25,10 +25,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/apibase"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
@@ -61,10 +64,11 @@ func regionBase(region string) string {
 }
 
 // baseURL resolves the API root for one job: an explicit base_url param wins (the
-// test seam), otherwise the connection's region selects the host.
+// test seam; outside tests only on a Klarna host, since the API credentials go
+// with it), otherwise the connection's region selects the host.
 func baseURL(job core.Job) string {
-	if u, _ := params.StringOpt(job.Params, "base_url"); u != "" {
-		return strings.TrimRight(u, "/")
+	if u := apibase.Override(job, slices.Collect(maps.Values(regionHosts))...); u != "" {
+		return u
 	}
 	return regionBase(params.StringDefault(job.Params, "region", ""))
 }

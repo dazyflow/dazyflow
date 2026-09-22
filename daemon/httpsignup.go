@@ -4,6 +4,7 @@
 package daemon
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -95,7 +96,7 @@ func (h *authAPI) signUp(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tenant, err := mintTenantID()
+	tenant, err := h.mintFreshTenantID(r.Context(), mintTenantID)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, fmt.Sprintf("mint tenant: %v", err))
 		return
@@ -218,8 +219,12 @@ func validSignupPassword(password string) error {
 	return nil
 }
 
+// 80 random bits: a tenant id is the isolation key for everything an org owns,
+// so a collision would merge two customers.
+const tenantIDRandomBytes = 10
+
 func mintTenantID() (string, error) {
-	b := make([]byte, 4)
+	b := make([]byte, tenantIDRandomBytes)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
@@ -227,19 +232,49 @@ func mintTenantID() (string, error) {
 }
 
 func mintOrgTenantID() (string, error) {
-	b := make([]byte, 4)
+	b := make([]byte, tenantIDRandomBytes)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
 	return "org_" + hex.EncodeToString(b), nil
 }
 
+// mintFreshTenantID mints with mint until the id is not already in use.
+func (h *authAPI) mintFreshTenantID(ctx context.Context, mint func() (string, error)) (string, error) {
+	const attempts = 5
+	for range attempts {
+		id, err := mint()
+		if err != nil {
+			return "", err
+		}
+		if !h.tenantIDTaken(ctx, id) {
+			return id, nil
+		}
+	}
+	return "", errors.New("could not mint an unused tenant id")
+}
+
+func (h *authAPI) tenantIDTaken(ctx context.Context, tenant string) bool {
+	if h.Profiles != nil {
+		if _, err := h.Profiles.GetOrgProfile(ctx, tenant); err == nil {
+			return true
+		}
+	}
+	if h.Memberships != nil {
+		if ms, err := h.Memberships.ListByTenant(ctx, tenant); err == nil && len(ms) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func defaultSignupRoles() []core.Role {
 	return []core.Role{
 		core.TeamRoleEditor(),
 		{
-			Name:        "tenant_owner",
-			Permissions: []core.Permission{core.PermOrganizationAdmin},
+			Name: "tenant_owner",
+			// graph:admin (publish) is the owner's; editor no longer carries it.
+			Permissions: []core.Permission{core.PermOrganizationAdmin, core.PermGraphAdmin},
 		},
 	}
 }

@@ -26,6 +26,7 @@ func main() {
 		SilenceErrors: true,
 	}
 	root.PersistentFlags().StringVar(&serverFlag, "server", "localhost:50050", "dzd gRPC address")
+	root.PersistentFlags().BoolVar(&insecureFlag, "insecure", false, "allow plaintext gRPC to a non-loopback --server (sends the bearer token unencrypted; also DZCTL_INSECURE=1)")
 
 	root.AddCommand(graphCmd())
 	root.AddCommand(moduleCmd())

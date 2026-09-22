@@ -220,6 +220,15 @@ func (m *Memory) CountsByStatus(_ context.Context) (map[core.JobStatus]int, erro
 }
 
 func (m *Memory) Requeue(_ context.Context, jobID string, availableAt time.Time) error {
+	return m.requeue(jobID, "", availableAt)
+}
+
+// RequeueOwned is Requeue fenced on lease ownership.
+func (m *Memory) RequeueOwned(_ context.Context, jobID, worker string, availableAt time.Time) error {
+	return m.requeue(jobID, worker, availableAt)
+}
+
+func (m *Memory) requeue(jobID, worker string, availableAt time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	r, ok := m.records[jobID]
@@ -231,9 +240,14 @@ func (m *Memory) Requeue(_ context.Context, jobID string, availableAt time.Time)
 		// new record ID.
 		return core.ErrConflict
 	}
+	if worker != "" && r.WorkerID != worker {
+		return core.ErrConflict
+	}
 	r.Status = core.JobStatusQueued
 	r.AvailableAt = &availableAt
 	r.LeaseUntil = nil
+	// The previous holder must not be able to complete the requeued record.
+	r.WorkerID = ""
 	r.Result = nil
 	return nil
 }
@@ -524,7 +538,9 @@ func (m *Memory) CountGraphRuns(ctx context.Context, opts core.ListGraphRunsOpts
 	// Limit means "count no further than", so an unset one must not fall through to
 	// ListGraphRuns' default page of 50 and under-report.
 	if opts.Limit <= 0 {
+		m.mu.Lock()
 		opts.Limit = len(m.records) + 1
+		m.mu.Unlock()
 	}
 	recs, err := m.ListGraphRuns(ctx, opts)
 	if err != nil {

@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/apibase"
 	"github.com/dazyflow/dazyflow/drops/internal/google"
-	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // maxResponseBytes caps how much of an API response we buffer so a hostile
@@ -53,12 +53,13 @@ func SetHTTPBase(base string) {
 }
 
 func formsBaseURL(job core.Job) string {
-	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
+	baseMu.RLock()
+	def := formsBase
+	baseMu.RUnlock()
+	if b := apibase.Override(job, def); b != "" {
 		return b
 	}
-	baseMu.RLock()
-	defer baseMu.RUnlock()
-	return formsBase
+	return def
 }
 
 func googleGet(ctx context.Context, url, token string, timeoutMS int) (int, []byte, error) {

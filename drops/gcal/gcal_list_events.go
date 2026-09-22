@@ -152,27 +152,44 @@ func ListEvents(ctx context.Context, job core.Job) ([]map[string]any, error) {
 		q.Set("q", v)
 	}
 
-	endpoint := calBaseURL(job) + "/calendars/" + url.PathEscape(resolveCalendarID(job)) + "/events?" + q.Encode()
-	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
-	if err != nil {
-		return nil, err
-	}
-	if status < 200 || status >= 300 {
-		return nil, fmt.Errorf("%s", calErr(body))
-	}
+	// A page can hold fewer than maxResults with more behind nextPageToken, so
+	// follow it until the limit is reached.
+	limit := max(params.IntDefault(job.Params, "limit", 250), 1)
+	out := []map[string]any{}
+	for page := 0; page < maxEventPages && len(out) < limit; page++ {
+		q.Set("maxResults", strconv.Itoa(limit-len(out)))
+		endpoint := calBaseURL(job) + "/calendars/" + url.PathEscape(resolveCalendarID(job)) + "/events?" + q.Encode()
+		status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
+		if err != nil {
+			return nil, err
+		}
+		if status < 200 || status >= 300 {
+			return nil, fmt.Errorf("%s", calErr(body))
+		}
 
-	var parsed struct {
-		Items []rawEvent `json:"items"`
+		var parsed struct {
+			Items         []rawEvent `json:"items"`
+			NextPageToken string     `json:"nextPageToken"`
+		}
+		if err := json.Unmarshal(body, &parsed); err != nil {
+			return nil, fmt.Errorf("events.list decode: %w", err)
+		}
+		for _, it := range parsed.Items {
+			out = append(out, it.normalize())
+		}
+		if parsed.NextPageToken == "" {
+			break
+		}
+		q.Set("pageToken", parsed.NextPageToken)
 	}
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, fmt.Errorf("events.list decode: %w", err)
-	}
-	out := make([]map[string]any, 0, len(parsed.Items))
-	for _, it := range parsed.Items {
-		out = append(out, it.normalize())
+	if len(out) > limit {
+		out = out[:limit]
 	}
 	return out, nil
 }
+
+// maxEventPages bounds one listing's page walk.
+const maxEventPages = 20
 
 type rawEvent struct {
 	ID          string     `json:"id"`

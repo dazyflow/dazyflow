@@ -57,6 +57,43 @@ func Migrate(ctx context.Context, dst, src *Store) (MigrateResult, error) {
 		if len(revs) == maxMigratedRevisions {
 			res.Truncated = append(res.Truncated, id)
 		}
+		inRevs := make(map[string]bool, len(revs))
+		for _, r := range revs {
+			inRevs[r.Commit] = true
+		}
+
+		// A git published tag names a WORKSPACE commit — often another flow's
+		// save — which is not in this flow's History and so never becomes a
+		// revision here. Map it to the flow's own revision at that point, and
+		// carry that revision over first (lowest seq) when truncation left it
+		// out, so the pointer always names content that loads.
+		pub, err := src.PublishedCommit(id)
+		if err != nil {
+			return res, fmt.Errorf("published %s: %w", id, err)
+		}
+		pubRev := ""
+		if pub != "" {
+			if pubRev, err = flowRevisionAt(src, id, pub, inRevs); err != nil {
+				return res, fmt.Errorf("published %s: %w", id, err)
+			}
+			if !inRevs[pubRev] {
+				g, err := src.LoadAt(pubRev, id)
+				if err != nil {
+					return res, fmt.Errorf("read published %s@%s: %w", id, pubRev, err)
+				}
+				content, err := json.Marshal(g)
+				if err != nil {
+					return res, fmt.Errorf("marshal %s@%s: %w", id, pubRev, err)
+				}
+				label, _ := src.RevisionLabel(id, pubRev)
+				r := Revision{Commit: pubRev, Author: "migration", Label: label,
+					Message: fmt.Sprintf("graph: published revision of %s carried over by migration", id)}
+				if err := pg.importRevision(ctx, id, r, "", content); err != nil {
+					return res, fmt.Errorf("import published %s@%s: %w", id, pubRev, err)
+				}
+				res.Revisions++
+			}
+		}
 		// History is newest-first; replay oldest-first so each revision's
 		// parent is already there.
 		var parent string
@@ -90,18 +127,36 @@ func Migrate(ctx context.Context, dst, src *Store) (MigrateResult, error) {
 		// Environment pointers. Published is the one that decides whether a
 		// flow is live, so a migration that dropped it would take every
 		// scheduled and webhook-triggered flow in the install offline.
-		pub, err := src.PublishedCommit(id)
-		if err != nil {
-			return res, fmt.Errorf("published %s: %w", id, err)
-		}
-		if pub != "" {
-			if err := dst.PromoteToEnvironment(id, PublishedEnv, pub); err != nil {
+		if pubRev != "" {
+			if err := dst.PromoteToEnvironment(id, PublishedEnv, pubRev); err != nil {
 				return res, fmt.Errorf("publish %s: %w", id, err)
 			}
 			res.Published++
 		}
 	}
 	return res, nil
+}
+
+// flowRevisionAt maps a published commit to the flow's own revision that was
+// current at that commit. On git that is the newest commit at or before it that
+// touched the flow's file; a Postgres source already points at a per-flow
+// revision.
+func flowRevisionAt(src *Store, graphID, commit string, known map[string]bool) (string, error) {
+	if known[commit] {
+		return commit, nil
+	}
+	g, ok := src.b.(*gitBackend)
+	if !ok {
+		return commit, nil
+	}
+	rev, err := g.flowRevisionAt(graphID, commit)
+	if err != nil {
+		return "", err
+	}
+	if rev == "" {
+		return "", fmt.Errorf("commit %s holds no revision of %s", commit, graphID)
+	}
+	return rev, nil
 }
 
 // importRevision writes a revision verbatim. Upsert rather than insert so a
@@ -192,15 +247,22 @@ func VerifyMigration(ctx context.Context, dst, src *Store) (VerifyResult, error)
 			res.flag(id, "current content differs")
 		}
 
-		wantPub, err := src.PublishedCommit(id)
-		if err != nil {
-			return res, fmt.Errorf("source published %s: %w", id, err)
-		}
-		gotPub, err := dst.PublishedCommit(id)
-		if err != nil {
-			res.flag(id, "published pointer unreadable: %v", err)
-		} else if wantPub != gotPub {
-			res.flag(id, "published pointer is %q, source has %q", gotPub, wantPub)
+		// The pointer strings may legitimately differ (a git tag names a
+		// workspace commit, the migrated pointer the flow's own revision), so
+		// what is compared is what goes live: the published CONTENT must load
+		// on both sides and match.
+		wantPub, werr := src.LoadPublished(id)
+		gotPub, gerr := dst.LoadPublished(id)
+		switch {
+		case errors.Is(werr, ErrNotPublished) && errors.Is(gerr, ErrNotPublished):
+		case errors.Is(werr, ErrNotPublished):
+			res.flag(id, "published in the migrated workspace but not in the source")
+		case werr != nil:
+			return res, fmt.Errorf("source published %s: %w", id, werr)
+		case gerr != nil:
+			res.flag(id, "published version does not load after migration: %v", gerr)
+		case !sameGraph(wantPub, gotPub):
+			res.flag(id, "published content differs")
 		}
 
 		wantRevs, err := src.History(id, maxMigratedRevisions)

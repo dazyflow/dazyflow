@@ -164,13 +164,11 @@ func TestIsTerminal(t *testing.T) {
 }
 
 func TestIdempotencyKey(t *testing.T) {
-	k1 := idempotencyKeyFor("set_secret", json.RawMessage(`{"name":"A"}`))
-	k2 := idempotencyKeyFor("set_secret", json.RawMessage(`{"name":"A"}`))
-	if k1 != k2 || len(k1) != 32 {
-		t.Errorf("nondeterministic or wrong length: %q %q", k1, k2)
-	}
-	if idempotencyKeyFor("a", json.RawMessage(`b`)) == idempotencyKeyFor("ab", json.RawMessage(``)) {
-		t.Error("name/args separator collision")
+	// Fresh per invocation: identical repeated calls (enable, disable, enable)
+	// are distinct actions and must not replay the first one's cached 2xx.
+	k1, k2 := newIdempotencyKey(), newIdempotencyKey()
+	if k1 == k2 || len(k1) != 32 || len(k2) != 32 {
+		t.Errorf("keys not unique or wrong length: %q %q", k1, k2)
 	}
 
 	ctx := withIdempotencyKey(context.Background(), "key1")
@@ -215,61 +213,5 @@ func TestErrorResultOrErr_NonHTTP(t *testing.T) {
 	plain := context.Canceled
 	if _, err := errorResultOrErr(plain); err != plain {
 		t.Errorf("non-HTTP error should pass through, got %v", err)
-	}
-}
-
-// The regression for a duplicated side effect on retry: an MCP host that re-
-// serializes the arguments (key order, whitespace, number formatting held
-// constant) must still land on the same idempotency key, or the gateway treats
-// the retry as a new request.
-func TestIdempotencyKeyFor_CanonicalizesArgs(t *testing.T) {
-	same := []string{
-		`{"flow":"a","tenant":"acme"}`,
-		`{"tenant":"acme","flow":"a"}`,
-		`{ "tenant" : "acme" ,  "flow" : "a" }`,
-		"{\n  \"flow\": \"a\",\n  \"tenant\": \"acme\"\n}",
-	}
-	want := idempotencyKeyFor("run_flow", json.RawMessage(same[0]))
-	for _, in := range same[1:] {
-		if got := idempotencyKeyFor("run_flow", json.RawMessage(in)); got != want {
-			t.Errorf("key for %s = %s, want %s (same call, retried)", in, got, want)
-		}
-	}
-
-	// Genuinely different args must NOT collide — a false match would
-	// silently suppress a distinct action.
-	for _, in := range []string{
-		`{"flow":"b","tenant":"acme"}`,
-		`{"flow":"a","tenant":"acme","dry_run":true}`,
-		`{"flow":"a"}`,
-	} {
-		if got := idempotencyKeyFor("run_flow", json.RawMessage(in)); got == want {
-			t.Errorf("key for %s collided with the baseline", in)
-		}
-	}
-	// Different tool, same args, must differ.
-	if idempotencyKeyFor("delete_flow", json.RawMessage(same[0])) == want {
-		t.Error("tool name is not namespacing the key")
-	}
-}
-
-// Pins the UseNumber choice: two int64 arguments that differ only beyond
-// float64's 53-bit mantissa must still produce different keys.
-func TestIdempotencyKeyFor_PreservesNumericPrecision(t *testing.T) {
-	a := idempotencyKeyFor("t", json.RawMessage(`{"n":9007199254740993}`))
-	b := idempotencyKeyFor("t", json.RawMessage(`{"n":9007199254740992}`))
-	if a == b {
-		t.Error("large ints collapsed onto one key — a distinct call would be wrongly deduped")
-	}
-}
-
-func TestIdempotencyKeyFor_InvalidJSONIsStable(t *testing.T) {
-	const bad = `{"flow":`
-	first, second := idempotencyKeyFor("t", json.RawMessage(bad)), idempotencyKeyFor("t", json.RawMessage(bad))
-	if first != second {
-		t.Error("invalid JSON should still hash deterministically")
-	}
-	if idempotencyKeyFor("t", nil) != idempotencyKeyFor("t", json.RawMessage("")) {
-		t.Error("nil and empty args should agree")
 	}
 }

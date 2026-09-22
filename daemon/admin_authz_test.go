@@ -4,8 +4,10 @@
 package daemon
 
 import (
+	"errors"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
@@ -25,7 +27,7 @@ func TestIssueAPIKey_RejectsForeignTenantKeyID(t *testing.T) {
 	}
 
 	admin := core.Principal{Subject: "root", Tenant: "t", Workspace: "ws",
-		Roles: []core.Role{{Name: "admin", Permissions: []core.Permission{core.PermOrganizationAdmin}}}}
+		Roles: []core.Role{core.TeamRoleAdmin()}}
 	if _, err := svc.IssueAPIKey(t.Context(), admin, IssueAPIKeyParams{
 		ID: "shared-id", Subject: "attacker@t", Roles: []core.Role{editor},
 	}); err == nil {
@@ -41,13 +43,60 @@ func TestIssueAPIKey_RejectsForeignTenantKeyID(t *testing.T) {
 		t.Fatalf("victim key was clobbered: tenant=%q subject=%q", got.Tenant, got.Subject)
 	}
 
+	// Same tenant is refused too: the upsert would overwrite a colleague's key
+	// (new secret and subject) and clear its revocation.
 	if _, _, err := auth.IssueAPIKey(ks, t.Context(), "own-id", "t", "ws", "u@t", []core.Role{editor}, nil); err != nil {
 		t.Fatalf("seed own key: %v", err)
 	}
+	if err := ks.Revoke(t.Context(), "own-id", time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := svc.IssueAPIKey(t.Context(), admin, IssueAPIKeyParams{
-		ID: "own-id", Subject: "u@t", Roles: []core.Role{editor},
+		ID: "own-id", Subject: "attacker@t", Roles: []core.Role{editor},
+	}); err == nil {
+		t.Fatal("tenant admin was allowed to reuse an existing key id in its own tenant")
+	}
+	if got, _ := ks.GetKey(t.Context(), "own-id"); got.Subject != "u@t" || got.RevokedAt == nil {
+		t.Fatalf("colleague's key was clobbered: subject=%q revoked=%v", got.Subject, got.RevokedAt)
+	}
+}
+
+// A tenant admin must not mint a key with a platform-scoped permission or one
+// broader than their own roles.
+func TestIssueAPIKey_CapsRolesToCaller(t *testing.T) {
+	t.Parallel()
+	svc := &Service{AdminKeys: auth.NewMemKeyStore()}
+	admin := core.Principal{Subject: "root@t", Tenant: "t", Roles: []core.Role{core.TeamRoleAdmin()}}
+	for _, perm := range []core.Permission{core.PermSupportAgent, core.PermPlatformAdmin} {
+		if _, err := svc.IssueAPIKey(t.Context(), admin, IssueAPIKeyParams{
+			Subject: "bot", Roles: []core.Role{{Name: "x", Permissions: []core.Permission{perm}}},
+		}); !errors.Is(err, core.ErrUnauthorized) {
+			t.Errorf("minting %q: err=%v, want unauthorized", perm, err)
+		}
+	}
+	viewerAdmin := core.Principal{Subject: "v@t", Tenant: "t", Roles: []core.Role{
+		core.TeamRoleViewer(), {Name: "owner", Permissions: []core.Permission{core.PermOrganizationAdmin}},
+	}}
+	if _, err := svc.IssueAPIKey(t.Context(), viewerAdmin, IssueAPIKeyParams{
+		Subject: "bot", Roles: []core.Role{core.TeamRoleEditor()},
+	}); !errors.Is(err, core.ErrUnauthorized) {
+		t.Errorf("minting beyond own roles: err=%v, want unauthorized", err)
+	}
+	if _, err := svc.IssueAPIKey(t.Context(), admin, IssueAPIKeyParams{
+		Subject: "bot", Roles: []core.Role{core.TeamRoleEditor()},
 	}); err != nil {
-		t.Fatalf("re-issuing within own tenant should be allowed: %v", err)
+		t.Errorf("minting within own roles: %v", err)
+	}
+}
+
+// Regression: RevokeAPIKey used to skip the tenant check (and revoke anyway)
+// when the key lookup failed.
+func TestRevokeAPIKey_FailsClosedOnLookupError(t *testing.T) {
+	t.Parallel()
+	svc := &Service{AdminKeys: auth.NewMemKeyStore()}
+	admin := core.Principal{Subject: "root", Tenant: "t", Roles: []core.Role{core.TeamRoleAdmin()}}
+	if err := svc.RevokeAPIKey(t.Context(), admin, "missing"); err == nil {
+		t.Fatal("revoke of an unreadable key succeeded")
 	}
 }
 

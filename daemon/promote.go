@@ -33,11 +33,15 @@ func (s *Service) promotePendingRuns(ctx context.Context, tenant string) {
 		return
 	}
 	limit, capped := s.concurrencyCapped(ctx, tenant)
+	// Where the store can, the cap check and the start are one atomic step.
+	// Otherwise it is check-then-act, and promoters on several replicas racing
+	// for the last slot can briefly overshoot the cap by one each.
+	cappedStarter, atomicCap := s.Jobs.(cappedGraphRunStarter)
 	// Bound work per call so a large backlog can't monopolize a sweep; the
 	// next sweep picks up where this left off.
 	const maxPerCall = 50
 	for range maxPerCall {
-		if capped {
+		if capped && !atomicCap {
 			running, err := s.runningGraphRuns(ctx, tenant, limit)
 			if err != nil {
 				return
@@ -50,7 +54,17 @@ func (s *Service) promotePendingRuns(ctx context.Context, tenant string) {
 		if !ok {
 			return // nothing pending
 		}
-		won, err := starter.MarkGraphRunning(ctx, runID)
+		var won bool
+		var err error
+		if capped && atomicCap {
+			var atCap bool
+			won, atCap, err = cappedStarter.MarkGraphRunningCapped(ctx, runID, tenant, limit)
+			if err == nil && atCap {
+				return
+			}
+		} else {
+			won, err = starter.MarkGraphRunning(ctx, runID)
+		}
 		if err != nil {
 			return
 		}
@@ -73,19 +87,15 @@ func (s *Service) promotePendingRuns(ctx context.Context, tenant string) {
 }
 
 func (s *Service) oldestPendingRun(ctx context.Context, tenant string) (string, bool) {
-	recs, err := core.ListRunSummaries(ctx, s.Jobs, core.ListGraphRunsOpts{
-		Tenant: tenant, Status: core.JobStatusQueued, Limit: 50,
+	// Oldest-first from the store: the newest-first page this used to scan
+	// never held a backlog's oldest runs, so they were never promoted.
+	recs, err := listRunSummariesOldest(ctx, s.Jobs, core.ListGraphRunsOpts{
+		Tenant: tenant, Status: core.JobStatusQueued, Limit: 1,
 	})
 	if err != nil || len(recs) == 0 {
 		return "", false
 	}
-	oldest := recs[0]
-	for _, r := range recs[1:] {
-		if r.EnqueuedAt.Before(oldest.EnqueuedAt) {
-			oldest = r
-		}
-	}
-	return oldest.ID, true
+	return recs[0].ID, true
 }
 
 func (s *Service) startPendingRun(ctx context.Context, run core.JobRecord) {
@@ -169,21 +179,16 @@ func (s *Service) SweepPromotePending(ctx context.Context) {
 	if _, ok := s.Jobs.(core.GraphRunStarter); !ok {
 		return
 	}
-	recs, err := core.ListRunSummaries(ctx, s.Jobs, core.ListGraphRunsOpts{
-		Status: core.JobStatusQueued, Limit: 200,
-	})
+	// Every tenant with a pending run, not the tenants on one page of runs: a
+	// tenant whose pending runs all sat past that page was never promoted.
+	tenants, err := graphRunTenants(ctx, s.Jobs, core.JobStatusQueued)
 	if err != nil {
 		if s.Logger != nil {
 			s.Logger.Printf("concurrency promotion: list pending: %v", err)
 		}
 		return
 	}
-	seen := make(map[string]struct{}, len(recs))
-	for _, r := range recs {
-		if _, done := seen[r.Tenant]; done {
-			continue
-		}
-		seen[r.Tenant] = struct{}{}
-		s.promotePendingRuns(ctx, r.Tenant)
+	for _, tenant := range tenants {
+		s.promotePendingRuns(ctx, tenant)
 	}
 }

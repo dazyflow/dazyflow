@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -224,7 +225,7 @@ func (h *supportAPI) listTicketQueue(rw http.ResponseWriter, r *http.Request, p 
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
 	}
-	if err := core.Require(p, core.PermSupportAgent); err != nil {
+	if err := h.requireSupportAgent(p); err != nil {
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "support agent role required")
 		return
 	}
@@ -241,7 +242,7 @@ func (h *supportAPI) ticketQueueSummary(rw http.ResponseWriter, r *http.Request,
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
 	}
-	if err := core.Require(p, core.PermSupportAgent); err != nil {
+	if err := h.requireSupportAgent(p); err != nil {
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "support agent role required")
 		return
 	}
@@ -297,6 +298,19 @@ func (h *supportAPI) assignSupportTicket(rw http.ResponseWriter, r *http.Request
 	h.audit(r.Context(), core.Principal{Tenant: t.Tenant, Subject: p.Subject},
 		"support.ticket.assign", t.FlowID, detail)
 	h.writeTicketView(rw, r, t)
+}
+
+// The permission alone is not enough: support:agent is a platform grant, so
+// the caller must also still be in the SupportAgents registry. That makes a
+// self-minted or stale credential carrying the role worthless once revoked.
+func (h *supportAPI) requireSupportAgent(p core.Principal) error {
+	if err := core.Require(p, core.PermSupportAgent); err != nil {
+		return err
+	}
+	if !h.isProvisionedSupportAgent(p.Subject) {
+		return fmt.Errorf("%w: %s is not a provisioned support agent", core.ErrUnauthorized, p.Subject)
+	}
+	return nil
 }
 
 func (h *supportAPI) isProvisionedSupportAgent(subject string) bool {
@@ -395,7 +409,7 @@ func (h *supportAPI) loadTicketForAgent(rw http.ResponseWriter, r *http.Request,
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return core.Ticket{}, false
 	}
-	if err := core.Require(p, core.PermSupportAgent); err != nil {
+	if err := h.requireSupportAgent(p); err != nil {
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "support agent role required")
 		return core.Ticket{}, false
 	}

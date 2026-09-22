@@ -159,6 +159,79 @@ func TestPgBackend_ConcurrentEditsToOneFlowResolveCleanly(t *testing.T) {
 	}
 }
 
+// Concurrent saves used to read the head without a lock, so several landed
+// on the same parent and forked the chain. With the head row locked every
+// save succeeds and the chain stays linear: exactly one root, and no revision
+// is the parent of more than one other.
+func TestPgBackend_ConcurrentSavesKeepTheChainLinear(t *testing.T) {
+	podA, podB := pgTestWorkspace(t)
+	const n = 10
+	var wg sync.WaitGroup
+	errs := make(chan error, 2*n)
+	for i := range n {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			if _, err := podA.Save(flow("f1", fmt.Sprintf("A-%d", i)), "ada"); err != nil {
+				errs <- err
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			if _, err := podB.Save(flow("f1", fmt.Sprintf("B-%d", i)), "grace"); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("concurrent save: %v", err)
+	}
+	pg := podA.b.(*pgBackend)
+	rows, err := pg.pool.Query(context.Background(),
+		`SELECT parent, count(*) FROM flow_revisions
+		  WHERE tenant=$1 AND workspace=$2 AND graph_id='f1' GROUP BY parent`,
+		pg.tenant, pg.workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	total := 0
+	for rows.Next() {
+		var parent string
+		var c int
+		if err := rows.Scan(&parent, &c); err != nil {
+			t.Fatal(err)
+		}
+		total += c
+		if c != 1 {
+			t.Errorf("parent %q has %d children, want a linear chain", parent, c)
+		}
+	}
+	if total != 2*n {
+		t.Errorf("recorded %d revisions, want %d", total, 2*n)
+	}
+}
+
+// A Store is opened per request, so each mirror() call builds a fresh
+// pgMirror; they must still share one lock per workspace or concurrent pushes
+// rebuild the same cache directory at once.
+func TestPgBackend_MirrorsOfOneWorkspaceShareALock(t *testing.T) {
+	a := &pgBackend{tenant: "t", workspace: "w", mirrorDir: "/cache/t/w"}
+	b := &pgBackend{tenant: "t", workspace: "w", mirrorDir: "/cache/t/w"}
+	other := &pgBackend{tenant: "t", workspace: "other", mirrorDir: "/cache/t/other"}
+	ma, _ := a.mirror()
+	mb, _ := b.mirror()
+	mo, _ := other.mirror()
+	if ma.(*pgMirror).mu != mb.(*pgMirror).mu {
+		t.Fatal("two mirrors of one workspace hold different locks")
+	}
+	if ma.(*pgMirror).mu == mo.(*pgMirror).mu {
+		t.Fatal("different workspaces share a mirror lock")
+	}
+}
+
 // Mirroring is a push of a real git repository, and a Postgres workspace has
 // none. It must say so rather than silently doing nothing.
 func TestPgBackend_MirroringIsRefusedClearly(t *testing.T) {

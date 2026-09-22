@@ -206,6 +206,24 @@ export function Inspector({
     setMode(supportsSchemaForm(schema) ? "form" : "json");
   }, [selected?.id]);
 
+  // Params can change under the JSON box without a new selection — the form
+  // tab, undo, a canvas edit. Resync then, or the box keeps the old text and the
+  // next keystroke writes it back over the newer params. Text that already
+  // means the current params (the user's own formatting) is left alone.
+  const paramsJSON = JSON.stringify(currentParams);
+  useEffect(() => {
+    if (!selected) return;
+    try {
+      if (JSON.stringify(JSON.parse(jsonText)) === paramsJSON) return;
+    } catch {
+      /* an invalid draft the params moved under — replace it */
+    }
+    setJsonText(JSON.stringify(currentParams, null, 2));
+    setJsonError(null);
+    // Keyed on the params' content; `selected` changes are the effect above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramsJSON]);
+
   if (!selected) {
     return (
       <>

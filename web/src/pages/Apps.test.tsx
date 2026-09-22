@@ -4,7 +4,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 // Stable `t` and auth, as the admin page tests do: the load effect lists `t` in
 // its deps, so a fresh function per render would re-fire it forever.
@@ -315,7 +315,9 @@ describe("AppDetail with two connections", () => {
     window.history.pushState({}, "", "/apps/stripe");
     return render(
       <MemoryRouter initialEntries={["/apps/stripe"]}>
-        <AppDetail />
+        <Routes>
+          <Route path="/apps/:slug" element={<AppDetail />} />
+        </Routes>
       </MemoryRouter>,
     );
   }
@@ -354,7 +356,9 @@ describe("AppDetail with two connections", () => {
     window.history.pushState({}, "", "/apps/claude");
     render(
       <MemoryRouter initialEntries={["/apps/claude"]}>
-        <AppDetail />
+        <Routes>
+          <Route path="/apps/:slug" element={<AppDetail />} />
+        </Routes>
       </MemoryRouter>,
     );
 

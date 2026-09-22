@@ -148,6 +148,26 @@ func (p *pgBackend) headRevision(ctx context.Context, q rowQuerier, graphID stri
 	return rev, err
 }
 
+// lockHead reads a flow's head revision holding the head row FOR UPDATE, so
+// concurrent saves (and a save racing a delete) of one flow serialize instead
+// of forking the chain from the same parent. A flow with no head yet gets a
+// placeholder row (an empty revision, which every reader treats as "no head") so a
+// first save has a row to lock too; it only outlives the transaction when the
+// caller commits, and then it holds a real revision.
+func (p *pgBackend) lockHead(ctx context.Context, tx pgx.Tx, graphID string) (string, error) {
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO flow_heads (tenant, workspace, graph_id, revision) VALUES ($1,$2,$3,'')
+		 ON CONFLICT (tenant, workspace, graph_id) DO NOTHING`,
+		p.tenant, p.workspace, graphID); err != nil {
+		return "", err
+	}
+	var rev string
+	err := tx.QueryRow(ctx,
+		`SELECT revision FROM flow_heads WHERE tenant=$1 AND workspace=$2 AND graph_id=$3 FOR UPDATE`,
+		p.tenant, p.workspace, graphID).Scan(&rev)
+	return rev, err
+}
+
 type rowQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
@@ -167,7 +187,7 @@ func (p *pgBackend) save(graph core.Graph, author string, coalesce bool) (string
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	head, err := p.headRevision(ctx, tx, graph.ID)
+	head, err := p.lockHead(ctx, tx, graph.ID)
 	if err != nil {
 		return "", err
 	}
@@ -177,14 +197,22 @@ func (p *pgBackend) save(graph core.Graph, author string, coalesce bool) (string
 		headAuthor  string
 		headMessage string
 		headParent  string
+		headLabel   string
 		headAt      time.Time
+		headPinned  bool
 	)
 	if head != "" {
+		// pinned: an environment points at the head. Such a revision is what a
+		// live flow runs, so it is never rewritten or dropped — see amend below.
 		err = tx.QueryRow(ctx,
-			`SELECT content, author, message, parent, created_at FROM flow_revisions
-			  WHERE tenant=$1 AND workspace=$2 AND graph_id=$3 AND revision=$4`,
+			`SELECT r.content, r.author, r.message, r.parent, r.label, r.created_at,
+			        EXISTS (SELECT 1 FROM flow_envs e
+			                 WHERE e.tenant=r.tenant AND e.workspace=r.workspace
+			                   AND e.graph_id=r.graph_id AND e.revision=r.revision)
+			   FROM flow_revisions r
+			  WHERE r.tenant=$1 AND r.workspace=$2 AND r.graph_id=$3 AND r.revision=$4`,
 			p.tenant, p.workspace, graph.ID, head).
-			Scan(&headContent, &headAuthor, &headMessage, &headParent, &headAt)
+			Scan(&headContent, &headAuthor, &headMessage, &headParent, &headLabel, &headAt, &headPinned)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return "", err
 		}
@@ -198,9 +226,13 @@ func (p *pgBackend) save(graph core.Graph, author string, coalesce bool) (string
 		return head, tx.Commit(ctx)
 	}
 
+	// A published or labelled head is frozen: amending it in place would change
+	// what the live environment runs (or what the label names), and dropping it
+	// would silently unpublish. The burst continues on a new revision instead.
 	amend := coalesce && head != "" && headAuthor == author &&
 		strings.HasPrefix(headMessage, "autosave:") &&
-		time.Since(headAt) <= autosaveCoalesceWindow
+		time.Since(headAt) <= autosaveCoalesceWindow &&
+		!headPinned && headLabel == ""
 
 	if amend {
 		// The burst netted back to the pre-autosave content — add a step then
@@ -220,12 +252,16 @@ func (p *pgBackend) save(graph core.Graph, author string, coalesce bool) (string
 				return headParent, tx.Commit(ctx)
 			}
 		}
-		if _, err := tx.Exec(ctx,
+		ct, err := tx.Exec(ctx,
 			`UPDATE flow_revisions SET content=$5, message=$6, created_at=now()
 			  WHERE tenant=$1 AND workspace=$2 AND graph_id=$3 AND revision=$4`,
 			p.tenant, p.workspace, graph.ID, head, content,
-			autosaveMessage(graph.ID, author)); err != nil {
+			autosaveMessage(graph.ID, author))
+		if err != nil {
 			return "", err
+		}
+		if ct.RowsAffected() != 1 {
+			return "", fmt.Errorf("graph %q: head revision %s vanished during save", graph.ID, head)
 		}
 		return head, tx.Commit(ctx)
 	}
@@ -258,22 +294,35 @@ func (p *pgBackend) insertRevision(ctx context.Context, tx pgx.Tx, graphID, rev,
 	return err
 }
 
+// dropRevision removes an unpublished, unlabelled autosave and moves the head
+// back to its parent. The caller (save, under lockHead) has already refused a
+// pinned revision; the NOT EXISTS guard keeps a publish that slipped in between
+// from being deleted out from under its environment.
 func (p *pgBackend) dropRevision(ctx context.Context, tx pgx.Tx, graphID, rev, parent string) error {
-	if _, err := tx.Exec(ctx,
-		`DELETE FROM flow_envs WHERE tenant=$1 AND workspace=$2 AND graph_id=$3 AND revision=$4`,
-		p.tenant, p.workspace, graphID, rev); err != nil {
+	ct, err := tx.Exec(ctx,
+		`DELETE FROM flow_revisions r
+		  WHERE r.tenant=$1 AND r.workspace=$2 AND r.graph_id=$3 AND r.revision=$4 AND r.label=''
+		    AND NOT EXISTS (SELECT 1 FROM flow_envs e
+		                     WHERE e.tenant=r.tenant AND e.workspace=r.workspace
+		                       AND e.graph_id=r.graph_id AND e.revision=r.revision)`,
+		p.tenant, p.workspace, graphID, rev)
+	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx,
-		`DELETE FROM flow_revisions WHERE tenant=$1 AND workspace=$2 AND graph_id=$3 AND revision=$4`,
-		p.tenant, p.workspace, graphID, rev); err != nil {
-		return err
+	if ct.RowsAffected() != 1 {
+		return fmt.Errorf("graph %q: revision %s is published, labelled or gone and cannot be dropped", graphID, rev)
 	}
-	_, err := tx.Exec(ctx,
+	ct, err = tx.Exec(ctx,
 		`UPDATE flow_heads SET revision=$4, updated_at=now()
 		  WHERE tenant=$1 AND workspace=$2 AND graph_id=$3`,
 		p.tenant, p.workspace, graphID, parent)
-	return err
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() != 1 {
+		return fmt.Errorf("graph %q: head row vanished during save", graphID)
+	}
+	return nil
 }
 
 func (p *pgBackend) delete(graphID, author string) (string, error) {
@@ -287,12 +336,12 @@ func (p *pgBackend) delete(graphID, author string) (string, error) {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	head, err := p.headRevision(ctx, tx, graphID)
+	head, err := p.lockHead(ctx, tx, graphID)
 	if err != nil {
 		return "", err
 	}
 	if head == "" {
-		return "", tx.Commit(ctx) // never existed
+		return "", nil // never existed; the rollback discards lockHead's placeholder
 	}
 	var content []byte
 	if err := tx.QueryRow(ctx,
@@ -565,7 +614,7 @@ func (p *pgBackend) mirror() (gitMirrorer, bool) {
 	if p.mirrorDir == "" {
 		return nil, false
 	}
-	return &pgMirror{pg: p, dir: p.mirrorDir}, true
+	return &pgMirror{pg: p, dir: p.mirrorDir, mu: mirrorLock(p.tenant, p.workspace, p.mirrorDir)}, true
 }
 
 // sameJSON compares two marshalled graphs for semantic equality, so a re-save

@@ -81,12 +81,14 @@ ciphertexts are untouched, so rotation is fast and needs no secret re-entry.
 
 1. Generate `NEW_KEY` (`openssl rand -base64 32`).
 2. Run the re-wrap against the same store the daemon uses. The **current** key
-   comes from the environment; the new one is the flag argument:
+   comes from the environment; the new one is read from a file (or `-` for
+   stdin), so it never appears in the process list or shell history:
 
    ```sh
+   printf '%s' "$NEW_KEY" | \
    DAZYFLOW_POSTGRES_DSN="$DSN" \
    DAZYFLOW_MASTER_KEY="$OLD_KEY" \
-       dzd --rotate-master-key "$NEW_KEY"
+       dzd --rotate-master-key-file -
    # logs: "master-key rotation complete: N DEK(s) re-wrapped, …"
    ```
 

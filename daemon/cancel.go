@@ -12,9 +12,9 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-// CancelGraphRun aborts an in-flight graph run gracefully. Every non-terminal
-// node-record is marked Cancelled, the graph-record is marked Cancelled, and a
-// Terminal event is published so SSE subscribers wrap up.
+// CancelGraphRun aborts an in-flight graph run gracefully. The graph-record is
+// marked Cancelled, then every non-terminal node-record, and a Terminal event is
+// published so SSE subscribers wrap up.
 //
 // "Graceful" means nodes mid-execution are NOT interrupted — they finish
 // naturally and the worker's AdvanceAfterCompletion is short-circuited once the
@@ -87,12 +87,20 @@ func (s *Service) cancelGraphRun(ctx context.Context, p core.Principal, graphRun
 		return res
 	}
 
-	// Sweep non-terminal node-records first so the dispatcher's
-	// short-circuit (introduced for cancel) is in place before we flip
-	// the graph-record. Order matters: workers race against us, and
-	// once the graph-record is terminal the dispatcher refuses to
-	// advance — so a node racing to Complete after we mark the graph
-	// cannot cause spurious dispatch.
+	// Flip the graph-record FIRST, then sweep. Workers race against us, and the
+	// graph-record is what they check: once it is terminal CompleteAndEnqueue
+	// queues no dependents and a worker that claims a node of this run cancels it
+	// instead of executing it. Sweeping first left a window where a node finishing
+	// mid-sweep queued a dependent the sweep had already walked past, and that
+	// step then ran after the cancel.
+	breakpoints.clear(graphRunID)
+	graphResult := &core.Result{Status: core.StatusError, Error: cancelErr}
+	if err := s.Jobs.Complete(ctx, graphRunID, core.JobStatusCancelled, graphResult); err != nil {
+		if errors.Is(err, core.ErrConflict) {
+			return fmt.Errorf("run %s already finished: %w", graphRunID, core.ErrConflict)
+		}
+		return fmt.Errorf("cancel graph record: %w", err)
+	}
 	for _, n := range g.Nodes {
 		nodeRecID := NodeJobID(graphRunID, n.ID)
 		nrec, err := s.Jobs.Get(ctx, nodeRecID)
@@ -113,20 +121,58 @@ func (s *Service) cancelGraphRun(ctx context.Context, p core.Principal, graphRun
 				Error:  cancelErr,
 			}})
 		} else if !errors.Is(err, core.ErrConflict) {
-			return fmt.Errorf("cancel node %s: %w", n.ID, err)
+			// The run is already cancelled; a node left behind here is cancelled by
+			// the worker that claims it, so keep sweeping rather than stop half-way.
+			s.logf("cancel %s: node %s: %v", graphRunID, n.ID, err)
+		}
+		// A subgraph node parks on its child run; the child is this run's work too
+		// and must stop with it (a cancel or a timeout alike).
+		if nrec.Status == core.JobStatusAwaiting && nrec.Result != nil {
+			if childGraphID, _ := nrec.Result.Output["pending_child_graph_id"].Inline.(string); childGraphID != "" {
+				s.cancelChildRuns(ctx, rec.Tenant, rec.Workspace, childGraphID, nodeRecID, reason)
+			}
 		}
 	}
 
-	breakpoints.clear(graphRunID)
-	graphResult := &core.Result{Status: core.StatusError, Error: cancelErr}
-	if err := s.Jobs.Complete(ctx, graphRunID, core.JobStatusCancelled, graphResult); err != nil {
-		return fmt.Errorf("cancel graph record: %w", err)
-	}
-	NewDispatcher(s.Jobs, s.bus(), s.Engine, s.Logger).reclaimScratch(g, graphRunID)
+	disp := NewDispatcher(s.Jobs, s.bus(), s.Engine, s.Logger)
+	disp.reclaimScratch(g, graphRunID)
 	s.bus().Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
 		JobID:  graphRunID,
 		Status: core.JobStatusCancelled,
 		Error:  cancelErr,
 	}})
+	// A child run cancelled on its own must not leave its parent's subgraph node
+	// parked for ever: fail that node so the parent run moves on. A no-op when the
+	// parent is what cancelled us — its node is already cancelled.
+	if rec.ParentNodeRecID != "" {
+		disp.maybeResumeParent(ctx, graphRunID, core.StatusError, cancelErr)
+	}
 	return nil
+}
+
+// CancelCodeParent marks a child run stopped because its parent run was
+// cancelled or timed out. The parent's own outcome is what gets reported, so
+// the failure-notification sweep does not mail about the child as well.
+const CancelCodeParent = "parent_cancelled"
+
+func (s *Service) cancelChildRuns(ctx context.Context, tenant, workspace, childGraphID, parentNodeRecID, reason string) {
+	p := SystemPrincipal("dazyflow-cancel", tenant, workspace)
+	for _, st := range []core.JobStatus{core.JobStatusRunning, core.JobStatusAwaiting, core.JobStatusQueued} {
+		runs, err := listGraphRunsOldest(ctx, s.Jobs, core.ListGraphRunsOpts{
+			Tenant: tenant, Workspace: workspace, GraphID: childGraphID, Status: st, Limit: 500,
+		})
+		if err != nil {
+			s.logf("cancel children of %s: list %s runs: %v", parentNodeRecID, st, err)
+			continue
+		}
+		for _, r := range runs {
+			if r.ParentNodeRecID != parentNodeRecID {
+				continue
+			}
+			if err := s.cancelGraphRun(ctx, p, r.ID, CancelCodeParent, "parent run stopped: "+reason); err != nil &&
+				!errors.Is(err, core.ErrConflict) {
+				s.logf("cancel child run %s of %s: %v", r.ID, parentNodeRecID, err)
+			}
+		}
+	}
 }

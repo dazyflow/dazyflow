@@ -65,7 +65,7 @@ func (h *supportAPI) requestGrant(rw http.ResponseWriter, r *http.Request, p cor
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
 	}
-	if err := core.Require(p, core.PermSupportAgent); err != nil {
+	if err := h.requireSupportAgent(p); err != nil {
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "support agent role required")
 		return
 	}
@@ -140,7 +140,7 @@ func (h *supportAPI) listMyGrants(rw http.ResponseWriter, r *http.Request, p cor
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
 	}
-	if err := core.Require(p, core.PermSupportAgent); err != nil {
+	if err := h.requireSupportAgent(p); err != nil {
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "support agent role required")
 		return
 	}
@@ -223,7 +223,7 @@ func (h *supportAPI) supportView(rw http.ResponseWriter, r *http.Request, p core
 		writeAPIError(rw, http.StatusNotImplemented, "support_disabled", "support is not enabled on this deployment")
 		return
 	}
-	if err := core.Require(p, core.PermSupportAgent); err != nil {
+	if err := h.requireSupportAgent(p); err != nil {
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "support agent role required")
 		return
 	}

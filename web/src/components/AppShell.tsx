@@ -201,14 +201,20 @@ export function AppShell({ children }: { children: ReactNode }) {
       window.clearInterval(iv);
     };
   }, [token, supportOn, isAgent, location.pathname]);
+  // Only the newest listing lands: after a workspace switch the previous
+  // workspace's slower answer must not repopulate the sidebar.
+  const flowsSeq = useRef(0);
   const refreshFlows = useCallback(() => {
+    const seq = ++flowsSeq.current;
     if (!token || !me || !activeWorkspace) {
       setFlows([]);
       return;
     }
     api
       .listGraphs(token, activeTenant, activeWorkspace)
-      .then((r) => setFlows(r.graphs))
+      .then((r) => {
+        if (seq === flowsSeq.current) setFlows(r.graphs);
+      })
       .catch(() => {
         /* ignore — sidebar list is non-essential */
       });
@@ -447,7 +453,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                   onDelete={async (tid, password) => {
                     if (!token) return;
                     await api.deleteOrg(token, tid, password);
-                    if (tid === active) setActiveTenant(homeTenant);
+                    // Same deep reload as picking an org, or the page keeps
+                    // rendering the deleted org's data.
+                    if (tid === active) setActiveTenant(homeTenant, { reload: true });
                     reloadTenants();
                     setOrgModalOpen(false);
                   }}

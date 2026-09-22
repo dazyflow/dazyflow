@@ -306,3 +306,51 @@ func TestCachingSessionStore_SweepDropsEntriesExactlyAtTTL(t *testing.T) {
 		t.Errorf("cached ids = %v, want {b,c} after the sweep", ids)
 	}
 }
+
+// blockingGetStore returns the session it read, but only after the test lets
+// it — so a DeleteSession can land between the DB read and the cache fill.
+type blockingGetStore struct {
+	countingStore
+	read, release chan struct{}
+}
+
+func (b *blockingGetStore) GetSession(ctx context.Context, id string) (Session, error) {
+	s, err := b.countingStore.GetSession(ctx, id)
+	b.read <- struct{}{}
+	<-b.release
+	return s, err
+}
+
+func (b *blockingGetStore) RevokeSubjectSessions(context.Context, string) (int, error) {
+	return 1, nil
+}
+
+func TestCachingSessionStore_MissRacingDeleteDoesNotRecache(t *testing.T) {
+	for _, revoke := range []bool{false, true} {
+		now := time.Unix(1_000_000, 0)
+		inner := &blockingGetStore{
+			countingStore: countingStore{sess: newTestSession(now.Add(time.Hour))},
+			read:          make(chan struct{}), release: make(chan struct{}),
+		}
+		c := NewCachingSessionStore(inner, time.Minute, 0).(*CachingSessionStore)
+		c.clock = func() time.Time { return now }
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			_, _ = c.GetSession(context.Background(), "abc")
+		}()
+		<-inner.read // the miss has read the (still live) row
+		if revoke {
+			_, _ = c.RevokeSubjectSessions(context.Background(), "u@example.com")
+		} else {
+			_ = c.DeleteSession(context.Background(), "abc")
+		}
+		close(inner.release)
+		<-done
+
+		if ids := cachedIDs(c); ids["abc"] {
+			t.Errorf("revoke=%v: a read that raced the delete re-cached the session", revoke)
+		}
+	}
+}

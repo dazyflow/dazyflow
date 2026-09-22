@@ -179,6 +179,35 @@ func TestCovListChannels_HTTPError(t *testing.T) {
 	}
 }
 
+// conversations.list pages behind next_cursor; the step follows it up to its
+// limit instead of returning the first page only.
+func TestListChannels_FollowsCursor(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		out := map[string]any{"ok": true}
+		switch r.URL.Query().Get("cursor") {
+		case "":
+			out["channels"] = []any{map[string]any{"id": "C1"}}
+			out["response_metadata"] = map[string]any{"next_cursor": "p2"}
+		case "p2":
+			out["channels"] = []any{map[string]any{"id": "C2"}, map[string]any{"id": "C3"}}
+			out["response_metadata"] = map[string]any{"next_cursor": "p3"}
+		default:
+			out["channels"] = []any{map[string]any{"id": "C4"}}
+		}
+		_ = json.NewEncoder(w).Encode(out)
+	}))
+	t.Cleanup(srv.Close)
+	withSlackEnv(t, srv.URL)
+
+	res, _ := executeSlackListChannels(context.Background(), core.Job{Params: map[string]any{"limit": 3}}, nil)
+	if res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	if got := res.Output["channels"].Inline.([]any); len(got) != 3 {
+		t.Errorf("channels = %v, want the first 3 across two pages", got)
+	}
+}
+
 func TestCovListChannels_SlackError(t *testing.T) {
 	cases := []struct {
 		name string

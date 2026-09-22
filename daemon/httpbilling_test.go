@@ -78,7 +78,7 @@ func TestBillingReturnURLsPinTheOrg(t *testing.T) {
 	t.Parallel()
 	h, plans, _, forms := billingHarnessWithStripeForms(t)
 
-	rw := h.do(t, "POST", "/api/v1/me/billing/checkout", nil)
+	rw := teamAdminDo(t, h, "POST", "/api/v1/me/billing/checkout", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("checkout: status = %d (%s)", rw.Code, rw.Body.String())
 	}
@@ -91,7 +91,7 @@ func TestBillingReturnURLsPinTheOrg(t *testing.T) {
 	}
 
 	_ = plans.SetPlan(t.Context(), TenantPlan{Tenant: "t", Plan: PlanPro, StripeCustomerID: "cus_1"})
-	rw = h.do(t, "POST", "/api/v1/me/billing/portal", nil)
+	rw = teamAdminDo(t, h, "POST", "/api/v1/me/billing/portal", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("portal: status = %d (%s)", rw.Code, rw.Body.String())
 	}
@@ -107,7 +107,7 @@ func TestBillingReturnURLsTrimTrailingSlash(t *testing.T) {
 	h, _, _, forms := billingHarnessWithStripeForms(t)
 	h.svc.PublicBaseURL = "https://app.example/"
 
-	rw := h.do(t, "POST", "/api/v1/me/billing/checkout", nil)
+	rw := teamAdminDo(t, h, "POST", "/api/v1/me/billing/checkout", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("checkout: status = %d (%s)", rw.Code, rw.Body.String())
 	}
@@ -122,11 +122,23 @@ func TestBillingMe(t *testing.T) {
 	h.svc.FreeRunsPerMonth = 100
 	_ = h.svc.Usage.AddRun(t.Context(), "t", time.Now())
 
+	// A non-admin sees the plan but is not offered checkout or the portal,
+	// which would refuse them.
 	rw := h.do(t, "GET", "/api/v1/me/billing", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rw.Code, rw.Body.String())
 	}
 	var got map[string]any
+	_ = json.Unmarshal(rw.Body.Bytes(), &got)
+	if got["plan"] != "free" || got["can_upgrade"] != false || got["can_manage"] != false {
+		t.Errorf("non-admin: got %+v", got)
+	}
+
+	rw = teamAdminDo(t, h, "GET", "/api/v1/me/billing", nil)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rw.Code, rw.Body.String())
+	}
+	got = map[string]any{}
 	_ = json.Unmarshal(rw.Body.Bytes(), &got)
 	if got["plan"] != "free" || got["free_runs_per_month"] != float64(100) ||
 		got["runs_this_month"] != float64(1) || got["can_upgrade"] != true ||
@@ -135,7 +147,7 @@ func TestBillingMe(t *testing.T) {
 	}
 
 	_ = plans.SetPlan(t.Context(), TenantPlan{Tenant: "t", Plan: PlanPro, StripeCustomerID: "cus_1"})
-	rw = h.do(t, "GET", "/api/v1/me/billing", nil)
+	rw = teamAdminDo(t, h, "GET", "/api/v1/me/billing", nil)
 	_ = json.Unmarshal(rw.Body.Bytes(), &got)
 	if got["plan"] != "pro" || got["can_upgrade"] != false || got["can_manage"] != true {
 		t.Errorf("after upgrade: %+v", got)
@@ -184,7 +196,7 @@ func TestBillingMeCompedEntitlement(t *testing.T) {
 func TestBillingCheckout(t *testing.T) {
 	t.Parallel()
 	h, _, _ := billingHarness(t)
-	rw := h.do(t, "POST", "/api/v1/me/billing/checkout", nil)
+	rw := teamAdminDo(t, h, "POST", "/api/v1/me/billing/checkout", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rw.Code, rw.Body.String())
 	}
@@ -202,7 +214,7 @@ func TestBillingCheckout_AlreadySubscribedRejected(t *testing.T) {
 		Tenant: "t", Plan: PlanPro, StripeCustomerID: "cus_1",
 		StripeSubscriptionID: "sub_1", SubscriptionStatus: "active",
 	})
-	rw := h.do(t, "POST", "/api/v1/me/billing/checkout", nil)
+	rw := teamAdminDo(t, h, "POST", "/api/v1/me/billing/checkout", nil)
 	if rw.Code != http.StatusConflict {
 		t.Fatalf("status = %d (%s), want 409", rw.Code, rw.Body.String())
 	}
@@ -214,7 +226,7 @@ func TestBillingCheckout_AlreadySubscribedRejected(t *testing.T) {
 		Tenant: "t", Plan: PlanFree, StripeCustomerID: "cus_1",
 		StripeSubscriptionID: "sub_1", SubscriptionStatus: "canceled",
 	})
-	rw = h.do(t, "POST", "/api/v1/me/billing/checkout", nil)
+	rw = teamAdminDo(t, h, "POST", "/api/v1/me/billing/checkout", nil)
 	if rw.Code != http.StatusOK {
 		t.Fatalf("re-checkout after lapse: status = %d (%s), want 200", rw.Code, rw.Body.String())
 	}
@@ -223,7 +235,7 @@ func TestBillingCheckout_AlreadySubscribedRejected(t *testing.T) {
 func TestBillingCheckout_NotConfigured(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	rw := h.do(t, "POST", "/api/v1/me/billing/checkout", nil)
+	rw := teamAdminDo(t, h, "POST", "/api/v1/me/billing/checkout", nil)
 	if rw.Code != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501", rw.Code)
 	}
@@ -233,12 +245,12 @@ func TestBillingPortal_RequiresExistingCustomer(t *testing.T) {
 	t.Parallel()
 	h, plans, _ := billingHarness(t)
 
-	rw := h.do(t, "POST", "/api/v1/me/billing/portal", nil)
+	rw := teamAdminDo(t, h, "POST", "/api/v1/me/billing/portal", nil)
 	if rw.Code != http.StatusConflict {
 		t.Fatalf("portal without customer: status = %d, want 409", rw.Code)
 	}
 	_ = plans.SetPlan(t.Context(), TenantPlan{Tenant: "t", Plan: PlanPro, StripeCustomerID: "cus_1"})
-	rw = h.do(t, "POST", "/api/v1/me/billing/portal", nil)
+	rw = teamAdminDo(t, h, "POST", "/api/v1/me/billing/portal", nil)
 	if rw.Code != http.StatusOK || !strings.Contains(rw.Body.String(), "billing.stripe.com") {
 		t.Fatalf("portal with customer: %d %s", rw.Code, rw.Body.String())
 	}
@@ -262,7 +274,7 @@ func TestStripeWebhook_CheckoutCompletedUpgrades(t *testing.T) {
 		"type": "checkout.session.completed",
 		"data": {"object": {
 			"id": "cs_1", "customer": "cus_9", "subscription": "sub_9",
-			"client_reference_id": "t"
+			"client_reference_id": "t", "payment_status": "paid"
 		}}
 	}`)
 	if rw.Code != http.StatusOK {
@@ -345,7 +357,7 @@ func TestStripeWebhook_BadSignatureRejected(t *testing.T) {
 	t.Parallel()
 	h, plans, _ := billingHarness(t)
 
-	body := `{"type":"checkout.session.completed","data":{"object":{"client_reference_id":"t"}}}`
+	body := `{"type":"checkout.session.completed","data":{"object":{"client_reference_id":"t","payment_status":"paid"}}}`
 	req := httptest.NewRequest("POST", "/api/v1/events/stripe", strings.NewReader(body))
 	req.Header.Set("Stripe-Signature", signStripe(t, "whsec_WRONG", time.Now(), []byte(body)))
 	rw := httptest.NewRecorder()
@@ -390,7 +402,7 @@ func TestPlanGate_WebhookUpgradeLiftsCap(t *testing.T) {
 	}
 	postStripeEvent(t, h, `{
 		"type": "checkout.session.completed",
-		"data": {"object": {"customer": "cus_9", "subscription": "sub_9", "client_reference_id": "t"}}
+		"data": {"object": {"customer": "cus_9", "subscription": "sub_9", "client_reference_id": "t", "payment_status": "paid"}}
 	}`)
 	if err := h.svc.checkRunQuota(t.Context(), "t"); err != nil {
 		t.Fatalf("pro tenant still gated: %v", err)
@@ -406,7 +418,7 @@ func TestStripeWebhook_ReplayedEventIgnored(t *testing.T) {
 	ev := `{
 		"id": "evt_once",
 		"type": "checkout.session.completed",
-		"data": {"object": {"customer": "cus_9", "subscription": "sub_9", "client_reference_id": "t"}}
+		"data": {"object": {"customer": "cus_9", "subscription": "sub_9", "client_reference_id": "t", "payment_status": "paid"}}
 	}`
 	if rw := postStripeEvent(t, h, ev); rw.Code != http.StatusOK {
 		t.Fatalf("first delivery: %d", rw.Code)

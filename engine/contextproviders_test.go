@@ -99,12 +99,25 @@ func TestNodeResolver_Resolve_Cov(t *testing.T) {
 		t.Error("unknown module should error")
 	}
 
-	tr, err := r.Resolve(context.Background(), "ping@9.9.9")
+	// A pin that does not match the registered version must fail rather than
+	// silently run whatever is installed.
+	if _, err := r.Resolve(context.Background(), "ping@9.9.9"); err == nil {
+		t.Error("a pin to an unavailable version resolved")
+	}
+	versioned := drop("pong")
+	versioned.Manifest.Version = "1.2.0"
+	if err := reg.Register(versioned); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	tr, err := r.Resolve(context.Background(), "pong@1.2.0")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if tr.Manifest().ID != "ping" {
-		t.Errorf("resolved %q, want ping", tr.Manifest().ID)
+	if tr.Manifest().ID != "pong" {
+		t.Errorf("resolved %q, want pong", tr.Manifest().ID)
+	}
+	if _, err := r.Resolve(context.Background(), "pong@1.1.0"); err == nil {
+		t.Error("a pin to another version of pong resolved")
 	}
 
 	gateErr := errors.New("disabled by admin")

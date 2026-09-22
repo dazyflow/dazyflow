@@ -5,7 +5,6 @@ package engine
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -103,31 +102,7 @@ func traverseItemPath(root any, path string) (any, error) {
 }
 
 func stringifyItemValue(v any) string {
-	switch t := v.(type) {
-	case string:
-		return t
-	case nil:
-		return ""
-	case bool:
-		if t {
-			return "true"
-		}
-		return "false"
-	case float64:
-		return strconv.FormatFloat(t, 'f', -1, 64)
-	case int:
-		return strconv.Itoa(t)
-	case int64:
-		return strconv.FormatInt(t, 10)
-	case json.Number:
-		return t.String()
-	default:
-		b, err := json.Marshal(v)
-		if err != nil {
-			return fmt.Sprintf("%v", v)
-		}
-		return string(b)
-	}
+	return stringifyForTemplate(v)
 }
 
 type loopRunIDCtxKey struct{}

@@ -90,13 +90,11 @@ func (s *Service) IssueAPIKey(ctx context.Context, p core.Principal, params Issu
 	if err != nil {
 		return IssuedAPIKey{}, err
 	}
-	// Only a platform admin may mint a key for another tenant.
-	if !isPlatformAdmin(p) {
-		for _, r := range params.Roles {
-			if r.Has(core.PermPlatformAdmin) {
-				return IssuedAPIKey{}, fmt.Errorf("%w: only a platform admin may grant %q", core.ErrUnauthorized, core.PermPlatformAdmin)
-			}
-		}
+	// No escalation: a key can do no more than its issuer, and only a platform
+	// admin may grant a platform-scoped permission (support:agent comes from the
+	// SupportAgents registry, never from a tenant admin).
+	if err := capRolesToCaller(p, params.Roles); err != nil {
+		return IssuedAPIKey{}, fmt.Errorf("%w: %v", core.ErrUnauthorized, err)
 	}
 	if err := s.reserveKeyID(ctx, params.ID, tenant); err != nil {
 		return IssuedAPIKey{}, err
@@ -203,21 +201,72 @@ func resolveKeyID(requested string) (string, error) {
 	return "k" + generated[:12], nil
 }
 
-func (s *Service) reserveKeyID(ctx context.Context, id, tenant string) error {
+// Refuses ANY existing id, same tenant included: the upsert would otherwise
+// overwrite a colleague's key (new secret, new subject) and clear its revoked_at.
+func (s *Service) reserveKeyID(ctx context.Context, id, _ string) error {
 	if id == "" {
 		return nil
 	}
-	existing, err := s.AdminKeys.GetKey(ctx, id)
+	_, err := s.AdminKeys.GetKey(ctx, id)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredential) {
 			return nil // no key with that ID — it's free to use
 		}
 		return err
 	}
-	if existing.Tenant != tenant {
-		return fmt.Errorf("%w: key id %q is already in use", core.ErrUnauthorized, id)
+	return fmt.Errorf("%w: key id %q is already in use", core.ErrUnauthorized, id)
+}
+
+// Permissions that are not a tenant's to hand out.
+var platformScopedPermissions = []core.Permission{core.PermPlatformAdmin, core.PermSupportAgent}
+
+// revokeSubjectKeys revokes subject's active API keys in tenant ("" = every
+// tenant) unless keep says otherwise. Keys snapshot tenant and roles at issue
+// time, so a removed or demoted member would otherwise keep their old access.
+func (s *Service) revokeSubjectKeys(ctx context.Context, subject, tenant string, keep func(auth.APIKey) bool) (int, error) {
+	if s == nil || s.AdminKeys == nil || subject == "" {
+		return 0, nil
 	}
-	return nil
+	var (
+		keys []auth.APIKey
+		err  error
+	)
+	if tenant == "" {
+		keys, err = s.AdminKeys.ListAll(ctx)
+	} else {
+		keys, err = s.AdminKeys.ListByTenant(ctx, tenant)
+	}
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now()
+	n := 0
+	for _, k := range keys {
+		if k.RevokedAt != nil || !strings.EqualFold(strings.TrimSpace(k.Subject), strings.TrimSpace(subject)) {
+			continue
+		}
+		if keep != nil && keep(k) {
+			continue
+		}
+		if err := s.AdminKeys.Revoke(ctx, k.ID, now); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
+// keyWithinRoles reports whether every permission k carries is held by roles.
+func keyWithinRoles(k auth.APIKey, roles []core.Role) bool {
+	held := principalPermissions(core.Principal{Roles: roles})
+	for _, r := range k.Roles {
+		for _, perm := range r.Permissions {
+			if _, ok := held[perm]; !ok {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func principalPermissions(p core.Principal) map[core.Permission]struct{} {
@@ -331,7 +380,8 @@ func (s *Service) RevokeAPIKey(ctx context.Context, p core.Principal, id string)
 	// Revoke keys only on id, so the tenant must be checked before calling it.
 	key, err := s.AdminKeys.GetKey(ctx, id)
 	if err != nil {
-		return s.AdminKeys.Revoke(ctx, id, time.Now())
+		// Fail closed: an unreadable key cannot be tenant-checked.
+		return err
 	}
 	if !isPlatformAdmin(p) && key.Tenant != p.Tenant {
 		return auth.ErrInvalidCredential

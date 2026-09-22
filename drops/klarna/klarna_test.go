@@ -238,6 +238,29 @@ func TestRefund_FullUsesRemainingRefundable(t *testing.T) {
 	}
 }
 
+// An explicit 0 — set or wired — is rejected, not treated as "full amount".
+func TestCaptureRefund_ZeroAmountRejected(t *testing.T) {
+	for name, exec := range map[string]func(context.Context, core.Job, chan<- core.Progress) (core.Result, error){
+		"capture": executeCaptureOrder, "refund": executeRefundOrder,
+	} {
+		for _, wired := range []any{nil, float64(0), "0"} {
+			f := newFakeKlarna(t)
+			job := f.job(map[string]any{"order_id": "o1", "amount": 0})
+			if wired != nil {
+				job = f.job(map[string]any{"order_id": "o1"})
+				job.Input = map[string]core.Ref{"amount": {Inline: wired}}
+			}
+			res, _ := exec(context.Background(), job, nil)
+			if res.Status != core.StatusError || res.Error.Code != "bad_input" {
+				t.Errorf("%s wired=%v: res = %+v, want bad_input", name, wired, res)
+			}
+			if f.lastPath != "" {
+				t.Errorf("%s wired=%v: hit Klarna at %q", name, wired, f.lastPath)
+			}
+		}
+	}
+}
+
 func TestRefund_MissingCreds(t *testing.T) {
 	f := newFakeKlarna(t)
 	job := core.Job{ID: "j1", Params: map[string]any{"base_url": f.srv.URL, "order_id": "o1", "amount": 500}}

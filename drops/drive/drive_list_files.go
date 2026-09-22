@@ -87,31 +87,47 @@ func ListFiles(ctx context.Context, job core.Job) ([]map[string]any, error) {
 
 	q := url.Values{}
 	q.Set("q", buildQuery(job))
-	q.Set("fields", "files(id,name,mimeType,modifiedTime,size,webViewLink)")
+	q.Set("fields", "nextPageToken,files(id,name,mimeType,modifiedTime,size,webViewLink)")
 	q.Set("orderBy", params.StringDefault(job.Params, "order_by", "modifiedTime desc"))
-	q.Set("pageSize", strconv.Itoa(params.IntDefault(job.Params, "limit", 100)))
 
-	endpoint := apiBaseURL(job) + "/files?" + q.Encode()
-	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
-	if err != nil {
-		return nil, err
-	}
-	if status < 200 || status >= 300 {
-		return nil, fmt.Errorf("%s", driveErr(body))
-	}
+	// Drive may return a short page (it caps pageSize, and filters after
+	// paging) with more behind nextPageToken, so follow it up to the limit.
+	limit := max(params.IntDefault(job.Params, "limit", 100), 1)
+	out := []map[string]any{}
+	for page := 0; page < maxFilePages && len(out) < limit; page++ {
+		q.Set("pageSize", strconv.Itoa(limit-len(out)))
+		endpoint := apiBaseURL(job) + "/files?" + q.Encode()
+		status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
+		if err != nil {
+			return nil, err
+		}
+		if status < 200 || status >= 300 {
+			return nil, fmt.Errorf("%s", driveErr(body))
+		}
 
-	var parsed struct {
-		Files []driveFile `json:"files"`
+		var parsed struct {
+			Files         []driveFile `json:"files"`
+			NextPageToken string      `json:"nextPageToken"`
+		}
+		if err := json.Unmarshal(body, &parsed); err != nil {
+			return nil, fmt.Errorf("files.list decode: %w", err)
+		}
+		for _, f := range parsed.Files {
+			out = append(out, f.normalize())
+		}
+		if parsed.NextPageToken == "" {
+			break
+		}
+		q.Set("pageToken", parsed.NextPageToken)
 	}
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, fmt.Errorf("files.list decode: %w", err)
-	}
-	out := make([]map[string]any, 0, len(parsed.Files))
-	for _, f := range parsed.Files {
-		out = append(out, f.normalize())
+	if len(out) > limit {
+		out = out[:limit]
 	}
 	return out, nil
 }
+
+// maxFilePages bounds one listing's page walk.
+const maxFilePages = 20
 
 func buildQuery(job core.Job) string {
 	var clauses []string

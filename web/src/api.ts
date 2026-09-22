@@ -84,7 +84,7 @@ const API_BASE = (import.meta.env.VITE_API_BASE ?? "") + "/api/v1";
 // never readable from JS, so requests send credentials instead of a header.
 export const COOKIE_SESSION = "cookie-session";
 
-function authHeader(token: string | null): Record<string, string> {
+export function authHeader(token: string | null): Record<string, string> {
   return token && token !== COOKIE_SESSION
     ? { Authorization: `Bearer ${token}` }
     : {};
@@ -163,6 +163,67 @@ async function request<T>(
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+// streamSSE opens a server-sent-event stream over fetch (EventSource can't send
+// the Authorization header or a POST body) and hands each frame's event name and
+// raw `data:` line to onFrame. Resolves when the server ends the stream.
+async function streamSSE(
+  token: string,
+  path: string,
+  init: { method: "GET" | "POST"; body?: unknown },
+  signal: AbortSignal | undefined,
+  onFrame: (name: string, data: string) => void,
+): Promise<void> {
+  const headers: Record<string, string> = { ...authHeader(token) };
+  if (init.body !== undefined) headers["Content-Type"] = "application/json";
+  const res = await fetch(API_BASE + path, {
+    method: init.method,
+    headers,
+    credentials: "include",
+    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    if (res.status === 401) notifyUnauthorized();
+    const { message, code } = parseAPIErrorBody(await res.text(), res.statusText);
+    throw new APIError(res.status, message, code);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buffer += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buffer.indexOf("\n\n")) >= 0) {
+      const frame = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      if (frame.startsWith(":")) continue; // keep-alive / open comment
+      let name = "message";
+      let dataLine = "";
+      for (const line of frame.split("\n")) {
+        if (line.startsWith("event: ")) name = line.slice(7);
+        else if (line.startsWith("data: ")) dataLine = line.slice(6);
+      }
+      if (dataLine) onFrame(name, dataLine);
+    }
+  }
+}
+
+// jsonOrRaw delivers a frame's data parsed when it is JSON, as text otherwise.
+function jsonOrRaw(onEvent: (kind: string, data: unknown) => void) {
+  return (name: string, data: string) => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(data);
+    } catch {
+      onEvent(name, data);
+      return;
+    }
+    onEvent(name, parsed);
+  };
 }
 
 export type SignInResponse = {
@@ -302,7 +363,7 @@ export const api = {
           `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files`,
       );
       xhr.withCredentials = true;
-      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      for (const [k, v] of Object.entries(authHeader(token))) xhr.setRequestHeader(k, v);
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) opts?.onProgress?.(e.loaded / e.total);
       };
@@ -732,6 +793,8 @@ export const api = {
       "DELETE",
       `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}`,
       { password },
+      // A mistyped password answers 401 bad_credentials; that is not a dead session.
+      { signalUnauthorized: false },
     ),
   listSchedules: (token: string, opts: { tenant?: string; workspace?: string } = {}) => {
     const qs = new URLSearchParams();
@@ -988,45 +1051,13 @@ export const api = {
     onEvent: (kind: string, data: unknown) => void,
     signal?: AbortSignal,
   ): Promise<void> {
-    return fetch(API_BASE + "/tools/flow/generate/stream", {
-      method: "POST",
-      headers: { ...authHeader(token), "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(body),
+    return streamSSE(
+      token,
+      "/tools/flow/generate/stream",
+      { method: "POST", body },
       signal,
-    }).then(async (res) => {
-      if (!res.ok || !res.body) {
-        if (res.status === 401) notifyUnauthorized();
-        throw new APIError(res.status, await res.text());
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) return;
-        buffer += decoder.decode(value, { stream: true });
-        let idx;
-        while ((idx = buffer.indexOf("\n\n")) >= 0) {
-          const frame = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 2);
-          if (frame.startsWith(":")) continue;
-          let name = "message";
-          let dataLine = "";
-          for (const line of frame.split("\n")) {
-            if (line.startsWith("event: ")) name = line.slice(7);
-            else if (line.startsWith("data: ")) dataLine = line.slice(6);
-          }
-          if (dataLine) {
-            try {
-              onEvent(name, JSON.parse(dataLine));
-            } catch {
-              onEvent(name, dataLine);
-            }
-          }
-        }
-      }
-    });
+      jsonOrRaw(onEvent),
+    );
   },
 
   generateFlow: (token: string, description: string, provider?: string) =>
@@ -1361,44 +1392,13 @@ export const api = {
     onEvent: (kind: string, data: unknown) => void,
     signal: AbortSignal,
   ): Promise<void> {
-    return fetch(API_BASE + `/me/runs/${encodeURIComponent(jobID)}/events`, {
-      method: "GET",
-      headers: { ...authHeader(token) },
-      credentials: "include",
+    return streamSSE(
+      token,
+      `/me/runs/${encodeURIComponent(jobID)}/events`,
+      { method: "GET" },
       signal,
-    }).then(async (res) => {
-      if (!res.ok || !res.body) {
-        if (res.status === 401) notifyUnauthorized();
-        throw new APIError(res.status, await res.text());
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) return;
-        buffer += decoder.decode(value, { stream: true });
-        let idx;
-        while ((idx = buffer.indexOf("\n\n")) >= 0) {
-          const frame = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 2);
-          if (frame.startsWith(":")) continue; // keep-alive
-          let name = "message";
-          let dataLine = "";
-          for (const line of frame.split("\n")) {
-            if (line.startsWith("event: ")) name = line.slice(7);
-            else if (line.startsWith("data: ")) dataLine = line.slice(6);
-          }
-          if (dataLine) {
-            try {
-              onEvent(name, JSON.parse(dataLine));
-            } catch {
-              onEvent(name, dataLine);
-            }
-          }
-        }
-      }
-    });
+      jsonOrRaw(onEvent),
+    );
   },
   streamSystemLog(
     token: string,
@@ -1407,42 +1407,13 @@ export const api = {
     tail = 500,
   ): Promise<void> {
     const qs = tail !== 500 ? `?tail=${encodeURIComponent(String(tail))}` : "";
-    return fetch(API_BASE + `/admin/system/log` + qs, {
-      method: "GET",
-      headers: { ...authHeader(token) },
-      credentials: "include",
+    return streamSSE(
+      token,
+      `/admin/system/log` + qs,
+      { method: "GET" },
       signal,
-    }).then(async (res) => {
-      if (!res.ok || !res.body) {
-        if (res.status === 401) notifyUnauthorized();
-        throw new APIError(res.status, await res.text());
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) return;
-        buffer += decoder.decode(value, { stream: true });
-        let idx;
-        while ((idx = buffer.indexOf("\n\n")) >= 0) {
-          const frame = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 2);
-          if (frame.startsWith(":")) continue; // keep-alive
-          let dataLine = "";
-          for (const line of frame.split("\n")) {
-            if (line.startsWith("data: ")) dataLine = line.slice(6);
-          }
-          if (dataLine) {
-            try {
-              onLine(JSON.parse(dataLine) as string);
-            } catch {
-              onLine(dataLine);
-            }
-          }
-        }
-      }
-    });
+      jsonOrRaw((_name, data) => onLine(data as string)),
+    );
   },
   watchFlow(
     token: string,
@@ -1457,43 +1428,20 @@ export const api = {
     }) => void,
     signal: AbortSignal,
   ): Promise<void> {
-    return fetch(
-      API_BASE +
-        `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/watch`,
-      { method: "GET", headers: { ...authHeader(token) }, credentials: "include", signal },
-    ).then(async (res) => {
-      if (!res.ok || !res.body) {
-        if (res.status === 401) notifyUnauthorized();
-        throw new APIError(res.status, await res.text());
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) return;
-        buffer += decoder.decode(value, { stream: true });
-        let idx;
-        while ((idx = buffer.indexOf("\n\n")) >= 0) {
-          const frame = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 2);
-          if (frame.startsWith(":")) continue; // keep-alive / open comment
-          let name = "message";
-          let dataLine = "";
-          for (const line of frame.split("\n")) {
-            if (line.startsWith("event: ")) name = line.slice(7);
-            else if (line.startsWith("data: ")) dataLine = line.slice(6);
-          }
-          if (name === "flow_updated" && dataLine) {
-            try {
-              onUpdated(JSON.parse(dataLine));
-            } catch {
-              /* ignore malformed frame */
-            }
-          }
+    return streamSSE(
+      token,
+      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/watch`,
+      { method: "GET" },
+      signal,
+      (name, data) => {
+        if (name !== "flow_updated") return;
+        try {
+          onUpdated(JSON.parse(data));
+        } catch {
+          /* ignore malformed frame */
         }
-      }
-    });
+      },
+    );
   },
   listProviders: async (token: string) => {
     const r = await request<{ providers: OAuthProviderStatus[] }>(

@@ -75,17 +75,21 @@ func executeCaptureOrder(ctx context.Context, job core.Job, _ chan<- core.Progre
 	if orderID == "" {
 		return params.Err(job, "bad_param", "'order_id' is required — set it or connect the 'Order ID' input"), nil
 	}
-	amount, ok := wholeNumberInputOr(job, "amount", params.IntDefault(job.Params, "amount", 0))
+	amount, ok := wholeNumberInputOr(job, "amount", params.IntDefault(job.Params, "amount", amountUnset))
 	if !ok {
 		return params.Err(job, "bad_input", "'Amount' input must be a whole number (smallest currency unit, e.g. 2500 = 25.00)"), nil
 	}
-	if amount < 0 {
+	// Absent means the full amount; an explicit 0 is a mistake upstream.
+	if amount == 0 {
+		return params.Err(job, "bad_input", "'Amount' is 0 — leave it empty to capture the whole remaining authorized amount, or enter a positive amount"), nil
+	}
+	if amount < 0 && amount != amountUnset {
 		return params.Err(job, "bad_input", "'Amount' cannot be negative"), nil
 	}
 
 	// Full capture: no amount given, so read the order's remaining authorized
 	// amount and capture exactly that (Klarna requires captured_amount).
-	if amount == 0 {
+	if amount == amountUnset {
 		o, r := fetchOrder(ctx, job, orderID)
 		if r != nil {
 			return *r, nil

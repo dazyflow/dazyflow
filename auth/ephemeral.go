@@ -37,6 +37,11 @@ type EphemeralStore interface {
 	Put(ctx context.Context, kind, token string, payload []byte, expiresAt time.Time) error
 	Get(ctx context.Context, kind, token string) ([]byte, int, error)
 	Delete(ctx context.Context, kind, token string) error
+	// Take atomically reads and removes an unexpired entry, so exactly one of
+	// any number of concurrent redemptions gets the payload; the rest see
+	// ErrEphemeralNotFound. Single-use tokens must be consumed with Take, never
+	// Get-then-Delete (both of two racing Gets would succeed).
+	Take(ctx context.Context, kind, token string) ([]byte, error)
 	// IncrAttempts atomically increments and returns the failed-guess count.
 	// Atomic because concurrent wrong guesses against one token must not all
 	// read the same count and lose increments, which would weaken a
@@ -97,6 +102,21 @@ func (s *MemEphemeralStore) Delete(_ context.Context, kind, token string) error 
 	defer s.mu.Unlock()
 	delete(s.items, ephemeralKey(kind, token))
 	return nil
+}
+
+func (s *MemEphemeralStore) Take(_ context.Context, kind, token string) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := ephemeralKey(kind, token)
+	e, ok := s.items[k]
+	if !ok {
+		return nil, ErrEphemeralNotFound
+	}
+	delete(s.items, k)
+	if !time.Now().Before(e.expiresAt) {
+		return nil, ErrEphemeralNotFound
+	}
+	return e.payload, nil
 }
 
 func (s *MemEphemeralStore) IncrAttempts(_ context.Context, kind, token string) (int, error) {
@@ -171,6 +191,25 @@ func (s *PgEphemeralStore) Get(ctx context.Context, kind, token string) ([]byte,
 func (s *PgEphemeralStore) Delete(ctx context.Context, kind, token string) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM auth_ephemeral WHERE kind=$1 AND token=$2`, kind, token)
 	return err
+}
+
+// DELETE ... RETURNING is the atomic claim: a row can be deleted once. An
+// expired row is removed too but reads as gone.
+func (s *PgEphemeralStore) Take(ctx context.Context, kind, token string) ([]byte, error) {
+	var (
+		payload []byte
+		live    bool
+	)
+	err := s.pool.QueryRow(ctx,
+		`DELETE FROM auth_ephemeral WHERE kind=$1 AND token=$2
+		 RETURNING payload, expires_at > now()`, kind, token).Scan(&payload, &live)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !live) {
+		return nil, ErrEphemeralNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return payload, nil
 }
 
 func (s *PgEphemeralStore) IncrAttempts(ctx context.Context, kind, token string) (int, error) {

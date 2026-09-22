@@ -22,7 +22,10 @@ import (
 
 const slackOnMentionModuleID = "slack_on_mention"
 
-// Per-tenant: the signing secret is the org's, not the deployment's.
+// Per-tenant: the signing secret is the org's. The deployment-wide secret is
+// only a fallback on a deployment with no per-tenant secret store (a single
+// operator); anywhere else it would let one signature reach every {tenant},
+// since the signature does not cover the URL.
 const slackTriggerSecretName = "SLACK_SIGNING_SECRET"
 
 // Capped: this endpoint is unauthenticated until the signature verifies.
@@ -75,7 +78,7 @@ func (h *SlackEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) 
 	// Bound to the URL's tenant: resolving it any other way would let one org's
 	// signature authenticate a delivery aimed at another.
 	secret := h.tenantSecret(r.Context(), tenant)
-	if secret == "" {
+	if secret == "" && (h.svc == nil || h.svc.EncryptedSecrets == nil) {
 		secret = h.signingSecret
 	}
 	if secret == "" {

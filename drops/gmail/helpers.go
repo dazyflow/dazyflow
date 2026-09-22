@@ -13,7 +13,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/apibase"
 	"github.com/dazyflow/dazyflow/drops/internal/google"
-	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // maxResponseBytes caps how much of an API response we buffer, so a
@@ -31,12 +30,7 @@ var httpBase = apibase.New("https://gmail.googleapis.com/gmail/v1")
 
 func SetHTTPBase(base string) { httpBase.Set(base) }
 
-func baseURL(job core.Job) string {
-	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
-		return b
-	}
-	return httpBase.Get()
-}
+func baseURL(job core.Job) string { return httpBase.For(job) }
 
 func gmailDo(ctx context.Context, method, url, token, contentType string, body []byte, timeoutMS int) (int, []byte, error) {
 	return google.Do(ctx, method, url, token, contentType, body, timeoutMS, maxResponseBytes)

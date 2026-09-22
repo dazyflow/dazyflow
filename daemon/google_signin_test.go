@@ -157,10 +157,18 @@ func TestResolveSignInUser_Cov(t *testing.T) {
 
 	rw := httptest.NewRecorder()
 	user, isNew, ok := h.gw.authAPI().resolveSignInUser(rw, r, "new@acme.test", st)
-	if !ok || !isNew || user.Tenant != "acme" || user.Email != "new@acme.test" {
+	// A first-time user gets their own personal tenant — never the org they
+	// signed in through — and is not persisted until admission succeeds.
+	if !ok || !isNew || !strings.HasPrefix(user.Tenant, "usr_") || user.Email != "new@acme.test" {
 		t.Fatalf("new user = %+v isNew=%v ok=%v", user, isNew, ok)
 	}
-	if prof, err := profiles.GetOrgProfile(r.Context(), "acme"); err != nil || prof.DisplayName == "" {
+	if _, err := users.GetByEmail(r.Context(), "new@acme.test"); err == nil {
+		t.Fatal("resolveSignInUser persisted the user before admission")
+	}
+	if !h.gw.authAPI().persistNewSignInUser(rw, r, user) {
+		t.Fatalf("persist: %s", rw.Body.String())
+	}
+	if prof, err := profiles.GetOrgProfile(r.Context(), user.Tenant); err != nil || prof.DisplayName == "" {
 		t.Errorf("org profile not seeded: %+v err=%v", prof, err)
 	}
 
@@ -391,8 +399,19 @@ func boolJSON(b bool) string {
 	return "false"
 }
 
+func inviteToAcme(t *testing.T, h *gatewayHarness, email string, roles []core.Role) {
+	t.Helper()
+	if err := h.gw.Invitations.PutInvitation(context.Background(), auth.Invitation{
+		Token: "inv-" + email, Email: email, Tenant: "acme", Workspace: "main",
+		Roles: roles, ExpiresAt: time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestGoogleSignInCallback_NewUserSuccess(t *testing.T) {
 	h := googleCallbackEnv(t, "fresh@acme.test", "", true)
+	inviteToAcme(t, h, "fresh@acme.test", []core.Role{core.TeamRoleEditor()})
 	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/dashboard", "", false)
 
 	rw := httptest.NewRecorder()
@@ -411,8 +430,33 @@ func TestGoogleSignInCallback_NewUserSuccess(t *testing.T) {
 		t.Error("expected a session cookie to be set")
 	}
 	u, err := h.gw.Users.GetByEmail(context.Background(), "fresh@acme.test")
-	if err != nil || u.Tenant != "acme" {
+	if err != nil || !strings.HasPrefix(u.Tenant, "usr_") {
 		t.Fatalf("new user = %+v err=%v", u, err)
+	}
+	m, err := h.gw.Memberships.GetMembership(context.Background(), "fresh@acme.test", "acme")
+	if err != nil || core.CanAdminOrg(core.Principal{Roles: m.Roles}) {
+		t.Fatalf("membership = %+v err=%v, want an invited non-admin member", m, err)
+	}
+}
+
+// Regression: a first-time Google user used to be created directly inside the
+// org whose client id they used, as its org admin, with no invite or seat check.
+func TestGoogleSignInCallback_NewUninvitedUserRefused(t *testing.T) {
+	h := googleCallbackEnv(t, "stranger@elsewhere.test", "", true)
+	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/", "", false)
+	rw := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/api/v1/auth/google/callback?state="+state+"&code=abc", nil)
+	r.AddCookie(bindCookie)
+	r.Host = "app.dazyflow.test"
+	ServeForTest(h.gw, rw, r)
+	if rw.Code != http.StatusForbidden {
+		t.Fatalf("uninvited new user = %d, want 403; body=%s", rw.Code, rw.Body.String())
+	}
+	if _, err := h.gw.Users.GetByEmail(context.Background(), "stranger@elsewhere.test"); err == nil {
+		t.Error("refused sign-in still created a user")
+	}
+	if _, err := h.gw.Memberships.GetMembership(context.Background(), "stranger@elsewhere.test", "acme"); err == nil {
+		t.Error("refused sign-in still created a membership")
 	}
 }
 
@@ -587,10 +631,10 @@ func TestResolveActiveOrg_Cov(t *testing.T) {
 	r := httptest.NewRequest("GET", "/cb", nil)
 	cfg := auth.OrgAuthConfig{Tenant: "acme"}
 
+	// A new user is admitted only like anyone else: invite or allowed domain.
 	newUser := auth.User{Email: "n@x.com", Tenant: "home", Workspace: "main", Roles: []core.Role{core.TeamRoleViewer()}}
-	tn, ws, _, reason, _, _ := h.gw.authAPI().resolveActiveOrg(r, cfg, newUser, true, "n@x.com", googleSignInState{Tenant: "acme"})
-	if reason != "" || tn != "home" || ws != "main" {
-		t.Fatalf("new user resolve = %q/%q reason=%q", tn, ws, reason)
+	if _, _, _, reason, status, _ := h.gw.authAPI().resolveActiveOrg(r, cfg, newUser, true, "n@x.com", googleSignInState{Tenant: "acme"}); reason != "not_invited" || status != http.StatusForbidden {
+		t.Fatalf("uninvited new user resolve reason=%q status=%d, want not_invited/403", reason, status)
 	}
 
 	home := auth.User{Email: "h@x.com", Tenant: "acme", Workspace: "main"}
@@ -751,6 +795,7 @@ func TestGoogleSignInCallback_RejectsUnboundBrowser(t *testing.T) {
 
 func TestGoogleSignInCallback_StateIsSingleUse(t *testing.T) {
 	h := googleCallbackEnv(t, "replay@acme.test", "", true)
+	inviteToAcme(t, h, "replay@acme.test", []core.Role{core.TeamRoleEditor()})
 	state, bindCookie := boundGoogleState(t, h.gw, "acme", "/", "", false)
 
 	for i, wantCode := range []int{http.StatusFound, http.StatusBadRequest} {

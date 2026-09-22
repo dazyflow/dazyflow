@@ -23,10 +23,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/apibase"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
@@ -60,9 +63,12 @@ func envBase(env string) string {
 
 // baseURL resolves the API root for one job: an explicit base_url param wins
 // (the test seam), otherwise the connection's environment selects the host.
+//
+// Outside tests the override is honoured only on an nShift host: the API key
+// goes with it.
 func baseURL(job core.Job) string {
-	if u, _ := params.StringOpt(job.Params, "base_url"); u != "" {
-		return strings.TrimRight(u, "/")
+	if u := apibase.Override(job, slices.Collect(maps.Values(envHosts))...); u != "" {
+		return u
 	}
 	return envBase(params.StringDefault(job.Params, "environment", ""))
 }

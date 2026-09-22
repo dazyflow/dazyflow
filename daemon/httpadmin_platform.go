@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -315,6 +316,13 @@ func (h *platformAdminAPI) platformRevokeAdmin(rw http.ResponseWriter, r *http.R
 	}
 	if u, err := h.Users.GetByEmail(r.Context(), email); err == nil {
 		h.revokeSubjectSessions(r.Context(), u.Subject)
+	}
+	// A key minted while the grant was live still carries platform:admin.
+	if _, err := h.svc.revokeSubjectKeys(r.Context(), email, "", func(k auth.APIKey) bool {
+		return !slices.ContainsFunc(k.Roles, func(role core.Role) bool { return role.Has(core.PermPlatformAdmin) })
+	}); err != nil {
+		writeJSONError(rw, http.StatusInternalServerError, "grant revoked, but its platform-admin API keys could not be: "+err.Error())
+		return
 	}
 	h.audit(r.Context(), p, "platform.user.revoke_admin", email, "")
 	u, err := h.Users.GetByEmail(r.Context(), email)

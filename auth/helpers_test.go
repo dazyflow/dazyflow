@@ -5,6 +5,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -295,6 +296,9 @@ func TestJSONInvitationStore_Cov(t *testing.T) {
 
 	if err := s.MarkAccepted(ctx, "inv_1", now); err != nil {
 		t.Fatalf("MarkAccepted: %v", err)
+	}
+	if err := s.MarkAccepted(ctx, "inv_1", now); !errors.Is(err, ErrInvitationNotPending) {
+		t.Errorf("second MarkAccepted = %v, want ErrInvitationNotPending", err)
 	}
 	if err := s.MarkAccepted(ctx, "nope", now); err != ErrUnknownInvitation {
 		t.Errorf("MarkAccepted unknown = %v", err)

@@ -334,6 +334,8 @@ type Service struct {
 	suggestCache map[string]suggestEntry
 	suggestOrder []string
 
+	failureMail failureMailLedger
+
 	// Called after any change that lands a commit, which is what the git mirror and
 	// the suggestion memo hang off — so a new write path must call it or they go
 	// stale.
@@ -1153,17 +1155,28 @@ func (s *Service) WaitGraph(
 	defer cancel()
 
 	fresh, err := s.Jobs.Get(ctx, jobID)
-	if err == nil && isTerminal(fresh.Status) {
+	if err == nil && core.IsTerminalStatus(fresh.Status) {
 		return graphResultFromRecord(fresh), nil
 	}
-	if isTerminal(rec.Status) {
+	if core.IsTerminalStatus(rec.Status) {
 		return graphResultFromRecord(rec), nil
 	}
 
+	// The bus is best-effort: a subscriber that falls behind has events dropped,
+	// Terminal included, and would then wait for ever. So the record is re-read
+	// now and then as well; the event stays the fast path.
+	recheck := time.NewTicker(waitGraphRecheck)
+	defer recheck.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return engine.GraphResult{}, ctx.Err()
+		case <-recheck.C:
+			if sum, err := core.GetRunSummary(ctx, s.Jobs, jobID); err == nil && core.IsTerminalStatus(sum.Status) {
+				if rec, err := s.Jobs.Get(ctx, jobID); err == nil {
+					return graphResultFromRecord(rec), nil
+				}
+			}
 		case ev, ok := <-events:
 			if !ok {
 				rec, err := s.Jobs.Get(context.Background(), jobID)
@@ -1183,11 +1196,25 @@ func (s *Service) WaitGraph(
 				continue
 			}
 			if ev.Terminal != nil {
-				return ev.Terminal.GraphRes, nil
+				if ev.Terminal.GraphRes.Status != "" {
+					return ev.Terminal.GraphRes, nil
+				}
+				// Only a dispatcher finalize carries a GraphRes; cancel, timeout, a
+				// failed load, the reaper and promotion publish a bare Terminal, and
+				// returning its empty result read as a run with no status and no
+				// error. The record says how it ended.
+				rec, err := s.Jobs.Get(context.WithoutCancel(ctx), jobID)
+				if err != nil {
+					return engine.GraphResult{}, err
+				}
+				return graphResultFromRecord(rec), nil
 			}
 		}
 	}
 }
+
+// How often WaitGraph re-reads the run in case its Terminal event was dropped.
+var waitGraphRecheck = 5 * time.Second
 
 func (s *Service) RunGraph(
 	ctx context.Context,
@@ -1210,14 +1237,6 @@ func (s *Service) RunGraph(
 		return result, jobID, fmt.Errorf("%s: %s", result.Error.Code, result.Error.Message)
 	}
 	return result, jobID, nil
-}
-
-func isTerminal(s core.JobStatus) bool {
-	switch s {
-	case core.JobStatusSucceeded, core.JobStatusFailed, core.JobStatusCancelled:
-		return true
-	}
-	return false
 }
 
 func graphResultFromRecord(rec core.JobRecord) engine.GraphResult {

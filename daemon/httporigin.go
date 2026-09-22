@@ -34,7 +34,7 @@ func (h *HTTPGateway) withCORSAndLogging(next http.Handler) http.Handler {
 			// Emit no CORS headers at all rather than a header the browser will reject.
 		}
 		rw.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		rw.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")
+		rw.Header().Set("Access-Control-Allow-Methods", "GET, PUT, PATCH, POST, DELETE, OPTIONS")
 		if h.requestIsHTTPS(r) {
 			rw.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}

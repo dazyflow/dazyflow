@@ -95,9 +95,12 @@ func pahoPublish(_ context.Context, cfg publishConfig) error {
 	// runs on the resolved address. nil when the operator allowed private
 	// egress, which leaves the dialer unrestricted.
 	opts.SetDialer(&stdnet.Dialer{Timeout: to, Control: hfnet.SSRFDialControl()})
+	tlsc := &tls.Config{MinVersion: tls.VersionTLS12}
 	if cfg.TLS {
-		opts.SetTLSConfig(&tls.Config{MinVersion: tls.VersionTLS12})
+		opts.SetTLSConfig(tlsc)
 	}
+	// Every scheme — ws/wss included — dials through the guarded dialer.
+	opts.SetCustomOpenConnectionFn(guardedOpen(to, tlsc))
 
 	client := mqttlib.NewClient(opts)
 	tok := client.Connect()

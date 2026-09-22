@@ -519,3 +519,43 @@ func TestFetchSpec(t *testing.T) {
 		t.Fatal("a non-spec 200 body was accepted")
 	}
 }
+
+// A schema whose allOf refers back to itself used to recurse with a fresh
+// $ref depth on every level and overflow the stack; it must now surface as
+// a skipped operation with a warning.
+func TestParseSpec_AllOfSelfCycleIsRejectedNotRecursedForever(t *testing.T) {
+	const spec = `
+openapi: 3.0.3
+info: {title: loop}
+paths:
+  /loop:
+    post:
+      operationId: loop
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/A'
+      responses:
+        '200': {description: ok}
+  /ok:
+    get:
+      operationId: fine
+      responses:
+        '200': {description: ok}
+components:
+  schemas:
+    A:
+      allOf:
+        - $ref: '#/components/schemas/A'
+`
+	got := parse(t, spec)
+	for _, op := range got.Operations {
+		if op.ID == "loop" {
+			t.Fatalf("self-cycling allOf operation was imported: %+v", op)
+		}
+	}
+	if len(got.Warnings) == 0 {
+		t.Fatal("expected a warning for the self-cycling allOf")
+	}
+}

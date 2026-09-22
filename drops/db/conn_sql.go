@@ -9,8 +9,16 @@ import (
 	"fmt"
 )
 
+// sqlHandle is what sqlConn runs statements on: a pool, or one pinned
+// connection when per-connection limits matter (see lockedQueryConn).
+type sqlHandle interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
+}
+
 type sqlConn struct {
-	db            *sql.DB
+	db            sqlHandle
 	bytesToString bool
 }
 

@@ -184,6 +184,28 @@ func redactHeaders(in []string, set *secretSet) []string {
 	return out
 }
 
+// redactError scrubs resolved secrets out of an error's message before it
+// reaches a span or a run record. The original stays reachable through Unwrap
+// so errors.Is/As classification still works; only the text is replaced.
+func redactError(err error, set *secretSet) error {
+	if err == nil || set.empty() {
+		return err
+	}
+	msg := err.Error()
+	if red := redactString(msg, set); red != msg {
+		return &redactedError{msg: red, err: err}
+	}
+	return err
+}
+
+type redactedError struct {
+	msg string
+	err error
+}
+
+func (e *redactedError) Error() string { return e.msg }
+func (e *redactedError) Unwrap() error { return e.err }
+
 func redactString(s string, set *secretSet) string {
 	if s == "" {
 		return s
@@ -221,30 +243,49 @@ func redactValue(v any, set *secretSet) any {
 			out[redactString(k, set)] = redactString(val, set)
 		}
 		return out
+	// Slices are rebuilt, never edited in place: ApplyPassthrough hands a node's
+	// output the very slices its upstream recorded, and another reader may hold
+	// them concurrently. Writing through would race and corrupt that record.
 	case []string:
-		for i, s := range tv {
-			tv[i] = redactString(s, set)
+		if tv == nil {
+			return tv
 		}
-		return tv
+		out := make([]string, len(tv))
+		for i, s := range tv {
+			out[i] = redactString(s, set)
+		}
+		return out
 	case []map[string]any:
+		if tv == nil {
+			return tv
+		}
+		out := make([]map[string]any, len(tv))
 		for i, m := range tv {
 			if rm, ok := redactValue(m, set).(map[string]any); ok {
-				tv[i] = rm
+				out[i] = rm
 			}
 		}
-		return tv
+		return out
 	case []map[string]string:
+		if tv == nil {
+			return tv
+		}
+		out := make([]map[string]string, len(tv))
 		for i, m := range tv {
 			if rm, ok := redactValue(m, set).(map[string]string); ok {
-				tv[i] = rm
+				out[i] = rm
 			}
 		}
-		return tv
+		return out
 	case []any:
-		for i, val := range tv {
-			tv[i] = redactValue(val, set)
+		if tv == nil {
+			return tv
 		}
-		return tv
+		out := make([]any, len(tv))
+		for i, val := range tv {
+			out[i] = redactValue(val, set)
+		}
+		return out
 	default:
 		// Walk the long tail of container shapes reflectively, so a secret echoed into
 		// any slice or map is still scrubbed.

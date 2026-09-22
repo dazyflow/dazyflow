@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -68,9 +69,24 @@ func init() {
 
 func executeListInvoices(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	page := params.IntDefault(job.Params, "page", 1)
-	if pageIn, ok := params.TextInputOr(job, "page", ""); ok && pageIn != "" {
-		if n, err := strconv.Atoi(pageIn); err == nil && n >= 1 {
-			page = n
+	// The input is usually a number — meta.next_page from the previous run —
+	// which TextInputOr would reject, so read both shapes.
+	if in, ok := job.Input["page"]; ok && in.Inline != nil {
+		switch v := in.Inline.(type) {
+		case float64:
+			if v >= 1 && v == float64(int(v)) {
+				page = int(v)
+			}
+		case int:
+			if v >= 1 {
+				page = v
+			}
+		default:
+			if pageIn, ok := params.TextInputOr(job, "page", ""); ok && pageIn != "" {
+				if n, err := strconv.Atoi(strings.TrimSpace(pageIn)); err == nil && n >= 1 {
+					page = n
+				}
+			}
 		}
 	}
 	if page < 1 {

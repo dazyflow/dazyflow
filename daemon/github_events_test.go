@@ -9,8 +9,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -65,12 +67,15 @@ func (h *githubHarness) awaitFanout(t *testing.T) {
 	}
 }
 
+// Each post is a distinct delivery: the handler dedupes replayed ids.
+var githubDeliverySeq atomic.Int64
+
 func (h *githubHarness) post(t *testing.T, path, event string, body []byte) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest("POST", path, bytes.NewReader(body))
 	req.Header.Set("X-Hub-Signature-256", signGitHub(h.secret, body))
 	req.Header.Set("X-GitHub-Event", event)
-	req.Header.Set("X-GitHub-Delivery", "test-delivery-id")
+	req.Header.Set("X-GitHub-Delivery", fmt.Sprintf("test-delivery-%d", githubDeliverySeq.Add(1)))
 	req.Header.Set("Content-Type", "application/json")
 	rw := httptest.NewRecorder()
 	ServeForTest(h.gw, rw, req)
@@ -329,5 +334,46 @@ func TestGitHubEvents_SparsePushAcked(t *testing.T) {
 	rw := h.post(t, "/api/v1/events/github/t", "push", []byte(`{"ref":"refs/heads/main"}`))
 	if rw.Code != http.StatusOK {
 		t.Errorf("sparse push code=%d, want 200", rw.Code)
+	}
+}
+
+func TestGitHubEvents_ReplayedDeliveryNotDispatched(t *testing.T) {
+	t.Parallel()
+	h := newGitHubHarness(t)
+	body := []byte(`{"zen":"hi"}`)
+	send := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", "/api/v1/events/github/t", bytes.NewReader(body))
+		req.Header.Set("X-Hub-Signature-256", signGitHub(h.secret, body))
+		req.Header.Set("X-GitHub-Event", "ping")
+		req.Header.Set("X-GitHub-Delivery", "replayed-id")
+		rw := httptest.NewRecorder()
+		ServeForTest(h.gw, rw, req)
+		return rw
+	}
+	if rw := send(); rw.Code != http.StatusOK || rw.Body.String() != "pong" {
+		t.Fatalf("first delivery = %d %q, want 200 pong", rw.Code, rw.Body.String())
+	}
+	if rw := send(); rw.Code != http.StatusOK || rw.Body.String() != "duplicate delivery" {
+		t.Fatalf("replay = %d %q, want 200 duplicate delivery", rw.Code, rw.Body.String())
+	}
+}
+
+// With a per-tenant secret store configured, the deployment-wide secret must
+// not authenticate a delivery for a tenant that has no secret of its own.
+func TestGitHubEvents_NoGlobalFallbackWithTenantStore(t *testing.T) {
+	t.Parallel()
+	h := newGitHubHarness(t)
+	es, err := NewEncryptedSecrets(randomKey(t), NewMemSecretsStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.svc.EncryptedSecrets = es
+	rw := h.post(t, "/api/v1/events/github/t", "ping", []byte(`{}`))
+	if rw.Code != http.StatusUnauthorized {
+		t.Fatalf("global-secret delivery = %d, want 401", rw.Code)
+	}
+	_ = es.Put(t.Context(), "t", githubTriggerSecretName, h.secret)
+	if rw := h.post(t, "/api/v1/events/github/t", "ping", []byte(`{}`)); rw.Code != http.StatusOK {
+		t.Fatalf("tenant-secret delivery = %d, want 200", rw.Code)
 	}
 }

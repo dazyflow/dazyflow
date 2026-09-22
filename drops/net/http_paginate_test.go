@@ -159,6 +159,48 @@ func TestPaginate_ClimbsAPageNumber(t *testing.T) {
 	}
 }
 
+// A 0-indexed API starts at page=0 and climbs by one; an offset climbs by the
+// number of items on the page.
+func TestPaginate_ClimbsFromTheGivenStart(t *testing.T) {
+	for _, tc := range []struct {
+		param, start string
+		want         string
+	}{
+		{"page", "0", "0,1,2"},
+		{"offset", "", "0,2,4"},
+		{"offset", "2", "2,4"},
+	} {
+		var got []string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			v := r.URL.Query().Get(tc.param)
+			if v == "" {
+				v = "0"
+			}
+			got = append(got, v)
+			n, _ := strconv.Atoi(v)
+			w.Header().Set("Content-Type", "application/json")
+			if n > 2 && tc.param == "page" || n > 4 {
+				_, _ = w.Write([]byte(`{"rows":[]}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"rows":[{"id":"a"},{"id":"b"}]}`))
+		}))
+		u := srv.URL
+		if tc.start != "" {
+			u += "?" + tc.param + "=" + tc.start
+		}
+		res := paged(t, map[string]any{"url": u, "paginate": "page", "page_param": tc.param, "items_path": "rows"})
+		srv.Close()
+		if res.Status != core.StatusOK {
+			t.Fatalf("%s from %q: %+v", tc.param, tc.start, res.Error)
+		}
+		// The last request is the empty page that ends it.
+		if s := strings.Join(got[:len(got)-1], ","); s != tc.want {
+			t.Errorf("%s from %q: requested %v, want %s then the end", tc.param, tc.start, got, tc.want)
+		}
+	}
+}
+
 func TestPaginate_StopsAtTheCeiling(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -333,8 +375,9 @@ func TestPaginate_OffIsTheOldBehaviour(t *testing.T) {
 }
 
 // The next address comes from the server, so it is as untrusted as any other
-// field in the response: every hop is checked again, not just the first.
-func TestPaginate_ChecksEgressOnEveryHop(t *testing.T) {
+// field in the response. One on another site is refused outright — before the
+// egress check, since the step's headers (credentials) would go with it.
+func TestPaginate_RefusesACrossSiteNext(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Link", `<https://elsewhere.example.com/2>; rel="next"`)
 		w.Header().Set("Content-Type", "application/json")
@@ -349,7 +392,7 @@ func TestPaginate_ChecksEgressOnEveryHop(t *testing.T) {
 	t.Cleanup(func() { _ = SetEgressAllowlist(nil) })
 
 	mustFail(t, paged(t, map[string]any{"url": srv.URL, "paginate": "link"}),
-		"egress_blocked", "elsewhere.example.com")
+		"cross_origin_next", "elsewhere.example.com")
 }
 
 func TestLinkHeaderNext(t *testing.T) {

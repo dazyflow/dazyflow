@@ -35,11 +35,19 @@ var inputLayouts = []string{
 }
 
 func ParseOffset(s string) (time.Duration, error) {
+	days, sub, err := parseOffsetParts(s)
+	return time.Duration(days)*24*time.Hour + sub, err
+}
+
+// parseOffsetParts splits an offset into whole days (weeks count as 7) and the
+// sub-day rest, both carrying the sign, so a caller anchored to a calendar day
+// can apply them as wall-clock changes rather than fixed 24-hour blocks.
+func parseOffsetParts(s string) (days int, sub time.Duration, err error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return 0, nil
+		return 0, 0, nil
 	}
-	sign := time.Duration(1)
+	sign := 1
 	switch s[0] {
 	case '+':
 		s = s[1:]
@@ -47,7 +55,6 @@ func ParseOffset(s string) (time.Duration, error) {
 		sign = -1
 		s = s[1:]
 	}
-	var total time.Duration
 	i := 0
 	for i < len(s) {
 		start := i
@@ -55,33 +62,33 @@ func ParseOffset(s string) (time.Duration, error) {
 			i++
 		}
 		if i == start {
-			return 0, fmt.Errorf("bad offset %q: expected a number before position %d", s, i)
+			return 0, 0, fmt.Errorf("bad offset %q: expected a number before position %d", s, i)
 		}
 		n, err := strconv.Atoi(s[start:i])
 		if err != nil {
-			return 0, fmt.Errorf("bad offset %q: %v", s, err)
+			return 0, 0, fmt.Errorf("bad offset %q: %v", s, err)
 		}
 		if i >= len(s) {
-			return 0, fmt.Errorf("bad offset %q: number %d has no unit (use w, d, h, m, or s)", s, n)
+			return 0, 0, fmt.Errorf("bad offset %q: number %d has no unit (use w, d, h, m, or s)", s, n)
 		}
 		unit := s[i]
 		i++
 		switch unit {
 		case 'w':
-			total += time.Duration(n) * 7 * 24 * time.Hour
+			days += n * 7
 		case 'd':
-			total += time.Duration(n) * 24 * time.Hour
+			days += n
 		case 'h':
-			total += time.Duration(n) * time.Hour
+			sub += time.Duration(n) * time.Hour
 		case 'm':
-			total += time.Duration(n) * time.Minute
+			sub += time.Duration(n) * time.Minute
 		case 's':
-			total += time.Duration(n) * time.Second
+			sub += time.Duration(n) * time.Second
 		default:
-			return 0, fmt.Errorf("bad offset %q: unknown unit %q (use w, d, h, m, or s)", s, string(unit))
+			return 0, 0, fmt.Errorf("bad offset %q: unknown unit %q (use w, d, h, m, or s)", s, string(unit))
 		}
 	}
-	return sign * total, nil
+	return sign * days, time.Duration(sign) * sub, nil
 }
 
 // IsRelative reports whether s is written in the relative form — a leading
@@ -116,19 +123,20 @@ func Resolve(s string, loc *time.Location, now time.Time) (t time.Time, ok bool,
 
 	base, offsetPart := splitBase(s)
 	var anchor time.Time
+	dayAnchored := false
 	switch strings.ToLower(base) {
 	case "now":
 		anchor = now
 	case "today":
-		anchor = startOfDay(now, loc, 0)
+		anchor, dayAnchored = startOfDay(now, loc, 0), true
 	case "tomorrow":
-		anchor = startOfDay(now, loc, 1)
+		anchor, dayAnchored = startOfDay(now, loc, 1), true
 	case "yesterday":
-		anchor = startOfDay(now, loc, -1)
+		anchor, dayAnchored = startOfDay(now, loc, -1), true
 	case "":
 		anchor = now
 	default:
-		abs, aerr := parseAbsolute(base)
+		abs, aerr := parseAbsolute(base, loc)
 		if aerr != nil {
 			return time.Time{}, false, aerr
 		}
@@ -136,11 +144,19 @@ func Resolve(s string, loc *time.Location, now time.Time) (t time.Time, ok bool,
 	}
 
 	if offsetPart != "" {
-		d, oerr := ParseOffset(offsetPart)
+		days, sub, oerr := parseOffsetParts(offsetPart)
 		if oerr != nil {
 			return time.Time{}, false, oerr
 		}
-		anchor = anchor.Add(d)
+		if dayAnchored {
+			// Wall clock from the day's midnight: "tomorrow+9h" is nine o'clock
+			// tomorrow even across a DST change, where adding 9 hours of
+			// elapsed time would land at 08:00 or 10:00.
+			anchor = time.Date(anchor.Year(), anchor.Month(), anchor.Day()+days,
+				0, 0, 0, int(sub), loc)
+		} else {
+			anchor = anchor.Add(time.Duration(days)*24*time.Hour + sub)
+		}
 	}
 	return anchor.UTC(), true, nil
 }
@@ -179,12 +195,14 @@ func startOfDay(now time.Time, loc *time.Location, dayOffset int) time.Time {
 	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc)
 }
 
-func parseAbsolute(s string) (time.Time, error) {
+// parseAbsolute reads a zoneless timestamp or plain date in loc: "2026-06-16"
+// for a step set to Europe/Stockholm is midnight there, not midnight UTC.
+func parseAbsolute(s string, loc *time.Location) (time.Time, error) {
 	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
 		return time.Unix(n, 0).UTC(), nil
 	}
 	for _, layout := range inputLayouts {
-		if t, err := time.Parse(layout, s); err == nil {
+		if t, err := time.ParseInLocation(layout, s, loc); err == nil {
 			return t.UTC(), nil
 		}
 	}

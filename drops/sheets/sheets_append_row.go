@@ -208,9 +208,9 @@ func executeSheetsAppend(ctx context.Context, job core.Job, _ chan<- core.Progre
 	q := url.Values{}
 	q.Set("valueInputOption", params.StringDefault(job.Params, "value_input_option", "USER_ENTERED"))
 	q.Set("insertDataOption", params.StringDefault(job.Params, "insert_data_option", "INSERT_ROWS"))
-	endpoint := sheetsBaseURL(job) + "/spreadsheets/" + url.PathEscape(id) + "/values/" + url.PathEscape(rng) + ":append?" + q.Encode()
+	endpoint := sheetsBaseURL(job) + "/spreadsheets/" + url.PathEscape(id) + "/values/" + url.PathEscape(sheetRangeRef(rng)) + ":append?" + q.Encode()
 
-	reqBody, _ := json.Marshal(map[string]any{"range": rng, "majorDimension": "ROWS", "values": values})
+	reqBody, _ := json.Marshal(map[string]any{"range": sheetRangeRef(rng), "majorDimension": "ROWS", "values": values})
 	status, body, err := googleDo(ctx, "POST", endpoint, token, "application/json; charset=utf-8", reqBody, timeout)
 	if err != nil {
 		return params.Err(job, "sheets_http_error", err.Error()), nil

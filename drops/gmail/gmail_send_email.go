@@ -199,7 +199,7 @@ func buildRFC822(h rfcHeaders, body string, atts []mailmsg.Attachment) string {
 	add("Content-Type", `multipart/mixed; boundary="`+boundary+`"`)
 
 	var b strings.Builder
-	b.WriteString(strings.Join(lines, "\r\n") + "\r\n")
+	b.WriteString(strings.Join(lines, "\r\n") + "\r\n\r\n") // blank line ends the headers
 	b.WriteString("--" + boundary + "\r\n")
 	b.WriteString("Content-Type: " + h.bodyContentType + "\r\n")
 	b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")

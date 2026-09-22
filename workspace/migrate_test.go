@@ -107,6 +107,61 @@ func TestMigrate_GitToPostgresPreservesEverything(t *testing.T) {
 	}
 }
 
+// Publishing "HEAD" on git tags the WORKSPACE head — here another flow's save,
+// a commit absent from this flow's History. The migrated pointer must name the
+// flow's own revision current at that commit, so LoadPublished still works.
+func TestMigrate_PublishedAtAnotherFlowsCommitStaysLive(t *testing.T) {
+	dst, _ := pgTestWorkspace(t)
+	src, err := OpenFS(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	v1 := mustSave(t, src, flow("shipping", "v1"), "ada")
+	other := mustSave(t, src, flow("billing", "b1"), "ada")
+	if err := src.PromoteToEnvironment("shipping", PublishedEnv, "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	if pub, _ := src.PublishedCommit("shipping"); pub != other {
+		t.Fatalf("fixture: published commit = %q, want billing's commit %q", pub, other)
+	}
+	mustSave(t, src, flow("shipping", "v2"), "ada")
+
+	if _, err := Migrate(ctx, dst, src); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	live, err := dst.LoadPublished("shipping")
+	if err != nil || live.Name != "v1" {
+		t.Fatalf("published after migration = %+v / %v, want v1", live, err)
+	}
+	if pub, _ := dst.PublishedCommit("shipping"); pub != v1 {
+		t.Errorf("published pointer = %q, want shipping's own revision %q", pub, v1)
+	}
+	res, err := VerifyMigration(ctx, dst, src)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if !res.OK() {
+		t.Fatalf("verify reported issues: %+v", res.Issues)
+	}
+
+	// Verify must fail when the published version does not load.
+	pg := dst.b.(*pgBackend)
+	if _, err := pg.pool.Exec(ctx,
+		`UPDATE flow_envs SET revision='nonexistent' WHERE tenant=$1 AND workspace=$2 AND graph_id='shipping'`,
+		pg.tenant, pg.workspace); err != nil {
+		t.Fatal(err)
+	}
+	res, err = VerifyMigration(ctx, dst, src)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if res.OK() {
+		t.Fatal("a published pointer to a missing revision was not reported")
+	}
+}
+
 func TestMigrate_DeletedFlowDoesNotComeAcross(t *testing.T) {
 	dst, _ := pgTestWorkspace(t)
 	src, err := OpenFS(t.TempDir())

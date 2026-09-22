@@ -252,6 +252,23 @@ func TestCovAggregateDaysEdge(t *testing.T) {
 	}
 }
 
+// Days follow the Swedish calendar: 23:00Z on the 16th is 01:00 on the 17th
+// in summer, and "noon" is 12:00 local (10:00Z), not 12:00Z.
+func TestAggregateDays_SwedishCalendar(t *testing.T) {
+	ts := []smhiEntry{
+		{Time: "2026-06-16T10:00:00Z", Data: map[string]any{"air_temperature": 20.0, "symbol_code": float64(1)}},
+		{Time: "2026-06-16T12:00:00Z", Data: map[string]any{"air_temperature": 22.0, "symbol_code": float64(18)}},
+		{Time: "2026-06-16T23:00:00Z", Data: map[string]any{"air_temperature": 9.0}},
+	}
+	out := aggregateDays(ts, 5)
+	if len(out) != 2 || out[0].Date != "2026-06-16" || out[1].Date != "2026-06-17" {
+		t.Fatalf("days = %+v, want the 23:00Z reading on the 17th", out)
+	}
+	if out[0].TempMin != 20 || out[0].Description != wsymb2[1] {
+		t.Errorf("16th = %+v, want min 20 and the 12:00-local symbol", out[0])
+	}
+}
+
 func TestCovForecastSummaryEmpty(t *testing.T) {
 	if forecastSummary(nil) != "No forecast available." {
 		t.Fatal("empty forecast summary")

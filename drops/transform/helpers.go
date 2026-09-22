@@ -5,6 +5,7 @@ package transform
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/google/cel-go/cel"
@@ -121,11 +122,37 @@ func compileRowExpr(env *cel.Env, expr, label string) (cel.Program, error) {
 // pre-cast columns coming out of Excel/JSON. Cells are separated by the
 // ASCII unit separator (\x1f) so adjacent values can't collide.
 func keyString(row map[string]any, cols []string) string {
+	k, _ := keyStringOK(row, cols)
+	return k
+}
+
+// keyStringOK is keyString plus whether every key cell holds a value. A join
+// must not match on a missing key: rows lacking the column would all share
+// one "<nil>" key and pair up with each other (SQL's NULL never equals NULL).
+func keyStringOK(row map[string]any, cols []string) (string, bool) {
 	parts := make([]string, len(cols))
+	ok := true
 	for i, c := range cols {
-		parts[i] = fmt.Sprint(row[c])
+		v := row[c]
+		if v == nil {
+			ok = false
+		}
+		parts[i] = keyCell(v)
 	}
-	return strings.Join(parts, "\x1f")
+	return strings.Join(parts, "\x1f"), ok
+}
+
+// keyCell renders one key value. Floats are written out in full: fmt.Sprint
+// gives 1e+06 for a JSON number 1000000, which then fails to match the same
+// id arriving as an int or a string.
+func keyCell(v any) string {
+	switch t := v.(type) {
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(t), 'f', -1, 32)
+	}
+	return fmt.Sprint(v)
 }
 
 func normalizeStringSlice(v any, name string) ([]string, error) {

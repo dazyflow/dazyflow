@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -442,21 +443,33 @@ func ConsumeTOTPChallenge(ctx context.Context, challenges TOTPChallengeStore, us
 			recordWrongGuess()
 			return TOTPChallengeResult{}, ErrTOTPInvalid
 		}
-		u.TOTPLastStep = step
-		if err := users.PutUser(ctx, u); err != nil {
+		// The check above read a snapshot; the store re-checks atomically, so a
+		// concurrent login with the same code cannot also pass.
+		advanced, err := advanceTOTPStep(ctx, users, u, step)
+		if err != nil {
 			return TOTPChallengeResult{}, err
 		}
+		if !advanced {
+			recordWrongGuess()
+			return TOTPChallengeResult{}, ErrTOTPInvalid
+		}
+		u.TOTPLastStep = step
 		factor = FactorTOTP
 	case strings.TrimSpace(recoveryCode) != "":
-		remaining, ok := consumeRecoveryCode(u.RecoveryCodeHashes, recoveryCode)
+		hash, ok := matchRecoveryCode(u.RecoveryCodeHashes, recoveryCode)
 		if !ok {
 			recordWrongGuess()
 			return TOTPChallengeResult{}, ErrRecoveryCodeInvalid
 		}
-		u.RecoveryCodeHashes = remaining
-		if err := users.PutUser(ctx, u); err != nil {
+		removed, err := removeRecoveryCode(ctx, users, u, hash)
+		if err != nil {
 			return TOTPChallengeResult{}, err
 		}
+		if !removed {
+			recordWrongGuess()
+			return TOTPChallengeResult{}, ErrRecoveryCodeInvalid
+		}
+		u.RecoveryCodeHashes = withoutHash(u.RecoveryCodeHashes, hash)
 		factor = FactorRecoveryCode
 	default:
 		return TOTPChallengeResult{}, ErrTOTPInvalid
@@ -471,22 +484,40 @@ func ConsumeTOTPChallenge(ctx context.Context, challenges TOTPChallengeStore, us
 	return TOTPChallengeResult{User: u, Factor: factor}, nil
 }
 
-// Single-use: a matched code is removed, so it cannot be replayed.
-func consumeRecoveryCode(hashes []string, plaintext string) ([]string, bool) {
+// Returns the stored hash the code matches. Every hash is compared, so timing
+// does not reveal which slot matched.
+func matchRecoveryCode(hashes []string, plaintext string) (string, bool) {
 	plaintext = canonicaliseRecoveryCode(plaintext)
-	matchIdx := -1
-	for i, h := range hashes {
-		if bcrypt.CompareHashAndPassword([]byte(h), []byte(plaintext)) == nil && matchIdx == -1 {
-			matchIdx = i
+	match := ""
+	for _, h := range hashes {
+		if bcrypt.CompareHashAndPassword([]byte(h), []byte(plaintext)) == nil && match == "" {
+			match = h
 		}
 	}
-	if matchIdx == -1 {
-		return hashes, false
+	return match, match != ""
+}
+
+func withoutHash(hashes []string, hash string) []string {
+	return slices.DeleteFunc(slices.Clone(hashes), func(h string) bool { return h == hash })
+}
+
+// Stores without UserFieldUpdater fall back to a (racy) whole-row write.
+func advanceTOTPStep(ctx context.Context, users UserStore, u User, step int64) (bool, error) {
+	if up, ok := users.(UserFieldUpdater); ok {
+		return up.AdvanceTOTPStep(ctx, u.Email, step)
 	}
-	remaining := make([]string, 0, len(hashes)-1)
-	remaining = append(remaining, hashes[:matchIdx]...)
-	remaining = append(remaining, hashes[matchIdx+1:]...)
-	return remaining, true
+	u.TOTPLastStep = step
+	return true, users.PutUser(ctx, u)
+}
+
+// Single-use: the matched hash is removed conditionally, so a code cannot be
+// redeemed twice, even by two racing logins.
+func removeRecoveryCode(ctx context.Context, users UserStore, u User, hash string) (bool, error) {
+	if up, ok := users.(UserFieldUpdater); ok {
+		return up.RemoveRecoveryCode(ctx, u.Email, hash)
+	}
+	u.RecoveryCodeHashes = withoutHash(u.RecoveryCodeHashes, hash)
+	return true, users.PutUser(ctx, u)
 }
 
 var recoveryCodeHashCost = func() int {

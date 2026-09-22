@@ -207,13 +207,10 @@ func (c *Catalog) attach(ctx context.Context, id serverIdentity, client session,
 	if label == "" {
 		label = name
 	}
-	if tenant != "" {
-		c.mu.RLock()
-		_, clash := c.servers[serverKey{tenant: "", name: name}]
-		c.mu.RUnlock()
-		if clash {
-			return fmt.Errorf("mcp server %q is configured on this deployment for every org — pick another name", name)
-		}
+	// Resolved before the lock (it may fetch) and before conn is built, so the
+	// connection records the icons its manifests were synthesized with.
+	if logos == nil {
+		logos = resolveToolIcons(ctx, nil, tools)
 	}
 
 	_, isHTTP := client.(*HTTPClient)
@@ -222,12 +219,22 @@ func (c *Catalog) attach(ctx context.Context, id serverIdentity, client session,
 		tools: tools, logos: logos,
 		client: client, info: id.info, closer: closer, concurrent: isHTTP}
 
-	if logos == nil {
-		logos = resolveToolIcons(ctx, nil, tools)
-	}
-
+	// The shadowing check and the insert share one critical section: checked
+	// under a separate read lock, two concurrent registrations could both pass
+	// and leave ManifestsFor choosing between them by map order.
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if tenant != "" {
+		if _, clash := c.servers[serverKey{tenant: "", name: name}]; clash {
+			return fmt.Errorf("mcp server %q is configured on this deployment for every org — pick another name", name)
+		}
+	} else {
+		for k := range c.servers {
+			if k.name == name && k.tenant != "" {
+				return fmt.Errorf("mcp server %q is already used by an org on this deployment — pick another name", name)
+			}
+		}
+	}
 	key := serverKey{tenant: tenant, name: name}
 	if old, exists := c.servers[key]; exists {
 		if tenant == "" {

@@ -588,6 +588,96 @@ func runConformance(t *testing.T, mk func(t *testing.T) core.JobStore) {
 		}
 	})
 
+	// skipped is terminal (core.IsTerminalStatus): both stores must refuse to
+	// revive or overwrite it, and a skipped run must swallow dependents.
+	t.Run("Skipped_is_terminal", func(t *testing.T) {
+		s := mk(t)
+		ctx := t.Context()
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "sk", Kind: core.JobKindNode, Tenant: "t"})
+		if err := s.Complete(ctx, "sk", core.JobStatusSkipped, nil); err != nil {
+			t.Fatalf("skip: %v", err)
+		}
+		if err := s.Requeue(ctx, "sk", time.Now()); !errors.Is(err, core.ErrConflict) {
+			t.Errorf("Requeue(skipped) = %v, want ErrConflict", err)
+		}
+		if err := s.Complete(ctx, "sk", core.JobStatusSucceeded, nil); !errors.Is(err, core.ErrConflict) {
+			t.Errorf("Complete(skipped) = %v, want ErrConflict", err)
+		}
+		if err := s.Complete(ctx, "sk", core.JobStatusAwaiting, nil); !errors.Is(err, core.ErrConflict) {
+			t.Errorf("park(skipped) = %v, want ErrConflict", err)
+		}
+		if got, _ := s.Get(ctx, "sk"); got.Status != core.JobStatusSkipped {
+			t.Errorf("status = %q, want skipped", got.Status)
+		}
+		ce, ok := s.(core.CompleteEnqueuer)
+		if !ok {
+			return
+		}
+		if _, err := ce.CompleteAndEnqueue(ctx, "sk", "", core.JobStatusSucceeded, nil, nil); !errors.Is(err, core.ErrConflict) {
+			t.Errorf("CompleteAndEnqueue(skipped) = %v, want ErrConflict", err)
+		}
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "run", Kind: core.JobKindGraph, Tenant: "t", Status: core.JobStatusRunning})
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "run/a", Kind: core.JobKindNode, GraphRunID: "run", NodeID: "a", Tenant: "t"})
+		if err := s.Complete(ctx, "run", core.JobStatusSkipped, nil); err != nil {
+			t.Fatalf("skip run: %v", err)
+		}
+		adv, err := ce.CompleteAndEnqueue(ctx, "run/a", "", core.JobStatusSucceeded, nil,
+			[]core.JobRecord{{ID: "run/b", GraphRunID: "run", GraphID: "g", NodeID: "b", Tenant: "t"}})
+		if err != nil {
+			t.Fatalf("CompleteAndEnqueue: %v", err)
+		}
+		if adv.Enqueued != 0 {
+			t.Errorf("adv = %+v, want nothing enqueued under a skipped run", adv)
+		}
+		if _, err := s.Get(ctx, "run/b"); !errors.Is(err, core.ErrNotFound) {
+			t.Errorf("b under a skipped run = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("RequeueOwned_fences_and_clears_holder", func(t *testing.T) {
+		s := mk(t)
+		rq, ok := s.(core.OwnedRequeuer)
+		if !ok {
+			t.Skip("store does not implement OwnedRequeuer")
+		}
+		oc := s.(core.OwnedCompleter)
+		ctx := t.Context()
+		mustEnqueue(t, s, ctx, core.JobRecord{ID: "j", Kind: core.JobKindNode, Tenant: "t"})
+		if _, err := s.Claim(ctx, "owner", time.Minute); err != nil {
+			t.Fatalf("claim: %v", err)
+		}
+		if err := rq.RequeueOwned(ctx, "j", "thief", time.Now()); !errors.Is(err, core.ErrConflict) {
+			t.Fatalf("RequeueOwned(non-owner) = %v, want ErrConflict", err)
+		}
+		if got, _ := s.Get(ctx, "j"); got.Status != core.JobStatusRunning {
+			t.Errorf("status after fenced requeue = %q, want running", got.Status)
+		}
+		if err := rq.RequeueOwned(ctx, "ghost", "owner", time.Now()); !errors.Is(err, core.ErrNotFound) {
+			t.Errorf("RequeueOwned(missing) = %v, want ErrNotFound", err)
+		}
+		if err := rq.RequeueOwned(ctx, "j", "owner", time.Now()); err != nil {
+			t.Fatalf("RequeueOwned(owner): %v", err)
+		}
+		got, _ := s.Get(ctx, "j")
+		if got.Status != core.JobStatusQueued || got.WorkerID != "" {
+			t.Errorf("after requeue = %q/%q, want queued with no holder", got.Status, got.WorkerID)
+		}
+		// The previous holder's late completion must not land on the requeued record.
+		if err := oc.CompleteOwned(ctx, "j", "owner", core.JobStatusSucceeded, nil); !errors.Is(err, core.ErrConflict) {
+			t.Errorf("stale CompleteOwned = %v, want ErrConflict", err)
+		}
+		// Plain Requeue clears the holder too.
+		if _, err := s.Claim(ctx, "second", time.Minute); err != nil {
+			t.Fatalf("reclaim: %v", err)
+		}
+		if err := s.Requeue(ctx, "j", time.Now()); err != nil {
+			t.Fatalf("Requeue: %v", err)
+		}
+		if err := oc.CompleteOwned(ctx, "j", "second", core.JobStatusSucceeded, nil); !errors.Is(err, core.ErrConflict) {
+			t.Errorf("stale CompleteOwned after Requeue = %v, want ErrConflict", err)
+		}
+	})
+
 	t.Run("CompleteAndEnqueue_awaiting_parks", func(t *testing.T) {
 		s := mk(t)
 		ce, ok := s.(core.CompleteEnqueuer)

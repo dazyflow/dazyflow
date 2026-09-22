@@ -21,6 +21,7 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/apibase"
 	"github.com/dazyflow/dazyflow/drops/internal/oauthtok"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
@@ -135,7 +136,9 @@ func slackDo(ctx context.Context, method, url, token string, body []byte, timeou
 		return slackEnvelope{}, nil, err
 	}
 	if status < 200 || status >= 300 {
-		return slackEnvelope{}, nil, fmt.Errorf("slack returned %d: %s", status, string(raw))
+		// Bounded: the body can be up to maxResponseBytes, and this error ends up
+		// in run records and the UI.
+		return slackEnvelope{}, nil, fmt.Errorf("slack returned %d: %s", status, params.Truncate(string(raw), 300))
 	}
 	return decodeSlackJSON(raw)
 }

@@ -16,7 +16,9 @@ import (
 
 // Resolver finds the Transport for a module id, applying the priority order.
 // ctx carries the tenant, so scripted catalogs return that tenant's installed
-// drops. moduleID may pin an exact version as "id@version"; a bare id resolves
+// drops. moduleID may pin an exact version as "id@version": it resolves only
+// when the registered drop's manifest declares exactly that version, and errors
+// otherwise rather than silently running a different one. A bare id resolves
 // the latest visible to the tenant.
 type Resolver interface {
 	Resolve(ctx context.Context, moduleID string) (core.Transport, error)
@@ -52,11 +54,21 @@ type NodeResolver struct {
 }
 
 func (r *NodeResolver) Resolve(ctx context.Context, moduleID string) (core.Transport, error) {
-	id, _ := splitModuleVersion(moduleID)
+	id, version := splitModuleVersion(moduleID)
 
 	t, ok := r.lookup(ctx, id)
 	if !ok {
 		return nil, fmt.Errorf("no transport registered for module %q", moduleID)
+	}
+	// Only one version of a drop is registered at a time, so a pin either names
+	// it or cannot be honoured.
+	if version != "" {
+		if have := t.Manifest().Version; have != version {
+			if have == "" {
+				have = "an unversioned build"
+			}
+			return nil, fmt.Errorf("module %q pins version %q, but only %s of %q is available", moduleID, version, have, id)
+		}
 	}
 	// Check the killswitch after lookup, so an unknown id still reports "no
 	// transport" rather than a confusing "disabled".
@@ -186,27 +198,28 @@ func (r *NodeResolver) Manifests() map[string]core.Manifest {
 
 func (r *NodeResolver) AllManifests() (map[string]core.Manifest, map[string][]string) {
 	out := r.ManifestsForTenant("")
-	var tenants map[string][]string
-	if r.Remote != nil {
-		remotes, remoteTenants := r.Remote.AllManifests()
-		for id, m := range remotes {
-			out[id] = core.MarkListPorts(core.WithPassthrough(m))
+	tenants := map[string][]string{}
+	// addKeeping, so a tenant-scoped entry can never replace a native one here
+	// either — the same precedence lookup applies.
+	merge := func(ms map[string]core.Manifest, ts map[string][]string) {
+		addKeeping(out, ms)
+		for id, t := range ts {
+			tenants[id] = append(tenants[id], t...)
 		}
-		tenants = remoteTenants
+	}
+	if r.Remote != nil {
+		merge(r.Remote.AllManifests())
 	}
 	if r.MCP != nil {
 		// A platform admin cannot switch off a misbehaving tool that never appears on
 		// the page the killswitch lives on.
-		mcps, mcpTenants := r.MCP.AllManifests()
-		for id, m := range mcps {
-			out[id] = core.MarkListPorts(core.WithPassthrough(m))
-		}
-		if tenants == nil {
-			tenants = map[string][]string{}
-		}
-		for id, ts := range mcpTenants {
-			tenants[id] = append(tenants[id], ts...)
-		}
+		merge(r.MCP.AllManifests())
+	}
+	if r.WebAPI != nil {
+		merge(r.WebAPI.AllManifests())
+	}
+	if len(tenants) == 0 {
+		tenants = nil
 	}
 	return out, tenants
 }

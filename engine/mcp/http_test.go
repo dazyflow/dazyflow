@@ -213,6 +213,24 @@ func TestRegisterHTTP_RefusesShadowingInstanceWide(t *testing.T) {
 	}
 }
 
+// The reverse direction: an instance-wide server may not take a name an org
+// already registered, or both would answer for the same step id.
+func TestRegisterHTTP_RefusesInstanceWideOverTenantName(t *testing.T) {
+	srv := newFakeHTTP(t, &fakeHTTPServer{tools: []mcp.Tool{echoTool()}})
+
+	cat := mcp.NewCatalog()
+	t.Cleanup(func() { _ = cat.Close() })
+	if err := cat.RegisterHTTP(mcp.HTTPDescriptor{Name: "github", Tenant: "acme", URL: srv.URL}); err != nil {
+		t.Fatalf("tenant RegisterHTTP: %v", err)
+	}
+	if err := cat.RegisterHTTP(mcp.HTTPDescriptor{Name: "github", URL: srv.URL}); err == nil {
+		t.Fatal("an instance-wide server was allowed to shadow an org's server name")
+	}
+	if n := len(cat.ManifestsFor("acme")); n != 1 {
+		t.Errorf("acme sees %d manifests, want exactly its own one", n)
+	}
+}
+
 func TestRegisterHTTP_ReplacesOnReRegister(t *testing.T) {
 	first := newFakeHTTP(t, &fakeHTTPServer{tools: []mcp.Tool{echoTool()}})
 	second := newFakeHTTP(t, &fakeHTTPServer{tools: []mcp.Tool{{Name: "other"}}})

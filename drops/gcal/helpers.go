@@ -32,12 +32,7 @@ var calBase = apibase.New(calendarAPIBase)
 
 func SetHTTPBase(base string) { calBase.Set(base) }
 
-func calBaseURL(job core.Job) string {
-	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
-		return b
-	}
-	return calBase.Get()
-}
+func calBaseURL(job core.Job) string { return calBase.For(job) }
 
 func googleDo(ctx context.Context, method, url, token, contentType string, body []byte, timeoutMS int) (int, []byte, error) {
 	return google.Do(ctx, method, url, token, contentType, body, timeoutMS, maxResponseBytes)

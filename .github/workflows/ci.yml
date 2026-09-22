@@ -64,13 +64,13 @@ jobs:
     name: Build, vet, and the fast gates
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # check-changelog compares a released section against the commit that
           # released it, which does not work on a shallow clone.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -177,9 +177,9 @@ jobs:
           --health-cmd "healthcheck.sh --connect --innodb_initialized"
           --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -221,9 +221,9 @@ jobs:
           --health-cmd "pg_isready -U dazyflow -d dazyflow_test"
           --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -239,7 +239,7 @@ jobs:
     name: Web unit tests and build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The docs SPA content tree (web/src/docs/content/) is generated, not
       # committed — guide pages copied from docs/guide/ and the step catalog
@@ -247,12 +247,12 @@ jobs:
       # otherwise pure Node. Without it content.ts globs an empty directory and
       # the docs-search tests fail on a fresh checkout with "Nothing matches",
       # which reads as a search bug rather than as missing content.
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: web/.nvmrc
           cache: npm
@@ -291,14 +291,14 @@ jobs:
     name: Docs site
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: web/.nvmrc
           cache: npm
@@ -317,12 +317,12 @@ jobs:
     name: Vulnerability scan and SBOM
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # `stable` rather than go-version-file: the scan's Go version decides which
       # STDLIB govulncheck audits, and pinning made every stdlib CVE batch turn
       # this red until go.mod was hand-bumped. Build jobs and images stay pinned.
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
           cache-dependency-path: go.sum
@@ -337,7 +337,9 @@ jobs:
       # killer (source mode peaks near 4 GiB on a cold cache), not a finding.
       - name: govulncheck (source and binary)
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          # Pinned: @latest would let an upstream release change what CI runs
+          # (and whether it passes) without a commit here. Bump deliberately.
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
           GV="$(go env GOPATH)/bin/govulncheck"
           "$GV" ./...
           # Symbol scan of each shipped binary. docsgen is a build-time tool,
@@ -354,15 +356,18 @@ jobs:
       # always generates; releases attach both. Not committed — see .gitignore.
       - name: Generate SBOM
         run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-            | sh -s -- -b "$(go env GOPATH)/bin"
+          # The installer is fetched at the commit of a release tag (v1.52.0),
+          # not from main, and installs that same release — so what runs here
+          # changes only when this line does.
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/02ba369d13b4248395b20a504eca94b0cab564d8/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" v1.52.0
           "$(go env GOPATH)/bin/syft" dir:. \
             -o spdx-json=sbom.spdx.json \
             -o cyclonedx-json=sbom.cdx.json
 
       # The sourcehut build left these on the build page. Here they are a proper
       # artifact, so a release can attach them without a rebuild.
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sbom
           path: |
@@ -390,7 +395,7 @@ jobs:
       commit: ${{ steps.ver.outputs.commit }}
       date: ${{ steps.ver.outputs.date }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # `git describe --tags` for the version stamp
 
@@ -415,7 +420,7 @@ jobs:
       # hosted runner starts with an empty one — so every run recompiled the
       # world. buildx with the GitHub Actions cache backend is what makes those
       # mounts, and the layer cache, survive between runs.
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # VERSION is $TAG, which is EMPTY off a tag: the Dockerfile falls back to
       # the committed ./VERSION when the arg is empty, and a placeholder would
@@ -425,7 +430,7 @@ jobs:
       # Separate cache scopes so the two images do not evict each other's
       # layers; mode=max keeps the intermediate stages (npm ci, go build).
       - name: Build dzd image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           push: false
@@ -440,7 +445,7 @@ jobs:
       # The docs site image (docs.dazyflow.app) — deploy/ references it but
       # nothing else exercises Dockerfile.docs.
       - name: Build docs image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: Dockerfile.docs
@@ -472,12 +477,12 @@ jobs:
       # A shallow clone is enough here, unlike in `images`: the version stamp
       # arrives through needs.images.outputs, so nothing in this job runs
       # `git describe`.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to ghcr.io
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -506,7 +511,7 @@ jobs:
           fi
 
       - name: Push dzd image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           push: true
@@ -518,7 +523,7 @@ jobs:
           cache-from: type=gha,scope=dzd
 
       - name: Push docs image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: Dockerfile.docs

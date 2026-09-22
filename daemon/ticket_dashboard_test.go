@@ -53,6 +53,10 @@ func (d *ticketDashboardHarness) do(token, method, path string, body any) *httpt
 
 func (d *ticketDashboardHarness) agentToken(t *testing.T, subject string) string {
 	t.Helper()
+	// The role alone is not enough: an agent must also be in the registry.
+	if err := d.gw.SupportAgents.Grant(t.Context(), subject, "root"); err != nil {
+		t.Fatalf("provision agent %s: %v", subject, err)
+	}
 	keyID := "k-" + strings.NewReplacer("@", "-", ".", "-").Replace(subject)
 	_, tok, err := auth.IssueAPIKey(d.ks, t.Context(), keyID, "", "", subject,
 		[]core.Role{core.SupportAgentRole()}, nil)

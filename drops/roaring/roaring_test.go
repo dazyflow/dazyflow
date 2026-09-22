@@ -157,6 +157,30 @@ func TestToken_CachedAcrossCalls(t *testing.T) {
 	}
 }
 
+// A cached token is not handed out on the consumer key alone: a wrong secret,
+// or the same credentials in another tenant, must go back to /token.
+func TestToken_CacheKeyedBySecretAndTenant(t *testing.T) {
+	f := newFakeRoaring(t)
+	ok := f.job(map[string]any{"company_id": "5566778899"})
+	ok.Tenant = "acme"
+	if res, _ := executeCompanyOverview(context.Background(), ok, nil); res.Status != core.StatusOK {
+		t.Fatalf("seed: %+v", res.Error)
+	}
+	bad := f.job(map[string]any{"company_id": "5566778899", "client_secret": "wrong"})
+	bad.Tenant = "acme"
+	if res, _ := executeCompanyOverview(context.Background(), bad, nil); res.Status == core.StatusOK {
+		t.Fatal("a wrong secret reused the cached token")
+	}
+	other := f.job(map[string]any{"company_id": "5566778899"})
+	other.Tenant = "globex"
+	if res, _ := executeCompanyOverview(context.Background(), other, nil); res.Status != core.StatusOK {
+		t.Fatalf("other tenant: %+v", res.Error)
+	}
+	if got := f.hits(); got != 3 {
+		t.Errorf("token exchanges = %d, want 3 (no cross-secret or cross-tenant reuse)", got)
+	}
+}
+
 func TestToken_BadCredentialsSurfaced(t *testing.T) {
 	f := newFakeRoaring(t)
 	res, _ := executeCompanyOverview(context.Background(),

@@ -64,6 +64,7 @@ func (v *oidcVerifier) Verify(ctx context.Context, rawIDToken string) (Claims, e
 	}
 	return Claims{
 		Subject: idToken.Subject,
+		Issuer:  idToken.Issuer,
 		Tenant:  tenant,
 		Roles:   stringList(all[rolesClaim]),
 		Extras:  all,

@@ -20,7 +20,9 @@ package roaring
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -30,6 +32,7 @@ import (
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/apibase"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
@@ -41,10 +44,11 @@ const maxResponseBytes = 8 << 20 // 8 MiB — company reports carry rich records
 const defaultBase = "https://api.roaring.io"
 
 // baseURL resolves the API root for one job: an explicit base_url param wins
-// (trailing slash trimmed), otherwise the production host.
+// (trailing slash trimmed; outside tests only on the Roaring host, since the
+// credentials go with it), otherwise the production host.
 func baseURL(job core.Job) string {
-	if u, _ := params.StringOpt(job.Params, "base_url"); u != "" {
-		return strings.TrimRight(u, "/")
+	if u := apibase.Override(job, defaultBase); u != "" {
+		return u
 	}
 	return defaultBase
 }
@@ -75,7 +79,8 @@ type cachedToken struct {
 
 // tokenCache memoises client-credentials tokens across job runs so a burst of
 // enrichment calls shares one exchange instead of hitting /token every time.
-// Keyed by (base, client_key) so distinct connections — and distinct test
+// Keyed by (tenant, base, client_key, secret digest) so distinct connections
+// — and distinct test
 // servers — never share a token.
 var (
 	tokenMu    sync.Mutex
@@ -90,7 +95,11 @@ func resolveToken(ctx context.Context, job core.Job) (string, error) {
 		return "", err
 	}
 	base := baseURL(job)
-	cacheKey := base + "\x00" + key
+	// Tenant and a digest of the secret are part of the key: a cached token must
+	// only be handed to the same tenant presenting the same credentials, never
+	// to anyone who merely knows the (non-secret) consumer key.
+	sum := sha256.Sum256([]byte(secret))
+	cacheKey := job.Tenant + "\x00" + base + "\x00" + key + "\x00" + hex.EncodeToString(sum[:])
 
 	tokenMu.Lock()
 	if t, ok := tokenCache[cacheKey]; ok && time.Now().Before(t.expires) {

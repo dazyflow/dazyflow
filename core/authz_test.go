@@ -147,10 +147,12 @@ func TestAuthorizeGraphView_Cov(t *testing.T) {
 }
 
 func TestAuthorizeGraphEdit_Cov(t *testing.T) {
-	editorRole := Role{Permissions: []Permission{PermGraphEdit}}
+	// The real catalog roles: editor is the default invite/signup role, so it
+	// must not bypass ownership.
+	editorRole := TeamRoleEditor()
 	owner := Principal{Subject: "u1", Tenant: "acme", Roles: []Role{editorRole}}
 	stranger := Principal{Subject: "u2", Tenant: "acme", Roles: []Role{editorRole}}
-	admin := Principal{Subject: "u3", Tenant: "acme", Roles: []Role{{Permissions: []Permission{PermGraphEdit, PermGraphAdmin}}}}
+	admin := Principal{Subject: "u3", Tenant: "acme", Roles: []Role{TeamRoleAdmin()}}
 	viewer := Principal{Subject: "u4", Tenant: "acme", Roles: []Role{{Permissions: []Permission{PermGraphRun}}}}
 
 	if err := AuthorizeGraphEdit(owner, Graph{Tenant: "acme"}); err != nil {

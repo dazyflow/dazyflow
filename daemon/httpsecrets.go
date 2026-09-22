@@ -29,8 +29,12 @@ func (h *HTTPGateway) secretsAPI() *secretsAPI {
 
 const maxSecretValueBytes = 64 * 1024 // 64 KiB upper bound; OAuth tokens are ~hundreds of bytes
 
-// The reserved prefixes (conn., oauth., cursor., res.) are machinery, so a user
-// write there would silently shadow a connection's credential.
+// The reserved namespaces are machinery, each owned by a dedicated endpoint
+// with its own authorization (email templates and SSO config need org admin,
+// OAuth tokens come only from the OAuth callback), so the generic API must not
+// write or delete them — an editor could otherwise forge a credential or
+// shadow a connection's. The one exception is an org-scope conn. value: the
+// Connect flow saves a connection's fields through this API.
 func checkReservedSecretWrite(scope SecretScope, name string) error {
 	if strings.HasPrefix(name, secretFlowPrefix) {
 		return fmt.Errorf("name %q uses the reserved %q prefix", name, secretFlowPrefix)
@@ -38,8 +42,17 @@ func checkReservedSecretWrite(scope SecretScope, name string) error {
 	if scope == ScopeFlow && orgAuthoritativeSecretName(name) {
 		return fmt.Errorf("name %q is organization-scoped and cannot be set per-flow", name)
 	}
+	if strings.HasPrefix(name, secretConnPrefix) {
+		return nil
+	}
+	if isReservedSecretName(name) || strings.HasPrefix(name, orgAuthSecretPrefix) {
+		return fmt.Errorf("name %q is in a reserved namespace — manage it from its own settings page, not the secrets API", name)
+	}
 	return nil
 }
+
+// Org SSO config (orgauth.google.client_secret), managed via the org auth endpoints.
+const orgAuthSecretPrefix = "orgauth."
 
 type putSecretBody struct {
 	Value string `json:"value"`

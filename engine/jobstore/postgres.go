@@ -438,28 +438,58 @@ func (s *Postgres) CountsByStatus(ctx context.Context) (map[core.JobStatus]int, 
 }
 
 func (s *Postgres) Requeue(ctx context.Context, jobID string, availableAt time.Time) error {
-	const q = `
+	return s.requeue(ctx, jobID, "", availableAt)
+}
+
+// RequeueOwned is Requeue fenced on lease ownership, so a worker whose lease was
+// reclaimed cannot push someone else's claim back onto the queue.
+func (s *Postgres) RequeueOwned(ctx context.Context, jobID, worker string, availableAt time.Time) error {
+	return s.requeue(ctx, jobID, worker, availableAt)
+}
+
+// Clears worker_id so the previous holder's CompleteOwned/Renew no longer
+// matches the requeued record.
+func (s *Postgres) requeue(ctx context.Context, jobID, worker string, availableAt time.Time) error {
+	q := `
 		UPDATE jobs
 		   SET status = 'queued',
 		       available_at = $2,
 		       lease_until = NULL,
+		       worker_id = '',
 		       result = NULL
 		 WHERE id = $1
-		   AND status NOT IN ('succeeded','failed','cancelled')
+		   AND status NOT IN (` + terminalStatuses + `)
 	`
-	ct, err := s.pool.Exec(ctx, q, jobID, availableAt)
+	args := []any{jobID, availableAt}
+	if worker != "" {
+		q += " AND worker_id = $3"
+		args = append(args, worker)
+	}
+	ct, err := s.pool.Exec(ctx, q, args...)
 	if err != nil {
 		return wrapPgErr(err)
 	}
 	if ct.RowsAffected() == 0 {
-		var exists bool
-		_ = s.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM jobs WHERE id = $1)", jobID).Scan(&exists)
-		if !exists {
-			return core.ErrNotFound
-		}
-		return core.ErrConflict
+		return s.missOrConflict(ctx, jobID)
 	}
 	return nil
+}
+
+// terminalStatuses mirrors core.IsTerminalStatus for SQL guards.
+const terminalStatuses = "'succeeded','failed','cancelled','skipped'"
+
+// missOrConflict explains a guarded write that touched no row: ErrNotFound when
+// the record is absent, ErrConflict when a guard refused it. A failing
+// existence probe is returned as is rather than masquerading as ErrNotFound.
+func (s *Postgres) missOrConflict(ctx context.Context, jobID string) error {
+	var exists bool
+	if err := s.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM jobs WHERE id = $1)", jobID).Scan(&exists); err != nil {
+		return wrapPgErr(err)
+	}
+	if !exists {
+		return core.ErrNotFound
+	}
+	return core.ErrConflict
 }
 
 func (s *Postgres) Renew(ctx context.Context, jobID, worker string, lease time.Duration) error {
@@ -510,7 +540,7 @@ func (s *Postgres) CompleteAndEnqueue(ctx context.Context, jobID, worker string,
 		ids[i], runs[i], graphs[i], nodes[i], tenants[i], workspaces[i], jobs[i] = d.ID, d.GraphRunID, d.GraphID, d.NodeID, d.Tenant, d.Workspace, string(jobJSON)
 	}
 	finishedClause := "finished_at = now()"
-	terminalGuard := "'succeeded','failed','cancelled'"
+	terminalGuard := terminalStatuses
 	if status == core.JobStatusAwaiting {
 		finishedClause = "finished_at = finished_at"
 		terminalGuard += ",'awaiting'"
@@ -527,7 +557,11 @@ func (s *Postgres) CompleteAndEnqueue(ctx context.Context, jobID, worker string,
 			 WHERE id = $1 AND status NOT IN (` + terminalGuard + `)` + fence + `
 			RETURNING graph_run_id, tenant
 		), run AS (
+			-- FOR SHARE waits out a concurrent cancel of the run and re-reads its
+			-- committed status, so dependents cannot slip in under a run that was
+			-- cancelled after this statement's snapshot was taken.
 			SELECT g.status FROM jobs g JOIN done ON g.id = done.graph_run_id
+			   FOR SHARE OF g
 		), tail AS (
 			SELECT max(b.slot_at) AS at FROM jobs b JOIN done ON b.tenant = done.tenant
 			 WHERE b.kind = 'node' AND b.status = 'queued'
@@ -540,7 +574,7 @@ func (s *Postgres) CompleteAndEnqueue(ctx context.Context, jobID, worker string,
 			  FROM unnest($4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[])
 			       WITH ORDINALITY AS d(id, run, graph, node, tenant, workspace, job, ord)
 			 WHERE EXISTS (SELECT 1 FROM done)
-			   AND NOT EXISTS (SELECT 1 FROM run WHERE run.status IN ('succeeded','failed','cancelled'))
+			   AND NOT EXISTS (SELECT 1 FROM run WHERE run.status IN (` + terminalStatuses + `))
 			ON CONFLICT (id) DO NOTHING
 			RETURNING id
 		)
@@ -552,12 +586,7 @@ func (s *Postgres) CompleteAndEnqueue(ctx context.Context, jobID, worker string,
 		return core.Advance{}, wrapPgErr(err)
 	}
 	if completed == 0 {
-		var exists bool
-		_ = s.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM jobs WHERE id = $1)", jobID).Scan(&exists)
-		if !exists {
-			return core.Advance{}, core.ErrNotFound
-		}
-		return core.Advance{}, core.ErrConflict
+		return core.Advance{}, s.missOrConflict(ctx, jobID)
 	}
 	adv := core.Advance{Enqueued: enqueued}
 	if runStatus != nil {
@@ -585,7 +614,7 @@ func (s *Postgres) complete(ctx context.Context, jobID, worker string, status co
 	if status == core.JobStatusAwaiting {
 		finishedClause = "finished_at = finished_at"
 	}
-	terminalGuard := "'succeeded','failed','cancelled'"
+	terminalGuard := terminalStatuses
 	if status == core.JobStatusAwaiting {
 		terminalGuard += ",'awaiting'"
 	}
@@ -603,12 +632,7 @@ func (s *Postgres) complete(ctx context.Context, jobID, worker string, status co
 		return wrapPgErr(err)
 	}
 	if ct.RowsAffected() == 0 {
-		var exists bool
-		_ = s.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM jobs WHERE id = $1)", jobID).Scan(&exists)
-		if !exists {
-			return core.ErrNotFound
-		}
-		return core.ErrConflict
+		return s.missOrConflict(ctx, jobID)
 	}
 	return nil
 }

@@ -80,17 +80,22 @@ func executeCreateRefund(ctx context.Context, job core.Job, _ chan<- core.Progre
 		return params.Err(job, "bad_param", "'payment_intent' is required — set it or connect the 'Payment intent' input"), nil
 	}
 
-	amount, ok := numberInputOr(job, "amount", params.IntDefault(job.Params, "amount", 0))
+	// Absent (no param, nothing wired) means a full refund; an explicit 0 is a
+	// mistake upstream, not a request to refund everything.
+	amount, ok := numberInputOr(job, "amount", params.IntDefault(job.Params, "amount", amountUnset))
 	if !ok {
 		return params.Err(job, "bad_input", "'Amount' input must be a whole number (smallest currency unit, e.g. 500 = 5.00)"), nil
 	}
-	if amount < 0 {
+	if amount == 0 {
+		return params.Err(job, "bad_input", "'Amount' is 0 — leave it empty to refund the whole payment, or enter a positive amount"), nil
+	}
+	if amount < 0 && amount != amountUnset {
 		return params.Err(job, "bad_input", "'Amount' cannot be negative"), nil
 	}
 
 	form := url.Values{}
 	form.Set("payment_intent", pi)
-	if amount > 0 {
+	if amount != amountUnset {
 		form.Set("amount", strconv.Itoa(amount))
 	}
 	if reason := params.StringDefault(job.Params, "reason", ""); reason != "" {

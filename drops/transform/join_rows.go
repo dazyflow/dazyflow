@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/limits"
@@ -148,8 +149,13 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 
 	rightIndex := make(map[string][]map[string]any, len(rightRows))
 	rightOrder := make([]string, 0, len(rightIndex)) // first-seen key order, for deterministic right/outer output
-	for _, r := range rightRows {
-		k := keyString(r, rightKeysInLeftOrder)
+	for i, r := range rightRows {
+		k, hasKey := keyStringOK(r, rightKeysInLeftOrder)
+		if !hasKey {
+			// A missing key matches nothing; its own bucket keeps it in the
+			// unmatched-right pass. \x00 never appears in a real key.
+			k = "\x00nokey\x00" + strconv.Itoa(i)
+		}
 		if _, seen := rightIndex[k]; !seen {
 			rightOrder = append(rightOrder, k)
 		}
@@ -163,8 +169,11 @@ func executeJoinRows(_ context.Context, job core.Job, _ chan<- core.Progress) (c
 	maxOut := limits.MaxRows()
 	out := make([]map[string]any, 0, len(leftRows))
 	for _, lr := range leftRows {
-		k := keyString(lr, leftKeys)
-		matches := rightIndex[k]
+		k, hasKey := keyStringOK(lr, leftKeys)
+		var matches []map[string]any
+		if hasKey {
+			matches = rightIndex[k]
+		}
 		if len(matches) == 0 {
 			if kind == joinKindLeft || kind == joinKindOuter || kind == joinKindAnti {
 				if len(out) >= maxOut {

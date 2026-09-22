@@ -4,9 +4,8 @@
 package server
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,36 +15,21 @@ import (
 	"time"
 )
 
-// So an LLM retrying after a network blip hits the gateway's cached 2xx instead
-// of firing the action twice. Hashed in CANONICAL form: a host that re-serializes
-// the arguments between attempts would otherwise produce a different key for the
-// same call, in exactly the scenario the key exists to make safe.
-func idempotencyKeyFor(toolName string, args json.RawMessage) string {
-	h := sha256.New()
-	h.Write([]byte(toolName))
-	h.Write([]byte{0}) // separator so {"name":"x","args":"y"} ≠ {"name":"xy","args":""}
-	h.Write(canonicalJSON(args))
-	return hex.EncodeToString(h.Sum(nil))[:32]
-}
-
-// UseNumber keeps numeric literals as source text: decoding into float64 maps two
-// DIFFERENT large int64 arguments onto one value, and a false idempotency match
-// silently suppresses a distinct action.
-func canonicalJSON(raw json.RawMessage) []byte {
-	if len(raw) == 0 {
-		return nil
+// A fresh random key per tool invocation, sent on every HTTP request that
+// invocation makes. NOT derived from the tool name and arguments: the gateway
+// replays a cached 2xx for a repeated key for 24h, and identical calls are very
+// often distinct, intended actions — enable→disable→enable, patch A→B→A, a
+// sample after an update — which a content hash would silently turn into
+// replays of the first. A retry of the SAME invocation (a transport retry
+// inside the client) reuses the key from the context and is still deduped.
+func newIdempotencyKey() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// crypto/rand does not fail on supported platforms; no key is safer
+		// than a predictable one that could collide with another call.
+		return ""
 	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.UseNumber()
-	var v any
-	if err := dec.Decode(&v); err != nil {
-		return raw
-	}
-	out, err := json.Marshal(v)
-	if err != nil {
-		return raw
-	}
-	return out
+	return hex.EncodeToString(b[:])
 }
 
 type Defaults struct {
@@ -217,7 +201,7 @@ func scopedTool(c *DazydClient, d Defaults, name, description, schema string, re
 				return ErrorResult(err.Error()), nil
 			}
 			if idempotent {
-				ctx = withIdempotencyKey(ctx, idempotencyKeyFor(name, raw))
+				ctx = withIdempotencyKey(ctx, newIdempotencyKey())
 			}
 			res, err := fn(ctx, c, args, tenant, workspace)
 			if err != nil {
@@ -407,7 +391,7 @@ func startConnection(c *DazydClient) Tool {
 				"return_to": stringField(args, "return_to", ""),
 			})
 			var out map[string]any
-			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("start_connection", raw))
+			ctx = withIdempotencyKey(ctx, newIdempotencyKey())
 			if err := c.Post(ctx, "/me/connections/"+pathSegment(provider)+"/authorize"+qs, nil, &out); err != nil {
 				return errorResultOrErr(err)
 			}
@@ -450,7 +434,7 @@ func setSecret(c *DazydClient) Tool {
 				return ErrorResult("name and value are required"), nil
 			}
 			body := map[string]string{"value": value}
-			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("set_secret", raw))
+			ctx = withIdempotencyKey(ctx, newIdempotencyKey())
 			if err := c.Put(ctx, "/secrets/"+pathSegment(name), body, nil); err != nil {
 				return errorResultOrErr(err)
 			}
@@ -475,7 +459,7 @@ func deleteSecret(c *DazydClient) Tool {
 			if name == "" {
 				return ErrorResult("name is required"), nil
 			}
-			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("delete_secret", raw))
+			ctx = withIdempotencyKey(ctx, newIdempotencyKey())
 			if err := c.Delete(ctx, "/secrets/"+pathSegment(name)); err != nil {
 				return errorResultOrErr(err)
 			}
@@ -590,7 +574,7 @@ func configureConnection(c *DazydClient) Tool {
 				keys = append(keys, k)
 			}
 			slug := connectionSlug(integration)
-			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("configure_connection", raw))
+			ctx = withIdempotencyKey(ctx, newIdempotencyKey())
 			if err := c.Put(ctx, "/catalog/integrations/"+pathSegment(slug)+"/connection", map[string]any{"values": sv}, nil); err != nil {
 				return errorResultOrErr(err)
 			}
@@ -875,10 +859,9 @@ func sampleNode(c *DazydClient, d Defaults) Tool {
 		func(ctx context.Context, c *DazydClient, args map[string]any, tenant, workspace string) (ToolCallResult, error) {
 			id := stringField(args, "id", "")
 			nodeID := stringField(args, "node_id", "")
+			// No inputs: the endpoint re-runs the upstream chain for real and
+			// reads no request body (see daemon flowAPI.sampleNode).
 			body := map[string]any{}
-			if inputs, ok := args["inputs"].(map[string]any); ok {
-				body["inputs"] = inputs
-			}
 			var out map[string]any
 			path := "/me/flows/" + composeFlowID(tenant, workspace, id) +
 				"/nodes/" + pathSegment(nodeID) + "/sample"
@@ -924,7 +907,7 @@ func cancelRun(c *DazydClient) Tool {
 			}
 			var out map[string]any
 			path := fmt.Sprintf("/me/runs/%s/cancel", pathSegment(runID))
-			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("cancel_run", raw))
+			ctx = withIdempotencyKey(ctx, newIdempotencyKey())
 			if err := c.Post(ctx, path, body, &out); err != nil {
 				return errorResultOrErr(err)
 			}
@@ -1120,7 +1103,7 @@ func approveNode(c *DazydClient) Tool {
 					"comment":  stringField(args, "comment", ""),
 				})
 			var out map[string]any
-			ctx = withIdempotencyKey(ctx, idempotencyKeyFor("approve_node", raw))
+			ctx = withIdempotencyKey(ctx, newIdempotencyKey())
 			if err := c.Post(ctx, path, nil, &out); err != nil {
 				return errorResultOrErr(err)
 			}

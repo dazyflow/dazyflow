@@ -66,6 +66,13 @@ func (h *filesAPI) requireWorkspaceEdit(rw http.ResponseWriter, r *http.Request,
 		writeJSONError(rw, http.StatusForbidden, err.Error())
 		return "", "", false
 	}
+	// RequireWorkspace checks the tenant only; a workspace-bound credential is
+	// held to its workspace here, as resolveScope does for flows.
+	if p.Workspace != "" && workspace != p.Workspace && !isPlatformAdmin(p) {
+		writeJSONError(rw, http.StatusForbidden,
+			fmt.Sprintf("cannot act on workspace %q (principal is bound to %q)", workspace, p.Workspace))
+		return "", "", false
+	}
 	if err := core.Require(p, core.PermGraphEdit); err != nil {
 		writeJSONError(rw, http.StatusForbidden, err.Error())
 		return "", "", false

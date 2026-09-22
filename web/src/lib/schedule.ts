@@ -9,6 +9,8 @@ type TFunc = (k: string, o?: Record<string, unknown>) => string;
 export function describeSchedule(s: ScheduleEntry, t: TFunc): string {
   if (s.kind === "cron") return s.cron || "—";
   const secs = s.interval_seconds ?? 0;
+  // No (or a nonsensical) interval yet: "every 0 hours" reads as a schedule.
+  if (!Number.isFinite(secs) || secs <= 0) return "—";
   if (secs % 3600 === 0) return t("schedules.everyHours", { count: secs / 3600 });
   if (secs % 60 === 0) return t("schedules.everyMinutes", { count: secs / 60 });
   return t("schedules.everySeconds", { count: secs });

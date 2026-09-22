@@ -119,6 +119,27 @@ func TestListEvents_SingleEventsFalseOmitsOrderBy(t *testing.T) {
 	}
 }
 
+// A short page with a nextPageToken is followed up to the limit.
+func TestListEvents_FollowsPageToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("pageToken") == "" {
+			_, _ = w.Write([]byte(`{"items":[{"id":"a"},{"id":"b"}],"nextPageToken":"p2"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"items":[{"id":"c"},{"id":"d"}],"nextPageToken":"p3"}`))
+	}))
+	defer srv.Close()
+	withCalEnv(t, srv.URL)
+
+	got, err := ListEvents(context.Background(), core.Job{Params: map[string]any{"limit": 3}})
+	if err != nil {
+		t.Fatalf("ListEvents: %v", err)
+	}
+	if len(got) != 3 || got[2]["id"] != "c" {
+		t.Errorf("events = %v, want a, b, c", got)
+	}
+}
+
 func TestListEvents_APIErrorSurfaces(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)

@@ -4,6 +4,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -140,5 +142,41 @@ func TestHostIsLocal(t *testing.T) {
 		if got := hostIsLocal(tc.host); got != tc.want {
 			t.Errorf("hostIsLocal(%q) = %v, want %v", tc.host, got, tc.want)
 		}
+	}
+}
+
+func TestReadRotationKey(t *testing.T) {
+	const b64 = "c3Ryb25nLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9rIQ=="
+	file := filepath.Join(t.TempDir(), "key")
+	if err := os.WriteFile(file, []byte(b64+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, inline, file, stdin string
+		wantErr                   bool
+	}{
+		{"file", "", file, "", false},
+		{"stdin", "", "-", "  " + b64 + "\n", false},
+		{"deprecated inline", b64, "", "", false},
+		{"both", b64, file, "", true},
+		{"empty stdin", "", "-", "\n", true},
+		{"bad base64", "", "-", "not*base64", true},
+		{"missing file", "", filepath.Join(t.TempDir(), "nope"), "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			key, err := readRotationKey(tc.inline, tc.file, strings.NewReader(tc.stdin))
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("readRotationKey = %q, want error", key)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("readRotationKey: %v", err)
+			}
+			if string(key) != "strong-32-byte-key-for-testing-ok!" {
+				t.Errorf("key = %q", key)
+			}
+		})
 	}
 }

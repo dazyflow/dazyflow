@@ -35,6 +35,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dazyflow/dazyflow/core/buildinfo"
 	"github.com/dazyflow/dazyflow/mcp/server"
 )
 
@@ -81,7 +82,7 @@ func main() {
 
 	srv := &server.Server{
 		Name:    "dazyflow",
-		Version: "0.1.0",
+		Version: buildinfo.Version,
 		Logger:  logger,
 	}
 	for _, t := range server.BuildTools(client, defaults) {

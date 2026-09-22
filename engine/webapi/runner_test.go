@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -367,5 +368,59 @@ func TestRunnerScript_ActuallyPerformsTheCall(t *testing.T) {
 	}
 	if got := res.Output["response_body"].Inline; got != `{"id":"o-9"}` {
 		t.Errorf("response_body = %v", got)
+	}
+}
+
+// A 3xx must come back as the answer rather than be followed: urllib replays
+// Authorization to the redirect target (another host) and rewrites POST to GET.
+func TestRunnerScript_DoesNotFollowRedirects(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not installed; the generated script cannot be exercised here")
+	}
+	var leaked atomic.Bool
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leaked.Store(true)
+		w.WriteHeader(200)
+	}))
+	defer target.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/steal", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	cat := mustRegister(t, func() webapi.Descriptor {
+		d := runnerDescriptor()
+		d.BaseURL = srv.URL
+		return d
+	}())
+	tr := transport(t, cat, "acme", "api:orders:create_order")
+	webapi.SetDispatcher(dispatchFunc(func(ctx context.Context, req webapi.RunnerRequest, _ func(string)) (webapi.RunnerResult, error) {
+		cmd := exec.CommandContext(ctx, python, "-c", req.Script)
+		cmd.Stdin = strings.NewReader(req.Stdin)
+		var stdout, stderr strings.Builder
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		if err := cmd.Run(); err != nil {
+			return webapi.RunnerResult{ExitCode: 1, Stdout: stdout.String(), Stderr: stderr.String()}, nil
+		}
+		return webapi.RunnerResult{Stdout: stdout.String(), Stderr: stderr.String()}, nil
+	}))
+	t.Cleanup(func() { webapi.SetDispatcher(nil) })
+
+	res, err := tr.Execute(context.Background(), core.Job{
+		ID: "j1",
+		Params: map[string]any{
+			"sku": "ABC", "qty": 2, "token": "tok-real",
+			"expect_status": []any{302},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if leaked.Load() {
+		t.Fatal("the script followed the redirect to another host")
+	}
+	if res.Output["status"].Inline != 302 {
+		t.Errorf("status port = %v (error %+v), want the 302 itself", res.Output["status"].Inline, res.Error)
 	}
 }

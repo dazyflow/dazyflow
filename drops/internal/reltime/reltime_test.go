@@ -31,7 +31,9 @@ func TestResolve(t *testing.T) {
 		{"TOMORROW", "2026-06-18T22:00:00Z"},
 		{"2026-06-16T00:00:00Z", "2026-06-16T00:00:00Z"},
 		{"2026-06-16T09:00:00+02:00", "2026-06-16T07:00:00Z"},
-		{"2026-06-16", "2026-06-16T00:00:00Z"},
+		// Zoneless values are read in the step's zone, not UTC.
+		{"2026-06-16", "2026-06-15T22:00:00Z"},
+		{"2026-06-16 09:00", "2026-06-16T07:00:00Z"},
 	}
 	for _, c := range cases {
 		got, err := ResolveRFC3339(c.in, sthlm, now)
@@ -41,6 +43,27 @@ func TestResolve(t *testing.T) {
 		}
 		if got != c.want {
 			t.Errorf("Resolve(%q) = %s, want %s", c.in, got, c.want)
+		}
+	}
+}
+
+// A day-anchored offset is wall-clock: "tomorrow+9h" on the night the clocks
+// go back (Europe/Stockholm, 25 Oct 2026) is 09:00 local, not 08:00.
+func TestResolve_DayAnchoredOffsetAcrossDST(t *testing.T) {
+	sthlm, err := time.LoadLocation("Europe/Stockholm")
+	if err != nil {
+		t.Skipf("no tzdata: %v", err)
+	}
+	now := time.Date(2026, 10, 24, 14, 30, 0, 0, sthlm)
+	for in, want := range map[string]string{
+		"tomorrow+9h":  "2026-10-25T08:00:00Z", // 09:00 CET
+		"tomorrow+1d":  "2026-10-25T23:00:00Z", // midnight 26 Oct CET
+		"today+23h59m": "2026-10-24T21:59:00Z", // 23:59 CEST
+		"tomorrow-1h":  "2026-10-24T21:00:00Z", // 23:00 CEST on the 24th
+	} {
+		got, err := ResolveRFC3339(in, sthlm, now)
+		if err != nil || got != want {
+			t.Errorf("Resolve(%q) = %s (%v), want %s", in, got, err, want)
 		}
 	}
 }

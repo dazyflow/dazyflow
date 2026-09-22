@@ -337,6 +337,30 @@ func TestListFolders_QueryAndProjection(t *testing.T) {
 	}
 }
 
+// A short page with a nextPageToken is followed up to the limit.
+func TestListFiles_FollowsPageToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Query().Get("fields"), "nextPageToken") {
+			t.Errorf("fields = %q, must ask for nextPageToken", r.URL.Query().Get("fields"))
+		}
+		if r.URL.Query().Get("pageToken") == "" {
+			_, _ = w.Write([]byte(`{"files":[{"id":"a"}],"nextPageToken":"p2"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"files":[{"id":"b"},{"id":"c"}]}`))
+	}))
+	defer srv.Close()
+	withDriveEnv(t, srv.URL)
+
+	got, err := ListFiles(context.Background(), core.Job{Params: map[string]any{"limit": 10}})
+	if err != nil {
+		t.Fatalf("ListFiles: %v", err)
+	}
+	if len(got) != 3 {
+		t.Errorf("files = %v, want a, b, c", got)
+	}
+}
+
 func TestListFilesForPicker_ExcludesFolders(t *testing.T) {
 	var gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

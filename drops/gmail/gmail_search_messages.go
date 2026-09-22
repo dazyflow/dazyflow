@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/cursor"
@@ -218,6 +219,9 @@ func pollNewMail(
 	if fail != nil {
 		return *fail, nil
 	}
+	if last == "" {
+		return baselineNewMail(ctx, job, name, token, query, timeoutMS, progress), nil
+	}
 
 	q := url.Values{}
 	q.Set("maxResults", strconv.Itoa(backlogPageSize))
@@ -283,6 +287,39 @@ func pollNewMail(
 		}
 		return res, nil
 	}
+}
+
+// baselineProbe is how many of the newest matches a first run reads to find
+// where to start. More than one so a message that fails to fetch does not
+// leave the baseline unset.
+const baselineProbe = 10
+
+// baselineNewMail is the first only_new run: record the NEWEST match as the
+// starting point and emit nothing. It must not go through the backlog scan —
+// with no `after:` bound that scan is the whole mailbox, so it either drained
+// the oldest mail (baselining years back and replaying everything since on the
+// next run) or refused a big mailbox with gmail_backlog_too_deep on every run.
+// messages.list is newest-first, so one short page holds the newest match.
+func baselineNewMail(ctx context.Context, job core.Job, name, token, query string, timeoutMS int, progress chan<- core.Progress) core.Result {
+	q := url.Values{}
+	q.Set("maxResults", strconv.Itoa(baselineProbe))
+	if query != "" {
+		q.Set("q", query)
+	}
+	stubs, _, ferr := listMessages(ctx, job, token, q, timeoutMS)
+	if ferr != nil {
+		return *ferr
+	}
+	if len(stubs) == 0 {
+		// Nothing matches yet: start from now, or the first email to arrive would
+		// be swallowed as the baseline.
+		if werr := cursor.Write(ctx, job.Tenant, name, strconv.FormatInt(time.Now().UnixMilli(), 10)); werr != nil {
+			return cursor.FailBaseline(job, werr)
+		}
+		return core.Result{JobID: job.ID, Status: core.StatusOK, Output: map[string]core.Ref{}}
+	}
+	msgs, dates, unresolved := hydrateAll(ctx, job, token, stubs, timeoutMS)
+	return emitOnlyNew(ctx, job, name, "", msgs, dates, "", unresolved, progress)
 }
 
 // reversed copies: the caller trims `stubs` between rounds, so reversing in

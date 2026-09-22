@@ -172,6 +172,26 @@ func TestListInvoices_OK(t *testing.T) {
 	}
 }
 
+// meta.next_page is a number; wired into Page it must be honoured, not
+// silently dropped for page 1.
+func TestListInvoices_NumericPageInput(t *testing.T) {
+	for _, in := range []any{float64(3), 3, "3"} {
+		var gotPage string
+		f := newFakeFortnox(t, func(w http.ResponseWriter, r *http.Request) {
+			gotPage = r.URL.Query().Get("page")
+			_, _ = w.Write([]byte(`{"Invoices":[],"MetaInformation":{"@CurrentPage":3,"@TotalPages":3}}`))
+		})
+		job := f.job(nil)
+		job.Input = map[string]core.Ref{"page": {Inline: in}}
+		if res, _ := executeListInvoices(context.Background(), job, nil); res.Status != core.StatusOK {
+			t.Fatalf("page %T: %+v", in, res.Error)
+		}
+		if gotPage != "3" {
+			t.Errorf("page input %#v sent page=%q, want 3", in, gotPage)
+		}
+	}
+}
+
 func TestListCustomers_Picker(t *testing.T) {
 	f := newFakeFortnox(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"Customers":[{"CustomerNumber":"42","Name":"Acme AB","Email":"x@acme.se"},{"CustomerNumber":"43","Name":""}]}`))

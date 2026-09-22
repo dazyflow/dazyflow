@@ -178,10 +178,26 @@ func TestFailureEmailThrottle_FirstFailureMails(t *testing.T) {
 	}
 }
 
+// mailFirst reports runID's failure and waits for its email, then clears the
+// fake server so the assertion that follows sees only later mail.
+func mailFirst(t *testing.T, svc *Service, srv *fakeSMTP, graph core.Graph, runID string) {
+	t.Helper()
+	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
+		GraphID: graph.ID, RunID: runID, ErrorMessage: "boom",
+	})
+	if data, _ := waitForEmail(t, srv, 2*time.Second); data == "" {
+		t.Fatalf("the first failure (%s) sent no email", runID)
+	}
+	srv.mu.Lock()
+	srv.data, srv.to = "", nil
+	srv.mu.Unlock()
+}
+
 func TestFailureEmailThrottle_RepeatWithinTheWindowIsSilent(t *testing.T) {
 	svc, srv, graph := throttleHarness(t)
 	seedFailedRun(t, svc, graph, "run-1", inThisWindow(10*time.Minute))
 	seedFailedRun(t, svc, graph, "run-2", time.Now())
+	mailFirst(t, svc, srv, graph, "run-1")
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-2", ErrorMessage: "boom again",
@@ -207,6 +223,7 @@ func TestFailureEmailThrottle_CatchesAFlappingFlow(t *testing.T) {
 		t.Fatalf("seed success: %v", err)
 	}
 	seedFailedRun(t, svc, graph, "run-3", time.Now())
+	mailFirst(t, svc, srv, graph, "run-1")
 
 	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
 		GraphID: graph.ID, RunID: "run-3", ErrorMessage: "boom",
@@ -214,6 +231,61 @@ func TestFailureEmailThrottle_CatchesAFlappingFlow(t *testing.T) {
 
 	if data, _ := waitForEmail(t, srv, 700*time.Millisecond); data != "" {
 		t.Errorf("a flapping flow emailed on every failure:\n%s", data)
+	}
+}
+
+// Two failures landing together must not throttle each other into silence:
+// the throttle counts mails sent, not other failed runs, so exactly one of
+// them mails.
+func TestFailureEmailThrottle_SimultaneousFailuresMailOnce(t *testing.T) {
+	svc, srv, graph := throttleHarness(t)
+	seedFailedRun(t, svc, graph, "run-a", time.Now())
+	seedFailedRun(t, svc, graph, "run-b", time.Now())
+
+	mailFirst(t, svc, srv, graph, "run-a")
+	svc.fireFailureNotification(t.Context(), graph, FailurePayload{
+		GraphID: graph.ID, RunID: "run-b", ErrorMessage: "boom",
+	})
+	if data, _ := waitForEmail(t, srv, 700*time.Millisecond); data != "" {
+		t.Errorf("the second simultaneous failure mailed too:\n%s", data)
+	}
+}
+
+// A retry after a partial failure redoes only what failed: the email that
+// already went out is not sent again because the webhook after it failed.
+func TestFailureNotify_RetryDoesNotResendDeliveredEmail(t *testing.T) {
+	svc, srv, graph := throttleHarness(t)
+	fw := newFakeWebhook(t)
+	fw.mu.Lock()
+	fw.respCode = 502
+	fw.mu.Unlock()
+	graph.FailureNotify = &core.FailureNotify{Webhook: fw.server.URL}
+
+	payload := FailurePayload{GraphID: graph.ID, RunID: "run-1", ErrorMessage: "boom"}
+	if err := svc.fireFailureNotification(t.Context(), graph, payload); err == nil {
+		t.Fatal("a 502 from the webhook did not fail the notification")
+	}
+	if data, _ := waitForEmail(t, srv, 2*time.Second); data == "" {
+		t.Fatal("the email was not sent on the first attempt")
+	}
+	srv.mu.Lock()
+	srv.data, srv.to = "", nil
+	srv.mu.Unlock()
+
+	fw.mu.Lock()
+	fw.respCode = 200
+	fw.mu.Unlock()
+	if err := svc.fireFailureNotification(t.Context(), graph, payload); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	fw.mu.Lock()
+	n := len(fw.received)
+	fw.mu.Unlock()
+	if n != 2 {
+		t.Errorf("webhook called %d times, want 2 (the retry redoes it)", n)
+	}
+	if data, _ := waitForEmail(t, srv, 700*time.Millisecond); data != "" {
+		t.Errorf("the retry mailed the owner a second time:\n%s", data)
 	}
 }
 

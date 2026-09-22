@@ -75,17 +75,21 @@ func executeRefundOrder(ctx context.Context, job core.Job, _ chan<- core.Progres
 	if orderID == "" {
 		return params.Err(job, "bad_param", "'order_id' is required — set it or connect the 'Order ID' input"), nil
 	}
-	amount, ok := wholeNumberInputOr(job, "amount", params.IntDefault(job.Params, "amount", 0))
+	amount, ok := wholeNumberInputOr(job, "amount", params.IntDefault(job.Params, "amount", amountUnset))
 	if !ok {
 		return params.Err(job, "bad_input", "'Amount' input must be a whole number (smallest currency unit, e.g. 500 = 5.00)"), nil
 	}
-	if amount < 0 {
+	// Absent means the full amount; an explicit 0 is a mistake upstream.
+	if amount == 0 {
+		return params.Err(job, "bad_input", "'Amount' is 0 — leave it empty to refund the whole remaining refundable amount, or enter a positive amount"), nil
+	}
+	if amount < 0 && amount != amountUnset {
 		return params.Err(job, "bad_input", "'Amount' cannot be negative"), nil
 	}
 
 	// Full refund: no amount given, so read the order and refund what's left
 	// refundable — the captured amount minus what's already been refunded.
-	if amount == 0 {
+	if amount == amountUnset {
 		o, r := fetchOrder(ctx, job, orderID)
 		if r != nil {
 			return *r, nil

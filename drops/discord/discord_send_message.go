@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -86,8 +87,10 @@ func executeSendMessage(ctx context.Context, job core.Job, _ chan<- core.Progres
 	if strings.TrimSpace(content) == "" {
 		return params.Err(job, "bad_param", "'content' is required — set it or connect the 'Content' input"), nil
 	}
-	if len(content) > maxContentLen {
-		return params.Err(job, "bad_param", fmt.Sprintf("'content' is %d characters; Discord allows at most %d", len(content), maxContentLen)), nil
+	// Discord counts characters, not bytes: 2000 Swedish or emoji-laden
+	// characters are well over 2000 bytes and still allowed.
+	if n := utf8.RuneCountInString(content); n > maxContentLen {
+		return params.Err(job, "bad_param", fmt.Sprintf("'content' is %d characters; Discord allows at most %d", n, maxContentLen)), nil
 	}
 
 	payload := map[string]any{"content": content}

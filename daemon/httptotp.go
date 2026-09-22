@@ -68,6 +68,9 @@ func (h *authAPI) totpSetup(rw http.ResponseWriter, r *http.Request, p core.Prin
 	if !h.requireTOTP(rw) {
 		return
 	}
+	if !requireSessionCredential(rw, r, "managing two-factor authentication") {
+		return
+	}
 	setup, err := auth.EnrolStart(r.Context(), h.Users, h.TOTPKey, totpEmail(p))
 	switch {
 	case errors.Is(err, auth.ErrTOTPAlreadyEnrolled):
@@ -94,6 +97,9 @@ func (h *authAPI) totpSetup(rw http.ResponseWriter, r *http.Request, p core.Prin
 // codes ONCE.
 func (h *authAPI) totpConfirm(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requireTOTP(rw) {
+		return
+	}
+	if !requireSessionCredential(rw, r, "managing two-factor authentication") {
 		return
 	}
 	body, ok := decodeRequestJSONOptional[struct {
@@ -135,6 +141,9 @@ func (h *authAPI) totpDisable(rw http.ResponseWriter, r *http.Request, p core.Pr
 	if !h.requireTOTP(rw) {
 		return
 	}
+	if !requireSessionCredential(rw, r, "managing two-factor authentication") {
+		return
+	}
 	body, ok := decodeRequestJSONOptional[struct {
 		Password string `json:"password"`
 	}](rw, r)
@@ -164,6 +173,9 @@ func (h *authAPI) totpDisable(rw http.ResponseWriter, r *http.Request, p core.Pr
 
 func (h *authAPI) totpRegenerate(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if !h.requireTOTP(rw) {
+		return
+	}
+	if !requireSessionCredential(rw, r, "managing two-factor authentication") {
 		return
 	}
 	codes, err := auth.RegenerateRecoveryCodes(r.Context(), h.Users, totpEmail(p))

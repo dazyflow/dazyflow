@@ -39,6 +39,29 @@ func TestFor_OverrideTrimsTrailingSlash(t *testing.T) {
 	}
 }
 
+// Outside tests a base_url may only point at the vendor's own host: the
+// connection's credentials ride on the request.
+func TestFor_ProductionRejectsForeignHost(t *testing.T) {
+	anyOverride = false
+	t.Cleanup(func() { anyOverride = true })
+	b := New("https://api.example.com/v1")
+	for in, want := range map[string]string{
+		"https://evil.test/v1":            "https://api.example.com/v1",
+		"http://api.example.com/v1":       "https://api.example.com/v1",
+		"https://u:p@api.example.com/v1":  "https://api.example.com/v1",
+		"https://api.example.com.evil/v1": "https://api.example.com/v1",
+		"https://API.example.com/v2/":     "https://API.example.com/v2",
+	} {
+		job := core.Job{Params: map[string]any{"base_url": in}}
+		if got := b.For(job); got != want {
+			t.Errorf("For(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := Override(core.Job{Params: map[string]any{"base_url": "https://b.test"}}, "https://a.test", "https://b.test/x"); got != "https://b.test" {
+		t.Errorf("Override with a second allowed root = %q", got)
+	}
+}
+
 func TestFor_EmptyOverrideFallsBack(t *testing.T) {
 	b := New("https://api.example.com")
 	job := core.Job{Params: map[string]any{"base_url": ""}}

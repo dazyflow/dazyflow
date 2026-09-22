@@ -181,7 +181,17 @@ func (p *specParser) resolve(node any, depth int) (any, error) {
 }
 
 func (p *specParser) schemaOf(node any) (map[string]any, error) {
-	resolved, err := p.resolve(node, 0)
+	return p.schemaOfDepth(node, 0)
+}
+
+// schemaOfDepth threads the nesting depth through allOf members so a
+// self-referencing allOf (A: allOf[$ref A]) fails with an error instead of
+// recursing until the stack overflows.
+func (p *specParser) schemaOfDepth(node any, depth int) (map[string]any, error) {
+	if depth > maxRefDepth {
+		return nil, fmt.Errorf("allOf nests more than %d deep", maxRefDepth)
+	}
+	resolved, err := p.resolve(node, depth)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +207,7 @@ func (p *specParser) schemaOf(node any) (map[string]any, error) {
 	props := map[string]any{}
 	var required []any
 	for _, member := range members {
-		sub, err := p.schemaOf(member)
+		sub, err := p.schemaOfDepth(member, depth+1)
 		if err != nil {
 			return nil, err
 		}

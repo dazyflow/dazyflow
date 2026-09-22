@@ -251,6 +251,19 @@ func TestMirrorPusher_PublishMirrorsWhenConfiguredForSave(t *testing.T) {
 	waitFor(t, "the publish to be mirrored", func() bool { return cp.count() == 1 })
 }
 
+// A save then a publish inside one debounce window is one push, and it must
+// carry the publish: keeping only the first trigger made the push a "save",
+// which a publish-only mirror ignores, so the publish was never mirrored.
+func TestMirrorPusher_PublishAfterSaveInWindowPushes(t *testing.T) {
+	t.Parallel()
+	cp := newCountingPusher(t, enabledMirror())
+	cp.Notify("acme", "main", PushOnSave)
+	cp.Notify("acme", "main", PushOnPublish)
+	cp.Notify("acme", "main", PushOnSave)
+	waitFor(t, "the publish to be mirrored", func() bool { return cp.count() == 1 })
+	staysAt(t, 1, cp.count)
+}
+
 func TestMirrorPusher_DisabledDoesNothing(t *testing.T) {
 	t.Parallel()
 	row := enabledMirror()

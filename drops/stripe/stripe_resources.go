@@ -239,13 +239,27 @@ var priceZeroDecimalCurrencies = map[string]bool{
 	"xpf": true,
 }
 
+// Stripe's three-decimal currencies: 1000 minor units is 1.000.
+var priceThreeDecimalCurrencies = map[string]bool{
+	"bhd": true, "jod": true, "kwd": true, "omr": true, "tnd": true,
+}
+
 func formatPriceAmount(minor int64, currency string) string {
 	if minor == 0 || currency == "" {
 		return ""
 	}
 	code := strings.ToUpper(currency)
-	if priceZeroDecimalCurrencies[strings.ToLower(currency)] {
+	lower := strings.ToLower(currency)
+	if priceZeroDecimalCurrencies[lower] {
 		return fmt.Sprintf("%d %s", minor, code)
 	}
-	return fmt.Sprintf("%d.%02d %s", minor/100, minor%100, code)
+	// The sign goes once, in front: -150 is "-1.50", not "-1.-50".
+	sign := ""
+	if minor < 0 {
+		sign, minor = "-", -minor
+	}
+	if priceThreeDecimalCurrencies[lower] {
+		return fmt.Sprintf("%s%d.%03d %s", sign, minor/1000, minor%1000, code)
+	}
+	return fmt.Sprintf("%s%d.%02d %s", sign, minor/100, minor%100, code)
 }

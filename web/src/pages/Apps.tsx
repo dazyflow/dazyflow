@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Box, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, APIError } from "../api";
@@ -467,8 +467,9 @@ function appConnectionState(
 
 export function AppDetail() {
   const { t, i18n } = useTranslation();
-  const slugRaw = window.location.pathname.split("/").pop() ?? "";
-  const slug = decodeURIComponent(slugRaw);
+  // From the router, not window.location: a trailing slash or a client-side
+  // navigation between two apps would otherwise read the wrong (or no) slug.
+  const { slug = "" } = useParams<{ slug: string }>();
   const { token, hasPerm } = useAuth();
   // Connecting writes a credential, so it is gated on secret:write.
   const canManageConnections = hasPerm("secret:write");

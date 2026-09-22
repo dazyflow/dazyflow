@@ -22,6 +22,9 @@ func (h *authAPI) changePasswordHandler(rw http.ResponseWriter, r *http.Request,
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")
 		return
 	}
+	if !requireSessionCredential(rw, r, "changing your password") {
+		return
+	}
 	body, ok := decodeRequestJSON[struct {
 		CurrentPassword string `json:"current_password"`
 		NewPassword     string `json:"new_password"`
@@ -73,6 +76,9 @@ func (h *authAPI) changePasswordHandler(rw http.ResponseWriter, r *http.Request,
 func (h *authAPI) changeEmailHandler(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Users == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "password auth not configured")
+		return
+	}
+	if !requireSessionCredential(rw, r, "changing your email") {
 		return
 	}
 	body, ok := decodeRequestJSON[struct {

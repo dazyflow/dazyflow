@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -138,6 +139,14 @@ func TestStringifyForTemplate(t *testing.T) {
 		{"nil", nil, ""},
 		{"int", int64(42), "42"},
 		{"float", 3.14, "3.14"},
+		// JSON numbers decode to float64; a large integral one must not render
+		// in exponent form.
+		{"large integral float", float64(1234567), "1234567"},
+		{"huge integral float", float64(12345678901234), "12345678901234"},
+		{"negative integral float", float64(-2000000), "-2000000"},
+		{"small float", 0.000001, "0.000001"},
+		{"float32", float32(1.5e6), "1500000"},
+		{"json number", json.Number("12345678901234567890"), "12345678901234567890"},
 		{"bool true", true, "true"},
 		{"bool false", false, "false"},
 		{"bytes", []byte("raw"), "raw"},

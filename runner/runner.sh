@@ -27,14 +27,19 @@
 
 set -eu
 
-# DAZYFLOW_URL is substituted by the server. The fallback keeps the script
-# usable straight from the repository, where nothing has substituted anything.
-URL="${DAZYFLOW_URL:-@@DAZYFLOW_URL@@}"
+# The server substitutes its own address here, and that is used as-is: an
+# ambient DAZYFLOW_URL in the operator's shell (set for some other tool) must
+# not silently point the registration token and the credential at a different
+# server. DAZYFLOW_RUNNER_URL — or --url — is the deliberate override, and what
+# keeps the script usable straight from the repository, where nothing has
+# substituted anything.
+URL="${DAZYFLOW_RUNNER_URL:-@@DAZYFLOW_URL@@}"
 # The server substitutes the checksum of the agent it is serving. Left as the
 # placeholder when this file comes straight from the repository, where there is
 # no server to vouch for anything and the check is skipped with a word about it.
 AGENT_SHA256="@@DAZYFLOW_AGENT_SHA256@@"
-TOKEN=""
+# --token, or DAZYFLOW_RUNNER_TOKEN to keep it off this script's command line.
+TOKEN="${DAZYFLOW_RUNNER_TOKEN:-}"
 NAME=""
 LABELS=""
 ALLOW=""
@@ -60,7 +65,9 @@ Set up (from your Dazyflow server):
   curl -fsSL https://SERVER/runner.sh | sh -s -- --token dzrt_... --service
 
   --token TOKEN   registration token from Admin -> Runners in Dazyflow
-  --url URL       Dazyflow server (already set if you piped this from one)
+                  (or set DAZYFLOW_RUNNER_TOKEN, which keeps it out of ps)
+  --url URL       Dazyflow server (already set if you piped this from one;
+                  DAZYFLOW_RUNNER_URL overrides it too)
   --name NAME     name for this machine (default: this host's name)
   --tags A,B      tags a flow can target this machine by (its name is always one)
   --allow A,B     only let these programs run. Strongly recommended
@@ -428,7 +435,13 @@ It ships with most systems; install it and run this again."
 	# operator can actually read — which is the reason it is a script.
 	echo "The agent is one file, standard library only. Read it: $AGENT"
 
-	set -- --url "$URL" --token "$TOKEN"
+	# The token reaches the agent through its environment, not its argv: a
+	# command line is readable by every user on the machine (ps, /proc), and
+	# the token is a credential until it is spent. The agent removes it from
+	# its own environment on start, so no step it runs inherits it.
+	DAZYFLOW_RUNNER_TOKEN="$TOKEN"
+	export DAZYFLOW_RUNNER_TOKEN
+	set -- --url "$URL"
 	[ -n "$NAME" ] && set -- "$@" --name "$NAME"
 	[ -n "$LABELS" ] && set -- "$@" --tags "$LABELS"
 	[ -n "$ALLOW" ] && set -- "$@" --allow "$ALLOW"

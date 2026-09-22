@@ -430,6 +430,22 @@ func TestNtfy_EgressBlocked(t *testing.T) {
 	}
 }
 
+// The topic is a path segment: anything outside ntfy's charset is refused
+// before a request is built, so it cannot re-route the POST.
+func TestNtfy_TopicValidated(t *testing.T) {
+	for _, topic := range []string{"a/b", "../admin", "x?y=1", "has space", strings.Repeat("a", 65)} {
+		res, err := executeNtfy(context.Background(), core.Job{
+			Params: map[string]any{"server": "https://ntfy.example.com", "topic": topic, "message": "m"},
+		}, nil)
+		if err != nil {
+			t.Fatalf("execute: %v", err)
+		}
+		if res.Status != core.StatusError || res.Error.Code != "bad_param" {
+			t.Errorf("topic %q: res = %+v, want bad_param", topic, res)
+		}
+	}
+}
+
 // TestExecuteEmail_IncompleteLogin: a connection carrying a password but no
 // username must fail the step, not send the mail unauthenticated and report
 // success. The scripted server here would happily accept the AUTH-less send,

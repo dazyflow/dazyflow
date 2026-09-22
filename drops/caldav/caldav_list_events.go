@@ -81,6 +81,9 @@ func executeCalDAVList(ctx context.Context, job core.Job, _ chan<- core.Progress
 	if err != nil {
 		return params.Err(job, "not_connected", err.Error()), nil
 	}
+	if res := egressBlocked(ctx, job, cfg); res != nil {
+		return *res, nil
+	}
 	loc, err := location(job)
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil

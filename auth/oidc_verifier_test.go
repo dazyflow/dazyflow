@@ -177,7 +177,8 @@ func TestOIDCAuthenticator_ThroughChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
-	if p.Subject != "user@corp.example" || p.Tenant != "acme" {
+	// Issuer-qualified, so an IdP sub can never collide with a local email subject.
+	if p.Subject != OIDCSubject(idp.srv.URL, "user@corp.example") || p.Tenant != "acme" {
 		t.Errorf("principal = %+v", p)
 	}
 	var editor, unknown *core.Role

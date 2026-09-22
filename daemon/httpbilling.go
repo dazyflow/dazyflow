@@ -82,6 +82,8 @@ func (h *billingAPI) billingMe(rw http.ResponseWriter, r *http.Request, p core.P
 	}
 	// Whether this deployment runs paid billing at all.
 	billingEnabled := h.Billing != nil && h.Billing.Stripe != nil
+	// Checkout and the portal are org-admin only; don't offer them to others.
+	isAdmin := canManageOrg(p, tenant)
 	resp := map[string]any{
 		"plan":                 effPlan,
 		"subscription_status":  plan.SubscriptionStatus,
@@ -90,8 +92,8 @@ func (h *billingAPI) billingMe(rw http.ResponseWriter, r *http.Request, p core.P
 		"runs_this_month":      runsThisMonth,
 		"billing_enabled":      billingEnabled,
 		"polling_allowed":      !h.svc.FreePollingDisabled || effPlan == PlanPro,
-		"can_upgrade":          billingEnabled && effPlan != PlanPro,
-		"can_manage":           billingEnabled && plan.StripeCustomerID != "",
+		"can_upgrade":          billingEnabled && isAdmin && effPlan != PlanPro,
+		"can_manage":           billingEnabled && isAdmin && plan.StripeCustomerID != "",
 	}
 	if !plan.CurrentPeriodEnd.IsZero() {
 		resp["current_period_end"] = plan.CurrentPeriodEnd.UTC().Format(time.RFC3339)
@@ -217,8 +219,8 @@ func (h *billingAPI) plansMe(rw http.ResponseWriter, r *http.Request, p core.Pri
 		CurrentPlan:   cur.Plan,
 		CurrentTierID: cur.TierID,
 		RunsThisMonth: runsThisMonth,
-		CanUpgrade:    h.Billing != nil && h.Billing.Stripe != nil && cur.Plan != PlanPro,
-		CanManage:     h.Billing != nil && h.Billing.Stripe != nil && customerID != "",
+		CanUpgrade:    h.Billing != nil && h.Billing.Stripe != nil && canManageOrg(p, tenant) && cur.Plan != PlanPro,
+		CanManage:     h.Billing != nil && h.Billing.Stripe != nil && canManageOrg(p, tenant) && customerID != "",
 		Plans:         plans,
 	})
 }
@@ -231,6 +233,11 @@ func (h *billingAPI) billingCheckout(rw http.ResponseWriter, r *http.Request, p 
 	}
 	tenant, ok := resolveTenantScope(rw, r, p)
 	if !ok {
+		return
+	}
+	// Starting or changing a paid subscription is the org's decision, not any member's.
+	if !canManageOrg(p, tenant) {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", "organization:admin required to manage billing")
 		return
 	}
 	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
@@ -276,6 +283,11 @@ func (h *billingAPI) billingPortal(rw http.ResponseWriter, r *http.Request, p co
 	if !ok {
 		return
 	}
+	// Starting or changing a paid subscription is the org's decision, not any member's.
+	if !canManageOrg(p, tenant) {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", "organization:admin required to manage billing")
+		return
+	}
 	if h.svc.Plans == nil {
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured",
 			"no plan store on this deployment")
@@ -310,6 +322,7 @@ type stripeEvent struct {
 			Subscription      string            `json:"subscription"`
 			ClientReferenceID string            `json:"client_reference_id"`
 			Status            string            `json:"status"`
+			PaymentStatus     string            `json:"payment_status"`
 			Metadata          map[string]string `json:"metadata"`
 			CancelAtPeriodEnd bool              `json:"cancel_at_period_end"`
 			CurrentPeriodEnd  int64             `json:"current_period_end"`
@@ -381,6 +394,21 @@ func (h *billingAPI) applyStripeEvent(r *http.Request, ev stripeEvent) error {
 			h.Billing.logger.Printf("checkout.session.completed without client_reference_id (session %s) — ignoring", obj.ID)
 			return nil
 		}
+		// A completed session is not a paid one (async methods settle later);
+		// the subscription events carry the real state once it does.
+		if obj.PaymentStatus != "paid" && obj.PaymentStatus != "no_payment_required" {
+			h.Billing.logger.Printf("checkout.session.completed %s with payment_status=%q — not granting yet", obj.ID, obj.PaymentStatus)
+			return nil
+		}
+		cur, err := h.svc.Plans.GetPlan(r.Context(), tenant)
+		if err != nil {
+			return err
+		}
+		if cur.StripeSubscriptionID == obj.Subscription && cur.SubscriptionStatus != "" {
+			// A subscription event already landed (events are unordered); it is
+			// the more precise record, and a terminal one must not be undone.
+			return nil
+		}
 		return h.svc.Plans.SetPlan(r.Context(), TenantPlan{
 			Tenant:               tenant,
 			Plan:                 PlanPro,
@@ -394,19 +422,33 @@ func (h *billingAPI) applyStripeEvent(r *http.Request, ev stripeEvent) error {
 			h.Billing.logger.Printf("%s without tenant metadata (sub %s) — ignoring", ev.Type, obj.ID)
 			return nil
 		}
-		plan := PlanPro
-		// past_due is deliberately NOT a drop: a card retry is still in flight.
-		if ev.Type == "customer.subscription.deleted" ||
-			obj.Status == "canceled" || obj.Status == "unpaid" ||
-			obj.Status == "incomplete_expired" {
-			plan = PlanFree
+		status := obj.Status
+		if ev.Type == "customer.subscription.deleted" && status == "" {
+			status = "canceled"
+		}
+		// Stripe delivers out of order: once a subscription reached a terminal
+		// state, a late "updated" for it must not restore Pro.
+		cur, err := h.svc.Plans.GetPlan(r.Context(), tenant)
+		if err != nil {
+			return err
+		}
+		if cur.StripeSubscriptionID == obj.ID && terminalSubscriptionStatus(cur.SubscriptionStatus) &&
+			!terminalSubscriptionStatus(status) {
+			h.Billing.logger.Printf("%s for sub %s after it ended (%s) — ignoring", ev.Type, obj.ID, cur.SubscriptionStatus)
+			return nil
+		}
+		// Allowlist: only a subscription Stripe still bills keeps Pro. past_due is
+		// deliberately NOT a drop: a card retry is still in flight.
+		plan := PlanFree
+		if ev.Type != "customer.subscription.deleted" && proSubscriptionStatus(status) {
+			plan = PlanPro
 		}
 		tp := TenantPlan{
 			Tenant:               tenant,
 			Plan:                 plan,
 			StripeCustomerID:     obj.Customer,
 			StripeSubscriptionID: obj.ID,
-			SubscriptionStatus:   obj.Status,
+			SubscriptionStatus:   status,
 			CancelAtPeriodEnd:    obj.CancelAtPeriodEnd,
 		}
 		// Top-level pre-2025-03-31, per line item after, so both are read.
@@ -422,5 +464,20 @@ func (h *billingAPI) applyStripeEvent(r *http.Request, ev stripeEvent) error {
 		return h.svc.Plans.SetPlan(r.Context(), tp)
 	default:
 		return nil
+	}
+}
+
+// Statuses Stripe can never leave: the subscription is over.
+func terminalSubscriptionStatus(s string) bool {
+	return s == "canceled" || s == "incomplete_expired"
+}
+
+// incomplete, unpaid and paused are not paying, so they are Free.
+func proSubscriptionStatus(s string) bool {
+	switch s {
+	case "active", "trialing", "past_due":
+		return true
+	default:
+		return false
 	}
 }

@@ -103,8 +103,18 @@ export function AdminSystemLog() {
     let stopped = false;
     const ctrl = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
+    // Every (re)connect opens with the last N lines again and the endpoint has
+    // no cursor to resume from, so a reconnect's first line replaces the buffer
+    // rather than appending the same tail a second time. Cleared on the first
+    // line, not on connect, so an outage doesn't blank the screen.
+    let reconnected = false;
 
     const onLine = (line: string) => {
+      if (reconnected) {
+        reconnected = false;
+        linesRef.current = [];
+        termRef.current?.clear();
+      }
       const buf = linesRef.current;
       buf.push(line);
       if (buf.length > MAX_BUFFER) buf.splice(0, buf.length - MAX_BUFFER);
@@ -115,7 +125,9 @@ export function AdminSystemLog() {
       if (!re || re.test(line)) term.writeln(line);
     };
 
+    let attempts = 0;
     const run = () => {
+      reconnected = attempts++ > 0;
       api
         .streamSystemLog(token, onLine, ctrl.signal)
         .then(() => {

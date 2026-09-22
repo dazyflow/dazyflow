@@ -66,7 +66,8 @@ import (
 )
 
 func main() {
-	rotateKeyB64 := flag.String("rotate-master-key", "", "rotate the encrypted-secret store's KEK: re-wrap every tenant DEK from DAZYFLOW_MASTER_KEY (the CURRENT key) to this new base64-encoded 32-byte key, print a report, and EXIT without serving. Re-runnable. After it succeeds, restart dzd with DAZYFLOW_MASTER_KEY set to the new key. No secret values are re-entered.")
+	rotateKeyB64 := flag.String("rotate-master-key", "", "DEPRECATED: the new key on the command line is visible to every user on the host (ps, /proc) and lands in shell history. Use --rotate-master-key-file instead.")
+	rotateKeyFile := flag.String("rotate-master-key-file", "", "rotate the encrypted-secret store's KEK: re-wrap every tenant DEK from DAZYFLOW_MASTER_KEY (the CURRENT key) to the new base64-encoded 32-byte key read from this file (\"-\" = stdin), print a report, and EXIT without serving. Re-runnable. After it succeeds, restart dzd with DAZYFLOW_MASTER_KEY set to the new key. No secret values are re-entered.")
 	importUsersFrom := flag.String("import-users-from-json", "", "one-time migration: import users from this JSON user file into the Postgres user store (requires DAZYFLOW_POSTGRES_DSN), then exit. Idempotent — accounts already in Postgres are skipped, never overwritten.")
 	verifyWorkspaces := flag.Bool("verify-workspace-migration", false, "compare the Postgres flow store against the git workspaces under DAZYFLOW_DATA_DIR — current content, published pointers, every revision and label — report any difference, and exit. Read-only. Run it before archiving the git directory.")
 	migrateWorkspaces := flag.Bool("migrate-workspaces-to-postgres", false, "one-time migration: copy every flow under DAZYFLOW_DATA_DIR/workspace — full revision history, labels and published pointers — into the Postgres flow store, then exit. Idempotent and re-runnable; the git directory is left untouched, so it stays the archive for flows deleted before the migration. Set DAZYFLOW_GRAPH_STORE=postgres afterwards.")
@@ -100,7 +101,7 @@ func main() {
 	dataDir := envStr("DAZYFLOW_DATA_DIR", "./.dazyflow")
 	workspaceDir := filepath.Join(dataDir, "workspace")
 	sandboxBase := filepath.Join(dataDir, "sandbox")
-	webOrigin := envStr("DAZYFLOW_WEB_ORIGIN", "http://localhost:5174")
+	webOrigin := envStr("DAZYFLOW_WEB_ORIGIN", "http://localhost:5173")
 	wildcardDomain := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(envStr("DAZYFLOW_WILDCARD_DOMAIN", ""))), ".")
 	if i := strings.Index(wildcardDomain, "://"); i >= 0 {
 		wildcardDomain = wildcardDomain[i+3:]
@@ -171,7 +172,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	traceShutdown, tracing, err := daemon.SetupTracing(ctx, "dzd", "dev")
+	traceShutdown, tracing, err := daemon.SetupTracing(ctx, "dzd", buildinfo.Version)
 	if err != nil {
 		log.Printf("tracing: %v (continuing without trace export)", err)
 	} else if tracing {
@@ -404,13 +405,16 @@ func main() {
 		log.Print("BYO secret managers enabled (schemes: vault://, aws://, gcp://) — tenants configure their own via /api/v1/secret-manager[/aws|/gcp]")
 	}
 
-	if *rotateKeyB64 != "" {
+	if *rotateKeyB64 != "" || *rotateKeyFile != "" {
 		if encryptedSecrets == nil {
-			log.Fatalf("--rotate-master-key requires DAZYFLOW_MASTER_KEY (the current key) to be set")
+			log.Fatalf("--rotate-master-key-file requires DAZYFLOW_MASTER_KEY (the current key) to be set")
 		}
-		newKey, err := base64.StdEncoding.DecodeString(*rotateKeyB64)
+		if *rotateKeyB64 != "" {
+			log.Print("WARNING: --rotate-master-key puts the new key on the command line, where other users on this host can read it; use --rotate-master-key-file (or \"-\" for stdin)")
+		}
+		newKey, err := readRotationKey(*rotateKeyB64, *rotateKeyFile, os.Stdin)
 		if err != nil {
-			log.Fatalf("--rotate-master-key: not valid base64: %v", err)
+			log.Fatalf("%v", err)
 		}
 		rotated, skipped, err := encryptedSecrets.RewrapDEKs(ctx, newKey)
 		if err != nil {
@@ -2222,4 +2226,35 @@ func ephemeralStore(ctx context.Context, pool *pgxpool.Pool, bgWg *sync.WaitGrou
 		}
 	}()
 	return store
+}
+
+// readRotationKey returns the new KEK for a master-key rotation, from the
+// deprecated inline flag value or from a file ("-" = stdin). Surrounding
+// whitespace is trimmed, so `openssl rand -base64 32 > key` works as-is.
+func readRotationKey(inline, file string, stdin stdio.Reader) ([]byte, error) {
+	if inline != "" && file != "" {
+		return nil, errors.New("--rotate-master-key and --rotate-master-key-file are mutually exclusive")
+	}
+	b64 := inline
+	if file != "" {
+		var raw []byte
+		var err error
+		if file == "-" {
+			raw, err = stdio.ReadAll(stdio.LimitReader(stdin, 4096))
+		} else {
+			raw, err = os.ReadFile(file)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("--rotate-master-key-file: %w", err)
+		}
+		b64 = strings.TrimSpace(string(raw))
+	}
+	if b64 == "" {
+		return nil, errors.New("--rotate-master-key-file: the new key is empty")
+	}
+	key, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return nil, fmt.Errorf("--rotate-master-key: not valid base64: %w", err)
+	}
+	return key, nil
 }

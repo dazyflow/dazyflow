@@ -97,6 +97,37 @@ func TestCall_SSRFGuardBlocksPrivate(t *testing.T) {
 	}
 }
 
+// Reasoning models reject max_tokens; they get max_completion_tokens.
+func TestCall_ReasoningModelsUseMaxCompletionTokens(t *testing.T) {
+	for model, wantKey := range map[string]string{
+		"o3-mini": "max_completion_tokens", "o1": "max_completion_tokens",
+		"gpt-5-mini": "max_completion_tokens", "gpt-4o": "max_tokens", "omni-x": "max_tokens",
+	} {
+		var gotBody map[string]any
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			b, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(b, &gotBody)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"choices": []any{map[string]any{"message": map[string]any{"content": "ok"}}},
+			})
+		}))
+		_, jerr := provider{}.Call(context.Background(), "k", llmtask.Request{
+			Model: model, MaxTokens: 50, UserText: "hi", BaseURL: srv.URL,
+		})
+		srv.Close()
+		if jerr != nil {
+			t.Fatalf("%s: %+v", model, jerr)
+		}
+		other := "max_tokens"
+		if wantKey == other {
+			other = "max_completion_tokens"
+		}
+		if gotBody[wantKey] != 50.0 || gotBody[other] != nil {
+			t.Errorf("%s: body = %v, want only %s", model, gotBody, wantKey)
+		}
+	}
+}
+
 func TestCall_MessagesPassthrough(t *testing.T) {
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

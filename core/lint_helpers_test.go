@@ -81,7 +81,11 @@ func TestSecretKeyNameLeaf_JudgesOnlyTheLeaf(t *testing.T) {
 	for in, want := range map[string]bool{
 		"headers.Authorization": true,
 		"api_key":               true,
-		"secrets[0]":            false,
+		"secrets[0]":            true, // a list item is judged by its enclosing key
+		"headers.api_keys[0]":   true,
+		"x.api_keys[0][1]":      true,
+		"items[0].name":         false,
+		"items[0].token":        true,
 		"token.value":           false, // the credential word is a PARENT, not the leaf
 		"secret.count":          false,
 		"password.length":       false,

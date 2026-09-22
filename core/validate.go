@@ -15,19 +15,34 @@ const maxReportedPerRule = 10
 func Validate(g Graph) error {
 	var errs []error
 
+	// Per-rule caps: the first maxReportedPerRule hits are itemised, the rest
+	// summarised as a count, so the report stays bounded at the edge ceiling.
+	// A rule is keyed by its summary format ("%d … in total").
+	var ruleOrder []string
+	ruleHits := map[string]int{}
+	report := func(summary string, err error) {
+		if ruleHits[summary] == 0 {
+			ruleOrder = append(ruleOrder, summary)
+		}
+		ruleHits[summary]++
+		if ruleHits[summary] <= maxReportedPerRule {
+			errs = append(errs, err)
+		}
+	}
+
 	ids := make(map[string]struct{}, len(g.Nodes))
 	for _, n := range g.Nodes {
 		if n.ID == "" {
-			errs = append(errs, errors.New("node with empty ID"))
+			report("%d nodes with empty ID in total", errors.New("node with empty ID"))
 			continue
 		}
 		if _, dup := ids[n.ID]; dup {
-			errs = append(errs, fmt.Errorf("duplicate node ID %q", n.ID))
+			report("%d duplicate node IDs in total", fmt.Errorf("duplicate node ID %q", n.ID))
 			continue
 		}
 		ids[n.ID] = struct{}{}
 		if n.Module == "" {
-			errs = append(errs, fmt.Errorf("node %q has empty module", n.ID))
+			report("%d nodes with empty module in total", fmt.Errorf("node %q has empty module", n.ID))
 		}
 	}
 
@@ -51,61 +66,56 @@ func Validate(g Graph) error {
 	// be entirely duplicates.
 	type edgeKey struct{ from, fromPort, to, toPort string }
 	seen := make(map[edgeKey]int, len(g.Edges))
-	dupes, waypointOverruns, waypoints := 0, 0, 0
+	waypoints := 0
+	waypointLimit := fmt.Sprint(MaxEdgeWaypoints)
 
 	for i, e := range g.Edges {
 		k := edgeKey{e.From, e.FromPort, e.To, e.ToPort}
 		if first, dup := seen[k]; dup {
-			dupes++
-			if dupes <= maxReportedPerRule {
-				errs = append(errs, fmt.Errorf("edge %d duplicates edge %d (%s.%s → %s.%s)",
-					i, first, e.From, e.FromPort, e.To, e.ToPort))
-			}
+			report("%d duplicate connections in total", fmt.Errorf("edge %d duplicates edge %d (%s.%s → %s.%s)",
+				i, first, e.From, e.FromPort, e.To, e.ToPort))
 		} else {
 			seen[k] = i
 		}
 		if len(e.Waypoints) > MaxEdgeWaypoints {
-			waypointOverruns++
-			if waypointOverruns <= maxReportedPerRule {
-				errs = append(errs, fmt.Errorf("edge %d has %d waypoints, limit is %d",
-					i, len(e.Waypoints), MaxEdgeWaypoints))
-			}
+			report("%d connections exceed the "+waypointLimit+"-waypoint limit in total",
+				fmt.Errorf("edge %d has %d waypoints, limit is %d", i, len(e.Waypoints), MaxEdgeWaypoints))
 		}
 		waypoints += len(e.Waypoints)
 		if _, ok := ids[e.From]; !ok {
-			errs = append(errs, fmt.Errorf("edge %d: unknown source node %q", i, e.From))
+			report("%d connections have an unknown source node in total",
+				fmt.Errorf("edge %d: unknown source node %q", i, e.From))
 		}
 		if _, ok := ids[e.To]; !ok {
-			errs = append(errs, fmt.Errorf("edge %d: unknown target node %q", i, e.To))
+			report("%d connections have an unknown target node in total",
+				fmt.Errorf("edge %d: unknown target node %q", i, e.To))
 		}
 		if e.FromPort == "" {
-			errs = append(errs, fmt.Errorf("edge %d: empty from_port", i))
+			report("%d connections have an empty from_port in total",
+				fmt.Errorf("edge %d: empty from_port", i))
 		}
 		if e.ToPort == "" {
-			errs = append(errs, fmt.Errorf("edge %d: empty to_port", i))
+			report("%d connections have an empty to_port in total",
+				fmt.Errorf("edge %d: empty to_port", i))
 		}
 		if e.From == e.To {
-			errs = append(errs, fmt.Errorf("edge %d: self-loop on node %q", i, e.From))
+			report("%d self-loops in total",
+				fmt.Errorf("edge %d: self-loop on node %q", i, e.From))
+		}
+		if !e.OnError.Valid() {
+			report("%d connections have an unknown on_error in total", fmt.Errorf(
+				"edge %d (%s→%s): unknown on_error %q (expected one of abort, skip, retry, fallback)",
+				i, e.From, e.To, string(e.OnError)))
 		}
 	}
-	if dupes > maxReportedPerRule {
-		errs = append(errs, fmt.Errorf("%d duplicate connections in total", dupes))
-	}
-	if waypointOverruns > maxReportedPerRule {
-		errs = append(errs, fmt.Errorf("%d connections exceed the %d-waypoint limit in total",
-			waypointOverruns, MaxEdgeWaypoints))
+	for _, summary := range ruleOrder {
+		if n := ruleHits[summary]; n > maxReportedPerRule {
+			errs = append(errs, fmt.Errorf(summary, n))
+		}
 	}
 	if waypoints > MaxGraphWaypoints {
 		errs = append(errs, fmt.Errorf("graph has %d connection waypoints in total, limit is %d",
 			waypoints, MaxGraphWaypoints))
-	}
-
-	for i, e := range g.Edges {
-		if !e.OnError.Valid() {
-			errs = append(errs, fmt.Errorf(
-				"edge %d (%s→%s): unknown on_error %q (expected one of abort, skip, retry, fallback)",
-				i, e.From, e.To, string(e.OnError)))
-		}
 	}
 
 	if _, err := TopologicalOrder(g); err != nil {

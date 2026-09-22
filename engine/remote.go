@@ -134,7 +134,7 @@ func listManifests(ctx context.Context, conn *grpc.ClientConn, client nodepb.Nod
 	}
 	var one nodepb.Manifest
 	if ferr := conn.Invoke(ctx, legacyGetManifestMethod, &nodepb.ListManifestsRequest{}, &one); ferr != nil {
-		return nil, err
+		return nil, ferr
 	}
 	return []*nodepb.Manifest{&one}, nil
 }
@@ -484,13 +484,19 @@ func refuseInlineOnlyFileRefs(m core.Manifest, input map[string]core.Ref) error 
 		if !port.InlineOnly {
 			continue
 		}
-		ref, ok := input[port.Port]
-		if !ok || ref.Ref == "" {
-			continue
+		// A variadic port arrives as one entry per edge, keyed "port[idx]".
+		refs := core.VariadicInputs(input, port.Port)
+		if ref, ok := input[port.Port]; ok {
+			refs = append([]core.Ref{ref}, refs...)
 		}
-		return fmt.Errorf(
-			"input %q is a file on the daemon (%s), and this step cannot read it — "+
-				"connect a value instead", port.Port, ref.Ref)
+		for _, ref := range refs {
+			if ref.Ref == "" {
+				continue
+			}
+			return fmt.Errorf(
+				"input %q is a file on the daemon (%s), and this step cannot read it — "+
+					"connect a value instead", port.Port, ref.Ref)
+		}
 	}
 	return nil
 }

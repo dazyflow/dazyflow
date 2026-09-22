@@ -4,6 +4,7 @@
 package caldav
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/drops/internal/reltime"
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 	"github.com/dazyflow/dazyflow/internal/caldavutil"
 )
 
@@ -48,6 +50,17 @@ func configFromJob(job core.Job) (caldavutil.Config, error) {
 		return caldavutil.Config{}, fmt.Errorf("no calendar connected — set one up on the Calendar integration page")
 	}
 	return caldavutil.ConfigFromConn(raw)
+}
+
+// egressBlocked applies the tenant's egress allowlist to the calendar server.
+// The client's dial guard stops private addresses, but only this check knows
+// the allowlist; redirects are re-checked by the client itself.
+func egressBlocked(ctx context.Context, job core.Job, cfg caldavutil.Config) *core.Result {
+	if err := hfnet.EgressAllowedFor(ctx, cfg.URL); err != nil {
+		res := params.Err(job, "egress_blocked", err.Error())
+		return &res
+	}
+	return nil
 }
 
 // location resolves the step's timezone. Empty means UTC, matching the

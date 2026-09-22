@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -94,10 +96,19 @@ func init() {
 	})
 }
 
+var ntfyTopicRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
 func executeNtfy(ctx context.Context, job core.Job, progress chan<- core.Progress) (core.Result, error) {
 	topic, _ := params.StringOpt(job.Params, "topic")
+	topic = strings.TrimSpace(topic)
 	if topic == "" {
 		return params.Err(job, "bad_param", "'topic' is required"), nil
+	}
+	// The topic becomes a path segment on the server: a "/" or "?" in it would
+	// post somewhere else entirely. ntfy's own rule is [-_A-Za-z0-9]{1,64}.
+	if !ntfyTopicRe.MatchString(topic) {
+		return params.Err(job, "bad_param", fmt.Sprintf(
+			"topic %q isn't valid — use up to 64 letters, numbers, dashes or underscores, no spaces or slashes", params.Truncate(topic, 80))), nil
 	}
 	server := strings.TrimRight(params.StringDefault(job.Params, "server", "https://ntfy.sh"), "/")
 
@@ -136,7 +147,7 @@ func executeNtfy(ctx context.Context, job core.Job, progress chan<- core.Progres
 			origBytes, ntfyMaxMessage))
 	}
 
-	url := server + "/" + topic
+	url := server + "/" + neturl.PathEscape(topic)
 	if err := hfnet.EgressAllowedFor(ctx, url); err != nil {
 		return params.Err(job, "egress_blocked", err.Error()), nil
 	}

@@ -7,7 +7,7 @@ package daemon
 // the window returns the original response verbatim, so an agent that retries a
 // /run because a blip swallowed the first response does not fire it twice.
 //
-// In-memory, keyed by (subject, route, key), lost on restart — the same
+// In-memory, keyed by (subject, route, path, key), lost on restart — the same
 // best-effort-within-a-window semantics Stripe documents. Entries are marked
 // stale on read rather than swept, so there is no janitor goroutine.
 
@@ -142,7 +142,10 @@ func (h *idempotencyAPI) idempotencyMiddleware(routePattern string, next func(rw
 				"Idempotency-Key must be <= 128 chars")
 			return
 		}
-		cacheKey := p.Subject + "|" + r.Method + "|" + routePattern + "|" + key
+		// The actual path, not only the pattern: /flows/{id}/enable for two
+		// different flows is two different requests, and one invocation that
+		// touches several resources under one key must not collide with itself.
+		cacheKey := p.Subject + "|" + r.Method + "|" + routePattern + "|" + r.URL.Path + "|" + key
 		reqHash, err := readBodyHash(r)
 		if err != nil {
 			writeAPIError(rw, http.StatusBadRequest, "bad_request", "could not read request body")

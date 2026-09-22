@@ -37,21 +37,37 @@ var templatePattern = regexp.MustCompile(`\$\{[a-z0-9_-]+\.[^}]*\}`)
 
 var secretKeyName = regexp.MustCompile(`(?i)(token|secret|password|passwd|api[_-]?key|apikey|auth|authorization|credential|private[_-]?key|access[_-]?key|client[_-]?secret)`)
 
-var knownSecretValue = regexp.MustCompile(
-	`(sk_live_[0-9A-Za-z]{8,}` + // Stripe live
-		`|sk_test_[0-9A-Za-z]{8,}` + // Stripe test
-		`|gh[pousr]_[0-9A-Za-z]{20,}` + // GitHub tokens (ghp_, gho_, ghu_, ghs_, ghr_)
-		`|github_pat_[0-9A-Za-z_]{20,}` + // GitHub fine-grained PAT
-		`|xox[baprs]-[0-9A-Za-z-]{10,}` + // Slack tokens
-		`|AKIA[0-9A-Z]{16}` + // AWS access key id
-		`|AIza[0-9A-Za-z_\-]{30,}` + // Google API key
-		`|-----BEGIN [A-Z ]*PRIVATE KEY-----` + // PEM private key
-		`)`)
+// Each entry is one alternative of knownSecretValue. Every entry MUST contain one
+// of secretValueMarkers as a mandatory literal (TestKnownSecretPatterns_EachHasMarker).
+var knownSecretPatterns = []string{
+	`sk_live_[0-9A-Za-z]{8,}`,                                          // Stripe live
+	`sk_test_[0-9A-Za-z]{8,}`,                                          // Stripe test
+	`gh[pousr]_[0-9A-Za-z]{20,}`,                                       // GitHub tokens (ghp_, gho_, ghu_, ghs_, ghr_)
+	`github_pat_[0-9A-Za-z_]{20,}`,                                     // GitHub fine-grained PAT
+	`xox[baprs]-[0-9A-Za-z-]{10,}`,                                     // Slack tokens
+	`AKIA[0-9A-Z]{16}`,                                                 // AWS access key id
+	`AIza[0-9A-Za-z_\-]{30,}`,                                          // Google API key
+	`\bsk-(?:ant|proj|svcacct|admin)-[0-9A-Za-z_\-]{20,}`,              // Anthropic / OpenAI project keys
+	`\bsk-[0-9A-Za-z]{40,}`,                                            // OpenAI legacy key (48 alnum); \b keeps "task-…" out
+	`eyJ[0-9A-Za-z_\-]{8,}\.eyJ[0-9A-Za-z_\-]{8,}\.[0-9A-Za-z_\-]{8,}`, // signed JWT
+	// Only with its variable name: a bare 40-char base64 run is far too common.
+	// \\? admits the JSON-escaped quote the support-bundle scrub sees.
+	`(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY)\\?["']?\s*[=:]\s*\\?["']?[0-9A-Za-z/+]{40}`,
+	// The whole PEM block, header through END, never crossing an unescaped quote
+	// (the scrub runs on marshalled JSON). With no END, redact to the end of the
+	// string rather than leave the key body behind.
+	`-----BEGIN [A-Z ]*PRIVATE KEY-----(?:(?:[^"\\]|\\[\s\S])*?-----END [A-Z ]*PRIVATE KEY-----|(?:[^"\\]|\\[\s\S])*)`,
+}
+
+var knownSecretValue = regexp.MustCompile("(" + strings.Join(knownSecretPatterns, "|") + ")")
 
 // A substring every alternative of knownSecretValue must contain, so a string
 // holding none cannot match — a sound pre-filter, not a heuristic. Needed because
 // this lint runs on every param string on every autosave: 32.7µs → 1.7µs.
-var secretValueMarkers = [...]string{"sk_", "gh", "xox", "AKIA", "AIza", "-----BEGIN "}
+var secretValueMarkers = [...]string{
+	"sk_", "gh", "github_pat_", "xox", "AKIA", "AIza", "sk-", "eyJ",
+	"aws_secret_access_key", "AWS_SECRET_ACCESS_KEY", "-----BEGIN ",
+}
 
 const minKnownSecretLen = 15
 
@@ -417,22 +433,21 @@ func rootParam(keyPath string) string {
 	return keyPath
 }
 
+// A list item is judged by its enclosing key, as redactValue does: the leaf of
+// "api_keys[0]" is "api_keys", not "".
 func secretKeyNameLeaf(keyPath string) bool {
 	leaf := keyPath
-	if i := lastSep(keyPath); i >= 0 {
-		leaf = keyPath[i+1:]
+	for strings.HasSuffix(leaf, "]") {
+		i := strings.LastIndexByte(leaf, '[')
+		if i < 0 {
+			break
+		}
+		leaf = leaf[:i]
+	}
+	if i := strings.LastIndexByte(leaf, '.'); i >= 0 {
+		leaf = leaf[i+1:]
 	}
 	return secretKeyName.MatchString(leaf)
-}
-
-func lastSep(s string) int {
-	idx := -1
-	for i := 0; i < len(s); i++ {
-		if s[i] == '.' || s[i] == ']' {
-			idx = i
-		}
-	}
-	return idx
 }
 
 func join(prefix, key string) string {

@@ -109,6 +109,8 @@ func ReadRange(ctx context.Context, job core.Job) (headers []string, rows []map[
 	rng := params.StringDefault(job.Params, "range", "Sheet1")
 	if cells := strings.TrimSpace(params.StringDefault(job.Params, "cells", "")); cells != "" {
 		rng = quoteSheetTab(rng) + "!" + cells
+	} else {
+		rng = sheetRangeRef(rng)
 	}
 
 	q := url.Values{}

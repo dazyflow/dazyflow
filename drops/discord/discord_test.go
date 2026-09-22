@@ -109,6 +109,11 @@ func TestSend_Validation(t *testing.T) {
 	if res.Status != core.StatusError || res.Error.Code != "bad_param" {
 		t.Errorf("too-long res = %+v", res)
 	}
+	// The limit is characters: 2000 "å" (4000 bytes) is allowed.
+	res = f.run(t, map[string]any{"content": strings.Repeat("å", maxContentLen)}, nil)
+	if res.Status != core.StatusOK {
+		t.Errorf("2000 multi-byte characters rejected: %+v", res.Error)
+	}
 }
 
 func TestSend_MissingWebhookIsFriendly(t *testing.T) {

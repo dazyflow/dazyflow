@@ -115,6 +115,97 @@ func TestSubgraph_EndToEnd_OutputProjection(t *testing.T) {
 	}
 }
 
+// A child whose every step is seeded by the parent finishes at submit, with no
+// step left to complete it. That path used to finalize the child without
+// resuming the parent node parked on it, so the parent waited for ever.
+func TestSubgraph_FullySeededChildResumesParent(t *testing.T) {
+	t.Parallel()
+	h := newSubgraphHarness(t)
+
+	child := core.Graph{
+		ID: "seededchild", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "start", Module: "delay", Params: map[string]any{"ms": 5}}},
+	}
+	if _, err := h.ws.Save(child, "u"); err != nil {
+		t.Fatalf("save child: %v", err)
+	}
+	parent := core.Graph{
+		ID: "parent-seeded", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{
+			{ID: "seed", Module: "delay", Params: map[string]any{"ms": 5}},
+			{ID: "call", Module: "subgraph", Params: map[string]any{
+				"graph_id":   "seededchild",
+				"input_map":  map[string]any{"in": "start"},
+				"output_map": map[string]any{"out": map[string]any{"node": "start", "port": "in"}},
+			}},
+		},
+		Edges: []core.Edge{{From: "seed", FromPort: "pass", To: "call", ToPort: "in"}},
+	}
+	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, parent)
+	if err != nil {
+		t.Fatalf("Submit parent: %v", err)
+	}
+	terminal := waitForTerminalEvent(t, h.bus, h.jobs, graphRunID, 8*time.Second)
+	if terminal.Status != core.JobStatusSucceeded {
+		t.Fatalf("parent status = %q, want succeeded (err=%+v)", terminal.Status, terminal.Error)
+	}
+}
+
+// Cancelling the parent stops the child run it is waiting on.
+func TestSubgraph_ParentCancelCascadesToChild(t *testing.T) {
+	t.Parallel()
+	h := newSubgraphHarness(t)
+
+	child := core.Graph{
+		ID: "slowchild", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{
+			{ID: "wait", Module: "delay", Params: map[string]any{"ms": 200}},
+			{ID: "then", Module: "delay", Params: map[string]any{"ms": 1}},
+		},
+		Edges: []core.Edge{{From: "wait", FromPort: "pass", To: "then", ToPort: "pass"}},
+	}
+	if _, err := h.ws.Save(child, "u"); err != nil {
+		t.Fatalf("save child: %v", err)
+	}
+	parent := core.Graph{
+		ID: "parent-cancel", Tenant: "t", Workspace: "ws",
+		Nodes: []core.Node{{ID: "call", Module: "subgraph", Params: map[string]any{"graph_id": "slowchild"}}},
+	}
+	graphRunID, err := h.svc.SubmitGraph(t.Context(), h.principal, parent)
+	if err != nil {
+		t.Fatalf("Submit parent: %v", err)
+	}
+
+	var childRun string
+	deadline := time.Now().Add(5 * time.Second)
+	for childRun == "" && time.Now().Before(deadline) {
+		runs, _ := h.jobs.ListGraphRuns(t.Context(), core.ListGraphRunsOpts{Tenant: "t", GraphID: "slowchild"})
+		if len(runs) > 0 {
+			childRun = runs[0].ID
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if childRun == "" {
+		t.Fatal("child run never started")
+	}
+	if err := h.svc.CancelGraphRun(t.Context(), h.principal, graphRunID, ""); err != nil {
+		t.Fatalf("cancel parent: %v", err)
+	}
+	rec, err := h.jobs.Get(t.Context(), childRun)
+	if err != nil {
+		t.Fatalf("get child: %v", err)
+	}
+	if rec.Status != core.JobStatusCancelled {
+		t.Fatalf("child run is %s after its parent was cancelled, want cancelled", rec.Status)
+	}
+	// And its second step never runs.
+	time.Sleep(400 * time.Millisecond)
+	if then, err := h.jobs.Get(t.Context(), daemon.NodeJobID(childRun, "then")); err == nil &&
+		then.Status == core.JobStatusSucceeded {
+		t.Error("the cancelled child ran its next step")
+	}
+}
+
 func TestSubgraph_ChildFailurePropagates(t *testing.T) {
 	t.Parallel()
 	h := newSubgraphHarness(t)

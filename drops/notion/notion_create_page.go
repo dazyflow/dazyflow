@@ -6,6 +6,8 @@ package notion
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -77,6 +79,9 @@ func init() {
 	})
 }
 
+// notionMaxChildren is Notion's per-request block limit.
+const notionMaxChildren = 100
+
 func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
 	dbID, _ := params.StringOpt(job.Params, "parent_database_id")
 	pgID, _ := params.StringOpt(job.Params, "parent_page_id")
@@ -113,8 +118,14 @@ func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	} else if c := params.StringDefault(job.Params, "content", ""); strings.TrimSpace(c) != "" {
 		children = append(children, paragraphsToBlocks(c)...)
 	}
-	if len(children) > 0 {
-		payload["children"] = children
+	// Notion takes at most 100 blocks per request; the rest are appended to the
+	// new page below, in order, rather than rejected or cut off.
+	first, rest := children, []any(nil)
+	if len(first) > notionMaxChildren {
+		first, rest = children[:notionMaxChildren], children[notionMaxChildren:]
+	}
+	if len(first) > 0 {
+		payload["children"] = first
 	}
 	raw, _ := json.Marshal(payload)
 
@@ -133,6 +144,21 @@ func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	_ = json.Unmarshal(body, &page)
 	var meta map[string]any
 	_ = json.Unmarshal(body, &meta)
+
+	for len(rest) > 0 {
+		batch := rest[:min(len(rest), notionMaxChildren)]
+		rest = rest[len(batch):]
+		b, _ := json.Marshal(map[string]any{"children": batch})
+		st, rb, aerr := notionDo(ctx, "PATCH", currentHTTPBase()+"/blocks/"+url.PathEscape(page.ID)+"/children", token, b, params.IntDefault(job.Params, "timeout_ms", 15000))
+		if aerr == nil && (st < 200 || st >= 300) {
+			aerr = fmt.Errorf("%s", notionError(st, rb))
+		}
+		if aerr != nil {
+			// The page exists; say where, so a retry doesn't just make another.
+			return params.Err(job, "notion_error", fmt.Sprintf(
+				"page created at %s, but adding the rest of its body failed: %v", page.URL, aerr)), nil
+		}
+	}
 	return core.Result{
 		JobID:  job.ID,
 		Status: core.StatusOK,

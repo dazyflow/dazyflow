@@ -109,6 +109,13 @@ type OwnedCompleter interface {
 	CompleteOwned(ctx context.Context, jobID, worker string, status JobStatus, result *Result) error
 }
 
+// OwnedRequeuer is Requeue fenced on lease ownership: ErrConflict unless worker
+// still holds the record. Requeue (fenced or not) clears the holder, so a stale
+// worker's CompleteOwned cannot finish the requeued record.
+type OwnedRequeuer interface {
+	RequeueOwned(ctx context.Context, jobID, worker string, availableAt time.Time) error
+}
+
 type NodeOutcome struct {
 	Status JobStatus
 	Result *Result

@@ -136,7 +136,7 @@ func (a *SessionAuthenticator) Authenticate(ctx context.Context, credential stri
 		Subject:   sess.Subject,
 		Tenant:    sess.Tenant,
 		Workspace: sess.Workspace,
-		Roles:     sess.Roles,
+		Roles:     core.UpgradeLegacyRoles(sess.Roles),
 	}, nil
 }
 

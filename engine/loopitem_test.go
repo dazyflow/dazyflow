@@ -70,6 +70,8 @@ func TestStringifyItemValue_Cov(t *testing.T) {
 		{name: "float", in: float64(3.5), want: "3.5"},
 		{name: "int", in: 7, want: "7"},
 		{name: "int64", in: int64(9), want: "9"},
+		{name: "large integral float", in: float64(1234567), want: "1234567"},
+		{name: "uint", in: uint(3), want: "3"},
 		{name: "map json", in: map[string]any{"a": 1}, want: `{"a":1}`},
 		{name: "slice json", in: []any{1, 2}, want: `[1,2]`},
 	}

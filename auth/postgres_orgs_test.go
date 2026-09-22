@@ -141,6 +141,9 @@ func TestPgInvitationStore_RoundTrip(t *testing.T) {
 	if err := store.MarkAccepted(ctx, "inv_abc", acceptedAt); err != nil {
 		t.Fatalf("MarkAccepted: %v", err)
 	}
+	if err := store.MarkAccepted(ctx, "inv_abc", acceptedAt); !errors.Is(err, ErrInvitationNotPending) {
+		t.Errorf("second MarkAccepted = %v, want ErrInvitationNotPending", err)
+	}
 	got, _ = store.GetByToken(ctx, "inv_abc")
 	if got.AcceptedAt == nil || !got.AcceptedAt.Equal(acceptedAt) {
 		t.Errorf("accepted_at = %v, want %v", got.AcceptedAt, acceptedAt)

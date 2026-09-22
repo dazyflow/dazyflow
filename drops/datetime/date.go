@@ -123,17 +123,6 @@ func init() {
 }
 
 func executeDate(_ context.Context, job core.Job, _ chan<- core.Progress) (core.Result, error) {
-	base := time.Now().UTC()
-	if ref, ok := job.Input["in"]; ok && ref.Inline != nil {
-		if !isEmptyInput(ref.Inline) {
-			t, err := parseTime(ref.Inline)
-			if err != nil {
-				return params.Err(job, "bad_input", err.Error()), nil
-			}
-			base = t
-		}
-	}
-
 	// Timezone first, because everything below is about the CALENDAR — which
 	// day it is, which weekday that day falls on, what the clock reads — and
 	// all three are answers only a timezone can give. Late on a Monday
@@ -142,6 +131,19 @@ func executeDate(_ context.Context, job core.Job, _ chan<- core.Progress) (core.
 	loc, err := loadLocation(params.StringDefault(job.Params, "tz", ""))
 	if err != nil {
 		return params.Err(job, "bad_param", err.Error()), nil
+	}
+
+	// A timestamp written without a zone ("2026-06-16 09:00") is read in that
+	// same timezone: nine o'clock where the step is set, not nine UTC.
+	base := time.Now().UTC()
+	if ref, ok := job.Input["in"]; ok && ref.Inline != nil {
+		if !isEmptyInput(ref.Inline) {
+			t, err := parseTime(ref.Inline, loc)
+			if err != nil {
+				return params.Err(job, "bad_input", err.Error()), nil
+			}
+			base = t
+		}
 	}
 	t := base.In(loc)
 
@@ -196,7 +198,7 @@ func isEmptyInput(inline any) bool {
 	return ok && strings.TrimSpace(s) == ""
 }
 
-func parseTime(inline any) (time.Time, error) {
+func parseTime(inline any, loc *time.Location) (time.Time, error) {
 	switch v := inline.(type) {
 	case float64:
 		return time.Unix(int64(v), 0).UTC(), nil
@@ -209,7 +211,7 @@ func parseTime(inline any) (time.Time, error) {
 			return time.Unix(n, 0).UTC(), nil
 		}
 	case string:
-		return parseTimeString(v)
+		return parseTimeString(v, loc)
 	}
 	return time.Time{}, fmt.Errorf("can't read a date from %T", inline)
 }
@@ -230,7 +232,7 @@ var inputLayouts = []string{
 	time.Kitchen,
 }
 
-func parseTimeString(s string) (time.Time, error) {
+func parseTimeString(s string, loc *time.Location) (time.Time, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return time.Time{}, fmt.Errorf("empty date string")
@@ -239,7 +241,8 @@ func parseTimeString(s string) (time.Time, error) {
 		return time.Unix(n, 0).UTC(), nil
 	}
 	for _, layout := range inputLayouts {
-		if t, err := time.Parse(layout, s); err == nil {
+		// Layouts that carry a zone ignore loc; the zoneless ones read in it.
+		if t, err := time.ParseInLocation(layout, s, loc); err == nil {
 			return t.UTC(), nil
 		}
 	}

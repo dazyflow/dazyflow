@@ -38,6 +38,41 @@ from pathlib import Path
 
 VERSION = "0.2.1"
 
+# Where the installer hands over the registration token: an environment
+# variable rather than --token, because argv is readable by every user (ps).
+TOKEN_ENV = "DAZYFLOW_RUNNER_TOKEN"
+
+# Environment a step may NOT set on a runner with an allow-list. The list
+# restricts which program starts; these names change what a permitted program
+# then does — run code before main (LD_PRELOAD, NODE_OPTIONS, PYTHONSTARTUP),
+# source a file (BASH_ENV, ENV), define functions (BASH_FUNC_*), trace commands
+# through an arbitrary expansion (PS4 with SHELLOPTS=xtrace), or pick which
+# binary a bare name means (PATH). Without an allow-list the step can run
+# anything anyway, so nothing is filtered there. Compared upper-cased, since
+# Windows environment names are case-insensitive.
+DANGEROUS_ENV_NAMES = frozenset({
+    "PATH", "PATHEXT", "COMSPEC", "IFS", "CDPATH", "GLOBIGNORE",
+    "ENV", "BASH_ENV", "SHELLOPTS", "BASHOPTS", "PS4", "PROMPT_COMMAND",
+    "NODE_OPTIONS", "NODE_PATH",
+    "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONINSPECT", "PYTHONUSERBASE",
+    "PERL5LIB", "PERL5OPT", "PERLLIB", "RUBYLIB", "RUBYOPT",
+    "JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS", "CLASSPATH",
+    "GIT_SSH", "GIT_SSH_COMMAND", "GIT_EXEC_PATH", "GIT_ASKPASS", "SSH_ASKPASS",
+    "GIT_PROXY_COMMAND", "GIT_EXTERNAL_DIFF", "GIT_PAGER", "PAGER", "EDITOR", "VISUAL",
+    "PSMODULEPATH",
+})
+DANGEROUS_ENV_PREFIXES = ("LD_", "DYLD_", "BASH_FUNC_", "GIT_CONFIG")
+
+
+def dangerous_env(names):
+    """The names in `names` a step may not set on an allow-listed runner."""
+    bad = []
+    for name in names:
+        up = str(name).upper()
+        if up in DANGEROUS_ENV_NAMES or up.startswith(DANGEROUS_ENV_PREFIXES):
+            bad.append(name)
+    return sorted(bad)
+
 # How long to wait after an empty poll.
 #
 # Five seconds, against the server's 90-second "online" window: a runner has to
@@ -257,7 +292,15 @@ def load_or_register(path, url, token, name, labels):
                 f"(delete {path} to register again)"
             )
         if url and url.rstrip("/") != cfg.get("url"):
-            cfg["url"] = url.rstrip("/")
+            # The saved credential was issued by the server it was registered
+            # against. Quietly re-pointing it would hand that long-lived secret
+            # to whatever the new URL is — a typo, a stale env var, someone
+            # else's server. A different server means a new registration.
+            raise SystemExit(
+                f'This machine is registered against {cfg.get("url")}, not {url.rstrip("/")}.\n'
+                "Its credential is not sent anywhere else. To move it, delete "
+                f"{path} and register again with a token from the new server."
+            )
         return cfg
     if not url or not token:
         raise SystemExit(
@@ -479,6 +522,31 @@ def _pump(stream, sink, progress):
             pass
 
 
+def _kill_tree(proc):
+    """Stop the command and everything it started.
+
+    The command runs in its own process group (see Agent._run), so the group
+    is the whole tree. Falls back to the direct child if the group is already
+    gone or cannot be signalled.
+    """
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=30,
+            )
+        else:
+            os.killpg(proc.pid, signal.SIGKILL)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        proc.kill()
+    except OSError:
+        pass
+
+
 def _feed(stdin, text):
     """Write the wired-in value to the command, in its own thread.
 
@@ -581,9 +649,37 @@ class Agent:
     def _run(self, task, command, use_shell):
         timeout = int(task.get("timeout_seconds") or 0) or DEFAULT_TIMEOUT_SECONDS
         env = dict(os.environ)
-        # Not scrubbed: unlike a plugin inside the daemon, this process is the
-        # org's own machine and its environment is theirs to arrange.
-        env.update(task.get("env") or {})
+        # The runner's own environment is not scrubbed: unlike a plugin inside
+        # the daemon, this process is the org's own machine and its environment
+        # is theirs to arrange. What the TASK sets is another matter once an
+        # allow-list is in force — see DANGEROUS_ENV_NAMES.
+        task_env = task.get("env") or {}
+        if self.allowed:
+            bad = dangerous_env(task_env)
+            if bad:
+                return {"error": (
+                    "this runner has an allow-list, so a step may not set "
+                    f"{', '.join(bad)}: these change what an allowed program "
+                    "does, or which program runs. Set them on the runner "
+                    "machine itself if they are needed."
+                )}
+        env.update(task_env)
+
+        if self.allowed and not use_shell:
+            # Resolved against the RUNNER's PATH, here, rather than left to the
+            # exec, which searches the PATH of the environment it is given.
+            exe = shutil.which(command[0], path=os.environ.get("PATH"))
+            if exe:
+                command = [exe] + list(command[1:])
+
+        # Its own process group (session on POSIX), so a timeout can stop
+        # everything the command started, not only the direct child: killing
+        # just `sh` would leave its `sleep`, or a script's background worker,
+        # running and holding the output pipes open.
+        if os.name == "nt":
+            group = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        else:
+            group = {"start_new_session": True}
 
         try:
             proc = subprocess.Popen(
@@ -592,12 +688,16 @@ class Agent:
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                # UTF-8 explicitly, not the locale's encoding (cp1252 on a
+                # Windows runner, ASCII under a bare C locale), and
                 # errors="replace" so a command emitting bytes that are not
                 # UTF-8 comes back mangled rather than raising out of the
                 # agent and leaving the task unreported.
                 text=True,
+                encoding="utf-8",
                 errors="replace",
                 env=env,
+                **group,
             )
         except OSError as e:
             # Could not start at all — a missing interpreter, a permission
@@ -625,7 +725,7 @@ class Agent:
             proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             timed_out = True
-            proc.kill()
+            _kill_tree(proc)
             proc.wait()
         finally:
             stop_beat()
@@ -783,12 +883,6 @@ class Agent:
             time.sleep(0.2)
 
 
-def _text(v):
-    if v is None:
-        return ""
-    return v if isinstance(v, str) else v.decode("utf-8", "replace")
-
-
 # ---------------------------------------------------------------------------
 
 
@@ -804,7 +898,12 @@ def build_parser():
         description="Run Dazyflow steps on this machine.",
     )
     p.add_argument("--url", default="", help="Dazyflow server URL, e.g. https://dazyflow.example.com")
-    p.add_argument("--token", default="", help="registration token from Admin → Runners (first run only)")
+    p.add_argument(
+        "--token",
+        default="",
+        help="registration token from Admin → Runners (first run only). "
+        f"Prefer setting {TOKEN_ENV}: a command line is visible to every user in ps",
+    )
     p.add_argument("--name", default=default_name(), help="name for this machine, as it appears in Dazyflow")
     # --tags is the name the web UI and the docs use; --labels is what the flag
     # was called first and what every existing install script passes, so both
@@ -833,8 +932,12 @@ def main(argv=None):
 
     labels = [x.strip() for x in args.labels.split(",") if x.strip()]
     allowed = [x.strip() for x in args.allow.split(",") if x.strip()]
+    # Popped, not read: every step inherits this process's environment, and a
+    # registration token has no business in a flow's script.
+    env_token = os.environ.pop(TOKEN_ENV, "")
+    token = args.token or env_token
 
-    cfg = load_or_register(args.config, args.url, args.token, args.name, labels)
+    cfg = load_or_register(args.config, args.url, token, args.name, labels)
     log(f'registered as "{cfg["name"]}" against {cfg["url"]}')
 
     if args.register_only:

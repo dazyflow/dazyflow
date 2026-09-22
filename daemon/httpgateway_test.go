@@ -954,7 +954,7 @@ func TestHTTPGateway_AdminListAPIKeys_RequiresTenantAdmin(t *testing.T) {
 func TestHTTPGateway_AdminIssueAPIKey_ReturnsSecretOnce(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
+	rw := teamAdminDo(t, h, "POST", "/api/v1/admin/api-keys", map[string]any{
 		"subject": "bot-1",
 		"roles": []map[string]any{
 			{"name": "runner", "permissions": []string{"graph:run"}},
@@ -978,13 +978,13 @@ func TestHTTPGateway_AdminIssueAPIKey_ReturnsSecretOnce(t *testing.T) {
 func TestHTTPGateway_AdminIssueAPIKey_RejectsMissingFields(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
+	rw := teamAdminDo(t, h, "POST", "/api/v1/admin/api-keys", map[string]any{
 		"roles": []map[string]any{{"name": "r", "permissions": []string{"graph:run"}}},
 	})
 	if rw.Code != http.StatusBadRequest {
 		t.Errorf("missing-subject code = %d, want 400", rw.Code)
 	}
-	rw = h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
+	rw = teamAdminDo(t, h, "POST", "/api/v1/admin/api-keys", map[string]any{
 		"subject": "x",
 	})
 	if rw.Code != http.StatusBadRequest {
@@ -995,7 +995,7 @@ func TestHTTPGateway_AdminIssueAPIKey_RejectsMissingFields(t *testing.T) {
 func TestHTTPGateway_AdminRevokeAPIKey(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
+	rw := teamAdminDo(t, h, "POST", "/api/v1/admin/api-keys", map[string]any{
 		"id":      "doomed",
 		"subject": "doomed",
 		"roles":   []map[string]any{{"name": "r", "permissions": []string{"graph:run"}}},
@@ -1036,7 +1036,7 @@ func TestHTTPGateway_AdminListUsersGroupsBySubject(t *testing.T) {
 			"roles":   []map[string]any{{"name": "ops", "permissions": []string{"organization:admin"}}},
 		},
 	} {
-		if rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", params); rw.Code != http.StatusCreated {
+		if rw := teamAdminDo(t, h, "POST", "/api/v1/admin/api-keys", params); rw.Code != http.StatusCreated {
 			t.Fatalf("issue %v: %d %s", params, rw.Code, rw.Body.String())
 		}
 	}
@@ -1078,7 +1078,7 @@ func TestHTTPGateway_AdminListUsersGroupsBySubject(t *testing.T) {
 func TestHTTPGateway_AdminListUsers_CountsRevokedSeparately(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)
-	rw := h.adminDo(t, "POST", "/api/v1/admin/api-keys", map[string]any{
+	rw := teamAdminDo(t, h, "POST", "/api/v1/admin/api-keys", map[string]any{
 		"id":      "kill-me",
 		"subject": "doomed",
 		"roles":   []map[string]any{{"name": "r", "permissions": []string{"graph:run"}}},

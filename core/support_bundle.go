@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -254,14 +255,16 @@ func redactEnv(env map[string]string, mode RedactMode) map[string]any {
 	return out
 }
 
-// A string holding a ${scheme.path} template is a REFERENCE, kept verbatim: its
-// diagnostic value is naming what it points at, and the name is not the secret.
+// A string made up ONLY of ${scheme.path} templates is a REFERENCE, kept verbatim:
+// its diagnostic value is naming what it points at, and the name is not the secret.
+// A template mixed with literal text ("Bearer sk-live-… ${x.y}") is not exempt —
+// the literal part may be the secret — and takes the normal path.
 // keyLeaf is threaded into slice elements, so an array under a secret-named key is
 // redacted element-wise.
 func redactValue(keyLeaf string, v any, mode RedactMode) any {
 	switch t := v.(type) {
 	case string:
-		if templatePattern.MatchString(t) {
+		if isPureTemplate(t) {
 			return t // reference template — keep verbatim
 		}
 		if mode == RedactStructurePlusValues &&
@@ -293,6 +296,11 @@ func redactValue(keyLeaf string, v any, mode RedactMode) any {
 		}
 		return map[string]any{"__redacted": shapeOf(t)}
 	}
+}
+
+func isPureTemplate(s string) bool {
+	return templatePattern.MatchString(s) &&
+		strings.TrimSpace(templatePattern.ReplaceAllString(s, "")) == ""
 }
 
 func shapeOf(v any) string {

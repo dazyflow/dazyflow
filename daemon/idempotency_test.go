@@ -79,6 +79,26 @@ func TestIdempotency_DistinctKeysAndRoutesDoNotCollide(t *testing.T) {
 	}
 }
 
+// Same route pattern, same key, different resource: two requests, not a replay.
+func TestIdempotency_DistinctPathsUnderOnePatternDoNotCollide(t *testing.T) {
+	t.Parallel()
+	h := newIdemGateway()
+	var calls int32
+	wrapped := h.idempotencyAPI().idempotencyMiddleware("/flows/{id}/enable", countingHandler(&calls))
+	for _, path := range []string{"/flows/a/enable", "/flows/b/enable"} {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req.Header.Set(idempotencyHeader, "k1")
+		rw := httptest.NewRecorder()
+		wrapped(rw, req, core.Principal{Subject: "alice"})
+		if rw.Header().Get("Idempotency-Replay") == "true" {
+			t.Errorf("%s replayed another path's response", path)
+		}
+	}
+	if got := atomic.LoadInt32(&calls); got != 2 {
+		t.Errorf("handler ran %d times, want 2", got)
+	}
+}
+
 func TestIdempotency_NonSuccessIsNotCached(t *testing.T) {
 	t.Parallel()
 	h := newIdemGateway()

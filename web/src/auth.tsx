@@ -237,18 +237,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [token, me]);
 
   const setActiveTenant = (t: string, opts?: { reload?: boolean }) => {
-    setActiveTenantState(t);
-    if (t) localStorage.setItem(TENANT_STORAGE_KEY, t);
-    else localStorage.removeItem(TENANT_STORAGE_KEY);
+    const commit = () => {
+      setActiveTenantState(t);
+      if (t) localStorage.setItem(TENANT_STORAGE_KEY, t);
+      else localStorage.removeItem(TENANT_STORAGE_KEY);
+    };
     const deepReload = () => {
       if (opts?.reload) window.location.assign("/");
     };
-    // Re-derived from whoami, not carried over from the previous org.
+    // Re-derived from whoami, not carried over from the previous org. The new org
+    // is only adopted once the server has re-scoped the session: committing first
+    // would leave the UI (and the next page load) in an org the session isn't in.
     if (token && t && me?.subject?.includes("@")) {
       setError(null);
       void api
         .switchOrg(token, t)
-        .then(() => api.whoami(token))
+        .then(() => {
+          commit();
+          return api.whoami(token);
+        })
         .then((w) => {
           setMe(w);
           deepReload();
@@ -262,6 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           );
         });
     } else {
+      commit();
       deepReload();
     }
   };

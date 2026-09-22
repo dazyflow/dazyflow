@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -107,12 +106,23 @@ func executeSQLiteQuery(ctx context.Context, job core.Job, _ chan<- core.Progres
 	}
 	probe.Close()
 
-	absPath := filepath.Join(job.WorkspaceRoot, path)
+	absPath, err := sandboxedRealPath(job.WorkspaceRoot, path)
+	if err != nil {
+		if core.IsSandboxEscape(err) {
+			return params.Err(job, "sandbox_escape", fmt.Sprintf("path %q escapes workspace", path)), nil
+		}
+		return params.Err(job, "io", fmt.Sprintf("open %q: %v", path, err)), nil
+	}
 	db, err := sql.Open("sqlite", absPath)
 	if err != nil {
 		return params.Err(job, "db", fmt.Sprintf("open sqlite %q: %v", path, err)), nil
 	}
 	defer db.Close()
+	conn, err := lockedQueryConn(ctx, db)
+	if err != nil {
+		return params.Err(job, "db", fmt.Sprintf("open sqlite %q: %v", path, err)), nil
+	}
+	defer conn.Close()
 
-	return runQueryParsed(ctx, job, sqlConn{db: db}, qp)
+	return runQueryParsed(ctx, job, sqlConn{db: conn}, qp)
 }

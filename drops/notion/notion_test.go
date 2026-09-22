@@ -279,6 +279,38 @@ func TestNotionCreatePage_TextContentBecomesParagraphs(t *testing.T) {
 	}
 }
 
+// Notion takes 100 blocks per request: the page is created with the first
+// 100 and the rest are appended in order, in batches.
+func TestNotionCreatePage_AppendsBeyond100Blocks(t *testing.T) {
+	var calls []string
+	var sizes []int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		c, _ := body["children"].([]any)
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		sizes = append(sizes, len(c))
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "pg1", "url": "https://notion/pg1"})
+	}))
+	defer srv.Close()
+	withNotionEnv(t, srv.URL)
+
+	blocks := make([]any, 250)
+	for i := range blocks {
+		blocks[i] = map[string]any{"type": "paragraph", "paragraph": map[string]any{"rich_text": []any{}}}
+	}
+	res, _ := executeNotionCreatePage(context.Background(), core.Job{
+		Params: map[string]any{"parent_page_id": "p", "title": "T", "children": blocks},
+	}, nil)
+	if res.Status != core.StatusOK {
+		t.Fatalf("status=%q err=%+v", res.Status, res.Error)
+	}
+	want := []string{"POST /pages", "PATCH /blocks/pg1/children", "PATCH /blocks/pg1/children"}
+	if strings.Join(calls, ",") != strings.Join(want, ",") || sizes[0] != 100 || sizes[1] != 100 || sizes[2] != 50 {
+		t.Errorf("calls = %v sizes = %v, want %v with 100/100/50", calls, sizes, want)
+	}
+}
+
 func TestNotionCreatePage_ContentParamBecomesParagraphs(t *testing.T) {
 	srv := newNotionServer(t, 200, map[string]any{"id": "new-id"})
 	withNotionEnv(t, srv.URL)

@@ -83,8 +83,19 @@ const runnerShell = "python"
 // It prints one JSON object on stdout and nothing else, so the parse below is
 // total rather than a scrape. Body is base64 so a binary response survives the
 // trip — stdout is text, and a PDF through it would not.
+//
+// Redirects are NOT followed (the MCP client's policy): urllib would replay the
+// Authorization header to whatever host a 3xx names and turn a POST into a GET.
+// A 3xx comes back as the answer, for expect_status to judge.
 const requestScript = `import base64, json, sys, urllib.error, urllib.request
 
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+opener = urllib.request.build_opener(_NoRedirect)
 req = json.load(sys.stdin)
 body = base64.b64decode(req["body"]) if req.get("body") else None
 r = urllib.request.Request(req["url"], data=body, method=req["method"])
@@ -92,7 +103,7 @@ for k, v in (req.get("headers") or {}).items():
     r.add_header(k, v)
 
 try:
-    with urllib.request.urlopen(r, timeout=req["timeout_s"]) as resp:
+    with opener.open(r, timeout=req["timeout_s"]) as resp:
         status, headers, payload = resp.status, resp.headers, resp.read(req["max_bytes"] + 1)
 except urllib.error.HTTPError as e:
     # A 4xx/5xx is an ANSWER, not a transport failure: the step's expect_status

@@ -59,8 +59,10 @@ describe("describeSchedule", () => {
     expect(describeSchedule(entry({ interval_seconds: 45 }), t)).toBe("every 45s");
   });
 
-  it("treats a missing interval as zero", () => {
-    expect(describeSchedule(entry({}), t)).toBe("every 0h");
+  it("falls back to a dash for a missing or non-positive interval", () => {
+    expect(describeSchedule(entry({}), t)).toBe("—");
+    expect(describeSchedule(entry({ interval_seconds: 0 }), t)).toBe("—");
+    expect(describeSchedule(entry({ interval_seconds: -60 }), t)).toBe("—");
   });
 });
 

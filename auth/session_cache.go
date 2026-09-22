@@ -28,6 +28,11 @@ type CachingSessionStore struct {
 
 	mu    sync.Mutex
 	items map[string]cachedSession
+	// evictions is bumped (under mu) around every delete/revoke. A GetSession
+	// miss caches its DB read only if no eviction happened since the read
+	// began — otherwise a read that raced a sign-out would re-cache the
+	// just-deleted session for a full TTL.
+	evictions uint64
 
 	// hits/misses count GetSession outcomes for the /metrics endpoint —
 	// the hit ratio shows both that the cache is earning its keep and the
@@ -82,6 +87,7 @@ func (c *CachingSessionStore) GetSession(ctx context.Context, id string) (Sessio
 		}
 		delete(c.items, id)
 	}
+	gen := c.evictions
 	c.mu.Unlock()
 
 	c.misses.Add(1)
@@ -89,8 +95,22 @@ func (c *CachingSessionStore) GetSession(ctx context.Context, id string) (Sessio
 	if err != nil {
 		return Session{}, err
 	}
-	c.put(id, sess, now)
+	c.mu.Lock()
+	if c.evictions == gen {
+		c.putLocked(id, sess, now)
+	}
+	c.mu.Unlock()
 	return sess, nil
+}
+
+// evict runs drop under the lock and bumps the eviction generation. Called both
+// before and after the inner delete, so a read that starts in between cannot
+// cache the row it saw.
+func (c *CachingSessionStore) evict(drop func()) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.evictions++
+	drop()
 }
 
 func (c *CachingSessionStore) Stats() (hits, misses int64) {
@@ -106,10 +126,11 @@ func (c *CachingSessionStore) PutSession(ctx context.Context, s Session) error {
 }
 
 func (c *CachingSessionStore) DeleteSession(ctx context.Context, id string) error {
-	c.mu.Lock()
-	delete(c.items, id)
-	c.mu.Unlock()
-	return c.inner.DeleteSession(ctx, id)
+	drop := func() { delete(c.items, id) }
+	c.evict(drop)
+	err := c.inner.DeleteSession(ctx, id)
+	c.evict(drop)
+	return err
 }
 
 func (c *CachingSessionStore) RevokeSubjectSessions(ctx context.Context, subject string) (int, error) {
@@ -117,20 +138,26 @@ func (c *CachingSessionStore) RevokeSubjectSessions(ctx context.Context, subject
 	if !ok {
 		return 0, nil
 	}
-	n, err := rev.RevokeSubjectSessions(ctx, subject)
-	c.mu.Lock()
-	for id, e := range c.items {
-		if e.sess.Subject == subject {
-			delete(c.items, id)
+	drop := func() {
+		for id, e := range c.items {
+			if e.sess.Subject == subject {
+				delete(c.items, id)
+			}
 		}
 	}
-	c.mu.Unlock()
+	c.evict(drop)
+	n, err := rev.RevokeSubjectSessions(ctx, subject)
+	c.evict(drop)
 	return n, err
 }
 
 func (c *CachingSessionStore) put(id string, sess Session, now time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.putLocked(id, sess, now)
+}
+
+func (c *CachingSessionStore) putLocked(id string, sess Session, now time.Time) {
 	if len(c.items) >= c.max {
 		// Cheap bound: sweep expired entries first; if still at capacity,
 		// drop the whole map. Entries are individually re-fetchable, so a

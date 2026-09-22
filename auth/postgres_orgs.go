@@ -386,14 +386,24 @@ func (s *PgInvitationStore) DeleteByTenant(ctx context.Context, tenant string) (
 
 func (s *PgInvitationStore) MarkAccepted(ctx context.Context, token string, at time.Time) error {
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE invitations SET accepted_at=$2 WHERE token=$1`, token, at)
+		`UPDATE invitations SET accepted_at=$2
+		 WHERE token=$1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > $2`,
+		token, at)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
+	if tag.RowsAffected() == 1 {
+		return nil
+	}
+	var exists bool
+	if err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM invitations WHERE token=$1)`, token).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
 		return ErrUnknownInvitation
 	}
-	return nil
+	return ErrInvitationNotPending
 }
 
 func (s *PgInvitationStore) MarkRevoked(ctx context.Context, token string, at time.Time) error {

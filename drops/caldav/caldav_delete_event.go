@@ -71,6 +71,9 @@ func executeCalDAVDelete(ctx context.Context, job core.Job, _ chan<- core.Progre
 	if err != nil {
 		return params.Err(job, "not_connected", err.Error()), nil
 	}
+	if res := egressBlocked(ctx, job, cfg); res != nil {
+		return *res, nil
+	}
 	uid, ok := resolveEventID(job)
 	if !ok {
 		return params.Err(job, "bad_input", "input port 'id' must be an event id or a list of events"), nil

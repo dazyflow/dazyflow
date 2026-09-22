@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest import mock
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -302,6 +303,68 @@ class AgentTest(unittest.TestCase):
         dzrunner.Agent(cfg, []).run(once=True)
         res = self.state["results"][0]
         self.assertIn("still running", res.get("error", ""))
+
+    @unittest.skipIf(os.name == "nt", "POSIX process groups")
+    def test_a_timeout_stops_what_the_command_started_too(self):
+        # Killing only the shell left its children running — and holding the
+        # output pipes open. The whole process group has to go.
+        cfg = self.register()
+        pidfile = Path(self.tmp.name) / "child.pid"
+        self.state["queue"].append({
+            "id": "t1",
+            "script": f"sleep 30 & echo $! > {pidfile}; wait",
+            "timeout_seconds": 1,
+        })
+        dzrunner.Agent(cfg, []).run(once=True)
+        self.assertIn("still running", self.state["results"][0].get("error", ""))
+        pid = int(pidfile.read_text().strip())
+        # Reaped by init once orphaned; give it a moment.
+        for _ in range(50):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.1)
+        else:
+            os.kill(pid, 9)
+            self.fail("the background child survived the timeout")
+
+    def test_a_different_url_does_not_receive_the_saved_credential(self):
+        self.register()
+        with self.assertRaises(SystemExit) as caught:
+            dzrunner.load_or_register(self.cfg_path, "https://elsewhere.example.com", "", "box", [])
+        self.assertIn("register again", str(caught.exception))
+        saved = json.loads(Path(self.cfg_path).read_text())
+        self.assertEqual(saved["url"], self.url)
+
+    def test_the_registration_token_is_taken_from_the_environment_and_removed(self):
+        with mock.patch.dict(os.environ, {dzrunner.TOKEN_ENV: "dzrt_good"}):
+            rc = dzrunner.main(["--url", self.url, "--config", self.cfg_path, "--register-only"])
+            self.assertNotIn(dzrunner.TOKEN_ENV, os.environ,
+                             "the token would be inherited by every step")
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(Path(self.cfg_path).read_text())["credential"], "dzrc_secret")
+
+    def test_an_allow_list_refuses_env_that_changes_what_runs(self):
+        cfg = self.register()
+        for name in ("LD_PRELOAD", "BASH_ENV", "PATH", "path", "BASH_FUNC_x%%", "NODE_OPTIONS", "PS4"):
+            with self.subTest(name=name):
+                self.state["results"].clear()
+                self.state["queue"].append(
+                    {"id": "t1", "script": "printf %s ok", "env": {name: "/tmp/x"}}
+                )
+                dzrunner.Agent(cfg, ["printf"]).run(once=True)
+                res = self.state["results"][0]
+                self.assertIn("may not set", res.get("error", ""))
+                self.assertNotIn("exit_code", res)
+
+    def test_an_allow_list_still_passes_ordinary_env(self):
+        cfg = self.register()
+        self.state["queue"].append(
+            {"id": "t1", "script": "printenv MONTH", "env": {"MONTH": "march"}}
+        )
+        dzrunner.Agent(cfg, ["printenv"]).run(once=True)
+        self.assertEqual(self.state["results"][0]["stdout"].strip(), "march")
 
     def test_a_missing_program_is_a_command_failure_not_a_crash(self):
         cfg = self.register()

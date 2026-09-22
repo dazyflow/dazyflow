@@ -86,8 +86,7 @@ func executeSlackListChannels(ctx context.Context, job core.Job, _ chan<- core.P
 		q.Set("exclude_archived", "true")
 	}
 
-	endpoint := slackBaseURL(job) + "/conversations.list?" + q.Encode()
-	env, raw, err := slackDo(ctx, "GET", endpoint, token, nil, params.IntDefault(job.Params, "timeout_ms", 15000))
+	channels, env, err := listConversations(ctx, job, token, q, params.IntDefault(job.Params, "limit", 200))
 	if err != nil {
 		return params.Err(job, "slack_http_error", err.Error()), nil
 	}
@@ -97,13 +96,6 @@ func executeSlackListChannels(ctx context.Context, job core.Job, _ chan<- core.P
 			msg = "unknown error"
 		}
 		return params.Err(job, "slack_error", "Slack rejected list: "+msg), nil
-	}
-
-	channels := []any{}
-	if raw != nil {
-		if c, ok := raw["channels"].([]any); ok {
-			channels = c
-		}
 	}
 	return core.Result{
 		JobID:  job.ID,
@@ -121,8 +113,7 @@ func ListChannels(ctx context.Context, job core.Job) ([]core.AccountResource, er
 	q.Set("types", "public_channel,private_channel")
 	q.Set("limit", "1000")
 	q.Set("exclude_archived", "true")
-	endpoint := slackBaseURL(job) + "/conversations.list?" + q.Encode()
-	env, raw, err := slackDo(ctx, "GET", endpoint, token, nil, params.IntDefault(job.Params, "timeout_ms", 15000))
+	chans, env, err := listConversations(ctx, job, token, q, maxPickerChannels)
 	if err != nil {
 		return nil, err
 	}
@@ -134,13 +125,6 @@ func ListChannels(ctx context.Context, job core.Job) ([]core.AccountResource, er
 		return nil, fmt.Errorf("slack rejected channel list: %s", msg)
 	}
 	out := []core.AccountResource{}
-	if raw == nil {
-		return out, nil
-	}
-	chans, ok := raw["channels"].([]any)
-	if !ok {
-		return out, nil
-	}
 	for _, c := range chans {
 		m, ok := c.(map[string]any)
 		if !ok {
@@ -157,4 +141,40 @@ func ListChannels(ctx context.Context, job core.Job) ([]core.AccountResource, er
 		out = append(out, core.AccountResource{ID: id, Name: label})
 	}
 	return out, nil
+}
+
+// maxPickerChannels bounds the channel picker; maxChannelPages bounds how many
+// cursor pages one call walks.
+const (
+	maxPickerChannels = 5000
+	maxChannelPages   = 50
+)
+
+// listConversations follows next_cursor until want channels are collected or
+// the list ends. Slack pages conversations.list well below the requested limit
+// (archived and filtered channels still count against a page), so one request
+// could return a handful of channels with more waiting behind the cursor.
+func listConversations(ctx context.Context, job core.Job, token string, q url.Values, want int) ([]any, slackEnvelope, error) {
+	channels := []any{}
+	timeout := params.IntDefault(job.Params, "timeout_ms", 15000)
+	for page := 0; page < maxChannelPages && len(channels) < want; page++ {
+		q.Set("limit", strconv.Itoa(min(want-len(channels), 1000)))
+		env, raw, err := slackDo(ctx, "GET", slackBaseURL(job)+"/conversations.list?"+q.Encode(), token, nil, timeout)
+		if err != nil || !env.OK {
+			return nil, env, err
+		}
+		if c, ok := raw["channels"].([]any); ok {
+			channels = append(channels, c...)
+		}
+		meta, _ := raw["response_metadata"].(map[string]any)
+		next, _ := meta["next_cursor"].(string)
+		if next == "" {
+			break
+		}
+		q.Set("cursor", next)
+	}
+	if len(channels) > want {
+		channels = channels[:want]
+	}
+	return channels, slackEnvelope{OK: true}, nil
 }

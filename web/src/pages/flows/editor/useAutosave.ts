@@ -2,11 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, isErrorCode, isHTTPStatus } from "../../../api";
+import { api, authHeader, isErrorCode, isHTTPStatus } from "../../../api";
 import { explainApiError } from "../../../lib/explainApiError";
 import type { Graph, LintIssue } from "../../../types";
 
 const AUTOSAVE_DEBOUNCE_MS = 1500;
+
+// Browsers cap the combined in-flight keepalive body at 64 KiB; stay under it so
+// the unload flush isn't rejected outright.
+const KEEPALIVE_MAX_BYTES = 60 * 1024;
 
 
 interface SaveResult {
@@ -51,7 +55,15 @@ export function useAutosave({
   onConflict,
   reArmOn,
 }: UseAutosaveArgs) {
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirtyState] = useState(false);
+  // Bumped on every edit, so a save that completes can tell whether the user
+  // kept editing while its PUT was in flight — those edits are not in the saved
+  // snapshot and must keep the document dirty (and re-arm the timer).
+  const editSeqRef = useRef(0);
+  const setDirty = useCallback((value: boolean) => {
+    if (value) editSeqRef.current += 1;
+    setDirtyState(value);
+  }, []);
   const [saving, setSaving] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [rejected, setRejected] = useState(false);
@@ -65,9 +77,10 @@ export function useAutosave({
       }
       setSaving(true);
       onError(null);
+      const seq = editSeqRef.current;
       try {
         const res = await api.saveGraph(token, buildGraph(), autosave);
-        setDirty(false);
+        if (editSeqRef.current === seq) setDirtyState(false);
         setRejected(false);
         onSaved(res, autosave);
         return true;
@@ -134,30 +147,28 @@ export function useAutosave({
   }, [...reArmOn]);
 
   useEffect(() => {
+    const canFlush = () =>
+      dirtyRef.current && !loadFailedRef.current && !!token && !!graphID && canEdit;
     const flush = () => {
-      if (
-        !dirtyRef.current ||
-        loadFailedRef.current ||
-        !token ||
-        !graphID ||
-        !canEdit
-      ) {
-        return;
-      }
+      if (!canFlush()) return;
       const g = buildGraphRef.current();
       const path = `/me/flows/${encodeURIComponent(
         `${g.tenant}/${g.workspace}/${g.id}`,
       )}?autosave=1`;
+      const body = JSON.stringify(g);
       try {
         void fetch((import.meta.env.VITE_API_BASE ?? "") + "/api/v1" + path, {
           method: "PUT",
           headers: {
-            Authorization: `Bearer ${token}`,
+            ...authHeader(token),
             "Content-Type": "application/json",
           },
           credentials: "include",
-          body: JSON.stringify(g),
-          keepalive: true,
+          body,
+          // Over the keepalive cap the browser refuses the request outright; a
+          // plain fetch still completes on in-app navigation and is best-effort on
+          // unload (the beforeunload prompt below covers that case).
+          keepalive: new Blob([body]).size <= KEEPALIVE_MAX_BYTES,
         }).catch(() => {
           /* best-effort on unload: nothing can be reported at this point */
         });
@@ -165,9 +176,20 @@ export function useAutosave({
         /* URL construction / synchronous failure — equally best-effort */
       }
     };
+    // A graph too large for a keepalive flush can't be saved reliably while the
+    // page unloads, so ask the user to stay rather than silently drop edits.
+    const warnLargeUnsaved = (e: BeforeUnloadEvent) => {
+      if (!canFlush()) return;
+      const size = new Blob([JSON.stringify(buildGraphRef.current())]).size;
+      if (size <= KEEPALIVE_MAX_BYTES) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
     window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", warnLargeUnsaved);
     return () => {
       window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", warnLargeUnsaved);
       flush();
     };
   }, [token, graphID, canEdit]);

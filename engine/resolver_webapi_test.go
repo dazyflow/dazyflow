@@ -67,6 +67,19 @@ func TestNodeResolver_WebAPIManifestsMatchResolution(t *testing.T) {
 	}
 }
 
+// The platform-admin view (and its killswitch) must list web-API steps too,
+// with the tenants that own them.
+func TestNodeResolver_AllManifestsIncludesWebAPI(t *testing.T) {
+	r := &NodeResolver{Native: NewRegistry(), WebAPI: webAPICatalog(t, "acme")}
+	got, tenants := r.AllManifests()
+	if _, ok := got["api:orders:get_order"]; !ok {
+		t.Fatalf("web-API step missing from AllManifests: %v", keys(got))
+	}
+	if ts := tenants["api:orders:get_order"]; len(ts) != 1 || ts[0] != "acme" {
+		t.Errorf("tenants = %v, want [acme]", ts)
+	}
+}
+
 func keys(m map[string]core.Manifest) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

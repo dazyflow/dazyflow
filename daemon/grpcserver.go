@@ -243,9 +243,15 @@ func (h *grpcHandlers) StreamJobLogs(req *controlpb.StreamJobLogsRequest, stream
 		events <-chan BusEvent
 		cancel func()
 	)
+	// Subscribe BEFORE the status check that decides whether to follow: checked
+	// first, a run finishing in between published its Terminal to nobody and the
+	// tail waited for ever.
 	if req.Follow && !core.IsTerminalStatus(rec.Status) {
 		events, cancel = h.svc.bus().Subscribe(req.JobId)
 		defer cancel()
+		if sum, err := core.GetRunSummary(ctx, h.svc.Jobs, req.JobId); err == nil && core.IsTerminalStatus(sum.Status) {
+			events = nil
+		}
 	}
 
 	after := req.AfterSeq
@@ -279,10 +285,17 @@ func (h *grpcHandlers) StreamJobLogs(req *controlpb.StreamJobLogsRequest, stream
 	if events == nil {
 		return nil
 	}
+	// A slow subscriber can have the Terminal dropped, so re-read the run too.
+	recheck := time.NewTicker(waitGraphRecheck)
+	defer recheck.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-recheck.C:
+			if sum, err := core.GetRunSummary(ctx, h.svc.Jobs, req.JobId); err == nil && core.IsTerminalStatus(sum.Status) {
+				return sendPage()
+			}
 		case ev, ok := <-events:
 			if !ok {
 				return sendPage()

@@ -14,6 +14,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/dazyflow/dazyflow/core"
 )
@@ -23,7 +25,10 @@ const (
 	githubOnNewPRModuleID = "github_on_new_pr"
 )
 
-// Per-tenant: the signing secret is the org's, not the deployment's.
+// Per-tenant: the signing secret is the org's. The deployment-wide secret is
+// only a fallback on a deployment with no per-tenant secret store (a single
+// operator); anywhere else it would let one signature reach every {tenant},
+// since the signature does not cover the URL.
 const githubTriggerSecretName = "GITHUB_WEBHOOK_SECRET"
 
 const maxGitHubBodyBytes = 1 * 1024 * 1024
@@ -35,6 +40,45 @@ type GitHubEventsHandler struct {
 	logger        *log.Logger
 	// Tests use it to await an asynchronous dispatch.
 	fanoutDone func()
+
+	// The signature has no timestamp, so a captured delivery would verify
+	// forever; the delivery id GitHub stamps on each one dedupes replays.
+	deliveries deliverySeen
+}
+
+// deliverySeen remembers recently accepted delivery ids, per process and bounded.
+type deliverySeen struct {
+	mu   sync.Mutex
+	seen map[string]time.Time
+}
+
+const (
+	githubDeliveryTTL = 24 * time.Hour
+	githubDeliveryCap = 100_000
+)
+
+// firstSeen records id and reports whether it is new within the TTL.
+func (d *deliverySeen) firstSeen(id string, now time.Time) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.seen == nil {
+		d.seen = map[string]time.Time{}
+	}
+	if at, ok := d.seen[id]; ok && now.Sub(at) < githubDeliveryTTL {
+		return false
+	}
+	if len(d.seen) >= githubDeliveryCap {
+		for k, at := range d.seen {
+			if now.Sub(at) >= githubDeliveryTTL {
+				delete(d.seen, k)
+			}
+		}
+		if len(d.seen) >= githubDeliveryCap {
+			clear(d.seen) // under a flood, forgetting beats unbounded memory
+		}
+	}
+	d.seen[id] = now
+	return true
 }
 
 func NewGitHubEventsHandler(svc *Service, webhookSecret string) *GitHubEventsHandler {
@@ -70,7 +114,7 @@ func (h *GitHubEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request)
 	// Bound to the URL's tenant: resolving it any other way would let one org's
 	// signature authenticate a delivery aimed at another.
 	secret := h.tenantSecret(r.Context(), tenant)
-	if secret == "" {
+	if secret == "" && (h.svc == nil || h.svc.EncryptedSecrets == nil) {
 		secret = h.webhookSecret
 	}
 	if secret == "" {
@@ -82,6 +126,12 @@ func (h *GitHubEventsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request)
 	if err := verifyGitHubSignature(r.Header, body, secret); err != nil {
 		h.logger.Printf("reject %s: %v", tenant, err)
 		http.Error(rw, "invalid signature", http.StatusUnauthorized)
+		return
+	}
+	if id := r.Header.Get("X-GitHub-Delivery"); id != "" && !h.deliveries.firstSeen(tenant+"|"+id, time.Now()) {
+		h.logger.Printf("replayed delivery %s for %s — acking without dispatch", id, tenant)
+		rw.WriteHeader(http.StatusOK)
+		_, _ = rw.Write([]byte("duplicate delivery"))
 		return
 	}
 

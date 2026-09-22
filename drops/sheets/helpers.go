@@ -45,19 +45,9 @@ func SetHTTPBases(sheets, drive string) {
 	driveBase.Set(drive)
 }
 
-func sheetsBaseURL(job core.Job) string {
-	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
-		return b
-	}
-	return sheetsBase.Get()
-}
+func sheetsBaseURL(job core.Job) string { return sheetsBase.For(job) }
 
-func driveBaseURL(job core.Job) string {
-	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
-		return b
-	}
-	return driveBase.Get()
-}
+func driveBaseURL(job core.Job) string { return driveBase.For(job) }
 
 func googleDo(ctx context.Context, method, url, token, contentType string, body []byte, timeoutMS int) (int, []byte, error) {
 	return google.Do(ctx, method, url, token, contentType, body, timeoutMS, maxResponseBytes)
@@ -208,6 +198,26 @@ func resolveSpreadsheetID(job core.Job) string {
 
 func quoteSheetTab(tab string) string {
 	return "'" + strings.ReplaceAll(tab, "'", "''") + "'"
+}
+
+var (
+	plainNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*$`)
+	cellLikeRe  = regexp.MustCompile(`^(?i:[a-z]{1,3}[0-9]+|r[0-9]*c[0-9]*)$`)
+)
+
+// sheetRangeRef turns the tab-or-named-range param into an A1 range. A bare
+// tab name is ambiguous: "Q1" or "FY2024" is read as a cell, and a name with a
+// space or dash does not parse, so those are quoted. A plain identifier stays
+// bare so a named range (which can never look like a cell or hold a space)
+// still resolves; a value that already is a range is passed through.
+func sheetRangeRef(name string) string {
+	if strings.Contains(name, "!") || strings.HasPrefix(name, "'") {
+		return name
+	}
+	if plainNameRe.MatchString(name) && !cellLikeRe.MatchString(name) {
+		return name
+	}
+	return quoteSheetTab(name)
 }
 
 // readSheetHeaders fetches the first row of a tab as its existing column

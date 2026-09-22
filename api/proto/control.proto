@@ -16,6 +16,34 @@ message Node {
     string module = 2;
     bytes  params = 3; // JSON
     map<string, string> env = 4;
+    string   label             = 5;
+    Position position          = 6; // unset = no stored position
+    bool     collapsed         = 7;
+    bool     locked            = 8;
+    int32    timeout_seconds   = 9;
+    bool     breakpoint        = 10;
+    bool     disabled          = 11;
+    bool     continue_on_error = 12;
+}
+
+message Position {
+    double x = 1;
+    double y = 2;
+}
+
+message Frame {
+    string id     = 1;
+    string title  = 2;
+    string color  = 3;
+    double x      = 4;
+    double y      = 5;
+    double width  = 6;
+    double height = 7;
+}
+
+message FailureNotify {
+    string webhook = 1;
+    string email   = 2;
 }
 
 message Edge {
@@ -24,6 +52,7 @@ message Edge {
     string to        = 3;
     string to_port   = 4;
     string on_error  = 5;
+    repeated Position waypoints = 6;
 }
 
 message Graph {
@@ -34,6 +63,17 @@ message Graph {
     repeated Node nodes = 5;
     repeated Edge edges = 6;
     repeated GraphTrigger triggers = 7;
+    repeated Frame frames = 8;
+    string name        = 9;
+    string icon        = 10;
+    string description = 11;
+    string visibility  = 12; // "" / "org" / "private"
+    string owner       = 13;
+    FailureNotify failure_notify = 14; // unset = none
+    int32  timeout_seconds   = 15;
+    string language          = 16;
+    bool   disabled          = 17;
+    bool   continue_on_error = 18;
 }
 
 message GraphTrigger {
@@ -53,6 +93,10 @@ message GraphTrigger {
     // existed; new writers should not produce one.
     string secret = 3;
     int32  interval_seconds = 4; // legacy type=poll; seconds between fires
+    string tz = 5; // IANA zone for the cron fields; empty = UTC
+    bool   public_form = 6;
+    repeated string form_fields = 7;
+    string form_title = 8;
 }
 
 message GraphProgress {

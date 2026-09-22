@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	hfnet "github.com/dazyflow/dazyflow/drops/net"
 	"github.com/dazyflow/dazyflow/engine"
 	"github.com/dazyflow/dazyflow/internal/caldavutil"
 )
@@ -28,6 +29,9 @@ const verifyTimeout = 25 * time.Second
 func verifyCalDAV(ctx context.Context, conn map[string]string) error {
 	cfg, err := caldavutil.ConfigFromConn(conn)
 	if err != nil {
+		return err
+	}
+	if err := hfnet.EgressAllowedFor(ctx, cfg.URL); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, verifyTimeout)

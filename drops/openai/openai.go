@@ -29,6 +29,20 @@ const (
 
 type provider struct{}
 
+// usesCompletionTokens reports whether model is one of OpenAI's reasoning
+// families, which only accept max_completion_tokens.
+func usesCompletionTokens(model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if i := strings.LastIndexByte(m, '/'); i >= 0 {
+		m = m[i+1:] // "openai/o3-mini" style ids
+	}
+	if strings.HasPrefix(m, "gpt-5") {
+		return true
+	}
+	// o1, o3-mini, o4-mini-high, … — "o" then a digit.
+	return len(m) >= 2 && m[0] == 'o' && m[1] >= '0' && m[1] <= '9'
+}
+
 func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (llmtask.Result, *core.JobError) {
 	model := req.Model
 	if model == "" {
@@ -54,7 +68,15 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 		}
 	}
 
-	body := map[string]any{"model": model, "messages": messages, "max_tokens": maxTokens}
+	body := map[string]any{"model": model, "messages": messages}
+	// Reasoning models (o1/o3/o4, gpt-5) reject max_tokens outright; they take
+	// max_completion_tokens. Older chat models, and the OpenAI-compatible servers
+	// a custom base URL points at, still expect max_tokens.
+	if usesCompletionTokens(model) {
+		body["max_completion_tokens"] = maxTokens
+	} else {
+		body["max_tokens"] = maxTokens
+	}
 	if req.Temperature != nil {
 		body["temperature"] = *req.Temperature
 	}

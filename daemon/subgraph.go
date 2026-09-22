@@ -60,11 +60,30 @@ func (s *Service) SubmitChild(
 	graphID string,
 	seeds map[string]core.Result,
 ) (string, error) {
+	// The parent may have been cancelled between parking this node and getting
+	// here; the cancel's cascade has already run, so a child started now would
+	// run on with nobody waiting for it.
+	if sum, err := core.GetRunSummary(ctx, s.Jobs, parentRec.GraphRunID); err == nil && core.IsTerminalStatus(sum.Status) {
+		return "", fmt.Errorf("parent run %s is %s: %w", parentRec.GraphRunID, sum.Status, core.ErrConflict)
+	}
 	store, err := s.Workspaces.Open(parentRec.Tenant, parentRec.Workspace)
 	if err != nil {
 		return "", fmt.Errorf("open workspace %s/%s: %w", parentRec.Tenant, parentRec.Workspace, err)
 	}
-	g, err := store.Load(graphID)
+	// The PUBLISHED revision, as fireGraph runs, so an in-progress edit of the
+	// child never runs inside somebody's live flow. A child that was never
+	// published has only its draft, which is what runs then (a flow built and
+	// tested together with its sub-flow before either is published).
+	pub, err := store.PublishedCommit(graphID)
+	if err != nil {
+		return "", fmt.Errorf("child graph %q: published lookup: %w", graphID, err)
+	}
+	var g core.Graph
+	if pub != "" {
+		g, err = store.LoadPublished(graphID)
+	} else {
+		g, err = store.Load(graphID)
+	}
 	if err != nil {
 		return "", fmt.Errorf("load child graph %q: %w", graphID, err)
 	}
@@ -190,12 +209,13 @@ func (s *Service) submitGraphWithParent(
 	if len(errs) > 0 {
 		return graphRunID, fmt.Errorf("enqueue child roots: %v", errs)
 	}
+	// Seeds covered every node, so no step will finish to complete the child.
+	// Finalize through the dispatcher, as a last step would: that is also what
+	// resumes the parent node parked on this child — completing the record here
+	// directly left the parent awaiting for ever.
 	if queued == 0 && allNodesAccountedFor(ctx, s.Jobs, g, graphRunID) {
-		final := &core.Result{Status: core.StatusOK}
-		_ = s.Jobs.Complete(ctx, graphRunID, core.JobStatusSucceeded, final)
-		s.bus().Publish(graphRunID, BusEvent{Terminal: &TerminalEvent{
-			JobID: graphRunID, Status: core.JobStatusSucceeded,
-		}})
+		NewDispatcher(s.Jobs, s.bus(), s.Engine, s.Logger).
+			maybeCompleteGraph(context.WithoutCancel(ctx), g, graphRunID, "", core.JobStatusSucceeded, nil)
 	}
 	return graphRunID, nil
 }

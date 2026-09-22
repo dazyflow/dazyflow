@@ -114,17 +114,39 @@ func executeForecast(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 	}, nil
 }
 
+// smhiZone is where SMHI forecasts are for. Days are grouped on its calendar:
+// by UTC, a Swedish day would run 01:00/02:00 to the same hour the next day,
+// and "noon" would be 13:00 or 14:00 local.
+var smhiZone = func() *time.Location {
+	if loc, err := time.LoadLocation("Europe/Stockholm"); err == nil {
+		return loc
+	}
+	return time.UTC
+}()
+
+func localDateHour(stamp string) (date string, hour int, ok bool) {
+	t, err := time.Parse(time.RFC3339, stamp)
+	if err != nil {
+		if len(stamp) < 13 {
+			return "", 0, false
+		}
+		h, _ := strconv.Atoi(stamp[11:13])
+		return stamp[:10], h, true
+	}
+	t = t.In(smhiZone)
+	return t.Format("2006-01-02"), t.Hour(), true
+}
+
 func aggregateDays(ts []smhiEntry, days int) []smhiDay {
 	idx := map[string]int{}
 	noonDelta := map[string]int{}
 	out := []smhiDay{}
 
 	for _, e := range ts {
-		if len(e.Time) < 13 {
+		date, hour, ok := localDateHour(e.Time)
+		if !ok {
 			continue
 		}
-		date := e.Time[:10]
-		hour, _ := strconv.Atoi(e.Time[11:13])
 
 		pos, seen := idx[date]
 		if !seen {

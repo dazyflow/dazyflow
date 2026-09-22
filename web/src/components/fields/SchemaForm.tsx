@@ -2362,6 +2362,23 @@ export function humanize(key: string): string {
   return words[0].toUpperCase() + words.slice(1);
 }
 
+// Stable React keys for the rows of a list the form doesn't own ids for. Keyed
+// by index, removing row 0 hands row 1's inputs (and their local text state, as
+// in JSONField) to the row that used to be row 0. `remove`/`add` must be called
+// alongside the matching list edit; an external length change just pads/trims.
+let nextRowKey = 1;
+function useRowKeys(length: number) {
+  const keys = useRef<number[]>([]);
+  while (keys.current.length < length) keys.current.push(nextRowKey++);
+  if (keys.current.length > length) keys.current.length = length;
+  return {
+    keys: keys.current,
+    remove: (idx: number) => {
+      keys.current.splice(idx, 1);
+    },
+  };
+}
+
 function DictField({
   valueSchema,
   value,
@@ -2399,9 +2416,13 @@ function DictField({
     setRows(next);
     onChange(toObject(next));
   };
+  const rowKeys = useRowKeys(rows.length);
   const updateAt = (idx: number, newKey: string, newVal: unknown) =>
     commit(rows.map((row, i) => (i === idx ? [newKey, newVal] : row)));
-  const removeAt = (idx: number) => commit(rows.filter((_, i) => i !== idx));
+  const removeAt = (idx: number) => {
+    rowKeys.remove(idx);
+    commit(rows.filter((_, i) => i !== idx));
+  };
   const addEmpty = () => {
     commit([...rows, ["", defaultFor(valueSchema) ?? ""]]);
   };
@@ -2415,7 +2436,7 @@ function DictField({
   return (
     <div className="sf-dict">
       {rows.flatMap(([k, v], idx) => [
-        <div key={idx} className="sf-dict-row">
+        <div key={rowKeys.keys[idx]} className="sf-dict-row">
           <input
             value={k}
             onChange={(e) => updateAt(idx, e.target.value, v)}
@@ -2441,7 +2462,7 @@ function DictField({
           </Button>
         </div>,
         confirming === idx ? (
-          <div key={`${idx}-confirm`} className="sf-dict-confirm inline-confirm">
+          <div key={`${rowKeys.keys[idx]}-confirm`} className="sf-dict-confirm inline-confirm">
             {k
               ? t("schemaForm.dictRemoveConfirm", { key: k })
               : t("schemaForm.dictRemoveConfirmUnnamed")}{" "}
@@ -2472,12 +2493,14 @@ function ArrayField({
   onChange: (v: unknown[]) => void;
 }) {
   const { t } = useTranslation();
+  const rowKeys = useRowKeys(value.length);
   const updateAt = (idx: number, nv: unknown) => {
     const next = value.slice();
     next[idx] = nv;
     onChange(next);
   };
   const removeAt = (idx: number) => {
+    rowKeys.remove(idx);
     const next = value.slice();
     next.splice(idx, 1);
     onChange(next);
@@ -2487,7 +2510,7 @@ function ArrayField({
   return (
     <div className="sf-array">
       {value.map((v, idx) => (
-        <div key={idx} className="sf-row">
+        <div key={rowKeys.keys[idx]} className="sf-row">
           <ScalarValue
             schema={itemSchema}
             value={v}
@@ -2812,18 +2835,7 @@ function ScalarValue({
     case "integer":
     case "number":
       return (
-        <input
-          type="number"
-          step={schema.type === "integer" ? 1 : "any"}
-          value={(value as number) ?? ""}
-          onChange={(e) => {
-            const raw = e.target.value;
-            if (raw === "") return;
-            const n =
-              schema.type === "integer" ? parseInt(raw, 10) : parseFloat(raw);
-            if (!Number.isNaN(n)) onChange(n);
-          }}
-        />
+        <NumberValue integer={schema.type === "integer"} value={value} onChange={onChange} />
       );
     case "boolean":
       return (
@@ -2849,6 +2861,42 @@ function ScalarValue({
         />
       );
   }
+}
+
+// The text is local so a half-typed number ("", "-", "1.") stays on screen:
+// bound straight to the numeric value, clearing the box snapped the old number
+// back. The value is only emitted once it parses, and an external change to it
+// (undo, a reload) resyncs the text.
+function NumberValue({
+  integer,
+  value,
+  onChange,
+}: {
+  integer: boolean;
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
+  const shown = value == null ? "" : String(value);
+  const [text, setText] = useState(shown);
+  useEffect(() => {
+    setText((prev) => (prev !== "" && Number(prev) === value ? prev : shown));
+    // `shown` is derived from `value`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  return (
+    <input
+      type="number"
+      step={integer ? 1 : "any"}
+      value={text}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setText(raw);
+        if (raw === "") return;
+        const n = integer ? parseInt(raw, 10) : parseFloat(raw);
+        if (!Number.isNaN(n)) onChange(n);
+      }}
+    />
+  );
 }
 
 function DictValueCell({
@@ -2894,14 +2942,36 @@ function JSONField({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
-  const [text, setText] = useState(() => {
-    if (value === undefined) return "";
+  const pretty = (v: unknown): string => {
+    if (v === undefined) return "";
     try {
-      return JSON.stringify(value, null, 2);
+      return JSON.stringify(v, null, 2);
     } catch {
       return "";
     }
-  });
+  };
+  const [text, setText] = useState(() => pretty(value));
+  // Resync when the value changes from outside (a removed sibling row, undo),
+  // but keep the user's own formatting when the text already means this value.
+  let incoming = "";
+  try {
+    incoming = JSON.stringify(value) ?? "";
+  } catch {
+    /* unserialisable — treated as empty */
+  }
+  useEffect(() => {
+    setText((prev) => {
+      try {
+        const cur = prev.trim() === "" ? "" : JSON.stringify(JSON.parse(prev));
+        if (cur === incoming) return prev;
+      } catch {
+        /* invalid draft — the value moved underneath it, so replace it */
+      }
+      return pretty(value);
+    });
+    // `incoming` is `value`'s content; the object identity changes every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incoming]);
   return (
     <textarea
       rows={3}

@@ -15,6 +15,7 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -105,12 +106,10 @@ type Server struct {
 	Version string
 	Logger  *log.Logger
 
-	mu          sync.Mutex
 	tools       []Tool
 	toolsByName map[string]Tool
 
-	wm          sync.Mutex
-	initialized bool
+	wm sync.Mutex
 }
 
 // Register must be called before Serve: once the reader goroutine starts, the
@@ -133,23 +132,56 @@ func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 	if s.Logger == nil {
 		s.Logger = log.New(io.Discard, "", 0)
 	}
-	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
-
-	for scanner.Scan() {
+	br := bufio.NewReaderSize(r, 64*1024)
+	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		line := scanner.Bytes()
+		line, tooLong, err := readLine(br, maxMessageBytes)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
+		}
+		if tooLong {
+			// One oversized message is the client's problem, not a reason to
+			// drop the session: the rest of the line is discarded and the next
+			// one is read as usual.
+			s.writeError(w, nil, codeInvalidRequest,
+				fmt.Sprintf("message exceeds %d bytes", maxMessageBytes))
+			continue
+		}
 		if len(line) == 0 {
 			continue
 		}
 		s.handle(ctx, line, w)
 	}
-	if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
-		return err
+}
+
+// maxMessageBytes caps one newline-delimited JSON-RPC message.
+const maxMessageBytes = 4 * 1024 * 1024
+
+// readLine returns the next line without its terminator. A line longer than
+// max is consumed to its end and reported as tooLong, with no content, so a
+// single oversized message cannot end the stream or be held in memory.
+func readLine(br *bufio.Reader, max int) (line []byte, tooLong bool, err error) {
+	for {
+		chunk, more, err := br.ReadLine()
+		if err != nil {
+			return nil, tooLong, err
+		}
+		if !tooLong {
+			if len(line)+len(chunk) > max {
+				tooLong, line = true, nil
+			} else {
+				line = append(line, chunk...)
+			}
+		}
+		if !more {
+			return line, tooLong, nil
+		}
 	}
-	return nil
 }
 
 func (s *Server) handle(ctx context.Context, line []byte, w io.Writer) {
@@ -159,7 +191,15 @@ func (s *Server) handle(ctx context.Context, line []byte, w io.Writer) {
 		return
 	}
 	if len(req.ID) == 0 {
-		s.handleNotification(req)
+		// A notification. initialized, progress and cancelled are valid wire
+		// shapes but none is acted on — tools are served whether or not the
+		// client sent initialized — and a notification never gets a reply.
+		return
+	}
+	// JSON-RPC allows a null id, but MCP forbids it — and a null id cannot
+	// be told apart from the id of a parse error. Refused, never executed.
+	if bytes.Equal(bytes.TrimSpace(req.ID), []byte("null")) {
+		s.writeError(w, nil, codeInvalidRequest, "id must be a string or number, not null")
 		return
 	}
 	if req.JSONRPC != "2.0" {
@@ -177,17 +217,6 @@ func (s *Server) handle(ctx context.Context, line []byte, w io.Writer) {
 		s.writeResult(w, req.ID, struct{}{})
 	default:
 		s.writeError(w, req.ID, codeMethodNotFound, "method not found: "+req.Method)
-	}
-}
-
-func (s *Server) handleNotification(req request) {
-	switch req.Method {
-	case "notifications/initialized":
-		s.mu.Lock()
-		s.initialized = true
-		s.mu.Unlock()
-	default:
-		// Progress and cancelled are valid wire shapes, not yet acted on.
 	}
 }
 

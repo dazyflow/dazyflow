@@ -10,6 +10,98 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Security
+
+- **An org admin can no longer mint an API key for someone else's identity.**
+  `POST /api/v1/admin/api-keys` accepted any `subject` and any role but
+  `platform:admin`, and every self-signup user is admin of their own org — so
+  anyone could mint a key naming another user and use `/me` endpoints as them
+  (delete their account, regenerate their recovery codes). The subject must now
+  be the caller, a member of the org, or a service name without `@`; roles are
+  capped to the caller's own, and `support:agent` can no longer be self-granted.
+  Account deletion, TOTP, password and email changes now require a browser
+  session, not an API key. Support-agent access is checked against the agent
+  registry, and the ticket queue no longer answers to a self-minted role.
+- **Editors no longer see or edit other people's private flows.** The editor
+  role carried `graph:admin`, which counts as flow admin and bypassed
+  visibility. It now belongs to admins and org owners only; stored editor roles
+  are upgraded on load. Publishing stays an admin action, as the UI already said.
+- **Google sign-in no longer makes a new user an admin of the org.** A
+  first-time Google user gets a personal org and joins another only by
+  invitation or an allowed domain, within the seat limit.
+- **Removing or demoting a member revokes their API keys** in that org;
+  revoking a platform admin revokes their `platform:admin` keys.
+- **Platform-admin elevation requires a verified email** when verification is on.
+- **The generic secrets API refuses the reserved namespaces** (`oauth.`,
+  `emailtmpl.`, `orgauth.`, `gitcred.`, `sshcred.`, …); an editor could
+  overwrite outbound email templates or SSO credentials through it.
+- **Billing checkout and the portal are org-admin only.**
+- **GitHub and Slack webhooks no longer fall back to the deployment-wide
+  secret** in multi-tenant deployments, and GitHub deliveries are de-duplicated.
+- **API key IDs cannot be reused**, so a member can no longer overwrite a
+  teammate's key; a failed lookup no longer skips the revoke's tenant check.
+- **OIDC principals are issuer-qualified** (`oidc:<issuer>#<sub>`), so an IdP
+  whose `sub` looks like an email cannot act as that local account. Flows owned
+  by an OIDC principal under the old subject need their owner updated.
+- **Single-use tokens, TOTP codes and recovery codes are consumed atomically**,
+  and user updates no longer rewrite the whole row, so a sign-in racing a
+  suspension or password reset cannot undo it. Accepting a revoked or expired
+  invitation now fails.
+- **The SQLite steps run with `ATTACH` disabled and `query_only`**, so user SQL
+  cannot reach another database file.
+- **Connector credentials only go to the vendor's own hosts.** A per-step
+  `base_url` is ignored unless it matches the vendor, and pagination refuses a
+  next-page URL on another host. The web-API runner no longer follows redirects,
+  CalDAV and MQTT honour the egress allowlist, and git over SSH dials through the
+  SSRF guard.
+- **Secrets are redacted in more places**: engine errors and spans, the
+  write-dedupe cache, support bundles (a literal beside a `${…}` placeholder was
+  kept verbatim), whole PEM blocks, `sk-…` keys, JWTs and `github_pat_` tokens.
+- **The runner refuses dangerous task environment variables under `--allow`**
+  (`PATH`, `LD_*`, `BASH_ENV`, `BASH_FUNC_*`, …), kills the whole process group
+  on timeout, and no longer sends its credential to a different server URL.
+  `runner.sh` takes an override from `DAZYFLOW_RUNNER_URL`, not `DAZYFLOW_URL`,
+  and passes the registration token by environment rather than argv.
+- **`dzd --rotate-master-key-file`** reads the new key from a file or stdin;
+  `--rotate-master-key` still works but is deprecated.
+- **`dzctl` refuses plaintext gRPC to a non-loopback server** without `--insecure`.
+
+### Fixed
+
+- **A cancelled run no longer runs downstream steps**; the run is marked
+  cancelled before its nodes, workers check it before executing, and
+  cancelling a parent cancels its sub-flow runs.
+- **Autosave no longer rewrites a published revision**, and undo can no longer
+  unpublish a flow.
+- **Saving through gRPC or `dzctl` keeps every flow field** — visibility,
+  disabled, timeouts, trigger time zones and the rest were dropped.
+- **A refund or capture of 0 is refused** instead of refunding the whole payment
+  (Stripe, Klarna).
+- **A leader handover no longer reports missed runs** that the old leader made.
+- **An OpenAPI spec with a self-referencing `allOf` no longer crashes the daemon.**
+- **Large numbers no longer render as `1.234567e+06`** in templates and
+  transform keys.
+- The oldest pending and stuck runs are promoted and reaped first; failure
+  emails are throttled on mails actually sent; approving advances the run even
+  if the approver disconnects; a publish right after a save is mirrored;
+  `WaitGraph` reports cancelled and timed-out runs; sub-flows resume their
+  parent and run the published revision; `skipped` is terminal in Postgres.
+- Gmail `only_new` starts from the newest mail instead of replaying history,
+  and messages with attachments are valid MIME. Page pagination no longer skips
+  a page; Sheets tabs named like cells are quoted; zoneless times honour `tz`
+  and relative times hold across DST; list steps follow their next page.
+- Web: uploads and save-on-leave work with cookie sessions; edits made during a
+  save are kept; the run timeline is oldest first; the run list keeps loaded
+  pages; a wrong password when deleting a flow no longer signs you out; several
+  pages ignore out-of-order responses.
+
+### Changed
+
+- Version pins (`id@version`) are enforced instead of silently ignored.
+- Docker images build with the Go and Node versions CI tests (1.26.7, 22); CI
+  actions are pinned to commit SHAs.
+- `DAZYFLOW_WEB_ORIGIN` defaults to `http://localhost:5173`, matching Vite.
+
 ## [0.42.5] - 2026-09-14
 
 ### Security

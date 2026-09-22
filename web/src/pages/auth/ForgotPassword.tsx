@@ -7,11 +7,13 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
 import { AuthLayout } from "../../components/auth/AuthLayout";
 import { api } from "../../api";
+import { explainApiError } from "../../lib/explainApiError";
 
 // ForgotPassword is the "email me a reset link" form. The server is
 // deliberately non-enumerating — it returns the same success whether or
-// not the address has an account — so on submit we always show the same
-// "check your inbox" confirmation rather than revealing existence. The
+// not the address has an account — so any success shows the same "check
+// your inbox" confirmation rather than revealing existence; only a request
+// that never got that answer (network, 429, 5xx) shows an error. The
 // ?email= deep link pre-fills the field (e.g. from the sign-in form).
 export function ForgotPassword() {
   const { t } = useTranslation();
@@ -19,6 +21,7 @@ export function ForgotPassword() {
   const [email, setEmail] = useState(searchParams.get("email") ?? "");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   if (sent) {
     return (
@@ -42,12 +45,17 @@ export function ForgotPassword() {
           e.preventDefault();
           if (!email.trim()) return;
           setBusy(true);
+          setErr(null);
           try {
+            // Any 2xx is the uniform answer, account or not; only a failure to
+            // get that answer (network, rate limit, server error) is reported —
+            // "check your inbox" after one would promise a mail never sent.
             await api.requestPasswordReset(email.trim());
-          } catch {
+            setSent(true);
+          } catch (e) {
+            setErr(explainApiError(e, t));
           } finally {
             setBusy(false);
-            setSent(true);
           }
         }}
       >
@@ -66,6 +74,7 @@ export function ForgotPassword() {
         <Button type="submit" variant="primary" disabled={busy || !email.trim()}>
           {busy ? t("common.sending") : t("forgotPassword.submit")}
         </Button>
+        {err && <div className="error">{err}</div>}
         <div className="signin-alt">
           <Link to="/signin">{t("forgotPassword.backToSignin")}</Link>
         </div>

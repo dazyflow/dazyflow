@@ -289,7 +289,14 @@ func (e *Engine) buildAndExecute(
 		}, err
 	}
 
-	params, env := cloneNodeIO(node.Params, node.Env)
+	params, env, err := cloneNodeIO(node.Params, node.Env)
+	if err != nil {
+		recordErr(err)
+		return core.Result{
+			Status: core.StatusError,
+			Error:  &core.JobError{Code: "invalid_params", Message: err.Error()},
+		}, err
+	}
 	job := core.Job{
 		ID:      jobID,
 		GraphID: graph.ID,
@@ -310,14 +317,17 @@ func (e *Engine) buildAndExecute(
 	injectConnectionDefaults(sctx, e.Secrets, manifest, &job)
 	secrets, err := resolveTemplatesCollecting(sctx, e.Secrets, e.Resources, graph, prior, &job)
 	if err != nil {
-		recordErr(err)
 		// The error string can embed an already-resolved secret — one spliced
 		// into a DSN that then fails to parse — and this is the only early return
 		// that can, the paths above running before anything is resolved. So scrub
-		// it with the redactor the success path uses.
+		// it with the redactor the success path uses, before it reaches the span
+		// or the caller (runLayer copies it into GraphResult.Error.Message).
+		code := templateErrCode(err)
+		err = redactError(err, secrets)
+		recordErr(err)
 		res := core.Result{
 			Status: core.StatusError,
-			Error:  &core.JobError{Code: templateErrCode(err), Message: err.Error()},
+			Error:  &core.JobError{Code: code, Message: err.Error()},
 		}
 		redactResult(&res, secrets)
 		return res, err
@@ -356,6 +366,9 @@ func (e *Engine) buildAndExecute(
 			}
 			res, err := baseExec(ctx, transport, j, secrets)
 			if err == nil && res.Status == core.StatusOK {
+				// The record is durable and replayed verbatim, so it must hold the
+				// scrubbed result, never the cleartext a module echoed.
+				redactResult(&res, secrets)
 				// The side effect already succeeded, so a lost lease cancelling ctx
 				// must not suppress the record and let a reclaim re-fire it — but a
 				// shared store must not block the worker forever either.
@@ -385,6 +398,9 @@ func (e *Engine) buildAndExecute(
 	}
 	core.ApplyPassthrough(job.Input, &result)
 	redactResult(&result, secrets)
+	// A transport error can quote a resolved param back, and it is recorded on
+	// the span and surfaced as the run's error message.
+	execErr = redactError(execErr, secrets)
 	if execErr != nil {
 		recordSpanError(span, execErr)
 	} else if result.Status == core.StatusError && result.Error != nil {
@@ -540,22 +556,87 @@ func newJobID() (string, error) {
 // making a re-run non-deterministic. Params can nest, so a shallow maps.Clone is
 // insufficient and a JSON round-trip mirrors how the graph is already stored;
 // Env is flat strings, so a shallow clone is exact. A marshal error falls back to
-// the originals rather than failing the node.
-func cloneNodeIO(params map[string]any, env map[string]string) (map[string]any, map[string]string) {
+// a manual deep copy; only a value that cannot be copied at all (a cycle)
+// fails the node — never a fall back to the originals, which would alias the
+// shared graph.
+func cloneNodeIO(params map[string]any, env map[string]string) (map[string]any, map[string]string, error) {
 	// The graph these params come from is shared by every step of the run and,
 	// through the worker's run cache, by every concurrent run of the same flow.
 	// Resolution writes into what it gets back, so a shared map would leak one
 	// run's resolved values into another's.
-	outParams := maps.Clone(params)
-	if len(params) > 0 {
-		if b, err := json.Marshal(params); err == nil {
-			var cp map[string]any
-			if json.Unmarshal(b, &cp) == nil {
-				outParams = cp
-			}
+	if params == nil {
+		return nil, maps.Clone(env), nil
+	}
+	if b, err := json.Marshal(params); err == nil {
+		var cp map[string]any
+		if json.Unmarshal(b, &cp) == nil {
+			return cp, maps.Clone(env), nil
 		}
 	}
-	return outParams, maps.Clone(env)
+	cp, err := deepCopyValue(reflect.ValueOf(params), 0)
+	if err != nil {
+		return nil, nil, fmt.Errorf("copy node params: %w", err)
+	}
+	return cp.Interface().(map[string]any), maps.Clone(env), nil
+}
+
+// maxCopyDepth bounds deepCopyValue: params nest a handful of levels, so
+// anything deeper is a cycle JSON already refused.
+const maxCopyDepth = 1000
+
+// deepCopyValue copies maps, slices and pointers recursively, keeping their
+// types. Other kinds (scalars, structs, channels, funcs) are copied by value.
+func deepCopyValue(v reflect.Value, depth int) (reflect.Value, error) {
+	if depth > maxCopyDepth {
+		return reflect.Value{}, fmt.Errorf("value nests more than %d levels deep (cyclic?)", maxCopyDepth)
+	}
+	switch v.Kind() {
+	case reflect.Map:
+		if v.IsNil() {
+			return v, nil
+		}
+		out := reflect.MakeMapWithSize(v.Type(), v.Len())
+		iter := v.MapRange()
+		for iter.Next() {
+			cv, err := deepCopyValue(iter.Value(), depth+1)
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			out.SetMapIndex(iter.Key(), cv)
+		}
+		return out, nil
+	case reflect.Slice:
+		if v.IsNil() {
+			return v, nil
+		}
+		out := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		for i := 0; i < v.Len(); i++ {
+			cv, err := deepCopyValue(v.Index(i), depth+1)
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			out.Index(i).Set(cv)
+		}
+		return out, nil
+	case reflect.Interface, reflect.Pointer:
+		if v.IsNil() {
+			return v, nil
+		}
+		cv, err := deepCopyValue(v.Elem(), depth+1)
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		if v.Kind() == reflect.Interface {
+			out := reflect.New(v.Type()).Elem()
+			out.Set(cv)
+			return out, nil
+		}
+		out := reflect.New(v.Type().Elem())
+		out.Elem().Set(cv)
+		return out, nil
+	default:
+		return v, nil
+	}
 }
 
 func errorResult(graphID, code, msg string) GraphResult {

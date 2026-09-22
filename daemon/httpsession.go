@@ -122,6 +122,19 @@ func (h *HTTPGateway) maybeRenewSession(rw http.ResponseWriter, r *http.Request,
 	h.setSessionCookie(rw, r, token, next)
 }
 
+// requireSessionCredential refuses API-key callers on identity and destructive
+// /me endpoints: a key's subject is chosen by whoever minted it, so only an
+// interactive session proves the caller IS that account. Writes a 403 and
+// returns false when the handler should stop.
+func requireSessionCredential(rw http.ResponseWriter, r *http.Request, what string) bool {
+	if strings.HasPrefix(credentialFromRequest(r), auth.SessionTokenPrefix) {
+		return true
+	}
+	writeAPIError(rw, http.StatusForbidden, "session_required",
+		what+" requires a signed-in session, not an API key")
+	return false
+}
+
 func credentialFromRequest(r *http.Request) string {
 	if h := r.Header.Get("Authorization"); h != "" {
 		token := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))

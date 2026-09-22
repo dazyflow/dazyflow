@@ -93,7 +93,12 @@ func (l *PgLeader) acquireAndHold(ctx context.Context, pingInterval time.Duratio
 	if err != nil {
 		return err
 	}
-	defer conn.Release() // releasing the session drops the advisory lock
+	// Release hands the connection back to the pool with its session — and so a
+	// session-level advisory lock — still alive: the lock would then outlive our
+	// leadership on an idle pooled connection, and no peer could take over. So the
+	// lock is dropped explicitly first (below), and a connection that cannot do
+	// that is closed rather than pooled. Release after Hijack is a no-op.
+	defer conn.Release()
 
 	var got bool
 	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", l.key).Scan(&got); err != nil {
@@ -102,6 +107,15 @@ func (l *PgLeader) acquireAndHold(ctx context.Context, pingInterval time.Duratio
 	if !got {
 		return nil
 	}
+	defer func() {
+		uctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		var unlocked bool
+		if err := conn.QueryRow(uctx, "SELECT pg_advisory_unlock($1)", l.key).Scan(&unlocked); err != nil || !unlocked {
+			// Ending the session is the one sure way to drop the lock.
+			_ = conn.Hijack().Close(uctx)
+		}
+	}()
 	l.set(true)
 	// Hold the lock: keep the session alive until ctx ends or the
 	// connection dies (which releases the lock and lets a peer win).

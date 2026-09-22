@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isResultNode,
+  orderNodesOldestFirst,
   pickResultNode,
   previewOutput,
   resultFilename,
@@ -198,6 +199,43 @@ describe("resultFilename", () => {
   it("falls back when the flow name has no usable characters", () => {
     expect(resultFilename(rows, "///")).toBe("result.csv");
     expect(resultFilename(rows, "")).toBe("result.csv");
+  });
+});
+
+describe("orderNodesOldestFirst", () => {
+  const rec = (id: string, started?: string, output?: Record<string, Ref>): JobRecord => ({
+    ID: "j-" + id,
+    Kind: "node",
+    GraphRunID: "r",
+    GraphID: "",
+    NodeID: id,
+    Status: started ? "succeeded" : "queued",
+    StartedAt: started ?? null,
+    Result: output ? { output } : undefined,
+  });
+
+  it("orders steps by start time, not the store's newest-first order", () => {
+    const newestFirst = [
+      rec("c", "2026-01-01T00:00:03Z"),
+      rec("b", "2026-01-01T00:00:02Z"),
+      rec("a", "2026-01-01T00:00:01Z"),
+    ];
+    expect(orderNodesOldestFirst(newestFirst).map((n) => n.NodeID)).toEqual(["a", "b", "c"]);
+  });
+
+  it("puts steps that never started last, in reversed store order", () => {
+    const newestFirst = [rec("p2"), rec("p1"), rec("done", "2026-01-01T00:00:01Z")];
+    expect(orderNodesOldestFirst(newestFirst).map((n) => n.NodeID)).toEqual(["done", "p1", "p2"]);
+  });
+
+  it("lets pickResultNode find the last step's value", () => {
+    const newestFirst = [
+      rec("end", "2026-01-01T00:00:02Z", { out: { data: "final" } }),
+      rec("start", "2026-01-01T00:00:01Z", { out: { data: "first" } }),
+    ];
+    expect(pickResultNode(orderNodesOldestFirst(newestFirst), undefined, "succeeded")?.NodeID).toBe(
+      "end",
+    );
   });
 });
 

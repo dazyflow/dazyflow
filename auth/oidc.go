@@ -49,7 +49,9 @@ type IDTokenVerifier interface {
 }
 
 type Claims struct {
+	// Subject is the raw IdP `sub`, unique only within Issuer.
 	Subject string
+	Issuer  string
 	Tenant  string
 	Roles   []string
 	Extras  map[string]any
@@ -66,16 +68,37 @@ func (a *OIDCAuthenticator) Authenticate(ctx context.Context, credential string)
 	if err != nil {
 		return core.Principal{}, fmt.Errorf("%w: %s", ErrInvalidCredential, err.Error())
 	}
+	if claims.Subject == "" {
+		return core.Principal{}, fmt.Errorf("%w: token has no sub claim", ErrInvalidCredential)
+	}
 	roles := make([]core.Role, 0, len(claims.Roles))
 	for _, name := range claims.Roles {
 		roles = append(roles, core.Role{Name: name, Permissions: rolePermissions(name)})
 	}
+	issuer := claims.Issuer
+	if issuer == "" {
+		issuer = a.Config.Issuer
+	}
 	return core.Principal{
-		Subject: claims.Subject,
+		Subject: OIDCSubject(issuer, claims.Subject),
 		Tenant:  claims.Tenant,
 		Roles:   roles,
 		Extras:  claims.Extras,
 	}, nil
+}
+
+// OIDCSubject is the principal Subject for an IdP-authenticated bearer token.
+//
+// The raw `sub` is NOT used: it is chosen by the IdP and shares a namespace with
+// local subjects, which are emails — invites, memberships, moderation and flow
+// ownership all key on them. An IdP whose sub happened to be "alice@corp" would
+// otherwise act as the local user alice@corp (accepting her invites, editing and
+// seeing her private flows). The issuer-qualified form cannot equal any
+// email-keyed subject, because nothing on those paths matches a string with the
+// "oidc:" prefix. The sub is also not replaced by the email claim: that would
+// hand every trusted IdP the ability to act as any local account.
+func OIDCSubject(issuer, sub string) string {
+	return "oidc:" + issuer + "#" + sub
 }
 
 func looksLikeJWT(s string) bool {

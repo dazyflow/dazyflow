@@ -10,7 +10,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/apibase"
 	"github.com/dazyflow/dazyflow/drops/internal/google"
-	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 // maxResponseBytes caps how much of a response (or a file being downloaded /
@@ -40,19 +39,9 @@ func SetHTTPBases(api, upload string) {
 	uploadBase.Set(upload)
 }
 
-func apiBaseURL(job core.Job) string {
-	if b, _ := params.StringOpt(job.Params, "base_url"); b != "" {
-		return b
-	}
-	return apiBase.Get()
-}
+func apiBaseURL(job core.Job) string { return apiBase.For(job) }
 
-func uploadBaseURL(job core.Job) string {
-	if b, _ := params.StringOpt(job.Params, "upload_url"); b != "" {
-		return b
-	}
-	return uploadBase.Get()
-}
+func uploadBaseURL(job core.Job) string { return uploadBase.ForParam(job, "upload_url") }
 
 func googleDo(ctx context.Context, method, url, token, contentType string, body []byte, timeoutMS int) (int, []byte, error) {
 	return google.Do(ctx, method, url, token, contentType, body, timeoutMS, maxResponseBytes)

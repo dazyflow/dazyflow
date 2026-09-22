@@ -120,9 +120,9 @@ func (s *Service) ResumeFailedRun(ctx context.Context, p core.Principal, runID s
 	//
 	// Manual, because every way to reach a retry is a person pressing a button
 	// in front of the failure they are retrying — the editor's error banner, the
-	// runs list, the run-detail page. The original run already emailed about
-	// this failure if it was going to; a retry that fails should not send a
-	// second mail about the thing they are actively working on.
+	// runs list, the run-detail page. Manual does not silence the failure email
+	// (see failure_notify_manual_test.go): a retry that fails is mailed about like
+	// any run, and the per-flow throttle is what keeps it to one mail a window.
 	return s.SubmitGraphOpts(ctx, p, g, SubmitOpts{Seeds: seeds, Manual: true})
 }
 

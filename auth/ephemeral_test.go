@@ -167,6 +167,49 @@ func runEphemeralConformance(t *testing.T, mk func(t *testing.T) EphemeralStore)
 		}
 	})
 
+	// Single-use tokens: of any number of concurrent redemptions exactly one
+	// gets the payload.
+	t.Run("TakeIsSingleUse", func(t *testing.T) {
+		s := mk(t)
+		if err := s.Put(ctx, EphemeralSignInHandoff, "tok", []byte(`"x"`), soon()); err != nil {
+			t.Fatal(err)
+		}
+		const n = 16
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+		wins := 0
+		for range n {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				got, err := s.Take(ctx, EphemeralSignInHandoff, "tok")
+				if err == nil {
+					if string(got) != `"x"` {
+						t.Errorf("Take payload = %q", got)
+					}
+					mu.Lock()
+					wins++
+					mu.Unlock()
+				} else if !errors.Is(err, ErrEphemeralNotFound) {
+					t.Errorf("Take: %v", err)
+				}
+			}()
+		}
+		wg.Wait()
+		if wins != 1 {
+			t.Fatalf("%d concurrent Takes succeeded, want exactly 1", wins)
+		}
+		if _, _, err := s.Get(ctx, EphemeralSignInHandoff, "tok"); !errors.Is(err, ErrEphemeralNotFound) {
+			t.Fatalf("token still readable after Take: %v", err)
+		}
+		if err := s.Put(ctx, EphemeralSignInHandoff, "old", []byte(`"x"`), time.Now().Add(-time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Take(ctx, EphemeralSignInHandoff, "old"); !errors.Is(err, ErrEphemeralNotFound) {
+			t.Fatalf("Take of an expired token = %v, want ErrEphemeralNotFound", err)
+		}
+	})
+
 	t.Run("DeleteIsIdempotent", func(t *testing.T) {
 		s := mk(t)
 		if err := s.Delete(ctx, EphemeralGoogleSignIn, "never-existed"); err != nil {
@@ -220,6 +263,9 @@ func (p *prefixedEphemeral) Get(ctx context.Context, kind, token string) ([]byte
 }
 func (p *prefixedEphemeral) Delete(ctx context.Context, kind, token string) error {
 	return p.inner.Delete(ctx, p.k(kind), token)
+}
+func (p *prefixedEphemeral) Take(ctx context.Context, kind, token string) ([]byte, error) {
+	return p.inner.Take(ctx, p.k(kind), token)
 }
 func (p *prefixedEphemeral) IncrAttempts(ctx context.Context, kind, token string) (int, error) {
 	return p.inner.IncrAttempts(ctx, p.k(kind), token)

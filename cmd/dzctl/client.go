@@ -6,7 +6,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -29,6 +32,15 @@ func daemonConnReal(server string) (*grpc.ClientConn, error) {
 	}
 	caFile := os.Getenv("DZCTL_TLS_CA")
 	if caFile == "" {
+		// Plaintext carries DZCTL_TOKEN — a long-lived bearer — in the clear, so
+		// it is only the default for this machine. Anything else needs TLS or an
+		// explicit opt-in that owns the risk.
+		if !isLoopbackTarget(server) {
+			if !insecureRequested() {
+				return nil, fmt.Errorf("refusing to send DZCTL_TOKEN over plaintext gRPC to %s: set DZCTL_TLS_CA (see DZCTL_TLS_*) or pass --insecure / DZCTL_INSECURE=1", server)
+			}
+			fmt.Fprintf(os.Stderr, "warning: connecting to %s without TLS; the bearer token is sent in the clear\n", server)
+		}
 		return grpc.NewClient(server, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 	files := daemon.TLSFiles{
@@ -43,13 +55,46 @@ func daemonConnReal(server string) (*grpc.ClientConn, error) {
 	return grpc.NewClient(server, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
 }
 
+// insecureFlag is bound to --insecure; DZCTL_INSECURE is the env equivalent.
+var insecureFlag bool
+
+func insecureRequested() bool {
+	if insecureFlag {
+		return true
+	}
+	v, err := strconv.ParseBool(os.Getenv("DZCTL_INSECURE"))
+	return err == nil && v
+}
+
+// isLoopbackTarget reports whether a gRPC dial target stays on this machine:
+// a unix socket, "localhost", or a loopback IP, with or without a port and a
+// dns:/// or passthrough:/// scheme.
+func isLoopbackTarget(target string) bool {
+	if strings.HasPrefix(target, "unix:") || strings.HasPrefix(target, "unix-abstract:") {
+		return true
+	}
+	for _, scheme := range []string{"dns:///", "passthrough:///"} {
+		target = strings.TrimPrefix(target, scheme)
+	}
+	host := target
+	if h, _, err := net.SplitHostPort(target); err == nil {
+		host = h
+	}
+	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 // authCtx attaches the API key from DZCTL_TOKEN as a bearer token in
 // outgoing metadata. Returning an error when unset gives the user a
 // targeted message rather than a generic Unauthenticated from the server.
 func authCtx(ctx context.Context) (context.Context, error) {
 	token := os.Getenv("DZCTL_TOKEN")
 	if token == "" {
-		return ctx, fmt.Errorf("DZCTL_TOKEN not set (issue one via `dzd --dev-key`)")
+		return ctx, fmt.Errorf("DZCTL_TOKEN not set (create an API key in the web UI, or start a local dzd with DAZYFLOW_DEV_KEY=1 to get a dev admin token)")
 	}
 	return metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token), nil
 }

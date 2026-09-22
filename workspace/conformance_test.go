@@ -333,6 +333,74 @@ func runWorkspaceConformance(t *testing.T, mk func(t *testing.T) *Store) {
 		}
 	})
 
+	// An autosave burst that continues after its head was published must not
+	// rewrite what is live: Postgres used to amend the published row in place.
+	t.Run("AutosaveOverAPublishedHeadLeavesItLive", func(t *testing.T) {
+		s := mk(t)
+		rev, err := s.SaveCoalescing(flow("f1", "live"), "ada")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.PromoteToEnvironment("f1", PublishedEnv, rev); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+		if _, err := s.SaveCoalescing(flow("f1", "draft"), "ada"); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := s.LoadPublished("f1"); err != nil || got.Name != "live" {
+			t.Fatalf("published reads %q / %v after an autosave, want live", got.Name, err)
+		}
+		if got, _ := s.Load("f1"); got.Name != "draft" {
+			t.Fatalf("draft reads %q, want draft", got.Name)
+		}
+		if got, err := s.LoadAt(rev, "f1"); err != nil || got.Name != "live" {
+			t.Fatalf("the published revision reads %q / %v, want live", got.Name, err)
+		}
+	})
+
+	// Reverting a burst whose head is published must not drop that revision
+	// (Postgres deleted its environment pointer, silently unpublishing).
+	t.Run("AutosaveRevertOverAPublishedHeadKeepsItPublished", func(t *testing.T) {
+		s := mk(t)
+		mustSave(t, s, flow("f1", "base"), "ada")
+		rev, err := s.SaveCoalescing(flow("f1", "edited"), "ada")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.PromoteToEnvironment("f1", PublishedEnv, rev); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+		if _, err := s.SaveCoalescing(flow("f1", "base"), "ada"); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := s.LoadPublished("f1"); err != nil || got.Name != "edited" {
+			t.Fatalf("published reads %q / %v after a revert, want edited", got.Name, err)
+		}
+		if got, _ := s.Load("f1"); got.Name != "base" {
+			t.Fatalf("draft reads %q after the revert, want base", got.Name)
+		}
+	})
+
+	t.Run("AutosaveDoesNotRewriteALabelledRevision", func(t *testing.T) {
+		s := mk(t)
+		rev, err := s.SaveCoalescing(flow("f1", "labelled"), "ada")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetRevisionLabel("f1", rev, "keep me"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.SaveCoalescing(flow("f1", "later"), "ada"); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := s.LoadAt(rev, "f1"); err != nil || got.Name != "labelled" {
+			t.Fatalf("labelled revision reads %q / %v, want labelled", got.Name, err)
+		}
+		if lbl, _ := s.RevisionLabel("f1", rev); lbl != "keep me" {
+			t.Fatalf("label = %q", lbl)
+		}
+	})
+
 	t.Run("UnpublishedFlowLoadsAsNotPublished", func(t *testing.T) {
 		s := mk(t)
 		mustSave(t, s, flow("f1", "x"), "u")
