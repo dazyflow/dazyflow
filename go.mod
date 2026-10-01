@@ -4,8 +4,8 @@ go 1.26.7
 
 require (
 	github.com/PuerkitoBio/goquery v1.13.0
-	github.com/andybalholm/cascadia v1.3.4
-	github.com/coreos/go-oidc/v3 v3.20.0
+	github.com/andybalholm/cascadia v1.3.5
+	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/creack/pty v1.1.24
 	github.com/dop251/goja v0.0.0-20260906210903-70ad66ec7ce4
 	github.com/eclipse/paho.mqtt.golang v1.5.1
@@ -15,12 +15,12 @@ require (
 	github.com/emersion/go-webdav v0.7.0
 	github.com/go-git/go-billy/v5 v5.9.1
 	github.com/go-git/go-git/v5 v5.19.2
-	github.com/go-sql-driver/mysql v1.10.0
+	github.com/go-sql-driver/mysql v1.10.1
 	github.com/google/cel-go v0.28.1
 	github.com/gorilla/websocket v1.5.3
-	github.com/jackc/pgx/v5 v5.10.0
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/nyaruka/phonenumbers v1.8.1
-	github.com/openbao/openbao/api/v2 v2.6.0
+	github.com/openbao/openbao/api/v2 v2.7.0
 	github.com/pdfcpu/pdfcpu v0.15.0
 	github.com/pkg/sftp v1.13.11
 	github.com/pquerna/otp v1.5.0
@@ -34,12 +34,12 @@ require (
 	go.opentelemetry.io/otel/sdk v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0
 	go.yaml.in/yaml/v3 v3.0.5
-	golang.org/x/crypto v0.56.0
-	golang.org/x/net v0.58.0
-	golang.org/x/text v0.41.0
-	google.golang.org/grpc v1.83.2
+	golang.org/x/crypto v0.57.0
+	golang.org/x/net v0.59.0
+	golang.org/x/text v0.42.0
+	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
-	modernc.org/sqlite v1.57.0
+	modernc.org/sqlite v1.59.0
 )
 
 require (
@@ -109,15 +109,15 @@ require (
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
-	modernc.org/libc v1.74.4 // indirect
+	modernc.org/libc v1.75.7 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.11.0 // indirect
+	modernc.org/memory v1.12.1 // indirect
 )
 
 // The frontend's dependency tree contains Go sources (flatted ships a Go
