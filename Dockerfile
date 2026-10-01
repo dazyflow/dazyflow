@@ -10,7 +10,7 @@
 # DAZYFLOW_WEB_DIST is set (we set it to /srv/web below).
 
 # ---- 1. web bundle ----------------------------------------------------
-FROM node:22-alpine AS web
+FROM node:26-alpine AS web
 WORKDIR /web
 # Install deps against the lockfile first so this layer caches unless
 # package.json / lock change.
@@ -26,7 +26,7 @@ RUN npm run build
 # 1.26.7 toolchain during `go mod download` — which fails in a
 # network-restricted prod build. GOTOOLCHAIN=local forbids that implicit
 # fetch so any future drift fails loud at build time instead.
-FROM golang:1.26.7-alpine AS build
+FROM golang:1.27.1-alpine AS build
 ENV GOTOOLCHAIN=local
 # Optional Go module proxy. The build fetches dependencies from here at
 # `go mod download`; when the build host can't reach the public
@@ -81,7 +81,7 @@ RUN mkdir -p /data/workspace /data/sandbox /data/state
 # reader. To bump, resolve the new digest with
 #   docker pull alpine:<tag> && docker inspect alpine:<tag> --format '{{index .RepoDigests 0}}'
 # and update both halves together (a mismatched pair still builds).
-FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS final
+FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS final
 RUN apk add --no-cache ca-certificates && adduser -D -u 1000 dazyflow
 WORKDIR /srv
 COPY --from=build /out/dzd /usr/local/bin/dzd
