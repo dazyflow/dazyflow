@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-10-05
+
 ### Security
 
 - **gRPC bumped to v1.83.2** (GO-2026-6443: a server panic when a request is
