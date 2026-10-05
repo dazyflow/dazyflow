@@ -55,9 +55,9 @@ func BuildTools(c *DazydClient, d Defaults) []Tool {
 		getFlow(c, d),
 		flowReferences(c, d),
 		saveFlow(c, d, "create_flow",
-			"Create a new flow. Use this for fresh graphs; for in-place edits to an existing flow use update_flow (same wire shape, distinct intent so the LLM doesn't accidentally overwrite something it didn't mean to touch). Note: edits are rejected with HTTP 409 while a run of the flow is active."),
+			"Create a new flow. Use this for fresh graphs — to build one up turn by turn, create it with just its trigger and grow it with edit_flow; for in-place edits to an existing flow use update_flow (same wire shape, distinct intent so the LLM doesn't accidentally overwrite something it didn't mean to touch). Note: edits are rejected with HTTP 409 while a run of the flow is active."),
 		saveFlow(c, d, "update_flow",
-			"Update an existing flow in place. Pass the FULL graph payload (nodes + edges) — the daemon overwrites the prior version. Refuses with HTTP 409 if a run of this flow is currently in flight."),
+			"Update an existing flow in place. Prefer edit_flow for changes: it takes small ops instead of the whole graph. Pass the FULL graph payload (nodes + edges) — the daemon overwrites the prior version. Refuses with HTTP 409 if a run of this flow is currently in flight."),
 		patchFlow(c, d),
 		deleteFlow(c, d),
 		enableFlow(c, d),
@@ -76,6 +76,9 @@ func BuildTools(c *DazydClient, d Defaults) []Tool {
 		waitForRun(c),
 		listPendingApprovals(c, d),
 		approveNode(c),
+		getAuthoringGuide(),
+		editFlow(c, d),
+		undoFlowEdit(c, d),
 	}
 }
 

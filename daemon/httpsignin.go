@@ -17,6 +17,8 @@ import (
 )
 
 type authAPI struct {
+	// Cuts off connected MCP clients wherever sessions are revoked.
+	revokeMCPGrants func(ctx context.Context, subject string)
 	auditor
 	adminCheck
 	urlBuilder
@@ -48,7 +50,7 @@ type authAPI struct {
 }
 
 func (h *HTTPGateway) authAPI() *authAPI {
-	return &authAPI{auditor: h.auditor(), adminCheck: h.admins(), urlBuilder: h.urls(), langPicker: h.lang(), sessionCookies: h.cookies(), seatQuota: h.seats(), svc: h.svc, logger: h.logger, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, OrgAuth: h.OrgAuth, SupportAgents: h.SupportAgents, TOTPChallenges: h.TOTPChallenges, Ephemeral: h.Ephemeral, TOTPKey: h.TOTPKey, WildcardDomain: h.WildcardDomain, EnableSignup: h.EnableSignup, PlatformAdmins: h.PlatformAdmins, platformAdminGranted: &h.platformAdminGranted, supportAgentGranted: &h.supportAgentGranted, signInLockout: h.platformAdminAPI().signInLockout, ticketsEnabled: h.supportAPI().ticketsEnabled}
+	return &authAPI{auditor: h.auditor(), adminCheck: h.admins(), urlBuilder: h.urls(), langPicker: h.lang(), sessionCookies: h.cookies(), seatQuota: h.seats(), svc: h.svc, logger: h.logger, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, OrgAuth: h.OrgAuth, SupportAgents: h.SupportAgents, TOTPChallenges: h.TOTPChallenges, Ephemeral: h.Ephemeral, TOTPKey: h.TOTPKey, WildcardDomain: h.WildcardDomain, EnableSignup: h.EnableSignup, PlatformAdmins: h.PlatformAdmins, platformAdminGranted: &h.platformAdminGranted, supportAgentGranted: &h.supportAgentGranted, signInLockout: h.platformAdminAPI().signInLockout, ticketsEnabled: h.supportAPI().ticketsEnabled, revokeMCPGrants: h.revokeMCPGrants}
 }
 
 func (h *authAPI) signIn(rw http.ResponseWriter, r *http.Request) {

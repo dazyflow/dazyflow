@@ -27,6 +27,9 @@ export interface UseAutosaveArgs {
   canEdit: boolean;
   lockedRunID: string | null;
   previewing: boolean;
+  // Someone else saved while there were unsaved edits here, and the user has
+  // not yet chosen whose version to keep: autosaving now would decide for them.
+  held?: boolean;
   loadedID: React.MutableRefObject<string | null>;
   onSaved: (res: SaveResult, autosave: boolean) => void;
   onError: (message: string | null) => void;
@@ -49,6 +52,7 @@ export function useAutosave({
   canEdit,
   lockedRunID,
   previewing,
+  held = false,
   loadedID,
   onSaved,
   onError,
@@ -116,6 +120,7 @@ export function useAutosave({
     if (!dirty || saving || !token || !ready || !graphID) return;
     if (!canEdit || lockedRunID) return;
     if (previewing) return;
+    if (held) return;
     if (loadFailed) return;
     if (rejected) return;
     if (loadedID.current !== null && loadedID.current !== graphID) return;
@@ -138,6 +143,7 @@ export function useAutosave({
     previewing,
     loadFailed,
     rejected,
+    held,
     ...reArmOn,
   ]);
 

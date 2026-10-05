@@ -481,6 +481,7 @@ func main() {
 	authChain := auth.Chain{
 		&auth.APIKeyAuthenticator{Store: ks},
 		&auth.SessionAuthenticator{Store: sessions},
+		&auth.MCPGrantAuthenticator{Store: stores.mcpGrants},
 	}
 	if oidcIssuer != "" {
 		oidcCfg := auth.OIDCConfig{
@@ -654,6 +655,7 @@ func main() {
 			logTail:          logTail,
 			users:            users,
 			sessions:         sessions,
+			mcpGrants:        stores.mcpGrants,
 			sessionTTL:       sessionTTL,
 			sessionMaxAge:    sessionMaxAge,
 			memberships:      memberships,
@@ -797,6 +799,7 @@ type coreStores struct {
 	collectionShares daemon.CollectionShareStore
 	mirrors          daemon.GitMirrorStore
 	schedules        daemon.ScheduleStore
+	mcpGrants        auth.MCPGrantStore
 }
 
 func openCoreStores(ctx context.Context, dsn string, maxConns, minConns, workerCount int, sessionCacheTTL time.Duration, devSeed bool) coreStores {
@@ -881,6 +884,10 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns, workerC
 	if err != nil {
 		log.Fatalf("postgres schedule store: %v", err)
 	}
+	pgMCPGrants, err := auth.NewPgMCPGrantStore(ctx, pool)
+	if err != nil {
+		log.Fatalf("postgres MCP grant store: %v", err)
+	}
 	if sessionCacheTTL > 0 {
 		log.Printf("session lookup cache: ttl=%s", sessionCacheTTL)
 	}
@@ -899,6 +906,7 @@ func openCoreStores(ctx context.Context, dsn string, maxConns, minConns, workerC
 		collectionShares: pgCollectionShares,
 		mirrors:          pgMirrors,
 		schedules:        pgSchedules,
+		mcpGrants:        pgMCPGrants,
 	}
 }
 
@@ -1293,6 +1301,7 @@ type gatewayDeps struct {
 	logTail          *daemon.LogTail
 	users            auth.UserStore
 	sessions         auth.SessionStore
+	mcpGrants        auth.MCPGrantStore
 	sessionTTL       time.Duration
 	sessionMaxAge    time.Duration
 	memberships      auth.MembershipStore
@@ -1337,6 +1346,14 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 	gw.LogTail = d.logTail // nil leaves GET /admin/system/log returning 501
 	gw.Users = d.users
 	gw.Sessions = d.sessions
+	gw.MCPGrants = d.mcpGrants
+	// Extra https hosts MCP clients may be sent back to after OAuth
+	// approval, beyond claude.ai and claude.com; comma-separated.
+	for _, host := range strings.Split(os.Getenv("DAZYFLOW_MCP_OAUTH_REDIRECT_HOSTS"), ",") {
+		if host = strings.ToLower(strings.TrimSpace(host)); host != "" {
+			gw.MCPRedirectHosts = append(gw.MCPRedirectHosts, host)
+		}
+	}
 	gw.SessionTTL = d.sessionTTL
 	gw.MaxSessionAge = d.sessionMaxAge
 

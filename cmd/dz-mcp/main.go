@@ -81,9 +81,10 @@ func main() {
 	}
 
 	srv := &server.Server{
-		Name:    "dazyflow",
-		Version: buildinfo.Version,
-		Logger:  logger,
+		Name:         "dazyflow",
+		Version:      buildinfo.Version,
+		Logger:       logger,
+		Instructions: server.Instructions,
 	}
 	for _, t := range server.BuildTools(client, defaults) {
 		srv.Register(t)

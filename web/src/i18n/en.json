@@ -496,7 +496,12 @@
       "macos": "macOS",
       "windows": "Windows",
       "linux": "Linux"
-    }
+    },
+    "remoteTitle": "Claude on the web, desktop or phone",
+    "remoteHelp": "No key needed. In Claude, open Settings → Connectors → Add custom connector and paste this URL. Claude sends you here to sign in and approve, and the connector then works in the Claude app on your phone too.",
+    "remoteUrlLabel": "Connector URL",
+    "copyUrl": "Copy URL",
+    "localTitle": "Or use an access key with dz-mcp"
   },
   "flowList": {
     "newFlow": "New flow",
@@ -2251,7 +2256,20 @@
     "ctxExpand": "Maximize step",
     "ctxLock": "Lock step",
     "ctxLockHint": "Make this step's fields read-only and stop the card being dragged. It still runs exactly as before.",
-    "fireWhileRunning": "Wait for the current run to finish, then fire this trigger again."
+    "fireWhileRunning": "Wait for the current run to finish, then fire this trigger again.",
+    "assistant": {
+      "added_one": "Your assistant added a step",
+      "added_other": "Your assistant added {{count}} steps",
+      "changed_one": "Your assistant changed a step",
+      "changed_other": "Your assistant changed {{count}} steps",
+      "edited": "Your assistant edited the flow",
+      "savedWhileEditing": "Your assistant changed this flow while you were editing. Load its version, or keep yours — saving yours replaces its change.",
+      "alsoChanged_one": "changed one more",
+      "alsoChanged_other": "changed {{count}} more"
+    },
+    "remoteSavedWhileEditing": "{{who}} saved this flow while you were editing. Load their version, or keep yours — saving yours replaces their change.",
+    "loadTheirs": "Load their version",
+    "keepMine": "Keep mine"
   },
   "iconUpload": {
     "upload": "Upload image"
@@ -2773,5 +2791,20 @@
     "saveHint": "A name, a username, and either a password or a key.",
     "toServers": "Set up a server",
     "fileUnreadable": "{{name}} isn't an SSH private key — it has no \"PRIVATE KEY\" line. Pick the file without the .pub ending, usually ~/.ssh/id_ed25519."
+  },
+  "authorizeMcp": {
+    "title": "Connect an AI assistant",
+    "missingRequest": "This link is missing its authorization request. Start connecting again from the app.",
+    "body": "<0>{{client}}</0> wants to build, change and run flows as <1>{{account}}</1> in <2>{{workspace}}</2>.",
+    "returnTo": "Only approve if you just started connecting from <0>{{host}}</0> — that is where you will be sent back. You can disconnect it any time under Settings.",
+    "approve": "Approve",
+    "deny": "Deny"
+  },
+  "connectedApps": {
+    "title": "Connected assistants",
+    "intro": "AI assistants you approved to work as you, such as Claude. Each one can do what you can in its workspace until you disconnect it.",
+    "none": "None connected.",
+    "line": "via {{host}} · {{workspace}} · last active {{when}}",
+    "disconnect": "Disconnect"
   }
 }

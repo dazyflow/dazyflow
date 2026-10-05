@@ -258,7 +258,8 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
           (d.configErrors?.length ? " config-err" : "") +
           (d.setupNeeded ? " needs-setup" : "") +
           (d.paused ? " paused" : "") +
-          (d.enterDelay != null ? " dz-enter" : "")
+          (d.enterDelay != null ? " dz-enter" : "") +
+          (d.assistantChanged ? " dz-assistant-changed" : "")
         }
         role="group"
         aria-label={i18n.t("nodeCard.collapsedLabel", {
@@ -357,7 +358,8 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
         (d.configErrors?.length ? " config-err" : "") +
         (d.setupNeeded ? " needs-setup" : "") +
         (d.paused ? " paused" : "") +
-        (d.enterDelay != null ? " dz-enter" : "")
+        (d.enterDelay != null ? " dz-enter" : "") +
+          (d.assistantChanged ? " dz-assistant-changed" : "")
       }
       role="group"
       aria-label={`${d.label || d.moduleID} (${d.moduleID})${d.disabled ? ", disabled" : ""} flow step`}
@@ -1096,7 +1098,8 @@ function OperatorChip({
         (d.lintMessage ? " lint-warn" : "") +
         (d.configErrors?.length ? " config-err" : "") +
         (d.paused ? " paused" : "") +
-        (d.enterDelay != null ? " dz-enter" : "")
+        (d.enterDelay != null ? " dz-enter" : "") +
+          (d.assistantChanged ? " dz-assistant-changed" : "")
       }
       style={
         {

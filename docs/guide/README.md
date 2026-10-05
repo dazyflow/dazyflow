@@ -26,7 +26,8 @@ file listing is not it.
 | 9 | [When a run fails](when-a-flow-fails.md) | Reading a failed run, retries, and failure notifications. |
 | 10 | [Runners](runners.md) | Running steps on your own machine, inside your own network. |
 | 11 | [MCP servers](mcp-servers.md) | Exposing a flow to an AI assistant, and calling MCP tools from one. |
-| 12 | [Web APIs](web-apis.md) | Calling an HTTP API that has no dedicated step. |
+| 12 | [Build with Claude](build-with-claude.md) | Connecting Claude, on desktop or phone, to build and run flows for you. |
+| 13 | [Web APIs](web-apis.md) | Calling an HTTP API that has no dedicated step. |
 | — | [Glossary](glossary.md) | Every term, defined once. Linked from everywhere. |
 
 The **step reference** — one page per step, generated from the drop manifests by

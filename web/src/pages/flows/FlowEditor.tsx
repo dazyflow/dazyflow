@@ -149,6 +149,7 @@ import { Inspector } from "../../components/editor/Inspector";
 import { FlowStatusChip } from "../../components/ui/FlowStatusChip";
 import { flowRunStatusPublished, isTriggerModule } from "../../flowStatus";
 import { DazyNode } from "../../components/editor/NodeCard";
+import { AssistantTicker, useAssistantLive, type AssistantSave } from "../../components/editor/AssistantLive";
 import { portColor, type DazyNodeData } from "../../components/editor/nodeCardShared";
 import { CommentNode, FRAME_COLOR_DEFAULT } from "../../components/editor/CommentNode";
 import { RerouteEdge } from "../../components/editor/RerouteEdge";
@@ -249,6 +250,12 @@ function EditorInner() {
 
   const [nodes, setNodes] = useState<FlowNode<DazyNodeData>[]>([]);
   const [edges, setEdges] = useState<FlowEdge[]>([]);
+  const assistantLive = useAssistantLive();
+  // Who saved this flow elsewhere while the canvas had unsaved edits: the
+  // canvas does not pull their version over yours, so it asks.
+  const [remoteSaveBy, setRemoteSaveBy] = useState<string | null>(null);
+  const forceResyncRef = useRef<() => void>(() => {});
+  const nodesNowRef = useRef<FlowNode<DazyNodeData>[]>([]);
   const [animApply, setAnimApply] = useState<{
     enter: Map<string, number>;
     draw: Map<string, number>;
@@ -443,6 +450,21 @@ function EditorInner() {
   // One SSE run-stream at a time; the previous is aborted before a new one opens.
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
+  // An assistant's change that lands out of view is one the person watching —
+  // often on a phone — would never see: zoom out until it is in.
+  const revealTouchedRef = useRef<(ids: string[]) => void>(() => {});
+  revealTouchedRef.current = (ids) => {
+    const root = wrapperRef.current;
+    const pane = root?.querySelector(".react-flow")?.getBoundingClientRect();
+    if (!root || !pane) return;
+    const hidden = ids.some((nid) => {
+      const el = root.querySelector(`.react-flow__node[data-id="${CSS.escape(nid)}"]`);
+      if (!el) return false;
+      const b = el.getBoundingClientRect();
+      return b.left < pane.left || b.right > pane.right || b.top < pane.top || b.bottom > pane.bottom;
+    });
+    if (hidden) fitView({ padding: 0.2, duration: 500, maxZoom: 1 });
+  };
   const updateNodeInternals = useUpdateNodeInternals();
 
   const hydrateGraph = useCallback((g: Graph) => {
@@ -622,6 +644,7 @@ function EditorInner() {
   );
   const applyGraphAnimatedRef = useRef(applyGraphAnimated);
   applyGraphAnimatedRef.current = applyGraphAnimated;
+  nodesNowRef.current = nodes;
 
   const hasPermRef = useRef(hasPerm);
   hasPermRef.current = hasPerm;
@@ -1863,6 +1886,7 @@ function EditorInner() {
       const locked = lockedNodes.has(n.id);
       const paused = pausedAt === n.id;
       const enterDelay = animApply?.enter.get(n.id);
+      const assistantChanged = assistantLive.touched.has(n.id);
       const moduleID = (n.data as DazyNodeData).moduleID;
       const fireable = canTestFire(moduleID) && hasPerm("graph:run");
       const deps: unknown[] = [
@@ -1892,6 +1916,7 @@ function EditorInner() {
         n.data.status,
         approveFromCard,
         enterDelay,
+        assistantChanged,
         fireable,
       ];
       const hit = cache.get(n.id);
@@ -1931,6 +1956,7 @@ function EditorInner() {
           breakpoint,
           paused,
           enterDelay,
+          assistantChanged,
           onFire: fireable
             ? () => openTestEventFor({ id: n.id, module: moduleID })
             : undefined,
@@ -1967,6 +1993,7 @@ function EditorInner() {
     pausedAt,
     approveFromCard,
     animApply,
+    assistantLive.touched,
     hasPerm,
   ]);
 
@@ -2444,6 +2471,7 @@ function EditorInner() {
     canEdit: hasPerm("graph:edit"),
     lockedRunID,
     previewing: !!previewRef,
+    held: remoteSaveBy !== null,
     loadedID: loadedIDRef,
     onError: setError,
     onConflict: refreshLock,
@@ -2699,8 +2727,11 @@ function EditorInner() {
     let retryMS = WATCH_RETRY_MIN_MS;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
-    const resync = () => {
+    const resync = (ev?: AssistantSave & { author?: string }) => {
       if (ctrl.signal.aborted) return;
+      if (ev && dirtyRef.current && !loadFailedRef.current && !previewRefRef.current) {
+        setRemoteSaveBy(ev.assistant ? "assistant" : ev.author || "");
+      }
       if (dirtyRef.current || loadFailedRef.current || previewRefRef.current) return;
       api
         .loadGraph(token, activeTenant, activeWorkspace, watchedID)
@@ -2713,11 +2744,24 @@ function EditorInner() {
           ) {
             return;
           }
+          const before = new Set(nodesNowRef.current.map((n) => n.id));
           applyGraphAnimatedRef.current(g);
+          setRemoteSaveBy(null);
+          if (ev?.assistant) {
+            assistantLive.announce(ev, before);
+            // After the enter animation has put the new nodes in place.
+            window.setTimeout(() => revealTouchedRef.current(ev.touched ?? []), 700);
+          }
         })
         .catch(() => {
           /* transient fetch error — the next save or reconnect re-syncs */
         });
+    };
+    forceResyncRef.current = () => {
+      dirtyRef.current = false;
+      setDirty(false);
+      setRemoteSaveBy(null);
+      resync();
     };
 
     const connect = (catchUp: boolean) => {
@@ -2735,7 +2779,7 @@ function EditorInner() {
               ownCommitsRef.current.delete(ev.commit);
               return;
             }
-            resync();
+            resync(ev);
           },
           ctrl.signal,
         )
@@ -3022,6 +3066,7 @@ function EditorInner() {
         onDrop={onDrop}
         onMouseMove={onCanvasMouseMove}
       >
+        <AssistantTicker entries={assistantLive.ticker} />
         <div className="editor-toolbar">
           {/* Secondary tools live in a SCROLLING region; the primary actions
               after it are pinned, so Run and Publish never slide off the right
@@ -3745,6 +3790,21 @@ function EditorInner() {
           )}
         </div>
         <div className="editor-banner-stack">
+        {remoteSaveBy !== null && (
+          <div className="editor-conn-banner" role="alert">
+            <span className="editor-conn-banner-text">
+              {remoteSaveBy === "assistant" || remoteSaveBy === ""
+                ? t("editor.assistant.savedWhileEditing")
+                : t("editor.remoteSavedWhileEditing", { who: remoteSaveBy })}
+            </span>
+            <span className="editor-conn-banner-actions">
+              <Button variant="primary" onClick={() => forceResyncRef.current()}>
+                {t("editor.loadTheirs")}
+              </Button>
+              <Button onClick={() => setRemoteSaveBy(null)}>{t("editor.keepMine")}</Button>
+            </span>
+          </div>
+        )}
         {/* Publish discoverability: the #1 "why didn't my flow run?" trap is a
             triggered flow left unpublished. A draft with a trigger never fires
             until it's live, and the only other hint is a hover tooltip. Surface

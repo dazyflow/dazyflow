@@ -23,6 +23,11 @@ type FlowUpdatedEvent struct {
 	Commit   string `json:"commit"`
 	Author   string `json:"author"`
 	Autosave bool   `json:"autosave"`
+	// Set on a save by an assistant (see SaveOptions.Assistant): the nodes it
+	// added or changed, new ones first, and its one-line note on why.
+	Assistant bool     `json:"assistant,omitempty"`
+	Note      string   `json:"note,omitempty"`
+	Touched   []string `json:"touched,omitempty"`
 }
 
 func flowBusKey(tenant, workspace, id string) string {

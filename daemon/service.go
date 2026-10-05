@@ -609,14 +609,36 @@ func uniqueGraphID(existing []string, base string) string {
 }
 
 func (s *Service) SaveGraph(ctx context.Context, p core.Principal, g core.Graph) (string, error) {
-	return s.saveGraph(ctx, p, g, false)
+	return s.saveGraph(ctx, p, g, SaveOptions{})
 }
 
 func (s *Service) SaveGraphCoalescing(ctx context.Context, p core.Principal, g core.Graph) (string, error) {
-	return s.saveGraph(ctx, p, g, true)
+	return s.saveGraph(ctx, p, g, SaveOptions{Coalesce: true})
 }
 
-func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph, coalesce bool) (string, error) {
+// SaveOptions shape one save beyond the graph itself.
+type SaveOptions struct {
+	Coalesce bool
+	// BaseETag, when set, refuses the save with ErrFlowChanged unless the
+	// stored flow is still the one with that ETag (GraphETag): an assistant
+	// editing from what it read must not overwrite what a person saved since.
+	BaseETag string
+	// Assistant marks a save made by software acting for the user (an API key
+	// or an MCP token). Its FlowUpdated event then names the nodes it touched
+	// and carries Note, so an open canvas can show what the assistant did.
+	Assistant bool
+	Note      string
+}
+
+// ErrFlowChanged reports a save refused because the flow changed after the
+// caller read it (SaveOptions.BaseETag).
+var ErrFlowChanged = errors.New("the flow changed since it was read")
+
+func (s *Service) SaveGraphWith(ctx context.Context, p core.Principal, g core.Graph, opts SaveOptions) (string, error) {
+	return s.saveGraph(ctx, p, g, opts)
+}
+
+func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph, opts SaveOptions) (string, error) {
 	if err := core.RequireWorkspace(p, g.Tenant, g.Workspace); err != nil {
 		return "", err
 	}
@@ -642,6 +664,9 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 	prior, loadErr := store.Load(g.ID)
 	if loadErr != nil && !errors.Is(loadErr, workspace.ErrGraphNotFound) {
 		return "", fmt.Errorf("load flow %q: %w", g.ID, loadErr)
+	}
+	if opts.BaseETag != "" && (loadErr != nil || core.GraphETag(prior) != opts.BaseETag) {
+		return "", fmt.Errorf("flow %q: %w", g.ID, ErrFlowChanged)
 	}
 	if loadErr == nil {
 		if err := core.AuthorizeGraphEdit(p, prior); err != nil {
@@ -676,7 +701,7 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 		}
 	}
 	var commit string
-	if coalesce {
+	if opts.Coalesce {
 		commit, err = store.SaveCoalescing(g, p.Subject)
 	} else {
 		commit, err = store.Save(g, p.Subject)
@@ -687,10 +712,13 @@ func (s *Service) saveGraph(ctx context.Context, p core.Principal, g core.Graph,
 	s.pruneGitCache(g.Tenant, g.Workspace, g)
 	s.bus().Publish(flowBusKey(g.Tenant, g.Workspace, g.ID), BusEvent{
 		FlowUpdated: &FlowUpdatedEvent{
-			FlowID:   g.Tenant + "/" + g.Workspace + "/" + g.ID,
-			Commit:   commit,
-			Author:   p.Subject,
-			Autosave: coalesce,
+			FlowID:    g.Tenant + "/" + g.Workspace + "/" + g.ID,
+			Commit:    commit,
+			Author:    p.Subject,
+			Autosave:  opts.Coalesce,
+			Assistant: opts.Assistant,
+			Note:      assistantNote(opts),
+			Touched:   assistantTouched(opts, prior, g),
 		},
 	})
 	s.reprojectSchedule(ctx, g.Tenant, g.Workspace, g.ID)
@@ -768,7 +796,7 @@ func (s *Service) RestoreFlow(ctx context.Context, p core.Principal, tenant, ws,
 		return "", core.Graph{}, err
 	}
 	old.Tenant, old.Workspace, old.ID = tenant, ws, id
-	commit, err := s.saveGraph(ctx, p, old, false)
+	commit, err := s.saveGraph(ctx, p, old, SaveOptions{})
 	if err != nil {
 		return "", core.Graph{}, err
 	}
@@ -1668,4 +1696,68 @@ func (s *Service) manifestsForGraph(tenant string, g core.Graph) map[string]core
 		ids = append(ids, n.Module)
 	}
 	return s.manifestsForModules(tenant, ids...)
+}
+
+// maxEditNote caps the note an assistant attaches to a save: it is shown on a
+// canvas ticker, not stored as a commit message.
+const maxEditNote = 200
+
+func assistantNote(opts SaveOptions) string {
+	if !opts.Assistant {
+		return ""
+	}
+	note := strings.TrimSpace(opts.Note)
+	if r := []rune(note); len(r) > maxEditNote {
+		note = string(r[:maxEditNote])
+	}
+	return note
+}
+
+// assistantTouched lists the nodes an assistant save added (first) or changed,
+// a rewire counting as a change to both ends — what a canvas should light up.
+// Position-only moves do not count: those are layout, not the edit.
+func assistantTouched(opts SaveOptions, prior, next core.Graph) []string {
+	if !opts.Assistant {
+		return nil
+	}
+	before := map[string]string{}
+	for _, n := range prior.Nodes {
+		before[n.ID] = nodeSignature(n)
+	}
+	edges := func(g core.Graph) map[string]bool {
+		m := map[string]bool{}
+		for _, e := range g.Edges {
+			m[e.From+"\x00"+e.FromPort+"\x00"+e.To+"\x00"+e.ToPort] = true
+		}
+		return m
+	}
+	oldEdges, newEdges := edges(prior), edges(next)
+	rewired := map[string]bool{}
+	for _, e := range next.Edges {
+		if !oldEdges[e.From+"\x00"+e.FromPort+"\x00"+e.To+"\x00"+e.ToPort] {
+			rewired[e.From], rewired[e.To] = true, true
+		}
+	}
+	for _, e := range prior.Edges {
+		if !newEdges[e.From+"\x00"+e.FromPort+"\x00"+e.To+"\x00"+e.ToPort] {
+			rewired[e.From], rewired[e.To] = true, true
+		}
+	}
+	var added, changed []string
+	for _, n := range next.Nodes {
+		sig, existed := before[n.ID]
+		switch {
+		case !existed:
+			added = append(added, n.ID)
+		case sig != nodeSignature(n) || rewired[n.ID]:
+			changed = append(changed, n.ID)
+		}
+	}
+	return append(added, changed...)
+}
+
+func nodeSignature(n core.Node) string {
+	n.Position = nil
+	b, _ := json.Marshal(n)
+	return string(b)
 }

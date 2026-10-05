@@ -3,6 +3,12 @@
 
 package core
 
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+)
+
 type OnError string
 
 const (
@@ -217,4 +223,14 @@ func (g Graph) Subset(keep map[string]struct{}) Graph {
 		}
 	}
 	return sub
+}
+
+// GraphETag identifies a flow's stored content, for optimistic concurrency: a
+// caller that read a flow with this ETag can ask a save to refuse if anything
+// changed since. A content hash rather than a commit, so it means the same on
+// every storage backend.
+func GraphETag(g Graph) string {
+	b, _ := json.Marshal(g)
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:8])
 }

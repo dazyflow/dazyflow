@@ -269,3 +269,34 @@ func TestRPCError_Error(t *testing.T) {
 		t.Errorf("Error() = %q", e.Error())
 	}
 }
+
+func TestServer_InitializeNegotiatesProtocolVersion(t *testing.T) {
+	s := &server.Server{Name: "test", Version: "1.0"}
+	for asked, want := range map[string]string{
+		"2025-06-18": "2025-06-18",
+		"2099-01-01": server.LatestProtocolVersion,
+	} {
+		reply := s.HandleMessage(t.Context(), []byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"`+asked+`"}}`))
+		var resp struct {
+			Result struct {
+				ProtocolVersion string `json:"protocolVersion"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(reply, &resp); err != nil {
+			t.Fatalf("decode: %v; %s", err, reply)
+		}
+		if resp.Result.ProtocolVersion != want {
+			t.Errorf("asked %s: got %s, want %s", asked, resp.Result.ProtocolVersion, want)
+		}
+	}
+}
+
+func TestServer_HandleMessageNotificationIsNil(t *testing.T) {
+	s := &server.Server{Name: "test", Version: "1.0"}
+	if reply := s.HandleMessage(t.Context(), []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)); reply != nil {
+		t.Errorf("reply = %s, want nil", reply)
+	}
+	if reply := s.HandleMessage(t.Context(), []byte(`{"jsonrpc":"2.0","id":1,"method":"ping"}`)); bytes.HasSuffix(reply, []byte("\n")) || len(reply) == 0 {
+		t.Errorf("ping reply = %q", reply)
+	}
+}

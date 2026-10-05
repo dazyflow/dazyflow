@@ -53,6 +53,7 @@ type EraseReport struct {
 	UserDeleted      bool     `json:"user_deleted,omitempty"`
 	Sessions         int      `json:"sessions_revoked"`
 	APIKeys          int      `json:"api_keys_deleted"`
+	MCPConnections   int      `json:"mcp_connections_revoked"`
 	Memberships      int      `json:"memberships_deleted"`
 	Invitations      int      `json:"invitations_deleted"`
 	AuditEvents      int      `json:"audit_events"`
@@ -122,6 +123,10 @@ func (h *gdprAPI) eraseUserIdentity(ctx context.Context, email string) (EraseRep
 	if rev, ok := h.Sessions.(auth.SessionRevoker); ok {
 		rep.eraseStep("sessions", func() (int, error) { return rev.RevokeSubjectSessions(ctx, u.Subject) },
 			func(n int) { rep.Sessions = n })
+	}
+	if h.MCPGrants != nil {
+		rep.eraseStep("mcp_connections", func() (int, error) { return h.MCPGrants.RevokeSubjectGrants(ctx, u.Subject) },
+			func(n int) { rep.MCPConnections = n })
 	}
 	if ks, ok := h.svc.AdminKeys.(subjectEraser); ok {
 		rep.eraseStep("api_keys", func() (int, error) { return ks.DeleteBySubject(ctx, u.Subject) },

@@ -39,6 +39,8 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	orgprofile := h.orgProfileAPI()
 	webapis := h.webAPIsAPI()
 	mcpapi := h.mcpAPI()
+	mcpendpoint := h.mcpEndpointAPI()
+	mcpoauth := h.mcpOAuthAPI()
 
 	mux.HandleFunc("GET /healthz", func(rw http.ResponseWriter, _ *http.Request) {
 		rw.WriteHeader(http.StatusOK)
@@ -179,6 +181,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/flows/{flow_id}/samples", h.requireAuth(flowapi.flowSamples))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/restore",
 		h.requireAuth(idem.idempotencyMiddleware("/me/flows/{flow_id}/restore", flowapi.restoreFlowMe)))
+	// A batch of small named changes, saved once; see httpflowedit.go.
+	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/edit",
+		h.requireAuth(idem.idempotencyMiddleware("/me/flows/{flow_id}/edit", flowapi.editFlowMe)))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/duplicate",
 		h.requireAuth(idem.idempotencyMiddleware("/me/flows/{flow_id}/duplicate", flowapi.duplicateFlowMe)))
 	mux.HandleFunc("POST /api/v1/me/flows/{flow_id}/label",
@@ -296,6 +301,21 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/admin/mcp-servers/{name}/usage", h.requireAuth(mcpapi.mcpServerUsage))
 	mux.HandleFunc("POST /api/v1/admin/mcp-servers/{name}/refresh", h.requireAuth(mcpapi.refreshMCPServer))
 	mux.HandleFunc("DELETE /api/v1/admin/mcp-servers/{name}", h.requireAuth(mcpapi.deleteMCPServer))
+	// dzd's own tools, for remote MCP clients; see httpmcp.go.
+	mux.HandleFunc("POST /mcp", mcpendpoint.handler(jsonErrors(mux)))
+	// OAuth for MCP clients; see httpmcpoauth.go. The protected-resource
+	// document is served at both the bare and the /mcp-suffixed path (RFC 9728 §3.1).
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource", mcpoauth.mcpProtectedResourceMetadata)
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", mcpoauth.mcpProtectedResourceMetadata)
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server", mcpoauth.mcpAuthorizationServerMetadata)
+	mux.HandleFunc("POST /oauth/register", h.rateLimitAuth(mcpoauth.mcpRegisterClient))
+	mux.HandleFunc("GET /oauth/authorize", h.rateLimitAuth(mcpoauth.mcpAuthorize))
+	mux.HandleFunc("POST /oauth/token", h.rateLimitAuth(mcpoauth.mcpToken))
+	mux.HandleFunc("GET /api/v1/me/mcp-authorizations/{id}", h.requireAuth(mcpoauth.mcpAuthorizationRequest))
+	mux.HandleFunc("POST /api/v1/me/mcp-authorizations/{id}/approve", h.requireAuth(mcpoauth.mcpApproveAuthorization))
+	mux.HandleFunc("POST /api/v1/me/mcp-authorizations/{id}/deny", h.requireAuth(mcpoauth.mcpDenyAuthorization))
+	mux.HandleFunc("GET /api/v1/me/mcp-connections", h.requireAuth(mcpoauth.listMCPConnections))
+	mux.HandleFunc("DELETE /api/v1/me/mcp-connections/{id}", h.requireAuth(mcpoauth.deleteMCPConnection))
 
 	// No refresh route: a re-import is a diff the admin has to confirm.
 	mux.HandleFunc("GET /api/v1/admin/web-apis", h.requireAuth(webapis.listWebAPIs))

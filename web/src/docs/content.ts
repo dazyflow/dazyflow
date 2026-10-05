@@ -186,6 +186,7 @@ export const NAV: NavGroup[] = [
       },
       { text: "Runners", link: "/guide/runners", icon: Plug },
       { text: "MCP servers", link: "/guide/mcp-servers", icon: Blocks },
+      { text: "Build with Claude", link: "/guide/build-with-claude", icon: Sparkles },
       { text: "Web APIs", link: "/guide/web-apis", icon: Globe },
       { text: "Glossary", link: "/guide/glossary", icon: BookText },
     ],

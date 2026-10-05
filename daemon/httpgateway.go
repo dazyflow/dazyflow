@@ -30,6 +30,12 @@ type HTTPGateway struct {
 
 	MCPServers *MCPServers
 
+	// MCPGrants backs the OAuth server MCP clients connect to /mcp through;
+	// nil leaves the OAuth endpoints answering 501. MCPRedirectHosts adds
+	// https redirect hosts beyond claude.ai and claude.com.
+	MCPGrants        auth.MCPGrantStore
+	MCPRedirectHosts []string
+
 	WebAPIs *WebAPIs
 
 	WildcardDomain string

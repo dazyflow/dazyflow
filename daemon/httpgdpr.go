@@ -15,6 +15,7 @@ import (
 )
 
 type gdprAPI struct {
+	MCPGrants auth.MCPGrantStore
 	auditor
 	adminCheck
 	svc                 *Service
@@ -42,7 +43,7 @@ type gdprAPI struct {
 }
 
 func (h *HTTPGateway) gdprAPI() *gdprAPI {
-	return &gdprAPI{auditor: h.auditor(), adminCheck: h.admins(), svc: h.svc, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, OrgAuth: h.OrgAuth, PlatformAdmins: h.PlatformAdmins, PlatformAdminGrants: h.PlatformAdminGrants, SupportAgents: h.SupportAgents, Grants: h.Grants, Bundles: h.Bundles, Tickets: h.Tickets, Audit: h.Audit, Runners: h.Runners, RunnerTasks: h.RunnerTasks, MCPServers: h.MCPServers, WebAPIs: h.WebAPIs, GitMirrors: h.GitMirrors, DropSwitches: h.DropSwitches, EncryptedSecrets: h.EncryptedSecrets}
+	return &gdprAPI{auditor: h.auditor(), adminCheck: h.admins(), svc: h.svc, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, OrgAuth: h.OrgAuth, PlatformAdmins: h.PlatformAdmins, PlatformAdminGrants: h.PlatformAdminGrants, SupportAgents: h.SupportAgents, Grants: h.Grants, Bundles: h.Bundles, Tickets: h.Tickets, Audit: h.Audit, Runners: h.Runners, RunnerTasks: h.RunnerTasks, MCPServers: h.MCPServers, WebAPIs: h.WebAPIs, GitMirrors: h.GitMirrors, DropSwitches: h.DropSwitches, EncryptedSecrets: h.EncryptedSecrets, MCPGrants: h.MCPGrants}
 }
 
 // deleteMyAccountHandler erases the calling user's own account (self-serve

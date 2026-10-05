@@ -61,8 +61,10 @@ plain-language asks — "chase overdue invoices", "remind people about
 appointments" — each with a verdict and a real graph behind it.
 
 **Beyond the canvas:** `dzd` speaks [MCP](docs/guide/mcp-servers.md) in both
-directions — it registers MCP servers as steps, and `dz-mcp` exposes your flows
-as tools to Claude or any MCP client. Long-running or on-prem work goes to
+directions — it registers MCP servers as steps, and serves your flows as tools
+at `/mcp`, so Claude on the web, desktop or phone can
+[build them for you](docs/guide/build-with-claude.md) (`dz-mcp` does the same
+over stdio). Long-running or on-prem work goes to
 [self-hosted runners](docs/guide/runners.md). Everything the UI does is on a
 [documented HTTP API](docs/guide/web-apis.md), and `dzctl` drives it from a
 terminal.

@@ -33,6 +33,7 @@ vi.mock("../api", () => ({
     exportMyData: (...a: unknown[]) => exportMyData(...a),
     getPreferences: (...a: unknown[]) => getPreferences(...a),
     totpStatus: (...a: unknown[]) => totpStatus(...a),
+    listMCPConnections: () => Promise.resolve({ connections: [] }),
   },
 }));
 

@@ -184,6 +184,7 @@ func (h *authAPI) resetPassword(rw http.ResponseWriter, r *http.Request) {
 			revoked = n
 		}
 	}
+	h.revokeMCPGrants(r.Context(), user.Subject)
 	h.auditAuth(r.Context(), r, user.Tenant, user.Email, "auth.password_reset",
 		fmt.Sprintf("sessions_revoked=%d", revoked))
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})

@@ -168,9 +168,14 @@ func (h *flowAPI) suggestionsMe(rw http.ResponseWriter, r *http.Request, p core.
 }
 
 func (h *flowAPI) loadFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	_, _, _, g, ok := h.loadFlowForRequest(rw, r, p, r.URL.Query().Get("ref"))
+	ref := r.URL.Query().Get("ref")
+	_, _, _, g, ok := h.loadFlowForRequest(rw, r, p, ref)
 	if !ok {
 		return
+	}
+	if ref == "" {
+		// For If-Match on the next PUT or PATCH; see SaveOptions.BaseETag.
+		rw.Header().Set("ETag", `"`+core.GraphETag(g)+`"`)
 	}
 	writeJSON(rw, http.StatusOK, g)
 }
@@ -192,14 +197,11 @@ func (h *flowAPI) saveFlowMe(rw http.ResponseWriter, r *http.Request, p core.Pri
 	g.Tenant, g.Workspace, g.ID = tenant, workspace, id
 	var commit string
 	var err error
-	if r.URL.Query().Get("autosave") == "1" {
-		commit, err = h.svc.SaveGraphCoalescing(r.Context(), p, g)
-	} else {
-		commit, err = h.svc.SaveGraph(r.Context(), p, g)
-	}
+	opts := saveOptionsFor(r)
+	opts.Coalesce = r.URL.Query().Get("autosave") == "1"
+	commit, err = h.svc.SaveGraphWith(r.Context(), p, g, opts)
 	if err != nil {
-		if errors.Is(err, core.ErrConflict) {
-			writeAPIError(rw, http.StatusConflict, "flow_locked", err.Error())
+		if writeSaveConflict(rw, err) {
 			return
 		}
 		writeAPIError(rw, http.StatusBadRequest, "save_failed", err.Error())
@@ -624,10 +626,9 @@ func (h *flowAPI) patchFlowMe(rw http.ResponseWriter, r *http.Request, p core.Pr
 		return
 	}
 	next.Tenant, next.Workspace, next.ID = tenant, workspace, id
-	commit, err := h.svc.SaveGraph(r.Context(), p, next)
+	commit, err := h.svc.SaveGraphWith(r.Context(), p, next, saveOptionsFor(r))
 	if err != nil {
-		if errors.Is(err, core.ErrConflict) {
-			writeAPIError(rw, http.StatusConflict, "flow_locked", err.Error())
+		if writeSaveConflict(rw, err) {
 			return
 		}
 		writeAPIError(rw, http.StatusUnprocessableEntity, "validation_failed", err.Error())

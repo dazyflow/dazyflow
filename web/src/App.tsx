@@ -23,6 +23,7 @@ import { VerifyEmail } from "./pages/auth/VerifyEmail";
 import { ForgotPassword } from "./pages/auth/ForgotPassword";
 import { ResetPassword } from "./pages/auth/ResetPassword";
 import { AcceptInvite } from "./pages/auth/AcceptInvite";
+import { AuthorizeMCP } from "./pages/auth/AuthorizeMCP";
 import { UploadsProvider } from "./uploads";
 
 // Split out of the initial bundle. These are the pages that carry the weight —
@@ -172,6 +173,13 @@ const PublicCollection = lazy(() =>
 // there within a frame, and a spinner that flashes for one frame reads as a
 // glitch. A slow network gets the shell (nav, header) and an empty content
 // area, which is what a page mid-load should look like.
+// SignInThenAuthorize sends a signed-out visitor to sign-in with the consent
+// page, request id included, as where to land afterwards.
+function SignInThenAuthorize() {
+  const { pathname, search } = useLocation();
+  return <Navigate to={`/signin?return_to=${encodeURIComponent(pathname + search)}`} replace />;
+}
+
 function PageFallback() {
   return <div className="page-loading" aria-busy="true" />;
 }
@@ -223,6 +231,9 @@ export function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/invite/:token" element={<AcceptInvite />} />
+          {/* An MCP client's OAuth consent: sign in first, then come back to
+              the same request — the catch-all below would land on "/". */}
+          <Route path="/authorize" element={<SignInThenAuthorize />} />
           {/* The bare root is how most people arrive — typing the domain. It has
               no signed-out route of its own, so without this it falls to the
               catch-all below and greets a first-time visitor with a notice about
@@ -328,6 +339,7 @@ export function App() {
           <Route path="/admin/runners" element={<AdminRunners />} />
           <Route path="/admin/runners/:name" element={<AdminRunnerDetail />} />
           <Route path="/invite/:token" element={<AcceptInvite />} />
+          <Route path="/authorize" element={<AuthorizeMCP />} />
           {/* Say the page wasn't found rather than teleporting to /flows: a
               silent redirect leaves the reader unsure whether they mis-clicked
               or whether what they wanted is gone. */}

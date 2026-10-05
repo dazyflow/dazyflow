@@ -22,6 +22,8 @@ import (
 )
 
 type orgAPI struct {
+	// Cuts off connected MCP clients wherever sessions are revoked.
+	revokeMCPGrants func(ctx context.Context, subject string)
 	auditor
 	langPicker
 	seatQuota
@@ -42,7 +44,7 @@ type orgAPI struct {
 }
 
 func (h *HTTPGateway) orgAPI() *orgAPI {
-	return &orgAPI{auditor: h.auditor(), langPicker: h.lang(), seatQuota: h.seats(), svc: h.svc, logger: h.logger, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, OrgAuth: h.OrgAuth, SupportAgents: h.SupportAgents, LogTail: h.LogTail, WildcardDomain: h.WildcardDomain, EnableSignup: h.EnableSignup, auth: h.authAPI(), revokeSessions: h.platformAdminAPI().revokeSubjectSessions}
+	return &orgAPI{auditor: h.auditor(), langPicker: h.lang(), seatQuota: h.seats(), svc: h.svc, logger: h.logger, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, OrgAuth: h.OrgAuth, SupportAgents: h.SupportAgents, LogTail: h.LogTail, WildcardDomain: h.WildcardDomain, EnableSignup: h.EnableSignup, auth: h.authAPI(), revokeSessions: h.platformAdminAPI().revokeSubjectSessions, revokeMCPGrants: h.revokeMCPGrants}
 }
 
 // Re-issues the session against another tenant the caller is a member of;
@@ -329,6 +331,7 @@ func (h *orgAPI) revokeMemberSessions(ctx context.Context, email string) {
 	if err != nil {
 		return // no local user record (e.g. SSO-only) — nothing to sweep
 	}
+	h.revokeMCPGrants(ctx, u.Subject)
 	if n, err := rev.RevokeSubjectSessions(ctx, u.Subject); err != nil {
 		h.logger.Printf("session sweep for %s: %v", email, err)
 	} else if n > 0 {

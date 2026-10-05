@@ -102,8 +102,13 @@ func (a *APIKeyAuthenticator) Authenticate(ctx context.Context, credential strin
 // re-supply. Prefix-only on purpose: a malformed key still reads as "an API
 // key" so it takes the key policy path and is rejected there by
 // Authenticate, never silently routed down the session path.
+//
+// An MCP OAuth access token (MCPAccessTokenPrefix) counts as a key here: it
+// is held by software acting for the user — an AI assistant — which can no
+// more re-type a password than a script can, and must not pass for the person
+// at a human-only approval gate.
 func IsAPIKeyCredential(credential string) bool {
-	return strings.HasPrefix(credential, apiKeyPrefix)
+	return strings.HasPrefix(credential, apiKeyPrefix) || strings.HasPrefix(credential, MCPAccessTokenPrefix)
 }
 
 func (a *APIKeyAuthenticator) now() time.Time {

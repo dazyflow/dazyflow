@@ -59,6 +59,7 @@ func (h *authAPI) changePasswordHandler(rw http.ResponseWriter, r *http.Request,
 	if rev, ok := h.Sessions.(auth.SessionRevoker); ok {
 		_, _ = rev.RevokeSubjectSessions(r.Context(), u.Subject)
 	}
+	h.revokeMCPGrants(r.Context(), u.Subject)
 	h.audit(r.Context(), p, "account.password_change", email, "self-service password change")
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"ok":   true,
@@ -163,6 +164,7 @@ func (h *authAPI) changeEmailHandler(rw http.ResponseWriter, r *http.Request, p 
 	if rev, ok := h.Sessions.(auth.SessionRevoker); ok {
 		_, _ = rev.RevokeSubjectSessions(r.Context(), oldEmail)
 	}
+	h.revokeMCPGrants(r.Context(), oldEmail)
 	if err := del.DeleteUser(r.Context(), oldEmail); err != nil {
 		warnings = append(warnings, "delete old row: "+err.Error())
 	}

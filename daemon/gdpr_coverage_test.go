@@ -70,8 +70,9 @@ var tenantTableDisposition = map[string]struct {
 	"invitations":           {erasedByCascade, "also erased per-subject on account deletion"},
 	"api_keys":              {erasedByCascade, "also erased per-subject on account deletion"},
 
-	"users":    {erasedByIdentity, "the data subject's own row"},
-	"sessions": {erasedByIdentity, "revoked by subject, and expire on their own"},
+	"users":            {erasedByIdentity, "the data subject's own row"},
+	"sessions":         {erasedByIdentity, "revoked by subject, and expire on their own"},
+	"mcp_oauth_grants": {erasedByIdentity, "revoked by subject wherever sessions are"},
 }
 
 // indirectlyScoped are tables the column scan cannot see: they carry no tenant
@@ -184,14 +185,15 @@ var identityColumnDisposition = map[string]struct {
 	how  columnDisposition
 	note string
 }{
-	"users.email":            {erasedWithRow, "the subject's row"},
-	"users.subject":          {erasedWithRow, "the subject's row"},
-	"sessions.subject":       {erasedWithRow, "revoked by subject"},
-	"api_keys.subject":       {erasedWithRow, "deleted by subject"},
-	"memberships.user_email": {erasedWithRow, "deleted by email"},
-	"invitations.email":      {erasedWithRow, "deleted by email"},
-	"platform_admins.email":  {erasedWithRow, "revoked by email"},
-	"support_agents.email":   {erasedWithRow, "revoked by email"},
+	"users.email":              {erasedWithRow, "the subject's row"},
+	"users.subject":            {erasedWithRow, "the subject's row"},
+	"sessions.subject":         {erasedWithRow, "revoked by subject"},
+	"mcp_oauth_grants.subject": {erasedWithRow, "revoked by subject"},
+	"api_keys.subject":         {erasedWithRow, "deleted by subject"},
+	"memberships.user_email":   {erasedWithRow, "deleted by email"},
+	"invitations.email":        {erasedWithRow, "deleted by email"},
+	"platform_admins.email":    {erasedWithRow, "revoked by email"},
+	"support_agents.email":     {erasedWithRow, "revoked by email"},
 
 	"audit_events.actor":             {pseudonymisedOnErase, "AnonymizeActor"},
 	"support_tickets.created_by":     {pseudonymisedOnErase, "AnonymizeSubject"},

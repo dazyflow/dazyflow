@@ -5,11 +5,12 @@
 // the counterpart to engine/mcp, which consumes external MCP servers as flow
 // nodes.
 //
-// Transport is stdio plus JSON-RPC 2.0, newline-delimited. Stderr is reserved for
-// logging so the protocol stream stays clean. HTTP+SSE would be a future addition
-// over the same Handler/Registry pair.
+// Transport is stdio plus JSON-RPC 2.0, newline-delimited (Serve), or one
+// message per call (HandleMessage), which dzd's streamable-HTTP /mcp endpoint
+// uses. Stderr is reserved for logging so the protocol stream stays clean.
 //
-// Targets the 2024-11-05 protocol version, matching engine/mcp's client.
+// initialize echoes the client's protocol version when it is one we speak, so
+// a 2025 HTTP client and a 2024-11-05 stdio client both get their own.
 // Spec: https://spec.modelcontextprotocol.io/
 package server
 
@@ -26,6 +27,20 @@ import (
 )
 
 const ProtocolVersion = "2024-11-05"
+
+// LatestProtocolVersion is answered to a client asking for a version not in
+// supportedProtocolVersions, as the spec's negotiation requires.
+const LatestProtocolVersion = "2025-11-25"
+
+var supportedProtocolVersions = map[string]bool{
+	"2024-11-05": true,
+	"2025-03-26": true,
+	"2025-06-18": true,
+	"2025-11-25": true,
+}
+
+// SupportsProtocolVersion reports whether v is a version initialize would echo.
+func SupportsProtocolVersion(v string) bool { return supportedProtocolVersions[v] }
 
 // Tool-level failures go through ToolCallResult.IsError, NOT these codes: the
 // spec distinguishes "tool ran and failed" from "tool couldn't be invoked".
@@ -105,6 +120,9 @@ type Server struct {
 	Name    string
 	Version string
 	Logger  *log.Logger
+	// Instructions, when set, is returned by initialize for the client to put
+	// in the model's context: how to use these tools, not what each one does.
+	Instructions string
 
 	tools       []Tool
 	toolsByName map[string]Tool
@@ -137,7 +155,7 @@ func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		line, tooLong, err := readLine(br, maxMessageBytes)
+		line, tooLong, err := readLine(br, MaxMessageBytes)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return nil
@@ -149,7 +167,7 @@ func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 			// drop the session: the rest of the line is discarded and the next
 			// one is read as usual.
 			s.writeError(w, nil, codeInvalidRequest,
-				fmt.Sprintf("message exceeds %d bytes", maxMessageBytes))
+				fmt.Sprintf("message exceeds %d bytes", MaxMessageBytes))
 			continue
 		}
 		if len(line) == 0 {
@@ -159,8 +177,22 @@ func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 	}
 }
 
-// maxMessageBytes caps one newline-delimited JSON-RPC message.
-const maxMessageBytes = 4 * 1024 * 1024
+// MaxMessageBytes caps one JSON-RPC message, on either transport.
+const MaxMessageBytes = 4 * 1024 * 1024
+
+// HandleMessage serves one JSON-RPC message and returns the encoded reply,
+// or nil for a notification, which never gets one.
+func (s *Server) HandleMessage(ctx context.Context, msg []byte) []byte {
+	if s.Logger == nil {
+		s.Logger = log.New(io.Discard, "", 0)
+	}
+	var buf bytes.Buffer
+	s.handle(ctx, bytes.TrimSpace(msg), &buf)
+	if buf.Len() == 0 {
+		return nil
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
+}
 
 // readLine returns the next line without its terminator. A line longer than
 // max is consumed to its end and reported as tooLong, with no content, so a
@@ -221,8 +253,18 @@ func (s *Server) handle(ctx context.Context, line []byte, w io.Writer) {
 }
 
 func (s *Server) handleInitialize(w io.Writer, req request) {
+	version := ProtocolVersion
+	var p struct {
+		ProtocolVersion string `json:"protocolVersion"`
+	}
+	if json.Unmarshal(req.Params, &p) == nil && p.ProtocolVersion != "" {
+		version = LatestProtocolVersion
+		if supportedProtocolVersions[p.ProtocolVersion] {
+			version = p.ProtocolVersion
+		}
+	}
 	result := map[string]any{
-		"protocolVersion": ProtocolVersion,
+		"protocolVersion": version,
 		"capabilities": map[string]any{
 			"tools": map[string]any{
 				"listChanged": false,
@@ -232,6 +274,9 @@ func (s *Server) handleInitialize(w io.Writer, req request) {
 			"name":    s.Name,
 			"version": s.Version,
 		},
+	}
+	if s.Instructions != "" {
+		result["instructions"] = s.Instructions
 	}
 	s.writeResult(w, req.ID, result)
 }

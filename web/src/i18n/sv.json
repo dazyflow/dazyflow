@@ -496,7 +496,12 @@
       "macos": "macOS",
       "windows": "Windows",
       "linux": "Linux"
-    }
+    },
+    "remoteTitle": "Claude på webben, datorn eller mobilen",
+    "remoteHelp": "Ingen nyckel behövs. Öppna Settings → Connectors → Add custom connector i Claude och klistra in den här adressen. Claude skickar dig hit för att logga in och godkänna, och sedan fungerar anslutningen även i Claude-appen i mobilen.",
+    "remoteUrlLabel": "Anslutningens adress",
+    "copyUrl": "Kopiera adress",
+    "localTitle": "Eller använd en åtkomstnyckel med dz-mcp"
   },
   "flowList": {
     "newFlow": "Nytt flöde",
@@ -2251,7 +2256,20 @@
     "ctxExpand": "Maximera steg",
     "ctxLock": "Lås steg",
     "ctxLockHint": "Gör stegets fält skrivskyddade och hindra att kortet dras. Det körs precis som förut.",
-    "fireWhileRunning": "Vänta tills den pågående körningen är klar och avfyra triggern igen."
+    "fireWhileRunning": "Vänta tills den pågående körningen är klar och avfyra triggern igen.",
+    "assistant": {
+      "added_one": "Din assistent lade till ett steg",
+      "added_other": "Din assistent lade till {{count}} steg",
+      "changed_one": "Din assistent ändrade ett steg",
+      "changed_other": "Din assistent ändrade {{count}} steg",
+      "edited": "Din assistent redigerade flödet",
+      "savedWhileEditing": "Din assistent ändrade flödet medan du redigerade. Ladda dess version eller behåll din — sparar du din ersätts dess ändring.",
+      "alsoChanged_one": "ändrade ett till",
+      "alsoChanged_other": "ändrade {{count}} till"
+    },
+    "remoteSavedWhileEditing": "{{who}} sparade flödet medan du redigerade. Ladda deras version eller behåll din — sparar du din ersätts deras ändring.",
+    "loadTheirs": "Ladda deras version",
+    "keepMine": "Behåll min"
   },
   "iconUpload": {
     "upload": "Ladda upp bild"
@@ -2773,5 +2791,20 @@
     "saveHint": "Ett namn, ett användarnamn och antingen ett lösenord eller en nyckel.",
     "toServers": "Sätt upp en server",
     "fileUnreadable": "{{name}} är ingen privat SSH-nyckel — den saknar raden ”PRIVATE KEY”. Välj filen utan .pub-ändelse, oftast ~/.ssh/id_ed25519."
+  },
+  "authorizeMcp": {
+    "title": "Anslut en AI-assistent",
+    "missingRequest": "Länken saknar sin auktoriseringsbegäran. Börja ansluta igen från appen.",
+    "body": "<0>{{client}}</0> vill bygga, ändra och köra flöden som <1>{{account}}</1> i <2>{{workspace}}</2>.",
+    "returnTo": "Godkänn bara om du nyss började ansluta från <0>{{host}}</0> — dit skickas du tillbaka. Du kan koppla från när som helst under Inställningar.",
+    "approve": "Godkänn",
+    "deny": "Neka"
+  },
+  "connectedApps": {
+    "title": "Anslutna assistenter",
+    "intro": "AI-assistenter du har godkänt att arbeta som dig, till exempel Claude. Var och en kan göra det du kan i sin arbetsyta tills du kopplar från den.",
+    "none": "Inga anslutna.",
+    "line": "via {{host}} · {{workspace}} · senast aktiv {{when}}",
+    "disconnect": "Koppla från"
   }
 }

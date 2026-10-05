@@ -15,6 +15,8 @@ import type {
   FlowSummary,
   Graph,
   IssuedAPIKey,
+  MCPAuthorizationRequest,
+  MCPConnection,
   InvitationDetails,
   ShareLink,
   CollectionShareLink,
@@ -1321,6 +1323,21 @@ export const api = {
     },
   ) => request<IssuedAPIKey>(token, "POST", "/me/api-keys", params),
 
+  // OAuth consent for an MCP client (claude.ai, the Claude apps) connecting
+  // to /mcp. Session-only on the server: an API key cannot approve.
+  getMCPAuthorization: (token: string, id: string) =>
+    request<MCPAuthorizationRequest>(token, "GET", `/me/mcp-authorizations/${encodeURIComponent(id)}`),
+  decideMCPAuthorization: (token: string, id: string, approve: boolean) =>
+    request<{ redirect_url: string }>(
+      token,
+      "POST",
+      `/me/mcp-authorizations/${encodeURIComponent(id)}/${approve ? "approve" : "deny"}`,
+    ),
+  listMCPConnections: (token: string) =>
+    request<{ connections: MCPConnection[] }>(token, "GET", "/me/mcp-connections"),
+  deleteMCPConnection: (token: string, id: string) =>
+    request<void>(token, "DELETE", `/me/mcp-connections/${encodeURIComponent(id)}`),
+
   revokeAPIKey: (token: string, id: string) =>
     request<void>(token, "DELETE", `/admin/api-keys/${encodeURIComponent(id)}`),
   listUsers: (token: string, tenant?: string) => {
@@ -1425,6 +1442,10 @@ export const api = {
       commit: string;
       author: string;
       autosave: boolean;
+      // Set on an assistant's save (Claude over MCP): what it touched and why.
+      assistant?: boolean;
+      note?: string;
+      touched?: string[];
     }) => void,
     signal: AbortSignal,
   ): Promise<void> {

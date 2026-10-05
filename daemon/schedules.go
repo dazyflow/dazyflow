@@ -163,7 +163,7 @@ func (s *Service) SetTriggerEnabled(ctx context.Context, p core.Principal, tenan
 		return "", fmt.Errorf("node %q: %w", nodeID, core.ErrNotFound)
 	}
 	g.Tenant, g.Workspace, g.ID = tenant, ws, id
-	return s.saveGraph(ctx, p, g, false)
+	return s.saveGraph(ctx, p, g, SaveOptions{})
 }
 
 func (h *flowAPI) listSchedulesMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {

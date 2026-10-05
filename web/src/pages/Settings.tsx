@@ -4,10 +4,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { setLanguage } from "../i18n/index";
-import { Bell, Download, Monitor, Moon, ShieldCheck, Sun } from "lucide-react";
+import { Bell, Download, Monitor, Moon, PlugZap, ShieldCheck, Sun } from "lucide-react";
 import { applyTheme, getThemeMode, type ThemeMode } from "../theme";
 import { useAuth } from "../auth";
 import { api, APIError, type TOTPSetup, type TOTPStatus } from "../api";
+import type { MCPConnection } from "../types";
+import { formatDateTime } from "../lib/datetime";
 import { explainApiError } from "../lib/explainApiError";
 import { downloadJson } from "../lib/download";
 import { OtpInput } from "../components/ui/OtpInput";
@@ -117,7 +119,81 @@ export function Settings() {
 
       <NotificationsCard />
       <TwoFactorCard />
+      <ConnectedAppsCard />
       <DataExportCard />
+    </div>
+  );
+}
+
+// ConnectedAppsCard lists the MCP clients (claude.ai, the Claude apps, Claude
+// Code) the user approved over OAuth, each of which acts as them, and lets
+// them cut one off. A 501 means the server has no OAuth for MCP, so the card
+// stays hidden rather than showing an error nobody can act on.
+function ConnectedAppsCard() {
+  const { t } = useTranslation();
+  const { token } = useAuth();
+  const [connections, setConnections] = useState<MCPConnection[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    try {
+      const r = await api.listMCPConnections(token);
+      setConnections(r.connections);
+    } catch (e) {
+      if (e instanceof APIError && e.status === 501) return;
+      setErr(explainApiError(e, t));
+    }
+  }, [token, t]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (!token || (connections === null && !err)) return null;
+
+  const disconnect = async (id: string) => {
+    setErr(null);
+    try {
+      await api.deleteMCPConnection(token, id);
+      await load();
+    } catch (e) {
+      setErr(explainApiError(e, t));
+    }
+  };
+
+  return (
+    <div className="card settings-card">
+      <div className="sf-field">
+        <div className="label-row">
+          <label>
+            <PlugZap className="icon-inline" size={ICON.md} />{" "}
+            {t("connectedApps.title")}
+          </label>
+        </div>
+        <div className="desc">{t("connectedApps.intro")}</div>
+        {connections && connections.length === 0 && (
+          <div className="desc">{t("connectedApps.none")}</div>
+        )}
+        {connections?.map((c) => (
+          <div key={c.id} className="totp-actions">
+            <span>
+              <strong>{c.client_name}</strong>{" "}
+              <span className="desc">
+                {t("connectedApps.line", {
+                  host: c.redirect_host,
+                  workspace: c.workspace,
+                  when: formatDateTime(c.last_seen_at),
+                })}
+              </span>
+            </span>
+            <Button variant="secondary" onClick={() => void disconnect(c.id)}>
+              {t("connectedApps.disconnect")}
+            </Button>
+          </div>
+        ))}
+        {err && <div className="error">{err}</div>}
+      </div>
     </div>
   );
 }

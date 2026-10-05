@@ -74,4 +74,44 @@ describe("useAutosave", () => {
     });
     expect(result.current.dirty).toBe(true);
   });
+
+  // A remote save is waiting for the user to choose whose version to keep:
+  // the idle autosave must not choose for them.
+  it("does not autosave while held, and does once released", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(null))));
+    saveGraph.mockReset();
+    saveGraph.mockResolvedValue({});
+    const { result, rerender } = renderHook(({ held }) =>
+      useAutosave({
+        token: "cookie-session",
+        ready: true,
+        graphID: "f",
+        t: (k) => k,
+        buildGraph: () => graph,
+        canEdit: true,
+        lockedRunID: null,
+        previewing: false,
+        held,
+        loadedID: { current: "f" },
+        onSaved: () => {},
+        onError: () => {},
+        onConflict: () => {},
+        reArmOn: [],
+      }),
+      { initialProps: { held: true } },
+    );
+    act(() => result.current.setDirty(true));
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(saveGraph).not.toHaveBeenCalled();
+    rerender({ held: false });
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(saveGraph).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 });

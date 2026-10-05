@@ -543,6 +543,25 @@ export type APIKeySummary = {
   status: "active" | "expired" | "revoked";
 };
 
+// An MCP client asking to connect over OAuth, as the consent page shows it.
+export type MCPAuthorizationRequest = {
+  client_name: string;
+  redirect_host: string;
+  scope: string;
+  account: string;
+  workspace: string;
+};
+
+// An approved MCP client connection, revocable from Settings.
+export type MCPConnection = {
+  id: string;
+  client_name: string;
+  redirect_host: string;
+  workspace: string;
+  created_at: string;
+  last_seen_at: string;
+};
+
 export type IssuedAPIKey = APIKeySummary & {
   secret: string;
 };

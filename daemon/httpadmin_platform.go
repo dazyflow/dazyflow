@@ -17,6 +17,8 @@ import (
 )
 
 type platformAdminAPI struct {
+	// Cuts off connected MCP clients wherever sessions are revoked.
+	revokeMCPGrants func(ctx context.Context, subject string)
 	auditor
 	adminCheck
 	svc                 *Service
@@ -31,7 +33,7 @@ type platformAdminAPI struct {
 }
 
 func (h *HTTPGateway) platformAdminAPI() *platformAdminAPI {
-	return &platformAdminAPI{auditor: h.auditor(), adminCheck: h.admins(), svc: h.svc, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, PlatformAdminGrants: h.PlatformAdminGrants, DropSwitches: h.DropSwitches}
+	return &platformAdminAPI{auditor: h.auditor(), adminCheck: h.admins(), svc: h.svc, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, PlatformAdminGrants: h.PlatformAdminGrants, DropSwitches: h.DropSwitches, revokeMCPGrants: h.revokeMCPGrants}
 }
 
 // Cross-tenant tools; every route here is gated on platform:admin.
@@ -398,6 +400,7 @@ func (h *platformAdminAPI) revokeSubjectSessions(ctx context.Context, subject st
 	if rev, ok := h.Sessions.(auth.SessionRevoker); ok && subject != "" {
 		_, _ = rev.RevokeSubjectSessions(ctx, subject)
 	}
+	h.revokeMCPGrants(ctx, subject)
 }
 
 func (h *platformAdminAPI) invalidateModeration(subject, tenant string) {

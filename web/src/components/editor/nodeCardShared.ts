@@ -121,6 +121,8 @@ export type DazyNodeData = {
   paused?: boolean;
   resourceLabels?: Record<string, string>;
   enterDelay?: number;
+  // Lit for a few seconds after an assistant's save touched this node.
+  assistantChanged?: boolean;
 };
 
 export function cronToWords(cron: string): string {

@@ -170,6 +170,23 @@ function ConfirmStage({
   return (
     <>
       <div className="modal-body">
+        {/* The remote connector needs no key: Claude signs in over OAuth and
+            the user approves it here, so it leads. */}
+        <div className="sf-field">
+          <div className="label-row">
+            <label>{t("connectMcp.remoteTitle")}</label>
+          </div>
+          <div className="desc">{t("connectMcp.remoteHelp")}</div>
+          <input
+            value={`${window.location.origin}/mcp`}
+            readOnly
+            aria-label={t("connectMcp.remoteUrlLabel")}
+            onFocus={(e) => e.currentTarget.select()}
+            style={{ fontFamily: "var(--font-mono)" }}
+          />
+          <CopyButton text={`${window.location.origin}/mcp`} labelKey="connectMcp.copyUrl" />
+        </div>
+        <h3>{t("connectMcp.localTitle")}</h3>
         <p className="settings-help">
           {t(canEdit ? "connectMcp.introRunEdit" : "connectMcp.introRun")}
         </p>

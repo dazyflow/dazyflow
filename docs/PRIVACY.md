@@ -58,6 +58,7 @@ the operator's `/data` volume) — nothing is sent to the vendor. Tables are in
 | Email, password hash (bcrypt), roles, TOTP secret (AES-GCM encrypted), recovery codes (bcrypt), email-verification token hash | `users` (`auth/postgres.go`) | Email is the primary key. |
 | Membership & invitation records (email, inviter email) | `memberships`, `invitations` (`auth/postgres_orgs.go`) | |
 | Sessions (subject, tenant, expiry) | `sessions` (`auth/postgres.go`) | Token stored only as SHA-256 hash. |
+| Connected AI assistants (subject, tenant, client name, redirect host, expiry) | `mcp_oauth_grants` (`auth/postgres_mcpgrant.go`) | Tokens stored only as SHA-256 hashes; revoked with the subject's sessions. |
 | API keys (subject, salted SHA-256 hash) | `api_keys` (`auth/postgres.go`) | Secret never stored in clear. |
 | Audit events — actor (email), action, target, and **source IP for auth events** | `audit_events` (`daemon/audit.go`) | IP is personal data; retained 90 days by default. |
 | Run logs & job payloads / node outputs | `run_logs`, `jobs`, `bus_events` (`daemon/runlog_pg.go`, `engine/jobstore`, `daemon/eventbus_pg.go`) | **May contain arbitrary personal data from the flows themselves** (e.g. emails in a processed CSV). Secrets are redacted (`engine/redact.go`); personal data is **not**. |
