@@ -63,6 +63,7 @@ vi.mock("../../api", () => ({
     listProviders: () => Promise.resolve({ providers: [] }),
     listSSHCredentials: () => Promise.resolve({ credentials: [] }),
     watchFlow: () => Promise.resolve({}),
+    putCanvasFocus: () => Promise.resolve(),
     publishFlow: () => Promise.resolve({}),
     labelRevision: () => Promise.resolve({}),
     restoreFlow: () => Promise.resolve({}),

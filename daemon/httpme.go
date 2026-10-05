@@ -222,6 +222,9 @@ func (h *flowAPI) flowMutationResponse(r *http.Request, p core.Principal, commit
 		"public_base_configured": h.svc.PublicBaseURL != "",
 	}
 	resp["canvas_url"] = base + "/flows/" + g.ID
+	// The same canvas, full-screen and read-only: what to open on a phone to
+	// watch an assistant build the flow.
+	resp["watch_url"] = base + "/flows/" + g.ID + "?watch=1"
 	return resp
 }
 

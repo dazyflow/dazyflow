@@ -78,6 +78,7 @@ vi.mock("../../api", () => {
       flowHistory: () => Promise.resolve({ revisions: [] }),
       streamJob: (...a: Parameters<typeof stream.streamJob>) => stream.streamJob(...a),
       watchFlow: () => Promise.resolve({}),
+      putCanvasFocus: () => Promise.resolve(),
     },
   };
 });

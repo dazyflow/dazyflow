@@ -210,6 +210,10 @@ function EditorInner() {
   } = useActiveFlow();
   const { id } = useParams();
   const [searchParams] = useSearchParams();
+  // ?watch=1: the canvas alone, full-screen and read-only — what a phone shows
+  // while an assistant builds the flow. Tapping a step still selects it, which
+  // is how "change this one" reaches the assistant (see the focus report below).
+  const watching = searchParams.get("watch") === "1";
   const navigate = useNavigate();
   const location = useLocation();
   const animateBuildRef = useRef(
@@ -2105,7 +2109,7 @@ function EditorInner() {
     [token, activeTenant, activeWorkspace, id, t],
   );
 
-  const canEdit = hasPerm("graph:edit") && !lockedRunID && !previewRef;
+  const canEdit = hasPerm("graph:edit") && !lockedRunID && !previewRef && !watching;
 
   const clearBreakpoints = useCallback(() => {
     setBreakpoints((prev) => (prev.size === 0 ? prev : new Set()));
@@ -2819,6 +2823,22 @@ function EditorInner() {
     };
   }, [token, meReady, id, activeTenant, activeWorkspace]);
 
+  // Tell the server which flow and step this canvas shows, so an assistant
+  // asked about "this step" can look it up (get_canvas_focus). Debounced: a
+  // selection is a pointer, not a stream; only a visible tab reports.
+  useEffect(() => {
+    if (!token || !meReady || !id || !activeTenant || !activeWorkspace) return;
+    const handle = window.setTimeout(() => {
+      if (document.visibilityState !== "visible") return;
+      void api
+        .putCanvasFocus(token, `${activeTenant}/${activeWorkspace}/${id}`, selectedID ?? "")
+        .catch(() => {
+          /* best-effort: an assistant falls back to asking */
+        });
+    }, 400);
+    return () => window.clearTimeout(handle);
+  }, [token, meReady, id, activeTenant, activeWorkspace, selectedID]);
+
 
 
 
@@ -3055,7 +3075,7 @@ function EditorInner() {
 
   return (
     <div
-      className="editor"
+      className={"editor" + (watching ? " editor-watch" : "")}
       data-has-selection={selectedID ? "true" : "false"}
       data-inspector-expanded={inspectorExpanded ? "true" : "false"}
       ref={wrapperRef}
@@ -3067,6 +3087,12 @@ function EditorInner() {
         onMouseMove={onCanvasMouseMove}
       >
         <AssistantTicker entries={assistantLive.ticker} />
+        {watching && id && (
+          <a className="editor-watch-chip" href={`/flows/${encodeURIComponent(id)}`}>
+            {name || id}
+            <span className="editor-watch-chip-action">{t("editor.watch.openEditor")}</span>
+          </a>
+        )}
         <div className="editor-toolbar">
           {/* Secondary tools live in a SCROLLING region; the primary actions
               after it are pinned, so Run and Publish never slide off the right
@@ -4087,7 +4113,9 @@ function EditorInner() {
           onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
           onEdgesChange={onEdgesChange}
-          deleteKeyCode={["Delete", "Backspace"]}
+          deleteKeyCode={watching ? null : ["Delete", "Backspace"]}
+          nodesDraggable={!watching}
+          nodesConnectable={!watching}
           onBeforeDelete={confirmDelete}
           onConnect={onConnect}
           isValidConnection={isValidConnection}

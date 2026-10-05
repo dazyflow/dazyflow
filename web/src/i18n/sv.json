@@ -2269,7 +2269,10 @@
     },
     "remoteSavedWhileEditing": "{{who}} sparade flödet medan du redigerade. Ladda deras version eller behåll din — sparar du din ersätts deras ändring.",
     "loadTheirs": "Ladda deras version",
-    "keepMine": "Behåll min"
+    "keepMine": "Behåll min",
+    "watch": {
+      "openEditor": "Öppna i redigeraren"
+    }
   },
   "iconUpload": {
     "upload": "Ladda upp bild"

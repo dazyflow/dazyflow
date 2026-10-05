@@ -41,6 +41,7 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mcpapi := h.mcpAPI()
 	mcpendpoint := h.mcpEndpointAPI()
 	mcpoauth := h.mcpOAuthAPI()
+	canvasfocus := h.canvasFocusAPI()
 
 	mux.HandleFunc("GET /healthz", func(rw http.ResponseWriter, _ *http.Request) {
 		rw.WriteHeader(http.StatusOK)
@@ -316,6 +317,9 @@ func (h *HTTPGateway) mountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/me/mcp-authorizations/{id}/deny", h.requireAuth(mcpoauth.mcpDenyAuthorization))
 	mux.HandleFunc("GET /api/v1/me/mcp-connections", h.requireAuth(mcpoauth.listMCPConnections))
 	mux.HandleFunc("DELETE /api/v1/me/mcp-connections/{id}", h.requireAuth(mcpoauth.deleteMCPConnection))
+	// What the user's canvas shows, for an assistant to resolve "this step".
+	mux.HandleFunc("PUT /api/v1/me/canvas-focus", h.requireAuth(canvasfocus.putCanvasFocus))
+	mux.HandleFunc("GET /api/v1/me/canvas-focus", h.requireAuth(canvasfocus.getCanvasFocus))
 
 	// No refresh route: a re-import is a diff the admin has to confirm.
 	mux.HandleFunc("GET /api/v1/admin/web-apis", h.requireAuth(webapis.listWebAPIs))

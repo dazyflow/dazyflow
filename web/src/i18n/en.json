@@ -2269,7 +2269,10 @@
     },
     "remoteSavedWhileEditing": "{{who}} saved this flow while you were editing. Load their version, or keep yours — saving yours replaces their change.",
     "loadTheirs": "Load their version",
-    "keepMine": "Keep mine"
+    "keepMine": "Keep mine",
+    "watch": {
+      "openEditor": "Open in editor"
+    }
   },
   "iconUpload": {
     "upload": "Upload image"

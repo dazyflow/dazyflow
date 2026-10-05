@@ -208,7 +208,7 @@ func TestMCPEndpoint_InstructionsNameRealTools(t *testing.T) {
 	if init.Instructions != server.Instructions {
 		t.Fatal("initialize does not carry the instructions")
 	}
-	tools := map[string]bool{"canvas_url": true, "undo_ref": true}
+	tools := map[string]bool{"canvas_url": true, "watch_url": true, "undo_ref": true}
 	for _, tl := range server.BuildTools(nil, server.Defaults{}) {
 		tools[tl.Name] = true
 	}
@@ -216,5 +216,38 @@ func TestMCPEndpoint_InstructionsNameRealTools(t *testing.T) {
 		if !tools[w] {
 			t.Errorf("instructions mention %q, which is not a tool", w)
 		}
+	}
+}
+
+// "Change this step": the canvas reports the step the user tapped, under
+// their session, and the assistant reads it back with its settings.
+func TestMCPEndpoint_CanvasFocusResolvesThisStep(t *testing.T) {
+	t.Parallel()
+	h, session := newMCPOAuthHarness(t)
+	if rw := h.do(t, http.MethodPut, "/api/v1/me/flows/t%2Fws%2Ffocus", map[string]any{
+		"nodes": []map[string]any{{"id": "msg", "module": "text", "params": map[string]any{"text": "hi"}}},
+	}); rw.Code != http.StatusOK {
+		t.Fatalf("seed: %d %s", rw.Code, rw.Body)
+	}
+	text, _ := callTool(t, h, "get_canvas_focus", map[string]any{})
+	if !strings.Contains(text, `"open": false`) {
+		t.Errorf("before any report: %s", text)
+	}
+	put := func(token string) int {
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/me/canvas-focus",
+			strings.NewReader(`{"flow_id":"t/ws/focus","node_id":"msg"}`))
+		req.Header.Set("Authorization", "Bearer "+token)
+		return serve(h, req).Code
+	}
+	if code := put(h.token); code != http.StatusForbidden {
+		t.Errorf("an API key set focus: %d", code)
+	}
+	if code := put(session); code != http.StatusNoContent {
+		t.Fatalf("session focus: %d", code)
+	}
+	// The harness key is the same person (alice) as the session.
+	text, isErr := callTool(t, h, "get_canvas_focus", map[string]any{})
+	if isErr || !strings.Contains(text, `"module": "text"`) || !strings.Contains(text, `"text": "hi"`) {
+		t.Errorf("focus: %s", text)
 	}
 }

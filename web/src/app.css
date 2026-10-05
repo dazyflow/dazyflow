@@ -8992,6 +8992,45 @@ a.pa-card:hover {
   animation: dz-node-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: var(--enter-delay, 0s);
 }
+/* Watch mode (?watch=1): the canvas alone, for following an assistant from a
+   phone. Everything that edits or explains is hidden; the chip names the flow
+   and is the way back to the full editor. */
+.editor-watch .editor-toolbar,
+.editor-watch .editor-banner-stack,
+.editor-watch .inspector,
+.editor-watch .inspect-fab,
+.editor-watch .dz-minimap {
+  display: none;
+}
+.editor.editor-watch {
+  height: 100dvh;
+}
+.editor-watch-chip {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  right: var(--space-3);
+  z-index: 5;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  padding: 8px 12px;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--shadow);
+}
+.editor-watch-chip-action {
+  color: var(--accent);
+  font-weight: 400;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
 /* An assistant's save just touched this node: a ring that fades, so someone
    watching Claude build the flow sees where each change landed. */
 .dz-node.dz-assistant-changed {

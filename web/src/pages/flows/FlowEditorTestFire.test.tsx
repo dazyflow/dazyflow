@@ -108,6 +108,7 @@ vi.mock("../../api", () => {
       cancelRun: () => Promise.resolve({}),
       sampleNode: () => Promise.resolve({}),
       watchFlow: () => new Promise(() => {}),
+      putCanvasFocus: () => Promise.resolve(),
       publishFlow: () => Promise.resolve({}),
       labelRevision: () => Promise.resolve({}),
       restoreFlow: () => Promise.resolve({}),

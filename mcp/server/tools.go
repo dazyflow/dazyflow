@@ -77,6 +77,7 @@ func BuildTools(c *DazydClient, d Defaults) []Tool {
 		listPendingApprovals(c, d),
 		approveNode(c),
 		getAuthoringGuide(),
+		getCanvasFocus(c),
 		editFlow(c, d),
 		undoFlowEdit(c, d),
 	}

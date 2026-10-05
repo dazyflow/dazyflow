@@ -27,13 +27,14 @@ You are the user's guide and co-builder. Many are new to this and are on their p
 
 A new flow goes in five steps. Say the plan in one sentence at the start, and name each step as you reach it.
 1. The idea. Ask a few questions at a time, never a form: what should happen, what starts it (a schedule, a form, a webhook, a message), which apps it touches. Offer two or three concrete suggestions with each question and a sensible default for when they don't know.
-2. Make it. Create the flow with create_flow holding just its trigger step, then give them the canvas_url from the reply: on their phone or computer it shows the flow, and every change you save appears there within a second.
+2. Make it. Create the flow with create_flow holding just its trigger step, then give them the watch_url from the reply: opened on their phone it shows the flow full-screen, and every change you save appears there within a second, with your note. On a computer, canvas_url opens the full editor.
 3. Connect apps. For each app the flow needs, check list_connections; if it is not connected, start_connection and give them the link to sign in. Never put passwords or keys in params: use set_secret and reference it.
 4. Build the steps. One edit_flow per change they ask for, with a short note saying what and why — the note is shown live on their canvas. Find steps with list_drops and describe_drop; never invent a step id or a param name. After each edit, say in a sentence what changed and keep count ("that's 3 steps").
 5. Try it. Run it with test_trigger_flow or run_flow and wait_for_run, and tell them in plain words what happened; fix with edit_flow. Turn it on (enable_flow, publish_flow) only when they say so.
 
 Throughout:
 - End each reply with the next step or a question, so they always know where they are.
+- "This", "here", "that step" mean what is on their canvas: call get_canvas_focus for the open flow and the step they tapped.
 - "Undo" means undo_flow_edit with the undo_ref from your last edit_flow.
 - Pass base from your last edit_flow reply on the next one. If an edit is refused because the flow changed, someone edited it on the canvas: get_flow, tell them, and redo your change on top.
 - An edit that fails changes nothing; read the error, fix the op and send the batch again.`
@@ -87,6 +88,21 @@ func getAuthoringGuide() Tool {
 		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 		Handler: func(context.Context, json.RawMessage) (ToolCallResult, error) {
 			return ToolCallResult{Content: []ContentItem{{Type: "text", Text: authoringGuide}}}, nil
+		},
+	}
+}
+
+func getCanvasFocus(c *DazydClient) Tool {
+	return Tool{
+		Name:        "get_canvas_focus",
+		Description: "What the user is looking at on their canvas right now: the open flow and the step they last tapped, with its settings. Call it whenever they say 'this', 'here' or 'that step' instead of guessing. open:false means no canvas has reported in the last 15 minutes.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+		Handler: func(ctx context.Context, _ json.RawMessage) (ToolCallResult, error) {
+			var out map[string]any
+			if err := c.Get(ctx, "/me/canvas-focus", &out); err != nil {
+				return errorResultOrErr(err)
+			}
+			return TextResult(out), nil
 		},
 	}
 }

@@ -35,12 +35,16 @@ claude mcp add --transport http dazyflow https://flows.example.com/mcp
 
 ## Watch it build
 
-Open the flow's canvas — Claude gives you the link when it creates the flow —
-on your phone or computer, and keep talking. Each change Claude makes lands
+When Claude creates a flow it gives you a watch link: the canvas on its own,
+full-screen and read-only, made for a phone. Open it and keep talking (or open
+the flow in the editor on a computer). Each change Claude makes lands
 there within a second: new steps pop in next to the step they follow, the
 steps it touched light up for a few seconds, and a line at the bottom says
 what it did and why. If a change lands out of view, the canvas zooms out to
 show it.
+
+To talk about one step, tap it and say "this one": Claude can see which flow
+you have open and which step you tapped, and its settings.
 
 Ask Claude to undo and it puts the flow back as it was before its last change.
 Every change is also in the flow's **History**.

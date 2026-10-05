@@ -1,16 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The editor's Errors/Warnings buttons, in the editor.
-//
-// Every message these count used to be a banner stacked over the canvas. The
-// two behaviours worth pinning down after the move are the ones a count alone
-// would lose: a message the author did not ask for still reaches them, and a
-// panel does not outlive the thing it was reporting.
+// Watching an assistant build the flow: its saves arrive on the watch stream
+// and the canvas shows them (ticker, lit nodes); ?watch=1 is the phone view;
+// and the canvas reports what it shows so "this step" means something.
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { render, waitFor, act, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { installLayoutStubs, makeStreamJob, manifests, twoStepGraph } from "./editorTestHarness";
 
@@ -25,6 +21,7 @@ vi.mock("react-i18next", () => {
   };
 });
 vi.mock("../../i18n", () => ({ default: { language: "en", t: (k: string) => k } }));
+
 vi.mock("../../auth", () => {
   const auth = {
     token: "tok",
@@ -38,6 +35,8 @@ vi.mock("../../auth", () => {
 
 const stream = makeStreamJob();
 const loadGraph = vi.fn();
+const watchFlow = vi.fn();
+const putCanvasFocus = vi.fn((..._a: unknown[]) => Promise.resolve());
 
 vi.mock("../../api", () => {
   class APIError extends Error {
@@ -69,8 +68,8 @@ vi.mock("../../api", () => {
       retryRun: () => Promise.resolve({ job_id: "run-2" }),
       cancelRun: () => Promise.resolve({}),
       sampleNode: () => Promise.resolve({}),
-      watchFlow: () => Promise.resolve({}),
-      putCanvasFocus: () => Promise.resolve(),
+      watchFlow: (...a: unknown[]) => watchFlow(...a),
+      putCanvasFocus: (...a: unknown[]) => putCanvasFocus(...a),
       publishFlow: () => Promise.resolve({}),
       labelRevision: () => Promise.resolve({}),
       restoreFlow: () => Promise.resolve({}),
@@ -85,9 +84,9 @@ vi.mock("../../api", () => {
 
 import { FlowEditor } from "./FlowEditor";
 
-function mount(id = "coffee-reorder") {
+function mount(url = "/flows/coffee-reorder") {
   return render(
-    <MemoryRouter initialEntries={[`/flows/${id}`]}>
+    <MemoryRouter initialEntries={[url]}>
       <Routes>
         <Route path="/flows/:id" element={<FlowEditor />} />
       </Routes>
@@ -95,63 +94,48 @@ function mount(id = "coffee-reorder") {
   );
 }
 
-
-function strayEdgeGraph() {
+const withAddedStep = () => {
   const g = twoStepGraph();
-  g.edges = [{ from: "manual_1", from_port: "out", to: "ntfy_1", to_port: "nope" }];
+  g.nodes.push({ id: "ntfy_2", module: "ntfy", params: { topic: "milk" }, position: { x: 640, y: 0 } });
   return g;
-}
+};
 
-describe("the editor's issue panels", () => {
+describe("assistant live view", () => {
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     loadGraph.mockReset();
+    loadGraph.mockResolvedValueOnce(twoStepGraph()).mockResolvedValue(withAddedStep());
+    putCanvasFocus.mockClear();
+    watchFlow.mockReset();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
-  it("opens the Warnings panel itself for a message nobody asked for", async () => {
-    loadGraph.mockResolvedValue(strayEdgeGraph());
-    mount();
-    // Not "there is a 1 in the toolbar": the author never clicked anything, so
-    // the words have to be on screen. A pruned wire is the editor changing the
-    // document under them.
-    expect(
-      await screen.findByRole("dialog", { name: /editor.issuesWarningsHeading/ }),
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByText(/editor.strayEdgesDropped/),
-    ).toBeInTheDocument();
-  });
-
-  it("closes the panel when its last row goes away", async () => {
-    loadGraph.mockResolvedValue(strayEdgeGraph());
-    mount();
-    const dialog = await screen.findByRole("dialog", {
-      name: /editor.issuesWarningsHeading/,
+  it("shows an assistant's save as it lands, with its note", async () => {
+    let push: (ev: unknown) => void = () => {};
+    watchFlow.mockImplementation((_t, _te, _w, _id, onUpdated: (ev: unknown) => void) => {
+      push = onUpdated;
+      return new Promise(() => {});
     });
-    expect(dialog).toBeInTheDocument();
-
-    // Dismissing the only warning leaves no button to anchor a panel to, so an
-    // empty box must not be left hanging under a control that is gone.
-    await userEvent.click(await screen.findByText("common.dismiss"));
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("dialog", { name: /editor.issuesWarningsHeading/ }),
-      ).not.toBeInTheDocument(),
+    mount();
+    await waitFor(() => expect(watchFlow).toHaveBeenCalled());
+    act(() =>
+      push({ flow_id: "acme/main/coffee-reorder", commit: "c9", author: "a@b.c", autosave: false,
+        assistant: true, note: "Also tell the milk topic", touched: ["ntfy_2"] }),
     );
-    expect(
-      screen.queryByRole("button", { name: /editor.issuesWarningsTitle/ }),
-    ).not.toBeInTheDocument();
+    expect(await screen.findByText("Also tell the milk topic")).toBeTruthy();
+    expect(screen.getByText("editor.assistant.added")).toBeTruthy();
+    expect(loadGraph).toHaveBeenCalledTimes(2);
   });
 
-  it("says nothing at all about a clean flow", async () => {
-    loadGraph.mockResolvedValue(twoStepGraph());
-    mount();
-    await screen.findAllByRole("button", { name: "editor.tidy" });
-    expect(
-      screen.queryByRole("button", { name: /editor.issuesWarningsTitle/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /editor.issuesErrorsTitle/ }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  it("reports the open flow and selection, and watch=1 is the bare read-only canvas", async () => {
+    watchFlow.mockImplementation(() => new Promise(() => {}));
+    const { container } = mount("/flows/coffee-reorder?watch=1");
+    await act(() => vi.advanceTimersByTimeAsync(600));
+    await waitFor(() => expect(putCanvasFocus).toHaveBeenCalledWith("tok", "acme/main/coffee-reorder", ""));
+    expect(container.querySelector(".editor.editor-watch")).toBeTruthy();
+    expect(screen.getByText("editor.watch.openEditor")).toBeTruthy();
   });
 });

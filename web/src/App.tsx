@@ -173,9 +173,16 @@ const PublicCollection = lazy(() =>
 // there within a frame, and a spinner that flashes for one frame reads as a
 // glitch. A slow network gets the shell (nav, header) and an empty content
 // area, which is what a page mid-load should look like.
-// SignInThenAuthorize sends a signed-out visitor to sign-in with the consent
-// page, request id included, as where to land afterwards.
-function SignInThenAuthorize() {
+// SignInThenReturn sends a signed-out visitor to sign-in with this page, query
+// included, as where to land afterwards: the OAuth consent page, and the watch
+// link an assistant hands someone for their phone.
+function SignInOrWatch() {
+  const { search } = useLocation();
+  if (new URLSearchParams(search).get("watch") === "1") return <SignInThenReturn />;
+  return <SignIn signInRequired />;
+}
+
+function SignInThenReturn() {
   const { pathname, search } = useLocation();
   return <Navigate to={`/signin?return_to=${encodeURIComponent(pathname + search)}`} replace />;
 }
@@ -186,7 +193,7 @@ function PageFallback() {
 
 export function App() {
   const { token } = useAuth();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   if (pathname.startsWith("/tv/")) {
     return (
       <Suspense fallback={<PageFallback />}>
@@ -233,7 +240,8 @@ export function App() {
           <Route path="/invite/:token" element={<AcceptInvite />} />
           {/* An MCP client's OAuth consent: sign in first, then come back to
               the same request — the catch-all below would land on "/". */}
-          <Route path="/authorize" element={<SignInThenAuthorize />} />
+          <Route path="/authorize" element={<SignInThenReturn />} />
+          <Route path="/flows/:id" element={<SignInOrWatch />} />
           {/* The bare root is how most people arrive — typing the domain. It has
               no signed-out route of its own, so without this it falls to the
               catch-all below and greets a first-time visitor with a notice about
@@ -249,6 +257,19 @@ export function App() {
           <Route path="*" element={<SignIn signInRequired />} />
         </Routes>
       </Suspense>
+    );
+  }
+  // Watching a flow (?watch=1, the link an assistant shares for a phone): the
+  // canvas without the app around it.
+  if (/^\/flows\/[^/]+$/.test(pathname) && new URLSearchParams(search).get("watch") === "1") {
+    return (
+      <UploadsProvider>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/flows/:id" element={<KeyedFlowEditor />} />
+          </Routes>
+        </Suspense>
+      </UploadsProvider>
     );
   }
   return (

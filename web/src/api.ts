@@ -1333,6 +1333,11 @@ export const api = {
       "POST",
       `/me/mcp-authorizations/${encodeURIComponent(id)}/${approve ? "approve" : "deny"}`,
     ),
+  // Which flow and step this canvas shows, for an assistant's "this step".
+  putCanvasFocus: (token: string, flowID: string, nodeID: string) =>
+    request<void>(token, "PUT", "/me/canvas-focus", { flow_id: flowID, node_id: nodeID }, {
+      signalUnauthorized: false,
+    }),
   listMCPConnections: (token: string) =>
     request<{ connections: MCPConnection[] }>(token, "GET", "/me/mcp-connections"),
   deleteMCPConnection: (token: string, id: string) =>
