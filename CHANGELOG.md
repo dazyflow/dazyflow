@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.43.2] - 2026-10-06
+
 ### Fixed
 
 - **The MCP grant lifecycle test no longer fails one run in 16.** Its tampered
