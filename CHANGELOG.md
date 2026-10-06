@@ -10,6 +10,8 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+## [0.43.1] - 2026-10-06
+
 ### Fixed
 
 - **Flow cards on the Flows page no longer draw over their own content.** The
