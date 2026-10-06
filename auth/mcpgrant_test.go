@@ -30,7 +30,12 @@ func testMCPGrantLifecycle(t *testing.T, store MCPGrantStore) {
 	if _, err := authn.Authenticate(ctx, refresh); err == nil {
 		t.Error("a refresh token must not authenticate as an access token")
 	}
-	if _, err := authn.Authenticate(ctx, access[:len(access)-1]+"0"); err == nil {
+	// The token ends in random hex: a fixed "0" left it unchanged one run in 16.
+	last := "0"
+	if access[len(access)-1] == '0' {
+		last = "1"
+	}
+	if _, err := authn.Authenticate(ctx, access[:len(access)-1]+last); err == nil {
 		t.Error("a tampered access token authenticated")
 	}
 	late := &MCPGrantAuthenticator{Store: store, Clock: func() time.Time { return now.Add(MCPAccessTTL + time.Second) }}
