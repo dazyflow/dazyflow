@@ -10,6 +10,14 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Flow cards on the Flows page no longer draw over their own content.** The
+  status chip and Private badge shared the name's row and squeezed it, so long
+  names painted underneath them. The name now has its own row (two lines, then
+  an ellipsis), badges sit below it, long descriptions wrap, and cards in a row
+  share one height with the last-run footer pinned to the bottom.
+
 ## [0.43.0] - 2026-10-05
 
 ### Security
