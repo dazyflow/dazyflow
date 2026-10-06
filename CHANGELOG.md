@@ -10,6 +10,12 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The MCP grant lifecycle test no longer fails one run in 16.** Its tampered
+  access token swapped the last character for `0`, which left the token
+  unchanged whenever its random hex already ended in `0`. No product change.
+
 ## [0.43.1] - 2026-10-06
 
 ### Fixed
