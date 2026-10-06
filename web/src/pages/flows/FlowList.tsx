@@ -386,74 +386,84 @@ export function FlowList() {
             <Link
               key={f.id}
               to={`/flows/${encodeURIComponent(f.id)}`}
-              style={{ textDecoration: "none", color: "inherit" }}
+              className="graph-card-link"
             >
               <div className="graph-card">
-                <div className="name">
-                  <FlowIcon
-                    icon={f.icon}
-                    size={isBrandedIcon(f.icon) || isImageIcon(f.icon) ? 20 : 16}
-                  />
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: "block" }}>{displayName}</span>
-                  </span>
-                  {f.run_status && (
-                    <FlowStatusChip status={f.run_status} size="sm" />
-                  )}
-                  {/* Visibility badge is shown only for private flows; an
-                      org-visible flow is the default, so an "Org" chip on
-                      every other card was pure noise. Absence = shared. */}
-                  {isPrivate && (
-                    <span
-                      className="vis-badge private"
-                      title={
-                        ownedByMe
-                          ? t("flowList.privateOwnedByYou")
-                          : t("flowList.privateOwnedBy", {
-                              owner: f.owner ?? t("common.unknownParen"),
-                            })
+                {/* The name owns its row; chips used to share it and, being
+                    unshrinkable, squeezed the name until it painted under them. */}
+                <div className="graph-card-head">
+                  <span className="graph-card-icon">
+                    <FlowIcon
+                      icon={f.icon}
+                      size={
+                        isBrandedIcon(f.icon) || isImageIcon(f.icon) ? 20 : 16
                       }
-                    >
-                      <Lock size={ICON.xs} />
-                      {t("common.private")}
-                    </span>
-                  )}
+                    />
+                  </span>
+                  <span className="name" title={displayName}>
+                    {displayName}
+                  </span>
                   {/* The card is a <Link>, so the delete action stops the
                       click from navigating and opens the password confirm.
                       Gated on graph:edit — viewers can browse but not delete;
                       the daemon is the final authority either way. */}
                   {canEdit && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title={t("flowList.duplicateFlow")}
-                      aria-label={t("flowList.duplicateFlow")}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setDupTarget(f);
-                      }}
-                    >
-                      <Copy size={ICON.sm} />
-                    </Button>
-                  )}
-                  {canEdit && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="graph-card-delete"
-                      title={t("common.deleteFlow")}
-                      aria-label={t("common.deleteFlow")}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setDeleteTarget(f);
-                      }}
-                    >
-                      <Trash2 size={ICON.sm} />
-                    </Button>
+                    <span className="graph-card-actions">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title={t("flowList.duplicateFlow")}
+                        aria-label={t("flowList.duplicateFlow")}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDupTarget(f);
+                        }}
+                      >
+                        <Copy size={ICON.sm} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="graph-card-delete"
+                        title={t("common.deleteFlow")}
+                        aria-label={t("common.deleteFlow")}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDeleteTarget(f);
+                        }}
+                      >
+                        <Trash2 size={ICON.sm} />
+                      </Button>
+                    </span>
                   )}
                 </div>
+                {(f.run_status || isPrivate) && (
+                  <div className="graph-card-badges">
+                    {f.run_status && (
+                      <FlowStatusChip status={f.run_status} size="sm" />
+                    )}
+                    {/* Visibility badge is shown only for private flows; an
+                        org-visible flow is the default, so an "Org" chip on
+                        every other card was pure noise. Absence = shared. */}
+                    {isPrivate && (
+                      <span
+                        className="vis-badge private"
+                        title={
+                          ownedByMe
+                            ? t("flowList.privateOwnedByYou")
+                            : t("flowList.privateOwnedBy", {
+                                owner: f.owner ?? t("common.unknownParen"),
+                              })
+                        }
+                      >
+                        <Lock size={ICON.xs} />
+                        {t("common.private")}
+                      </span>
+                    )}
+                  </div>
+                )}
                 {sched && (
                   <FlowScheduleChip
                     sum={sched}

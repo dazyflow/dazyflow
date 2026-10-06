@@ -1,7 +1,6 @@
 /* SPDX-FileCopyrightText: 2026 Angels' Ware
    SPDX-License-Identifier: AGPL-3.0-or-later */
 
-
 .app-shell {
   display: grid;
   grid-template-rows: var(--topbar-h) 1fr;
@@ -399,7 +398,6 @@
   padding: var(--space-3) var(--space-3) var(--space-1);
 }
 
-
 .main {
   min-height: 0;
   overflow: auto;
@@ -583,54 +581,110 @@
 
 .graph-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: var(--space-4);
+}
+
+.graph-card-link {
+  display: flex;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--r-3);
+}
+.graph-card-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .graph-card {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  min-height: 132px;
+  flex: 1;
+  min-width: 0;
+  min-height: 148px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-3);
   padding: var(--space-4);
+  box-shadow: var(--shadow);
   cursor: pointer;
   transition:
     border-color 120ms,
+    box-shadow 120ms,
     transform 120ms;
 }
 .graph-card:hover {
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow:
+    var(--shadow),
+    0 6px 16px -8px color-mix(in srgb, var(--accent) 35%, transparent);
   transform: translateY(-1px);
 }
+.graph-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.graph-card-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  color: var(--muted);
+}
 .graph-card .name {
+  flex: 1;
+  min-width: 0;
+  /* Centred against the 32px icon tile on one line; a second line grows down. */
+  padding-top: 5px;
   font-weight: 600;
   font-size: var(--text-base);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.graph-card-delete {
+.graph-card-actions {
+  display: inline-flex;
   flex-shrink: 0;
+  margin: -4px -6px 0 0;
   opacity: 0;
-  color: var(--muted);
-  transition:
-    opacity 120ms,
-    color 120ms;
+  transition: opacity 120ms;
 }
-.graph-card:hover .graph-card-delete,
-.graph-card:focus-within .graph-card-delete {
+.graph-card:hover .graph-card-actions,
+.graph-card:focus-within .graph-card-actions {
   opacity: 1;
+}
+@media (hover: none) {
+  .graph-card-actions {
+    opacity: 1;
+  }
+}
+.graph-card-actions .btn {
+  color: var(--muted);
 }
 .graph-card-delete:hover {
   color: var(--danger);
 }
+.graph-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
 .graph-card-desc {
   color: var(--muted);
   font-size: var(--text-sm);
-  line-height: 1.4;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -638,7 +692,8 @@
 }
 .graph-card-foot {
   margin-top: auto;
-  padding-top: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -648,6 +703,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: var(--text-xs);
   color: var(--muted);
 }
@@ -6475,7 +6534,6 @@ img[src$="/brands/yaml.svg"] {
   white-space: nowrap;
 }
 
-
 .sf-object {
   border: 1px solid var(--border);
   border-radius: var(--r-2);
@@ -7597,7 +7655,6 @@ a.pa-card:hover {
   color: var(--danger);
 }
 
-
 .api-key-toolbar {
   display: flex;
   align-items: center;
@@ -8716,7 +8773,8 @@ a.pa-card:hover {
 .editor-toolbar .toolbar-scroll::-webkit-scrollbar {
   display: none;
 }
-.editor-toolbar .toolbar-scroll[data-fade-left="false"][data-fade-right="true"] {
+.editor-toolbar
+  .toolbar-scroll[data-fade-left="false"][data-fade-right="true"] {
   -webkit-mask-image: linear-gradient(
     to right,
     #000 calc(100% - 24px),
@@ -8724,7 +8782,8 @@ a.pa-card:hover {
   );
   mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
 }
-.editor-toolbar .toolbar-scroll[data-fade-left="true"][data-fade-right="false"] {
+.editor-toolbar
+  .toolbar-scroll[data-fade-left="true"][data-fade-right="false"] {
   -webkit-mask-image: linear-gradient(to right, transparent, #000 24px);
   mask-image: linear-gradient(to right, transparent, #000 24px);
 }
@@ -8983,7 +9042,6 @@ a.pa-card:hover {
   );
 }
 
-
 .canvas.rf-animating .react-flow__node {
   transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -9039,8 +9097,13 @@ a.pa-card:hover {
   animation: dz-assistant-changed 8s ease-out both;
 }
 @keyframes dz-assistant-changed {
-  0%, 60% { outline-color: var(--accent); }
-  100% { outline-color: transparent; }
+  0%,
+  60% {
+    outline-color: var(--accent);
+  }
+  100% {
+    outline-color: transparent;
+  }
 }
 
 /* Bottom centre: React Flow's controls hold the left corner, the minimap the right. */
@@ -9175,7 +9238,6 @@ a.pa-card:hover {
     padding: var(--space-1) var(--space-1h);
   }
 }
-
 
 @keyframes dz-spin {
   to {
@@ -9461,7 +9523,6 @@ a.pa-card:hover {
 .flow-status-needs_publish {
   --c: var(--accent);
 }
-
 
 .for-each-hint {
   margin-top: var(--space-2);
@@ -10401,7 +10462,6 @@ a.pa-card:hover {
   }
 }
 
-
 .sidebar a.sidebar-new-flow {
   background: var(--btn);
   color: #fff;
@@ -10644,7 +10704,6 @@ a.pa-card:hover {
   flex: 1;
 }
 
-
 .route-fade {
   animation: route-fade-in var(--dur-3) var(--ease-out);
 }
@@ -10683,7 +10742,6 @@ button:active,
   transform: translateY(0.5px) scale(0.985);
 }
 
-
 @keyframes dz-fade-in {
   from {
     opacity: 0;
@@ -10712,7 +10770,6 @@ button:active,
     scroll-behavior: auto !important;
   }
 }
-
 
 .dash-title-actions {
   display: inline-flex;
@@ -11706,7 +11763,6 @@ button:active,
   min-width: 0;
 }
 
-
 .field-error {
   margin: var(--space-1) 0 0;
   color: var(--danger);
@@ -11993,7 +12049,6 @@ button:active,
   gap: var(--space-2);
 }
 
-
 .webapi-op {
   margin: var(--space-3) 0;
 }
@@ -12033,7 +12088,6 @@ button:active,
   vertical-align: -0.15em;
   margin-right: var(--space-1h);
 }
-
 
 .card.notice {
   color: var(--muted);
