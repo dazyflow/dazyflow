@@ -222,12 +222,8 @@ func (h *orgAPI) listMembers(rw http.ResponseWriter, r *http.Request, p core.Pri
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if tenant != p.Tenant && !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "cannot list members of another tenant")
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot list members of another tenant")
+	if !ok {
 		return
 	}
 	rows, err := h.Memberships.ListByTenant(r.Context(), tenant)
@@ -289,12 +285,8 @@ func (h *orgAPI) removeMember(rw http.ResponseWriter, r *http.Request, p core.Pr
 		writeJSONError(rw, http.StatusBadRequest, "email required")
 		return
 	}
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if tenant != p.Tenant && !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "cannot modify another tenant")
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot modify another tenant")
+	if !ok {
 		return
 	}
 	if h.Users != nil {
@@ -427,12 +419,8 @@ func (h *orgAPI) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusBadRequest, "email required")
 		return
 	}
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if tenant != p.Tenant && !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "cannot modify another tenant")
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot modify another tenant")
+	if !ok {
 		return
 	}
 	body, ok := decodeRequestJSON[struct {
@@ -647,12 +635,8 @@ func (h *orgAPI) listInvitations(rw http.ResponseWriter, r *http.Request, p core
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if tenant != p.Tenant && !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "cannot list invitations of another tenant")
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot list invitations of another tenant")
+	if !ok {
 		return
 	}
 	rows, err := h.Invitations.ListByTenant(r.Context(), tenant)
@@ -834,12 +818,8 @@ func (h *orgAPI) getOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if tenant != p.Tenant && !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "cannot view another tenant's SSO config")
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot view another tenant's SSO config")
+	if !ok {
 		return
 	}
 	cfg, err := h.OrgAuth.GetOrgAuth(r.Context(), tenant)
@@ -875,6 +855,10 @@ func (h *orgAPI) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot modify another tenant's SSO config")
+	if !ok {
+		return
+	}
 	body, ok := decodeRequestJSON[struct {
 		GoogleClientID        string `json:"google_client_id"`
 		GoogleClientSecret    string `json:"google_client_secret"`
@@ -884,14 +868,14 @@ func (h *orgAPI) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p cor
 		return
 	}
 	cfg := auth.OrgAuthConfig{
-		Tenant:                p.Tenant,
+		Tenant:                tenant,
 		GoogleClientID:        strings.TrimSpace(body.GoogleClientID),
 		GoogleClientSecret:    strings.TrimSpace(body.GoogleClientSecret),
 		GoogleWorkspaceDomain: strings.TrimSpace(body.GoogleWorkspaceDomain),
 		UpdatedAt:             time.Now().UTC(),
 	}
 	if cfg.GoogleClientSecret == "" {
-		if old, err := h.OrgAuth.GetOrgAuth(r.Context(), p.Tenant); err == nil {
+		if old, err := h.OrgAuth.GetOrgAuth(r.Context(), tenant); err == nil {
 			cfg.GoogleClientSecret = old.GoogleClientSecret
 		}
 	}
@@ -899,7 +883,7 @@ func (h *orgAPI) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.audit(r.Context(), p, "org_auth.update", p.Tenant, "")
+	h.audit(r.Context(), p, "org_auth.update", tenant, "")
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"tenant":         cfg.Tenant,
 		"google_enabled": cfg.GoogleEnabled(),
@@ -915,11 +899,15 @@ func (h *orgAPI) deleteOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p 
 		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
 		return
 	}
-	if err := h.OrgAuth.DeleteOrgAuth(r.Context(), p.Tenant); err != nil {
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot modify another tenant's SSO config")
+	if !ok {
+		return
+	}
+	if err := h.OrgAuth.DeleteOrgAuth(r.Context(), tenant); err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.audit(r.Context(), p, "org_auth.delete", p.Tenant, "")
+	h.audit(r.Context(), p, "org_auth.delete", tenant, "")
 	rw.WriteHeader(http.StatusNoContent)
 }
 
