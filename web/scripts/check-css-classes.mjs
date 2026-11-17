@@ -214,6 +214,10 @@ for (const file of srcFiles) {
         chunks = [m[1]];
       } else {
         const expr = m[2];
+        // A value computed by a helper (`nodeClassName(d, selected, "operator")`)
+        // is as dynamic as `className={cls}`: its literals are arguments, not
+        // classes, and the classes it returns live in the helper.
+        if (/^\s*[\w.]+\([^]*\)\s*$/.test(expr)) continue;
         chunks = [];
         // Template literals: static segments are class text; the quoted
         // literals inside their interpolations are handled by the pass below,
