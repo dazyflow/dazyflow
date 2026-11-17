@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -157,6 +158,44 @@ func GetStatus(ctx context.Context, endpoint string, headers map[string]string) 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	return resp.StatusCode, body, nil
 }
+
+// ErrKeyRejected is wrapped by VerifyGET when the endpoint answers with one of
+// the caller's auth statuses, so a provider can add vendor-specific advice.
+var ErrKeyRejected = errors.New("rejected the API key")
+
+// VerifyGET is the shared body of a provider's VerifyKey: a GetStatus probe
+// whose transport failure, auth statuses and other non-2xx answers each become
+// a "<label> …" error. It returns the body so a caller can inspect a 2xx.
+func VerifyGET(ctx context.Context, label, endpoint string, headers map[string]string, authStatuses []int, extract func([]byte) string) ([]byte, error) {
+	status, body, err := GetStatus(ctx, endpoint, headers)
+	if err != nil {
+		return nil, fmt.Errorf("could not reach %s: %w", label, err)
+	}
+	if slices.Contains(authStatuses, status) {
+		return nil, fmt.Errorf("%s %w", label, ErrKeyRejected)
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("%s returned HTTP %d: %s", label, status, extract(body))
+	}
+	return body, nil
+}
+
+// BaseOr trims an API host override, falling back to def when it is empty.
+func BaseOr(base, def string) string {
+	if b := strings.TrimRight(strings.TrimSpace(base), "/"); b != "" {
+		return b
+	}
+	return def
+}
+
+// MediaType strips parameters (";charset=…") from a MIME type.
+func MediaType(mime string) string {
+	return strings.TrimSpace(strings.SplitN(mime, ";", 2)[0])
+}
+
+// ErrorDetailLimit bounds the raw-body fallback of a provider's error
+// extractor, so an HTML error page can't flood the message.
+const ErrorDetailLimit = 512
 
 func HTTPError(codePrefix, label string, status int, detail string) *core.JobError {
 	detail = strings.TrimSpace(detail)

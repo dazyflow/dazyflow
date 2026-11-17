@@ -7,13 +7,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/chatcompletion"
 	"github.com/dazyflow/dazyflow/drops/internal/llmtask"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
@@ -91,10 +91,7 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 	}
 	raw, _ := json.Marshal(body)
 
-	base := strings.TrimRight(req.BaseURL, "/")
-	if base == "" {
-		base = defaultBase
-	}
+	base := llmtask.BaseOr(req.BaseURL, defaultBase)
 	status, respBody, jerr := llmtask.PostJSON(ctx, base+"/v1/chat/completions", map[string]string{
 		"content-type": "application/json", "authorization": "Bearer " + apiKey,
 	}, raw, req.TimeoutMS)
@@ -141,39 +138,14 @@ func init() {
 }
 
 func verifyKey(ctx context.Context, apiKey, base string) error {
-	base = strings.TrimRight(base, "/")
-	if base == "" {
-		base = defaultBase
-	}
-	status, body, err := llmtask.GetStatus(ctx, base+"/v1/models", map[string]string{
+	_, err := llmtask.VerifyGET(ctx, "ChatGPT", llmtask.BaseOr(base, defaultBase)+"/v1/models", map[string]string{
 		"authorization": "Bearer " + apiKey,
-	})
-	if err != nil {
-		return fmt.Errorf("could not reach ChatGPT: %w", err)
-	}
-	switch {
-	case status == 401 || status == 403:
-		return errors.New("ChatGPT rejected the API key")
-	case status < 200 || status >= 300:
-		return fmt.Errorf("ChatGPT returned HTTP %d: %s", status, openaiError(body))
-	}
-	return nil
+	}, []int{401, 403}, openaiError)
+	return err
 }
 
 func openaiError(body []byte) string {
-	var e struct {
-		Error struct {
-			Type    string `json:"type"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Error.Message != "" {
-		if e.Error.Type != "" {
-			return e.Error.Type + ": " + e.Error.Message
-		}
-		return e.Error.Message
-	}
-	return string(body)
+	return params.EnvelopeMessage(body, "type", llmtask.ErrorDetailLimit)
 }
 
 // userContent builds the Chat Completions content-part array for a request
@@ -184,7 +156,7 @@ func openaiError(body []byte) string {
 func userContent(req llmtask.Request) []any {
 	parts := make([]any, 0, len(req.Files)+1)
 	for _, f := range req.Files {
-		dataURI := "data:" + mediaType(f.MIME) + ";base64," + base64.StdEncoding.EncodeToString(f.Data)
+		dataURI := "data:" + llmtask.MediaType(f.MIME) + ";base64," + base64.StdEncoding.EncodeToString(f.Data)
 		switch {
 		case f.IsImage():
 			parts = append(parts, map[string]any{
@@ -209,8 +181,4 @@ func userContent(req llmtask.Request) []any {
 		parts = append(parts, map[string]any{"type": "text", "text": req.UserText})
 	}
 	return parts
-}
-
-func mediaType(mime string) string {
-	return strings.TrimSpace(strings.SplitN(mime, ";", 2)[0])
 }

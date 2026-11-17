@@ -428,3 +428,24 @@ func TestJSONFieldMessage(t *testing.T) {
 		})
 	}
 }
+
+func TestEnvelopeMessage(t *testing.T) {
+	cases := []struct {
+		name, body, qual string
+		limit            int
+		want             string
+	}{
+		{"message", `{"error":{"message":"bad scope"}}`, "", 100, "bad scope"},
+		{"qualified", `{"error":{"type":"invalid_request_error","message":"no"}}`, "type", 100, "invalid_request_error: no"},
+		{"empty qualifier value", `{"error":{"type":"","message":"no"}}`, "type", 100, "no"},
+		{"flat error string", `{"error":"oops"}`, "", 100, `{"error":"oops"}`},
+		{"raw truncated", "0123456789abc", "", 10, "0123456789"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := EnvelopeMessage([]byte(c.body), c.qual, c.limit); got != c.want {
+				t.Fatalf("EnvelopeMessage = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
