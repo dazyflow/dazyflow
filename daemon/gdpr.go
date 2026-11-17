@@ -108,7 +108,7 @@ func (rep *EraseReport) tallyByTenant(ctx context.Context, name string, store an
 }
 
 func (h *gdprAPI) eraseUserIdentity(ctx context.Context, email string) (EraseReport, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = auth.NormalizeEmail(email)
 	rep := EraseReport{Email: email}
 	if h.Users == nil {
 		return rep, fmt.Errorf("user store not configured")
@@ -348,7 +348,7 @@ func (h *gdprAPI) tenantHasOtherMembers(ctx context.Context, tenant, email strin
 	if err != nil {
 		return true // fail safe: assume shared, don't wipe org data
 	}
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = auth.NormalizeEmail(email)
 	for _, m := range members {
 		if strings.ToLower(m.UserEmail) != email {
 			return true

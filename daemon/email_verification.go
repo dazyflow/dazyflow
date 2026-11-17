@@ -97,7 +97,7 @@ func (h *authAPI) verifyEmail(rw http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(body.Email))
+	email := auth.NormalizeEmail(body.Email)
 	if email == "" || body.Token == "" {
 		writeJSONError(rw, http.StatusBadRequest, "email and token required")
 		return

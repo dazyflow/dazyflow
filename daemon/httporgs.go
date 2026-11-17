@@ -278,7 +278,7 @@ func (h *orgAPI) removeMember(rw http.ResponseWriter, r *http.Request, p core.Pr
 	if !requireOrgAdmin(rw, p) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	if email == "" {
 		writeJSONError(rw, http.StatusBadRequest, "email required")
 		return
@@ -352,7 +352,7 @@ func (h *orgAPI) callerIsOrgOwner(ctx context.Context, p core.Principal, tenant 
 	if h.Users == nil {
 		return false
 	}
-	u, err := h.Users.GetByEmail(ctx, strings.ToLower(strings.TrimSpace(p.Subject)))
+	u, err := h.Users.GetByEmail(ctx, auth.NormalizeEmail(p.Subject))
 	return err == nil && u.Tenant == tenant
 }
 
@@ -411,7 +411,7 @@ func (h *orgAPI) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p co
 	if !requireOrgAdmin(rw, p) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	if email == "" {
 		writeJSONError(rw, http.StatusBadRequest, "email required")
 		return
@@ -498,17 +498,13 @@ func (h *orgAPI) invitationSeatExceeded(ctx context.Context, tenant, invitee str
 		if invs, err := h.Invitations.ListByTenant(ctx, tenant); err == nil {
 			for _, inv := range invs {
 				if inv.IsPending(now) {
-					held[normalizeSeatEmail(inv.Email)] = struct{}{}
+					held[auth.NormalizeEmail(inv.Email)] = struct{}{}
 				}
 			}
 		}
 	}
-	delete(held, normalizeSeatEmail(invitee))
+	delete(held, auth.NormalizeEmail(invitee))
 	return len(held) >= limit, limit
-}
-
-func normalizeSeatEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func (h *orgAPI) createInvitation(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -529,7 +525,7 @@ func (h *orgAPI) createInvitation(rw http.ResponseWriter, r *http.Request, p cor
 	if !ok {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(body.Email))
+	email := auth.NormalizeEmail(body.Email)
 	if err := validSignupEmail(email); err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
@@ -943,7 +939,7 @@ func (q seatQuota) ownerEmail(ctx context.Context, tenant string) string {
 	}
 	for _, u := range users {
 		if u.Tenant == tenant {
-			return normalizeSeatEmail(u.Email) // single home per tenant
+			return auth.NormalizeEmail(u.Email) // single home per tenant
 		}
 	}
 	return ""
@@ -957,7 +953,7 @@ func (q seatQuota) seatHolders(ctx context.Context, tenant string) (map[string]s
 	}
 	held := make(map[string]struct{}, len(members)+1)
 	for _, m := range members {
-		held[normalizeSeatEmail(m.UserEmail)] = struct{}{}
+		held[auth.NormalizeEmail(m.UserEmail)] = struct{}{}
 	}
 	if owner := q.ownerEmail(ctx, tenant); owner != "" {
 		held[owner] = struct{}{}
