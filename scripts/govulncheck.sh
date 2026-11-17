@@ -17,12 +17,7 @@
 # GV overrides the binary (CI installs a pinned govulncheck into GOPATH/bin).
 set -euo pipefail
 
-ALLOW=(
-  # excelize v2.11.0 already contains the fix (qax-os/excelize 93f0b3ca, #2331):
-  # xlsxC.getValueFrom rejects `xlsxSI < 0` (cell.go:626). The DB entry has no
-  # fixed version, so every release is flagged.
-  "GO-2026-6452 github.com/xuri/excelize/v2@v2.11.0"
-)
+ALLOW=()
 
 GV="${GV:-$(go env GOPATH)/bin/govulncheck}"
 out="$(mktemp)"
