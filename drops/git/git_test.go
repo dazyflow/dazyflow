@@ -574,6 +574,16 @@ func TestHostKeyDB_BadUserKnownHosts(t *testing.T) {
 	}
 }
 
+func TestHostKeyDB_BadLineAmongValid(t *testing.T) {
+	valid, _, _ := strings.Cut(strings.TrimSpace(bundledKnownHosts), "\n")
+	if _, err := hostKeyDB(valid + "\ngithub.com ssh-ed25519 not-base64"); err == nil {
+		t.Fatal("expected error for a malformed line next to a valid one")
+	}
+	if _, err := hostKeyDB("# comment\n\n" + valid); err != nil {
+		t.Fatalf("valid known_hosts with comment: %v", err)
+	}
+}
+
 func TestSSHURLParts_PortAndDefaults(t *testing.T) {
 	cases := []struct {
 		url       string

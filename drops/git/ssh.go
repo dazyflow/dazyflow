@@ -5,7 +5,9 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -15,6 +17,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -201,6 +204,9 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	combined := bundledKnownHosts
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
+		if err := checkKnownHosts(s); err != nil {
+			return nil, err
+		}
 		combined += s + "\n"
 	}
 	f, err := os.CreateTemp("", "dazyflow-known-hosts-*")
@@ -216,4 +222,24 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 		return nil, err
 	}
 	return gitssh.NewKnownHostsDb(f.Name())
+}
+
+// checkKnownHosts rejects any malformed line. x/crypto's knownhosts skips bad
+// lines as long as one line parses, and the bundled entries always do, so a
+// typo in the credential's known_hosts would otherwise vanish silently.
+func checkKnownHosts(s string) error {
+	for i, line := range strings.Split(s, "\n") {
+		if line = strings.TrimSpace(line); line == "" || line[0] == '#' {
+			continue
+		}
+		// ParseKnownHosts skips a line without whitespace, reporting io.EOF.
+		_, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line))
+		if err == io.EOF {
+			err = errors.New("ssh: invalid entry in known_hosts data")
+		}
+		if err != nil {
+			return fmt.Errorf("knownhosts: line %d: %w", i+1, err)
+		}
+	}
+	return nil
 }

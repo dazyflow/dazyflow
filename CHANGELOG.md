@@ -10,6 +10,26 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Security
+
+- **excelize bumped to v2.11.1** (GO-2026-6674, -6676, -6677, -6679, -6680,
+  -6681, -6684, -6685, -6688, -6689, all reachable from the Excel read and
+  write drops).
+- **golang.org/x/net bumped to v0.63.0** (GO-2026-6603, -6610, -6611, -6612,
+  -6617, -6860, -6866).
+- **The govulncheck allowlist is empty again.** The vuln DB now records
+  excelize v2.11.0 as the fix for GO-2026-6452, so its exemption is gone.
+- **A malformed line in a git credential's known_hosts is still rejected.**
+  x/crypto v0.59.0 (pulled in by the x/net bump) skips bad lines whenever one
+  line parses, and the bundled hosts always do; dazyflow now checks each line
+  itself so a typo is reported instead of silently ignored.
+
+### Changed
+
+- **One loopback-host check (`internal/netutil.IsLoopbackHost`) replaces five
+  copies.** SMTP and IMAP now accept `LOCALHOST`, `[::1]` and `*.localhost` as
+  local, matching dzd's dev-key check and dzctl.
+
 ## [0.43.2] - 2026-10-06
 
 ### Fixed
