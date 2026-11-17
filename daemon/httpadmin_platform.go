@@ -98,12 +98,8 @@ func decodeModerationBody(r *http.Request) moderationBody {
 	return b
 }
 
-// Shared, so no route here can forget the gate.
-func (h *platformAdminAPI) requirePlatform(rw http.ResponseWriter, p core.Principal) bool {
-	if !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
-		return false
-	}
+// The platform:admin gate is platformOnly, applied to these routes in httproutes.go.
+func (h *platformAdminAPI) requireUsers(rw http.ResponseWriter) bool {
 	if h.Users == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "user store not configured")
 		return false
@@ -112,7 +108,7 @@ func (h *platformAdminAPI) requirePlatform(rw http.ResponseWriter, p core.Princi
 }
 
 func (h *platformAdminAPI) platformListUsers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.requirePlatform(rw, p) {
+	if !h.requireUsers(rw) {
 		return
 	}
 	users, err := h.Users.ListUsers(r.Context())
@@ -171,7 +167,7 @@ func (h *platformAdminAPI) tenantNames(ctx context.Context, tenants []string) ma
 }
 
 func (h *platformAdminAPI) platformGetUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.requirePlatform(rw, p) {
+	if !h.requireUsers(rw) {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
@@ -194,7 +190,7 @@ func (h *platformAdminAPI) platformGetUser(rw http.ResponseWriter, r *http.Reque
 }
 
 func (h *platformAdminAPI) platformSuspendUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.requirePlatform(rw, p) {
+	if !h.requireUsers(rw) {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
@@ -218,7 +214,7 @@ func (h *platformAdminAPI) platformSuspendUser(rw http.ResponseWriter, r *http.R
 }
 
 func (h *platformAdminAPI) platformUnsuspendUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.requirePlatform(rw, p) {
+	if !h.requireUsers(rw) {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
@@ -240,7 +236,7 @@ func (h *platformAdminAPI) platformUnsuspendUser(rw http.ResponseWriter, r *http
 }
 
 func (h *platformAdminAPI) platformVerifyUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.requirePlatform(rw, p) {
+	if !h.requireUsers(rw) {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
@@ -264,7 +260,7 @@ func (h *platformAdminAPI) platformVerifyUser(rw http.ResponseWriter, r *http.Re
 }
 
 func (h *platformAdminAPI) platformGrantAdmin(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.requirePlatform(rw, p) {
+	if !h.requireUsers(rw) {
 		return
 	}
 	if h.PlatformAdminGrants == nil {
@@ -295,7 +291,7 @@ func (h *platformAdminAPI) platformGrantAdmin(rw http.ResponseWriter, r *http.Re
 }
 
 func (h *platformAdminAPI) platformRevokeAdmin(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.requirePlatform(rw, p) {
+	if !h.requireUsers(rw) {
 		return
 	}
 	if h.PlatformAdminGrants == nil {
@@ -340,7 +336,7 @@ func (h *platformAdminAPI) platformRevokeAdmin(rw http.ResponseWriter, r *http.R
 }
 
 func (h *platformAdminAPI) platformBanUser(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.requirePlatform(rw, p) {
+	if !h.requireUsers(rw) {
 		return
 	}
 	if h.Blocklist == nil {
@@ -432,10 +428,6 @@ func emailDomainOf(email string) string {
 }
 
 func (h *platformAdminAPI) platformListOrgs(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
-		return
-	}
 	lister, ok := h.Profiles.(interface {
 		ListAllOrgProfiles(ctx context.Context) ([]auth.OrgProfile, error)
 	})
@@ -479,10 +471,6 @@ func (h *platformAdminAPI) toPlatformOrgDTO(ctx context.Context, pr auth.OrgProf
 }
 
 func (h *platformAdminAPI) platformGetOrg(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
-		return
-	}
 	if h.Profiles == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "org profile store not configured")
 		return
@@ -521,10 +509,6 @@ func (h *platformAdminAPI) platformBanOrg(rw http.ResponseWriter, r *http.Reques
 }
 
 func (h *platformAdminAPI) setOrgSuspended(rw http.ResponseWriter, r *http.Request, p core.Principal, suspend, ban bool) {
-	if !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
-		return
-	}
 	if h.Profiles == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "org profile store not configured")
 		return
@@ -617,10 +601,6 @@ func (h *platformAdminAPI) orgMemberEmails(ctx context.Context, tenant string) [
 }
 
 func (h *platformAdminAPI) platformListDrops(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
-		return
-	}
 	if h.DropSwitches == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "step killswitch not configured")
 		return
@@ -669,10 +649,6 @@ func (h *platformAdminAPI) platformListDrops(rw http.ResponseWriter, r *http.Req
 }
 
 func (h *platformAdminAPI) platformDisableDrop(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
-		return
-	}
 	if h.DropSwitches == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "step killswitch not configured")
 		return
@@ -698,10 +674,6 @@ func (h *platformAdminAPI) platformDisableDrop(rw http.ResponseWriter, r *http.R
 }
 
 func (h *platformAdminAPI) platformEnableDrop(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
-		return
-	}
 	if h.DropSwitches == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "step killswitch not configured")
 		return
@@ -724,11 +696,7 @@ func (h *platformAdminAPI) platformEnableDrop(rw http.ResponseWriter, r *http.Re
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-func (h *platformAdminAPI) requirePlatformEntitlements(rw http.ResponseWriter, p core.Principal) bool {
-	if !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
-		return false
-	}
+func (h *platformAdminAPI) requireEntitlements(rw http.ResponseWriter) bool {
 	if h.svc.Entitlements == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "entitlements not configured")
 		return false
@@ -737,7 +705,7 @@ func (h *platformAdminAPI) requirePlatformEntitlements(rw http.ResponseWriter, p
 }
 
 func (h *platformAdminAPI) platformListTiers(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.requirePlatformEntitlements(rw, p) {
+	if !h.requireEntitlements(rw) {
 		return
 	}
 	tiers, err := h.svc.Entitlements.ListTiers(r.Context())
@@ -749,7 +717,7 @@ func (h *platformAdminAPI) platformListTiers(rw http.ResponseWriter, r *http.Req
 }
 
 func (h *platformAdminAPI) platformPutTier(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.requirePlatformEntitlements(rw, p) {
+	if !h.requireEntitlements(rw) {
 		return
 	}
 	var t Tier
@@ -779,7 +747,7 @@ func (h *platformAdminAPI) platformPutTier(rw http.ResponseWriter, r *http.Reque
 }
 
 func (h *platformAdminAPI) platformDeleteTier(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.requirePlatformEntitlements(rw, p) {
+	if !h.requireEntitlements(rw) {
 		return
 	}
 	id := strings.TrimSpace(r.PathValue("id"))
@@ -792,7 +760,7 @@ func (h *platformAdminAPI) platformDeleteTier(rw http.ResponseWriter, r *http.Re
 }
 
 func (h *platformAdminAPI) platformGetEntitlement(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.requirePlatformEntitlements(rw, p) {
+	if !h.requireEntitlements(rw) {
 		return
 	}
 	tenant := strings.TrimSpace(r.PathValue("tenant"))
@@ -811,7 +779,7 @@ func (h *platformAdminAPI) platformGetEntitlement(rw http.ResponseWriter, r *htt
 }
 
 func (h *platformAdminAPI) platformPutEntitlement(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !h.requirePlatformEntitlements(rw, p) {
+	if !h.requireEntitlements(rw) {
 		return
 	}
 	tenant := strings.TrimSpace(r.PathValue("tenant"))
@@ -841,10 +809,6 @@ func (h *platformAdminAPI) platformPutEntitlement(rw http.ResponseWriter, r *htt
 }
 
 func (h *platformAdminAPI) platformInviteMember(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
-		return
-	}
 	if h.Invitations == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return

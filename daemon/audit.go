@@ -261,8 +261,7 @@ func (h *auditAPI) listAudit(rw http.ResponseWriter, r *http.Request, p core.Pri
 		writeJSONError(rw, http.StatusNotImplemented, "audit log not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
 	// Force-scoped: an admin cannot read another tenant's trail.

@@ -144,11 +144,8 @@ func executeUpload(ctx context.Context, job core.Job, _ chan<- core.Progress) (c
 	q.Set("fields", "id,name,webViewLink")
 	endpoint := uploadBaseURL(job) + "/files?" + q.Encode()
 	status, respBody, err := googleDo(ctx, "POST", endpoint, token, contentType, body, params.IntDefault(job.Params, "timeout_ms", 120000))
-	if err != nil {
-		return params.Err(job, "drive_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "drive_error", driveErr(respBody)), nil
+	if fail := params.HTTPFailure(job, "drive", "Google Drive", status, respBody, err, driveErr); fail != nil {
+		return *fail, nil
 	}
 
 	var created driveFile

@@ -20,7 +20,6 @@ package spotify
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/apibase"
@@ -52,20 +51,10 @@ func baseURL(job core.Job) string { return httpBase.For(job) }
 // resolved here) so tests can inject a value and the SSRF-guard test can call
 // this directly.
 func spotifyDo(ctx context.Context, method, url, token string, body []byte, timeoutMS int) (int, []byte, error) {
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
-	headers := map[string]string{
-		"Authorization": "Bearer " + token,
-		"Accept":        "application/json",
-	}
-	if body != nil {
-		headers["Content-Type"] = "application/json"
-	}
 	// base_url is a tenant-supplied param, so net.Do guards the dial: the SSRF
 	// client blocks loopback/private/link-local targets and the egress allowlist
 	// (when set) bounds which public hosts the bearer token may be sent to.
-	status, raw, _, err := hfnet.Do(ctx, method, url, headers, body, timeoutMS, maxResponseBytes)
+	status, raw, _, err := hfnet.DoBearer(ctx, method, url, token, "application/json", map[string]string{"Accept": "application/json"}, body, timeoutMS, maxResponseBytes)
 	return status, raw, err
 }
 
@@ -78,15 +67,7 @@ func call(ctx context.Context, job core.Job, method, path string, body []byte) (
 }
 
 func extractSpotifyError(body []byte) string {
-	var e struct {
-		Error struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Error.Message != "" {
-		return e.Error.Message
-	}
-	return params.Truncate(string(body), 200)
+	return params.EnvelopeMessage(body, "", 200)
 }
 
 func spotifyFailure(job core.Job, status int, body []byte, err error) *core.Result {

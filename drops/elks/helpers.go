@@ -15,7 +15,6 @@ package elks
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -46,25 +45,14 @@ func resolveCreds(job core.Job) (user, pass string, err error) {
 }
 
 func elksDo(ctx context.Context, job core.Job, method, url, form string) (int, []byte, error) {
-	timeoutMS := params.TimeoutMS(job, 15000)
 	user, pass, err := resolveCreds(job)
 	if err != nil {
 		return 0, nil, err
 	}
-	var b []byte
-	if form != "" {
-		b = []byte(form)
-	}
-	headers := map[string]string{
-		"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+pass)),
-	}
-	if form != "" {
-		headers["Content-Type"] = "application/x-www-form-urlencoded"
-	}
 	// base_url is a tenant-supplied param, so net.Do guards the dial: the SSRF
 	// client blocks loopback/private/link-local targets and the egress allowlist
 	// (when set) bounds which public hosts the credentials may be sent to.
-	status, raw, _, err := hfnet.Do(ctx, method, url, headers, b, timeoutMS, maxResponseBytes)
+	status, raw, _, err := hfnet.DoBasic(ctx, method, url, user, pass, "application/x-www-form-urlencoded", nil, hfnet.FormBody(form), params.TimeoutMS(job, 15000), maxResponseBytes)
 	return status, raw, err
 }
 
