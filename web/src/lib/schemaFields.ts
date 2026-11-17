@@ -46,3 +46,25 @@ function sameValue(a: unknown, b: unknown): boolean {
   }
   return a === b;
 }
+
+// Params that rarely need touching: paging cursors, timeouts, and the raw
+// token override wherever an account picker is the user path.
+const ADVANCED_FIELD_NAMES = new Set([
+  "timeout_ms",
+  "page_token",
+  "next_page_token",
+  "cursor",
+]);
+
+// isAdvancedField reports whether a property belongs behind the Advanced
+// disclosure in the Inspector, and so off the node card's inline editors.
+export function isAdvancedField(
+  name: string,
+  schema: JSONSchema,
+  siblings: Record<string, JSONSchema>,
+): boolean {
+  if (schema.x_advanced || schema["x-advanced"]) return true;
+  if (ADVANCED_FIELD_NAMES.has(name)) return true;
+  if (name === "token" && "account" in siblings) return true;
+  return false;
+}

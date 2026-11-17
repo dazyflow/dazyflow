@@ -17,7 +17,7 @@ import { scriptLangFor, type ScriptLang } from "../../lib/scriptHighlight";
 import { TokenText } from "./TokenText";
 import { dropSubtitle, enumOptionLabel, enumValueLabel, fieldTitle, integrationName, nodeStateText, portLabel } from "../../lib/dropText";
 import { humanize } from "../fields/SchemaForm";
-import { isFieldVisible } from "../../lib/schemaFields";
+import { isAdvancedField, isFieldVisible } from "../../lib/schemaFields";
 import { isRunnerStep, runnerTargetOf } from "../../lib/runnerStep";
 import type { Manifest, Port, JSONSchema, Ref } from "../../types";
 import {
@@ -153,7 +153,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
     </button>
   );
 
-  const isAdvanced = (s: JSONSchema) => !!(s.x_advanced || s["x-advanced"]);
   const isPrimitive = (s: JSONSchema) =>
     s.type === "string" ||
     s.type === "integer" ||
@@ -165,8 +164,11 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
   const inputPortIds = new Set((d.manifest?.inputs ?? []).map((p) => p.port));
   const missingByPort = missingInputsByPort(d, d.manifest?.inputs ?? []);
   const required = d.manifest?.params_schema?.required ?? [];
-  const inlineEligible = (s?: JSONSchema): s is JSONSchema =>
-    !!s && !isAdvanced(s) && isPrimitive(s) && isFieldVisible(s, d.params, schemaProps);
+  const inlineEligible = (key: string, s?: JSONSchema): s is JSONSchema =>
+    !!s &&
+    !isAdvancedField(key, s, schemaProps ?? {}) &&
+    isPrimitive(s) &&
+    isFieldVisible(s, d.params, schemaProps);
 
   const inlineByPort: Record<string, JSONSchema> = {};
   if (schemaProps) {
@@ -177,7 +179,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
       if (s?.format === "workspace-dir") continue;
       if (s?.format === "multiline") continue;
       if (s?.format === "script") continue;
-      if (inlineEligible(s)) inlineByPort[p.port] = s;
+      if (inlineEligible(p.port, s)) inlineByPort[p.port] = s;
     }
   }
   const literalKeys = schemaProps
@@ -210,7 +212,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
         }))
         .filter(
           (f): f is { key: string; label: string; schema: JSONSchema } =>
-            inlineEligible(f.schema),
+            inlineEligible(f.key, f.schema),
         )
     : [];
   const isValueSource = !hasDeclaredInputs && literalFields.length > 0;
