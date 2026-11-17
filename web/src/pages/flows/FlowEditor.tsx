@@ -771,6 +771,8 @@ function EditorInner() {
         if (!cancelled) setProviders(r.providers);
       })
       .catch(() => {
+        // null (not []) on purpose: unavailableProviders reads it as "OAuth is
+        // off" instead of requiredConnections flagging every step as unconnected.
         if (!cancelled) setProviders(null);
       });
     api
@@ -2014,7 +2016,6 @@ function EditorInner() {
     setDisabledNodes((prev) => toggleInSet(prev, nodeID));
     setDirty(true);
   }, []);
-
 
   const toggleNodeLocked = useCallback((nodeID: string) => {
     setLockedNodes((prev) => toggleInSet(prev, nodeID));
