@@ -4,7 +4,6 @@
 package daemon
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -36,11 +35,10 @@ func (h *orgAPI) grantSupportAgent(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusNotImplemented, "support agents are not enabled on this deployment")
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Email string `json:"email"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, "invalid JSON body")
+	}](rw, r)
+	if !ok {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))

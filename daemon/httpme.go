@@ -338,16 +338,12 @@ func (h *flowAPI) publishFlowMe(rw http.ResponseWriter, r *http.Request, p core.
 	if !ok {
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSONOptional[struct {
 		Ref   string `json:"ref"`
 		Label string `json:"label"`
-	}
-	if r.Body != nil {
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-			writeAPIError(rw, http.StatusBadRequest, "bad_request",
-				fmt.Sprintf("could not read the request body: %v", err))
-			return
-		}
+	}](rw, r)
+	if !ok {
+		return
 	}
 	label := strings.TrimSpace(body.Label)
 	commit, err := h.svc.PublishFlow(r.Context(), p, tenant, workspace, id, strings.TrimSpace(body.Ref), label)
