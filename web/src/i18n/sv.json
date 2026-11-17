@@ -2309,7 +2309,6 @@
     "title": "Dela arbetsytans översikt",
     "description": "Skapa en publik länk till en live-statustavla i helskärm — perfekt för en väggmonterad TV. Den visar bara flödesnamn och körstatus; inga nyttolaster, fel eller andra känsliga data.",
     "create": "Skapa länk",
-    "copied": "Kopierat!",
     "open": "Öppna tavlan",
     "regenerate": "Förnya",
     "disable": "Inaktivera länk",
