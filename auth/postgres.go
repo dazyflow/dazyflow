@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/pgutil"
 )
 
 // Postgres-backed implementations of the three auth stores
@@ -238,25 +239,10 @@ func (s *PgKeyStore) DeleteByTenant(ctx context.Context, tenant string) (int, er
 	return deleteWhere(ctx, s.pool, "api_keys", "tenant", tenant)
 }
 
-type rowScanner interface {
-	Scan(dest ...any) error
-}
+type rowScanner = pgutil.Scanner
 
 func queryRows[T any](ctx context.Context, pool *pgxpool.Pool, scan func(rowScanner) (T, error), query string, args ...any) ([]T, error) {
-	rows, err := pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := make([]T, 0)
-	for rows.Next() {
-		v, err := scan(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, v)
-	}
-	return out, rows.Err()
+	return pgutil.QueryRows(ctx, pool, scan, query, args...)
 }
 
 // deleteWhere runs `DELETE FROM <table> WHERE <col>=$1` and returns the
