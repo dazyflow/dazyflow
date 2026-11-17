@@ -15,6 +15,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -189,6 +190,24 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 	return nil, nil
 }
 
+// validateKnownHosts rejects a credential's known_hosts if any entry fails to
+// parse. x/crypto's reader skips unparseable lines and errors only when a file
+// has no valid line at all, and the bundled defaults always supply valid ones.
+// Without this check, a typo in the user's entry would be dropped silently and
+// show up later as a confusing "unknown host" failure on clone.
+func validateKnownHosts(text string) error {
+	for i, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
+			return fmt.Errorf("known_hosts line %d is not a valid entry", i+1)
+		}
+	}
+	return nil
+}
+
 // hostKeyDB builds a strict known-hosts database from the bundled defaults
 // plus the credential's own known_hosts. It backs both the host-key callback
 // and the host-key-algorithm constraint. We never fall back to an insecure
@@ -199,6 +218,9 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 // NewKnownHostsDb reads the file eagerly into memory, so the temp file is
 // removed as soon as the db is built.
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
+	if err := validateKnownHosts(userKnownHosts); err != nil {
+		return nil, err
+	}
 	combined := bundledKnownHosts
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
 		combined += s + "\n"
