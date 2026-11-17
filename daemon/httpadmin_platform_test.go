@@ -618,3 +618,16 @@ func TestPlatformInviteMember(t *testing.T) {
 		t.Fatalf("bad json = %d, want 400", rw.Code)
 	}
 }
+
+func TestPlatformInviteMember_RespectsSeatLimit(t *testing.T) {
+	t.Parallel()
+	h, _, _, _, ent, _ := platformHarness(t)
+	_ = ent.PutEntitlement(t.Context(), TenantEntitlement{Tenant: "acme", TierID: "free", MaxMembers: ptrInt(1)})
+
+	if rw := h.platformDo(t, "POST", "/api/v1/admin/platform/orgs/acme/invite", map[string]any{"email": "first@example.com"}); rw.Code != http.StatusCreated {
+		t.Fatalf("first invite = %d: %s", rw.Code, rw.Body.String())
+	}
+	if rw := h.platformDo(t, "POST", "/api/v1/admin/platform/orgs/acme/invite", map[string]any{"email": "second@example.com"}); rw.Code != http.StatusPaymentRequired {
+		t.Fatalf("over-limit invite = %d, want 402: %s", rw.Code, rw.Body.String())
+	}
+}
