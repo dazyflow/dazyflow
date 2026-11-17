@@ -51,6 +51,14 @@ const mount = (name = "invoices-box") =>
     </MemoryRouter>,
   );
 
+// The heading comes from the route, so it is on screen before the listing
+// resolves. Wait for the loading notice to go, or a test races the fetch and
+// queries controls that only exist once the machine is loaded.
+const loaded = async () => {
+  await screen.findByRole("heading", { name: "invoices-box" });
+  await waitFor(() => expect(screen.queryByText("common.loading")).not.toBeInTheDocument());
+};
+
 beforeEach(() => {
   mintRunnerToken.mockReset();
   listRunners.mockResolvedValue({ runners: [box] });
@@ -66,7 +74,8 @@ beforeEach(() => {
 describe("AdminRunnerDetail", () => {
   it("shows the machine, its state and its tags", async () => {
     mount();
-    expect(await screen.findByRole("heading", { name: "invoices-box" })).toBeInTheDocument();
+    await loaded();
+    expect(screen.getByRole("heading", { name: "invoices-box" })).toBeInTheDocument();
     expect(screen.getByText("runners.online")).toBeInTheDocument();
     expect(screen.getByText("0.2.0")).toBeInTheDocument();
     expect(screen.getByText("build")).toBeInTheDocument();
@@ -75,7 +84,7 @@ describe("AdminRunnerDetail", () => {
 
   it("shows the machine's name as a tag it always carries", async () => {
     const { container } = mount();
-    await screen.findByRole("heading", { name: "invoices-box" });
+    await loaded();
     const nameTag = container.querySelector(".runner-tag.is-name");
     expect(nameTag).toHaveTextContent("invoices-box");
     expect(nameTag?.querySelector("button")).toBeNull();
@@ -87,7 +96,7 @@ describe("AdminRunnerDetail", () => {
   it("assigns a tag", async () => {
     const user = userEvent.setup();
     mount();
-    await screen.findByRole("heading", { name: "invoices-box" });
+    await loaded();
 
     await user.type(screen.getByLabelText("runners.tagPlaceholder"), "GPU ");
     await user.click(screen.getByRole("button", { name: /runners.tagAdd/ }));
@@ -101,7 +110,7 @@ describe("AdminRunnerDetail", () => {
   it("removes a tag", async () => {
     const user = userEvent.setup();
     mount();
-    await screen.findByRole("heading", { name: "invoices-box" });
+    await loaded();
 
     await user.click(screen.getByRole("button", { name: /runners.tagRemove.*build/ }));
     await waitFor(() =>
@@ -112,7 +121,7 @@ describe("AdminRunnerDetail", () => {
   it("does not spend a request on a tag the machine already carries", async () => {
     const user = userEvent.setup();
     mount();
-    await screen.findByRole("heading", { name: "invoices-box" });
+    await loaded();
 
     await user.type(screen.getByLabelText("runners.tagPlaceholder"), "LINUX{Enter}");
     await user.type(screen.getByLabelText("runners.tagPlaceholder"), "invoices-box{Enter}");
@@ -126,7 +135,7 @@ describe("AdminRunnerDetail", () => {
     const user = userEvent.setup();
     setRunnerLabels.mockRejectedValue(new Error("another machine's name"));
     mount();
-    await screen.findByRole("heading", { name: "invoices-box" });
+    await loaded();
 
     await user.type(screen.getByLabelText("runners.tagPlaceholder"), "other-box{Enter}");
     expect(await screen.findByRole("alert")).toBeInTheDocument();
@@ -144,7 +153,7 @@ describe("AdminRunnerDetail", () => {
 
   it("offers a way back to the list", async () => {
     mount();
-    await screen.findByRole("heading", { name: "invoices-box" });
+    await loaded();
     expect(screen.getByRole("link", { name: /runners.title/ })).toHaveAttribute(
       "href",
       "/admin/runners",
@@ -161,7 +170,7 @@ describe("AdminRunnerDetail", () => {
       name: "invoices-box",
     });
     mount();
-    await screen.findByRole("heading", { name: "invoices-box" });
+    await loaded();
 
     await userEvent.click(screen.getByRole("button", { name: /runners.reregister/ }));
 
