@@ -26,6 +26,9 @@ import {
   portColor,
   hasToken,
   cronToWords,
+  missingByPort,
+  nodeClassName,
+  nodeStyle,
   secondsToWords,
 } from "./nodeCardShared";
 import { JsonEditor, isInvalidJSON } from "../ui/JsonEditor";
@@ -150,11 +153,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
   const connectedInputs = d.connectedInputs ?? [];
   const connectedOutputs = d.connectedOutputs ?? [];
   const inputPortIds = new Set((d.manifest?.inputs ?? []).map((p) => p.port));
-  const missingByPort = new Map(
-    (d.configErrors ?? [])
-      .filter((e) => inputPortIds.has(e.key))
-      .map((e) => [e.key, e.message]),
-  );
+  const missing = missingByPort(d, inputPortIds);
   const required = d.manifest?.params_schema?.required ?? [];
   const inlineEligible = (s?: JSONSchema): s is JSONSchema =>
     !!s && !isAdvanced(s) && isPrimitive(s) && isFieldVisible(s, d.params, schemaProps);
@@ -219,7 +218,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
   const visibleLiteralFields = literalFields;
   const showLiteralFields = visibleLiteralFields.length > 0;
 
-  const statusClass = d.status ? " status-" + d.status : "";
   const isTrigger = d.manifest?.category === "trigger";
 
   if (d.manifest?.category === "logic" && inputs.length === 2) {
@@ -232,148 +230,36 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
         outputs={outputs}
         connectedInputs={connectedInputs}
         connectedOutputs={connectedOutputs}
-        statusClass={statusClass}
       />
     );
   }
 
   if (d.collapsed) {
-    const inPins = hasDeclaredInputs
-      ? inputs
-      : isValueSource || isTrigger
-        ? []
-        : [inputs[0]];
     return (
-      <div
-        className={
-          "dz-node dz-node-collapsed" +
-          (selected ? " selected" : "") +
-          statusClass +
-          (isTrigger ? " dz-node-trigger" : "") +
-          (d.loopOwned ? " dz-loop-owned" : "") +
-          (d.disabled ? " dz-node-off" : "") +
-          (!d.disabled && d.offByCascade ? " dz-node-off-cascade" : "") +
-          (d.locked ? " dz-node-locked" : "") +
-          (d.lintMessage ? " lint-warn" : "") +
-          (d.configErrors?.length ? " config-err" : "") +
-          (d.setupNeeded ? " needs-setup" : "") +
-          (d.paused ? " paused" : "") +
-          (d.enterDelay != null ? " dz-enter" : "") +
-          (d.assistantChanged ? " dz-assistant-changed" : "")
-        }
-        role="group"
-        aria-label={i18n.t("nodeCard.collapsedLabel", {
-          name: d.label || d.moduleID,
-          module: d.moduleID,
-        })}
-        aria-selected={selected}
-        style={
-          {
-            ...(isTrigger ? { "--node-accent": color } : {}),
-            ...(d.enterDelay != null ? { "--enter-delay": `${d.enterDelay}s` } : {}),
-          } as React.CSSProperties
-        }
-      >
-        {d.breakpoint && (
-          <div className="dz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
-        )}
-        {inPins.map((p) => (
-          <Handle
-            key={p.port}
-            type="target"
-            position={Position.Left}
-            id={p.port}
-            style={{ ...dotStyle(portColor(p.mime), connectedInputs.includes(p.port), "in"), opacity: 0 }}
-            title={portTooltip(p)}
-          />
-        ))}
-        {outputs.map((p) => (
-          <Handle
-            key={p.port}
-            type="source"
-            position={Position.Right}
-            id={p.port}
-            style={{ ...dotStyle(portColor(p.mime), connectedOutputs.includes(p.port), "out"), opacity: 0 }}
-            title={portTooltip(p)}
-          />
-        ))}
-        {/* The stand-in dots. Drawn only on a side that has pins, and marked
-            .wired when anything is actually connected there, so a folded card
-            still shows at a glance that it is in the chain. */}
-        {inPins.length > 0 && (
-          <span
-            className={"dz-collapsed-pin in" + (connectedInputs.length ? " wired" : "")}
-            aria-hidden="true"
-          />
-        )}
-        {outputs.length > 0 && (
-          <span
-            className={"dz-collapsed-pin out" + (connectedOutputs.length ? " wired" : "")}
-            aria-hidden="true"
-          />
-        )}
-        <DropIcon
-          icon={d.manifest?.icon}
-          category={d.manifest?.category}
-          brandColor={d.manifest?.color}
-          brandLogo={d.manifest?.brand_logo}
-          glyphSize={ICON.md}
-        />
-        <span className="dz-collapsed-name" title={d.label || d.moduleID}>
-          {d.label || d.moduleID}
-        </span>
-        {d.locked && (
-          <Lock className="dz-collapsed-lock" size={ICON.xs} strokeWidth={2.2} aria-hidden="true" />
-        )}
-        {d.setCollapsed && (
-          <button
-            type="button"
-            className="dz-node-max nodrag"
-            aria-label={i18n.t("nodeCard.maximize", { name: d.label || d.moduleID })}
-            title={i18n.t("nodeCard.maximizeTitle")}
-            onClick={(e) => {
-              e.stopPropagation();
-              d.setCollapsed?.(false);
-            }}
-          >
-            <Maximize2 size={ICON.sm} strokeWidth={2.2} />
-          </button>
-        )}
-      </div>
+      <CollapsedNode
+        d={d}
+        selected={selected}
+        color={color}
+        inPins={hasDeclaredInputs ? inputs : isValueSource || isTrigger ? [] : [inputs[0]]}
+        outputs={outputs}
+        connectedInputs={connectedInputs}
+        connectedOutputs={connectedOutputs}
+      />
     );
   }
 
   return (
     <div
-      className={
-        "dz-node" +
-        (selected ? " selected" : "") +
-        statusClass +
-        (isTrigger ? " dz-node-trigger" : "") +
-        (d.loopOwned ? " dz-loop-owned" : "") +
-        (d.disabled ? " dz-node-off" : "") +
-        (!d.disabled && d.offByCascade ? " dz-node-off-cascade" : "") +
-        (d.locked ? " dz-node-locked" : "") +
-        (d.lintMessage ? " lint-warn" : "") +
-        (d.configErrors?.length ? " config-err" : "") +
-        (d.setupNeeded ? " needs-setup" : "") +
-        (d.paused ? " paused" : "") +
-        (d.enterDelay != null ? " dz-enter" : "") +
-          (d.assistantChanged ? " dz-assistant-changed" : "")
-      }
+      className={nodeClassName(d, selected, "dz-node")}
       role="group"
-      aria-label={`${d.label || d.moduleID} (${d.moduleID})${d.disabled ? ", disabled" : ""} flow step`}
+      aria-label={i18n.t(d.disabled ? "nodeCard.cardLabelDisabled" : "nodeCard.cardLabel", {
+        name: d.label || d.moduleID,
+        module: d.moduleID,
+      })}
       aria-selected={selected}
-      style={
-        {
-          ...(isTrigger ? { "--node-accent": color } : {}),
-          ...(d.enterDelay != null ? { "--enter-delay": `${d.enterDelay}s` } : {}),
-        } as React.CSSProperties
-      }
+      style={nodeStyle(d, color) as React.CSSProperties}
     >
-      {d.breakpoint && (
-        <div className="dz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
-      )}
+      {d.breakpoint && <NodeBreakpoint />}
       {d.disabled && (
         <div className="dz-node-offchip" title={i18n.t("nodeCard.offTitle")}>
           {i18n.t("nodeCard.off")}
@@ -696,12 +582,12 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
                       style={
                         isPass
                           ? passPinStyle("in")
-                          : dotStyle(c, connectedInputs.includes(p.port), "in", missingByPort.has(p.port))
+                          : dotStyle(c, connectedInputs.includes(p.port), "in", missing.has(p.port))
                       }
                       title={
                         isPass
                           ? i18n.t("nodeCard.passThrough")
-                          : (missingByPort.get(p.port) ?? portTooltip(p))
+                          : (missing.get(p.port) ?? portTooltip(p))
                       }
                     >
                       {isPass && <PassPinIcon />}
@@ -792,7 +678,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
       )}
       {/* Config errors read as an inline footer on the card (#13) — the same
           flush CTA-bar shape as the "Connect" needs-setup banner, in danger
-          red. The pin also recolours red (missingByPort), but that alone can't
+          red. The pin also recolours red (missing), but that alone can't
           say WHAT is wrong; this names it in words, always-visible instead of
           only on pin hover. It also surfaces errors with no pin at all (a
           required literal, a for_each with an unwired body). */}
@@ -1054,6 +940,110 @@ function ParamInput({
 
 const fitSize = (text: string) => Math.max(3, Math.min(24, text.length || 1));
 
+// The pause-point marker every face of a step carries when it has a breakpoint.
+function NodeBreakpoint() {
+  return (
+    <div className="dz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
+  );
+}
+
+// A step folded down to its name: icon, label and invisible handles behind a
+// stand-in dot on each side that has pins.
+function CollapsedNode({
+  d,
+  selected,
+  color,
+  inPins,
+  outputs,
+  connectedInputs,
+  connectedOutputs,
+}: {
+  d: DazyNodeData;
+  selected: boolean;
+  color: string;
+  inPins: Port[];
+  outputs: Port[];
+  connectedInputs: string[];
+  connectedOutputs: string[];
+}) {
+  return (
+    <div
+      className={nodeClassName(d, selected, "dz-node dz-node-collapsed")}
+      role="group"
+      aria-label={i18n.t("nodeCard.collapsedLabel", {
+        name: d.label || d.moduleID,
+        module: d.moduleID,
+      })}
+      aria-selected={selected}
+      style={nodeStyle(d, color) as React.CSSProperties}
+    >
+      {d.breakpoint && <NodeBreakpoint />}
+      {inPins.map((p) => (
+        <Handle
+          key={p.port}
+          type="target"
+          position={Position.Left}
+          id={p.port}
+          style={{ ...dotStyle(portColor(p.mime), connectedInputs.includes(p.port), "in"), opacity: 0 }}
+          title={portTooltip(p)}
+        />
+      ))}
+      {outputs.map((p) => (
+        <Handle
+          key={p.port}
+          type="source"
+          position={Position.Right}
+          id={p.port}
+          style={{ ...dotStyle(portColor(p.mime), connectedOutputs.includes(p.port), "out"), opacity: 0 }}
+          title={portTooltip(p)}
+        />
+      ))}
+      {/* The stand-in dots. Drawn only on a side that has pins, and marked
+          .wired when anything is actually connected there, so a folded card
+          still shows at a glance that it is in the chain. */}
+      {inPins.length > 0 && (
+        <span
+          className={"dz-collapsed-pin in" + (connectedInputs.length ? " wired" : "")}
+          aria-hidden="true"
+        />
+      )}
+      {outputs.length > 0 && (
+        <span
+          className={"dz-collapsed-pin out" + (connectedOutputs.length ? " wired" : "")}
+          aria-hidden="true"
+        />
+      )}
+      <DropIcon
+        icon={d.manifest?.icon}
+        category={d.manifest?.category}
+        brandColor={d.manifest?.color}
+        brandLogo={d.manifest?.brand_logo}
+        glyphSize={ICON.md}
+      />
+      <span className="dz-collapsed-name" title={d.label || d.moduleID}>
+        {d.label || d.moduleID}
+      </span>
+      {d.locked && (
+        <Lock className="dz-collapsed-lock" size={ICON.xs} strokeWidth={2.2} aria-hidden="true" />
+      )}
+      {d.setCollapsed && (
+        <button
+          type="button"
+          className="dz-node-max nodrag"
+          aria-label={i18n.t("nodeCard.maximize", { name: d.label || d.moduleID })}
+          title={i18n.t("nodeCard.maximizeTitle")}
+          onClick={(e) => {
+            e.stopPropagation();
+            d.setCollapsed?.(false);
+          }}
+        >
+          <Maximize2 size={ICON.sm} strokeWidth={2.2} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function OperatorChip({
   d,
   selected,
@@ -1062,7 +1052,6 @@ function OperatorChip({
   outputs,
   connectedInputs,
   connectedOutputs,
-  statusClass,
 }: {
   d: DazyNodeData;
   selected: boolean;
@@ -1071,7 +1060,6 @@ function OperatorChip({
   outputs: Port[];
   connectedInputs: string[];
   connectedOutputs: string[];
-  statusClass: string;
 }) {
   const sym = operatorSymbol(d.manifest!);
   const zoom = useStore((s) => s.transform[2]);
@@ -1082,49 +1070,27 @@ function OperatorChip({
     OP_MAX_FONT,
     Math.max(OP_BASE_FONT, OP_MIN_PX / (zoom || 1)),
   );
-  const inputPortIds = new Set(inputs.map((p) => p.port));
-  const missingByPort = new Map(
-    (d.configErrors ?? [])
-      .filter((e) => inputPortIds.has(e.key))
-      .map((e) => [e.key, e.message]),
-  );
+  const missing = missingByPort(d, new Set(inputs.map((p) => p.port)));
   return (
     <div
-      className={
-        "dz-node dz-op" +
-        (selected ? " selected" : "") +
-        statusClass +
-        (d.disabled ? " dz-node-off" : "") +
-        (d.lintMessage ? " lint-warn" : "") +
-        (d.configErrors?.length ? " config-err" : "") +
-        (d.paused ? " paused" : "") +
-        (d.enterDelay != null ? " dz-enter" : "") +
-          (d.assistantChanged ? " dz-assistant-changed" : "")
-      }
-      style={
-        {
-          ["--op-color"]: color,
-          ...(d.enterDelay != null ? { "--enter-delay": `${d.enterDelay}s` } : {}),
-        } as React.CSSProperties
-      }
+      className={nodeClassName(d, selected, "dz-node dz-op")}
+      style={nodeStyle(d, color, true) as React.CSSProperties}
       title={d.label}
     >
-      {d.breakpoint && (
-        <div className="dz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
-      )}
+      {d.breakpoint && <NodeBreakpoint />}
       <Handle
         type="target"
         position={Position.Left}
         id={inputs[0].port}
-        style={{ ...dotStyle(portColor(inputs[0].mime), connectedInputs.includes(inputs[0].port), undefined, missingByPort.has(inputs[0].port)), top: "32%" }}
-        title={missingByPort.get(inputs[0].port) ?? portTooltip(inputs[0])}
+        style={{ ...dotStyle(portColor(inputs[0].mime), connectedInputs.includes(inputs[0].port), undefined, missing.has(inputs[0].port)), top: "32%" }}
+        title={missing.get(inputs[0].port) ?? portTooltip(inputs[0])}
       />
       <Handle
         type="target"
         position={Position.Left}
         id={inputs[1].port}
-        style={{ ...dotStyle(portColor(inputs[1].mime), connectedInputs.includes(inputs[1].port), undefined, missingByPort.has(inputs[1].port)), top: "68%" }}
-        title={missingByPort.get(inputs[1].port) ?? portTooltip(inputs[1])}
+        style={{ ...dotStyle(portColor(inputs[1].mime), connectedInputs.includes(inputs[1].port), undefined, missing.has(inputs[1].port)), top: "68%" }}
+        title={missing.get(inputs[1].port) ?? portTooltip(inputs[1])}
       />
       <span className="dz-op-symbol" style={{ fontSize }}>
         {sym}

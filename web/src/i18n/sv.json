@@ -1709,6 +1709,8 @@
     "minimizeTitle": "Fäll ihop steget till bara namnet",
     "maximize": "Maximera {{name}}",
     "maximizeTitle": "Fäll ut steget igen",
+    "cardLabel": "{{name}} ({{module}}) flödessteg",
+    "cardLabelDisabled": "{{name}} ({{module}}), avstängt, flödessteg",
     "collapsedLabel": "{{name}} ({{module}}) flödessteg, minimerat",
     "locked": "Låst",
     "lockedHint": "Det här steget är låst: fälten går inte att ändra och kortet kan inte flyttas. Lås upp det i inspektören.",
