@@ -10,6 +10,19 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Security
+
+- **Excel and HTML parsing dependencies are patched.** excelize moves to
+  v2.11.1 (GO-2026-6677, -6679, -6680, -6681, -6684, -6685, -6688, -6689) and
+  golang.org/x/net to v0.63.0 (GO-2026-6860, -6866).
+
+### Fixed
+
+- **A malformed line in a git credential's known_hosts is still rejected.**
+  golang.org/x/crypto v0.59 now silently skips bad lines whenever the file also
+  has valid ones, which the bundled defaults always are; the credential's own
+  entries are now validated on their own first.
+
 ## [0.43.2] - 2026-10-06
 
 ### Fixed

@@ -5,7 +5,9 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -15,6 +17,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -201,6 +204,9 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	combined := bundledKnownHosts
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
+		if err := validateKnownHosts(s); err != nil {
+			return nil, err
+		}
 		combined += s + "\n"
 	}
 	f, err := os.CreateTemp("", "dazyflow-known-hosts-*")
@@ -216,4 +222,24 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 		return nil, err
 	}
 	return gitssh.NewKnownHostsDb(f.Name())
+}
+
+// validateKnownHosts rejects any malformed line in the credential's own
+// known_hosts. knownhosts.Read skips invalid lines once the file has a valid
+// one, and the bundled defaults always are, so a typo would otherwise be
+// dropped silently and surface later as an unknown-host failure.
+func validateKnownHosts(s string) error {
+	for n, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
+			if errors.Is(err, io.EOF) {
+				err = errors.New("invalid entry")
+			}
+			return fmt.Errorf("known_hosts line %d: %w", n+1, err)
+		}
+	}
+	return nil
 }
