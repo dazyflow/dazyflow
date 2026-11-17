@@ -23,7 +23,7 @@ import {
 import { Trans, useTranslation } from "react-i18next";
 import i18n from "../../i18n";
 import { enumOptionLabel, fieldHelp, fieldTitle } from "../../lib/dropText";
-import { isFieldVisible } from "../../lib/schemaFields";
+import { isAdvancedField, isFieldVisible } from "../../lib/schemaFields";
 import type {
   EmailTemplateSummary,
   JSONSchema,
@@ -198,13 +198,6 @@ export function SchemaForm({
   );
 }
 
-const ADVANCED_FIELD_NAMES = new Set([
-  "timeout_ms",
-  "page_token",
-  "next_page_token",
-  "cursor",
-]);
-
 const HIDDEN_FIELD_KEYS = new Set([
   "timeout_ms", // request-timeout dial
   "base_url", // API-host override — a test seam pointing at a mock server
@@ -212,17 +205,6 @@ const HIDDEN_FIELD_KEYS = new Set([
   "thread_id", // Gmail reply-in-thread by opaque id — wire it, don't type it
   "reply_to", // org-admin sets a default centrally; not per-flow (see /admin/google)
 ]);
-
-function isAdvancedField(
-  name: string,
-  schema: JSONSchema,
-  siblings: Record<string, JSONSchema>,
-): boolean {
-  if (schema.x_advanced || schema["x-advanced"]) return true;
-  if (ADVANCED_FIELD_NAMES.has(name)) return true;
-  if (name === "token" && "account" in siblings) return true;
-  return false;
-}
 
 type FieldProps = {
   name: string;
@@ -1981,15 +1963,6 @@ function ReferenceMenu({
     };
   }, [open, groups, error, ctx]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
   const sections: { kind: keyof ReferenceGroups; label: string }[] = [
     { kind: "upstream", label: t("schemaForm.refPicker.upstream") },
     { kind: "trigger", label: t("schemaForm.refPicker.trigger") },
@@ -3558,6 +3531,79 @@ function AccountField({
   );
 }
 
+// A select over a user's saved credentials, with a link to manage them.
+//
+// The saved value stays selectable even when the listing has not arrived or
+// the account has since been deleted, so opening a flow never silently
+// repoints a step at a different server or repository.
+function CredentialPickerField<C extends { account: string }>({
+  value,
+  onChange,
+  load,
+  fixedOptions = [],
+  blankLabel,
+  describe,
+  manageHref,
+  linkLabel,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  load: (token: string) => Promise<C[]>;
+  fixedOptions?: string[];
+  // When set, a blank option is offered first with this label.
+  blankLabel?: (creds: C[] | null) => string;
+  describe?: (account: string, creds: C[]) => string;
+  manageHref: string;
+  linkLabel: (creds: C[] | null) => string;
+}) {
+  const { token } = useAuth();
+  const [creds, setCreds] = useState<C[] | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    load(token)
+      .then((r) => {
+        if (!cancelled) setCreds(r);
+      })
+      .catch(() => {
+        if (!cancelled) setCreds([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, load]);
+
+  const known = creds ?? [];
+  const opts = Array.from(
+    new Set([...fixedOptions, ...known.map((c) => c.account), ...(value ? [value] : [])]),
+  );
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)" }}>
+      <select style={{ maxWidth: "100%" }} value={value} onChange={(e) => onChange(e.target.value)}>
+        {blankLabel && <option value="">{blankLabel(creds)}</option>}
+        {opts.map((a) => (
+          <option key={a} value={a}>
+            {describe ? describe(a, known) : a}
+          </option>
+        ))}
+      </select>
+      {/* The link keeps its own line rather than breaking across two: the row
+          wraps when an option's label outgrows the column. */}
+      <Link to={manageHref} style={{ fontSize: "var(--text-sm)", whiteSpace: "nowrap" }}>
+        {linkLabel(creds)}
+      </Link>
+    </div>
+  );
+}
+
+const loadSSHCredentials = (token: string) =>
+  api.listSSHCredentials(token).then((r) => r.credentials ?? []);
+
+const loadGitCredentials = (token: string) =>
+  api.listGitCredentials(token).then((r) => r.credentials ?? []);
+
 // The picker for a named SSH/SFTP server. Unlike the git equivalent it shows
 // user@host beside the name: "bank" and "supplier" mean nothing six months on,
 // and picking the wrong server is the mistake this field exists to prevent.
@@ -3571,73 +3617,36 @@ function SSHCredAccountField({
   onChange: (v: unknown) => void;
 }) {
   const { t } = useTranslation();
-  const { token } = useAuth();
   const { connectedIntegrations } = useFormCtx();
-  const [creds, setCreds] = useState<SSHCredential[] | null>(null);
   // Blank falls back to the integration's own connection, but only while that
   // connection exists; until it does, blank points at nothing.
   const hasConnection = !!connectionSlug && !!connectedIntegrations?.has(connectionSlug);
 
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    api
-      .listSSHCredentials(token)
-      .then((r) => {
-        if (!cancelled) setCreds(r.credentials ?? []);
-      })
-      .catch(() => {
-        if (!cancelled) setCreds([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
-
-  const known = creds ?? [];
-  const names = known.map((c) => c.account);
-  // The saved value stays selectable even when the listing has not arrived or
-  // the account has since been deleted, so opening a flow never silently
-  // repoints a step at a different server.
-  const extra = value && !names.includes(value) ? [value] : [];
-  const describe = (account: string) => {
-    const c = known.find((k) => k.account === account);
-    if (!c?.host) return account;
-    return `${account} — ${c.username ? `${c.username}@` : ""}${c.host}`;
-  };
-
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)" }}>
-      <select
-        style={{ maxWidth: "100%" }}
-        value={value}
-        onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
-      >
-        {/* Blank is always offered, and is what an unpointed step shows. With
-            no servers saved there is nothing else in here: naming one would
-            name a server that does not exist. */}
-        <option value="">
-          {hasConnection
-            ? t("sshCreds.useConnection")
-            : creds !== null && names.length === 0
-              ? t("sshCreds.noneYet")
-              : t("sshCreds.chooseServer")}
-        </option>
-        {[...names, ...extra].map((a) => (
-          <option key={a} value={a}>
-            {describe(a)}
-          </option>
-        ))}
-      </select>
-      {/* The link keeps its own line rather than breaking across two: the row
-          wraps when a server's name and address outgrow the column. */}
-      <Link
-        to="/admin/ssh-credentials"
-        style={{ fontSize: "var(--text-sm)", whiteSpace: "nowrap" }}
-      >
-        {known.length === 0 ? t("sshCreds.addLink") : t("sshCreds.manageLink")}
-      </Link>
-    </div>
+    <CredentialPickerField<SSHCredential>
+      value={value}
+      onChange={(v) => onChange(v === "" ? undefined : v)}
+      load={loadSSHCredentials}
+      // Blank is always offered, and is what an unpointed step shows. With no
+      // servers saved there is nothing else in here: naming one would name a
+      // server that does not exist.
+      blankLabel={(creds) =>
+        hasConnection
+          ? t("sshCreds.useConnection")
+          : creds !== null && creds.length === 0
+            ? t("sshCreds.noneYet")
+            : t("sshCreds.chooseServer")
+      }
+      describe={(account, known) => {
+        const c = known.find((k) => k.account === account);
+        if (!c?.host) return account;
+        return `${account} — ${c.username ? `${c.username}@` : ""}${c.host}`;
+      }}
+      manageHref="/admin/ssh-credentials"
+      linkLabel={(creds) =>
+        !creds || creds.length === 0 ? t("sshCreds.addLink") : t("sshCreds.manageLink")
+      }
+    />
   );
 }
 
@@ -3649,48 +3658,17 @@ function GitCredAccountField({
   onChange: (v: unknown) => void;
 }) {
   const { t } = useTranslation();
-  const { token } = useAuth();
-  const [accounts, setAccounts] = useState<string[] | null>(null);
-
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    api
-      .listGitCredentials(token)
-      .then((r) => {
-        if (!cancelled) setAccounts((r.credentials ?? []).map((c) => c.account));
-      })
-      .catch(() => {
-        if (!cancelled) setAccounts([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
-
-  const current = value || "default";
-  const opts = Array.from(
-    new Set(["default", ...(accounts ?? []), current]),
-  );
-
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)" }}>
-      <select style={{ maxWidth: "100%" }} value={current} onChange={(e) => onChange(e.target.value)}>
-        {opts.map((a) => (
-          <option key={a} value={a}>
-            {a}
-          </option>
-        ))}
-      </select>
-      <Link
-        to="/admin/git-credentials"
-        style={{ fontSize: "var(--text-sm)", whiteSpace: "nowrap" }}
-      >
-        {accounts && accounts.length === 0
-          ? t("gitCreds.addLink")
-          : t("gitCreds.manageLink")}
-      </Link>
-    </div>
+    <CredentialPickerField
+      value={value || "default"}
+      onChange={onChange}
+      load={loadGitCredentials}
+      fixedOptions={["default"]}
+      manageHref="/admin/git-credentials"
+      linkLabel={(creds) =>
+        creds && creds.length === 0 ? t("gitCreds.addLink") : t("gitCreds.manageLink")
+      }
+    />
   );
 }
 
