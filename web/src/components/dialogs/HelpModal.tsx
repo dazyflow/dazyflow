@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { BookOpen, LifeBuoy, X } from "lucide-react";
@@ -9,8 +8,8 @@ import { Button } from "../ui/Button";
 import { useAuth } from "../../auth";
 import { supportContactHref } from "../../lib/supportContact";
 import { ICON } from "../../icons";
-import { useEscapeToClose } from "../ui/useEscapeToClose";
 import { DOCS } from "../../lib/externalLinks";
+import { Modal } from "../ui/Modal";
 
 
 const isMac =
@@ -54,87 +53,76 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
   const supportOn = !!me?.support_tickets_enabled;
   const contactHref = supportContactHref(me?.support_contact);
 
-  useEscapeToClose(onClose);
-
-  return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("help.title")}
-      >
-        <div className="modal-head">
-          <h2>{t("help.title")}</h2>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            aria-label={t("common.close")}
+  return (
+    <Modal title={t("help.title")} onClose={onClose}>
+      <div className="modal-head">
+        <h2>{t("help.title")}</h2>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          aria-label={t("common.close")}
+        >
+          <X size={ICON.md} />
+        </Button>
+      </div>
+      <div className="modal-body">
+        <div className="help-links">
+          <a
+            className="help-link"
+            href={DOCS}
+            target="_blank"
+            rel="noreferrer noopener"
           >
-            <X size={ICON.md} />
-          </Button>
-        </div>
-        <div className="modal-body">
-          <div className="help-links">
-            <a
+            <BookOpen size={ICON.md} className="help-link-icon" />
+            <span className="help-link-text">
+              <span className="help-link-title">{t("help.docs")}</span>
+              <span className="help-link-desc">{t("help.docsDesc")}</span>
+            </span>
+          </a>
+          {supportOn ? (
+            <button
+              type="button"
               className="help-link"
-              href={DOCS}
-              target="_blank"
-              rel="noreferrer noopener"
+              onClick={() => {
+                onClose();
+                navigate("/support");
+              }}
             >
-              <BookOpen size={ICON.md} className="help-link-icon" />
+              <LifeBuoy size={ICON.md} className="help-link-icon" />
               <span className="help-link-text">
-                <span className="help-link-title">{t("help.docs")}</span>
-                <span className="help-link-desc">{t("help.docsDesc")}</span>
+                <span className="help-link-title">{t("help.support")}</span>
+                <span className="help-link-desc">{t("help.supportDesc")}</span>
               </span>
-            </a>
-            {supportOn ? (
-              <button
-                type="button"
+            </button>
+          ) : (
+            contactHref && (
+              <a
                 className="help-link"
-                onClick={() => {
-                  onClose();
-                  navigate("/support");
-                }}
+                href={contactHref}
+                {...(contactHref.startsWith("mailto:")
+                  ? {}
+                  : { target: "_blank", rel: "noreferrer noopener" })}
               >
                 <LifeBuoy size={ICON.md} className="help-link-icon" />
                 <span className="help-link-text">
                   <span className="help-link-title">{t("help.support")}</span>
                   <span className="help-link-desc">{t("help.supportDesc")}</span>
                 </span>
-              </button>
-            ) : (
-              contactHref && (
-                <a
-                  className="help-link"
-                  href={contactHref}
-                  {...(contactHref.startsWith("mailto:")
-                    ? {}
-                    : { target: "_blank", rel: "noreferrer noopener" })}
-                >
-                  <LifeBuoy size={ICON.md} className="help-link-icon" />
-                  <span className="help-link-text">
-                    <span className="help-link-title">{t("help.support")}</span>
-                    <span className="help-link-desc">{t("help.supportDesc")}</span>
-                  </span>
-                </a>
-              )
-            )}
-          </div>
-          <h3 className="help-section">{t("shortcuts.title")}</h3>
-          <div className="shortcut-group-label">{t("shortcuts.general")}</div>
-          {GENERAL.map((s) => (
-            <Row key={s.descKey} keys={s.keys} desc={t(s.descKey)} />
-          ))}
-          <div className="shortcut-group-label">{t("shortcuts.editor")}</div>
-          {EDITOR.map((s) => (
-            <Row key={s.descKey} keys={s.keys} desc={t(s.descKey)} />
-          ))}
+              </a>
+            )
+          )}
         </div>
+        <h3 className="help-section">{t("shortcuts.title")}</h3>
+        <div className="shortcut-group-label">{t("shortcuts.general")}</div>
+        {GENERAL.map((s) => (
+          <Row key={s.descKey} keys={s.keys} desc={t(s.descKey)} />
+        ))}
+        <div className="shortcut-group-label">{t("shortcuts.editor")}</div>
+        {EDITOR.map((s) => (
+          <Row key={s.descKey} keys={s.keys} desc={t(s.descKey)} />
+        ))}
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

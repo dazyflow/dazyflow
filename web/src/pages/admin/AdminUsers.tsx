@@ -29,10 +29,10 @@ import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { FEEDBACK } from "../../lib/timing";
-import { useEscapeToClose } from "../../components/ui/useEscapeToClose";
 import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
 import { EmptyState } from "../../components/ui/EmptyState";
+import { Modal } from "../../components/ui/Modal";
 
 // isAdminMember reports whether a member's role set grants org admin —
 // either a catalog role named "admin" or any role carrying the
@@ -539,8 +539,6 @@ function InviteModal({
   const canSubmit = !submitting && trimmed !== "" && looksValid;
   const selectedRole = rolePresetFor(roleName);
 
-  useEscapeToClose(onCancel);
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token || !canSubmit) return;
@@ -562,87 +560,83 @@ function InviteModal({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
-      <form
-        className="modal"
-        style={{ maxWidth: 520 }}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        onSubmit={submit}
-      >
-        <div className="modal-head">
-          <h2>{t("admin.users.inviteModalTitle")}</h2>
-        </div>
-        <div className="modal-body">
-          <div className="sf-field">
-            <div className="label-row">
-              <label>{t("admin.users.inviteEmailLabel")}</label>
-            </div>
-            <input
-              autoFocus
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="teammate@example.com"
-              className={!looksValid ? "invalid" : undefined}
-            />
-            <div className="desc">
-              {!looksValid
-                ? t("common.emailInvalid")
-                : t("admin.users.inviteEmailDesc")}
-            </div>
+    <Modal
+      title={t("admin.users.inviteModalTitle")}
+      onClose={onCancel}
+      size="md"
+      onSubmit={submit}
+    >
+      <div className="modal-head">
+        <h2>{t("admin.users.inviteModalTitle")}</h2>
+      </div>
+      <div className="modal-body">
+        <div className="sf-field">
+          <div className="label-row">
+            <label>{t("admin.users.inviteEmailLabel")}</label>
           </div>
-          <div className="sf-field">
-            <div className="label-row">
-              <label>{t("admin.users.inviteRoleLabel")}</label>
-            </div>
-            <div className="role-template-grid">
-              <button
-                type="button"
-                className={"role-template" + (roleName === "viewer" ? " active" : "")}
-                onClick={() => setRoleName("viewer")}
-              >
-                <div className="role-template-name">{t("admin.users.roleViewer")}</div>
-                <div className="role-template-desc">{t("admin.users.roleViewerDesc")}</div>
-              </button>
-              <button
-                type="button"
-                className={"role-template" + (roleName === "editor" ? " active" : "")}
-                onClick={() => setRoleName("editor")}
-              >
-                <div className="role-template-name">{t("admin.users.roleEditor")}</div>
-                <div className="role-template-desc">{t("admin.users.roleEditorDesc")}</div>
-              </button>
-              <button
-                type="button"
-                className={"role-template" + (roleName === "admin" ? " active" : "")}
-                onClick={() => setRoleName("admin")}
-              >
-                <div className="role-template-name">{t("admin.users.roleAdmin")}</div>
-                <div className="role-template-desc">{t("admin.users.roleAdminDesc")}</div>
-              </button>
-            </div>
-            <div className="role-perms-preview">
-              <span className="role-perms-label">
-                {t("admin.users.rolePermsLabel")}
-              </span>
-              {selectedRole.permissions.map((p) => (
-                <code key={p}>{p}</code>
-              ))}
-            </div>
+          <input
+            autoFocus
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="teammate@example.com"
+            className={!looksValid ? "invalid" : undefined}
+          />
+          <div className="desc">
+            {!looksValid
+              ? t("common.emailInvalid")
+              : t("admin.users.inviteEmailDesc")}
           </div>
         </div>
-        <div className="modal-foot">
-          <Button type="button" onClick={onCancel}>
-            {t("common.cancel")}
-          </Button>
-          <Button type="submit" variant="primary" disabled={!canSubmit}>
-            {submitting ? t("admin.users.sending") : t("admin.users.sendInvite")}
-          </Button>
+        <div className="sf-field">
+          <div className="label-row">
+            <label>{t("admin.users.inviteRoleLabel")}</label>
+          </div>
+          <div className="role-template-grid">
+            <button
+              type="button"
+              className={"role-template" + (roleName === "viewer" ? " active" : "")}
+              onClick={() => setRoleName("viewer")}
+            >
+              <div className="role-template-name">{t("admin.users.roleViewer")}</div>
+              <div className="role-template-desc">{t("admin.users.roleViewerDesc")}</div>
+            </button>
+            <button
+              type="button"
+              className={"role-template" + (roleName === "editor" ? " active" : "")}
+              onClick={() => setRoleName("editor")}
+            >
+              <div className="role-template-name">{t("admin.users.roleEditor")}</div>
+              <div className="role-template-desc">{t("admin.users.roleEditorDesc")}</div>
+            </button>
+            <button
+              type="button"
+              className={"role-template" + (roleName === "admin" ? " active" : "")}
+              onClick={() => setRoleName("admin")}
+            >
+              <div className="role-template-name">{t("admin.users.roleAdmin")}</div>
+              <div className="role-template-desc">{t("admin.users.roleAdminDesc")}</div>
+            </button>
+          </div>
+          <div className="role-perms-preview">
+            <span className="role-perms-label">
+              {t("admin.users.rolePermsLabel")}
+            </span>
+            {selectedRole.permissions.map((p) => (
+              <code key={p}>{p}</code>
+            ))}
+          </div>
         </div>
-      </form>
-    </div>
+      </div>
+      <div className="modal-foot">
+        <Button type="button" onClick={onCancel}>
+          {t("common.cancel")}
+        </Button>
+        <Button type="submit" variant="primary" disabled={!canSubmit}>
+          {submitting ? t("admin.users.sending") : t("admin.users.sendInvite")}
+        </Button>
+      </div>
+    </Modal>
   );
 }
 

@@ -2,14 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Check, Download, Plus, Trash2, X } from "lucide-react";
 import { ConfirmModal } from "../ui/ConfirmModal";
 import { Button } from "../ui/Button";
 import { explainApiError } from "../../lib/explainApiError";
 import { ICON } from "../../icons";
-import { useEscapeToClose } from "../ui/useEscapeToClose";
+import { Modal } from "../ui/Modal";
 
 // OrgSwitcherModal is the centered org switcher + create flow, mirroring the
 // ConfigChecklistModal shell (portal to <body>, modal-backdrop/dialog,
@@ -59,8 +58,6 @@ export function OrgSwitcherModal({
     "idle",
   );
 
-  useEscapeToClose(() => !busy && onClose());
-
   const submit = async () => {
     const trimmed = name.trim();
     if (!trimmed || busy) return;
@@ -89,14 +86,13 @@ export function OrgSwitcherModal({
       .finally(() => setBusy(false));
   };
 
-  return createPortal(
-    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
-      <div
-        className="modal org-switcher-modal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="org-switcher-title"
+  return (
+    <>
+      <Modal
+        labelledBy="org-switcher-title"
+        onClose={onClose}
+        dismissible={!busy}
+        className="org-switcher-modal"
       >
         <div className="modal-head">
           <h2 id="org-switcher-title">{t("common.organizations")}</h2>
@@ -212,7 +208,7 @@ export function OrgSwitcherModal({
             </Button>
           )}
         </div>
-      </div>
+      </Modal>
       {confirmDelete && (
         <ConfirmModal
           title={t("nav.orgDeleteTitle", { name: confirmDelete.name })}
@@ -284,7 +280,6 @@ export function OrgSwitcherModal({
           }}
         />
       )}
-    </div>,
-    document.body,
+    </>
   );
 }

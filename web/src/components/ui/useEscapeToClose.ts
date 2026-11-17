@@ -9,8 +9,9 @@ import { useEffect, useRef } from "react";
 // so it was present in nine dialogs and missing from twelve. A user who learns
 // Escape works on the delete-flow confirm found it dead on the MCP client
 // wizard, which is worse than if it had never worked anywhere. This is that
-// listener written once — scripts/check-modal-a11y.mjs fails the build if a
-// component rendering a backdrop doesn't call it.
+// listener written once. <Modal> calls it for every dialog, and
+// scripts/check-modal-a11y.mjs fails the build if a backdrop is rendered
+// anywhere else.
 //
 // Bound to `window`, not the dialog element: a portaled dialog may not have
 // focus inside it yet, and a key handler on an unfocused subtree never fires.

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { Pencil, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth";
@@ -17,8 +16,8 @@ import { formatDate } from "../../lib/datetime";
 import { Button } from "../ui/Button";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
-import { useEscapeToClose } from "../ui/useEscapeToClose";
 import { NBSP } from "../../lib/format";
+import { Modal } from "../ui/Modal";
 
 export function PlanLimitsSection({ tenant }: { tenant: string }) {
   const { t } = useTranslation();
@@ -207,75 +206,75 @@ function EntitlementEditor({
   );
 
 
-  useEscapeToClose(() => !busy && onClose());
-  return createPortal(
-    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="modal-head">
-          <h2>{t("admin.platformPlan.editTitle")}</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} disabled={busy}>
-            <X size={ICON.lg} />
-          </Button>
-        </div>
-        <div className="modal-body pa-tier-form">
-          <label>
-            {t("admin.platformPlan.tier")}
-            <select value={tierID} onChange={(e) => setTierID(e.target.value)}>
-              {tiers.map((tr) => (
-                <option key={tr.id} value={tr.id}>
-                  {tr.name} ({tr.plan})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t("admin.platformPlan.planGrant")}
-            <select value={planOverride} onChange={(e) => setPlanOverride(e.target.value)}>
-              <option value="">{t("admin.platformPlan.planInherit")}</option>
-              <option value="free">{t("admin.platformPlan.forceFree")}</option>
-              <option value="pro">{t("admin.platformPlan.forcePro")}</option>
-            </select>
-          </label>
-          <label className="pa-tier-check">
-            <input type="checkbox" checked={comped} onChange={(e) => setComped(e.target.checked)} />
-            {t("admin.platformPlan.compedLabel")}
-          </label>
-          <label>
-            {t("admin.platformPlan.trialEnds")} <span className="pa-subtext">({t("admin.platformPlan.blankNone")})</span>
-            <input type="date" value={trial} onChange={(e) => setTrial(e.target.value)} />
-          </label>
-          {overrideInput(t("admin.platformTiers.runs"), runs, setRuns)}
-          {overrideInput(t("admin.platformTiers.generations"), generations, setGenerations)}
-          {overrideInput(t("common.members"), members, setMembers)}
-          {overrideInput(t("admin.platformTiers.concurrency"), concurrency, setConcurrency)}
-          {overrideInput(t("admin.platformTiers.retention"), retention, setRetention)}
-          {overrideInput(t("admin.platformTiers.nodes"), nodes, setNodes)}
-          {overrideInput(t("common.flows"), flows, setFlows)}
-          {overrideInput(t("admin.platformTiers.timeout"), timeout, setTimeoutS)}
-          {overrideInput(t("admin.platformTiers.diskMB"), diskMB, setDiskMB)}
-          <label>
-            {t("admin.platformTiers.polling")}
-            <select value={polling} onChange={(e) => setPolling(e.target.value)}>
-              <option value="inherit">{t("admin.platformPlan.planInherit")}</option>
-              <option value="on">{t("common.yes")}</option>
-              <option value="off">{t("common.no")}</option>
-            </select>
-          </label>
-          <label>
-            {t("admin.platformPlan.notes")}
-            <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </label>
-        </div>
-        <div className="modal-foot">
-          <Button onClick={onClose} disabled={busy}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="primary" onClick={() => void save()} disabled={busy}>
-            {busy ? t("common.saving") : t("admin.platformTiers.save")}
-          </Button>
-        </div>
+  return (
+    <Modal
+      title={t("admin.platformPlan.editTitle")}
+      onClose={onClose}
+      dismissible={!busy}
+    >
+      <div className="modal-head">
+        <h2>{t("admin.platformPlan.editTitle")}</h2>
+        <Button variant="ghost" size="icon" onClick={onClose} disabled={busy}>
+          <X size={ICON.lg} />
+        </Button>
       </div>
-    </div>,
-    document.body,
+      <div className="modal-body pa-tier-form">
+        <label>
+          {t("admin.platformPlan.tier")}
+          <select value={tierID} onChange={(e) => setTierID(e.target.value)}>
+            {tiers.map((tr) => (
+              <option key={tr.id} value={tr.id}>
+                {tr.name} ({tr.plan})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          {t("admin.platformPlan.planGrant")}
+          <select value={planOverride} onChange={(e) => setPlanOverride(e.target.value)}>
+            <option value="">{t("admin.platformPlan.planInherit")}</option>
+            <option value="free">{t("admin.platformPlan.forceFree")}</option>
+            <option value="pro">{t("admin.platformPlan.forcePro")}</option>
+          </select>
+        </label>
+        <label className="pa-tier-check">
+          <input type="checkbox" checked={comped} onChange={(e) => setComped(e.target.checked)} />
+          {t("admin.platformPlan.compedLabel")}
+        </label>
+        <label>
+          {t("admin.platformPlan.trialEnds")} <span className="pa-subtext">({t("admin.platformPlan.blankNone")})</span>
+          <input type="date" value={trial} onChange={(e) => setTrial(e.target.value)} />
+        </label>
+        {overrideInput(t("admin.platformTiers.runs"), runs, setRuns)}
+        {overrideInput(t("admin.platformTiers.generations"), generations, setGenerations)}
+        {overrideInput(t("common.members"), members, setMembers)}
+        {overrideInput(t("admin.platformTiers.concurrency"), concurrency, setConcurrency)}
+        {overrideInput(t("admin.platformTiers.retention"), retention, setRetention)}
+        {overrideInput(t("admin.platformTiers.nodes"), nodes, setNodes)}
+        {overrideInput(t("common.flows"), flows, setFlows)}
+        {overrideInput(t("admin.platformTiers.timeout"), timeout, setTimeoutS)}
+        {overrideInput(t("admin.platformTiers.diskMB"), diskMB, setDiskMB)}
+        <label>
+          {t("admin.platformTiers.polling")}
+          <select value={polling} onChange={(e) => setPolling(e.target.value)}>
+            <option value="inherit">{t("admin.platformPlan.planInherit")}</option>
+            <option value="on">{t("common.yes")}</option>
+            <option value="off">{t("common.no")}</option>
+          </select>
+        </label>
+        <label>
+          {t("admin.platformPlan.notes")}
+          <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </label>
+      </div>
+      <div className="modal-foot">
+        <Button onClick={onClose} disabled={busy}>
+          {t("common.cancel")}
+        </Button>
+        <Button variant="primary" onClick={() => void save()} disabled={busy}>
+          {busy ? t("common.saving") : t("admin.platformTiers.save")}
+        </Button>
+      </div>
+    </Modal>
   );
 }

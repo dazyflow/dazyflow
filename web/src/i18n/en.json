@@ -2307,7 +2307,6 @@
     "title": "Share workspace overview",
     "description": "Create a public link to a live, full-screen status board — ideal for a wall-mounted TV. It shows only flow names and run status; no payloads, errors, or other sensitive data.",
     "create": "Create link",
-    "copied": "Copied!",
     "open": "Open board",
     "regenerate": "Regenerate",
     "disable": "Disable link",

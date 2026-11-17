@@ -7930,6 +7930,16 @@ a.pa-card:hover {
   box-shadow: var(--shadow-pop);
   overflow: hidden;
 }
+/* <Modal size>: the widths dialogs used to set inline, one by one. */
+.modal-sm {
+  max-width: 460px;
+}
+.modal-md {
+  max-width: 560px;
+}
+.modal-lg {
+  max-width: 680px;
+}
 .modal-head {
   display: flex;
   align-items: center;

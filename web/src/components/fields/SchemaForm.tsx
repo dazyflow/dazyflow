@@ -12,7 +12,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { Plus, Upload, X } from "lucide-react";
 import { HelpPopover } from "../ui/HelpPopover";
@@ -52,7 +51,7 @@ import { telFieldFlag, regionDisplayName } from "../../lib/phoneFlag";
 import { useAuth } from "../../auth";
 import { Button } from "../ui/Button";
 import { ICON } from "../../icons";
-import { useEscapeToClose } from "../ui/useEscapeToClose";
+import { Modal } from "../ui/Modal";
 
 
 export type WorkspaceCtx = {
@@ -1273,38 +1272,33 @@ function EmailTemplatePicker({
 
 function EmailPreviewModal({ html, onClose }: { html: string; onClose: () => void }) {
   const { t } = useTranslation();
-  useEscapeToClose(onClose);
 
-  return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal email-preview-dialog"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="modal-head">
-          <h2>{t("emailTemplate.previewTitle", "Email preview")}</h2>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            aria-label={t("common.close", "Close")}
-          >
-            <X size={ICON.md} />
-          </Button>
-        </div>
-        <div className="modal-body">
-          <iframe
-            className="email-preview-frame"
-            title={t("emailTemplate.previewTitle", "Email preview")}
-            srcDoc={html}
-            sandbox=""
-          />
-        </div>
+  return (
+    <Modal
+      title={t("emailTemplate.previewTitle", "Email preview")}
+      onClose={onClose}
+      className="email-preview-dialog"
+    >
+      <div className="modal-head">
+        <h2>{t("emailTemplate.previewTitle", "Email preview")}</h2>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          aria-label={t("common.close", "Close")}
+        >
+          <X size={ICON.md} />
+        </Button>
       </div>
-    </div>,
-    document.body,
+      <div className="modal-body">
+        <iframe
+          className="email-preview-frame"
+          title={t("emailTemplate.previewTitle", "Email preview")}
+          srcDoc={html}
+          sandbox=""
+        />
+      </div>
+    </Modal>
   );
 }
 
@@ -2037,8 +2031,6 @@ function ReferenceMenu({
     </Button>
   );
 
-  useEscapeToClose(() => open && setOpen(false));
-
   return (
     <div className="ref-menu">
       <Button
@@ -2056,89 +2048,83 @@ function ReferenceMenu({
       >
         {"{ }"}
       </Button>
-      {open &&
-        createPortal(
-          <div className="modal-backdrop" onClick={() => setOpen(false)}>
-            <div
-              className="modal ref-dialog"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-              aria-label={t("schemaForm.refPicker.title")}
+      {open && (
+        <Modal
+          title={t("schemaForm.refPicker.title")}
+          onClose={() => setOpen(false)}
+          className="ref-dialog"
+        >
+          <div className="modal-head">
+            <h2>{t("schemaForm.refPicker.title")}</h2>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setOpen(false)}
+              aria-label={t("common.close")}
+              title={t("common.close")}
             >
-              <div className="modal-head">
-                <h2>{t("schemaForm.refPicker.title")}</h2>
+              <X size={ICON.md} />
+            </Button>
+          </div>
+          <div className="ref-dialog-search">
+            <input
+              type="text"
+              className="ref-search-input"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("schemaForm.refPicker.search")}
+              aria-label={t("schemaForm.refPicker.search")}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && firstToken) {
+                  onInsert(firstToken);
+                  setOpen(false);
+                }
+              }}
+            />
+          </div>
+          <div className="modal-body ref-dialog-body">
+            {error && (
+              <div className="ref-pop-msg ref-pop-error">
+                <span>{error}</span>{" "}
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setOpen(false)}
-                  aria-label={t("common.close")}
-                  title={t("common.close")}
+                  variant="link"
+                  onClick={() => setError(null)}
                 >
-                  <X size={ICON.md} />
+                  {t("common.retry")}
                 </Button>
               </div>
-              <div className="ref-dialog-search">
-                <input
-                  type="text"
-                  className="ref-search-input"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder={t("schemaForm.refPicker.search")}
-                  aria-label={t("schemaForm.refPicker.search")}
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && firstToken) {
-                      onInsert(firstToken);
-                      setOpen(false);
-                    }
-                  }}
-                />
+            )}
+            {!groups && !error && !hasExtra && (
+              <div className="ref-pop-msg">{t("common.loading")}</div>
+            )}
+            {groups && !hasAny && (
+              <div className="ref-pop-msg">{t("schemaForm.refPicker.empty")}</div>
+            )}
+            {hasExtra && (
+              <div className="ref-pop-group">
+                <div className="ref-pop-group-label">
+                  {t("schemaForm.refPicker.itemFields")}
+                </div>
+                {filteredExtra.map((it) => renderRow(it.token, it.label, it.token))}
               </div>
-              <div className="modal-body ref-dialog-body">
-                {error && (
-                  <div className="ref-pop-msg ref-pop-error">
-                    <span>{error}</span>{" "}
-                    <Button
-                      variant="link"
-                      onClick={() => setError(null)}
-                    >
-                      {t("common.retry")}
-                    </Button>
+            )}
+            {groups &&
+              sections.map((s) => {
+                const items = filteredSection(s.kind);
+                if (items.length === 0) return null;
+                return (
+                  <div key={s.kind} className="ref-pop-group">
+                    <div className="ref-pop-group-label">{s.label}</div>
+                    {items.map((it) =>
+                      renderRow(it.token, describe(s.kind, it), it.token),
+                    )}
                   </div>
-                )}
-                {!groups && !error && !hasExtra && (
-                  <div className="ref-pop-msg">{t("common.loading")}</div>
-                )}
-                {groups && !hasAny && (
-                  <div className="ref-pop-msg">{t("schemaForm.refPicker.empty")}</div>
-                )}
-                {hasExtra && (
-                  <div className="ref-pop-group">
-                    <div className="ref-pop-group-label">
-                      {t("schemaForm.refPicker.itemFields")}
-                    </div>
-                    {filteredExtra.map((it) => renderRow(it.token, it.label, it.token))}
-                  </div>
-                )}
-                {groups &&
-                  sections.map((s) => {
-                    const items = filteredSection(s.kind);
-                    if (items.length === 0) return null;
-                    return (
-                      <div key={s.kind} className="ref-pop-group">
-                        <div className="ref-pop-group-label">{s.label}</div>
-                        {items.map((it) =>
-                          renderRow(it.token, describe(s.kind, it), it.token),
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+                );
+              })}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

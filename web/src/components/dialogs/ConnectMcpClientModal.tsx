@@ -12,7 +12,7 @@ import type { IssuedAPIKey } from "../../types";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
 import { FEEDBACK } from "../../lib/timing";
-import { useEscapeToClose } from "../ui/useEscapeToClose";
+import { Modal } from "../ui/Modal";
 
 
 type Stage = "confirm" | "reveal";
@@ -118,34 +118,29 @@ export function ConnectMcpClientModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  useEscapeToClose(onClose);
-
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal mcp-connect-dialog"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="modal-head">
-          <h2>{t("connectMcp.title")}</h2>
-        </div>
-        {stage === "confirm" ? (
-          <ConfirmStage
-            subject={subject}
-            workspace={workspace}
-            canEdit={canEdit}
-            submitting={submitting}
-            error={error}
-            onCancel={onClose}
-            onCreate={create}
-          />
-        ) : (
-          <RevealStage issued={issued!} onDone={onClose} />
-        )}
+    <Modal
+      title={t("connectMcp.title")}
+      onClose={onClose}
+      className="mcp-connect-dialog"
+    >
+      <div className="modal-head">
+        <h2>{t("connectMcp.title")}</h2>
       </div>
-    </div>
+      {stage === "confirm" ? (
+        <ConfirmStage
+          subject={subject}
+          workspace={workspace}
+          canEdit={canEdit}
+          submitting={submitting}
+          error={error}
+          onCancel={onClose}
+          onCreate={create}
+        />
+      ) : (
+        <RevealStage issued={issued!} onDone={onClose} />
+      )}
+    </Modal>
   );
 }
 
