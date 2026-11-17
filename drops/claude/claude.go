@@ -152,9 +152,7 @@ func extractToolInput(parsed map[string]any, name string) map[string]any {
 	return nil
 }
 
-func claudeError(body []byte) string {
-	return params.EnvelopeMessage(body, "type", llmtask.ErrDetailLimit)
-}
+func claudeError(body []byte) string { return params.EnvelopeMessage(body, "type", 512) }
 
 // userContent builds the Anthropic content-block array for a request carrying
 // files. Documents and images are their own block types, and both go BEFORE

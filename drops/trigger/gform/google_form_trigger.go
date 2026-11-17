@@ -13,6 +13,7 @@ import (
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/cursor"
+	"github.com/dazyflow/dazyflow/drops/internal/google"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 	"github.com/dazyflow/dazyflow/pollstate"
@@ -209,11 +210,8 @@ func fetchTitles(ctx context.Context, job core.Job, formID, token string, timeou
 	}
 	endpoint := formsBaseURL(job) + "/forms/" + url.PathEscape(formID)
 	status, body, err := googleGet(ctx, endpoint, token, timeoutMS)
-	if err != nil {
+	if err = params.HTTPError("forms.get", status, body, err, formsErr); err != nil {
 		return nil, err
-	}
-	if status < 200 || status >= 300 {
-		return nil, fmt.Errorf("forms.get: %s", formsErr(body))
 	}
 	var f formStructure
 	if err := json.Unmarshal(body, &f); err != nil {
@@ -224,14 +222,20 @@ func fetchTitles(ctx context.Context, job core.Job, formID, token string, timeou
 	return titles, nil
 }
 
+// responsesPageSize and maxResponsePages bound one poll's walk of
+// forms.responses.list: past maxResponsePages the poll refuses rather than
+// stepping the watermark over responses it never saw.
+const (
+	responsesPageSize = 200
+	maxResponsePages  = 100
+)
+
 func fetchNewResponses(ctx context.Context, job core.Job, formID, token string, timeoutMS int, cursor string) ([]formResponse, string, error) {
 	base := formsBaseURL(job) + "/forms/" + url.PathEscape(formID) + "/responses"
 	newCursor := cursor
-	var fresh []formResponse
-	pageToken := ""
-	for {
+	fresh, next, err := google.Paginate(ctx, func(pageToken string, _ int) ([]formResponse, string, error) {
 		q := url.Values{}
-		q.Set("pageSize", "200")
+		q.Set("pageSize", strconv.Itoa(responsesPageSize))
 		if cursor != "" {
 			// Forms filter grammar; client-side re-filter below guards the
 			// boundary since the API filter's precision is coarse.
@@ -241,26 +245,30 @@ func fetchNewResponses(ctx context.Context, job core.Job, formID, token string, 
 			q.Set("pageToken", pageToken)
 		}
 		status, body, err := googleGet(ctx, base+"?"+q.Encode(), token, timeoutMS)
-		if err != nil {
-			return nil, cursor, err
-		}
-		if status < 200 || status >= 300 {
-			return nil, cursor, fmt.Errorf("forms.responses.list: %s", formsErr(body))
+		if err = params.HTTPError("forms.responses.list", status, body, err, formsErr); err != nil {
+			return nil, "", err
 		}
 		var page responsesList
 		if err := json.Unmarshal(body, &page); err != nil {
-			return nil, cursor, fmt.Errorf("forms.responses.list decode: %w", err)
+			return nil, "", fmt.Errorf("forms.responses.list decode: %w", err)
 		}
+		var kept []formResponse
 		for _, r := range page.Responses {
 			if newerThan(r.LastSubmittedTime, cursor) {
-				fresh = append(fresh, r)
+				kept = append(kept, r)
 				newCursor = maxTime(newCursor, r.LastSubmittedTime)
 			}
 		}
-		if page.NextPageToken == "" {
-			break
-		}
-		pageToken = page.NextPageToken
+		return kept, page.NextPageToken, nil
+	}, 0, maxResponsePages)
+	if err != nil {
+		return nil, cursor, err
+	}
+	if next != "" {
+		// Responses aren't guaranteed to arrive in time order, so advancing the
+		// cursor to the newest one seen could skip ones on unread pages.
+		return nil, cursor, fmt.Errorf("forms.responses.list: more than %d pages of responses since the last check; "+
+			"nothing has been skipped and this step's position is unchanged", maxResponsePages)
 	}
 	return fresh, newCursor, nil
 }

@@ -266,9 +266,7 @@ func finishHint(parsed map[string]any) string {
 	}
 }
 
-func geminiError(body []byte) string {
-	return params.EnvelopeMessage(body, "status", llmtask.ErrDetailLimit)
-}
+func geminiError(body []byte) string { return params.EnvelopeMessage(body, "status", 512) }
 
 // Models that answer generateContent but cannot do text, so they must be hidden.
 var nonTextFamilies = []string{

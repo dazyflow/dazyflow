@@ -158,22 +158,19 @@ func GetStatus(ctx context.Context, endpoint string, headers map[string]string) 
 	return resp.StatusCode, body, nil
 }
 
-// ErrKeyRejected is wrapped by VerifyGET when the provider answers with one of
-// the auth statuses, so a caller can add a provider-specific hint.
+// ErrKeyRejected marks a VerifyGET failure where the provider refused the key,
+// so a caller can append its own hint (errors.Is) without re-deriving it.
 var ErrKeyRejected = errors.New("rejected the API key")
 
-// ErrDetailLimit bounds how much of a raw, non-envelope error body a provider
-// surfaces in an error message.
-const ErrDetailLimit = 512
-
-// VerifyGET is the shared body of a provider's VerifyKey: one GetStatus probe,
-// classified as unreachable, key rejected (any of authStatuses), or another
-// non-2xx (detail via extract). It returns the response body on success so a
-// caller can inspect it further.
-func VerifyGET(ctx context.Context, label, url string, headers map[string]string, authStatuses []int, extract func([]byte) string) ([]byte, error) {
-	status, body, err := GetStatus(ctx, url, headers)
+// VerifyGET is the shared VerifyKey body: one GetStatus probe, then
+// unreachable → "could not reach", an authStatuses hit → ErrKeyRejected, any
+// other non-2xx → "returned HTTP n" with extract's detail. label names the
+// provider in every message. The body is returned for callers that inspect a
+// successful response.
+func VerifyGET(ctx context.Context, label, endpoint string, headers map[string]string, authStatuses []int, extract func([]byte) string) ([]byte, error) {
+	status, body, err := GetStatus(ctx, endpoint, headers)
 	if err != nil {
-		return nil, fmt.Errorf("could not reach %s: %w", label, err)
+		return nil, fmt.Errorf("could not reach %s at %s: %w", label, endpoint, err)
 	}
 	for _, s := range authStatuses {
 		if status == s {
@@ -186,8 +183,7 @@ func VerifyGET(ctx context.Context, label, url string, headers map[string]string
 	return body, nil
 }
 
-// BaseOr returns base with surrounding whitespace and trailing slashes
-// stripped, or def when that leaves nothing.
+// BaseOr normalises a tenant base-URL override, falling back to def when unset.
 func BaseOr(base, def string) string {
 	if b := strings.TrimRight(strings.TrimSpace(base), "/"); b != "" {
 		return b
@@ -195,7 +191,7 @@ func BaseOr(base, def string) string {
 	return def
 }
 
-// MediaType strips parameters (";charset=…") from a MIME type.
+// MediaType strips parameters (e.g. "; charset=utf-8") from a MIME type.
 func MediaType(mime string) string {
 	return strings.TrimSpace(strings.SplitN(mime, ";", 2)[0])
 }

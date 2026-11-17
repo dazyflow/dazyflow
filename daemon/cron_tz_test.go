@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/robfig/cron/v3"
+	cron "github.com/netresearch/go-cron"
 )
 
 func TestParseCronInTZ(t *testing.T) {

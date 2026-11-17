@@ -457,7 +457,7 @@ func (h *authAPI) verifyGoogleIDToken(ctx context.Context, cfg auth.OrgAuthConfi
 	vc := verifiedGoogleClaims{}
 	if claims.Extras != nil {
 		if e, ok := claims.Extras["email"].(string); ok {
-			vc.Email = strings.ToLower(strings.TrimSpace(e))
+			vc.Email = auth.NormalizeEmail(e)
 		}
 		vc.EmailVerified = googleClaimBool(claims.Extras["email_verified"])
 		if hd, ok := claims.Extras["hd"].(string); ok {
@@ -467,7 +467,7 @@ func (h *authAPI) verifyGoogleIDToken(ctx context.Context, cfg auth.OrgAuthConfi
 	if vc.Email == "" {
 		return verifiedGoogleClaims{}, "no_email", http.StatusBadGateway, "google id_token carried no email claim"
 	}
-	uiEmail := strings.ToLower(strings.TrimSpace(info.Email))
+	uiEmail := auth.NormalizeEmail(info.Email)
 	if uiEmail != "" && uiEmail != vc.Email {
 		return verifiedGoogleClaims{}, "email_mismatch", http.StatusForbidden,
 			"google id_token email does not match the userinfo email"
@@ -573,7 +573,7 @@ func (h *authAPI) resolveActiveOrg(r *http.Request, cfg auth.OrgAuthConfig, user
 		return m.Tenant, m.Workspace, m.Roles, "", 0, ""
 	}
 	domainAuthorized := cfg.GoogleWorkspaceDomain != "" &&
-		strings.EqualFold(cfg.GoogleWorkspaceDomain, emailDomain(email))
+		strings.EqualFold(cfg.GoogleWorkspaceDomain, auth.EmailDomain(email))
 	inv, hasInvite := h.pendingInvitation(r.Context(), email, st.Tenant)
 	if !domainAuthorized && !hasInvite {
 		return "", "", nil, "not_invited", http.StatusForbidden,
@@ -605,14 +605,6 @@ func (h *authAPI) resolveActiveOrg(r *http.Request, cfg auth.OrgAuthConfig, user
 		_ = h.Invitations.MarkAccepted(r.Context(), inv.Token, m.CreatedAt)
 	}
 	return m.Tenant, m.Workspace, m.Roles, "", 0, ""
-}
-
-func emailDomain(email string) string {
-	at := strings.LastIndex(email, "@")
-	if at < 0 || at == len(email)-1 {
-		return ""
-	}
-	return strings.ToLower(email[at+1:])
 }
 
 func (h *authAPI) pendingInvitation(ctx context.Context, email, tenant string) (inv auth.Invitation, ok bool) {

@@ -348,6 +348,20 @@ func TestHTTPFailure(t *testing.T) {
 	})
 }
 
+func TestHTTPError(t *testing.T) {
+	extract := func(b []byte) string { return "EX:" + string(b) }
+	dial := errors.New("dial fail")
+	if err := HTTPError("Stripe", 0, nil, dial, extract); err != dial {
+		t.Fatalf("transport error = %v, want it unchanged", err)
+	}
+	if err := HTTPError("Stripe", 404, []byte("nope"), nil, extract); err == nil || err.Error() != "Stripe returned 404: EX:nope" {
+		t.Fatalf("non-2xx = %v", err)
+	}
+	if err := HTTPError("Stripe", 204, nil, nil, extract); err != nil {
+		t.Fatalf("2xx = %v, want nil", err)
+	}
+}
+
 func TestTimeoutMS(t *testing.T) {
 	// The clamp every HTTP drop applies before handing the value to net.Do: a
 	// missing, zero or negative timeout must never reach the client, or the
@@ -430,21 +444,19 @@ func TestJSONFieldMessage(t *testing.T) {
 }
 
 func TestEnvelopeMessage(t *testing.T) {
-	cases := []struct {
-		name, body, qual string
-		limit            int
-		want             string
+	for _, tc := range []struct {
+		body, qual string
+		limit      int
+		want       string
 	}{
-		{"message only", `{"error":{"message":"bad scope"}}`, "", 100, "bad scope"},
-		{"qualified", `{"error":{"type":"invalid_request_error","message":"no"}}`, "type", 100, "invalid_request_error: no"},
-		{"empty qualifier skipped", `{"error":{"type":"","message":"no"}}`, "type", 100, "no"},
-		{"missing qualifier skipped", `{"error":{"message":"no"}}`, "status", 100, "no"},
-		{"raw fallback truncated", "0123456789abc", "", 10, "0123456789"},
-		{"no message falls back", `{"error":"flat"}`, "", 100, `{"error":"flat"}`},
-	}
-	for _, c := range cases {
-		if got := EnvelopeMessage([]byte(c.body), c.qual, c.limit); got != c.want {
-			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		{`{"error":{"type":"api_error","message":"down"}}`, "type", 100, "api_error: down"},
+		{`{"error":{"message":"down"}}`, "type", 100, "down"},
+		{`{"error":{"type":"api_error","message":"down"}}`, "", 100, "down"},
+		{`{"error":"flat"}`, "", 100, `{"error":"flat"}`},
+		{"0123456789abc", "", 10, "0123456789"},
+	} {
+		if got := EnvelopeMessage([]byte(tc.body), tc.qual, tc.limit); got != tc.want {
+			t.Errorf("EnvelopeMessage(%s, %q) = %q, want %q", tc.body, tc.qual, got, tc.want)
 		}
 	}
 }

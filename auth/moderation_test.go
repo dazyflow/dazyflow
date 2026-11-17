@@ -115,8 +115,8 @@ func TestEmailDomain(t *testing.T) {
 		"trailing@":       "",
 	}
 	for in, want := range cases {
-		if got := emailDomain(in); got != want {
-			t.Errorf("emailDomain(%q) = %q, want %q", in, got, want)
+		if got := EmailDomain(in); got != want {
+			t.Errorf("EmailDomain(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

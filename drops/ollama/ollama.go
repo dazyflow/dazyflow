@@ -154,8 +154,7 @@ func verifyReachable(ctx context.Context, apiKey, base string) error {
 	if apiKey != "" {
 		headers["authorization"] = "Bearer " + apiKey
 	}
-	b := baseOr(base)
-	body, err := llmtask.VerifyGET(ctx, "Ollama at "+b, b+"/api/tags", headers, []int{401, 403}, ollamaError)
+	body, err := llmtask.VerifyGET(ctx, "Ollama", baseOr(base)+"/api/tags", headers, []int{401, 403}, ollamaError)
 	if err != nil {
 		return err
 	}
@@ -221,7 +220,7 @@ func ollamaError(body []byte) string {
 	if err := json.Unmarshal(body, &flat); err == nil && flat.Error != "" {
 		return flat.Error
 	}
-	return params.EnvelopeMessage(body, "", llmtask.ErrDetailLimit)
+	return params.EnvelopeMessage(body, "", 512)
 }
 
 // listModels asks this Ollama which models are pulled. Backs the model picker.

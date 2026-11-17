@@ -144,9 +144,7 @@ func verifyKey(ctx context.Context, apiKey, base string) error {
 	return err
 }
 
-func openaiError(body []byte) string {
-	return params.EnvelopeMessage(body, "type", llmtask.ErrDetailLimit)
-}
+func openaiError(body []byte) string { return params.EnvelopeMessage(body, "type", 512) }
 
 // userContent builds the Chat Completions content-part array for a request
 // carrying files. OpenAI takes an image as an `image_url` part holding a data:

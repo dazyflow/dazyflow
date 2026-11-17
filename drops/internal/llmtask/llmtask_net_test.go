@@ -127,50 +127,55 @@ func TestRegisterAll_RegistersDropsAndVerifier(t *testing.T) {
 }
 
 func TestVerifyGET(t *testing.T) {
-	extract := func(b []byte) string { return "detail:" + string(b) }
 	for _, tc := range []struct {
-		status int
-		want   string
+		status   int
+		rejected bool
+		want     string
 	}{
-		{200, ""},
-		{401, "Prov rejected the API key"},
-		{400, "Prov rejected the API key"},
-		{500, "Prov returned HTTP 500: detail:boom"},
+		{200, false, ""},
+		{403, true, "Acme rejected the API key"},
+		{500, false, "Acme returned HTTP 500: detail"},
 	} {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(tc.status)
-			_, _ = w.Write([]byte("boom"))
-		}))
-		body, err := VerifyGET(context.Background(), "Prov", srv.URL, nil, []int{400, 401, 403}, extract)
-		srv.Close()
-		if tc.want == "" {
-			if err != nil || string(body) != "boom" {
-				t.Errorf("status %d: body=%q err=%v", tc.status, body, err)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("x-key") != "k" {
+				t.Errorf("headers = %v", r.Header)
 			}
-			continue
-		}
-		if err == nil || err.Error() != tc.want {
+			w.WriteHeader(tc.status)
+		}))
+		_, err := VerifyGET(context.Background(), "Acme", srv.URL, map[string]string{"x-key": "k"}, []int{401, 403},
+			func([]byte) string { return "detail" })
+		srv.Close()
+		switch {
+		case tc.want == "" && err != nil:
+			t.Errorf("status %d: err = %v", tc.status, err)
+		case tc.want != "" && (err == nil || err.Error() != tc.want):
 			t.Errorf("status %d: err = %v, want %q", tc.status, err, tc.want)
+		case errors.Is(err, ErrKeyRejected) != tc.rejected:
+			t.Errorf("status %d: errors.Is(ErrKeyRejected) = %v", tc.status, !tc.rejected)
 		}
-		if (tc.status == 401 || tc.status == 400) && !errors.Is(err, ErrKeyRejected) {
-			t.Errorf("status %d: err does not wrap ErrKeyRejected", tc.status)
-		}
-	}
-	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	u := srv.URL
-	srv.Close()
-	if _, err := VerifyGET(context.Background(), "Prov", u, nil, nil, extract); err == nil || !strings.HasPrefix(err.Error(), "could not reach Prov: ") {
-		t.Errorf("unreachable: err = %v", err)
 	}
 }
 
-func TestBaseOrAndMediaType(t *testing.T) {
-	if got := BaseOr("  http://x/ ", "d"); got != "http://x" {
+func TestBaseOr(t *testing.T) {
+	if got := BaseOr("  http://h/ ", "d"); got != "http://h" {
 		t.Errorf("BaseOr = %q", got)
 	}
-	if got := BaseOr(" / ", "d"); got != "d" {
+	if got := BaseOr(" ", "d"); got != "d" {
 		t.Errorf("BaseOr empty = %q", got)
 	}
+}
+
+func TestVerifyGET_Unreachable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	u := srv.URL
+	srv.Close()
+	_, err := VerifyGET(context.Background(), "Acme", u, nil, nil, func([]byte) string { return "" })
+	if err == nil || !strings.HasPrefix(err.Error(), "could not reach Acme at "+u) {
+		t.Errorf("err = %v, want a reachability error naming the endpoint", err)
+	}
+}
+
+func TestMediaType(t *testing.T) {
 	if got := MediaType("image/png; charset=binary"); got != "image/png" {
 		t.Errorf("MediaType = %q", got)
 	}

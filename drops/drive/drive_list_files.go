@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/google"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 )
@@ -93,35 +94,31 @@ func ListFiles(ctx context.Context, job core.Job) ([]map[string]any, error) {
 	// Drive may return a short page (it caps pageSize, and filters after
 	// paging) with more behind nextPageToken, so follow it up to the limit.
 	limit := max(params.IntDefault(job.Params, "limit", 100), 1)
-	out := []map[string]any{}
-	for page := 0; page < maxFilePages && len(out) < limit; page++ {
-		q.Set("pageSize", strconv.Itoa(limit-len(out)))
-		endpoint := apiBaseURL(job) + "/files?" + q.Encode()
-		status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
-		if err != nil {
-			return nil, err
+	timeoutMS := params.IntDefault(job.Params, "timeout_ms", 15000)
+	files, _, err := google.Paginate(ctx, func(pageToken string, remaining int) ([]driveFile, string, error) {
+		q.Set("pageSize", strconv.Itoa(remaining))
+		if pageToken != "" {
+			q.Set("pageToken", pageToken)
 		}
-		if status < 200 || status >= 300 {
-			return nil, fmt.Errorf("%s", driveErr(body))
+		status, body, err := googleDo(ctx, "GET", apiBaseURL(job)+"/files?"+q.Encode(), token, "", nil, timeoutMS)
+		if err = params.HTTPError("Google Drive", status, body, err, driveErr); err != nil {
+			return nil, "", err
 		}
-
 		var parsed struct {
 			Files         []driveFile `json:"files"`
 			NextPageToken string      `json:"nextPageToken"`
 		}
 		if err := json.Unmarshal(body, &parsed); err != nil {
-			return nil, fmt.Errorf("files.list decode: %w", err)
+			return nil, "", fmt.Errorf("files.list decode: %w", err)
 		}
-		for _, f := range parsed.Files {
-			out = append(out, f.normalize())
-		}
-		if parsed.NextPageToken == "" {
-			break
-		}
-		q.Set("pageToken", parsed.NextPageToken)
+		return parsed.Files, parsed.NextPageToken, nil
+	}, limit, maxFilePages)
+	if err != nil {
+		return nil, err
 	}
-	if len(out) > limit {
-		out = out[:limit]
+	out := make([]map[string]any, 0, len(files))
+	for _, f := range files {
+		out = append(out, f.normalize())
 	}
 	return out, nil
 }
