@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/llmtask"
@@ -24,7 +23,7 @@ var embedModels = []llm.ModelOption{
 type embedder struct{}
 
 func (embedder) Embed(ctx context.Context, apiKey string, req llm.EmbedRequest) (llm.EmbedResult, *core.JobError) {
-	base := baseOrDefault(req.BaseURL)
+	base := llmtask.BaseOr(req.BaseURL, defaultBase)
 	body, err := json.Marshal(map[string]any{"model": req.Model, "input": req.Texts})
 	if err != nil {
 		return llm.EmbedResult{}, &core.JobError{Code: "internal", Message: err.Error()}
@@ -61,12 +60,4 @@ func (embedder) Embed(ctx context.Context, apiKey string, req llm.EmbedRequest) 
 		vectors[d.Index] = d.Embedding
 	}
 	return llm.EmbedResult{Vectors: vectors, Model: parsed.Model}, nil
-}
-
-func baseOrDefault(base string) string {
-	base = strings.TrimRight(base, "/")
-	if base == "" {
-		return defaultBase
-	}
-	return base
 }

@@ -173,11 +173,8 @@ func executeCreateEvent(ctx context.Context, job core.Job, _ chan<- core.Progres
 	}
 	endpoint := calBaseURL(job) + "/calendars/" + url.PathEscape(calendarID(job)) + "/events"
 	status, respBody, err := googleDo(ctx, "POST", endpoint, token, "application/json", body, params.IntDefault(job.Params, "timeout_ms", 15000))
-	if err != nil {
-		return params.Err(job, "gcal_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "gcal_error", calErr(respBody)), nil
+	if fail := params.HTTPFailure(job, "gcal", "Google Calendar", status, respBody, err, calErr); fail != nil {
+		return *fail, nil
 	}
 
 	var created rawEvent

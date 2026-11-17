@@ -21,7 +21,6 @@ package roaring
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -126,7 +125,7 @@ func fetchToken(ctx context.Context, job core.Job, base, key, secret string) (st
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
 	headers := map[string]string{
-		"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(key+":"+secret)),
+		"Authorization": hfnet.BasicAuth(key, secret),
 		"Content-Type":  "application/x-www-form-urlencoded",
 		"Accept":        "application/json",
 	}
@@ -163,11 +162,7 @@ func roaringGet(ctx context.Context, job core.Job, endpoint string) (int, []byte
 	if err != nil {
 		return 0, nil, err
 	}
-	headers := map[string]string{
-		"Authorization": "Bearer " + token,
-		"Accept":        "application/json",
-	}
-	status, body, _, err := hfnet.Do(ctx, http.MethodGet, endpoint, headers, nil, params.TimeoutMS(job, 15000), maxResponseBytes)
+	status, body, _, err := hfnet.DoBearer(ctx, http.MethodGet, endpoint, token, "", map[string]string{"Accept": "application/json"}, nil, params.TimeoutMS(job, 15000), maxResponseBytes)
 	return status, body, err
 }
 

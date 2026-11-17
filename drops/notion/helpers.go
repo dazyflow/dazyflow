@@ -12,11 +12,11 @@ package notion
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/apibase"
 	"github.com/dazyflow/dazyflow/drops/internal/oauthtok"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
 )
 
@@ -44,37 +44,24 @@ func SetHTTPBase(base string) { httpBase.Set(base) }
 func currentHTTPBase() string { return httpBase.Get() }
 
 func notionDo(ctx context.Context, method, url, token string, body []byte, timeoutMS int) (int, []byte, error) {
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
-	headers := map[string]string{
-		"Authorization":  "Bearer " + token,
-		"Notion-Version": notionVersion,
-	}
-	if body != nil {
-		headers["Content-Type"] = "application/json"
-	}
 	// base_url is a tenant-supplied param, so net.Do guards the dial: the SSRF
 	// client blocks loopback/private/link-local targets and the egress allowlist
 	// (when set) bounds which public hosts the bearer token may be sent to.
-	status, raw, _, err := hfnet.Do(ctx, method, url, headers, body, timeoutMS, maxResponseBytes)
+	extra := map[string]string{"Notion-Version": notionVersion}
+	status, raw, _, err := hfnet.DoBearer(ctx, method, url, token, "application/json", extra, body, timeoutMS, maxResponseBytes)
 	return status, raw, err
 }
 
-func notionError(status int, body []byte) string {
+func extractNotionError(body []byte) string {
 	var e struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	}
 	if err := json.Unmarshal(body, &e); err == nil && e.Message != "" {
 		if e.Code != "" {
-			return fmt.Sprintf("Notion %s: %s", e.Code, e.Message)
+			return e.Code + ": " + e.Message
 		}
 		return e.Message
 	}
-	trunc := body
-	if len(trunc) > 512 {
-		trunc = trunc[:512]
-	}
-	return fmt.Sprintf("Notion returned %d: %s", status, string(trunc))
+	return params.Truncate(string(body), 512)
 }

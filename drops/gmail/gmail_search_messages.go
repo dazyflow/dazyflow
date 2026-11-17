@@ -177,13 +177,8 @@ func readWatermark(ctx context.Context, job core.Job) (name, last string, fail *
 func listMessages(ctx context.Context, job core.Job, token string, q url.Values, timeoutMS int) ([]any, string, *core.Result) {
 	endpoint := baseURL(job) + "/users/me/messages?" + q.Encode()
 	status, body, err := gmailDo(ctx, "GET", endpoint, token, "", nil, timeoutMS)
-	if err != nil {
-		res := params.Err(job, "gmail_http_error", err.Error())
-		return nil, "", &res
-	}
-	if status < 200 || status >= 300 {
-		res := params.Err(job, "gmail_error", extractGmailError(body))
-		return nil, "", &res
+	if fail := params.HTTPFailure(job, "gmail", "Gmail", status, body, err, extractGmailError); fail != nil {
+		return nil, "", fail
 	}
 	var parsed struct {
 		Messages      []any  `json:"messages"`
