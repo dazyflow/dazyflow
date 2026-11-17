@@ -18,10 +18,6 @@ import (
 // elevated on the fly); the store is keyed on email, so we grant by email.
 
 func (h *orgAPI) listSupportAgents(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
-		return
-	}
 	if h.SupportAgents == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "support agents are not enabled on this deployment")
 		return
@@ -35,10 +31,6 @@ func (h *orgAPI) listSupportAgents(rw http.ResponseWriter, r *http.Request, p co
 }
 
 func (h *orgAPI) grantSupportAgent(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
-		return
-	}
 	if h.SupportAgents == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "support agents are not enabled on this deployment")
 		return
@@ -69,10 +61,6 @@ func (h *orgAPI) grantSupportAgent(rw http.ResponseWriter, r *http.Request, p co
 }
 
 func (h *orgAPI) revokeSupportAgent(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
-		return
-	}
 	if h.SupportAgents == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "support agents are not enabled on this deployment")
 		return
