@@ -136,35 +136,103 @@ function parseAPIErrorBody(text: string, fallback: string): { message: string; c
   return { message: text || fallback, code: "" };
 }
 
+type ErrorOpts = { signalUnauthorized?: boolean };
+
+// apiErrorFrom builds the APIError for a failed response and, for a 401 on an
+// authenticated call, signals the session as expired. Every transport (fetch,
+// XHR, SSE) goes through here so error parsing and 401 handling stay uniform.
+function apiErrorFrom(
+  token: string | null,
+  status: number,
+  text: string,
+  statusText: string,
+  opts?: ErrorOpts,
+): APIError {
+  const { message, code } = parseAPIErrorBody(text, statusText);
+  if (status === 401 && token && opts?.signalUnauthorized !== false) {
+    notifyUnauthorized();
+  }
+  return new APIError(status, message, code);
+}
+
+async function throwAPIError(
+  token: string | null,
+  res: Response,
+  opts?: ErrorOpts,
+): Promise<never> {
+  throw apiErrorFrom(token, res.status, await res.text(), res.statusText, opts);
+}
+
+// rawFetch sends an authenticated request to the API and returns the ok
+// Response; failures become APIError (status 0 for network errors). An abort
+// via init.signal is rethrown unchanged so callers can tell it apart.
+async function rawFetch(
+  token: string | null,
+  path: string,
+  init: RequestInit = {},
+  opts?: ErrorOpts,
+): Promise<Response> {
+  let res: Response;
+  try {
+    res = await fetch(API_BASE + path, {
+      ...init,
+      headers: { ...authHeader(token), ...(init.headers as Record<string, string> | undefined) },
+      credentials: "include",
+    });
+  } catch (err) {
+    if (init.signal?.aborted) throw err;
+    throw new APIError(0, "network error");
+  }
+  if (!res.ok) await throwAPIError(token, res, opts);
+  return res;
+}
+
 async function request<T>(
   token: string | null,
   method: string,
   path: string,
   body?: unknown,
-  opts?: { signalUnauthorized?: boolean },
+  opts?: ErrorOpts,
 ): Promise<T> {
-  const headers: Record<string, string> = { ...authHeader(token) };
-  if (body) headers["Content-Type"] = "application/json";
-  let res: Response;
-  try {
-    res = await fetch(API_BASE + path, {
+  const res = await rawFetch(
+    token,
+    path,
+    {
       method,
-      headers,
-      credentials: "include",
+      headers: body ? { "Content-Type": "application/json" } : {},
       body: body ? JSON.stringify(body) : undefined,
-    });
-  } catch {
-    throw new APIError(0, "network error");
-  }
-  if (!res.ok) {
-    const { message, code } = parseAPIErrorBody(await res.text(), res.statusText);
-    if (res.status === 401 && token && opts?.signalUnauthorized !== false) {
-      notifyUnauthorized();
-    }
-    throw new APIError(res.status, message, code);
-  }
+    },
+    opts,
+  );
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+type QueryValue = string | number | boolean | null | undefined;
+
+// withQuery appends the non-empty params to path as a query string.
+function withQuery(path: string, params: Record<string, QueryValue>): string {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null || v === "" || v === false) continue;
+    qs.set(k, String(v));
+  }
+  const s = qs.toString();
+  return s ? `${path}?${s}` : path;
+}
+
+// scopeQuery is the `?tenant=&workspace=` suffix (empty when neither is set).
+function scopeQuery(tenant?: string, workspace?: string): string {
+  return withQuery("", { tenant, workspace });
+}
+
+// flowPath is the /me/flows path segment for one flow.
+function flowPath(tenant: string, workspace: string, id: string): string {
+  return `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}`;
+}
+
+function workspacePath(tenant: string, workspace: string): string {
+  return `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}`;
 }
 
 // streamSSE opens a server-sent-event stream over fetch (EventSource can't send
@@ -177,20 +245,14 @@ async function streamSSE(
   signal: AbortSignal | undefined,
   onFrame: (name: string, data: string) => void,
 ): Promise<void> {
-  const headers: Record<string, string> = { ...authHeader(token) };
-  if (init.body !== undefined) headers["Content-Type"] = "application/json";
-  const res = await fetch(API_BASE + path, {
+  const hasBody = init.body !== undefined;
+  const res = await rawFetch(token, path, {
     method: init.method,
-    headers,
-    credentials: "include",
-    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    headers: hasBody ? { "Content-Type": "application/json" } : {},
+    body: hasBody ? JSON.stringify(init.body) : undefined,
     signal,
   });
-  if (!res.ok || !res.body) {
-    if (res.status === 401) notifyUnauthorized();
-    const { message, code } = parseAPIErrorBody(await res.text(), res.statusText);
-    throw new APIError(res.status, message, code);
-  }
+  if (!res.body) throw new APIError(res.status, "empty stream");
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -305,11 +367,7 @@ function nodeViewToRecord(runID: string, n: NodeRunView): JobRecord {
 export type SecretScope = "tenant" | "flow";
 
 function secretQuery(scope?: SecretScope, flow?: string): string {
-  const p = new URLSearchParams();
-  if (scope && scope !== "tenant") p.set("scope", scope);
-  if (flow) p.set("flow", flow);
-  const s = p.toString();
-  return s ? `?${s}` : "";
+  return withQuery("", { scope: scope !== "tenant" ? scope : undefined, flow });
 }
 
 export const api = {
@@ -323,26 +381,10 @@ export const api = {
     const form = new FormData();
     form.append("file", file);
     if (destPath) form.append("path", destPath);
-    const res = await fetch(
-      API_BASE + `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files`,
-      {
-        method: "POST",
-        headers: { ...authHeader(token) },
-        credentials: "include",
-        body: form,
-      },
-    );
-    if (!res.ok) {
-      const text = await res.text();
-      let message = text;
-      try {
-        const parsed = JSON.parse(text);
-        if (parsed.error) message = parsed.error;
-      } catch {
-      }
-      if (res.status === 401) notifyUnauthorized();
-      throw new APIError(res.status, message || res.statusText);
-    }
+    const res = await rawFetch(token, workspacePath(tenant, workspace) + "/files", {
+      method: "POST",
+      body: form,
+    });
     return res.json();
   },
 
@@ -359,11 +401,7 @@ export const api = {
       form.append("file", file);
       if (destPath) form.append("path", destPath);
       const xhr = new XMLHttpRequest();
-      xhr.open(
-        "POST",
-        API_BASE +
-          `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files`,
-      );
+      xhr.open("POST", API_BASE + workspacePath(tenant, workspace) + "/files");
       xhr.withCredentials = true;
       for (const [k, v] of Object.entries(authHeader(token))) xhr.setRequestHeader(k, v);
       xhr.upload.onprogress = (e) => {
@@ -377,9 +415,7 @@ export const api = {
             resolve({ path: destPath, size: file.size });
           }
         } else {
-          if (xhr.status === 401) notifyUnauthorized();
-          const { message } = parseAPIErrorBody(xhr.responseText, xhr.statusText);
-          reject(new APIError(xhr.status, message));
+          reject(apiErrorFrom(token, xhr.status, xhr.responseText, xhr.statusText));
         }
       };
       xhr.onerror = () => reject(new APIError(0, "network error"));
@@ -405,7 +441,7 @@ export const api = {
     return request(
       token,
       "GET",
-      `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files/list${q}`,
+      `${workspacePath(tenant, workspace)}/files/list${q}`,
     );
   },
 
@@ -417,7 +453,7 @@ export const api = {
     request(
       token,
       "GET",
-      `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files/usage`,
+      `${workspacePath(tenant, workspace)}/files/usage`,
     ),
 
   deleteWorkspaceFile: (
@@ -429,7 +465,7 @@ export const api = {
     request(
       token,
       "DELETE",
-      `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files?path=${encodeURIComponent(path)}`,
+      `${workspacePath(tenant, workspace)}/files?path=${encodeURIComponent(path)}`,
     ),
 
   mkdirWorkspaceDir: (
@@ -441,7 +477,7 @@ export const api = {
     request(
       token,
       "POST",
-      `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files/mkdir`,
+      `${workspacePath(tenant, workspace)}/files/mkdir`,
       { path },
     ),
 
@@ -455,7 +491,7 @@ export const api = {
     request(
       token,
       "POST",
-      `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files/rename`,
+      `${workspacePath(tenant, workspace)}/files/rename`,
       { from, to },
     ),
 
@@ -465,20 +501,10 @@ export const api = {
     workspace: string,
     path: string,
   ): Promise<Blob> => {
-    const res = await fetch(
-      API_BASE +
-        `/workspaces/${encodeURIComponent(tenant)}/${encodeURIComponent(workspace)}/files/download?path=${encodeURIComponent(path)}`,
-      {
-        method: "GET",
-        headers: { ...authHeader(token) },
-        credentials: "include",
-      },
+    const res = await rawFetch(
+      token,
+      withQuery(workspacePath(tenant, workspace) + "/files/download", { path }),
     );
-    if (!res.ok) {
-      const { message } = parseAPIErrorBody(await res.text(), res.statusText);
-      if (res.status === 401) notifyUnauthorized();
-      throw new APIError(res.status, message);
-    }
     return res.blob();
   },
 
@@ -541,7 +567,7 @@ export const api = {
     request<{ flow: string; node: string; groups: ReferenceGroups }>(
       token,
       "GET",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/references${
+      `${flowPath(tenant, workspace, id)}/references${
         node ? `?node=${encodeURIComponent(node)}` : ""
       }`,
     ),
@@ -556,7 +582,7 @@ export const api = {
     request<{ reset: boolean; node_id: string; cleared: number }>(
       token,
       "POST",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/nodes/${encodeURIComponent(node)}/reset-state`,
+      `${flowPath(tenant, workspace, id)}/nodes/${encodeURIComponent(node)}/reset-state`,
     ),
 
   listInputFields: (
@@ -573,7 +599,7 @@ export const api = {
     }>(
       token,
       "GET",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/input-fields?node=${encodeURIComponent(node)}${
+      `${flowPath(tenant, workspace, id)}/input-fields?node=${encodeURIComponent(node)}${
         port ? `&port=${encodeURIComponent(port)}` : ""
       }`,
     ),
@@ -659,7 +685,7 @@ export const api = {
     const r = await request<{ flows?: FlowSummary[] }>(
       token,
       "GET",
-      `/me/flows?tenant=${encodeURIComponent(tenant)}&workspace=${encodeURIComponent(workspace)}`,
+      `/me/flows${scopeQuery(tenant, workspace)}`,
     );
     return { graphs: r.flows ?? [] };
   },
@@ -667,7 +693,7 @@ export const api = {
     const r = await request<{ items?: DropAdjacency[] }>(
       token,
       "GET",
-      `/me/flows/suggestions?tenant=${encodeURIComponent(tenant)}&workspace=${encodeURIComponent(workspace)}`,
+      `/me/flows/suggestions${scopeQuery(tenant, workspace)}`,
     );
     return r.items ?? [];
   },
@@ -675,7 +701,7 @@ export const api = {
     request<Graph>(
       token,
       "GET",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}${
+      `${flowPath(tenant, workspace, id)}${
         ref ? `?ref=${encodeURIComponent(ref)}` : ""
       }`,
     ),
@@ -683,13 +709,13 @@ export const api = {
     request<{ revisions: Revision[]; published_commit?: string }>(
       token,
       "GET",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/history`,
+      `${flowPath(tenant, workspace, id)}/history`,
     ),
   getPublishedInfo: (token: string, tenant: string, workspace: string, id: string) =>
     request<PublishInfo>(
       token,
       "GET",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/published`,
+      `${flowPath(tenant, workspace, id)}/published`,
     ),
   publishFlow: (
     token: string,
@@ -702,7 +728,7 @@ export const api = {
     request<{ flow_id: string; published_commit: string }>(
       token,
       "POST",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/publish`,
+      `${flowPath(tenant, workspace, id)}/publish`,
       {
         ...(ref ? { ref } : {}),
         ...(label ? { label } : {}),
@@ -712,13 +738,13 @@ export const api = {
     request<{ flow_id: string; published: boolean }>(
       token,
       "POST",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/unpublish`,
+      `${flowPath(tenant, workspace, id)}/unpublish`,
     ),
   restoreFlow: (token: string, tenant: string, workspace: string, id: string, ref: string) =>
     request<{ commit: string }>(
       token,
       "POST",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/restore`,
+      `${flowPath(tenant, workspace, id)}/restore`,
       { ref },
     ),
   duplicateFlow: async (
@@ -731,7 +757,7 @@ export const api = {
     const res = await request<{ flow_id: string }>(
       token,
       "POST",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/duplicate`,
+      `${flowPath(tenant, workspace, id)}/duplicate`,
       name ? { name } : undefined,
     );
     return res.flow_id.split("/").slice(2).join("/");
@@ -747,7 +773,7 @@ export const api = {
     request<{ flow_id: string; commit: string; label: string }>(
       token,
       "POST",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/label`,
+      `${flowPath(tenant, workspace, id)}/label`,
       { ref, label },
     ),
   saveGraph: (token: string, g: Graph, autosave = false) =>
@@ -757,7 +783,7 @@ export const api = {
     }>(
       token,
       "PUT",
-      `/me/flows/${encodeURIComponent(`${g.tenant}/${g.workspace}/${g.id}`)}${
+      `${flowPath(g.tenant, g.workspace, g.id)}${
         autosave ? "?autosave=1" : ""
       }`,
       g,
@@ -766,7 +792,7 @@ export const api = {
     request<{ job_id: string }>(
       token,
       "POST",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/run`,
+      `${flowPath(tenant, workspace, id)}/run`,
     ),
   setFlowEnabled: (
     token: string,
@@ -778,7 +804,7 @@ export const api = {
     request<{ flow_id: string; enabled: boolean; commit: string }>(
       token,
       "POST",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/${
+      `${flowPath(tenant, workspace, id)}/${
         enabled ? "enable" : "disable"
       }`,
     ),
@@ -793,20 +819,17 @@ export const api = {
     request<void>(
       token,
       "DELETE",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}`,
+      flowPath(tenant, workspace, id),
       { password },
       // A mistyped password answers 401 bad_credentials; that is not a dead session.
       { signalUnauthorized: false },
     ),
   listSchedules: (token: string, opts: { tenant?: string; workspace?: string } = {}) => {
-    const qs = new URLSearchParams();
-    if (opts.tenant) qs.set("tenant", opts.tenant);
-    if (opts.workspace) qs.set("workspace", opts.workspace);
-    const q = qs.toString();
+    const q = scopeQuery(opts.tenant, opts.workspace);
     return request<{ schedules: ScheduleEntry[] }>(
       token,
       "GET",
-      "/me/schedules" + (q ? "?" + q : ""),
+      "/me/schedules" + q,
     );
   },
   setTriggerEnabled: (
@@ -820,7 +843,7 @@ export const api = {
     request<{ flow_id: string; node_id: string; enabled: boolean; commit: string }>(
       token,
       "POST",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/triggers/${encodeURIComponent(
+      `${flowPath(tenant, workspace, id)}/triggers/${encodeURIComponent(
         nodeID,
       )}/${enabled ? "enable" : "disable"}`,
     ),
@@ -989,7 +1012,7 @@ export const api = {
     request<{ job_id: string }>(
       token,
       "POST",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/test-trigger` +
+      `${flowPath(tenant, workspace, id)}/test-trigger` +
         (nodeID ? `?node=${encodeURIComponent(nodeID)}` : ""),
       sample,
     ),
@@ -1074,7 +1097,7 @@ export const api = {
     request<{ flow: string; nodes: Record<string, Record<string, Ref>> }>(
       token,
       "GET",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/samples`,
+      `${flowPath(tenant, workspace, id)}/samples`,
     ),
   sampleNode: (
     token: string,
@@ -1086,7 +1109,7 @@ export const api = {
     request<{ job_id: string; sampled_node: string }>(
       token,
       "POST",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/nodes/${encodeURIComponent(nodeID)}/sample`,
+      `${flowPath(tenant, workspace, id)}/nodes/${encodeURIComponent(nodeID)}/sample`,
     ),
   retryRun: (token: string, runID: string) =>
     request<{ job_id: string }>(
@@ -1136,7 +1159,7 @@ export const api = {
     return request<{ runs: RunSummary[] }>(
       token,
       "GET",
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/runs?${qs.toString()}`,
+      `${flowPath(tenant, workspace, id)}/runs?${qs.toString()}`,
     );
   },
   listAllRuns: (
@@ -1151,18 +1174,18 @@ export const api = {
       until?: string;
     } = {},
   ) => {
-    const qs = new URLSearchParams();
-    qs.set("limit", String(opts.limit ?? 50));
-    if (opts.offset) qs.set("offset", String(opts.offset));
-    if (opts.status) qs.set("status", opts.status);
-    if (opts.workspace) qs.set("workspace", opts.workspace);
-    if (opts.tenant) qs.set("tenant", opts.tenant);
-    if (opts.since) qs.set("since", opts.since);
-    if (opts.until) qs.set("until", opts.until);
     return request<{ runs: RunSummary[] }>(
       token,
       "GET",
-      `/me/runs?${qs.toString()}`,
+      withQuery("/me/runs", {
+        limit: opts.limit ?? 50,
+        offset: opts.offset || undefined,
+        status: opts.status,
+        workspace: opts.workspace,
+        tenant: opts.tenant,
+        since: opts.since,
+        until: opts.until,
+      }),
     );
   },
   getJob: (token: string, jobID: string): Promise<JobRecord> =>
@@ -1170,14 +1193,11 @@ export const api = {
       runViewToRecord,
     ),
   listBoards: (token: string, tenant?: string, workspace?: string) => {
-    const qs = new URLSearchParams();
-    if (tenant) qs.set("tenant", tenant);
-    if (workspace) qs.set("workspace", workspace);
-    const s = qs.toString();
+    const s = scopeQuery(tenant, workspace);
     return request<{ boards: BoardSummary[] }>(
       token,
       "GET",
-      "/me/boards" + (s ? `?${s}` : ""),
+      "/me/boards" + s,
     );
   },
   getBoard: (
@@ -1185,27 +1205,23 @@ export const api = {
     name: string,
     opts: { limit?: number; offset?: number; tenant?: string; workspace?: string } = {},
   ) => {
-    const qs = new URLSearchParams();
-    if (opts.limit) qs.set("limit", String(opts.limit));
-    if (opts.offset) qs.set("offset", String(opts.offset));
-    if (opts.tenant) qs.set("tenant", opts.tenant);
-    if (opts.workspace) qs.set("workspace", opts.workspace);
-    const s = qs.toString();
     return request<BoardPage>(
       token,
       "GET",
-      `/me/boards/${encodeURIComponent(name)}` + (s ? `?${s}` : ""),
+      withQuery(`/me/boards/${encodeURIComponent(name)}`, {
+        limit: opts.limit || undefined,
+        offset: opts.offset || undefined,
+        tenant: opts.tenant,
+        workspace: opts.workspace,
+      }),
     );
   },
   clearBoard: (token: string, name: string, tenant?: string, workspace?: string) => {
-    const qs = new URLSearchParams();
-    if (tenant) qs.set("tenant", tenant);
-    if (workspace) qs.set("workspace", workspace);
-    const s = qs.toString();
+    const s = scopeQuery(tenant, workspace);
     return request<void>(
       token,
       "DELETE",
-      `/me/boards/${encodeURIComponent(name)}` + (s ? `?${s}` : ""),
+      `/me/boards/${encodeURIComponent(name)}` + s,
     );
   },
   deleteBoardRow: (
@@ -1215,86 +1231,72 @@ export const api = {
     tenant?: string,
     workspace?: string,
   ) => {
-    const qs = new URLSearchParams();
-    if (tenant) qs.set("tenant", tenant);
-    if (workspace) qs.set("workspace", workspace);
-    const s = qs.toString();
+    const s = scopeQuery(tenant, workspace);
     return request<void>(
       token,
       "DELETE",
       `/me/boards/${encodeURIComponent(name)}/rows/${encodeURIComponent(String(rowid))}` +
-        (s ? `?${s}` : ""),
+        s,
     );
   },
   getBilling: (token: string, tenant?: string) => {
-    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    const qs = scopeQuery(tenant);
     return request<BillingInfo>(token, "GET", "/me/billing" + qs);
   },
   createCheckout: (token: string, tenant?: string) => {
-    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    const qs = scopeQuery(tenant);
     return request<{ url: string }>(token, "POST", "/me/billing/checkout" + qs);
   },
   createBillingPortal: (token: string, tenant?: string) => {
-    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    const qs = scopeQuery(tenant);
     return request<{ url: string }>(token, "POST", "/me/billing/portal" + qs);
   },
   getPlans: (token: string, tenant?: string) => {
-    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    const qs = scopeQuery(tenant);
     return request<PlansInfo>(token, "GET", "/me/plans" + qs);
   },
   getUsage: (token: string, opts: { tenant?: string; months?: number } = {}) => {
-    const qs = new URLSearchParams();
-    if (opts.tenant) qs.set("tenant", opts.tenant);
-    if (opts.months) qs.set("months", String(opts.months));
-    const q = qs.toString();
     return request<{ usage: UsageCounters[] }>(
       token,
       "GET",
-      "/me/usage" + (q ? "?" + q : ""),
+      withQuery("/me/usage", { tenant: opts.tenant, months: opts.months || undefined }),
     );
   },
   listPendingApprovals: (token: string, opts: { workspace?: string; tenant?: string } = {}) => {
-    const qs = new URLSearchParams();
-    if (opts.workspace) qs.set("workspace", opts.workspace);
-    if (opts.tenant) qs.set("tenant", opts.tenant);
-    const q = qs.toString();
+    const q = scopeQuery(opts.tenant, opts.workspace);
     return request<{ approvals: PendingApproval[] }>(
       token,
       "GET",
-      "/approvals/pending" + (q ? "?" + q : ""),
+      "/approvals/pending" + q,
     );
   },
   countPendingApprovals: (
     token: string,
     opts: { workspace?: string; tenant?: string } = {},
   ) => {
-    const qs = new URLSearchParams();
-    if (opts.workspace) qs.set("workspace", opts.workspace);
-    if (opts.tenant) qs.set("tenant", opts.tenant);
-    const q = qs.toString();
+    const q = scopeQuery(opts.tenant, opts.workspace);
     return request<{ count: number }>(
       token,
       "GET",
-      "/approvals/pending/count" + (q ? "?" + q : ""),
+      "/approvals/pending/count" + q,
     );
   },
   listDecidedApprovals: (
     token: string,
     opts: { workspace?: string; tenant?: string; limit?: number } = {},
   ) => {
-    const qs = new URLSearchParams();
-    if (opts.workspace) qs.set("workspace", opts.workspace);
-    if (opts.tenant) qs.set("tenant", opts.tenant);
-    if (opts.limit) qs.set("limit", String(opts.limit));
-    const q = qs.toString();
     return request<{ approvals: DecidedApproval[] }>(
       token,
       "GET",
-      "/approvals/decided" + (q ? "?" + q : ""),
+      withQuery("/approvals/decided", {
+        workspace: opts.workspace,
+        tenant: opts.tenant,
+        limit: opts.limit || undefined,
+      }),
     );
   },
   listAPIKeys: (token: string, tenant?: string) => {
-    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    const qs = scopeQuery(tenant);
     return request<{ keys: APIKeySummary[] }>(
       token,
       "GET",
@@ -1346,7 +1348,7 @@ export const api = {
   revokeAPIKey: (token: string, id: string) =>
     request<void>(token, "DELETE", `/admin/api-keys/${encodeURIComponent(id)}`),
   listUsers: (token: string, tenant?: string) => {
-    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    const qs = scopeQuery(tenant);
     return request<{ users: UserSummary[] }>(
       token,
       "GET",
@@ -1456,7 +1458,7 @@ export const api = {
   ): Promise<void> {
     return streamSSE(
       token,
-      `/me/flows/${encodeURIComponent(`${tenant}/${workspace}/${id}`)}/watch`,
+      `${flowPath(tenant, workspace, id)}/watch`,
       { method: "GET" },
       signal,
       (name, data) => {
@@ -1666,11 +1668,11 @@ export const api = {
     ),
 
   listMembers: (token: string, tenant?: string) => {
-    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    const qs = scopeQuery(tenant);
     return request<{ members: MemberSummary[] }>(token, "GET", `/admin/members${qs}`);
   },
   removeMember: (token: string, email: string, tenant?: string) => {
-    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    const qs = scopeQuery(tenant);
     return request<void>(
       token,
       "DELETE",
@@ -1678,7 +1680,7 @@ export const api = {
     );
   },
   updateMemberRoles: (token: string, email: string, roles: Role[], tenant?: string) => {
-    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    const qs = scopeQuery(tenant);
     return request<{ email: string; roles: Role[] }>(
       token,
       "PATCH",
@@ -1694,7 +1696,7 @@ export const api = {
     request<InvitationSummary & { token: string }>(token, "POST", "/admin/invitations", body),
 
   listInvitations: (token: string, tenant?: string) => {
-    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    const qs = scopeQuery(tenant);
     return request<{ invitations: InvitationSummary[] }>(
       token,
       "GET",
@@ -1869,35 +1871,23 @@ export const api = {
     request<void>(token, "DELETE", "/admin/org/auth-config"),
 
   getShare: (token: string, tenant?: string, workspace?: string) => {
-    const qs = new URLSearchParams();
-    if (tenant) qs.set("tenant", tenant);
-    if (workspace) qs.set("workspace", workspace);
-    const q = qs.toString();
-    return request<ShareLink>(token, "GET", `/me/share${q ? `?${q}` : ""}`);
+    const q = scopeQuery(tenant, workspace);
+    return request<ShareLink>(token, "GET", `/me/share${q}`);
   },
   createShare: (token: string, tenant?: string, workspace?: string) => {
-    const qs = new URLSearchParams();
-    if (tenant) qs.set("tenant", tenant);
-    if (workspace) qs.set("workspace", workspace);
-    const q = qs.toString();
-    return request<ShareLink>(token, "POST", `/me/share${q ? `?${q}` : ""}`);
+    const q = scopeQuery(tenant, workspace);
+    return request<ShareLink>(token, "POST", `/me/share${q}`);
   },
   deleteShare: (token: string, tenant?: string, workspace?: string) => {
-    const qs = new URLSearchParams();
-    if (tenant) qs.set("tenant", tenant);
-    if (workspace) qs.set("workspace", workspace);
-    const q = qs.toString();
-    return request<void>(token, "DELETE", `/me/share${q ? `?${q}` : ""}`);
+    const q = scopeQuery(tenant, workspace);
+    return request<void>(token, "DELETE", `/me/share${q}`);
   },
   listCollectionShares: (token: string, tenant?: string, workspace?: string) => {
-    const qs = new URLSearchParams();
-    if (tenant) qs.set("tenant", tenant);
-    if (workspace) qs.set("workspace", workspace);
-    const q = qs.toString();
+    const q = scopeQuery(tenant, workspace);
     return request<{ shares: CollectionShareLink[] }>(
       token,
       "GET",
-      `/me/collection-shares${q ? `?${q}` : ""}`,
+      `/me/collection-shares${q}`,
     );
   },
   getCollectionShare: (
@@ -1906,14 +1896,11 @@ export const api = {
     tenant?: string,
     workspace?: string,
   ) => {
-    const qs = new URLSearchParams();
-    if (tenant) qs.set("tenant", tenant);
-    if (workspace) qs.set("workspace", workspace);
-    const q = qs.toString();
+    const q = scopeQuery(tenant, workspace);
     return request<CollectionShareLink>(
       token,
       "GET",
-      `/me/collection-shares/${encodeURIComponent(name)}${q ? `?${q}` : ""}`,
+      `/me/collection-shares/${encodeURIComponent(name)}${q}`,
     );
   },
   createCollectionShare: (
@@ -1922,14 +1909,11 @@ export const api = {
     tenant?: string,
     workspace?: string,
   ) => {
-    const qs = new URLSearchParams();
-    if (tenant) qs.set("tenant", tenant);
-    if (workspace) qs.set("workspace", workspace);
-    const q = qs.toString();
+    const q = scopeQuery(tenant, workspace);
     return request<CollectionShareLink>(
       token,
       "POST",
-      `/me/collection-shares/${encodeURIComponent(name)}${q ? `?${q}` : ""}`,
+      `/me/collection-shares/${encodeURIComponent(name)}${q}`,
     );
   },
   deleteCollectionShare: (
@@ -1938,14 +1922,11 @@ export const api = {
     tenant?: string,
     workspace?: string,
   ) => {
-    const qs = new URLSearchParams();
-    if (tenant) qs.set("tenant", tenant);
-    if (workspace) qs.set("workspace", workspace);
-    const q = qs.toString();
+    const q = scopeQuery(tenant, workspace);
     return request<void>(
       token,
       "DELETE",
-      `/me/collection-shares/${encodeURIComponent(name)}${q ? `?${q}` : ""}`,
+      `/me/collection-shares/${encodeURIComponent(name)}${q}`,
     );
   },
   getPublicCollection: (

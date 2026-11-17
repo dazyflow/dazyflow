@@ -451,3 +451,30 @@ func TestCall_KeylessStepIsInertUnlessPublic(t *testing.T) {
 		t.Errorf("status=%d, want 401", code)
 	}
 }
+
+// A refusal only the flow's owner can fix must answer like /trigger does —
+// kept and reported — not as a 500 that invites the caller to resend.
+func TestCall_OwnerSideRefusalIsNotAServerError(t *testing.T) {
+	t.Parallel()
+	_, wh, _, _, wsStore := startWebhookHarness(t)
+	savePublished(t, wsStore, core.Graph{
+		ID: "call-broken", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			requestNode("in"),
+		},
+		// Wired into a step that doesn't exist: the published flow no longer validates.
+		Edges: []core.Edge{{From: "in", FromPort: "body", To: "ghost", ToPort: "pass"}},
+	})
+	code, body, _ := callPost(t, wh, "call-broken", "s3cr3t", "?wait=0")
+	if code == http.StatusInternalServerError {
+		t.Fatalf("owner-side refusal answered 500: %s", body)
+	}
+	switch code {
+	case http.StatusForbidden, http.StatusServiceUnavailable:
+	default:
+		t.Fatalf("status = %d, want 403 or 503; body=%s", code, body)
+	}
+	if !strings.Contains(body, "invalid_graph") {
+		t.Errorf("body = %s, want an invalid_graph code", body)
+	}
+}

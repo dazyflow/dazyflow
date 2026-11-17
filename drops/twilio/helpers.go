@@ -12,7 +12,6 @@ package twilio
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -45,25 +44,14 @@ func resolveCreds(job core.Job) (sid, token string, err error) {
 }
 
 func twilioDo(ctx context.Context, job core.Job, method, url, form string) (int, []byte, error) {
-	timeoutMS := params.TimeoutMS(job, 15000)
 	sid, token, err := resolveCreds(job)
 	if err != nil {
 		return 0, nil, err
 	}
-	var b []byte
-	if form != "" {
-		b = []byte(form)
-	}
-	headers := map[string]string{
-		"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(sid+":"+token)),
-	}
-	if form != "" {
-		headers["Content-Type"] = "application/x-www-form-urlencoded"
-	}
 	// base_url is a tenant-supplied param, so net.Do guards the dial: the SSRF
 	// client blocks loopback/private/link-local targets and the egress allowlist
 	// (when set) bounds which public hosts the credentials may be sent to.
-	status, raw, _, err := hfnet.Do(ctx, method, url, headers, b, timeoutMS, maxResponseBytes)
+	status, raw, _, err := hfnet.DoBasic(ctx, method, url, sid, token, "application/x-www-form-urlencoded", nil, hfnet.FormBody(form), params.TimeoutMS(job, 15000), maxResponseBytes)
 	return status, raw, err
 }
 
