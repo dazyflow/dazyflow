@@ -4,7 +4,7 @@
   "private": true,
   "license": "AGPL-3.0-or-later",
   "type": "module",
-  "description": "Dazyflow visual editor \u2014 React + React Flow over the daemon HTTP gateway.",
+  "description": "Dazyflow visual editor — React + React Flow over the daemon HTTP gateway.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -45,7 +45,7 @@
     "jsdom": "^30.0.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.68.0",
-    "vite": "^8.2.2",
+    "vite": "^8.3.8",
     "vitest": "^4.1.11"
   }
 }
