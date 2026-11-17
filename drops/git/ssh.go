@@ -15,7 +15,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
-	xssh "golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -200,11 +200,11 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 // NewKnownHostsDb reads the file eagerly into memory, so the temp file is
 // removed as soon as the db is built.
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
-	if err := validateKnownHosts(userKnownHosts); err != nil {
-		return nil, err
-	}
 	combined := bundledKnownHosts
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
+		if err := validateKnownHosts(s); err != nil {
+			return nil, err
+		}
 		combined += s + "\n"
 	}
 	f, err := os.CreateTemp("", "dazyflow-known-hosts-*")
@@ -223,18 +223,18 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 }
 
 // validateKnownHosts rejects a credential's known_hosts if any line fails to
-// parse. x/crypto's knownhosts reader skips bad lines as long as one line is
-// valid, and the bundled defaults always are, so without this check a typo
-// in a user's pinned key would be dropped silently and the clone would fail
-// later with a confusing unknown-host error.
-func validateKnownHosts(text string) error {
-	for i, line := range strings.Split(text, "\n") {
+// parse. x/crypto's knownhosts reader skips bad lines as long as the file has
+// at least one valid entry, and the bundled defaults always provide one, so
+// without this check a typo would silently drop the user's host key and the
+// clone would fail later with a confusing "unknown host" error.
+func validateKnownHosts(s string) error {
+	for i, line := range strings.Split(s, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		if _, _, _, _, _, err := xssh.ParseKnownHosts([]byte(line)); err != nil {
-			return fmt.Errorf("known_hosts line %d: %w", i+1, err)
+		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
+			return fmt.Errorf("credential known_hosts line %d: %w", i+1, err)
 		}
 	}
 	return nil
