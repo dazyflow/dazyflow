@@ -203,9 +203,8 @@ func (h *runCtlAPI) runGraph(rw http.ResponseWriter, r *http.Request, p core.Pri
 	tenant := r.PathValue("tenant")
 	workspace := r.PathValue("workspace")
 	id := r.PathValue("id")
-	g, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, "")
-	if err != nil {
-		writeJSONError(rw, http.StatusNotFound, err.Error())
+	g, ok := loadVisibleFlow(rw, r, h.svc, p, tenant, workspace, id, "")
+	if !ok {
 		return
 	}
 	runID, err := h.svc.SubmitGraphOpts(r.Context(), p, g, SubmitOpts{Manual: true})
@@ -230,9 +229,8 @@ func (h *runCtlAPI) testTrigger(rw http.ResponseWriter, r *http.Request, p core.
 	tenant := r.PathValue("tenant")
 	workspace := r.PathValue("workspace")
 	id := r.PathValue("id")
-	g, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, "")
-	if err != nil {
-		writeJSONError(rw, http.StatusNotFound, err.Error())
+	g, ok := loadVisibleFlow(rw, r, h.svc, p, tenant, workspace, id, "")
+	if !ok {
 		return
 	}
 	var rawBody []byte
