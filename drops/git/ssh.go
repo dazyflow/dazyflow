@@ -6,6 +6,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -201,6 +203,9 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	combined := bundledKnownHosts
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
+		if err := validateKnownHosts(s); err != nil {
+			return nil, err
+		}
 		combined += s + "\n"
 	}
 	f, err := os.CreateTemp("", "dazyflow-known-hosts-*")
@@ -216,4 +221,22 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 		return nil, err
 	}
 	return gitssh.NewKnownHostsDb(f.Name())
+}
+
+// validateKnownHosts rejects any malformed line: knownhosts skips bad lines
+// once a file holds a valid one, and the bundled entries always are.
+func validateKnownHosts(s string) error {
+	for i, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
+			if err == io.EOF {
+				err = fmt.Errorf("invalid entry")
+			}
+			return fmt.Errorf("known_hosts line %d: %w", i+1, err)
+		}
+	}
+	return nil
 }
