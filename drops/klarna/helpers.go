@@ -22,7 +22,6 @@ package klarna
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -99,7 +98,7 @@ func klarnaDo(ctx context.Context, job core.Job, method, url string, body []byte
 		return 0, nil, nil, err
 	}
 	headers := map[string]string{
-		"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+pass)),
+		"Authorization": hfnet.BasicAuth(user, pass),
 		"Accept":        "application/json",
 	}
 	if body != nil {

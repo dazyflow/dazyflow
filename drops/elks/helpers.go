@@ -15,7 +15,6 @@ package elks
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -51,14 +50,10 @@ func elksDo(ctx context.Context, job core.Job, method, url, form string) (int, [
 	if err != nil {
 		return 0, nil, err
 	}
+	headers := map[string]string{"Authorization": hfnet.BasicAuth(user, pass)}
 	var b []byte
 	if form != "" {
 		b = []byte(form)
-	}
-	headers := map[string]string{
-		"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+pass)),
-	}
-	if form != "" {
 		headers["Content-Type"] = "application/x-www-form-urlencoded"
 	}
 	// base_url is a tenant-supplied param, so net.Do guards the dial: the SSRF
