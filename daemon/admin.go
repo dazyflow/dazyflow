@@ -457,7 +457,7 @@ func (a adminCheck) isPlatformAdmin(email string) bool {
 }
 
 func (a adminCheck) isPlatformAdminEmail(email string) bool {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = auth.NormalizeEmail(email)
 	if email == "" {
 		return false
 	}

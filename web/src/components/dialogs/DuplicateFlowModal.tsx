@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { explainApiError } from "../../lib/explainApiError";
 import { Button } from "../ui/Button";
 import { ErrorNotice } from "../ui/ErrorNotice";
-import { useEscapeToClose } from "../ui/useEscapeToClose";
+import { Modal } from "../ui/Modal";
 
 export function DuplicateFlowModal({
   sourceName,
@@ -25,10 +24,6 @@ export function DuplicateFlowModal({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Escape cancels — but not mid-flight, so a stray keypress can't abandon the
-  // dialog while the request is running.
-  useEscapeToClose(() => !busy && onClose());
-
   const submit = async () => {
     const trimmed = name.trim();
     if (!trimmed || busy) return;
@@ -42,57 +37,51 @@ export function DuplicateFlowModal({
     }
   };
 
-  return createPortal(
-    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
-      <div
-        className="modal confirm-dialog"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="modal-head">
-          <h2>{t("duplicateFlow.title")}</h2>
-        </div>
-        <div className="modal-body">
-          <p className="confirm-message">
-            {t("duplicateFlow.body", { name: sourceName })}
-          </p>
-          <div className="sf-field">
-            <div className="label-row">
-              <label htmlFor="duplicate-flow-name">
-                {t("duplicateFlow.nameLabel")}
-              </label>
-            </div>
-            <input
-              id="duplicate-flow-name"
-              type="text"
-              autoFocus
-              value={name}
-              disabled={busy}
-              placeholder={t("duplicateFlow.namePlaceholder")}
-              onChange={(e) => setName(e.target.value)}
-              onFocus={(e) => e.target.select()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submit();
-              }}
-            />
+  return (
+    <Modal
+      title={t("duplicateFlow.title")}
+      className="confirm-dialog"
+      onClose={onClose}
+      dismissible={!busy}
+    >
+      <div className="modal-body">
+        <p className="confirm-message">
+          {t("duplicateFlow.body", { name: sourceName })}
+        </p>
+        <div className="sf-field">
+          <div className="label-row">
+            <label htmlFor="duplicate-flow-name">
+              {t("duplicateFlow.nameLabel")}
+            </label>
           </div>
-          {err && <ErrorNotice>{err}</ErrorNotice>}
+          <input
+            id="duplicate-flow-name"
+            type="text"
+            autoFocus
+            value={name}
+            disabled={busy}
+            placeholder={t("duplicateFlow.namePlaceholder")}
+            onChange={(e) => setName(e.target.value)}
+            onFocus={(e) => e.target.select()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+            }}
+          />
         </div>
-        <div className="modal-foot">
-          <Button onClick={onClose} disabled={busy}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            variant="primary"
-            onClick={submit}
-            disabled={busy || !name.trim()}
-          >
-            {busy ? t("duplicateFlow.duplicating") : t("duplicateFlow.confirm")}
-          </Button>
-        </div>
+        {err && <ErrorNotice>{err}</ErrorNotice>}
       </div>
-    </div>,
-    document.body,
+      <div className="modal-foot">
+        <Button onClick={onClose} disabled={busy}>
+          {t("common.cancel")}
+        </Button>
+        <Button
+          variant="primary"
+          onClick={submit}
+          disabled={busy || !name.trim()}
+        >
+          {busy ? t("duplicateFlow.duplicating") : t("duplicateFlow.confirm")}
+        </Button>
+      </div>
+    </Modal>
   );
 }

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { Layers, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../../../auth";
@@ -13,7 +12,7 @@ import { ConfirmModal } from "../../../components/ui/ConfirmModal";
 import { ErrorNotice } from "../../../components/ui/ErrorNotice";
 import { ICON } from "../../../icons";
 import { slugify } from "../../../lib/format";
-import { useEscapeToClose } from "../../../components/ui/useEscapeToClose";
+import { Modal } from "../../../components/ui/Modal";
 import { Loading } from "../../../components/ui/Loading";
 
 export function AdminPlatformTiers() {
@@ -239,112 +238,117 @@ function TierEditor({
   );
 
 
-  useEscapeToClose(() => !busy && onClose());
-  return createPortal(
-    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="modal-head">
-          <h2>{isNew ? t("admin.platformTiers.new") : t("admin.platformTiers.edit", { name: tier.name })}</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} disabled={busy}>
-            <X size={ICON.lg} />
-          </Button>
-        </div>
-        <div className="modal-body pa-tier-form">
-          <label>
-            {t("common.name")}
-            <input
-              type="text"
-              value={draft.name}
-              autoFocus
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            />
-          </label>
-          <label>
-            {t("admin.platformTiers.plan")}
-            <select value={draft.plan} onChange={(e) => setDraft({ ...draft, plan: e.target.value })}>
-              {/* The value is the plan's own name (what the API stores); the
-                  label is the word the rest of the product shows for it. */}
-              <option value="free">{t("usage.planValueFree")}</option>
-              <option value="pro">{t("usage.planValuePro")}</option>
-            </select>
-          </label>
-          <label>
-            {t("admin.platformTiers.runs")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
-            {num("runs_per_month")}
-          </label>
-          <label>
-            {t("admin.platformTiers.generations")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
-            {num("generations_per_month")}
-          </label>
-          <label>
-            {t("common.members")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
-            {num("max_members")}
-          </label>
-          <label>
-            {t("admin.platformTiers.concurrency")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
-            {num("max_concurrency")}
-          </label>
-          <label>
-            {t("admin.platformTiers.retention")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
-            {num("retention_days")}
-          </label>
-          <label>
-            {t("admin.platformTiers.nodes")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
-            {num("max_graph_nodes")}
-          </label>
-          <label>
-            {t("common.flows")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
-            {num("max_flows")}
-          </label>
-          <label>
-            {t("admin.platformTiers.timeout")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
-            {num("max_timeout_seconds")}
-          </label>
-          <label>
-            {t("admin.platformTiers.diskMB")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
-            <input
-              type="number"
-              min={0}
-              value={diskMB}
-              onChange={(e) => setDiskMB(Math.max(0, Number(e.target.value) || 0))}
-            />
-          </label>
-          <label>
-            {t("admin.platformTiers.pollingAllowed")}{" "}
-            <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
-            <select
-              value={
-                draft.polling_allowed == null
-                  ? "default"
-                  : draft.polling_allowed
-                    ? "yes"
-                    : "no"
-              }
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  polling_allowed:
-                    e.target.value === "default" ? null : e.target.value === "yes",
-                })
-              }
-            >
-              <option value="default">{t("admin.platformTiers.pollingDefault")}</option>
-              <option value="yes">{t("admin.platformTiers.pollingYes")}</option>
-              <option value="no">{t("admin.platformTiers.pollingNo")}</option>
-            </select>
-          </label>
-        </div>
-        <div className="modal-foot">
-          <Button onClick={onClose} disabled={busy}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="primary" onClick={() => void save()} disabled={busy || !draft.name.trim()}>
-            {busy ? t("common.saving") : t("admin.platformTiers.save")}
-          </Button>
-        </div>
+  return (
+    <Modal
+      title={isNew ? t("admin.platformTiers.new") : t("admin.platformTiers.edit", { name: tier.name })}
+      headActions={
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          disabled={busy}
+          aria-label={t("common.close")}
+        >
+          <X size={ICON.lg} />
+        </Button>
+      }
+      dismissible={!busy}
+      onClose={onClose}
+    >
+      <div className="modal-body pa-tier-form">
+        <label>
+          {t("common.name")}
+          <input
+            type="text"
+            value={draft.name}
+            autoFocus
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+          />
+        </label>
+        <label>
+          {t("admin.platformTiers.plan")}
+          <select value={draft.plan} onChange={(e) => setDraft({ ...draft, plan: e.target.value })}>
+            {/* The value is the plan's own name (what the API stores); the
+                label is the word the rest of the product shows for it. */}
+            <option value="free">{t("usage.planValueFree")}</option>
+            <option value="pro">{t("usage.planValuePro")}</option>
+          </select>
+        </label>
+        <label>
+          {t("admin.platformTiers.runs")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+          {num("runs_per_month")}
+        </label>
+        <label>
+          {t("admin.platformTiers.generations")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+          {num("generations_per_month")}
+        </label>
+        <label>
+          {t("common.members")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+          {num("max_members")}
+        </label>
+        <label>
+          {t("admin.platformTiers.concurrency")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+          {num("max_concurrency")}
+        </label>
+        <label>
+          {t("admin.platformTiers.retention")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+          {num("retention_days")}
+        </label>
+        <label>
+          {t("admin.platformTiers.nodes")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+          {num("max_graph_nodes")}
+        </label>
+        <label>
+          {t("common.flows")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+          {num("max_flows")}
+        </label>
+        <label>
+          {t("admin.platformTiers.timeout")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+          {num("max_timeout_seconds")}
+        </label>
+        <label>
+          {t("admin.platformTiers.diskMB")} <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+          <input
+            type="number"
+            min={0}
+            value={diskMB}
+            onChange={(e) => setDiskMB(Math.max(0, Number(e.target.value) || 0))}
+          />
+        </label>
+        <label>
+          {t("admin.platformTiers.pollingAllowed")}{" "}
+          <span className="pa-subtext">({t("admin.platformTiers.zeroInherit")})</span>
+          <select
+            value={
+              draft.polling_allowed == null
+                ? "default"
+                : draft.polling_allowed
+                  ? "yes"
+                  : "no"
+            }
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                polling_allowed:
+                  e.target.value === "default" ? null : e.target.value === "yes",
+              })
+            }
+          >
+            <option value="default">{t("admin.platformTiers.pollingDefault")}</option>
+            <option value="yes">{t("admin.platformTiers.pollingYes")}</option>
+            <option value="no">{t("admin.platformTiers.pollingNo")}</option>
+          </select>
+        </label>
       </div>
-    </div>,
-    document.body,
+      <div className="modal-foot">
+        <Button onClick={onClose} disabled={busy}>
+          {t("common.cancel")}
+        </Button>
+        <Button variant="primary" onClick={() => void save()} disabled={busy || !draft.name.trim()}>
+          {busy ? t("common.saving") : t("admin.platformTiers.save")}
+        </Button>
+      </div>
+    </Modal>
   );
 }
 

@@ -93,15 +93,15 @@ func TestOrgProfile_Suspended_Cov(t *testing.T) {
 	}
 }
 
-func TestNormalizeBlockEmail_Cov(t *testing.T) {
+func TestNormalizeEmail_Cov(t *testing.T) {
 	cases := map[string]string{
 		"  Alice@ACME.com ": "alice@acme.com",
 		"":                  "",
 		"X":                 "x",
 	}
 	for in, want := range cases {
-		if got := NormalizeBlockEmail(in); got != want {
-			t.Errorf("NormalizeBlockEmail(%q) = %q, want %q", in, got, want)
+		if got := NormalizeEmail(in); got != want {
+			t.Errorf("NormalizeEmail(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -115,8 +115,8 @@ func TestEmailDomain_Cov(t *testing.T) {
 		"@domain.com":    "",
 	}
 	for in, want := range cases {
-		if got := emailDomain(in); got != want {
-			t.Errorf("emailDomain(%q) = %q, want %q", in, got, want)
+		if got := EmailDomain(in); got != want {
+			t.Errorf("EmailDomain(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

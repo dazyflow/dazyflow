@@ -10,7 +10,7 @@ import { Button } from "../ui/Button";
 import { Switch } from "../ui/Switch";
 import type { IssuedAPIKey, Permission, Role } from "../../types";
 import { formatDate } from "../../lib/datetime";
-import { useEscapeToClose } from "../ui/useEscapeToClose";
+import { Modal } from "../ui/Modal";
 
 type Template = {
   id: string;
@@ -172,139 +172,131 @@ export function IssueKeyModal({
     }
   };
 
-  useEscapeToClose(onCancel);
-
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
-      <form
-        className="modal"
-        style={{ maxWidth: 560 }}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        onSubmit={submit}
-      >
-        <div className="modal-head">
-          <h2>{t("issueKey.title")}</h2>
-        </div>
-        <div className="modal-body">
-          <div className="sf-field">
-            <div className="label-row">
-              <label>{t("issueKey.subjectLabel")}</label>
-            </div>
-            <input
-              autoFocus={!initialSubject}
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder={t("issueKey.subjectPlaceholder")}
-            />
+    <Modal
+      title={t("issueKey.title")}
+      size="lg"
+      as="form"
+      onSubmit={submit}
+      onClose={onCancel}
+    >
+      <div className="modal-body">
+        <div className="sf-field">
+          <div className="label-row">
+            <label>{t("issueKey.subjectLabel")}</label>
           </div>
+          <input
+            autoFocus={!initialSubject}
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder={t("issueKey.subjectPlaceholder")}
+          />
+        </div>
 
-          <div className="sf-field">
-            <div className="label-row">
-              <label>{t("issueKey.roleTemplate")}</label>
-            </div>
-            <div className="role-template-grid">
-              {ROLE_TEMPLATES.map((tpl) => (
-                <Button
-                  key={tpl.id}
-                  className={
-                    "role-template" + (templateID === tpl.id ? " active" : "")
-                  }
-                  onClick={() => applyTemplate(tpl.id)}
-                >
-                  <div className="role-template-name">{t(tpl.nameKey)}</div>
-                  <div className="role-template-desc">{t(tpl.descKey)}</div>
-                </Button>
-              ))}
+        <div className="sf-field">
+          <div className="label-row">
+            <label>{t("issueKey.roleTemplate")}</label>
+          </div>
+          <div className="role-template-grid">
+            {ROLE_TEMPLATES.map((tpl) => (
               <Button
+                key={tpl.id}
                 className={
-                  "role-template" + (templateID === "custom" ? " active" : "")
+                  "role-template" + (templateID === tpl.id ? " active" : "")
                 }
-                onClick={() => applyTemplate("custom")}
+                onClick={() => applyTemplate(tpl.id)}
               >
-                <div className="role-template-name">{t("issueKey.templateCustom")}</div>
-                <div className="role-template-desc">
-                  {t("issueKey.templateCustomDesc")}
-                </div>
+                <div className="role-template-name">{t(tpl.nameKey)}</div>
+                <div className="role-template-desc">{t(tpl.descKey)}</div>
               </Button>
-            </div>
+            ))}
+            <Button
+              className={
+                "role-template" + (templateID === "custom" ? " active" : "")
+              }
+              onClick={() => applyTemplate("custom")}
+            >
+              <div className="role-template-name">{t("issueKey.templateCustom")}</div>
+              <div className="role-template-desc">
+                {t("issueKey.templateCustomDesc")}
+              </div>
+            </Button>
           </div>
+        </div>
 
-          <div className="sf-field">
-            <div className="label-row">
-              <label>{t("issueKey.roleName")}</label>
-            </div>
-            <input
-              value={roleName}
-              onChange={(e) => setRoleName(e.target.value)}
-              placeholder={t("issueKey.rolePlaceholder")}
-            />
-            <div className="desc">
-              {t("issueKey.roleNameDesc")}
-            </div>
+        <div className="sf-field">
+          <div className="label-row">
+            <label>{t("issueKey.roleName")}</label>
           </div>
+          <input
+            value={roleName}
+            onChange={(e) => setRoleName(e.target.value)}
+            placeholder={t("issueKey.rolePlaceholder")}
+          />
+          <div className="desc">
+            {t("issueKey.roleNameDesc")}
+          </div>
+        </div>
 
-          <div className="sf-field">
-            <div className="label-row">
-              <label>{t("issueKey.permissions")}</label>
-            </div>
-            <div className="perm-grid">
-              {ALL_PERMISSIONS.map((p) => (
-                <Switch
-                  key={p}
-                  compact
-                  checked={perms.has(p)}
-                  onChange={() => togglePerm(p)}
-                  label={
-                    <span className="perm-label">
-                      <span className="perm-label-name">
-                        {t(PERMISSION_LABEL_KEYS[p])}
-                      </span>
-                      <span className="perm-label-code">{p}</span>
+        <div className="sf-field">
+          <div className="label-row">
+            <label>{t("issueKey.permissions")}</label>
+          </div>
+          <div className="perm-grid">
+            {ALL_PERMISSIONS.map((p) => (
+              <Switch
+                key={p}
+                compact
+                checked={perms.has(p)}
+                onChange={() => togglePerm(p)}
+                label={
+                  <span className="perm-label">
+                    <span className="perm-label-name">
+                      {t(PERMISSION_LABEL_KEYS[p])}
                     </span>
-                  }
-                />
-              ))}
-            </div>
-            <div className="desc">
-              <Trans i18nKey="issueKey.tenantAdminWarning" components={[<strong />]} />
-            </div>
+                    <span className="perm-label-code">{p}</span>
+                  </span>
+                }
+              />
+            ))}
           </div>
+          <div className="desc">
+            <Trans i18nKey="issueKey.tenantAdminWarning" components={[<strong />]} />
+          </div>
+        </div>
 
-          <div className="sf-field">
-            <div className="label-row">
-              <label>{t("issueKey.expiryLabel")}</label>
-            </div>
-            <div className="expiry-grid">
-              {EXPIRY_CHOICES.map((c) => (
-                <Button
-                  key={c.id}
-                  className={"expiry-choice" + (expiry === c.id ? " active" : "")}
-                  onClick={() => setExpiry(c.id)}
-                >
-                  {t(c.labelKey)}
-                </Button>
-              ))}
-            </div>
-            <div className="desc">
-              {expiry === "never"
-                ? t("issueKey.expiryNeverDesc")
-                : t("issueKey.expirySetDesc", {
-                    date: formatDate(expiryToISO(expiry)),
-                  })}
-            </div>
+        <div className="sf-field">
+          <div className="label-row">
+            <label>{t("issueKey.expiryLabel")}</label>
+          </div>
+          <div className="expiry-grid">
+            {EXPIRY_CHOICES.map((c) => (
+              <Button
+                key={c.id}
+                className={"expiry-choice" + (expiry === c.id ? " active" : "")}
+                onClick={() => setExpiry(c.id)}
+              >
+                {t(c.labelKey)}
+              </Button>
+            ))}
+          </div>
+          <div className="desc">
+            {expiry === "never"
+              ? t("issueKey.expiryNeverDesc")
+              : t("issueKey.expirySetDesc", {
+                  date: formatDate(expiryToISO(expiry)),
+                })}
           </div>
         </div>
-        <div className="modal-foot">
-          <Button onClick={onCancel}>
-            {t("common.cancel")}
-          </Button>
-          <Button type="submit" variant="primary" disabled={submitting}>
-            {submitting ? t("issueKey.issuing") : t("issueKey.issue")}
-          </Button>
-        </div>
-      </form>
-    </div>
+      </div>
+      <div className="modal-foot">
+        <Button onClick={onCancel}>
+          {t("common.cancel")}
+        </Button>
+        <Button type="submit" variant="primary" disabled={submitting}>
+          {submitting ? t("issueKey.issuing") : t("issueKey.issue")}
+        </Button>
+      </div>
+    </Modal>
   );
 }

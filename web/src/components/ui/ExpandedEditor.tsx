@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Maximize2, X } from "lucide-react";
 import { Button } from "./Button";
 import { ScriptEditor } from "./ScriptEditor";
-import { useEscapeToClose } from "./useEscapeToClose";
+import { Modal } from "./Modal";
 import { ICON } from "../../icons";
 import type { ScriptLang } from "../../lib/scriptHighlight";
 
@@ -99,57 +98,50 @@ function Overlay({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  useEscapeToClose(onClose);
 
-  return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal dz-bigedit"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-      >
-        <div className="modal-head">
-          <h2>{title}</h2>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            title={t("common.close")}
-            aria-label={t("common.close")}
-          >
-            <X size={ICON.md} />
-          </Button>
+  return (
+    <Modal
+      className="dz-bigedit"
+      title={title}
+      headActions={
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          title={t("common.close")}
+          aria-label={t("common.close")}
+        >
+          <X size={ICON.md} />
+        </Button>
+      }
+      onClose={onClose}
+    >
+      <div className={"modal-body dz-bigedit-body" + (preview ? " dz-bigedit-split" : "")}>
+        {/* The editor gets a pane of its own so the two halves are sized by
+            one rule rather than by whichever of editor and preview carries
+            the more specific selector. */}
+        <div className="dz-bigedit-pane">
+        {lang ? (
+          <ScriptEditor
+            value={value}
+            lang={lang}
+            onChange={onChange}
+            placeholder={placeholder}
+            autoFocus
+          />
+        ) : (
+          <textarea
+            className="dz-bigedit-plain"
+            value={value}
+            placeholder={placeholder}
+            onChange={(e) => onChange(e.target.value)}
+            autoFocus
+          />
+        )}
         </div>
-        <div className={"modal-body dz-bigedit-body" + (preview ? " dz-bigedit-split" : "")}>
-          {/* The editor gets a pane of its own so the two halves are sized by
-              one rule rather than by whichever of editor and preview carries
-              the more specific selector. */}
-          <div className="dz-bigedit-pane">
-          {lang ? (
-            <ScriptEditor
-              value={value}
-              lang={lang}
-              onChange={onChange}
-              placeholder={placeholder}
-              autoFocus
-            />
-          ) : (
-            <textarea
-              className="dz-bigedit-plain"
-              value={value}
-              placeholder={placeholder}
-              onChange={(e) => onChange(e.target.value)}
-              autoFocus
-            />
-          )}
-          </div>
-          {preview && <div className="dz-bigedit-preview">{preview}</div>}
-        </div>
+        {preview && <div className="dz-bigedit-preview">{preview}</div>}
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

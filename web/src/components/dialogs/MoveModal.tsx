@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { ChevronRight, CornerLeftUp, Folder } from "lucide-react";
 import { api } from "../../api";
@@ -11,7 +10,7 @@ import { Button } from "../ui/Button";
 import type { FileEntry } from "../../types";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
-import { useEscapeToClose } from "../ui/useEscapeToClose";
+import { Modal } from "../ui/Modal";
 import { Loading } from "../ui/Loading";
 import { Notice } from "../ui/Notice";
 
@@ -60,8 +59,6 @@ export function MoveModal({
   }, [token, tenant, workspace, dir, t]);
   useEffect(load, [load]);
 
-  useEscapeToClose(onCancel);
-
   const doMove = () => {
     setMoving(true);
     setError(null);
@@ -77,92 +74,85 @@ export function MoveModal({
 
   const segments = dir ? dir.split("/") : [];
 
-  return createPortal(
-    <div className="modal-backdrop" onClick={onCancel}>
-      <div
-        className="modal move-dialog"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="modal-head">
-          <h2>{t("files.moveTitle", { name: entry.name })}</h2>
-        </div>
-        <div className="modal-body">
-          <nav className="files-breadcrumb move-breadcrumb">
-            <Button variant="link" onClick={() => setDir("")} disabled={dir === ""}>
-              {t("files.root")}
+  return (
+    <Modal
+      title={t("files.moveTitle", { name: entry.name })}
+      className="move-dialog"
+      onClose={onCancel}
+    >
+      <div className="modal-body">
+        <nav className="files-breadcrumb move-breadcrumb">
+          <Button variant="link" onClick={() => setDir("")} disabled={dir === ""}>
+            {t("files.root")}
+          </Button>
+          {segments.map((seg, i) => {
+            const target = segments.slice(0, i + 1).join("/");
+            return (
+              <span key={target} className="files-crumb">
+                <ChevronRight size={ICON.sm} className="files-crumb-sep" />
+                <Button
+                  variant="link"
+                  onClick={() => setDir(target)}
+                  disabled={i === segments.length - 1}
+                >
+                  {seg}
+                </Button>
+              </span>
+            );
+          })}
+        </nav>
+
+        {error && <ErrorNotice>{error}</ErrorNotice>}
+
+        <div className="move-folder-list">
+          {dir !== "" && (
+            <Button
+              className="move-folder-row"
+              onClick={() => setDir(currentParentOf(dir))}
+            >
+              <CornerLeftUp size={ICON.md} className="files-icon" />
+              <span className="move-folder-name">{t("files.moveUp")}</span>
             </Button>
-            {segments.map((seg, i) => {
-              const target = segments.slice(0, i + 1).join("/");
+          )}
+          {folders === null ? (
+            <Loading inline />
+          ) : folders.length === 0 ? (
+            <Notice inline>{t("files.moveNoSubfolders")}</Notice>
+          ) : (
+            folders.map((f) => {
+              const disabled =
+                entry.is_dir &&
+                (f.path === entry.path || f.path.startsWith(entry.path + "/"));
               return (
-                <span key={target} className="files-crumb">
-                  <ChevronRight size={ICON.sm} className="files-crumb-sep" />
-                  <Button
-                    variant="link"
-                    onClick={() => setDir(target)}
-                    disabled={i === segments.length - 1}
-                  >
-                    {seg}
-                  </Button>
-                </span>
+                <Button
+                  key={f.path}
+                  className="move-folder-row"
+                  disabled={disabled}
+                  onClick={() => setDir(f.path)}
+                >
+                  <Folder size={ICON.md} className="files-icon files-icon-dir" />
+                  <span className="move-folder-name">{f.name}</span>
+                  <ChevronRight size={ICON.md} className="move-folder-chev" />
+                </Button>
               );
-            })}
-          </nav>
-
-          {error && <ErrorNotice>{error}</ErrorNotice>}
-
-          <div className="move-folder-list">
-            {dir !== "" && (
-              <Button
-                className="move-folder-row"
-                onClick={() => setDir(currentParentOf(dir))}
-              >
-                <CornerLeftUp size={ICON.md} className="files-icon" />
-                <span className="move-folder-name">{t("files.moveUp")}</span>
-              </Button>
-            )}
-            {folders === null ? (
-              <Loading inline />
-            ) : folders.length === 0 ? (
-              <Notice inline>{t("files.moveNoSubfolders")}</Notice>
-            ) : (
-              folders.map((f) => {
-                const disabled =
-                  entry.is_dir &&
-                  (f.path === entry.path || f.path.startsWith(entry.path + "/"));
-                return (
-                  <Button
-                    key={f.path}
-                    className="move-folder-row"
-                    disabled={disabled}
-                    onClick={() => setDir(f.path)}
-                  >
-                    <Folder size={ICON.md} className="files-icon files-icon-dir" />
-                    <span className="move-folder-name">{f.name}</span>
-                    <ChevronRight size={ICON.md} className="move-folder-chev" />
-                  </Button>
-                );
-              })
-            )}
-          </div>
-        </div>
-        <div className="modal-foot">
-          <Button type="button" onClick={onCancel}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            disabled={moving || intoSelf || isNoop}
-            onClick={doMove}
-          >
-            {isNoop ? t("files.moveAlreadyHere") : t("files.moveHere")}
-          </Button>
+            })
+          )}
         </div>
       </div>
-    </div>,
-    document.body,
+      <div className="modal-foot">
+        <Button type="button" onClick={onCancel}>
+          {t("common.cancel")}
+        </Button>
+        <Button
+          type="button"
+          variant="primary"
+          disabled={moving || intoSelf || isNoop}
+          onClick={doMove}
+        >
+          {isNoop ? t("files.moveAlreadyHere") : t("files.moveHere")}
+        </Button>
+      </div>
+    </Modal>
   );
 }
 

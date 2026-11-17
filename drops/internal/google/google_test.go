@@ -153,3 +153,54 @@ func TestErrMessage(t *testing.T) {
 		t.Errorf("truncated = %q (len %d)", got, len(got))
 	}
 }
+
+// pager serves pages of three ints; endless keeps returning a token forever.
+func pager(total int, endless bool, calls *int) func(string, int) ([]int, string, error) {
+	return func(tok string, _ int) ([]int, string, error) {
+		*calls++
+		start := *calls*3 - 3
+		var out []int
+		for i := start; i < start+3 && (endless || i < total); i++ {
+			out = append(out, i)
+		}
+		if !endless && start+3 >= total {
+			return out, "", nil
+		}
+		return out, "t", nil
+	}
+}
+
+func TestPaginate_Exhausts(t *testing.T) {
+	calls := 0
+	got, next, err := Paginate(context.Background(), pager(7, false, &calls), 0, 10)
+	if err != nil || next != "" || len(got) != 7 || calls != 3 {
+		t.Fatalf("got %v next=%q err=%v calls=%d", got, next, err, calls)
+	}
+}
+
+func TestPaginate_StopsAtLimitAndTrims(t *testing.T) {
+	calls := 0
+	got, next, err := Paginate(context.Background(), pager(100, false, &calls), 5, 10)
+	if err != nil || len(got) != 5 || calls != 2 || next == "" {
+		t.Fatalf("got %v next=%q err=%v calls=%d", got, next, err, calls)
+	}
+}
+
+func TestPaginate_CapsEndlessTokens(t *testing.T) {
+	calls := 0
+	got, next, err := Paginate(context.Background(), pager(0, true, &calls), 0, 4)
+	if err != nil || calls != 4 || len(got) != 12 || next == "" {
+		t.Fatalf("got %v next=%q err=%v calls=%d", got, next, err, calls)
+	}
+}
+
+func TestPaginate_PassesRemaining(t *testing.T) {
+	var seen []int
+	_, _, _ = Paginate(context.Background(), func(_ string, remaining int) ([]int, string, error) {
+		seen = append(seen, remaining)
+		return []int{1, 2}, "t", nil
+	}, 5, 10)
+	if len(seen) != 3 || seen[0] != 5 || seen[1] != 3 || seen[2] != 1 {
+		t.Fatalf("remaining = %v", seen)
+	}
+}

@@ -68,7 +68,7 @@ func (h *authAPI) signIn(rw http.ResponseWriter, r *http.Request) {
 	user, err := auth.VerifyPassword(r.Context(), h.Users, body.Email, body.Password)
 	if err != nil {
 		// Resolving it would reveal whether the address belongs to a real org.
-		h.auditAuth(r.Context(), r, "", strings.ToLower(strings.TrimSpace(body.Email)), "auth.signin_failed", "method=password")
+		h.auditAuth(r.Context(), r, "", auth.NormalizeEmail(body.Email), "auth.signin_failed", "method=password")
 		writeJSONError(rw, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
@@ -130,7 +130,7 @@ func (h *authAPI) elevatePlatformAdmin(ctx context.Context, u auth.User) auth.Us
 	if env {
 		source = "DAZYFLOW_PLATFORM_ADMINS"
 	}
-	key := strings.ToLower(strings.TrimSpace(u.Email))
+	key := auth.NormalizeEmail(u.Email)
 	if _, seen := h.platformAdminGranted.LoadOrStore(key, struct{}{}); !seen {
 		h.audit(ctx, core.Principal{Tenant: u.Tenant, Subject: u.Email},
 			"platform_admin.granted", u.Email, "source="+source)
@@ -152,7 +152,7 @@ func (h *authAPI) elevateSupportAgent(ctx context.Context, u auth.User) auth.Use
 		}
 	}
 	u.Roles = append(append([]core.Role(nil), u.Roles...), core.SupportAgentRole())
-	key := strings.ToLower(strings.TrimSpace(u.Email))
+	key := auth.NormalizeEmail(u.Email)
 	if _, seen := h.supportAgentGranted.LoadOrStore(key, struct{}{}); !seen {
 		h.audit(ctx, core.Principal{Tenant: u.Tenant, Subject: u.Email},
 			"support_agent.granted", u.Email, "source=runtime_grant")

@@ -69,3 +69,37 @@ func Do(ctx context.Context, method, url, token, contentType string, body []byte
 func ErrMessage(body []byte, limit int) string {
 	return params.EnvelopeMessage(body, "", limit)
 }
+
+// Paginate walks a nextPageToken-paged Google list. fetch makes one call with
+// the page token ("" for the first page) and the number of items still wanted
+// (0 when limit is unbounded), returning that page's items and the next token.
+//
+// The walk stops when a page carries no token, once limit items are collected
+// (limit <= 0 means no limit), or after maxPages calls — a guard against an API
+// that keeps handing back tokens. The result is trimmed to limit. next is the
+// token the walk stopped short of: "" when the listing was exhausted, so a
+// caller that must see everything can tell a capped walk from a complete one.
+func Paginate[T any](ctx context.Context, fetch func(pageToken string, remaining int) ([]T, string, error), limit, maxPages int) (items []T, next string, err error) {
+	for page := 0; page < maxPages; page++ {
+		if err := ctx.Err(); err != nil {
+			return nil, "", err
+		}
+		remaining := 0
+		if limit > 0 {
+			remaining = limit - len(items)
+		}
+		got, tok, err := fetch(next, remaining)
+		if err != nil {
+			return nil, "", err
+		}
+		items = append(items, got...)
+		next = tok
+		if next == "" || (limit > 0 && len(items) >= limit) {
+			break
+		}
+	}
+	if limit > 0 && len(items) > limit {
+		items = items[:limit]
+	}
+	return items, next, nil
+}
