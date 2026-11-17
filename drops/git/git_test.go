@@ -581,6 +581,12 @@ func TestHostKeyDB_BadLineAmongValidOnes(t *testing.T) {
 	if _, err := hostKeyDB(valid + "\n# comment\nnot a valid known_hosts line"); err == nil {
 		t.Fatal("expected error for a malformed line mixed with valid ones")
 	}
+	// A well-formed key under a corrupt hashed host passes ssh.ParseKnownHosts
+	// but is skipped by the knownhosts reader, so it must be caught too.
+	key := strings.SplitN(valid, " ", 2)[1]
+	if _, err := hostKeyDB(valid + "\n|1|not-base64|also-not " + key); err == nil {
+		t.Fatal("expected error for a corrupt hashed host entry")
+	}
 	if _, err := hostKeyDB(valid + "\n# comment\n"); err != nil {
 		t.Fatalf("valid user known_hosts rejected: %v", err)
 	}

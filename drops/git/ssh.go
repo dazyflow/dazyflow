@@ -16,6 +16,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
+	"golang.org/x/crypto/ssh"
 	xknownhosts "golang.org/x/crypto/ssh/knownhosts"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -223,30 +224,39 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	return gitssh.NewKnownHostsDb(f.Name())
 }
 
-// validateKnownHosts rejects user known_hosts content with any unparseable
-// line. Since x/crypto v0.59 the knownhosts parser skips bad lines and only
-// fails when a file has no valid entry at all — and the combined file always
-// has the bundled entries — so a typo'd user line would otherwise be dropped
-// silently and surface later as a confusing "unknown host" clone failure.
-// Each line is parsed on its own so the library's exact rules still apply: a
-// one-line file fails if and only if that line is invalid.
-func validateKnownHosts(content string) error {
+// validateKnownHosts rejects a credential's known_hosts if any line fails to
+// parse. x/crypto's knownhosts reader (since v0.59) skips bad lines as long as
+// the file has at least one valid entry, and the bundled defaults always
+// provide one, so without this check a typo would silently drop the user's
+// host key and the clone would fail later with a confusing "unknown host"
+// error.
+//
+// Two passes per line: ssh.ParseKnownHosts gives a precise message for bad
+// markers/keys, but it doesn't validate the host pattern (e.g. a corrupt
+// hashed "|1|salt|hash" entry), which the real reader would still skip. So
+// each line is also run through the knownhosts reader on its own — a one-line
+// file fails if and only if that line is invalid.
+func validateKnownHosts(s string) error {
 	dir, err := os.MkdirTemp("", "dazyflow-known-hosts-check-*")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(dir)
 	path := filepath.Join(dir, "known_hosts")
-	for i, line := range strings.Split(content, "\n") {
+	for i, line := range strings.Split(s, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" || line[0] == '#' {
+		if line == "" || strings.HasPrefix(line, "#") {
 			continue
+		}
+		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
+			return fmt.Errorf("credential known_hosts line %d: %w", i+1, err)
 		}
 		if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
 			return err
 		}
 		if _, err := xknownhosts.New(path); err != nil {
-			return fmt.Errorf("known_hosts: invalid entry on line %d", i+1)
+			// The reader's error embeds the temp path; report the line instead.
+			return fmt.Errorf("credential known_hosts line %d: invalid host pattern or entry", i+1)
 		}
 	}
 	return nil

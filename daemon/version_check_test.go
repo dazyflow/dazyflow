@@ -215,7 +215,7 @@ func TestAdminVersion(t *testing.T) {
 		if version != nil {
 			api.Version = *version
 		}
-		api.adminVersion(rec, req, p)
+		platformOnly(api.adminVersion)(rec, req, p)
 		var vs versionStatus
 		_ = json.Unmarshal(rec.Body.Bytes(), &vs)
 		return rec.Code, vs
