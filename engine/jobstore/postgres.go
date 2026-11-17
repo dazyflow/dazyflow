@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/pgutil"
 )
 
 //go:embed schema.sql
@@ -94,13 +95,9 @@ func (s *Postgres) Enqueue(ctx context.Context, rec core.JobRecord) error {
 	if len(rec.GraphPayload) > 0 {
 		graphPayload = rec.GraphPayload
 	}
-	var resJSON any
-	if rec.Result != nil {
-		b, merr := json.Marshal(rec.Result)
-		if merr != nil {
-			return fmt.Errorf("marshal result: %w", merr)
-		}
-		resJSON = b
+	resJSON, err := marshalResult(rec.Result)
+	if err != nil {
+		return err
 	}
 	var finished, started any
 	if core.IsTerminalStatus(status) {
@@ -192,8 +189,12 @@ func (s *Postgres) Claim(ctx context.Context, worker string, lease time.Duration
 	return rec, err
 }
 
-const claimReturning = `id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
+// jobColumns is the column list scanRecord reads, in its order. Every query
+// that returns whole records selects exactly this.
+const jobColumns = `id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
 		           enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual`
+
+const jobSelect = `SELECT ` + jobColumns + ` FROM jobs WHERE `
 
 const claimQuery = `
 		UPDATE jobs
@@ -213,7 +214,7 @@ const claimQuery = `
 		      FOR UPDATE SKIP LOCKED
 		      LIMIT 1
 		 )
-		 RETURNING ` + claimReturning
+		 RETURNING ` + jobColumns
 
 // A queued job is claimable only if its tenant has fewer than $3 running.
 // Expired-lease reclaims bypass the cap, being recovery of existing work.
@@ -240,7 +241,7 @@ const claimCappedQuery = `
 		      FOR UPDATE SKIP LOCKED
 		      LIMIT 1
 		 )
-		 RETURNING ` + claimReturning
+		 RETURNING ` + jobColumns
 
 // Deletes a RUN whole, once the RUN has been finished for longer than the window
 // — an unfinished run is never touched, however old its steps. Keying on each
@@ -282,25 +283,12 @@ func (s *Postgres) PruneTerminal(ctx context.Context, olderThan time.Duration, b
 }
 
 func (s *Postgres) oldTerminalRunIDs(ctx context.Context, cutoff time.Time, batch int) ([]string, error) {
-	rows, err := s.pool.Query(ctx,
+	return pgutil.QueryRows(ctx, s.pool, scanString,
 		`SELECT id FROM jobs
 		  WHERE kind = 'graph'
 		    AND finished_at IS NOT NULL AND finished_at < $1
-		    AND status IN ('succeeded','failed','cancelled','skipped')
+		    AND status IN (`+terminalStatuses+`)
 		  LIMIT $2`, cutoff, batch)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
 }
 
 // One statement, so a run is never left half-deleted. Node-record status is
@@ -325,7 +313,7 @@ func (s *Postgres) pruneOrphanNodes(ctx context.Context, cutoff time.Time, batch
 			     SELECT j.id FROM jobs j
 			      WHERE j.kind = 'node'
 			        AND j.finished_at IS NOT NULL AND j.finished_at < $1
-			        AND j.status IN ('succeeded','failed','cancelled','skipped')
+			        AND j.status IN (`+terminalStatuses+`)
 			        AND NOT EXISTS (SELECT 1 FROM jobs p WHERE p.id = j.graph_run_id)
 			      LIMIT $2)`, cutoff, batch)
 		if err != nil {
@@ -354,7 +342,7 @@ func (s *Postgres) ClaimUnnotified(ctx context.Context, lookback time.Duration, 
 		maxAttempts = 3
 	}
 	since := time.Now().Add(-lookback)
-	rows, err := s.pool.Query(ctx, `
+	return s.queryRecords(ctx, `
 		WITH due AS (
 			SELECT id FROM jobs
 			 WHERE kind = 'graph'
@@ -369,22 +357,9 @@ func (s *Postgres) ClaimUnnotified(ctx context.Context, lookback time.Duration, 
 		), claimed AS (
 			UPDATE jobs SET notified_at = now(), notify_attempts = notify_attempts + 1
 			 WHERE id IN (SELECT id FROM due)
-			 RETURNING `+claimReturning+`
+			 RETURNING `+jobColumns+`
 		)
 		SELECT * FROM claimed`, since, maxAttempts, limit)
-	if err != nil {
-		return nil, wrapPgErr(err)
-	}
-	defer rows.Close()
-	var out []core.JobRecord
-	for rows.Next() {
-		rec, err := scanRecord(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, rec)
-	}
-	return out, rows.Err()
 }
 
 func (s *Postgres) ReleaseNotifyClaim(ctx context.Context, jobID string) error {
@@ -522,13 +497,9 @@ func (s *Postgres) CompleteAndEnqueue(ctx context.Context, jobID, worker string,
 	if !core.IsTerminalStatus(status) && status != core.JobStatusAwaiting {
 		return core.Advance{}, core.ErrConflict
 	}
-	var resJSON any
-	if result != nil {
-		b, err := json.Marshal(result)
-		if err != nil {
-			return core.Advance{}, fmt.Errorf("marshal result: %w", err)
-		}
-		resJSON = b
+	resJSON, err := marshalResult(result)
+	if err != nil {
+		return core.Advance{}, err
 	}
 	n := len(deps)
 	ids, runs, graphs, nodes, tenants, workspaces, jobs := make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n)
@@ -602,13 +573,9 @@ func (s *Postgres) complete(ctx context.Context, jobID, worker string, status co
 	if !core.IsTerminalStatus(status) && status != core.JobStatusAwaiting {
 		return core.ErrConflict
 	}
-	var resJSON any
-	if result != nil {
-		b, err := json.Marshal(result)
-		if err != nil {
-			return fmt.Errorf("marshal result: %w", err)
-		}
-		resJSON = b
+	resJSON, err := marshalResult(result)
+	if err != nil {
+		return err
 	}
 	finishedClause := "finished_at = now()"
 	if status == core.JobStatusAwaiting {
@@ -638,11 +605,7 @@ func (s *Postgres) complete(ctx context.Context, jobID, worker string, status co
 }
 
 func (s *Postgres) Get(ctx context.Context, jobID string) (core.JobRecord, error) {
-	const q = `
-		SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-		       enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual
-		  FROM jobs WHERE id = $1
-	`
+	const q = jobSelect + `id = $1`
 	rec, err := scanRecord(s.pool.QueryRow(ctx, q, jobID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return core.JobRecord{}, core.ErrNotFound
@@ -654,33 +617,36 @@ func (s *Postgres) Outcomes(ctx context.Context, jobIDs []string) (map[string]co
 	if len(jobIDs) == 0 {
 		return nil, nil
 	}
-	const q = `SELECT id, status, result FROM jobs WHERE id = ANY($1)`
-	rows, err := s.pool.Query(ctx, q, jobIDs)
-	if err != nil {
-		return nil, wrapPgErr(err)
+	type outcome struct {
+		id string
+		oc core.NodeOutcome
 	}
-	defer rows.Close()
-	out := make(map[string]core.NodeOutcome, len(jobIDs))
-	for rows.Next() {
+	scan := func(r pgutil.Scanner) (outcome, error) {
 		var (
-			id         string
+			o          outcome
 			status     string
 			resultJSON []byte
 		)
-		if err := rows.Scan(&id, &status, &resultJSON); err != nil {
-			return nil, err
+		if err := r.Scan(&o.id, &status, &resultJSON); err != nil {
+			return outcome{}, err
 		}
-		oc := core.NodeOutcome{Status: core.JobStatus(status)}
-		if len(resultJSON) > 0 {
-			var res core.Result
-			if err := json.Unmarshal(resultJSON, &res); err != nil {
-				return nil, fmt.Errorf("unmarshal result %s: %w", id, err)
-			}
-			oc.Result = &res
+		o.oc.Status = core.JobStatus(status)
+		res, err := unmarshalResult(resultJSON)
+		if err != nil {
+			return outcome{}, fmt.Errorf("%s: %w", o.id, err)
 		}
-		out[id] = oc
+		o.oc.Result = res
+		return o, nil
 	}
-	return out, rows.Err()
+	list, err := queryAll(ctx, s, scan, `SELECT id, status, result FROM jobs WHERE id = ANY($1)`, jobIDs)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]core.NodeOutcome, len(list))
+	for _, o := range list {
+		out[o.id] = o.oc
+	}
+	return out, nil
 }
 
 func (s *Postgres) MarkGraphRunning(ctx context.Context, jobID string) (bool, error) {
@@ -708,25 +674,7 @@ func (s *Postgres) SetGraphRunParked(ctx context.Context, graphRunID string, par
 }
 
 func (s *Postgres) ListByGraph(ctx context.Context, graphID string) ([]core.JobRecord, error) {
-	const q = `
-		SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-		       enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual
-		  FROM jobs WHERE graph_id = $1 ORDER BY enqueued_at DESC
-	`
-	rows, err := s.pool.Query(ctx, q, graphID)
-	if err != nil {
-		return nil, wrapPgErr(err)
-	}
-	defer rows.Close()
-	var out []core.JobRecord
-	for rows.Next() {
-		rec, err := scanRecord(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, rec)
-	}
-	return out, rows.Err()
+	return s.queryRecords(ctx, jobSelect+`graph_id = $1 ORDER BY enqueued_at DESC`, graphID)
 }
 
 func graphRunPredicates(q string, args []any, opts core.ListGraphRunsOpts) (string, []any) {
@@ -757,59 +705,37 @@ func graphRunPredicates(q string, args []any, opts core.ListGraphRunsOpts) (stri
 	return q, args
 }
 
-func graphRunOrderLimit(q string, args []any, opts core.ListGraphRunsOpts) (string, []any) {
-	limit := opts.Limit
+// appendOrderLimit appends ORDER BY order with a bound LIMIT (def when limit
+// is not positive) and, when offset is positive, a bound OFFSET.
+func appendOrderLimit(q string, args []any, order string, limit, def, offset int) (string, []any) {
 	if limit <= 0 {
-		limit = 50
+		limit = def
 	}
 	args = append(args, limit)
-	q += fmt.Sprintf(" ORDER BY enqueued_at DESC, id DESC LIMIT $%d", len(args))
-	if opts.Offset > 0 {
-		args = append(args, opts.Offset)
+	q += fmt.Sprintf(" ORDER BY %s LIMIT $%d", order, len(args))
+	if offset > 0 {
+		args = append(args, offset)
 		q += fmt.Sprintf(" OFFSET $%d", len(args))
 	}
 	return q, args
 }
 
+const defaultGraphRunLimit = 50
+
+func graphRunOrderLimit(q string, args []any, opts core.ListGraphRunsOpts) (string, []any) {
+	return appendOrderLimit(q, args, "enqueued_at DESC, id DESC", opts.Limit, defaultGraphRunLimit, opts.Offset)
+}
+
 func (s *Postgres) ListGraphRuns(ctx context.Context, opts core.ListGraphRunsOpts) ([]core.JobRecord, error) {
-	q := `SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-	             enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual
-	        FROM jobs WHERE kind = 'graph'`
-	q, args := graphRunPredicates(q, []any{}, opts)
+	q, args := graphRunPredicates(jobSelect+`kind = 'graph'`, []any{}, opts)
 	q, args = graphRunOrderLimit(q, args, opts)
-	rows, err := s.pool.Query(ctx, q, args...)
-	if err != nil {
-		return nil, wrapPgErr(err)
-	}
-	defer rows.Close()
-	var out []core.JobRecord
-	for rows.Next() {
-		rec, err := scanRecord(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, rec)
-	}
-	return out, rows.Err()
+	return s.queryRecords(ctx, q, args...)
 }
 
 func (s *Postgres) ListGraphRunSummaries(ctx context.Context, opts core.ListGraphRunsOpts) ([]core.RunSummary, error) {
 	q, args := graphRunPredicates(summarySelect, []any{}, opts)
 	q, args = graphRunOrderLimit(q, args, opts)
-	rows, err := s.pool.Query(ctx, q, args...)
-	if err != nil {
-		return nil, wrapPgErr(err)
-	}
-	defer rows.Close()
-	var out []core.RunSummary
-	for rows.Next() {
-		sum, err := scanSummary(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, sum)
-	}
-	return out, rows.Err()
+	return queryAll(ctx, s, scanSummary, q, args...)
 }
 
 const summaryCols = `SELECT id, graph_id, tenant, workspace, status, enqueued_at, started_at, finished_at,
@@ -820,7 +746,7 @@ const summaryByID = summaryCols + `id = $1`
 
 func isJSONNull(b []byte) bool { return len(b) == 0 || string(b) == "null" }
 
-func scanSummary(r row) (core.RunSummary, error) {
+func scanSummary(r pgutil.Scanner) (core.RunSummary, error) {
 	var (
 		sum     core.RunSummary
 		errJSON []byte
@@ -873,74 +799,40 @@ func (s *Postgres) ListNodeRuns(ctx context.Context, graphRunID string, limit in
 	            WHERE kind = 'node' AND graph_run_id = $1
 	            ORDER BY enqueued_at DESC, id DESC
 	            LIMIT $2`
-	rows, err := s.pool.Query(ctx, q, graphRunID, limit)
+	return queryAll(ctx, s, scanNodeRun, q, graphRunID, limit)
+}
+
+func scanNodeRun(r pgutil.Scanner) (core.NodeRun, error) {
+	var (
+		n          core.NodeRun
+		inputJSON  []byte
+		resultJSON []byte
+	)
+	if err := r.Scan(&n.NodeID, &n.Status, &inputJSON, &resultJSON,
+		&n.StartedAt, &n.FinishedAt, &n.Attempt, &n.AvailableAt); err != nil {
+		return core.NodeRun{}, err
+	}
+	if !isJSONNull(inputJSON) {
+		if err := json.Unmarshal(inputJSON, &n.Inputs); err != nil {
+			return core.NodeRun{}, fmt.Errorf("unmarshal node input: %w", err)
+		}
+	}
+	res, err := unmarshalResult(resultJSON)
 	if err != nil {
-		return nil, wrapPgErr(err)
+		return core.NodeRun{}, err
 	}
-	defer rows.Close()
-	out := make([]core.NodeRun, 0, 32)
-	for rows.Next() {
-		var (
-			n          core.NodeRun
-			inputJSON  []byte
-			resultJSON []byte
-		)
-		if err := rows.Scan(&n.NodeID, &n.Status, &inputJSON, &resultJSON,
-			&n.StartedAt, &n.FinishedAt, &n.Attempt, &n.AvailableAt); err != nil {
-			return nil, wrapPgErr(err)
-		}
-		if !isJSONNull(inputJSON) {
-			if err := json.Unmarshal(inputJSON, &n.Inputs); err != nil {
-				return nil, fmt.Errorf("unmarshal node input: %w", err)
-			}
-		}
-		if !isJSONNull(resultJSON) {
-			var res core.Result
-			if err := json.Unmarshal(resultJSON, &res); err != nil {
-				return nil, fmt.Errorf("unmarshal result: %w", err)
-			}
-			n.Result = &res
-		}
-		out = append(out, n)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, wrapPgErr(err)
-	}
-	return out, nil
+	n.Result = res
+	return n, nil
 }
 
 func (s *Postgres) ListNodeRecords(ctx context.Context, opts core.ListNodeRecordsOpts) ([]core.JobRecord, error) {
-	limit := opts.Limit
-	if limit <= 0 {
-		limit = 100
-	}
-	q, args := nodeRecordWhere(`SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-	             enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual
-	        FROM jobs WHERE kind = 'node'`, opts)
-	args = append(args, limit)
+	q, args := nodeRecordWhere(jobSelect+`kind = 'node'`, opts)
 	order := "enqueued_at DESC, id DESC"
 	if opts.NewestByFinished {
 		order = "finished_at DESC NULLS LAST, id DESC"
 	}
-	q += fmt.Sprintf(" ORDER BY %s LIMIT $%d", order, len(args))
-	if opts.Offset > 0 {
-		args = append(args, opts.Offset)
-		q += fmt.Sprintf(" OFFSET $%d", len(args))
-	}
-	rows, err := s.pool.Query(ctx, q, args...)
-	if err != nil {
-		return nil, wrapPgErr(err)
-	}
-	defer rows.Close()
-	var out []core.JobRecord
-	for rows.Next() {
-		rec, err := scanRecord(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, rec)
-	}
-	return out, rows.Err()
+	q, args = appendOrderLimit(q, args, order, opts.Limit, 100, opts.Offset)
+	return s.queryRecords(ctx, q, args...)
 }
 
 func nodeRecordWhere(q string, opts core.ListNodeRecordsOpts) (string, []any) {
@@ -990,11 +882,7 @@ func (s *Postgres) CountNodeRecords(ctx context.Context, opts core.ListNodeRecor
 	return n, nil
 }
 
-type row interface {
-	Scan(dest ...any) error
-}
-
-func scanRecord(r row) (core.JobRecord, error) {
+func scanRecord(r pgutil.Scanner) (core.JobRecord, error) {
 	var (
 		rec        core.JobRecord
 		kind       string
@@ -1023,17 +911,60 @@ func scanRecord(r row) (core.JobRecord, error) {
 	if len(graphJSON) > 0 {
 		rec.GraphPayload = graphJSON
 	}
-	if len(resultJSON) > 0 {
-		var res core.Result
-		if err := json.Unmarshal(resultJSON, &res); err != nil {
-			return core.JobRecord{}, fmt.Errorf("unmarshal result: %w", err)
-		}
-		rec.Result = &res
+	res, err := unmarshalResult(resultJSON)
+	if err != nil {
+		return core.JobRecord{}, err
 	}
+	rec.Result = res
 	rec.StartedAt = started
 	rec.FinishedAt = finished
 	rec.LeaseUntil = lease
 	return rec, nil
+}
+
+// marshalResult encodes a result for a JSONB column; nil stays SQL NULL.
+func marshalResult(r *core.Result) (any, error) {
+	if r == nil {
+		return nil, nil
+	}
+	b, err := json.Marshal(r)
+	if err != nil {
+		return nil, fmt.Errorf("marshal result: %w", err)
+	}
+	return b, nil
+}
+
+// unmarshalResult decodes a result column. SQL NULL and JSONB null are both
+// "no result" (nil), never an empty Result.
+func unmarshalResult(b []byte) (*core.Result, error) {
+	if isJSONNull(b) {
+		return nil, nil
+	}
+	var res core.Result
+	if err := json.Unmarshal(b, &res); err != nil {
+		return nil, fmt.Errorf("unmarshal result: %w", err)
+	}
+	return &res, nil
+}
+
+func scanString(r pgutil.Scanner) (string, error) {
+	var v string
+	err := r.Scan(&v)
+	return v, err
+}
+
+// queryAll is pgutil.QueryRows with the store's error wrapping applied to
+// query, scan and iteration errors alike.
+func queryAll[T any](ctx context.Context, s *Postgres, scan func(pgutil.Scanner) (T, error), q string, args ...any) ([]T, error) {
+	out, err := pgutil.QueryRows(ctx, s.pool, scan, q, args...)
+	if err != nil {
+		return nil, wrapPgErr(err)
+	}
+	return out, nil
+}
+
+func (s *Postgres) queryRecords(ctx context.Context, q string, args ...any) ([]core.JobRecord, error) {
+	return queryAll(ctx, s, scanRecord, q, args...)
 }
 
 const pgUniqueViolation = "23505"
