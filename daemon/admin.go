@@ -421,14 +421,6 @@ func requireAdmin(p core.Principal) error {
 	return fmt.Errorf("%w: requires permission %q", core.ErrUnauthorized, core.PermOrganizationAdmin)
 }
 
-// Instance-wide settings, so tenant admin is not enough.
-func requirePlatformAdmin(p core.Principal) error {
-	if p.Has(core.PermPlatformAdmin) {
-		return nil
-	}
-	return fmt.Errorf("%w: requires permission %q", core.ErrUnauthorized, core.PermPlatformAdmin)
-}
-
 func isPlatformAdmin(p core.Principal) bool {
 	return p.Has(core.PermPlatformAdmin)
 }

@@ -54,8 +54,7 @@ type adminUpsertProviderRequest struct {
 }
 
 func (h *oauthAPI) listAdminOAuthProviders(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if err := requirePlatformAdmin(p); err != nil {
-		adminError(rw, err)
+	if !requirePlatformAdmin(rw, p) {
 		return
 	}
 	if h.OAuth == nil {
@@ -90,8 +89,7 @@ func (h *oauthAPI) listAdminOAuthProviders(rw http.ResponseWriter, r *http.Reque
 }
 
 func (h *oauthAPI) upsertAdminOAuthProvider(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if err := requirePlatformAdmin(p); err != nil {
-		adminError(rw, err)
+	if !requirePlatformAdmin(rw, p) {
 		return
 	}
 	if h.OAuth == nil {
@@ -141,8 +139,7 @@ func (h *oauthAPI) upsertAdminOAuthProvider(rw http.ResponseWriter, r *http.Requ
 }
 
 func (h *oauthAPI) deleteAdminOAuthProvider(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if err := requirePlatformAdmin(p); err != nil {
-		adminError(rw, err)
+	if !requirePlatformAdmin(rw, p) {
 		return
 	}
 	if h.OAuth == nil {

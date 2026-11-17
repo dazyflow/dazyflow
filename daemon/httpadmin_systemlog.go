@@ -13,8 +13,7 @@ import (
 )
 
 func (h *orgAPI) systemLogTail(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
+	if !requirePlatformAdmin(rw, p) {
 		return
 	}
 	if h.LogTail == nil {
