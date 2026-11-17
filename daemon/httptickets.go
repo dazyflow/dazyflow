@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -108,7 +107,7 @@ func (h *supportAPI) listMyTickets(rw http.ResponseWriter, r *http.Request, p co
 	}
 	tickets, err := h.Tickets.ListForTenant(r.Context(), p.Tenant, core.TicketListOpts{
 		Status: core.TicketStatus(r.URL.Query().Get("status")),
-		Limit:  ticketQueryLimit(r),
+		Limit:  queryLimit(r, support.DefaultTicketListLimit, support.DefaultTicketListLimit),
 	})
 	if err != nil {
 		writeAPIError(rw, http.StatusInternalServerError, "internal_error", err.Error())
@@ -472,16 +471,8 @@ func queueListOpts(r *http.Request, p core.Principal) core.TicketListOpts {
 		Status:     core.TicketStatus(q.Get("status")),
 		AssignedTo: assignee,
 		Unassigned: q.Get("unassigned") == "true",
-		Limit:      ticketQueryLimit(r),
+		Limit:      queryLimit(r, support.DefaultTicketListLimit, support.DefaultTicketListLimit),
 	}
-}
-
-func ticketQueryLimit(r *http.Request) int {
-	n, err := strconv.Atoi(r.URL.Query().Get("limit"))
-	if err != nil || n <= 0 || n > support.DefaultTicketListLimit {
-		return 0
-	}
-	return n
 }
 
 func decodeTicketStatusBody(rw http.ResponseWriter, r *http.Request) (core.TicketStatus, bool) {

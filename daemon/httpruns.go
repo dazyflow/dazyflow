@@ -7,7 +7,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -113,20 +112,7 @@ func (h *flowAPI) listAllRuns(rw http.ResponseWriter, r *http.Request, p core.Pr
 // for a filter value the caller can't have meant, which the handlers surface
 // as a 400 rather than an empty list.
 func parseRunListOpts(r *http.Request) (core.ListGraphRunsOpts, error) {
-	opts := core.ListGraphRunsOpts{Limit: 20}
-	if s := r.URL.Query().Get("limit"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n > 0 {
-			opts.Limit = n
-		}
-	}
-	if opts.Limit > 200 {
-		opts.Limit = 200
-	}
-	if s := r.URL.Query().Get("offset"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n > 0 {
-			opts.Offset = n
-		}
-	}
+	opts := core.ListGraphRunsOpts{Limit: queryLimit(r, 20, 200), Offset: queryOffset(r)}
 	if s := r.URL.Query().Get("status"); s != "" {
 		st := core.JobStatus(s)
 		if !st.Valid() {

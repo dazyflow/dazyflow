@@ -126,8 +126,7 @@ func (h *flowAPI) deleteRunLogsMe(rw http.ResponseWriter, r *http.Request, p cor
 func (h *flowAPI) listRunLogsMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("run_id")
 	after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	entries, err := h.svc.RunLogPage(r.Context(), p, runID, after, limit)
+	entries, err := h.svc.RunLogPage(r.Context(), p, runID, after, queryLimit(r, defaultRunLogPage, maxRunLogEntries))
 	if err != nil {
 		runStoreError(rw, err)
 		return
@@ -257,18 +256,17 @@ func (h *flowAPI) lintGraph(r *http.Request, p core.Principal, g core.Graph) []c
 	return append(core.LintGraph(g), core.WiringWarnings(g, manifests)...)
 }
 
+const (
+	defaultFlowHistoryLimit = 100
+	maxFlowHistoryLimit     = 1000
+)
+
 func (h *flowAPI) historyFlowMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	tenant, workspace, id, ok := readFlowID(rw, r, p)
 	if !ok {
 		return
 	}
-	limit := 100
-	if v := strings.TrimSpace(r.URL.Query().Get("limit")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			limit = n
-		}
-	}
-	revs, err := h.svc.FlowHistory(r.Context(), p, tenant, workspace, id, limit)
+	revs, err := h.svc.FlowHistory(r.Context(), p, tenant, workspace, id, queryLimit(r, defaultFlowHistoryLimit, maxFlowHistoryLimit))
 	if err != nil {
 		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
 		return

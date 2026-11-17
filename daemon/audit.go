@@ -27,7 +27,10 @@ func (h *HTTPGateway) auditAPI() *auditAPI {
 	return &auditAPI{Audit: h.Audit}
 }
 
-const defaultAuditLimit = 100
+const (
+	defaultAuditLimit = 100
+	maxAuditLimit     = 1000
+)
 
 type MemAuditLog struct {
 	mu     sync.Mutex
@@ -268,8 +271,8 @@ func (h *auditAPI) listAudit(rw http.ResponseWriter, r *http.Request, p core.Pri
 	// Force-scoped: an admin cannot read another tenant's trail.
 	events, err := h.Audit.List(r.Context(), core.AuditQuery{
 		Tenant: p.Tenant,
-		Limit:  queryInt(r, "limit", defaultAuditLimit),
-		Offset: queryInt(r, "offset", 0),
+		Limit:  queryLimit(r, defaultAuditLimit, maxAuditLimit),
+		Offset: queryOffset(r),
 	})
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
@@ -285,6 +288,21 @@ func queryInt(r *http.Request, key string, def int) int {
 		}
 	}
 	return def
+}
+
+// queryLimit reads ?limit=: a missing, malformed or non-positive value yields
+// def, and anything above max is capped to max.
+func queryLimit(r *http.Request, def, max int) int {
+	n := queryInt(r, "limit", def)
+	if n <= 0 {
+		n = def
+	}
+	return min(n, max)
+}
+
+// queryOffset reads ?offset=: a missing, malformed or negative value yields 0.
+func queryOffset(r *http.Request) int {
+	return max(queryInt(r, "offset", 0), 0)
 }
 
 func (h *HTTPGateway) auditor() auditor { return auditor{h.Audit} }

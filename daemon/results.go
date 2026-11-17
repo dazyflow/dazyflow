@@ -342,9 +342,7 @@ func (h *flowAPI) getBoardMe(rw http.ResponseWriter, r *http.Request, p core.Pri
 		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	page, err := h.svc.BoardRows(r.Context(), p, tenant, workspace, r.PathValue("name"), limit, offset)
+	page, err := h.svc.BoardRows(r.Context(), p, tenant, workspace, r.PathValue("name"), queryLimit(r, boardRowLimit, boardRowLimit), queryOffset(r))
 	if err != nil {
 		writeBoardError(rw, err)
 		return
