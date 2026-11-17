@@ -576,6 +576,8 @@ func TestTool_RequiredFieldGuards(t *testing.T) {
 		{"validate_cron", "validate_cron", map[string]any{}, "expr is required"},
 		{"cancel_run", "cancel_run", map[string]any{}, "run_id is required"},
 		{"get_run", "get_run", map[string]any{}, "run_id is required"},
+		{"get_run_blank", "get_run", map[string]any{"run_id": "  "}, "run_id is required"},
+		{"get_flow_blank", "get_flow", map[string]any{"id": " "}, "id is required"},
 		{"wait_for_run", "wait_for_run", map[string]any{}, "run_id is required"},
 		{"approve_node", "approve_node", map[string]any{"run_id": "r"}, "run_id, node_id, and decision are required"},
 		{"generate_flow", "generate_flow", map[string]any{}, "description is required"},

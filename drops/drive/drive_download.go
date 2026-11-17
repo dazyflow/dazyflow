@@ -87,11 +87,8 @@ func executeDownload(ctx context.Context, job core.Job, _ chan<- core.Progress) 
 
 	endpoint := apiBaseURL(job) + "/files/" + url.PathEscape(id) + "?alt=media"
 	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, timeoutMS)
-	if err != nil {
-		return params.Err(job, "drive_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "drive_error", driveErr(body)), nil
+	if fail := params.HTTPFailure(job, "drive", "Google Drive", status, body, err, driveErr); fail != nil {
+		return *fail, nil
 	}
 
 	dest := destPath(job, meta.Name, id)
@@ -153,11 +150,8 @@ func exportNative(ctx context.Context, job core.Job, id string, meta driveFile, 
 	q.Set("mimeType", ef.mime)
 	endpoint := apiBaseURL(job) + "/files/" + url.PathEscape(id) + "/export?" + q.Encode()
 	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, timeoutMS)
-	if err != nil {
-		return params.Err(job, "drive_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "drive_error", driveErr(body)), nil
+	if fail := params.HTTPFailure(job, "drive", "Google Drive", status, body, err, driveErr); fail != nil {
+		return *fail, nil
 	}
 
 	dest := exportDestPath(job, meta.Name, id, ef.ext)

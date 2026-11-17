@@ -329,24 +329,23 @@ func describeDrop(c *DazydClient) Tool {
 		})
 }
 
-func describeTriggerKinds(c *DazydClient) Tool {
-	return plainTool(c, "describe_trigger_kinds",
-		"Return the schema for every supported GraphTrigger kind (cron, webhook, poll), with per-field descriptions and worked examples. Consult this when composing a flow that needs to fire on a schedule. Inbound HTTP is configured on steps rather than here: webhook_input, request_input (answered by a reply step) and form_input.",
-		`{"type":"object","properties":{}}`,
-		nil, false,
+func getTool(c *DazydClient, name, description, path string) Tool {
+	return plainTool(c, name, description, `{"type":"object","properties":{}}`, nil, false,
 		func(ctx context.Context, c *DazydClient, _ map[string]any) (ToolCallResult, error) {
-			return getJSON(ctx, c, "/catalog/trigger-kinds")
+			return getJSON(ctx, c, path)
 		})
 }
 
+func describeTriggerKinds(c *DazydClient) Tool {
+	return getTool(c, "describe_trigger_kinds",
+		"Return the schema for every supported GraphTrigger kind (cron, webhook, poll), with per-field descriptions and worked examples. Consult this when composing a flow that needs to fire on a schedule. Inbound HTTP is configured on steps rather than here: webhook_input, request_input (answered by a reply step) and form_input.",
+		"/catalog/trigger-kinds")
+}
+
 func listConnections(c *DazydClient) Tool {
-	return plainTool(c, "list_connections",
+	return getTool(c, "list_connections",
 		"List OAuth providers the daemon offers and which accounts the caller has linked. Each entry: {name, accounts:[...]}. Empty `accounts` = not connected. Pair with start_connection to begin the auth dance for a not-connected provider.",
-		`{"type":"object","properties":{}}`,
-		nil, false,
-		func(ctx context.Context, c *DazydClient, _ map[string]any) (ToolCallResult, error) {
-			return getJSON(ctx, c, "/me/connections")
-		})
+		"/me/connections")
 }
 
 func startConnection(c *DazydClient) Tool {
@@ -369,13 +368,9 @@ func startConnection(c *DazydClient) Tool {
 }
 
 func listSecrets(c *DazydClient) Tool {
-	return plainTool(c, "list_secrets",
+	return getTool(c, "list_secrets",
 		"List secret names in the caller's tenant. Returns {secrets:[name,...]}. Values are write-only — there is no read API; the only way to inspect a secret is to use it in a node. Pair with set_secret to add one.",
-		`{"type":"object","properties":{}}`,
-		nil, false,
-		func(ctx context.Context, c *DazydClient, _ map[string]any) (ToolCallResult, error) {
-			return getJSON(ctx, c, "/secrets")
-		})
+		"/secrets")
 }
 
 func setSecret(c *DazydClient) Tool {
@@ -877,17 +872,18 @@ func isTerminal(rec map[string]any) bool {
 }
 
 func listPendingApprovals(c *DazydClient, d Defaults) Tool {
-	return scopedTool(c, d, "list_pending_approvals",
+	return plainTool(c, "list_pending_approvals",
 		"List await_approval nodes parked across the workspace. Pair with approve_node to resume them.",
 		`{"type":"object","properties":{
 			"tenant":    {"type":"string"},
 			"workspace": {"type":"string"}
 		}}`,
 		nil, false,
-		func(ctx context.Context, c *DazydClient, _ map[string]any, tenant, workspace string) (ToolCallResult, error) {
+		func(ctx context.Context, c *DazydClient, args map[string]any) (ToolCallResult, error) {
+			// Empty tenant/workspace is valid: the daemon falls back to the bearer's scope.
 			return getJSON(ctx, c, "/approvals/pending"+buildQuery(map[string]string{
-				"tenant":    tenant,
-				"workspace": workspace,
+				"tenant":    stringField(args, "tenant", d.Tenant),
+				"workspace": stringField(args, "workspace", d.Workspace),
 			}))
 		})
 }
