@@ -5,7 +5,9 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -15,6 +17,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -189,6 +192,30 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 	return nil, nil
 }
 
+// validateKnownHosts rejects any unparseable line in a credential's
+// known_hosts. x/crypto's knownhosts reader silently skips bad lines as long as
+// the file has one valid line, and the bundled defaults always provide one, so
+// without this check a typo would drop the user's entry and fail later with a
+// confusing unknown-host error.
+// Checked line by line because ParseKnownHosts itself skips lines without a
+// field separator.
+func validateKnownHosts(s string) error {
+	for i, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		_, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line))
+		if errors.Is(err, io.EOF) {
+			err = errors.New("ssh: invalid entry in known_hosts data")
+		}
+		if err != nil {
+			return fmt.Errorf("invalid known_hosts line %d: %w", i+1, err)
+		}
+	}
+	return nil
+}
+
 // hostKeyDB builds a strict known-hosts database from the bundled defaults
 // plus the credential's own known_hosts. It backs both the host-key callback
 // and the host-key-algorithm constraint. We never fall back to an insecure
@@ -201,6 +228,9 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	combined := bundledKnownHosts
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
+		if err := validateKnownHosts(s); err != nil {
+			return nil, err
+		}
 		combined += s + "\n"
 	}
 	f, err := os.CreateTemp("", "dazyflow-known-hosts-*")
