@@ -716,9 +716,8 @@ func (h *platformAdminAPI) platformPutTier(rw http.ResponseWriter, r *http.Reque
 	if !h.requireEntitlements(rw) {
 		return
 	}
-	var t Tier
-	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, "decode tier: "+err.Error())
+	t, ok := decodeRequestJSON[Tier](rw, r)
+	if !ok {
 		return
 	}
 	if id := strings.TrimSpace(r.PathValue("id")); id != "" {
@@ -783,9 +782,8 @@ func (h *platformAdminAPI) platformPutEntitlement(rw http.ResponseWriter, r *htt
 		writeJSONError(rw, http.StatusBadRequest, "tenant required")
 		return
 	}
-	var ent TenantEntitlement
-	if err := json.NewDecoder(r.Body).Decode(&ent); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, "decode entitlement: "+err.Error())
+	ent, ok := decodeRequestJSON[TenantEntitlement](rw, r)
+	if !ok {
 		return
 	}
 	ent.Tenant = tenant
