@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState } from "react";
-import { Check, ChevronDown, ChevronUp, Copy, Download } from "lucide-react";
+import { ChevronDown, ChevronUp, Download } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
+import { CopyButton } from "../../components/ui/CopyButton";
 import { formatCellDisplay, rowsToCSV } from "../../lib/cells";
 import { downloadText } from "../../lib/download";
 import { ICON } from "../../icons";
-import { FEEDBACK } from "../../lib/timing";
 import {
   RESULT_ROW_LIMIT,
   RESULT_TEXT_MAX,
@@ -27,7 +27,6 @@ export function RunResultPanel({
   filenameStem: string;
 }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   if (view.kind === "none") return null;
@@ -43,12 +42,6 @@ export function RunResultPanel({
         ? "application/json"
         : "text/plain;charset=utf-8";
 
-  const copy = () => {
-    void navigator.clipboard?.writeText(asText);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), FEEDBACK.copied);
-  };
-
   const shownRows =
     view.kind === "rows" ? view.rows.slice(0, RESULT_ROW_LIMIT) : [];
   const foldText = view.kind === "text" && view.text.length > RESULT_TEXT_MAX;
@@ -60,15 +53,13 @@ export function RunResultPanel({
         <div className="run-result-head">
           <span>{t("runDetail.resultFrom", { label: from })}</span>
           <span className="run-result-actions">
-            <Button
+            <CopyButton
+              text={asText}
               variant="ghost"
               size="sm"
-              onClick={copy}
-              title={copied ? t("common.copied") : t("runDetail.copyResult")}
-            >
-              {copied ? <Check size={ICON.sm} /> : <Copy size={ICON.sm} />}
-              {copied ? t("common.copied") : t("common.copy")}
-            </Button>
+              iconSize={ICON.sm}
+              title={t("runDetail.copyResult")}
+            />
             <Button
               variant="ghost"
               size="sm"

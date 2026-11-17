@@ -4,8 +4,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Check,
-  Copy,
   Mail,
   Search,
   ShieldCheck,
@@ -20,11 +18,12 @@ import { explainApiError } from "../../../lib/explainApiError";
 import { UserAvatar } from "../../../components/brand/PlatformAvatar";
 import { ConfirmModal } from "../../../components/ui/ConfirmModal";
 import { Button } from "../../../components/ui/Button";
+import { CopyButton } from "../../../components/ui/CopyButton";
 import type { SignupInviteSummary } from "../../../types";
 import { formatDate } from "../../../lib/datetime";
 import { ErrorNotice } from "../../../components/ui/ErrorNotice";
 import { ICON } from "../../../icons";
-import { FEEDBACK } from "../../../lib/timing";
+import { absoluteURL } from "../../../lib/absoluteURL";
 import { Loading } from "../../../components/ui/Loading";
 import { Notice } from "../../../components/ui/Notice";
 
@@ -174,12 +173,6 @@ export function AdminPlatformUsers() {
 // job. We just catch obvious typos before a round-trip.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function absoluteSignupURL(url: string): string {
-  if (/^https?:\/\//i.test(url)) return url;
-  if (typeof window !== "undefined") return window.location.origin + url;
-  return url;
-}
-
 function SignupInviteSection() {
   const { t } = useTranslation();
   const { token } = useAuth();
@@ -288,17 +281,7 @@ function SignupInviteIssuedCard({
   onDismiss: () => void;
 }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const link = absoluteSignupURL(inv.signup_url);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), FEEDBACK.copied);
-    } catch {
-      /* manual copy fallback */
-    }
-  };
+  const link = absoluteURL(inv.signup_url);
   return (
     <div className="card invite-issued-card" style={{ marginTop: "var(--space-3)" }}>
       <div className="invite-issued-head">
@@ -317,10 +300,11 @@ function SignupInviteIssuedCard({
       </div>
       <div className="invite-link-row">
         <code className="invite-link">{link}</code>
-        <Button onClick={copy} variant="primary">
-          {copied ? <Check size={ICON.xs} /> : <Copy size={ICON.xs} />}
-          {copied ? t("common.copied") : t("common.copyLink")}
-        </Button>
+        <CopyButton
+          text={link}
+          variant="primary"
+          label={t("common.copyLink")}
+        />
       </div>
     </div>
   );
@@ -335,20 +319,10 @@ function SignupInviteCard({
 }) {
   const { t } = useTranslation();
   const { token } = useAuth();
-  const [copied, setCopied] = useState(false);
   const [revoking, setRevoking] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(absoluteSignupURL(inv.signup_url));
-      setCopied(true);
-      setTimeout(() => setCopied(false), FEEDBACK.copied);
-    } catch {
-      /* manual copy fallback */
-    }
-  };
   const revoke = async () => {
     if (!token) return;
     setRevoking(true);
@@ -386,11 +360,12 @@ function SignupInviteCard({
         )}
         {inv.pending && (
           <div className="invite-link-row">
-            <code className="invite-link">{absoluteSignupURL(inv.signup_url)}</code>
-            <Button onClick={copy} title={t("common.copyLink")}>
-              {copied ? <Check size={ICON.xs} /> : <Copy size={ICON.xs} />}
-              {copied ? t("common.copied") : t("common.copyLink")}
-            </Button>
+            <code className="invite-link">{absoluteURL(inv.signup_url)}</code>
+            <CopyButton
+              text={absoluteURL(inv.signup_url)}
+              label={t("common.copyLink")}
+              title={t("common.copyLink")}
+            />
           </div>
         )}
       </div>

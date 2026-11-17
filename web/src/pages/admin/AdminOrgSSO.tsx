@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Check, Copy, ShieldCheck } from "lucide-react";
+import { AlertCircle, Check, ShieldCheck } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../../auth";
 import { api, APIError } from "../../api";
 import { Button } from "../../components/ui/Button";
+import { CopyButton } from "../../components/ui/CopyButton";
 import { ServiceIcon, serviceLabel } from "../../components/brand/ServiceIcon";
 import type { OrgAuthConfig } from "../../types";
 import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
-import { FEEDBACK } from "../../lib/timing";
 import { Loading } from "../../components/ui/Loading";
 
 const ssoUpcoming: string[] = [];
@@ -25,30 +25,13 @@ const ssoUpcoming: string[] = [];
 // one-click.
 function RedirectURIDisplay({ uri }: { uri: string }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(uri);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), FEEDBACK.copied);
-    } catch {
-      /* clipboard may be blocked; user can select + copy manually */
-    }
-  };
   if (!uri) {
     return <div className="desc">{t("admin.sso.redirectUriUnavailable")}</div>;
   }
   return (
     <div className="sso-readonly-row">
       <code className="sso-readonly">{uri}</code>
-      <Button onClick={copy} className="sso-copy-btn">
-        {copied ? (
-          <Check size={ICON.xs} />
-        ) : (
-          <Copy size={ICON.xs} />
-        )}
-        {copied ? t("common.copied") : t("common.copy")}
-      </Button>
+      <CopyButton text={uri} className="sso-copy-btn" />
     </div>
   );
 }

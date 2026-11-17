@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState, type ReactNode } from "react";
-import { Check, Copy, Terminal } from "lucide-react";
+import { Terminal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth";
 import { api } from "../../api";
@@ -11,7 +11,7 @@ import { Button } from "../ui/Button";
 import type { IssuedAPIKey } from "../../types";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
-import { FEEDBACK } from "../../lib/timing";
+import { CopyButton as SharedCopyButton } from "../ui/CopyButton";
 import { useEscapeToClose } from "../ui/useEscapeToClose";
 
 
@@ -344,30 +344,6 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
   );
 }
 
-function CopyButton({ text, labelKey }: { text: string; labelKey: string }) {
-  const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), FEEDBACK.copied);
-    } catch {
-      /* clipboard blocked — input/pre is selectable for manual copy */
-    }
-  };
-  return (
-    <Button type="button" onClick={copy} style={{ marginTop: "var(--space-2)" }}>
-      {copied ? (
-        <Check size={ICON.xs} />
-      ) : (
-        <Copy size={ICON.xs} />
-      )}
-      {copied ? t("common.copied") : t(labelKey)}
-    </Button>
-  );
-}
-
 function mcpServersJSON({ url, secret }: SnippetEnv): string {
   const config = {
     mcpServers: {
@@ -435,5 +411,16 @@ function ClaudeCodeLogo() {
         strokeLinecap="round"
       />
     </svg>
+  );
+}
+
+function CopyButton({ text, labelKey }: { text: string; labelKey: string }) {
+  const { t } = useTranslation();
+  return (
+    <SharedCopyButton
+      text={text}
+      label={t(labelKey)}
+      style={{ marginTop: "var(--space-2)" }}
+    />
   );
 }

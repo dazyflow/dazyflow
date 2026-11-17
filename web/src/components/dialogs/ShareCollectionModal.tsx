@@ -4,11 +4,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Copy, ExternalLink, RefreshCw, Table2 } from "lucide-react";
+import { ExternalLink, RefreshCw, Table2 } from "lucide-react";
 import { api, isErrorCode } from "../../api";
 import { explainApiError } from "../../lib/explainApiError";
 import { useAuth } from "../../auth";
 import { Button } from "../ui/Button";
+import { CopyButton } from "../ui/CopyButton";
 import { Callout } from "../ui/Callout";
 import type { CollectionShareLink } from "../../types";
 import { ICON } from "../../icons";
@@ -42,7 +43,6 @@ export function ShareCollectionModal({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const tenant = activeTenant || undefined;
   const workspace = activeWorkspace || undefined;
@@ -112,17 +112,6 @@ export function ShareCollectionModal({
     }
   }, [token, collection, tenant, workspace, t, onChange]);
 
-  const copy = useCallback(async () => {
-    if (!link) return;
-    try {
-      await navigator.clipboard.writeText(publicURL(link));
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* clipboard may be blocked; user can select + copy manually */
-    }
-  }, [link]);
-
   useEscapeToClose(onClose);
 
   return createPortal(
@@ -153,10 +142,11 @@ export function ShareCollectionModal({
                   marginTop: "var(--space-3)",
                 }}
               >
-                <Button onClick={copy}>
-                  <Copy size={ICON.xs} />
-                  {copied ? t("common.copied") : t("common.copyLink")}
-                </Button>
+                <CopyButton
+                  text={publicURL(link)}
+                  label={t("common.copyLink")}
+                  copiedLabel={t("common.copied")}
+                />
                 <Button
                   onClick={() =>
                     window.open(publicURL(link), "_blank", "noreferrer")

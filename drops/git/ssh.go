@@ -15,10 +15,10 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
-	"golang.org/x/crypto/ssh"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
+	"github.com/dazyflow/dazyflow/internal/sshutil"
 )
 
 // GitCred is the material for one named, per-org git credential. It may carry
@@ -202,7 +202,7 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	combined := bundledKnownHosts
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
-		if err := validateKnownHosts(s); err != nil {
+		if err := sshutil.ValidateKnownHosts(s); err != nil {
 			return nil, err
 		}
 		combined += s + "\n"
@@ -220,22 +220,4 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 		return nil, err
 	}
 	return gitssh.NewKnownHostsDb(f.Name())
-}
-
-// validateKnownHosts rejects a credential's known_hosts if any line fails to
-// parse. x/crypto's knownhosts reader skips bad lines as long as the file has
-// at least one valid entry, and the bundled defaults always provide one, so
-// without this check a typo would silently drop the user's host key and the
-// clone would fail later with a confusing "unknown host" error.
-func validateKnownHosts(s string) error {
-	for i, line := range strings.Split(s, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
-			return fmt.Errorf("credential known_hosts line %d: %w", i+1, err)
-		}
-	}
-	return nil
 }
