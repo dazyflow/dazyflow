@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "./Button";
-import { useEscapeToClose } from "./useEscapeToClose";
+import { Modal } from "./Modal";
 
 export function PromptModal({
   title,
@@ -36,51 +35,37 @@ export function PromptModal({
     el.setSelectionRange(slash + 1, el.value.length);
   }, []);
 
-  useEscapeToClose(onCancel);
-
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const v = value.trim();
     if (v) onSubmit(v);
   };
 
-  return createPortal(
-    <div className="modal-backdrop" onClick={onCancel}>
-      <form
-        className="modal"
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={submit}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="modal-head">
-          <h2>{title}</h2>
-        </div>
-        <div className="modal-body">
-          <div className="sf-field">
-            <div className="label-row">
-              <label>{label}</label>
-            </div>
-            <input
-              ref={inputRef}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              spellCheck={false}
-              autoComplete="off"
-            />
-            {hint && <p className="desc">{hint}</p>}
+  return (
+    <Modal as="form" onSubmit={submit} title={title} onClose={onCancel}>
+      <div className="modal-body">
+        <div className="sf-field">
+          <div className="label-row">
+            <label>{label}</label>
           </div>
+          <input
+            ref={inputRef}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            spellCheck={false}
+            autoComplete="off"
+          />
+          {hint && <p className="desc">{hint}</p>}
         </div>
-        <div className="modal-foot">
-          <Button onClick={onCancel}>
-            {t("common.cancel")}
-          </Button>
-          <Button type="submit" variant="primary" disabled={!value.trim()}>
-            {confirmLabel}
-          </Button>
-        </div>
-      </form>
-    </div>,
-    document.body,
+      </div>
+      <div className="modal-foot">
+        <Button onClick={onCancel}>
+          {t("common.cancel")}
+        </Button>
+        <Button type="submit" variant="primary" disabled={!value.trim()}>
+          {confirmLabel}
+        </Button>
+      </div>
+    </Modal>
   );
 }

@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"slices"
 	"sort"
@@ -21,7 +22,10 @@ type platformAdminAPI struct {
 	revokeMCPGrants func(ctx context.Context, subject string)
 	auditor
 	adminCheck
+	langPicker
+	seatQuota
 	svc                 *Service
+	logger              *log.Logger
 	Users               auth.UserStore
 	Sessions            auth.SessionStore
 	Memberships         auth.MembershipStore
@@ -33,7 +37,7 @@ type platformAdminAPI struct {
 }
 
 func (h *HTTPGateway) platformAdminAPI() *platformAdminAPI {
-	return &platformAdminAPI{auditor: h.auditor(), adminCheck: h.admins(), svc: h.svc, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, PlatformAdminGrants: h.PlatformAdminGrants, DropSwitches: h.DropSwitches, revokeMCPGrants: h.revokeMCPGrants}
+	return &platformAdminAPI{auditor: h.auditor(), adminCheck: h.admins(), langPicker: h.lang(), seatQuota: h.seats(), svc: h.svc, logger: h.logger, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, PlatformAdminGrants: h.PlatformAdminGrants, DropSwitches: h.DropSwitches, revokeMCPGrants: h.revokeMCPGrants}
 }
 
 // Cross-tenant tools; every route here is gated on platform:admin.
@@ -166,7 +170,7 @@ func (h *platformAdminAPI) platformGetUser(rw http.ResponseWriter, r *http.Reque
 	if !h.requireUsers(rw) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	u, err := h.Users.GetByEmail(r.Context(), email)
 	if err != nil {
 		writeJSONError(rw, http.StatusNotFound, "no such account")
@@ -189,7 +193,7 @@ func (h *platformAdminAPI) platformSuspendUser(rw http.ResponseWriter, r *http.R
 	if !h.requireUsers(rw) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	body := decodeModerationBody(r)
 	u, ok := h.guardUserModeration(rw, r.Context(), p, email)
 	if !ok {
@@ -213,7 +217,7 @@ func (h *platformAdminAPI) platformUnsuspendUser(rw http.ResponseWriter, r *http
 	if !h.requireUsers(rw) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	u, err := h.Users.GetByEmail(r.Context(), email)
 	if err != nil {
 		writeJSONError(rw, http.StatusNotFound, "no such account")
@@ -235,7 +239,7 @@ func (h *platformAdminAPI) platformVerifyUser(rw http.ResponseWriter, r *http.Re
 	if !h.requireUsers(rw) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	u, err := h.Users.GetByEmail(r.Context(), email)
 	if err != nil {
 		writeJSONError(rw, http.StatusNotFound, "no such account")
@@ -263,7 +267,7 @@ func (h *platformAdminAPI) platformGrantAdmin(rw http.ResponseWriter, r *http.Re
 		writeJSONError(rw, http.StatusNotImplemented, "platform-admin grant store not configured")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	if email == "" {
 		writeJSONError(rw, http.StatusBadRequest, "email required")
 		return
@@ -294,12 +298,12 @@ func (h *platformAdminAPI) platformRevokeAdmin(rw http.ResponseWriter, r *http.R
 		writeJSONError(rw, http.StatusNotImplemented, "platform-admin grant store not configured")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	if email == "" {
 		writeJSONError(rw, http.StatusBadRequest, "email required")
 		return
 	}
-	if email == strings.ToLower(strings.TrimSpace(p.Subject)) {
+	if email == auth.NormalizeEmail(p.Subject) {
 		writeJSONError(rw, http.StatusBadRequest, "you can't revoke your own platform-admin role")
 		return
 	}
@@ -339,7 +343,7 @@ func (h *platformAdminAPI) platformBanUser(rw http.ResponseWriter, r *http.Reque
 		writeJSONError(rw, http.StatusNotImplemented, "blocklist store not configured")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	body := decodeModerationBody(r)
 	u, ok := h.guardUserModeration(rw, r.Context(), p, email)
 	if !ok {
@@ -357,7 +361,7 @@ func (h *platformAdminAPI) platformBanUser(rw http.ResponseWriter, r *http.Reque
 	h.revokeSubjectSessions(r.Context(), u.Subject)
 	value, kind := email, auth.BlockEmail
 	if body.Domain {
-		if d := emailDomainOf(email); d != "" {
+		if d := auth.EmailDomain(email); d != "" {
 			value, kind = d, auth.BlockDomain
 		}
 	}
@@ -376,7 +380,7 @@ func (h *platformAdminAPI) guardUserModeration(rw http.ResponseWriter, ctx conte
 		writeJSONError(rw, http.StatusBadRequest, "email required")
 		return auth.User{}, false
 	}
-	if email == strings.ToLower(strings.TrimSpace(p.Subject)) {
+	if email == auth.NormalizeEmail(p.Subject) {
 		writeJSONError(rw, http.StatusBadRequest, "you can't moderate your own account")
 		return auth.User{}, false
 	}
@@ -413,14 +417,6 @@ func (h *platformAdminAPI) signInLockout(ctx context.Context, u auth.User) (stri
 		return "your organization has been suspended", true
 	}
 	return "", false
-}
-
-func emailDomainOf(email string) string {
-	at := strings.LastIndex(email, "@")
-	if at < 1 || at == len(email)-1 {
-		return ""
-	}
-	return email[at+1:]
 }
 
 func (h *platformAdminAPI) platformListOrgs(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -716,9 +712,8 @@ func (h *platformAdminAPI) platformPutTier(rw http.ResponseWriter, r *http.Reque
 	if !h.requireEntitlements(rw) {
 		return
 	}
-	var t Tier
-	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, "decode tier: "+err.Error())
+	t, ok := decodeRequestJSON[Tier](rw, r)
+	if !ok {
 		return
 	}
 	if id := strings.TrimSpace(r.PathValue("id")); id != "" {
@@ -783,9 +778,8 @@ func (h *platformAdminAPI) platformPutEntitlement(rw http.ResponseWriter, r *htt
 		writeJSONError(rw, http.StatusBadRequest, "tenant required")
 		return
 	}
-	var ent TenantEntitlement
-	if err := json.NewDecoder(r.Body).Decode(&ent); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, "decode entitlement: "+err.Error())
+	ent, ok := decodeRequestJSON[TenantEntitlement](rw, r)
+	if !ok {
 		return
 	}
 	ent.Tenant = tenant
@@ -810,6 +804,10 @@ func (h *platformAdminAPI) platformInviteMember(rw http.ResponseWriter, r *http.
 		return
 	}
 	tenant := strings.TrimSpace(r.PathValue("tenant"))
+	if tenant == "" {
+		writeJSONError(rw, http.StatusBadRequest, "tenant required")
+		return
+	}
 	body, ok := decodeRequestJSON[struct {
 		Email     string      `json:"email"`
 		Roles     []core.Role `json:"roles"`
@@ -818,7 +816,7 @@ func (h *platformAdminAPI) platformInviteMember(rw http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(body.Email))
+	email := auth.NormalizeEmail(body.Email)
 	if err := validSignupEmail(email); err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
@@ -831,33 +829,22 @@ func (h *platformAdminAPI) platformInviteMember(rw http.ResponseWriter, r *http.
 			return
 		}
 		roles = resolved
-	} else {
-		roles = []core.Role{core.TeamRoleEditor()}
 	}
-	ws := body.Workspace
-	if ws == "" {
-		ws = "main"
-	}
-	token, err := auth.MintInvitationToken()
+	inv, err := h.mintOrgInvitation(r.Context(), p.Subject, tenant, email, body.Workspace, roles)
 	if err != nil {
-		writeJSONError(rw, http.StatusInternalServerError, err.Error())
-		return
-	}
-	now := time.Now().UTC()
-	inv := auth.Invitation{
-		Token:     token,
-		Email:     email,
-		Tenant:    tenant,
-		Workspace: ws,
-		Roles:     roles,
-		InvitedBy: p.Subject,
-		CreatedAt: now,
-		ExpiresAt: now.Add(14 * 24 * time.Hour),
-	}
-	if err := h.Invitations.PutInvitation(r.Context(), inv); err != nil {
-		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		writeMintInvitationError(rw, err)
 		return
 	}
 	h.audit(r.Context(), p, "platform.member.invite", tenant, "email="+email)
-	writeJSON(rw, http.StatusCreated, map[string]any{"token": token, "email": email, "tenant": tenant})
+	emailSent := h.sendOrgInviteEmail(r.Context(), h.logger, inv)
+	writeJSON(rw, http.StatusCreated, map[string]any{
+		"token":      inv.Token,
+		"email":      email,
+		"tenant":     tenant,
+		"workspace":  inv.Workspace,
+		"roles":      inv.Roles,
+		"expires_at": inv.ExpiresAt,
+		"accept_url": orgInviteURL(h.svc.PublicBaseURL, inv.Token),
+		"email_sent": emailSent,
+	})
 }

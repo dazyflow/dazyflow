@@ -202,6 +202,18 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 // NewKnownHostsDb reads the file eagerly into memory, so the temp file is
 // removed as soon as the db is built.
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
+	// x/crypto's knownhosts skips malformed lines once the file holds any
+	// valid entry (the bundled ones always are), so check the user's lines
+	// here or a typo would silently drop their host key.
+	for i, line := range strings.Split(userKnownHosts, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
+			return nil, fmt.Errorf("known_hosts line %d: %w", i+1, err)
+		}
+	}
 	combined := bundledKnownHosts
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
 		if err := validateKnownHosts(s); err != nil {

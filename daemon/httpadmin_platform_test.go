@@ -71,7 +71,7 @@ type covBlocklist struct {
 func newCovBlocklist() *covBlocklist { return &covBlocklist{rows: map[string]auth.Blocked{}} }
 
 func (b *covBlocklist) IsBlocked(_ context.Context, email string) (bool, auth.Blocked, error) {
-	e := auth.NormalizeBlockEmail(email)
+	e := auth.NormalizeEmail(email)
 	if bl, ok := b.rows[e]; ok {
 		return true, bl, nil
 	}
@@ -83,13 +83,13 @@ func (b *covBlocklist) IsBlocked(_ context.Context, email string) (bool, auth.Bl
 	return false, auth.Blocked{}, nil
 }
 func (b *covBlocklist) AnonymizeCreatedBy(_ context.Context, email string) (int, error) {
-	e := auth.NormalizeBlockEmail(email)
+	e := auth.NormalizeEmail(email)
 	if e == "" {
 		return 0, fmt.Errorf("email required")
 	}
 	n := 0
 	for k, bl := range b.rows {
-		if auth.NormalizeBlockEmail(bl.CreatedBy) == e {
+		if auth.NormalizeEmail(bl.CreatedBy) == e {
 			bl.CreatedBy = core.ErasedIdentity
 			b.rows[k] = bl
 			n++
@@ -335,25 +335,25 @@ type memPlatformAdmins struct{ set map[string]string }
 
 func newMemPlatformAdmins() *memPlatformAdmins { return &memPlatformAdmins{set: map[string]string{}} }
 func (m *memPlatformAdmins) Granted(email string) bool {
-	_, ok := m.set[normalizeEmail(email)]
+	_, ok := m.set[auth.NormalizeEmail(email)]
 	return ok
 }
 func (m *memPlatformAdmins) Grant(_ context.Context, email, by string) error {
-	m.set[normalizeEmail(email)] = by
+	m.set[auth.NormalizeEmail(email)] = by
 	return nil
 }
 func (m *memPlatformAdmins) Revoke(_ context.Context, email string) error {
-	delete(m.set, normalizeEmail(email))
+	delete(m.set, auth.NormalizeEmail(email))
 	return nil
 }
 func (m *memPlatformAdmins) AnonymizeGrantedBy(_ context.Context, email string) (int, error) {
-	e := normalizeEmail(email)
+	e := auth.NormalizeEmail(email)
 	if e == "" {
 		return 0, fmt.Errorf("email required")
 	}
 	n := 0
 	for k, by := range m.set {
-		if normalizeEmail(by) == e {
+		if auth.NormalizeEmail(by) == e {
 			m.set[k] = core.ErasedIdentity
 			n++
 		}
@@ -616,5 +616,18 @@ func TestPlatformInviteMember(t *testing.T) {
 	}
 	if rw := platformRaw(t, h, "POST", "/api/v1/admin/platform/orgs/acme/invite", []byte("{")); rw.Code != http.StatusBadRequest {
 		t.Fatalf("bad json = %d, want 400", rw.Code)
+	}
+}
+
+func TestPlatformInviteMember_RespectsSeatLimit(t *testing.T) {
+	t.Parallel()
+	h, _, _, _, ent, _ := platformHarness(t)
+	_ = ent.PutEntitlement(t.Context(), TenantEntitlement{Tenant: "acme", TierID: "free", MaxMembers: ptrInt(1)})
+
+	if rw := h.platformDo(t, "POST", "/api/v1/admin/platform/orgs/acme/invite", map[string]any{"email": "first@example.com"}); rw.Code != http.StatusCreated {
+		t.Fatalf("first invite = %d: %s", rw.Code, rw.Body.String())
+	}
+	if rw := h.platformDo(t, "POST", "/api/v1/admin/platform/orgs/acme/invite", map[string]any{"email": "second@example.com"}); rw.Code != http.StatusPaymentRequired {
+		t.Fatalf("over-limit invite = %d, want 402: %s", rw.Code, rw.Body.String())
 	}
 }
