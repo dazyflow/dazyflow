@@ -20,10 +20,11 @@ import (
 
 type versionAPI struct {
 	UpdateURL string
+	Version   string
 }
 
 func (h *HTTPGateway) versionAPI() *versionAPI {
-	return &versionAPI{UpdateURL: h.UpdateURL}
+	return &versionAPI{UpdateURL: h.UpdateURL, Version: buildinfo.Version}
 }
 
 // Version self-check — the System section of the platform admin page asks "is
@@ -182,7 +183,7 @@ func (h *versionAPI) adminVersion(rw http.ResponseWriter, r *http.Request, p cor
 		return
 	}
 	out := versionStatus{
-		Current:        buildinfo.Version,
+		Current:        h.Version,
 		Commit:         buildinfo.Commit,
 		Date:           buildinfo.Date,
 		UpgradeCommand: "make upgrade",
@@ -199,7 +200,7 @@ func (h *versionAPI) adminVersion(rw http.ResponseWriter, r *http.Request, p cor
 		return
 	}
 	out.Latest = latestRaw
-	if cur, ok := parseSemver(buildinfo.Version); ok {
+	if cur, ok := parseSemver(h.Version); ok {
 		out.UpdateAvailable = cur.less(latestVer)
 	}
 	writeJSON(rw, http.StatusOK, out)
