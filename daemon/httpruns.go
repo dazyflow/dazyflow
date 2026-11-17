@@ -86,8 +86,7 @@ func (h *flowAPI) listRuns(rw http.ResponseWriter, r *http.Request, p core.Princ
 	tenant := r.PathValue("tenant")
 	workspace := r.PathValue("workspace")
 	id := r.PathValue("id")
-	if _, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, ""); err != nil {
-		writeJSONError(rw, http.StatusNotFound, err.Error())
+	if _, ok := loadVisibleFlow(rw, r, h.svc, p, tenant, workspace, id, ""); !ok {
 		return
 	}
 	opts, err := parseRunListOpts(r)

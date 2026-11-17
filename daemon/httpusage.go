@@ -22,7 +22,7 @@ func (h *preferencesAPI) usageMe(rw http.ResponseWriter, r *http.Request, p core
 			"usage metering is not enabled on this deployment")
 		return
 	}
-	tenant, ok := resolveTenantScope(rw, r, p, "cannot view another tenant's usage")
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot read another tenant's usage")
 	if !ok {
 		return
 	}

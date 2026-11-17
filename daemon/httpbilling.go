@@ -43,8 +43,10 @@ func NewBillingHandler(stripe *StripeClient, webhookSecret string) *BillingHandl
 	}
 }
 
+const billingForbiddenMsg = "cannot act on another tenant's billing"
+
 func (h *billingAPI) billingMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	tenant, ok := resolveTenantScope(rw, r, p, "cannot act on another tenant's billing")
+	tenant, ok := resolveTenantScope(rw, r, p, billingForbiddenMsg)
 	if !ok {
 		return
 	}
@@ -131,7 +133,7 @@ func planLimitsFrom(e EffectiveLimits) planLimits {
 func isBuiltinTierID(id string) bool { return id == "free" || id == PlanPro }
 
 func (h *billingAPI) plansMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	tenant, ok := resolveTenantScope(rw, r, p, "cannot act on another tenant's billing")
+	tenant, ok := resolveTenantScope(rw, r, p, billingForbiddenMsg)
 	if !ok {
 		return
 	}
@@ -213,7 +215,7 @@ func (h *billingAPI) billingCheckout(rw http.ResponseWriter, r *http.Request, p 
 			"billing is not enabled on this deployment")
 		return
 	}
-	tenant, ok := resolveTenantScope(rw, r, p, "cannot act on another tenant's billing")
+	tenant, ok := resolveTenantScope(rw, r, p, billingForbiddenMsg)
 	if !ok {
 		return
 	}
@@ -261,7 +263,7 @@ func (h *billingAPI) billingPortal(rw http.ResponseWriter, r *http.Request, p co
 			"billing is not enabled on this deployment")
 		return
 	}
-	tenant, ok := resolveTenantScope(rw, r, p, "cannot act on another tenant's billing")
+	tenant, ok := resolveTenantScope(rw, r, p, billingForbiddenMsg)
 	if !ok {
 		return
 	}

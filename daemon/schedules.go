@@ -167,7 +167,7 @@ func (s *Service) SetTriggerEnabled(ctx context.Context, p core.Principal, tenan
 }
 
 func (h *flowAPI) listSchedulesMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	tenant, workspace, ok := resolveTenantWorkspaceScope(rw, r, p)
+	tenant, workspace, ok := resolveScope(rw, r, p, "act on")
 	if !ok {
 		return
 	}

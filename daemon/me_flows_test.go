@@ -4,6 +4,7 @@
 package daemon
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -304,5 +305,38 @@ func TestDuplicateFlowMe_MissingSource(t *testing.T) {
 	}
 	if !strings.Contains(rw.Body.String(), "flow_not_found") {
 		t.Errorf("body %s, want flow_not_found", rw.Body.String())
+	}
+}
+
+func TestMeFlows_MissingFlowMaskedMessage(t *testing.T) {
+	t.Parallel()
+	h := newGatewayHarness(t)
+	want := flowNotFoundMessage("t", "ws", "ghost")
+	const base = "/api/v1/me/flows/t%2Fws%2Fghost"
+	for _, c := range []struct {
+		method, path string
+		body         any
+	}{
+		{"GET", base + "/samples", nil},
+		{"GET", base + "/input-fields", nil},
+		{"GET", base + "/runs", nil},
+		{"PATCH", base, map[string]any{"name": "x"}},
+		{"POST", base + "/validate", nil},
+		{"POST", base + "/run", nil},
+		{"POST", base + "/test-trigger", nil},
+		{"POST", base + "/nodes/n1/sample", nil},
+	} {
+		rw := h.do(t, c.method, c.path, c.body)
+		if rw.Code != http.StatusNotFound {
+			t.Errorf("%s %s = %d (%s), want 404", c.method, c.path, rw.Code, rw.Body.String())
+			continue
+		}
+		var env ErrorEnvelope
+		if err := json.Unmarshal(rw.Body.Bytes(), &env); err != nil {
+			t.Fatalf("%s %s: decode: %v", c.method, c.path, err)
+		}
+		if env.Error.Code != "flow_not_found" || env.Error.Message != want {
+			t.Errorf("%s %s = %+v, want flow_not_found %q", c.method, c.path, env.Error, want)
+		}
 	}
 }

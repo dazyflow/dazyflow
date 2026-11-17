@@ -5,7 +5,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -46,14 +45,13 @@ func (h *supportAPI) createTicket(rw http.ResponseWriter, r *http.Request, p cor
 	if !h.allowSupportWrite(rw, p) {
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Subject string `json:"subject"`
 		FlowID  string `json:"flow_id"`
 		RunID   string `json:"run_id"`
 		Message string `json:"message"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeAPIError(rw, http.StatusBadRequest, "bad_request", "invalid JSON body")
+	}](rw, r)
+	if !ok {
 		return
 	}
 	subject := strings.TrimSpace(body.Subject)
@@ -263,11 +261,10 @@ func (h *supportAPI) assignSupportTicket(rw http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Assignee string `json:"assignee"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeAPIError(rw, http.StatusBadRequest, "bad_request", "invalid JSON body")
+	}](rw, r)
+	if !ok {
 		return
 	}
 	assignee := strings.TrimSpace(body.Assignee)
@@ -485,11 +482,10 @@ func ticketQueryLimit(r *http.Request) int {
 }
 
 func decodeTicketStatusBody(rw http.ResponseWriter, r *http.Request) (core.TicketStatus, bool) {
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Status string `json:"status"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeAPIError(rw, http.StatusBadRequest, "bad_request", "invalid JSON body")
+	}](rw, r)
+	if !ok {
 		return "", false
 	}
 	status := core.TicketStatus(body.Status)
@@ -532,11 +528,10 @@ func (h *supportAPI) writeUserTicketView(rw http.ResponseWriter, r *http.Request
 }
 
 func decodeTicketMessageBody(rw http.ResponseWriter, r *http.Request) (string, bool) {
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Message string `json:"message"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeAPIError(rw, http.StatusBadRequest, "bad_request", "invalid JSON body")
+	}](rw, r)
+	if !ok {
 		return "", false
 	}
 	msg := strings.TrimSpace(body.Message)

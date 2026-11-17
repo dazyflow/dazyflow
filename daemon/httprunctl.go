@@ -140,14 +140,11 @@ func approvalNeedsHuman(runRec core.JobRecord, nodeID string) bool {
 
 func (h *runCtlAPI) cancelRun(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("runID")
-	var body struct {
+	body, ok := decodeRequestJSONOptional[struct {
 		Reason string `json:"reason"`
-	}
-	if r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
-			return
-		}
+	}](rw, r)
+	if !ok {
+		return
 	}
 	if err := h.svc.CancelGraphRun(r.Context(), p, runID, body.Reason); err != nil {
 		switch {
@@ -169,14 +166,11 @@ func (h *runCtlAPI) cancelRun(rw http.ResponseWriter, r *http.Request, p core.Pr
 // step=true advances one node instead of continuing.
 func (h *runCtlAPI) resumeRun(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	runID := r.PathValue("runID")
-	var body struct {
+	body, ok := decodeRequestJSONOptional[struct {
 		Step bool `json:"step"`
-	}
-	if r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeJSONError(rw, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
-			return
-		}
+	}](rw, r)
+	if !ok {
+		return
 	}
 	if err := h.svc.ResumeGraphRun(r.Context(), p, runID, body.Step); err != nil {
 		switch {
@@ -203,9 +197,8 @@ func (h *runCtlAPI) runGraph(rw http.ResponseWriter, r *http.Request, p core.Pri
 	tenant := r.PathValue("tenant")
 	workspace := r.PathValue("workspace")
 	id := r.PathValue("id")
-	g, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, "")
-	if err != nil {
-		writeJSONError(rw, http.StatusNotFound, err.Error())
+	g, ok := loadVisibleFlow(rw, r, h.svc, p, tenant, workspace, id, "")
+	if !ok {
 		return
 	}
 	runID, err := h.svc.SubmitGraphOpts(r.Context(), p, g, SubmitOpts{Manual: true})
@@ -230,9 +223,8 @@ func (h *runCtlAPI) testTrigger(rw http.ResponseWriter, r *http.Request, p core.
 	tenant := r.PathValue("tenant")
 	workspace := r.PathValue("workspace")
 	id := r.PathValue("id")
-	g, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, "")
-	if err != nil {
-		writeJSONError(rw, http.StatusNotFound, err.Error())
+	g, ok := loadVisibleFlow(rw, r, h.svc, p, tenant, workspace, id, "")
+	if !ok {
 		return
 	}
 	var rawBody []byte
