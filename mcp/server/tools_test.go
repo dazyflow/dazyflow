@@ -584,6 +584,11 @@ func TestTool_RequiredFieldGuards(t *testing.T) {
 		{"validate_graph_no_graph", "validate_graph", map[string]any{}, "graph must be a JSON object"},
 		{"patch_flow_no_patch", "patch_flow", map[string]any{"id": "f1"}, "patch must be a JSON object"},
 		{"save_flow_missing_id", "create_flow", map[string]any{"nodes": []any{}}, "id is required"},
+		// Whitespace-only counts as missing for every tool, not just a few.
+		{"describe_drop_blank_id", "describe_drop", map[string]any{"id": "  "}, "id is required"},
+		{"get_run_blank_run_id", "get_run", map[string]any{"run_id": "\t"}, "run_id is required"},
+		{"get_flow_blank_id", "get_flow", map[string]any{"id": " "}, "id is required"},
+		{"generate_flow_blank", "generate_flow", map[string]any{"description": "  "}, "description is required"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
