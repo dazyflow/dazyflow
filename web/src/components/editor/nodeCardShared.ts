@@ -125,6 +125,68 @@ export type DazyNodeData = {
   assistantChanged?: boolean;
 };
 
+export type NodeVariant = "expanded" | "collapsed" | "operator";
+
+const VARIANT_CLASS: Record<NodeVariant, string> = {
+  expanded: "dz-node",
+  collapsed: "dz-node dz-node-collapsed",
+  operator: "dz-node dz-op",
+};
+
+// The card's class list, shared by every rendering of a step so the state
+// flags (selected, off, locked, lint, …) can't drift between them.
+export function nodeClassName(
+  d: DazyNodeData,
+  selected: boolean,
+  variant: NodeVariant,
+): string {
+  const flags: [boolean | undefined, string][] = [
+    [selected, "selected"],
+    [d.manifest?.category === "trigger", "dz-node-trigger"],
+    [d.loopOwned, "dz-loop-owned"],
+    [d.disabled, "dz-node-off"],
+    [!d.disabled && d.offByCascade, "dz-node-off-cascade"],
+    [d.locked, "dz-node-locked"],
+    [!!d.lintMessage, "lint-warn"],
+    [!!d.configErrors?.length, "config-err"],
+    [!!d.setupNeeded, "needs-setup"],
+    [d.paused, "paused"],
+    [d.enterDelay != null, "dz-enter"],
+    [d.assistantChanged, "dz-assistant-changed"],
+  ];
+  let cls = VARIANT_CLASS[variant];
+  if (d.status) cls += " status-" + d.status;
+  for (const [on, name] of flags) if (on) cls += " " + name;
+  return cls;
+}
+
+// The card's inline custom properties: the accent colour (operators always
+// carry it, other cards only when they are triggers) and the enter delay.
+export function nodeStyle(
+  d: DazyNodeData,
+  color: string,
+  variant: NodeVariant,
+): Record<string, string> {
+  const style: Record<string, string> = {};
+  if (variant === "operator") style["--op-color"] = color;
+  else if (d.manifest?.category === "trigger") style["--node-accent"] = color;
+  if (d.enterDelay != null) style["--enter-delay"] = `${d.enterDelay}s`;
+  return style;
+}
+
+// Config errors keyed by the input port they concern, for marking pins.
+export function missingInputsByPort(
+  d: DazyNodeData,
+  ports: { port: string }[],
+): Map<string, string> {
+  const ids = new Set(ports.map((p) => p.port));
+  return new Map(
+    (d.configErrors ?? [])
+      .filter((e) => ids.has(e.key))
+      .map((e) => [e.key, e.message]),
+  );
+}
+
 export function cronToWords(cron: string): string {
   const t = (k: string, o?: Record<string, unknown>) => i18n.t("nodeCard.schedule." + k, o);
   const trimmed = (cron ?? "").trim();

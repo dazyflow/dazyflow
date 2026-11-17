@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/robfig/cron/v3"
+	cron "github.com/netresearch/go-cron"
 
 	"github.com/dazyflow/dazyflow/core"
 )

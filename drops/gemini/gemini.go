@@ -16,6 +16,7 @@ import (
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/llmtask"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
@@ -153,12 +154,7 @@ func stringOf(v any) string {
 	}
 }
 
-func baseOr(base string) string {
-	if b := strings.TrimRight(strings.TrimSpace(base), "/"); b != "" {
-		return b
-	}
-	return defaultBase
-}
+func baseOr(base string) string { return llmtask.BaseOr(base, defaultBase) }
 
 func init() {
 	llm.Register(llm.ProviderInfo{
@@ -188,19 +184,13 @@ func init() {
 }
 
 func verifyKey(ctx context.Context, apiKey, base string) error {
-	status, body, err := llmtask.GetStatus(ctx, baseOr(base)+"/v1beta/models", map[string]string{
+	_, err := llmtask.VerifyGET(ctx, "Gemini", baseOr(base)+"/v1beta/models", map[string]string{
 		"x-goog-api-key": apiKey,
-	})
-	if err != nil {
-		return fmt.Errorf("could not reach Gemini: %w", err)
+	}, []int{400, 401, 403}, geminiError)
+	if errors.Is(err, llmtask.ErrKeyRejected) {
+		return fmt.Errorf("%w — check it in Google AI Studio", err)
 	}
-	switch {
-	case status == 400 || status == 401 || status == 403:
-		return errors.New("Gemini rejected the API key — check it in Google AI Studio")
-	case status < 200 || status >= 300:
-		return fmt.Errorf("Gemini returned HTTP %d: %s", status, geminiError(body))
-	}
-	return nil
+	return err
 }
 
 func parts(parsed map[string]any) []any {
@@ -276,21 +266,7 @@ func finishHint(parsed map[string]any) string {
 	}
 }
 
-func geminiError(body []byte) string {
-	var e struct {
-		Error struct {
-			Status  string `json:"status"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Error.Message != "" {
-		if e.Error.Status != "" {
-			return e.Error.Status + ": " + e.Error.Message
-		}
-		return e.Error.Message
-	}
-	return string(body)
-}
+func geminiError(body []byte) string { return params.EnvelopeMessage(body, "status", 512) }
 
 // Models that answer generateContent but cannot do text, so they must be hidden.
 var nonTextFamilies = []string{
@@ -376,7 +352,7 @@ func userParts(req llmtask.Request) []any {
 	for _, f := range req.Files {
 		parts = append(parts, map[string]any{
 			"inline_data": map[string]any{
-				"mime_type": mediaType(f.MIME),
+				"mime_type": llmtask.MediaType(f.MIME),
 				"data":      base64.StdEncoding.EncodeToString(f.Data),
 			},
 		})
@@ -385,8 +361,4 @@ func userParts(req llmtask.Request) []any {
 		parts = append(parts, map[string]any{"text": req.UserText})
 	}
 	return parts
-}
-
-func mediaType(mime string) string {
-	return strings.TrimSpace(strings.SplitN(mime, ";", 2)[0])
 }

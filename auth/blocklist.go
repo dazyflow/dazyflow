@@ -88,11 +88,7 @@ CREATE TABLE IF NOT EXISTS blocked_identities (
 `
 
 func EnsurePgBlocklistSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	if pool == nil {
-		return fmt.Errorf("nil pool")
-	}
-	_, err := pool.Exec(ctx, pgBlocklistSchema)
-	return err
+	return ensureSchema(ctx, pool, pgBlocklistSchema)
 }
 
 type PgBlocklistStore struct {

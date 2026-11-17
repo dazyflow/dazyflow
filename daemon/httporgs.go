@@ -218,8 +218,7 @@ func (h *orgAPI) listMembers(rw http.ResponseWriter, r *http.Request, p core.Pri
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
 	tenant := r.URL.Query().Get("tenant")
@@ -280,8 +279,7 @@ func (h *orgAPI) removeMember(rw http.ResponseWriter, r *http.Request, p core.Pr
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
 	email := auth.NormalizeEmail(r.PathValue("email"))
@@ -418,8 +416,7 @@ func (h *orgAPI) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
 	email := auth.NormalizeEmail(r.PathValue("email"))
@@ -527,8 +524,7 @@ func (h *orgAPI) createInvitation(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
 	// An unverified signup must not be able to mint invitations.
@@ -639,8 +635,7 @@ func (h *orgAPI) listInvitations(rw http.ResponseWriter, r *http.Request, p core
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
 	tenant := r.URL.Query().Get("tenant")
@@ -696,8 +691,7 @@ func (h *orgAPI) revokeInvitation(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
 	token := r.PathValue("token")
@@ -826,8 +820,7 @@ func (h *orgAPI) getOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
 	tenant := r.URL.Query().Get("tenant")
@@ -867,8 +860,7 @@ func (h *orgAPI) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
 	body, ok := decodeRequestJSON[struct {
@@ -907,8 +899,7 @@ func (h *orgAPI) deleteOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p 
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
 	if err := h.OrgAuth.DeleteOrgAuth(r.Context(), p.Tenant); err != nil {

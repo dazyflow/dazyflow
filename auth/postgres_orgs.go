@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -78,11 +77,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS org_profiles_subdomain_key
 `
 
 func EnsurePgOrgsSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	if pool == nil {
-		return fmt.Errorf("nil pool")
-	}
-	_, err := pool.Exec(ctx, pgOrgsSchema)
-	return err
+	return ensureSchema(ctx, pool, pgOrgsSchema)
 }
 
 // MigrateLegacyOrgAdminPerm rewrites the pre-rename "tenant:admin" permission
@@ -257,10 +252,7 @@ func (s *PgMembershipStore) GetMembership(ctx context.Context, email, tenant str
 		`SELECT user_email, tenant, workspace, roles, COALESCE(invited_by,''), created_at
          FROM memberships WHERE user_email=$1 AND tenant=$2`, email, tenant)
 	m, err := scanMembership(row)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Membership{}, ErrUnknownMembership
-	}
-	return m, err
+	return m, noRows(err, ErrUnknownMembership)
 }
 
 func (s *PgMembershipStore) ListByEmail(ctx context.Context, email string) ([]Membership, error) {
@@ -354,10 +346,7 @@ func (s *PgInvitationStore) GetByToken(ctx context.Context, token string) (Invit
 		`SELECT token, email, tenant, workspace, roles, invited_by, created_at, expires_at, accepted_at, revoked_at
          FROM invitations WHERE token=$1`, token)
 	inv, err := scanInvitation(row)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Invitation{}, ErrUnknownInvitation
-	}
-	return inv, err
+	return inv, noRows(err, ErrUnknownInvitation)
 }
 
 func (s *PgInvitationStore) ListByTenant(ctx context.Context, tenant string) ([]Invitation, error) {
@@ -454,10 +443,7 @@ func (s *PgOrgAuthStore) GetOrgAuth(ctx context.Context, tenant string) (OrgAuth
          FROM org_auth WHERE tenant=$1`, tenant)
 	var c OrgAuthConfig
 	err := row.Scan(&c.Tenant, &c.GoogleClientID, &c.GoogleClientSecret, &c.GoogleWorkspaceDomain, &c.UpdatedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return OrgAuthConfig{}, ErrUnknownOrgAuth
-	}
-	return c, err
+	return c, noRows(err, ErrUnknownOrgAuth)
 }
 
 func (s *PgOrgAuthStore) PutOrgAuth(ctx context.Context, cfg OrgAuthConfig) error {
@@ -513,10 +499,7 @@ func scanOrgProfile(row rowScanner) (OrgProfile, error) {
 func (s *PgOrgProfileStore) GetOrgProfile(ctx context.Context, tenant string) (OrgProfile, error) {
 	p, err := scanOrgProfile(s.pool.QueryRow(ctx,
 		`SELECT `+orgProfileColumns+` FROM org_profiles WHERE tenant=$1`, tenant))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return OrgProfile{}, ErrUnknownOrgProfile
-	}
-	return p, err
+	return p, noRows(err, ErrUnknownOrgProfile)
 }
 
 func (s *PgOrgProfileStore) GetOrgProfileBySubdomain(ctx context.Context, subdomain string) (OrgProfile, error) {
@@ -526,10 +509,7 @@ func (s *PgOrgProfileStore) GetOrgProfileBySubdomain(ctx context.Context, subdom
 	}
 	p, err := scanOrgProfile(s.pool.QueryRow(ctx,
 		`SELECT `+orgProfileColumns+` FROM org_profiles WHERE lower(subdomain)=$1`, subdomain))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return OrgProfile{}, ErrUnknownOrgProfile
-	}
-	return p, err
+	return p, noRows(err, ErrUnknownOrgProfile)
 }
 
 func (s *PgOrgProfileStore) PutOrgProfile(ctx context.Context, p OrgProfile) error {
