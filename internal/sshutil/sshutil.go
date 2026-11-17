@@ -164,6 +164,9 @@ func hostKeyCallback(cfg Config) (cb ssh.HostKeyCallback, algos []string, err er
 }
 
 func knownHostsDB(lines string) (*knownhosts.HostKeyDB, error) {
+	if err := ValidateKnownHosts(lines); err != nil {
+		return nil, err
+	}
 	f, err := os.CreateTemp("", "dazyflow-sftp-known-hosts-*")
 	if err != nil {
 		return nil, err
@@ -335,6 +338,25 @@ func Verify(ctx context.Context, cfg Config) error {
 	}
 	if !info.IsDir() {
 		return fmt.Errorf("%q is a file, not a folder — the folder setting names the directory the steps work in", dir)
+	}
+	return nil
+}
+
+// ValidateKnownHosts rejects known_hosts text if any line fails to parse.
+// x/crypto's knownhosts reader (since v0.59) skips bad lines as long as one
+// line in the file is valid. Without this check, a typo next to a good entry,
+// or next to bundled defaults, is dropped silently, and the connection then
+// fails with a confusing "unknown host" error instead of naming the broken
+// line.
+func ValidateKnownHosts(s string) error {
+	for i, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
+			return fmt.Errorf("known_hosts line %d: %w", i+1, err)
+		}
 	}
 	return nil
 }
