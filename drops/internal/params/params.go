@@ -226,6 +226,29 @@ func JSONFieldMessage(body []byte, field string, limit int) string {
 	return Truncate(string(body), limit)
 }
 
+// EnvelopeMessage pulls the human message out of the common
+// {"error":{"message":...}} error envelope (Google, OpenAI, Anthropic, Spotify,
+// …). When qualifierField is non-empty and that sibling of message is a
+// non-empty string (e.g. "type" or "status"), it prefixes the message as
+// "qualifier: message". Anything else falls back to the raw body truncated to
+// limit bytes.
+func EnvelopeMessage(body []byte, qualifierField string, limit int) string {
+	var e struct {
+		Error map[string]any `json:"error"`
+	}
+	if json.Unmarshal(body, &e) == nil {
+		if msg, _ := e.Error["message"].(string); msg != "" {
+			if qualifierField != "" {
+				if q, _ := e.Error[qualifierField].(string); q != "" {
+					return q + ": " + msg
+				}
+			}
+			return msg
+		}
+	}
+	return Truncate(string(body), limit)
+}
+
 func APIErrorMessage(body []byte, limit int) string {
 	var e struct {
 		Message string `json:"message"`

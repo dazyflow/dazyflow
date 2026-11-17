@@ -7,12 +7,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/llmtask"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
@@ -64,10 +64,7 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 	}
 	raw, _ := json.Marshal(body)
 
-	base := strings.TrimRight(req.BaseURL, "/")
-	if base == "" {
-		base = defaultBase
-	}
+	base := llmtask.BaseOr(req.BaseURL, defaultBase)
 	status, respBody, jerr := llmtask.PostJSON(ctx, base+"/v1/messages", map[string]string{
 		"content-type": "application/json", "x-api-key": apiKey, "anthropic-version": apiVersion,
 	}, raw, req.TimeoutMS)
@@ -111,23 +108,10 @@ func init() {
 }
 
 func verifyKey(ctx context.Context, apiKey, base string) error {
-	base = strings.TrimRight(base, "/")
-	if base == "" {
-		base = defaultBase
-	}
-	status, body, err := llmtask.GetStatus(ctx, base+"/v1/models", map[string]string{
+	_, err := llmtask.VerifyGET(ctx, "Claude", llmtask.BaseOr(base, defaultBase)+"/v1/models", map[string]string{
 		"x-api-key": apiKey, "anthropic-version": apiVersion,
-	})
-	if err != nil {
-		return fmt.Errorf("could not reach Claude: %w", err)
-	}
-	switch {
-	case status == 401 || status == 403:
-		return errors.New("Claude rejected the API key")
-	case status < 200 || status >= 300:
-		return fmt.Errorf("Claude returned HTTP %d: %s", status, claudeError(body))
-	}
-	return nil
+	}, []int{401, 403}, claudeError)
+	return err
 }
 
 func extractText(parsed map[string]any) string {
@@ -169,16 +153,7 @@ func extractToolInput(parsed map[string]any, name string) map[string]any {
 }
 
 func claudeError(body []byte) string {
-	var e struct {
-		Error struct {
-			Type    string `json:"type"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Error.Message != "" {
-		return e.Error.Type + ": " + e.Error.Message
-	}
-	return string(body)
+	return params.EnvelopeMessage(body, "type", llmtask.ErrDetailLimit)
 }
 
 // userContent builds the Anthropic content-block array for a request carrying
@@ -209,7 +184,7 @@ func userContent(req llmtask.Request) []any {
 				"type": "image",
 				"source": map[string]any{
 					"type":       "base64",
-					"media_type": mediaType(f.MIME),
+					"media_type": llmtask.MediaType(f.MIME),
 					"data":       data,
 				},
 			})
@@ -224,8 +199,4 @@ func userContent(req llmtask.Request) []any {
 		blocks = append(blocks, map[string]any{"type": "text", "text": req.UserText})
 	}
 	return blocks
-}
-
-func mediaType(mime string) string {
-	return strings.TrimSpace(strings.SplitN(mime, ";", 2)[0])
 }

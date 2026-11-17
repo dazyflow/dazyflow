@@ -5,6 +5,7 @@ package llmtask
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -122,5 +123,55 @@ func TestRegisterAll_RegistersDropsAndVerifier(t *testing.T) {
 	}
 	if verifiedKey != "sk-123" {
 		t.Errorf("VerifyKey got %q, want sk-123", verifiedKey)
+	}
+}
+
+func TestVerifyGET(t *testing.T) {
+	extract := func(b []byte) string { return "detail:" + string(b) }
+	for _, tc := range []struct {
+		status int
+		want   string
+	}{
+		{200, ""},
+		{401, "Prov rejected the API key"},
+		{400, "Prov rejected the API key"},
+		{500, "Prov returned HTTP 500: detail:boom"},
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(tc.status)
+			_, _ = w.Write([]byte("boom"))
+		}))
+		body, err := VerifyGET(context.Background(), "Prov", srv.URL, nil, []int{400, 401, 403}, extract)
+		srv.Close()
+		if tc.want == "" {
+			if err != nil || string(body) != "boom" {
+				t.Errorf("status %d: body=%q err=%v", tc.status, body, err)
+			}
+			continue
+		}
+		if err == nil || err.Error() != tc.want {
+			t.Errorf("status %d: err = %v, want %q", tc.status, err, tc.want)
+		}
+		if (tc.status == 401 || tc.status == 400) && !errors.Is(err, ErrKeyRejected) {
+			t.Errorf("status %d: err does not wrap ErrKeyRejected", tc.status)
+		}
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	u := srv.URL
+	srv.Close()
+	if _, err := VerifyGET(context.Background(), "Prov", u, nil, nil, extract); err == nil || !strings.HasPrefix(err.Error(), "could not reach Prov: ") {
+		t.Errorf("unreachable: err = %v", err)
+	}
+}
+
+func TestBaseOrAndMediaType(t *testing.T) {
+	if got := BaseOr("  http://x/ ", "d"); got != "http://x" {
+		t.Errorf("BaseOr = %q", got)
+	}
+	if got := BaseOr(" / ", "d"); got != "d" {
+		t.Errorf("BaseOr empty = %q", got)
+	}
+	if got := MediaType("image/png; charset=binary"); got != "image/png" {
+		t.Errorf("MediaType = %q", got)
 	}
 }
