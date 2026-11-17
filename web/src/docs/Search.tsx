@@ -16,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { Search as SearchIcon } from "lucide-react";
 import { PAGES } from "./content";
 import { ICON } from "../icons";
+import { isTypingTarget } from "../lib/typingTarget";
 
 type Hit = {
   path: string;
@@ -109,12 +110,7 @@ export function DocsSearch() {
   // "/" is ignored while typing somewhere else, so it can't hijack a real slash.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      const target = e.target as HTMLElement | null;
-      const typing =
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable);
+      const typing = isTypingTarget(e.target);
       if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setOpen(true);

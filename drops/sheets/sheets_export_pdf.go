@@ -93,11 +93,8 @@ func executeSheetsExportPDF(ctx context.Context, job core.Job, _ chan<- core.Pro
 	q.Set("mimeType", "application/pdf")
 	endpoint := driveBaseURL(job) + "/files/" + url.PathEscape(id) + "/export?" + q.Encode()
 	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 30000))
-	if err != nil {
-		return params.Err(job, "sheets_http_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "sheets_error", "Drive export returned: "+sheetsErr(body)), nil
+	if fail := params.HTTPFailure(job, "sheets", "Drive export", status, body, err, sheetsErr); fail != nil {
+		return *fail, nil
 	}
 
 	root, rel, err := sandbox.OpenRoot(job, dest)

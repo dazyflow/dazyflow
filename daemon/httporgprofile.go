@@ -35,12 +35,8 @@ func (h *orgProfileAPI) getOrgProfile(rw http.ResponseWriter, r *http.Request, p
 	if !requireOrgAdmin(rw, p) {
 		return
 	}
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if tenant != p.Tenant && !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "cannot view another tenant's profile")
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot view another tenant's profile")
+	if !ok {
 		return
 	}
 	pr, err := h.Profiles.GetOrgProfile(r.Context(), tenant)

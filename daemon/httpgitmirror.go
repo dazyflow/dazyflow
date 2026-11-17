@@ -4,9 +4,7 @@
 package daemon
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -143,10 +141,8 @@ func (h *gitMirrorAPI) putGitMirrorMe(rw http.ResponseWriter, r *http.Request, p
 	if !ok {
 		return
 	}
-	var body putGitMirrorBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-		writeAPIError(rw, http.StatusBadRequest, "bad_request",
-			"could not read the request body: "+err.Error())
+	body, ok := decodeRequestJSONOptional[putGitMirrorBody](rw, r)
+	if !ok {
 		return
 	}
 	remote, err := ValidateMirrorRemote(body.RemoteURL)
@@ -244,15 +240,11 @@ func (h *gitMirrorAPI) pushGitMirrorMe(rw http.ResponseWriter, r *http.Request, 
 			"git mirroring is not configured on this deployment")
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSONOptional[struct {
 		OverwriteUnrelated bool `json:"overwrite_unrelated"`
-	}
-	if r.Body != nil {
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-			writeAPIError(rw, http.StatusBadRequest, "bad_request",
-				"could not read the request body: "+err.Error())
-			return
-		}
+	}](rw, r)
+	if !ok {
+		return
 	}
 	res, err := h.MirrorPusher.PushNow(r.Context(), tenant, ws, body.OverwriteUnrelated)
 	if errors.Is(err, core.ErrNotFound) {

@@ -40,6 +40,29 @@ export function isFieldVisible(
   return true;
 }
 
+// Params that are plumbing rather than choices: a request-timeout dial and the
+// paging cursors a flow wires in rather than types.
+const ADVANCED_FIELD_NAMES = new Set([
+  "timeout_ms",
+  "page_token",
+  "next_page_token",
+  "cursor",
+]);
+
+// isAdvancedField reports whether a property belongs behind the Advanced fold
+// rather than up front. The Inspector folds these and the node card leaves
+// them off, so both go through here and cannot disagree about a field.
+export function isAdvancedField(
+  name: string,
+  schema: JSONSchema,
+  siblingSchemas: Record<string, JSONSchema> | undefined,
+): boolean {
+  if (schema.x_advanced || schema["x-advanced"]) return true;
+  if (ADVANCED_FIELD_NAMES.has(name)) return true;
+  if (name === "token" && !!siblingSchemas && "account" in siblingSchemas) return true;
+  return false;
+}
+
 function sameValue(a: unknown, b: unknown): boolean {
   if (typeof a === "string" && typeof b === "string") {
     return a.toLowerCase() === b.toLowerCase();

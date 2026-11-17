@@ -5,7 +5,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -69,13 +68,12 @@ func (h *supportAPI) requestGrant(rw http.ResponseWriter, r *http.Request, p cor
 		writeAPIError(rw, http.StatusForbidden, "forbidden", "support agent role required")
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Tenant   string `json:"tenant"`
 		FlowID   string `json:"flow_id"`
 		TicketID string `json:"ticket_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeAPIError(rw, http.StatusBadRequest, "bad_request", "invalid JSON body")
+	}](rw, r)
+	if !ok {
 		return
 	}
 	if body.Tenant == "" || body.FlowID == "" {
@@ -157,11 +155,10 @@ func (h *supportAPI) decideGrant(rw http.ResponseWriter, r *http.Request, p core
 	if !ok {
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSON[struct {
 		Decision string `json:"decision"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeAPIError(rw, http.StatusBadRequest, "bad_request", "invalid JSON body")
+	}](rw, r)
+	if !ok {
 		return
 	}
 	var status core.GrantStatus

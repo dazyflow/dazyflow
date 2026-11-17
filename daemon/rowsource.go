@@ -94,9 +94,8 @@ func (h *flowAPI) listInputFields(rw http.ResponseWriter, r *http.Request, p cor
 	if port == "" {
 		port = "rows"
 	}
-	g, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, "")
-	if err != nil {
-		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
+	g, ok := loadVisibleFlow(rw, r, h.svc, p, tenant, workspace, id, "")
+	if !ok {
 		return
 	}
 
