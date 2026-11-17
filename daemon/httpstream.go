@@ -18,9 +18,8 @@ func (h *flowAPI) sampleNode(rw http.ResponseWriter, r *http.Request, p core.Pri
 	workspace := r.PathValue("workspace")
 	id := r.PathValue("id")
 	nodeID := r.PathValue("nodeID")
-	g, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, "")
-	if err != nil {
-		writeJSONError(rw, http.StatusNotFound, err.Error())
+	g, ok := loadVisibleFlow(rw, r, h.svc, p, tenant, workspace, id, "")
+	if !ok {
 		return
 	}
 	sub, ok := g.UpstreamSubset(nodeID)
