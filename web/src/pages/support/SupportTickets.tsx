@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Check,
@@ -35,7 +35,7 @@ import type {
 } from "../../types";
 import { ICON } from "../../icons";
 import { POLL } from "../../lib/timing";
-import { useEscapeToClose } from "../../components/ui/useEscapeToClose";
+import { Modal } from "../../components/ui/Modal";
 import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
@@ -212,86 +212,77 @@ function NewTicketModal({ onClose, onCreated }: { onClose: () => void; onCreated
   };
 
 
-  useEscapeToClose(onClose);
+  const headingId = useId();
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal"
-        onClick={(e) => e.stopPropagation()}
-        aria-modal="true"
-        role="dialog"
-        aria-label={t("support.new")}
-        style={{ maxWidth: 520 }}
-      >
-        <div className="modal-head">
-          <strong>{t("support.new")}</strong>
-          <Button size="icon" onClick={onClose} aria-label={t("common.close")}>
-            <X size={ICON.md} />
-          </Button>
-        </div>
-        <div className="modal-body">
-          <label className="field-label">{t("support.subjectLabel")}</label>
-          <input
-            className="input"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder={t("support.subjectPlaceholder")}
-            autoFocus
-          />
-          {flows.length > 0 && (
-            <>
-              <label className="field-label" htmlFor="ticket-flow" style={{ marginTop: "var(--space-3)" }}>
-                {t("support.flowLabel")}
-              </label>
-              <select
-                id="ticket-flow"
-                className="input"
-                value={flowId}
-                onChange={(e) => setFlowId(e.target.value)}
-              >
-                <option value="">{t("support.flowNone")}</option>
-                {flows.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name || f.id}
-                  </option>
-                ))}
-              </select>
-              {/* Say plainly what leaves the org the moment a flow is picked.
-                  The premise of the product is "your stuff is secret", so the
-                  attachment is never silent. */}
-              <div className="sub" style={{ marginTop: "var(--space-2)" }}>
-                {flowId ? t("support.flowAttachNote") : t("support.flowNoneNote")}
-                {flowId && runId && (
-                  <>
-                    {" "}
-                    {t("support.flowRunNote", {
-                      date: runAt ? formatDateTime(runAt) : "",
-                    })}
-                  </>
-                )}
-              </div>
-            </>
-          )}
-          <label className="field-label" style={{ marginTop: "var(--space-3)" }}>
-            {t("support.messageLabel")}
-          </label>
-          <textarea
-            className="input"
-            rows={5}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder={t("support.messagePlaceholder")}
-          />
-          {err && <ErrorNotice style={{ marginTop: "var(--space-3)" }}>{err}</ErrorNotice>}
-        </div>
-        <div className="modal-foot">
-          <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
-          <Button variant="primary" onClick={() => void submit()} disabled={busy || !subject.trim()}>
-            {t("support.send")}
-          </Button>
-        </div>
+    <Modal size="md" labelledBy={headingId} onClose={onClose}>
+      <div className="modal-head">
+        <strong id={headingId}>{t("support.new")}</strong>
+        <Button size="icon" onClick={onClose} aria-label={t("common.close")}>
+          <X size={ICON.md} />
+        </Button>
       </div>
-    </div>
+      <div className="modal-body">
+        <label className="field-label">{t("support.subjectLabel")}</label>
+        <input
+          className="input"
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          placeholder={t("support.subjectPlaceholder")}
+          autoFocus
+        />
+        {flows.length > 0 && (
+          <>
+            <label className="field-label" htmlFor="ticket-flow" style={{ marginTop: "var(--space-3)" }}>
+              {t("support.flowLabel")}
+            </label>
+            <select
+              id="ticket-flow"
+              className="input"
+              value={flowId}
+              onChange={(e) => setFlowId(e.target.value)}
+            >
+              <option value="">{t("support.flowNone")}</option>
+              {flows.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name || f.id}
+                </option>
+              ))}
+            </select>
+            {/* Say plainly what leaves the org the moment a flow is picked.
+                The premise of the product is "your stuff is secret", so the
+                attachment is never silent. */}
+            <div className="sub" style={{ marginTop: "var(--space-2)" }}>
+              {flowId ? t("support.flowAttachNote") : t("support.flowNoneNote")}
+              {flowId && runId && (
+                <>
+                  {" "}
+                  {t("support.flowRunNote", {
+                    date: runAt ? formatDateTime(runAt) : "",
+                  })}
+                </>
+              )}
+            </div>
+          </>
+        )}
+        <label className="field-label" style={{ marginTop: "var(--space-3)" }}>
+          {t("support.messageLabel")}
+        </label>
+        <textarea
+          className="input"
+          rows={5}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder={t("support.messagePlaceholder")}
+        />
+        {err && <ErrorNotice style={{ marginTop: "var(--space-3)" }}>{err}</ErrorNotice>}
+      </div>
+      <div className="modal-foot">
+        <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
+        <Button variant="primary" onClick={() => void submit()} disabled={busy || !subject.trim()}>
+          {t("support.send")}
+        </Button>
+      </div>
+    </Modal>
   );
 }
 
@@ -893,33 +884,24 @@ function BundleModal({ ticketId, mode, onClose }: { ticketId: string; mode: "use
   }, [token, ticketId, mode, t]);
 
 
-  useEscapeToClose(onClose);
+  const headingId = useId();
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal"
-        onClick={(e) => e.stopPropagation()}
-        aria-modal="true"
-        role="dialog"
-        aria-label={t("bundle.title")}
-        style={{ maxWidth: 680 }}
-      >
-        <div className="modal-head">
-          <strong>{t("bundle.title")}</strong>
-          <Button size="icon" onClick={onClose} aria-label={t("common.close")}>
-            <X size={ICON.md} />
-          </Button>
-        </div>
-        <div className="modal-body">
-          {error && <ErrorNotice>{error}</ErrorNotice>}
-          {!bundle && !error && <Loading inline />}
-          {bundle && <BundleView bundle={bundle} />}
-        </div>
-        <div className="modal-foot">
-          <Button variant="ghost" onClick={onClose}>{t("common.close")}</Button>
-        </div>
+    <Modal style={{ maxWidth: 680 }} labelledBy={headingId} onClose={onClose}>
+      <div className="modal-head">
+        <strong id={headingId}>{t("bundle.title")}</strong>
+        <Button size="icon" onClick={onClose} aria-label={t("common.close")}>
+          <X size={ICON.md} />
+        </Button>
       </div>
-    </div>
+      <div className="modal-body">
+        {error && <ErrorNotice>{error}</ErrorNotice>}
+        {!bundle && !error && <Loading inline />}
+        {bundle && <BundleView bundle={bundle} />}
+      </div>
+      <div className="modal-foot">
+        <Button variant="ghost" onClick={onClose}>{t("common.close")}</Button>
+      </div>
+    </Modal>
   );
 }
 

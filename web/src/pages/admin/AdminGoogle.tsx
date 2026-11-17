@@ -11,7 +11,7 @@ import type { GoogleAccountsResponse } from "../../types";
 import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
-import { useEscapeToClose } from "../../components/ui/useEscapeToClose";
+import { Modal } from "../../components/ui/Modal";
 import { Loading } from "../../components/ui/Loading";
 
 const RETURN_TO = "/admin/google";
@@ -260,53 +260,46 @@ function ConnectAccountDialog({
   };
 
 
-  useEscapeToClose(onCancel);
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
-      <form
-        className="modal"
-        style={{ maxWidth: 460 }}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        onSubmit={submit}
-      >
-        <div className="modal-head">
-          <h2>{t("admin.google.connectTitle")}</h2>
-        </div>
-        <div className="modal-body">
-          <div className="sf-field">
-            <div className="label-row">
-              <label htmlFor="google-account-name">{t("admin.google.nameLabel")}</label>
-            </div>
-            <input
-              id="google-account-name"
-              autoFocus
-              value={name}
-              placeholder={t("admin.google.namePlaceholder")}
-              onChange={(e) => {
-                setName(e.target.value);
-                setErr(null);
-              }}
-            />
-            <div className="desc">{t("admin.google.nameHelp")}</div>
-            {err && (
-              <div className="desc" style={{ color: "var(--danger)" }}>
-                {err}
-              </div>
-            )}
+    <Modal
+      as="form"
+      onSubmit={submit}
+      size="sm"
+      title={t("admin.google.connectTitle")}
+      onClose={onCancel}
+    >
+      <div className="modal-body">
+        <div className="sf-field">
+          <div className="label-row">
+            <label htmlFor="google-account-name">{t("admin.google.nameLabel")}</label>
           </div>
+          <input
+            id="google-account-name"
+            autoFocus
+            value={name}
+            placeholder={t("admin.google.namePlaceholder")}
+            onChange={(e) => {
+              setName(e.target.value);
+              setErr(null);
+            }}
+          />
+          <div className="desc">{t("admin.google.nameHelp")}</div>
+          {err && (
+            <div className="desc" style={{ color: "var(--danger)" }}>
+              {err}
+            </div>
+          )}
         </div>
-        <div className="modal-foot">
-          <Button onClick={onCancel}>
-            {t("common.cancel")}
-          </Button>
-          <Button type="submit" variant="primary" disabled={busy}>
-            {t("common.connect")}
-          </Button>
-        </div>
-      </form>
-    </div>
+      </div>
+      <div className="modal-foot">
+        <Button onClick={onCancel}>
+          {t("common.cancel")}
+        </Button>
+        <Button type="submit" variant="primary" disabled={busy}>
+          {t("common.connect")}
+        </Button>
+      </div>
+    </Modal>
   );
 }
 
@@ -323,31 +316,19 @@ function ConfirmDisconnectDialog({
 }) {
   const { t } = useTranslation();
 
-  useEscapeToClose(onCancel);
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
-      <div
-        className="modal"
-        style={{ maxWidth: 460 }}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="modal-head">
-          <h2>{t("admin.google.disconnectTitle")}</h2>
-        </div>
-        <div className="modal-body">
-          <p className="desc">{t("admin.google.disconnectConfirm", { account })}</p>
-        </div>
-        <div className="modal-foot">
-          <Button onClick={onCancel}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="danger" disabled={busy} onClick={onConfirm}>
-            {t("common.disconnect")}
-          </Button>
-        </div>
+    <Modal size="sm" title={t("admin.google.disconnectTitle")} onClose={onCancel}>
+      <div className="modal-body">
+        <p className="desc">{t("admin.google.disconnectConfirm", { account })}</p>
       </div>
-    </div>
+      <div className="modal-foot">
+        <Button onClick={onCancel}>
+          {t("common.cancel")}
+        </Button>
+        <Button variant="danger" disabled={busy} onClick={onConfirm}>
+          {t("common.disconnect")}
+        </Button>
+      </div>
+    </Modal>
   );
 }

@@ -1,20 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { ExternalLink, RefreshCw, Table2 } from "lucide-react";
-import { api, isErrorCode } from "../../api";
-import { explainApiError } from "../../lib/explainApiError";
+import { Table2 } from "lucide-react";
+import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { Button } from "../ui/Button";
 import { Callout } from "../ui/Callout";
 import type { CollectionShareLink } from "../../types";
 import { ICON } from "../../icons";
-import { CopyButton } from "../ui/CopyButton";
-import { useEscapeToClose } from "../ui/useEscapeToClose";
-import { Loading } from "../ui/Loading";
+import { ShareLinkModal, useShareLink } from "./ShareLinkModal";
 
 // ShareCollectionModal manages one collection's public link — the cryptic,
 // login-free URL to a read-only table of its rows.
@@ -24,10 +18,6 @@ import { Loading } from "../ui/Loading";
 // publishes the collection's actual rows to anyone holding the URL, and the
 // person clicking may not have thought about what is in there. So the
 // consequence is stated before the link exists, not after.
-//
-// The displayed URL is built from the browser's own origin: behind a dev proxy
-// the daemon's derived base URL can be the internal host, while
-// window.location.origin is always the address the operator is looking at.
 export function ShareCollectionModal({
   collection,
   onClose,
@@ -39,163 +29,45 @@ export function ShareCollectionModal({
 }) {
   const { t } = useTranslation();
   const { token, activeTenant, activeWorkspace } = useAuth();
-  const [link, setLink] = useState<CollectionShareLink | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   const tenant = activeTenant || undefined;
   const workspace = activeWorkspace || undefined;
 
-  const publicURL = (l: CollectionShareLink) =>
-    `${window.location.origin}/board/${l.token}`;
+  const share = useShareLink<CollectionShareLink>(
+    {
+      enabled: !!token,
+      get: () => api.getCollectionShare(token!, collection, tenant, workspace),
+      create: () =>
+        api.createCollectionShare(token!, collection, tenant, workspace),
+      remove: () =>
+        api.deleteCollectionShare(token!, collection, tenant, workspace),
+      path: "/board/",
+      forbiddenMessage: t("shareCollection.forbidden"),
+      onChange,
+    },
+    [token, collection, tenant, workspace],
+  );
 
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    setLoading(true);
-    api
-      .getCollectionShare(token, collection, tenant, workspace)
-      .then((l) => {
-        if (!cancelled) setLink(l);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        if (!isErrorCode(e, "share_not_found")) {
-          setError(explainApiError(e, t));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, collection, tenant, workspace, t]);
-
-  const create = useCallback(async () => {
-    if (!token) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const l = await api.createCollectionShare(
-        token,
-        collection,
-        tenant,
-        workspace,
-      );
-      setLink(l);
-      onChange?.(l);
-    } catch (e) {
-      setError(
-        isErrorCode(e, "forbidden")
-          ? t("shareCollection.forbidden")
-          : explainApiError(e, t),
-      );
-    } finally {
-      setBusy(false);
-    }
-  }, [token, collection, tenant, workspace, t, onChange]);
-
-  const disable = useCallback(async () => {
-    if (!token) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await api.deleteCollectionShare(token, collection, tenant, workspace);
-      setLink(null);
-      onChange?.(null);
-    } catch (e) {
-      setError(explainApiError(e, t));
-    } finally {
-      setBusy(false);
-    }
-  }, [token, collection, tenant, workspace, t, onChange]);
-
-  useEscapeToClose(onClose);
-
-  return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal"
-        style={{ maxWidth: 560 }}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="modal-head">
-          <h2>{t("shareCollection.title", { name: collection })}</h2>
+  return (
+    <ShareLinkModal
+      share={share}
+      title={t("shareCollection.title", { name: collection })}
+      description={t("shareCollection.description")}
+      openIcon={<Table2 size={ICON.xs} />}
+      labels={{
+        open: t("shareCollection.open"),
+        create: t("shareCollection.create"),
+        regenerate: t("shareCollection.regenerate"),
+        disable: t("shareCollection.disable"),
+      }}
+      linkNotice={
+        <div style={{ marginTop: "var(--space-3)" }}>
+          <Callout variant="warning">{t("shareCollection.liveWarning")}</Callout>
         </div>
-        <div className="modal-body">
-          <p className="settings-help">{t("shareCollection.description")}</p>
-
-          {loading ? (
-            <Loading inline />
-          ) : link ? (
-            <>
-              <div className="secret-reveal">{publicURL(link)}</div>
-              <div
-                style={{
-                  display: "flex",
-                  gap: "var(--space-2)",
-                  flexWrap: "wrap",
-                  marginTop: "var(--space-3)",
-                }}
-              >
-                <CopyButton
-                  text={publicURL(link)}
-                  label={t("common.copyLink")}
-                />
-                <Button
-                  onClick={() =>
-                    window.open(publicURL(link), "_blank", "noreferrer")
-                  }
-                >
-                  <Table2 size={ICON.xs} />
-                  {t("shareCollection.open")}
-                </Button>
-              </div>
-              <div style={{ marginTop: "var(--space-3)" }}>
-                <Callout variant="warning">
-                  {t("shareCollection.liveWarning")}
-                </Callout>
-              </div>
-            </>
-          ) : (
-            <Callout variant="warning">
-              {t("shareCollection.beforeYouShare")}
-            </Callout>
-          )}
-
-          {error && (
-            <p className="desc" style={{ color: "var(--status-failed)" }}>
-              {error}
-            </p>
-          )}
-        </div>
-        <div className="modal-foot">
-          {link ? (
-            <>
-              <Button onClick={disable} disabled={busy} variant="danger">
-                {t("shareCollection.disable")}
-              </Button>
-              <Button onClick={create} disabled={busy}>
-                <RefreshCw size={ICON.xs} />
-                {t("shareCollection.regenerate")}
-              </Button>
-            </>
-          ) : (
-            !loading && (
-              <Button onClick={create} disabled={busy} variant="primary">
-                <ExternalLink size={ICON.xs} />
-                {t("shareCollection.create")}
-              </Button>
-            )
-          )}
-          <Button onClick={onClose}>{t("common.close")}</Button>
-        </div>
-      </div>
-    </div>,
-    document.body,
+      }
+      noLinkNotice={
+        <Callout variant="warning">{t("shareCollection.beforeYouShare")}</Callout>
+      }
+      onClose={onClose}
+    />
   );
 }

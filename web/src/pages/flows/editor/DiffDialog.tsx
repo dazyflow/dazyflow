@@ -6,7 +6,7 @@ import { GitCompare, Rocket, X } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { ICON } from "../../../icons";
 import { diffIsEmpty, type GraphDiff } from "../../../lib/diffGraphs";
-import { useEscapeToClose } from "../../../components/ui/useEscapeToClose";
+import { Modal } from "../../../components/ui/Modal";
 import { Loading } from "../../../components/ui/Loading";
 import { Notice } from "../../../components/ui/Notice";
 
@@ -31,87 +31,78 @@ export function DiffDialog({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  useEscapeToClose(onClose);
 
   return (
-        <div className="modal-backdrop" onClick={() => onClose()}>
-          <div
-            className="modal"
-            onClick={(e) => e.stopPropagation()}
-            aria-modal="true"
-            role="dialog"
-            aria-label={t("editor.diffTitle")}
-          >
-            <div className="modal-head">
-              <strong>
-                <GitCompare className="icon-lede" size={ICON.sm} />
-                {t("editor.diffHeading")}
-              </strong>
-              <Button
-                size="icon"
-                onClick={() => onClose()}
-                aria-label={t("common.dismiss")}
-              >
-                <X size={ICON.md} />
-              </Button>
-            </div>
-            <div className="modal-body">
-              {loading ? (
-                <Loading inline />
-              ) : !diff || diffIsEmpty(diff) ? (
-                <Notice inline>{t("editor.diffNone")}</Notice>
-              ) : (
-                <ul className="diff-list">
-                  {diff.addedNodes.map((id) => (
-                    <li key={`an-${id}`} className="diff-row added">
-                      + {t("editor.diffNodeAdded", { id })}
-                    </li>
-                  ))}
-                  {diff.removedNodes.map((id) => (
-                    <li key={`rn-${id}`} className="diff-row removed">
-                      − {t("editor.diffNodeRemoved", { id })}
-                    </li>
-                  ))}
-                  {diff.changedNodes.map((c) => (
-                    <li key={`cn-${c.id}`} className="diff-row changed">
-                      ~ {t("editor.diffNodeChanged", { id: c.id, fields: c.fields.join(", ") })}
-                    </li>
-                  ))}
-                  {diff.addedEdges.map((k) => (
-                    <li key={`ae-${k}`} className="diff-row added">
-                      + {t("editor.diffEdgeAdded")}: <code>{k}</code>
-                    </li>
-                  ))}
-                  {diff.removedEdges.map((k) => (
-                    <li key={`re-${k}`} className="diff-row removed">
-                      − {t("editor.diffEdgeRemoved")}: <code>{k}</code>
-                    </li>
-                  ))}
-                  {diff.metaChanged.length > 0 && (
-                    <li className="diff-row changed">
-                      ~ {t("editor.diffMeta", { fields: diff.metaChanged.join(", ") })}
-                    </li>
-                  )}
-                </ul>
-              )}
-            </div>
-            <div className="modal-foot">
-              <Button variant="ghost" onClick={() => onClose()}>
-                {t("common.dismiss")}
-              </Button>
-              <Button
-                className="editor-publish"
-                onClick={() => {
-                  onClose();
-                  onPublish();
-                }}
-                disabled={publishing || !canPublish}
-              >
-                <Rocket size={ICON.sm} />
-                {t("editor.publish")}
-              </Button>
-            </div>
-          </div>
-        </div>
+    <Modal ariaLabel={t("editor.diffTitle")} onClose={onClose}>
+      <div className="modal-head">
+        <strong>
+          <GitCompare className="icon-lede" size={ICON.sm} />
+          {t("editor.diffHeading")}
+        </strong>
+        <Button
+          size="icon"
+          onClick={() => onClose()}
+          aria-label={t("common.dismiss")}
+        >
+          <X size={ICON.md} />
+        </Button>
+      </div>
+      <div className="modal-body">
+        {loading ? (
+          <Loading inline />
+        ) : !diff || diffIsEmpty(diff) ? (
+          <Notice inline>{t("editor.diffNone")}</Notice>
+        ) : (
+          <ul className="diff-list">
+            {diff.addedNodes.map((id) => (
+              <li key={`an-${id}`} className="diff-row added">
+                + {t("editor.diffNodeAdded", { id })}
+              </li>
+            ))}
+            {diff.removedNodes.map((id) => (
+              <li key={`rn-${id}`} className="diff-row removed">
+                − {t("editor.diffNodeRemoved", { id })}
+              </li>
+            ))}
+            {diff.changedNodes.map((c) => (
+              <li key={`cn-${c.id}`} className="diff-row changed">
+                ~ {t("editor.diffNodeChanged", { id: c.id, fields: c.fields.join(", ") })}
+              </li>
+            ))}
+            {diff.addedEdges.map((k) => (
+              <li key={`ae-${k}`} className="diff-row added">
+                + {t("editor.diffEdgeAdded")}: <code>{k}</code>
+              </li>
+            ))}
+            {diff.removedEdges.map((k) => (
+              <li key={`re-${k}`} className="diff-row removed">
+                − {t("editor.diffEdgeRemoved")}: <code>{k}</code>
+              </li>
+            ))}
+            {diff.metaChanged.length > 0 && (
+              <li className="diff-row changed">
+                ~ {t("editor.diffMeta", { fields: diff.metaChanged.join(", ") })}
+              </li>
+            )}
+          </ul>
+        )}
+      </div>
+      <div className="modal-foot">
+        <Button variant="ghost" onClick={() => onClose()}>
+          {t("common.dismiss")}
+        </Button>
+        <Button
+          className="editor-publish"
+          onClick={() => {
+            onClose();
+            onPublish();
+          }}
+          disabled={publishing || !canPublish}
+        >
+          <Rocket size={ICON.sm} />
+          {t("editor.publish")}
+        </Button>
+      </div>
+    </Modal>
   );
 }

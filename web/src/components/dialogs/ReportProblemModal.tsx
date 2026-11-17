@@ -11,7 +11,7 @@ import { Button } from "../ui/Button";
 import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
-import { useEscapeToClose } from "../ui/useEscapeToClose";
+import { Modal } from "../ui/Modal";
 
 // ReportProblemModal files a support ticket about a specific flow/run — the
 // zero-friction path: the server auto-attaches a redacted diagnostic bundle for
@@ -66,54 +66,47 @@ export function ReportProblemModal({
     }
   };
 
-  useEscapeToClose(onClose);
-
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal"
-        onClick={(e) => e.stopPropagation()}
-        aria-modal="true"
-        role="dialog"
-        aria-label={t("report.title")}
-        style={{ maxWidth: 520 }}
-      >
-        <div className="modal-head">
-          <strong>{t("report.title")}</strong>
-          <Button size="icon" onClick={onClose} aria-label={t("common.close")}>
-            <X size={ICON.md} />
-          </Button>
-        </div>
-        <div className="modal-body">
-          <p className="muted" style={{ fontSize: "var(--text-sm)", margin: "0 0 var(--space-3)" }}>
-            {t("report.lede")}
-          </p>
-          <label className="field-label">{t("support.subjectLabel")}</label>
-          <input
-            className="input"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            autoFocus
-          />
-          <label className="field-label" style={{ marginTop: "var(--space-3)" }}>
-            {t("support.messageLabel")}
-          </label>
-          <textarea
-            className="input"
-            rows={5}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder={t("report.messagePlaceholder")}
-          />
-          {err && <ErrorNotice style={{ marginTop: "var(--space-3)" }}>{err}</ErrorNotice>}
-        </div>
-        <div className="modal-foot">
-          <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
-          <Button variant="primary" onClick={() => void submit()} disabled={busy || !subject.trim()}>
-            {t("report.send")}
-          </Button>
-        </div>
+    <Modal
+      labelledBy="report-problem-title"
+      size="md"
+      onClose={onClose}
+    >
+      <div className="modal-head">
+        <strong id="report-problem-title">{t("report.title")}</strong>
+        <Button size="icon" onClick={onClose} aria-label={t("common.close")}>
+          <X size={ICON.md} />
+        </Button>
       </div>
-    </div>
+      <div className="modal-body">
+        <p className="muted" style={{ fontSize: "var(--text-sm)", margin: "0 0 var(--space-3)" }}>
+          {t("report.lede")}
+        </p>
+        <label className="field-label">{t("support.subjectLabel")}</label>
+        <input
+          className="input"
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          autoFocus
+        />
+        <label className="field-label" style={{ marginTop: "var(--space-3)" }}>
+          {t("support.messageLabel")}
+        </label>
+        <textarea
+          className="input"
+          rows={5}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder={t("report.messagePlaceholder")}
+        />
+        {err && <ErrorNotice style={{ marginTop: "var(--space-3)" }}>{err}</ErrorNotice>}
+      </div>
+      <div className="modal-foot">
+        <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
+        <Button variant="primary" onClick={() => void submit()} disabled={busy || !subject.trim()}>
+          {t("report.send")}
+        </Button>
+      </div>
+    </Modal>
   );
 }

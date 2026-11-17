@@ -15,7 +15,7 @@ import { Button } from "../ui/Button";
 import { DeleteFlowModal } from "./DeleteFlowModal";
 import { FlowIcon, ICON } from "../../icons";
 import { ErrorNotice } from "../ui/ErrorNotice";
-import { useEscapeToClose } from "../ui/useEscapeToClose";
+import { Modal } from "../ui/Modal";
 
 type Props = {
   graph: Graph;
@@ -39,22 +39,17 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
     setDraft(graph);
   }, [graph.id]);
 
-  useEscapeToClose(onClose);
-
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="modal-head">
-          <h2>{t("settings.title")}</h2>
+    <>
+      <Modal
+        title={t("settings.title")}
+        headActions={
           <Button variant="ghost" size="icon" onClick={onClose} aria-label={t("settings.close")}>
             <X size={ICON.lg} />
           </Button>
-        </div>
+        }
+        onClose={onClose}
+      >
         <div className="settings-tabs">
           <Button
             type="button"
@@ -355,7 +350,7 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
             {t("common.save")}
           </Button>
         </div>
-      </div>
+      </Modal>
       {confirmDelete && onDelete && (
         <DeleteFlowModal
           flowName={graph.name || graph.id}
@@ -363,7 +358,7 @@ export function SettingsModal({ graph, onClose, onSave, onDelete }: Props) {
           onClose={() => setConfirmDelete(false)}
         />
       )}
-    </div>
+    </>
   );
 }
 
