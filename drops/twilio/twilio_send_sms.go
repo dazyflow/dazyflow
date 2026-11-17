@@ -116,11 +116,8 @@ func executeSendSMS(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 
 	endpoint := baseURL(job) + "/Accounts/" + url.PathEscape(sid) + "/Messages.json"
 	status, respBody, err := twilioDo(ctx, job, http.MethodPost, endpoint, form.Encode())
-	if err != nil {
-		return params.Err(job, "twilio_http_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "twilio_error", extractTwilioError(respBody)), nil
+	if fail := params.HTTPFailure(job, "twilio", "Twilio", status, respBody, err, extractTwilioError); fail != nil {
+		return *fail, nil
 	}
 
 	var parsed struct {

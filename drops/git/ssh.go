@@ -204,7 +204,7 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	combined := bundledKnownHosts
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
-		if err := checkKnownHosts(s); err != nil {
+		if err := validateKnownHosts(s); err != nil {
 			return nil, err
 		}
 		combined += s + "\n"
@@ -224,12 +224,15 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	return gitssh.NewKnownHostsDb(f.Name())
 }
 
-// checkKnownHosts rejects any malformed line. x/crypto's knownhosts skips bad
-// lines as long as one line parses, and the bundled entries always do, so a
-// typo in the credential's known_hosts would otherwise vanish silently.
-func checkKnownHosts(s string) error {
+// validateKnownHosts rejects a credential's known_hosts if any line fails to
+// parse. x/crypto's knownhosts reader skips bad lines as long as the file has
+// at least one valid entry, and the bundled defaults always provide one, so
+// without this check a typo would silently drop the user's host key and the
+// clone would fail later with a confusing "unknown host" error.
+func validateKnownHosts(s string) error {
 	for i, line := range strings.Split(s, "\n") {
-		if line = strings.TrimSpace(line); line == "" || line[0] == '#' {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		// ParseKnownHosts skips a line without whitespace, reporting io.EOF.
@@ -238,7 +241,7 @@ func checkKnownHosts(s string) error {
 			err = errors.New("ssh: invalid entry in known_hosts data")
 		}
 		if err != nil {
-			return fmt.Errorf("knownhosts: line %d: %w", i+1, err)
+			return fmt.Errorf("credential known_hosts line %d: %w", i+1, err)
 		}
 	}
 	return nil

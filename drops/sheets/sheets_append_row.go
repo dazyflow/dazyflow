@@ -197,11 +197,8 @@ func executeSheetsAppend(ctx context.Context, job core.Job, _ chan<- core.Progre
 		hdrEndpoint := sheetsBaseURL(job) + "/spreadsheets/" + url.PathEscape(id) + "/values/" + url.PathEscape(hdrRange) + "?" + hq.Encode()
 		hdrBody, _ := json.Marshal(map[string]any{"range": hdrRange, "majorDimension": "ROWS", "values": [][]any{hdr}})
 		hstatus, hbody, herr := googleDo(ctx, "PUT", hdrEndpoint, token, "application/json; charset=utf-8", hdrBody, timeout)
-		if herr != nil {
-			return params.Err(job, "sheets_http_error", herr.Error()), nil
-		}
-		if hstatus < 200 || hstatus >= 300 {
-			return params.Err(job, "sheets_error", sheetsErr(hbody)), nil
+		if fail := params.HTTPFailure(job, "sheets", "Google Sheets", hstatus, hbody, herr, sheetsErr); fail != nil {
+			return *fail, nil
 		}
 	}
 
@@ -212,11 +209,8 @@ func executeSheetsAppend(ctx context.Context, job core.Job, _ chan<- core.Progre
 
 	reqBody, _ := json.Marshal(map[string]any{"range": sheetRangeRef(rng), "majorDimension": "ROWS", "values": values})
 	status, body, err := googleDo(ctx, "POST", endpoint, token, "application/json; charset=utf-8", reqBody, timeout)
-	if err != nil {
-		return params.Err(job, "sheets_http_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "sheets_error", sheetsErr(body)), nil
+	if fail := params.HTTPFailure(job, "sheets", "Google Sheets", status, body, err, sheetsErr); fail != nil {
+		return *fail, nil
 	}
 
 	var parsed struct {

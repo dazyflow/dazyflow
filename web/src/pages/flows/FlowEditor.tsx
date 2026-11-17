@@ -145,6 +145,8 @@ import type {
 import { formatDateTime } from "../../lib/datetime";
 import { MOBILE, isNarrower } from "../../lib/breakpoints";
 import { pickGraphSettings } from "../../lib/graphMeta";
+import { isTypingTarget } from "../../lib/typingTarget";
+import { toggleInSet } from "../../lib/toggleInSet";
 import { Inspector } from "../../components/editor/Inspector";
 import { FlowStatusChip } from "../../components/ui/FlowStatusChip";
 import { flowRunStatusPublished, isTriggerModule } from "../../flowStatus";
@@ -1391,7 +1393,7 @@ function EditorInner() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const cmd = e.metaKey || e.ctrlKey;
-      if (cmd && (e.key === "k" || e.key === "K")) {
+      if (cmd && (e.key === "k" || e.key === "K") && !isTypingTarget(document.activeElement)) {
         e.preventDefault();
         setPaletteOpen(true);
       }
@@ -1401,17 +1403,8 @@ function EditorInner() {
   }, []);
 
   useEffect(() => {
-    const inTextField = () => {
-      const el = document.activeElement as HTMLElement | null;
-      return (
-        !!el &&
-        (el.tagName === "INPUT" ||
-          el.tagName === "TEXTAREA" ||
-          el.isContentEditable)
-      );
-    };
     const onCopy = (e: ClipboardEvent) => {
-      if (inTextField() || (window.getSelection()?.toString() ?? "")) return;
+      if (isTypingTarget(document.activeElement) || (window.getSelection()?.toString() ?? "")) return;
       const sel = nodes.filter((n) => n.selected);
       if (sel.length === 0) return;
       const ids = new Set(sel.map((n) => n.id));
@@ -1440,7 +1433,7 @@ function EditorInner() {
       e.preventDefault();
     };
     const onPaste = (e: ClipboardEvent) => {
-      if (inTextField()) return;
+      if (isTypingTarget(document.activeElement)) return;
       const text = e.clipboardData?.getData("text/plain") ?? "";
       let payload: {
         __dazyflow_clipboard?: number;
@@ -2013,58 +2006,31 @@ function EditorInner() {
   }, [setEdges]);
 
   const toggleContinueOnError = useCallback((nodeID: string) => {
-    setContinueOnError((prev) => {
-      const next = new Set(prev);
-      if (next.has(nodeID)) next.delete(nodeID);
-      else next.add(nodeID);
-      return next;
-    });
+    setContinueOnError((prev) => toggleInSet(prev, nodeID));
     setDirty(true);
   }, []);
 
   const toggleNodeDisabled = useCallback((nodeID: string) => {
-    setDisabledNodes((prev) => {
-      const next = new Set(prev);
-      if (next.has(nodeID)) next.delete(nodeID);
-      else next.add(nodeID);
-      return next;
-    });
+    setDisabledNodes((prev) => toggleInSet(prev, nodeID));
     setDirty(true);
   }, []);
 
 
   const toggleNodeLocked = useCallback((nodeID: string) => {
-    setLockedNodes((prev) => {
-      const next = new Set(prev);
-      if (next.has(nodeID)) next.delete(nodeID);
-      else next.add(nodeID);
-      return next;
-    });
+    setLockedNodes((prev) => toggleInSet(prev, nodeID));
+    setDirty(true);
+  }, []);
+
+  const toggleBreakpointFor = useCallback((id: string) => {
+    setBreakpoints((prev) => toggleInSet(prev, id));
     setDirty(true);
   }, []);
 
   const toggleBreakpoint = useCallback(() => {
     const sel = nodes.filter((n) => n.selected);
     if (sel.length !== 1) return;
-    const id = sel[0].id;
-    setBreakpoints((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-    setDirty(true);
-  }, [nodes]);
-
-  const toggleBreakpointFor = useCallback((id: string) => {
-    setBreakpoints((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-    setDirty(true);
-  }, []);
+    toggleBreakpointFor(sel[0].id);
+  }, [nodes, toggleBreakpointFor]);
 
   const duplicateNode = useCallback(
     (id: string) => {
@@ -2117,15 +2083,8 @@ function EditorInner() {
   }, []);
 
   useEffect(() => {
-    const inText = () => {
-      const el = document.activeElement as HTMLElement | null;
-      return (
-        !!el &&
-        (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)
-      );
-    };
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || inText()) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || isTypingTarget(document.activeElement)) return;
       switch (e.key.toLowerCase()) {
         case "c":
           if (pausedAt) {
@@ -2688,10 +2647,7 @@ function EditorInner() {
     const onKey = (e: KeyboardEvent) => {
       if (!e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key !== "P") return;
-      const el = document.activeElement as HTMLElement | null;
-      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) {
-        return;
-      }
+      if (isTypingTarget(document.activeElement)) return;
       e.preventDefault();
       celebrate();
     };
@@ -2702,10 +2658,7 @@ function EditorInner() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
-      const el = document.activeElement as HTMLElement | null;
-      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) {
-        return;
-      }
+      if (isTypingTarget(document.activeElement)) return;
       const k = e.key.toLowerCase();
       if (k === "z") {
         e.preventDefault();

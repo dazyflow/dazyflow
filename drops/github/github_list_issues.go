@@ -109,11 +109,8 @@ func executeGitHubListIssues(ctx context.Context, job core.Job, _ chan<- core.Pr
 			break
 		}
 		status, respBody, hdr, hErr := githubDoH(ctx, "GET", next, token, nil, timeoutMS)
-		if hErr != nil {
-			return params.Err(job, "github_http_error", hErr.Error()), nil
-		}
-		if status < 200 || status >= 300 {
-			return params.Err(job, "github_error", extractGitHubError(respBody)), nil
+		if fail := params.HTTPFailure(job, "github", "GitHub", status, respBody, hErr, extractGitHubError); fail != nil {
+			return *fail, nil
 		}
 		var page []map[string]any
 		if err := json.Unmarshal(respBody, &page); err != nil {

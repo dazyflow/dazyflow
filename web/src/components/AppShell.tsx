@@ -51,6 +51,7 @@ import type { FlowSummary } from "../types";
 import { POLL } from "../lib/timing";
 import { savedCollapsePref, initialNavCollapsed } from "../lib/navCollapse";
 import { resendOutcome } from "../lib/verifyResend";
+import { isTypingTarget } from "../lib/typingTarget";
 
 function orgGlyph(icon: string | undefined, size: number) {
   return isImageIcon(icon) ? (
@@ -239,13 +240,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         return;
       }
       if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const el = e.target as HTMLElement | null;
-        const typing =
-          !!el &&
-          (el.tagName === "INPUT" ||
-            el.tagName === "TEXTAREA" ||
-            el.isContentEditable);
-        if (typing) return;
+        if (isTypingTarget(e.target)) return;
         e.preventDefault();
         setHelpOpen((v) => !v);
       }

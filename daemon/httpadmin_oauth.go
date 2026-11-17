@@ -54,10 +54,6 @@ type adminUpsertProviderRequest struct {
 }
 
 func (h *oauthAPI) listAdminOAuthProviders(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if err := requirePlatformAdmin(p); err != nil {
-		adminError(rw, err)
-		return
-	}
 	if h.OAuth == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "OAuth registry not configured")
 		return
@@ -90,10 +86,6 @@ func (h *oauthAPI) listAdminOAuthProviders(rw http.ResponseWriter, r *http.Reque
 }
 
 func (h *oauthAPI) upsertAdminOAuthProvider(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if err := requirePlatformAdmin(p); err != nil {
-		adminError(rw, err)
-		return
-	}
 	if h.OAuth == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "OAuth registry not configured")
 		return
@@ -141,10 +133,6 @@ func (h *oauthAPI) upsertAdminOAuthProvider(rw http.ResponseWriter, r *http.Requ
 }
 
 func (h *oauthAPI) deleteAdminOAuthProvider(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if err := requirePlatformAdmin(p); err != nil {
-		adminError(rw, err)
-		return
-	}
 	if h.OAuth == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "OAuth registry not configured")
 		return
