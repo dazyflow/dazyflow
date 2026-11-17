@@ -145,7 +145,7 @@ func geoHTTPFailure(job core.Job, svc, rateHint string, status int, body []byte,
 			svc+" declined the request (HTTP "+strconv.Itoa(status)+"). "+rateHint)
 		return &r
 	}
-	return params.HTTPFailure(job, "geocoder", svc, status, body, nil, truncateBody)
+	return params.HTTPFailure(job, "geocoder", svc, status, body, nil, extractGeoError)
 }
 
-func truncateBody(body []byte) string { return params.Truncate(string(body), 200) }
+func extractGeoError(body []byte) string { return params.Truncate(string(body), 200) }

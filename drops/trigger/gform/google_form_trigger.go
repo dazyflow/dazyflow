@@ -209,7 +209,7 @@ func fetchTitles(ctx context.Context, job core.Job, formID, token string, timeou
 	}
 	endpoint := formsBaseURL(job) + "/forms/" + url.PathEscape(formID)
 	status, body, err := googleGet(ctx, endpoint, token, timeoutMS)
-	if err := params.HTTPError("forms.get", status, body, err, formsErr); err != nil {
+	if err = params.HTTPError("forms.get", status, body, err, formsErr); err != nil {
 		return nil, err
 	}
 	var f formStructure
@@ -238,7 +238,7 @@ func fetchNewResponses(ctx context.Context, job core.Job, formID, token string, 
 			q.Set("pageToken", pageToken)
 		}
 		status, body, err := googleGet(ctx, base+"?"+q.Encode(), token, timeoutMS)
-		if err := params.HTTPError("forms.responses.list", status, body, err, formsErr); err != nil {
+		if err = params.HTTPError("forms.responses.list", status, body, err, formsErr); err != nil {
 			return nil, cursor, err
 		}
 		var page responsesList

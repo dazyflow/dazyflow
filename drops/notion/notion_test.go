@@ -376,8 +376,8 @@ func TestCovNotionError_Variants(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := notionError(c.body); got != c.want {
-				t.Errorf("notionError = %q, want %q", got, c.want)
+			if got := extractNotionError(c.body); got != c.want {
+				t.Errorf("extractNotionError = %q, want %q", got, c.want)
 			}
 		})
 	}

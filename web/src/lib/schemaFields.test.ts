@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it } from "vitest";
-import { isFieldVisible } from "./schemaFields";
+import { isAdvancedField, isFieldVisible } from "./schemaFields";
 import type { JSONSchema } from "../types";
 
 const siblingSchemas: Record<string, JSONSchema> = {
@@ -63,5 +63,23 @@ describe("isFieldVisible", () => {
   it("survives absent sibling schemas", () => {
     expect(isFieldVisible(gated, { format: "custom" }, undefined)).toBe(true);
     expect(isFieldVisible(gated, {}, undefined)).toBe(false);
+  });
+});
+
+describe("isAdvancedField", () => {
+  const str = { type: "string" } as JSONSchema;
+  it("honours both spellings of the advanced flag", () => {
+    expect(isAdvancedField("x", { type: "string", x_advanced: true } as JSONSchema, {})).toBe(true);
+    expect(isAdvancedField("x", { type: "string", "x-advanced": true } as JSONSchema, {})).toBe(true);
+    expect(isAdvancedField("x", str, {})).toBe(false);
+  });
+  it("folds plumbing params by name", () => {
+    expect(isAdvancedField("timeout_ms", { type: "integer" } as JSONSchema, {})).toBe(true);
+    expect(isAdvancedField("cursor", str, {})).toBe(true);
+  });
+  it("folds a raw token only beside an account picker", () => {
+    expect(isAdvancedField("token", str, { account: str })).toBe(true);
+    expect(isAdvancedField("token", str, {})).toBe(false);
+    expect(isAdvancedField("token", str, undefined)).toBe(false);
   });
 });

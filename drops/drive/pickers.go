@@ -35,7 +35,7 @@ func listForPicker(ctx context.Context, job core.Job, q string) ([]core.AccountR
 	qv.Set("pageSize", "100")
 	endpoint := apiBaseURL(job) + "/files?" + qv.Encode()
 	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
-	if err := params.HTTPError("Google Drive", status, body, err, driveErr); err != nil {
+	if err = params.HTTPError("Google Drive", status, body, err, driveErr); err != nil {
 		return nil, err
 	}
 	var parsed struct {

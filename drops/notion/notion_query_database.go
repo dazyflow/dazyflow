@@ -95,7 +95,7 @@ func executeNotionQueryDatabase(ctx context.Context, job core.Job, _ chan<- core
 
 	endpoint := currentHTTPBase() + "/databases/" + url.PathEscape(dbID) + "/query"
 	status, body, err := notionDo(ctx, "POST", endpoint, token, raw, params.IntDefault(job.Params, "timeout_ms", 15000))
-	if fail := params.HTTPFailure(job, "notion", "Notion", status, body, err, notionError); fail != nil {
+	if fail := params.HTTPFailure(job, "notion", "Notion", status, body, err, extractNotionError); fail != nil {
 		return *fail, nil
 	}
 

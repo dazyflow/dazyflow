@@ -21,7 +21,7 @@ func ListPrices(ctx context.Context, job core.Job) ([]core.AccountResource, erro
 	q.Set("limit", "100")
 	q.Set("expand[]", "data.product")
 	status, body, err := stripeDo(ctx, job, http.MethodGet, baseURL(job)+"/prices?"+q.Encode(), "")
-	if err := params.HTTPError("Stripe", status, body, err, extractStripeError); err != nil {
+	if err = params.HTTPError("Stripe", status, body, err, extractStripeError); err != nil {
 		return nil, err
 	}
 	var parsed struct {
@@ -72,7 +72,7 @@ func ListSubscriptions(ctx context.Context, job core.Job) ([]core.AccountResourc
 	q.Set("limit", "100")
 	q.Set("expand[]", "data.customer")
 	status, body, err := stripeDo(ctx, job, http.MethodGet, baseURL(job)+"/subscriptions?"+q.Encode(), "")
-	if err := params.HTTPError("Stripe", status, body, err, extractStripeError); err != nil {
+	if err = params.HTTPError("Stripe", status, body, err, extractStripeError); err != nil {
 		return nil, err
 	}
 	var parsed struct {
@@ -138,7 +138,7 @@ func ListPaymentIntents(ctx context.Context, job core.Job) ([]core.AccountResour
 	q.Set("limit", "100")
 	q.Set("expand[]", "data.customer")
 	status, body, err := stripeDo(ctx, job, http.MethodGet, baseURL(job)+"/payment_intents?"+q.Encode(), "")
-	if err := params.HTTPError("Stripe", status, body, err, extractStripeError); err != nil {
+	if err = params.HTTPError("Stripe", status, body, err, extractStripeError); err != nil {
 		return nil, err
 	}
 	var parsed struct {
@@ -190,7 +190,7 @@ func ListCustomers(ctx context.Context, job core.Job) ([]core.AccountResource, e
 	q := url.Values{}
 	q.Set("limit", "100")
 	status, body, err := stripeDo(ctx, job, http.MethodGet, baseURL(job)+"/customers?"+q.Encode(), "")
-	if err := params.HTTPError("Stripe", status, body, err, extractStripeError); err != nil {
+	if err = params.HTTPError("Stripe", status, body, err, extractStripeError); err != nil {
 		return nil, err
 	}
 	var parsed struct {

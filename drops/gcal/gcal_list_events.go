@@ -160,7 +160,7 @@ func ListEvents(ctx context.Context, job core.Job) ([]map[string]any, error) {
 		q.Set("maxResults", strconv.Itoa(limit-len(out)))
 		endpoint := calBaseURL(job) + "/calendars/" + url.PathEscape(resolveCalendarID(job)) + "/events?" + q.Encode()
 		status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
-		if err := params.HTTPError("Google Calendar", status, body, err, calErr); err != nil {
+		if err = params.HTTPError("Google Calendar", status, body, err, calErr); err != nil {
 			return nil, err
 		}
 

@@ -226,6 +226,24 @@ func JSONFieldMessage(body []byte, field string, limit int) string {
 	return Truncate(string(body), limit)
 }
 
+// EnvelopeMessage pulls the message out of an {"error":{"message":...}}
+// envelope, prefixed with "<qualifier>: " when qualifierField is set and
+// present, falling back to the raw body truncated at limit bytes.
+func EnvelopeMessage(body []byte, qualifierField string, limit int) string {
+	var e struct {
+		Error map[string]any `json:"error"`
+	}
+	if err := json.Unmarshal(body, &e); err == nil {
+		if msg, _ := e.Error["message"].(string); msg != "" {
+			if q, _ := e.Error[qualifierField].(string); qualifierField != "" && q != "" {
+				return q + ": " + msg
+			}
+			return msg
+		}
+	}
+	return Truncate(string(body), limit)
+}
+
 func APIErrorMessage(body []byte, limit int) string {
 	var e struct {
 		Message string `json:"message"`
@@ -252,17 +270,15 @@ func HTTPFailure(job core.Job, vendor, vendorLabel string, status int, body []by
 		r := Err(job, vendor+"_http_error", err.Error())
 		return &r
 	}
-	if status < 200 || status >= 300 {
-		r := Err(job, vendor+"_error", fmt.Sprintf("%s returned %d: %s", vendorLabel, status, extract(body)))
+	if herr := HTTPError(vendorLabel, status, body, nil, extract); herr != nil {
+		r := Err(job, vendor+"_error", herr.Error())
 		return &r
 	}
 	return nil
 }
 
-// HTTPError is HTTPFailure for callers that return a plain error (pickers,
-// resource listers, paging helpers): the transport error as-is, or
-// "<label> returned <status>: <extracted message>" for a non-2xx status.
-// It returns nil when the call succeeded.
+// HTTPError is HTTPFailure for helpers that return a plain error: err as-is,
+// or "<label> returned <status>: <detail>" for a non-2xx status.
 func HTTPError(vendorLabel string, status int, body []byte, err error, extract func([]byte) string) error {
 	if err != nil {
 		return err
