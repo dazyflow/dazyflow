@@ -68,37 +68,6 @@ func readFlowID(rw http.ResponseWriter, r *http.Request, p core.Principal) (stri
 	return tenant, workspace, id, true
 }
 
-// A non-platform-admin is pinned to their own tenant whatever they ask for.
-func resolveScope(rw http.ResponseWriter, r *http.Request, p core.Principal, action string) (tenant, workspace string, ok bool) {
-	tenant = r.URL.Query().Get("tenant")
-	workspace = r.URL.Query().Get("workspace")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if workspace == "" {
-		workspace = p.Workspace
-	}
-	if tenant == "" || workspace == "" {
-		writeAPIError(rw, http.StatusBadRequest, "missing_scope",
-			"tenant and workspace required (no principal binding)")
-		return "", "", false
-	}
-	if isPlatformAdmin(p) {
-		return tenant, workspace, true
-	}
-	if p.Tenant != "" && tenant != p.Tenant {
-		writeAPIError(rw, http.StatusForbidden, "forbidden_scope",
-			fmt.Sprintf("cannot %s tenant %q (principal is bound to %q)", action, tenant, p.Tenant))
-		return "", "", false
-	}
-	if p.Workspace != "" && workspace != p.Workspace {
-		writeAPIError(rw, http.StatusForbidden, "forbidden_scope",
-			fmt.Sprintf("cannot %s workspace %q (principal is bound to %q)", action, workspace, p.Workspace))
-		return "", "", false
-	}
-	return tenant, workspace, true
-}
-
 func resolveTenantWorkspaceScope(rw http.ResponseWriter, r *http.Request, p core.Principal) (string, string, bool) {
 	return resolveScope(rw, r, p, "act on")
 }
