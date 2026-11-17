@@ -185,39 +185,20 @@ func requiredFieldsMessage(keys []string) string {
 	}
 }
 
-type scopedHandler func(ctx context.Context, c *DazydClient, args map[string]any, tenant, workspace string) (ToolCallResult, error)
-
-func scopedTool(c *DazydClient, d Defaults, name, description, schema string, required []string, idempotent bool, fn scopedHandler) Tool {
-	return Tool{
-		Name:        name,
-		Description: description,
-		InputSchema: json.RawMessage(schema),
-		Handler: func(ctx context.Context, raw json.RawMessage) (ToolCallResult, error) {
-			args, err := decodeArgs(raw)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
-			if _, bad := requireStrings(args, required...); bad != nil {
-				return *bad, nil
-			}
-			tenant, workspace, err := scoped(args, d)
-			if err != nil {
-				return ErrorResult(err.Error()), nil
-			}
-			if idempotent {
-				ctx = withIdempotencyKey(ctx, newIdempotencyKey())
-			}
-			res, err := fn(ctx, c, args, tenant, workspace)
-			if err != nil {
-				return errorResultOrErr(err)
-			}
-			return res, nil
-		},
-	}
-}
+// flowIDSchema is the input schema of every tool that takes just a flow ID
+// plus the optional tenant/workspace overrides.
+const flowIDSchema = `{"type":"object","required":["id"],"properties":{
+	"id":        {"type":"string","description":"Flow ID."},
+	"tenant":    {"type":"string"},
+	"workspace": {"type":"string"}
+}}`
 
 type plainHandler func(ctx context.Context, c *DazydClient, args map[string]any) (ToolCallResult, error)
 
+// plainTool centralises argument decoding, required-field checks, the
+// per-invocation idempotency key and error mapping for tools that are not
+// scoped to a tenant/workspace. fn returns a non-nil error for daemon or
+// transport failures; validation failures it reports as an ErrorResult.
 func plainTool(c *DazydClient, name, description, schema string, required []string, idempotent bool, fn plainHandler) Tool {
 	return Tool{
 		Name:        name,
@@ -243,29 +224,46 @@ func plainTool(c *DazydClient, name, description, schema string, required []stri
 	}
 }
 
-const flowIDSchema = `{"type":"object","required":["id"],"properties":{
-			"id":        {"type":"string"},
-			"tenant":    {"type":"string"},
-			"workspace": {"type":"string"}
-		}}`
+type scopedHandler func(ctx context.Context, c *DazydClient, args map[string]any, tenant, workspace string) (ToolCallResult, error)
+
+func scopedTool(c *DazydClient, d Defaults, name, description, schema string, required []string, idempotent bool, fn scopedHandler) Tool {
+	return plainTool(c, name, description, schema, required, idempotent,
+		func(ctx context.Context, c *DazydClient, args map[string]any) (ToolCallResult, error) {
+			tenant, workspace, err := scoped(args, d)
+			if err != nil {
+				return ErrorResult(err.Error()), nil
+			}
+			return fn(ctx, c, args, tenant, workspace)
+		})
+}
+
+// getJSON GETs path and returns the decoded body as a text result.
+func getJSON(ctx context.Context, c *DazydClient, path string) (ToolCallResult, error) {
+	var out map[string]any
+	if err := c.Get(ctx, path, &out); err != nil {
+		return ToolCallResult{}, err
+	}
+	return TextResult(out), nil
+}
+
+// postJSON POSTs body to path and returns the decoded response as a text result.
+func postJSON(ctx context.Context, c *DazydClient, path string, body any) (ToolCallResult, error) {
+	var out map[string]any
+	if err := c.Post(ctx, path, body, &out); err != nil {
+		return ToolCallResult{}, err
+	}
+	return TextResult(out), nil
+}
 
 func flowPathTool(c *DazydClient, d Defaults, name, description, schema, verb, suffix string, idempotent bool) Tool {
 	return scopedTool(c, d, name, description, schema, []string{"id"}, idempotent,
 		func(ctx context.Context, c *DazydClient, args map[string]any, tenant, workspace string) (ToolCallResult, error) {
 			id := stringField(args, "id", "")
 			path := "/me/flows/" + composeFlowID(tenant, workspace, id) + suffix
-			var out map[string]any
-			var err error
-			switch verb {
-			case "GET":
-				err = c.Get(ctx, path, &out)
-			default: // "POST"
-				err = c.Post(ctx, path, nil, &out)
+			if verb == "GET" {
+				return getJSON(ctx, c, path)
 			}
-			if err != nil {
-				return ToolCallResult{}, err
-			}
-			return TextResult(out), nil
+			return postJSON(ctx, c, path, nil) // "POST"
 		})
 }
 
@@ -282,11 +280,7 @@ func listIntegrations(c *DazydClient) Tool {
 				"q":        stringField(args, "q", ""),
 				"category": stringField(args, "category", ""),
 			})
-			var out map[string]any
-			if err := c.Get(ctx, "/catalog/integrations"+qs, &out); err != nil {
-				return ToolCallResult{}, err
-			}
-			return TextResult(out), nil
+			return getJSON(ctx, c, "/catalog/integrations"+qs)
 		})
 }
 
@@ -298,11 +292,7 @@ func describeIntegration(c *DazydClient) Tool {
 		}}`,
 		[]string{"id"}, false,
 		func(ctx context.Context, c *DazydClient, args map[string]any) (ToolCallResult, error) {
-			var out map[string]any
-			if err := c.Get(ctx, "/catalog/integrations/"+pathSegment(stringField(args, "id", "")), &out); err != nil {
-				return ToolCallResult{}, err
-			}
-			return TextResult(out), nil
+			return getJSON(ctx, c, "/catalog/integrations/"+pathSegment(stringField(args, "id", "")))
 		})
 }
 
@@ -323,11 +313,7 @@ func listDrops(c *DazydClient) Tool {
 				"integration": stringField(args, "integration", ""),
 				"tag":         stringField(args, "tag", ""),
 			})
-			var out map[string]any
-			if err := c.Get(ctx, "/catalog/drops"+qs, &out); err != nil {
-				return ToolCallResult{}, err
-			}
-			return TextResult(out), nil
+			return getJSON(ctx, c, "/catalog/drops"+qs)
 		})
 }
 
@@ -339,22 +325,14 @@ func describeDrop(c *DazydClient) Tool {
 		}}`,
 		[]string{"id"}, false,
 		func(ctx context.Context, c *DazydClient, args map[string]any) (ToolCallResult, error) {
-			var out map[string]any
-			if err := c.Get(ctx, "/catalog/drops/"+pathSegment(stringField(args, "id", "")), &out); err != nil {
-				return ToolCallResult{}, err
-			}
-			return TextResult(out), nil
+			return getJSON(ctx, c, "/catalog/drops/"+pathSegment(stringField(args, "id", "")))
 		})
 }
 
 func getTool(c *DazydClient, name, description, path string) Tool {
 	return plainTool(c, name, description, `{"type":"object","properties":{}}`, nil, false,
 		func(ctx context.Context, c *DazydClient, _ map[string]any) (ToolCallResult, error) {
-			var out map[string]any
-			if err := c.Get(ctx, path, &out); err != nil {
-				return ToolCallResult{}, err
-			}
-			return TextResult(out), nil
+			return getJSON(ctx, c, path)
 		})
 }
 
@@ -385,11 +363,7 @@ func startConnection(c *DazydClient) Tool {
 				"account":   stringField(args, "account", ""),
 				"return_to": stringField(args, "return_to", ""),
 			})
-			var out map[string]any
-			if err := c.Post(ctx, "/me/connections/"+pathSegment(provider)+"/authorize"+qs, nil, &out); err != nil {
-				return ToolCallResult{}, err
-			}
-			return TextResult(out), nil
+			return postJSON(ctx, c, "/me/connections/"+pathSegment(provider)+"/authorize"+qs, nil)
 		})
 }
 
@@ -441,11 +415,7 @@ func validateCron(c *DazydClient) Tool {
 		}}`,
 		[]string{"expr"}, false,
 		func(ctx context.Context, c *DazydClient, args map[string]any) (ToolCallResult, error) {
-			var out map[string]any
-			if err := c.Post(ctx, "/validate/cron", map[string]string{"expr": stringField(args, "expr", "")}, &out); err != nil {
-				return ToolCallResult{}, err
-			}
-			return TextResult(out), nil
+			return postJSON(ctx, c, "/validate/cron", map[string]string{"expr": stringField(args, "expr", "")})
 		})
 }
 
@@ -557,22 +527,14 @@ func listFlows(c *DazydClient, d Defaults) Tool {
 func getFlow(c *DazydClient, d Defaults) Tool {
 	return flowPathTool(c, d, "get_flow",
 		"Fetch a flow's full graph payload (nodes, edges, triggers, settings) so you can show the user what's there or build an updated version off it.",
-		`{"type":"object","required":["id"],"properties":{
-			"id":        {"type":"string","description":"Flow ID."},
-			"tenant":    {"type":"string"},
-			"workspace": {"type":"string"}
-		}}`,
+		flowIDSchema,
 		"GET", "", false)
 }
 
 func flowReferences(c *DazydClient, d Defaults) Tool {
 	return flowPathTool(c, d, "flow_references",
 		"List the valid ${…} placeholder tokens for a flow's params: upstream node outputs (e.g. ${upstream.<node>.<port>[0].<field>}), trigger body fields (${trigger.body.<field>}), secrets and resources. Use this to find the EXACT path to a field before putting it in a param — field shapes are non-obvious (a form/webhook body arrives as a list; form fields live under ${trigger.body.…}), and a wrong path passes validation but fails at run time.",
-		`{"type":"object","required":["id"],"properties":{
-			"id":        {"type":"string","description":"Flow ID."},
-			"tenant":    {"type":"string"},
-			"workspace": {"type":"string"}
-		}}`,
+		flowIDSchema,
 		"GET", "/references", false)
 }
 
@@ -729,11 +691,7 @@ func validateGraph(c *DazydClient) Tool {
 			if !ok {
 				return ErrorResult("graph must be a JSON object"), nil
 			}
-			var out map[string]any
-			if err := c.Post(ctx, "/validate/graph", graph, &out); err != nil {
-				return ToolCallResult{}, err
-			}
-			return TextResult(out), nil
+			return postJSON(ctx, c, "/validate/graph", graph)
 		})
 }
 
@@ -802,16 +760,12 @@ func cancelRun(c *DazydClient) Tool {
 		}}`,
 		[]string{"run_id"}, true,
 		func(ctx context.Context, c *DazydClient, args map[string]any) (ToolCallResult, error) {
+			runID := stringField(args, "run_id", "")
 			body := map[string]string{}
 			if reason := stringField(args, "reason", ""); reason != "" {
 				body["reason"] = reason
 			}
-			var out map[string]any
-			path := fmt.Sprintf("/me/runs/%s/cancel", pathSegment(stringField(args, "run_id", "")))
-			if err := c.Post(ctx, path, body, &out); err != nil {
-				return ToolCallResult{}, err
-			}
-			return TextResult(out), nil
+			return postJSON(ctx, c, fmt.Sprintf("/me/runs/%s/cancel", pathSegment(runID)), body)
 		})
 }
 
@@ -823,11 +777,7 @@ func getRun(c *DazydClient) Tool {
 		}}`,
 		[]string{"run_id"}, false,
 		func(ctx context.Context, c *DazydClient, args map[string]any) (ToolCallResult, error) {
-			var out map[string]any
-			if err := c.Get(ctx, "/me/runs/"+pathSegment(stringField(args, "run_id", "")), &out); err != nil {
-				return ToolCallResult{}, err
-			}
-			return TextResult(out), nil
+			return getJSON(ctx, c, "/me/runs/"+pathSegment(stringField(args, "run_id", "")))
 		})
 }
 
@@ -861,11 +811,7 @@ func listRuns(c *DazydClient, d Defaults) Tool {
 			} else {
 				path = "/me/runs" + qs
 			}
-			var out map[string]any
-			if err := c.Get(ctx, path, &out); err != nil {
-				return ToolCallResult{}, err
-			}
-			return TextResult(out), nil
+			return getJSON(ctx, c, path)
 		})
 }
 
@@ -888,20 +834,18 @@ func waitForRun(c *DazydClient) Tool {
 			}
 			deadline := time.Now().Add(time.Duration(timeout) * time.Second)
 
-			var last map[string]any
 			for {
 				var rec map[string]any
 				if err := c.Get(ctx, "/me/runs/"+pathSegment(runID), &rec); err != nil {
 					return ToolCallResult{}, err
 				}
-				last = rec
 				if isTerminal(rec) {
 					return TextResult(rec), nil
 				}
 				if time.Now().After(deadline) {
 					// The last snapshot beats an error: the steps stay described.
-					last["wait_timed_out"] = true
-					return TextResult(last), nil
+					rec["wait_timed_out"] = true
+					return TextResult(rec), nil
 				}
 				select {
 				case <-ctx.Done():
@@ -937,15 +881,10 @@ func listPendingApprovals(c *DazydClient, d Defaults) Tool {
 		nil, false,
 		func(ctx context.Context, c *DazydClient, args map[string]any) (ToolCallResult, error) {
 			// Empty tenant/workspace is valid: the daemon falls back to the bearer's scope.
-			path := "/approvals/pending" + buildQuery(map[string]string{
+			return getJSON(ctx, c, "/approvals/pending"+buildQuery(map[string]string{
 				"tenant":    stringField(args, "tenant", d.Tenant),
 				"workspace": stringField(args, "workspace", d.Workspace),
-			})
-			var out map[string]any
-			if err := c.Get(ctx, path, &out); err != nil {
-				return ToolCallResult{}, err
-			}
-			return TextResult(out), nil
+			}))
 		})
 }
 
@@ -965,10 +904,6 @@ func approveNode(c *DazydClient) Tool {
 					"decision": stringField(args, "decision", ""),
 					"comment":  stringField(args, "comment", ""),
 				})
-			var out map[string]any
-			if err := c.Post(ctx, path, nil, &out); err != nil {
-				return ToolCallResult{}, err
-			}
-			return TextResult(out), nil
+			return postJSON(ctx, c, path, nil)
 		})
 }
