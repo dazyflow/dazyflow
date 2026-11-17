@@ -131,12 +131,7 @@ func main() {
 	oidcAudience := envStr("DAZYFLOW_OIDC_AUDIENCE", "")
 	oidcTenantClaim := envStr("DAZYFLOW_OIDC_TENANT_CLAIM", "")
 	oidcRolesClaim := envStr("DAZYFLOW_OIDC_ROLES_CLAIM", "")
-	var oidcAllowedTenants []string
-	for _, t := range strings.Split(envStr("DAZYFLOW_OIDC_ALLOWED_TENANTS", ""), ",") {
-		if t = strings.TrimSpace(t); t != "" {
-			oidcAllowedTenants = append(oidcAllowedTenants, t)
-		}
-	}
+	oidcAllowedTenants := splitList(envStr("DAZYFLOW_OIDC_ALLOWED_TENANTS", ""), false)
 	stripeSecretKey := envStr("DAZYFLOW_STRIPE_SECRET_KEY", "")
 	stripePriceID := envStr("DAZYFLOW_STRIPE_PRICE_ID", "")
 	stripeWebhookSecret := envStr("DAZYFLOW_STRIPE_WEBHOOK_SECRET", "")
@@ -204,9 +199,6 @@ func main() {
 	}
 
 	if *importUsersFrom != "" {
-		if postgresDSN == "" {
-			log.Fatalf("--import-users-from-json requires DAZYFLOW_POSTGRES_DSN (the destination store)")
-		}
 		src, err := auth.OpenJSONUserStore(*importUsersFrom)
 		if err != nil {
 			log.Fatalf("open source users %q: %v", *importUsersFrom, err)
@@ -236,9 +228,6 @@ func main() {
 	default:
 		log.Fatalf("DAZYFLOW_GRAPH_STORE=%q: expected \"git\" or \"postgres\"", graphStore)
 	}
-	if graphStore == "postgres" && pgPool == nil {
-		log.Fatal("DAZYFLOW_GRAPH_STORE=postgres requires DAZYFLOW_POSTGRES_DSN")
-	}
 
 	fsWorkspaces := daemon.NewAutoFSWorkspaces(workspaceDir)
 	if n := envInt("DAZYFLOW_MAX_OPEN_WORKSPACES", 0); n != 0 {
@@ -256,19 +245,11 @@ func main() {
 		workspaces = pgws
 		log.Printf("flow store: postgres (shared by every replica; git mirrors synthesized into %s)",
 			filepath.Join(dataDir, "mirrorcache"))
-	} else if workspaceDir != "" {
-		log.Printf("flow store: git at %s/<tenant>/<workspace> (auto-provisioned)", workspaceDir)
 	} else {
-		log.Println("flow store: in-memory (flows lost on restart)")
+		log.Printf("flow store: git at %s/<tenant>/<workspace> (auto-provisioned)", workspaceDir)
 	}
 
 	if *migrateWorkspaces {
-		if pgPool == nil {
-			log.Fatal("--migrate-workspaces-to-postgres requires DAZYFLOW_POSTGRES_DSN")
-		}
-		if workspaceDir == "" {
-			log.Fatal("--migrate-workspaces-to-postgres requires DAZYFLOW_DATA_DIR (the git workspaces to read)")
-		}
 		if err := workspace.EnsurePgWorkspaceSchema(ctx, pgPool); err != nil {
 			log.Fatalf("flow store schema: %v", err)
 		}
@@ -277,9 +258,6 @@ func main() {
 	}
 
 	if *verifyWorkspaces {
-		if pgPool == nil {
-			log.Fatal("--verify-workspace-migration requires DAZYFLOW_POSTGRES_DSN")
-		}
 		// Create tables if absent, so verifying before migrating is not an error.
 		if err := workspace.EnsurePgWorkspaceSchema(ctx, pgPool); err != nil {
 			log.Fatalf("flow store schema: %v", err)
@@ -343,34 +321,10 @@ func main() {
 		})
 	}
 	if encryptedSecrets != nil {
-		daemon.RegisterResourceLister("stripe", "prices", func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
-			key, err := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Stripe", "api_key"))
-			if err != nil {
-				return nil, fmt.Errorf("connect Stripe first (add your secret API key on the Apps page) to list prices: %w", err)
-			}
-			return stripe.ListPrices(ctx, core.Job{Params: map[string]any{"api_key": key}})
-		})
-		daemon.RegisterResourceLister("stripe", "subscriptions", func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
-			key, err := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Stripe", "api_key"))
-			if err != nil {
-				return nil, fmt.Errorf("connect Stripe first (add your secret API key on the Apps page) to list subscriptions: %w", err)
-			}
-			return stripe.ListSubscriptions(ctx, core.Job{Params: map[string]any{"api_key": key}})
-		})
-		daemon.RegisterResourceLister("stripe", "payment_intents", func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
-			key, err := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Stripe", "api_key"))
-			if err != nil {
-				return nil, fmt.Errorf("connect Stripe first (add your secret API key on the Apps page) to list payments: %w", err)
-			}
-			return stripe.ListPaymentIntents(ctx, core.Job{Params: map[string]any{"api_key": key}})
-		})
-		daemon.RegisterResourceLister("stripe", "customers", func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
-			key, err := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Stripe", "api_key"))
-			if err != nil {
-				return nil, fmt.Errorf("connect Stripe first (add your secret API key on the Apps page) to list customers: %w", err)
-			}
-			return stripe.ListCustomers(ctx, core.Job{Params: map[string]any{"api_key": key}})
-		})
+		daemon.RegisterResourceLister("stripe", "prices", stripeLister(encryptedSecrets, "prices", stripe.ListPrices))
+		daemon.RegisterResourceLister("stripe", "subscriptions", stripeLister(encryptedSecrets, "subscriptions", stripe.ListSubscriptions))
+		daemon.RegisterResourceLister("stripe", "payment_intents", stripeLister(encryptedSecrets, "payments", stripe.ListPaymentIntents))
+		daemon.RegisterResourceLister("stripe", "customers", stripeLister(encryptedSecrets, "customers", stripe.ListCustomers))
 		haConn := func(ctx context.Context) (core.Job, error) {
 			base, _ := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Home Assistant", "base_url"))
 			token, _ := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Home Assistant", "token"))
@@ -696,11 +650,7 @@ func main() {
 	}
 
 	if devKey {
-		adminRole := core.Role{Name: "admin", Permissions: []core.Permission{
-			core.PermOrganizationAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
-			core.PermSecretRead, core.PermSecretWrite,
-		}}
-		_, ct, err := auth.IssueAPIKey(ks, ctx, "dev", "dev", "main", "dev@local", []core.Role{adminRole}, nil)
+		_, ct, err := auth.IssueAPIKey(ks, ctx, "dev", "dev", "main", "dev@local", []core.Role{devAdminRole}, nil)
 		if err != nil {
 			log.Fatalf("issue dev key: %v", err)
 		}
@@ -717,11 +667,7 @@ func main() {
 
 	healthSrv := health.NewServer()
 	grpc_health_v1.RegisterHealthServer(srv, healthSrv)
-	var grpcReady func(context.Context) error
-	if pgPool != nil {
-		pool := pgPool
-		grpcReady = func(ctx context.Context) error { return pool.Ping(ctx) }
-	}
+	grpcReady := func(ctx context.Context) error { return pgPool.Ping(ctx) }
 	go daemon.MonitorGRPCHealth(ctx, healthSrv, grpcReady, 5*time.Second)
 
 	lis, err := net.Listen("tcp", listen)
@@ -969,42 +915,25 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 
 	if d.runnerTasks != nil {
 		sweeper := &daemon.RunnerTaskSweeper{Tasks: d.runnerTasks}
-		bgWg.Add(1)
-		go func() {
-			defer bgWg.Done()
-			pass := func() {
-				n, err := sweeper.Sweep(ctx, time.Now())
-				if err != nil && ctx.Err() == nil {
-					log.Printf("runner tasks: sweep orphans: %v", err)
-				}
-				if n > 0 {
-					log.Printf("runner tasks: closed %d task(s) nobody was waiting for", n)
-				}
+		// Startup pass: this boot is itself the restart that stranded them.
+		runEvery(ctx, bgWg, runnerSweepInterval, true, func() {
+			n, err := sweeper.Sweep(ctx, time.Now())
+			if err != nil && ctx.Err() == nil {
+				log.Printf("runner tasks: sweep orphans: %v", err)
 			}
-			pass() // startup pass: this boot is itself the restart that stranded them
-			t := time.NewTicker(runnerSweepInterval)
-			defer t.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-t.C:
-					pass()
-				}
+			if n > 0 {
+				log.Printf("runner tasks: closed %d task(s) nobody was waiting for", n)
 			}
-		}()
+		})
 	}
 
 	sched := daemon.NewScheduler(d.svc)
 	sched.SetPollStateReader(pollstate.Read)
-	var isLeader func() bool
-	if d.pgPool != nil {
-		leader := daemon.NewPgLeader(d.pgPool, daemon.SchedulerLockKey)
-		go leader.Run(ctx)
-		isLeader = leader.IsLeader
-		sched.SetLeader(isLeader)
-		log.Print("scheduler: leader election via postgres advisory lock")
-	}
+	leader := daemon.NewPgLeader(d.pgPool, daemon.SchedulerLockKey)
+	go leader.Run(ctx)
+	isLeader := leader.IsLeader
+	sched.SetLeader(isLeader)
+	log.Print("scheduler: leader election via postgres advisory lock")
 	bgWg.Add(1)
 	go func() {
 		defer bgWg.Done()
@@ -1015,131 +944,70 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 
 	reconcileInterval := envDuration("DAZYFLOW_SCHEDULE_RECONCILE_INTERVAL", time.Hour)
 	if reconcileInterval > 0 && d.svc != nil && d.svc.Schedules != nil {
-		bgWg.Add(1)
-		go func() {
-			defer bgWg.Done()
-			t := time.NewTicker(5 * time.Second)
-			defer t.Stop()
-			var last time.Time
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-t.C:
-					if isLeader != nil && !isLeader() {
-						continue
-					}
-					if !last.IsZero() && time.Since(last) < reconcileInterval {
-						continue
-					}
-					start := time.Now()
-					n, err := d.svc.ReconcileSchedules(ctx)
-					last = time.Now() // also on failure, so a broken pass doesn't spin
-					if err != nil {
-						if ctx.Err() == nil {
-							log.Printf("schedule reconcile: %v", err)
-						}
-						continue
-					}
-					log.Printf("schedule reconcile: %d flow(s) in %s", n, time.Since(start).Round(time.Millisecond))
-				}
+		// Polls every 5s rather than ticking at reconcileInterval, so a replica
+		// that wins leadership mid-interval reconciles promptly. No startup pass:
+		// leadership is only known once the elector has run.
+		var last time.Time
+		runEvery(ctx, bgWg, 5*time.Second, false, func() {
+			if !isLeader() {
+				return
 			}
-		}()
+			if !last.IsZero() && time.Since(last) < reconcileInterval {
+				return
+			}
+			start := time.Now()
+			n, err := d.svc.ReconcileSchedules(ctx)
+			last = time.Now() // also on failure, so a broken pass doesn't spin
+			if err != nil {
+				if ctx.Err() == nil {
+					log.Printf("schedule reconcile: %v", err)
+				}
+				return
+			}
+			log.Printf("schedule reconcile: %d flow(s) in %s", n, time.Since(start).Round(time.Millisecond))
+		})
 	}
 
 	if pgws, ok := d.svc.Workspaces.(*daemon.PgWorkspaces); ok {
-		bgWg.Add(1)
-		go func() {
-			defer bgWg.Done()
-			sweep := func() {
-				n, err := pgws.PruneMirrorCache(ctx)
-				if err != nil {
-					if ctx.Err() == nil {
-						log.Printf("mirror cache sweep: %v", err)
-					}
-					return
+		// Startup pass: orgs erased while this replica was down leave mirrors behind.
+		runEvery(ctx, bgWg, time.Hour, true, func() {
+			n, err := pgws.PruneMirrorCache(ctx)
+			if err != nil {
+				if ctx.Err() == nil {
+					log.Printf("mirror cache sweep: %v", err)
 				}
-				if n > 0 {
-					log.Printf("mirror cache sweep: removed %d erased org(s)", n)
-				}
+				return
 			}
-			sweep()
-			t := time.NewTicker(time.Hour)
-			defer t.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-t.C:
-					sweep()
-				}
+			if n > 0 {
+				log.Printf("mirror cache sweep: removed %d erased org(s)", n)
 			}
-		}()
+		})
 	}
 
 	reaperDispatcher := daemon.NewDispatcher(d.jobs, d.bus, d.eng, log.New(log.Writer(), "reaper: ", log.LstdFlags))
 	reapInterval := envDuration("DAZYFLOW_REAP_INTERVAL", time.Minute)
 	daemon.AbandonRunsAfter = envDuration("DAZYFLOW_ABANDON_RUNS_AFTER", daemon.AbandonRunsAfter)
-	bgWg.Add(1)
-	go func() {
-		defer bgWg.Done()
-		runReap := func() {
-			if n, err := reaperDispatcher.ReapStuckGraphRuns(ctx); err != nil {
-				if ctx.Err() == nil {
-					log.Printf("reaper sweep: %v", err)
-				}
-			} else if n > 0 {
-				log.Printf("reaper: recovered %d orphaned graph run(s)", n)
+	// Startup pass: recover runs the previous process orphaned.
+	runEvery(ctx, bgWg, reapInterval, true, func() {
+		if n, err := reaperDispatcher.ReapStuckGraphRuns(ctx); err != nil {
+			if ctx.Err() == nil {
+				log.Printf("reaper sweep: %v", err)
 			}
+		} else if n > 0 {
+			log.Printf("reaper: recovered %d orphaned graph run(s)", n)
 		}
-		runReap() // startup pass: recover runs the previous process orphaned
-		t := time.NewTicker(reapInterval)
-		defer t.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				runReap()
-			}
-		}
-	}()
+	})
 
 	notifyInterval := envDuration("DAZYFLOW_NOTIFY_INTERVAL", 15*time.Second)
 	daemon.NotifySweepLookback = envDuration("DAZYFLOW_NOTIFY_LOOKBACK", daemon.NotifySweepLookback)
 	if notifyInterval > 0 && d.svc != nil {
-		bgWg.Add(1)
-		go func() {
-			defer bgWg.Done()
-			d.svc.SweepFailureNotifications(ctx)
-			t := time.NewTicker(notifyInterval)
-			defer t.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-t.C:
-					d.svc.SweepFailureNotifications(ctx)
-				}
-			}
-		}()
+		// Startup pass: notify failures that landed while no replica was sweeping.
+		runEvery(ctx, bgWg, notifyInterval, true, func() { d.svc.SweepFailureNotifications(ctx) })
 	}
 
+	// No startup pass: the interval is seconds, so the first tick comes soon enough.
 	promoteInterval := envDuration("DAZYFLOW_PROMOTE_INTERVAL", 2*time.Second)
-	bgWg.Add(1)
-	go func() {
-		defer bgWg.Done()
-		t := time.NewTicker(promoteInterval)
-		defer t.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				d.svc.SweepPromotePending(ctx)
-			}
-		}
-	}()
+	runEvery(ctx, bgWg, promoteInterval, false, func() { d.svc.SweepPromotePending(ctx) })
 
 	startRetentionSweeps(ctx, d.svc, d.jobs, d.runLogs, d.pgPool, bgWg)
 	return isLeader
@@ -1189,109 +1057,60 @@ func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.Jo
 		}
 	}
 	var runnerTaskPruner pruner
-	if runnerTaskRetention > 0 && pgPool != nil {
+	if runnerTaskRetention > 0 {
 		if rt, err := daemon.NewPgRunnerTaskStore(ctx, pgPool); err != nil {
 			log.Printf("retention: runner task store: %v", err)
 		} else {
 			runnerTaskPruner = rt
 		}
 	}
-	bgWg.Add(1)
-	go func() {
-		defer bgWg.Done()
-		sweep := func() {
-			if jobRetention > 0 && jobPruner != nil {
-				if n, err := jobPruner.PruneTerminal(ctx, jobRetention, 5000); err != nil {
-					if ctx.Err() == nil {
-						log.Printf("retention: prune jobs: %v", err)
-					}
-				} else if n > 0 {
-					log.Printf("retention: pruned %d terminal job row(s)", n)
-				}
+	var terminalJobs pruner
+	if jobPruner != nil {
+		terminalJobs = pruneFunc(jobPruner.PruneTerminal)
+	}
+	// One row per global sweep; a nil pruner or a non-positive retention skips it.
+	sweeps := []struct {
+		op, what  string
+		p         pruner
+		retention time.Duration
+		batch     int
+	}{
+		{"prune jobs", "terminal job row(s)", terminalJobs, jobRetention, 5000},
+		{"prune audit", "audit row(s)", retentionAudit, auditRetention, 5000},
+		{"prune run logs", "run-log row(s)", logPruner, runLogRetention, 5000},
+		{"prune runner tasks", "runner task row(s)", runnerTaskPruner, runnerTaskRetention, 5000},
+		{"prune support tickets", "closed support ticket(s)", ticketPruner, supportRetention, 1000},
+		{"prune support bundles", "support bundle(s)", bundlePruner, supportRetention, 1000},
+	}
+	// Startup pass, so rows that aged out while the daemon was down go promptly.
+	runEvery(ctx, bgWg, time.Hour, true, func() {
+		for _, s := range sweeps {
+			if s.p == nil || s.retention <= 0 {
+				continue
 			}
-			if auditRetention > 0 {
-				if n, err := retentionAudit.Prune(ctx, auditRetention, 5000); err != nil {
-					if ctx.Err() == nil {
-						log.Printf("retention: prune audit: %v", err)
-					}
-				} else if n > 0 {
-					log.Printf("retention: pruned %d audit row(s)", n)
-				}
-			}
-			if runLogRetention > 0 && logPruner != nil {
-				if n, err := logPruner.Prune(ctx, runLogRetention, 5000); err != nil {
-					if ctx.Err() == nil {
-						log.Printf("retention: prune run logs: %v", err)
-					}
-				} else if n > 0 {
-					log.Printf("retention: pruned %d run-log row(s)", n)
-				}
-			}
-			if runnerTaskPruner != nil {
-				if n, err := runnerTaskPruner.Prune(ctx, runnerTaskRetention, 5000); err != nil {
-					if ctx.Err() == nil {
-						log.Printf("retention: prune runner tasks: %v", err)
-					}
-				} else if n > 0 {
-					log.Printf("retention: pruned %d runner task row(s)", n)
-				}
-			}
-			if supportRetention > 0 && ticketPruner != nil {
-				if n, err := ticketPruner.Prune(ctx, supportRetention, 1000); err != nil {
-					if ctx.Err() == nil {
-						log.Printf("retention: prune support tickets: %v", err)
-					}
-				} else if n > 0 {
-					log.Printf("retention: pruned %d closed support ticket(s)", n)
-				}
-			}
-			if supportRetention > 0 && bundlePruner != nil {
-				if n, err := bundlePruner.Prune(ctx, supportRetention, 1000); err != nil {
-					if ctx.Err() == nil {
-						log.Printf("retention: prune support bundles: %v", err)
-					}
-				} else if n > 0 {
-					log.Printf("retention: pruned %d support bundle(s)", n)
-				}
-			}
-			if svc != nil && perTenantLogPruner != nil {
-				tenants, err := perTenantLogPruner.RunLogTenants(ctx)
-				if err != nil {
-					if ctx.Err() == nil {
-						log.Printf("retention: list tenants for run-log sweep: %v", err)
-					}
-				}
-				for _, tenant := range tenants {
-					days := svc.RunLogRetentionDays(ctx, tenant)
-					if days <= 0 {
-						continue // uncapped — global sweep is the only bound
-					}
-					win := time.Duration(days) * 24 * time.Hour
-					if runLogRetention > 0 && win >= runLogRetention {
-						continue // global sweep already covers this window
-					}
-					if n, err := perTenantLogPruner.PruneTenant(ctx, tenant, win, 5000); err != nil {
-						if ctx.Err() == nil {
-							log.Printf("retention: prune run logs for %s: %v", tenant, err)
-						}
-					} else if n > 0 {
-						log.Printf("retention: pruned %d run-log row(s) for %s (%dd)", n, tenant, days)
-					}
-				}
-			}
+			n, err := s.p.Prune(ctx, s.retention, s.batch)
+			logPrune(ctx, s.op, s.what, n, err)
 		}
-		sweep() // startup pass
-		t := time.NewTicker(time.Hour)
-		defer t.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				sweep()
-			}
+		if svc == nil || perTenantLogPruner == nil {
+			return
 		}
-	}()
+		tenants, err := perTenantLogPruner.RunLogTenants(ctx)
+		if err != nil && ctx.Err() == nil {
+			log.Printf("retention: list tenants for run-log sweep: %v", err)
+		}
+		for _, tenant := range tenants {
+			days := svc.RunLogRetentionDays(ctx, tenant)
+			if days <= 0 {
+				continue // uncapped — global sweep is the only bound
+			}
+			win := time.Duration(days) * 24 * time.Hour
+			if runLogRetention > 0 && win >= runLogRetention {
+				continue // global sweep already covers this window
+			}
+			n, err := perTenantLogPruner.PruneTenant(ctx, tenant, win, 5000)
+			logPrune(ctx, "prune run logs for "+tenant, fmt.Sprintf("run-log row(s) for %s (%dd)", tenant, days), n, err)
+		}
+	})
 	log.Printf("retention sweeps: jobs=%s audit=%s run-logs=%s support=%s (0 = disabled)",
 		jobRetention, auditRetention, runLogRetention, supportRetention)
 }
@@ -1349,11 +1168,7 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 	gw.MCPGrants = d.mcpGrants
 	// Extra https hosts MCP clients may be sent back to after OAuth
 	// approval, beyond claude.ai and claude.com; comma-separated.
-	for _, host := range strings.Split(os.Getenv("DAZYFLOW_MCP_OAUTH_REDIRECT_HOSTS"), ",") {
-		if host = strings.ToLower(strings.TrimSpace(host)); host != "" {
-			gw.MCPRedirectHosts = append(gw.MCPRedirectHosts, host)
-		}
-	}
+	gw.MCPRedirectHosts = splitList(os.Getenv("DAZYFLOW_MCP_OAUTH_REDIRECT_HOSTS"), true)
 	gw.SessionTTL = d.sessionTTL
 	gw.MaxSessionAge = d.sessionMaxAge
 
@@ -1461,26 +1276,17 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 				Leader:  d.isLeader,
 				Notify:  gw.NotifyTicketWaiting,
 			}
-			bgWg.Add(1)
-			go func() {
-				defer bgWg.Done()
-				t := time.NewTicker(ticketNudgeInterval)
-				defer t.Stop()
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case <-t.C:
-						n, err := sweeper.Sweep(ctx)
-						if err != nil && ctx.Err() == nil {
-							log.Printf("support: reminder sweep: %v", err)
-						}
-						if n > 0 {
-							log.Printf("support: reminded %d ticket(s) nobody had opened", n)
-						}
-					}
+			// No startup pass: the sweep is leader-gated, and waiting one tick is
+			// immaterial next to a reminder threshold measured in hours.
+			runEvery(ctx, bgWg, ticketNudgeInterval, false, func() {
+				n, err := sweeper.Sweep(ctx)
+				if err != nil && ctx.Err() == nil {
+					log.Printf("support: reminder sweep: %v", err)
 				}
-			}()
+				if n > 0 {
+					log.Printf("support: reminded %d ticket(s) nobody had opened", n)
+				}
+			})
 			log.Printf("support reminders: after %s (DAZYFLOW_SUPPORT_NUDGE_AFTER)", nudgeAfter)
 		} else {
 			log.Print("support reminders: off (DAZYFLOW_SUPPORT_NUDGE_AFTER=0)")
@@ -1527,14 +1333,7 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 			log.Print("Stripe events endpoint enabled at /api/v1/events/stripe")
 		}
 	}
-	if d.webOrigin != "" {
-		for _, o := range strings.Split(d.webOrigin, ",") {
-			o = strings.TrimSpace(o)
-			if o != "" {
-				gw.AllowedOrigins = append(gw.AllowedOrigins, o)
-			}
-		}
-	}
+	gw.AllowedOrigins = append(gw.AllowedOrigins, splitList(d.webOrigin, false)...)
 	if d.webDist != "" && d.publicBaseURL != "" {
 		own := strings.TrimRight(d.publicBaseURL, "/")
 		known := false
@@ -1556,11 +1355,7 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 		}
 		log.Printf("per-org subdomains enabled for *.%s (CORS/CSRF allow subdomains; sign-in derives org from host)", d.wildcardDomain)
 	}
-	for _, e := range strings.Split(envStr("DAZYFLOW_PLATFORM_ADMINS", ""), ",") {
-		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
-			gw.PlatformAdmins = append(gw.PlatformAdmins, e)
-		}
-	}
+	gw.PlatformAdmins = append(gw.PlatformAdmins, splitList(envStr("DAZYFLOW_PLATFORM_ADMINS", ""), true)...)
 	if len(gw.PlatformAdmins) > 0 {
 		log.Printf("platform admins (from DAZYFLOW_PLATFORM_ADMINS): %v", gw.PlatformAdmins)
 	}
@@ -1580,6 +1375,73 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 		}
 	}()
 }
+
+// runEvery runs fn every interval on a goroutine tracked by wg until ctx is
+// done. With runAtStart, fn also runs once immediately, before the first tick.
+func runEvery(ctx context.Context, wg *sync.WaitGroup, interval time.Duration, runAtStart bool, fn func()) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if runAtStart {
+			fn()
+		}
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				fn()
+			}
+		}
+	}()
+}
+
+// logPrune reports one retention prune: the error unless shutdown caused it,
+// otherwise the row count when anything was removed. what names the rows
+// ("audit row(s)"); op names the pass in error messages ("prune audit").
+func logPrune(ctx context.Context, op, what string, n int, err error) {
+	if err != nil {
+		if ctx.Err() == nil {
+			log.Printf("retention: %s: %v", op, err)
+		}
+		return
+	}
+	if n > 0 {
+		log.Printf("retention: pruned %d %s", n, what)
+	}
+}
+
+// pruneFunc adapts a prune method with another name to the Prune shape.
+type pruneFunc func(context.Context, time.Duration, int) (int, error)
+
+func (f pruneFunc) Prune(ctx context.Context, retention time.Duration, batch int) (int, error) {
+	return f(ctx, retention, batch)
+}
+
+// splitList splits a comma-separated value, trimming each entry and dropping
+// empty ones; lower also lowercases them.
+func splitList(s string, lower bool) []string {
+	var out []string
+	for _, e := range strings.Split(s, ",") {
+		e = strings.TrimSpace(e)
+		if lower {
+			e = strings.ToLower(e)
+		}
+		if e != "" {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// devAdminRole is the all-permissions role given to the dev API key and the
+// seeded dev user.
+var devAdminRole = core.Role{Name: "admin", Permissions: []core.Permission{
+	core.PermOrganizationAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
+	core.PermSecretRead, core.PermSecretWrite,
+}}
 
 func waitForGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
 	done := make(chan struct{})
@@ -1840,17 +1702,13 @@ func seedDefaultUser(ctx context.Context, users auth.UserStore, dev bool) {
 		log.Printf("seed user: hash failed: %v", err)
 		return
 	}
-	adminRole := core.Role{Name: "admin", Permissions: []core.Permission{
-		core.PermOrganizationAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
-		core.PermSecretRead, core.PermSecretWrite,
-	}}
 	u := auth.User{
 		Email:        "test@example.com",
 		PasswordHash: hash,
 		Subject:      "test@example.com",
 		Tenant:       "dev",
 		Workspace:    "main",
-		Roles:        []core.Role{adminRole},
+		Roles:        []core.Role{devAdminRole},
 		CreatedAt:    time.Now(),
 	}
 	if err := users.PutUser(ctx, u); err != nil {
@@ -1931,9 +1789,7 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 		}
 	}
 	slack.SetTokenLookup(bind("slack"))
-	daemon.RegisterResourceLister("slack", "channels", func(ctx context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
-		return slack.ListChannels(ctx, core.Job{Params: map[string]any{"account": account}})
-	})
+	daemon.RegisterResourceLister("slack", "channels", accountLister(slack.ListChannels))
 	github.SetTokenLookup(bind("github"))
 	gmail.SetTokenLookup(bind("google"))
 	sheets.SetTokenLookup(bind("google"))
@@ -1943,9 +1799,7 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 	notion.SetTokenLookup(bind("notion"))
 	spotify.SetTokenLookup(bind("spotify"))
 	fortnox.SetTokenLookup(bind("fortnox"))
-	daemon.RegisterResourceLister("fortnox", "customers", func(ctx context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
-		return fortnox.ListCustomers(ctx, core.Job{Params: map[string]any{"account": account}})
-	})
+	daemon.RegisterResourceLister("fortnox", "customers", accountLister(fortnox.ListCustomers))
 	daemon.SetGoogleFormFieldFetcher(func(ctx context.Context, node core.Node) ([]string, error) {
 		return gform.FieldNames(ctx, core.Job{Params: node.Params})
 	})
@@ -1960,15 +1814,9 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 	}
 	daemon.RegisterResourceLister("google", "spreadsheets", driveLister("application/vnd.google-apps.spreadsheet"))
 	daemon.RegisterResourceLister("google", "forms", driveLister("application/vnd.google-apps.form"))
-	daemon.RegisterResourceLister("google", "drive-folders", func(ctx context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
-		return drive.ListFolders(ctx, core.Job{Params: map[string]any{"account": account}})
-	})
-	daemon.RegisterResourceLister("google", "drive-files", func(ctx context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
-		return drive.ListFilesForPicker(ctx, core.Job{Params: map[string]any{"account": account}})
-	})
-	daemon.RegisterResourceLister("google", "calendars", func(ctx context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
-		return gcal.ListCalendars(ctx, core.Job{Params: map[string]any{"account": account}})
-	})
+	daemon.RegisterResourceLister("google", "drive-folders", accountLister(drive.ListFolders))
+	daemon.RegisterResourceLister("google", "drive-files", accountLister(drive.ListFilesForPicker))
+	daemon.RegisterResourceLister("google", "calendars", accountLister(gcal.ListCalendars))
 	daemon.RegisterResourceLister("google", "tabs", func(ctx context.Context, account string, extra map[string]string) ([]core.AccountResource, error) {
 		return sheets.ListSheetTabs(ctx, core.Job{Params: map[string]any{
 			"account":        account,
@@ -1987,10 +1835,29 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 	})
 }
 
-func setupRunners(ctx context.Context, pool *pgxpool.Pool, secrets *daemon.EncryptedSecrets) (*daemon.Runners, daemon.RunnerTaskStore) {
-	if pool == nil {
-		return nil, nil
+// resourceListFunc is the shape of a connector's resource listing call.
+type resourceListFunc func(context.Context, core.Job) ([]core.AccountResource, error)
+
+// accountLister lists resources for the picked connected account.
+func accountLister(list resourceListFunc) daemon.ResourceLister {
+	return func(ctx context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
+		return list(ctx, core.Job{Params: map[string]any{"account": account}})
 	}
+}
+
+// stripeLister lists Stripe resources with the org's stored API key; noun
+// names them in the "connect Stripe first" error.
+func stripeLister(secrets *daemon.EncryptedSecrets, noun string, list resourceListFunc) daemon.ResourceLister {
+	return func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
+		key, err := secrets.Get(ctx, core.ConnectionSecretKey("Stripe", "api_key"))
+		if err != nil {
+			return nil, fmt.Errorf("connect Stripe first (add your secret API key on the Apps page) to list %s: %w", noun, err)
+		}
+		return list(ctx, core.Job{Params: map[string]any{"api_key": key}})
+	}
+}
+
+func setupRunners(ctx context.Context, pool *pgxpool.Pool, secrets *daemon.EncryptedSecrets) (*daemon.Runners, daemon.RunnerTaskStore) {
 	store, err := daemon.NewPgRunnerStore(ctx, pool)
 	if err != nil {
 		log.Printf("runners disabled: %v", err)
@@ -2019,9 +1886,6 @@ func setupTenantWebAPIs(
 	pool *pgxpool.Pool,
 	catalog *webapi.Catalog,
 ) *daemon.WebAPIs {
-	if pool == nil {
-		return nil
-	}
 	store, err := daemon.NewPgWebAPIStore(ctx, pool)
 	if err != nil {
 		log.Printf("per-org web APIs disabled: %v", err)
@@ -2051,9 +1915,6 @@ func setupTenantMCPServers(
 	catalog *mcp.Catalog,
 	secrets *daemon.EncryptedSecrets,
 ) *daemon.MCPServers {
-	if pool == nil {
-		return nil
-	}
 	store, err := daemon.NewPgMCPServerStore(ctx, pool)
 	if err != nil {
 		log.Printf("per-org MCP servers disabled: %v", err)
@@ -2214,34 +2075,17 @@ func verifyWorkspaceMigration(ctx context.Context, src *daemon.AutoFSWorkspaces,
 }
 
 func ephemeralStore(ctx context.Context, pool *pgxpool.Pool, bgWg *sync.WaitGroup) auth.EphemeralStore {
-	var store auth.EphemeralStore
-	if pool != nil {
-		pg, err := auth.NewPgEphemeralStore(ctx, pool)
-		if err != nil {
-			log.Fatalf("postgres sign-in state store: %v", err)
-		}
-		store = pg
-		log.Print("sign-in state: postgres (no sticky sessions needed)")
-	} else {
-		store = auth.NewMemEphemeralStore()
-		log.Print("sign-in state: in-process memory (single instance only)")
+	store, err := auth.NewPgEphemeralStore(ctx, pool)
+	if err != nil {
+		log.Fatalf("postgres sign-in state store: %v", err)
 	}
-	bgWg.Add(1)
-	go func() {
-		defer bgWg.Done()
-		t := time.NewTicker(15 * time.Minute)
-		defer t.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				if _, err := store.Sweep(ctx); err != nil && ctx.Err() == nil {
-					log.Printf("sign-in state sweep: %v", err)
-				}
-			}
+	log.Print("sign-in state: postgres (no sticky sessions needed)")
+	// No startup pass: entries only expire, so a fresh boot has nothing urgent to drop.
+	runEvery(ctx, bgWg, 15*time.Minute, false, func() {
+		if _, err := store.Sweep(ctx); err != nil && ctx.Err() == nil {
+			log.Printf("sign-in state sweep: %v", err)
 		}
-	}()
+	})
 	return store
 }
 
