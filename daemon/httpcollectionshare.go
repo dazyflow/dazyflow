@@ -6,7 +6,6 @@ package daemon
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -114,9 +113,7 @@ func (h *shareAPI) publicCollection(rw http.ResponseWriter, r *http.Request) {
 		writeAPIError(rw, http.StatusNotFound, "share_not_found", "unknown share link")
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	data, err := h.svc.PublicCollection(r.Context(), token, limit, offset, time.Now())
+	data, err := h.svc.PublicCollection(r.Context(), token, queryLimit(r, boardRowLimit, boardRowLimit), queryOffset(r), time.Now())
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			writeAPIError(rw, http.StatusNotFound, "share_not_found", "unknown share link")
