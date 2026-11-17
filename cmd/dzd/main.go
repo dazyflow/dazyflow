@@ -952,6 +952,9 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 
 	reconcileInterval := envDuration("DAZYFLOW_SCHEDULE_RECONCILE_INTERVAL", time.Hour)
 	if reconcileInterval > 0 && d.svc != nil && d.svc.Schedules != nil {
+		// Polls every 5s rather than ticking at reconcileInterval, so a replica
+		// that wins leadership mid-interval reconciles promptly. No startup pass:
+		// leadership is only known once the elector has run.
 		var last time.Time
 		runEvery(ctx, bgWg, 5*time.Second, false, func() {
 			if !isLeader() {
@@ -974,6 +977,7 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 	}
 
 	if pgws, ok := d.svc.Workspaces.(*daemon.PgWorkspaces); ok {
+		// Startup pass: orgs erased while this replica was down leave mirrors behind.
 		runEvery(ctx, bgWg, time.Hour, true, func() {
 			n, err := pgws.PruneMirrorCache(ctx)
 			if err != nil {
@@ -1005,9 +1009,11 @@ func startBackgroundJobs(ctx context.Context, d backgroundDeps, bgWg *sync.WaitG
 	notifyInterval := envDuration("DAZYFLOW_NOTIFY_INTERVAL", 15*time.Second)
 	daemon.NotifySweepLookback = envDuration("DAZYFLOW_NOTIFY_LOOKBACK", daemon.NotifySweepLookback)
 	if notifyInterval > 0 && d.svc != nil {
+		// Startup pass: notify failures that landed while no replica was sweeping.
 		runEvery(ctx, bgWg, notifyInterval, true, func() { d.svc.SweepFailureNotifications(ctx) })
 	}
 
+	// No startup pass: the interval is seconds, so the first tick comes soon enough.
 	promoteInterval := envDuration("DAZYFLOW_PROMOTE_INTERVAL", 2*time.Second)
 	runEvery(ctx, bgWg, promoteInterval, false, func() { d.svc.SweepPromotePending(ctx) })
 
@@ -1066,6 +1072,7 @@ func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.Jo
 			runnerTaskPruner = rt
 		}
 	}
+	// Startup pass, so rows that aged out while the daemon was down go promptly.
 	runEvery(ctx, bgWg, time.Hour, true, func() {
 		if jobRetention > 0 && jobPruner != nil {
 			n, err := jobPruner.PruneTerminal(ctx, jobRetention, 5000)
@@ -1313,6 +1320,8 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 				Leader:  d.isLeader,
 				Notify:  gw.NotifyTicketWaiting,
 			}
+			// No startup pass: the sweep is leader-gated, and waiting one tick is
+			// immaterial next to a reminder threshold measured in hours.
 			runEvery(ctx, bgWg, ticketNudgeInterval, false, func() {
 				n, err := sweeper.Sweep(ctx)
 				if err != nil && ctx.Err() == nil {
@@ -2049,6 +2058,7 @@ func ephemeralStore(ctx context.Context, pool *pgxpool.Pool, bgWg *sync.WaitGrou
 		log.Fatalf("postgres sign-in state store: %v", err)
 	}
 	log.Print("sign-in state: postgres (no sticky sessions needed)")
+	// No startup pass: entries only expire, so a fresh boot has nothing urgent to drop.
 	runEvery(ctx, bgWg, 15*time.Minute, false, func() {
 		if _, err := store.Sweep(ctx); err != nil && ctx.Err() == nil {
 			log.Printf("sign-in state sweep: %v", err)
