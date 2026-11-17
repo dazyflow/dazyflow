@@ -428,3 +428,21 @@ func TestJSONFieldMessage(t *testing.T) {
 		})
 	}
 }
+
+func TestEnvelopeMessage(t *testing.T) {
+	for _, tc := range []struct {
+		body, qual string
+		limit      int
+		want       string
+	}{
+		{`{"error":{"type":"api_error","message":"down"}}`, "type", 100, "api_error: down"},
+		{`{"error":{"message":"down"}}`, "type", 100, "down"},
+		{`{"error":{"type":"api_error","message":"down"}}`, "", 100, "down"},
+		{`{"error":"flat"}`, "", 100, `{"error":"flat"}`},
+		{"0123456789abc", "", 10, "0123456789"},
+	} {
+		if got := EnvelopeMessage([]byte(tc.body), tc.qual, tc.limit); got != tc.want {
+			t.Errorf("EnvelopeMessage(%s, %q) = %q, want %q", tc.body, tc.qual, got, tc.want)
+		}
+	}
+}

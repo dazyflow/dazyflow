@@ -5,7 +5,6 @@ package google
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -68,16 +67,5 @@ func Do(ctx context.Context, method, url, token, contentType string, body []byte
 // ({"error":{"message":...}}), falling back to a slice of the raw body bounded
 // at limit bytes.
 func ErrMessage(body []byte, limit int) string {
-	var e struct {
-		Error struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Error.Message != "" {
-		return e.Error.Message
-	}
-	if len(body) > limit {
-		return string(body[:limit])
-	}
-	return string(body)
+	return params.EnvelopeMessage(body, "", limit)
 }

@@ -226,6 +226,24 @@ func JSONFieldMessage(body []byte, field string, limit int) string {
 	return Truncate(string(body), limit)
 }
 
+// EnvelopeMessage pulls the message out of an {"error":{"message":...}}
+// envelope, prefixed with "<qualifier>: " when qualifierField is set and
+// present, falling back to the raw body truncated at limit bytes.
+func EnvelopeMessage(body []byte, qualifierField string, limit int) string {
+	var e struct {
+		Error map[string]any `json:"error"`
+	}
+	if err := json.Unmarshal(body, &e); err == nil {
+		if msg, _ := e.Error["message"].(string); msg != "" {
+			if q, _ := e.Error[qualifierField].(string); qualifierField != "" && q != "" {
+				return q + ": " + msg
+			}
+			return msg
+		}
+	}
+	return Truncate(string(body), limit)
+}
+
 func APIErrorMessage(body []byte, limit int) string {
 	var e struct {
 		Message string `json:"message"`
