@@ -252,9 +252,10 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
       : isValueSource || isTrigger
         ? []
         : [inputs[0]];
+    const collapsedClassName = nodeClassName(d, selected, "collapsed");
     return (
       <div
-        className={nodeClassName(d, selected, "collapsed")}
+        className={collapsedClassName}
         role="group"
         aria-label={i18n.t("nodeCard.collapsedLabel", {
           name: d.label || d.moduleID,
@@ -330,9 +331,10 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
     );
   }
 
+  const expandedClassName = nodeClassName(d, selected, "expanded");
   return (
     <div
-      className={nodeClassName(d, selected, "expanded")}
+      className={expandedClassName}
       role="group"
       aria-label={i18n.t(
         d.disabled ? "nodeCard.expandedLabelDisabled" : "nodeCard.expandedLabel",
@@ -1049,9 +1051,10 @@ function OperatorChip({
     Math.max(OP_BASE_FONT, OP_MIN_PX / (zoom || 1)),
   );
   const missingByPort = missingInputsByPort(d, inputs);
+  const operatorClassName = nodeClassName(d, selected, "operator");
   return (
     <div
-      className={nodeClassName(d, selected, "operator")}
+      className={operatorClassName}
       style={nodeStyle(d, color, "operator") as React.CSSProperties}
       title={d.label}
     >
