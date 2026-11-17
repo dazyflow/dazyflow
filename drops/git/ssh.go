@@ -6,6 +6,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -234,6 +235,9 @@ func validateKnownHosts(s string) error {
 			continue
 		}
 		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
+			if err == io.EOF {
+				err = fmt.Errorf("invalid entry")
+			}
 			return fmt.Errorf("credential known_hosts line %d: %w", i+1, err)
 		}
 	}

@@ -123,7 +123,7 @@ func NewPgMembershipStore(ctx context.Context, pool *pgxpool.Pool) (*PgMembershi
 }
 
 func (s *PgMembershipStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
-	ident = strings.ToLower(strings.TrimSpace(ident))
+	ident = NormalizeEmail(ident)
 	if ident == "" {
 		return 0, nil
 	}
@@ -136,7 +136,7 @@ func (s *PgMembershipStore) AnonymizeSubject(ctx context.Context, ident string) 
 }
 
 func (s *PgMembershipStore) PutMembership(ctx context.Context, m Membership) error {
-	email := strings.ToLower(strings.TrimSpace(m.UserEmail))
+	email := NormalizeEmail(m.UserEmail)
 	if email == "" {
 		return fmt.Errorf("user_email required")
 	}
@@ -179,7 +179,7 @@ const membershipUpsertSQL = `
 // the tenant id onto the bigint the advisory lock API takes, and a collision
 // costs a little contention and nothing else.
 func (s *PgMembershipStore) PutMembershipWithinLimit(ctx context.Context, m Membership, maxRows int) (bool, error) {
-	email := strings.ToLower(strings.TrimSpace(m.UserEmail))
+	email := NormalizeEmail(m.UserEmail)
 	if email == "" {
 		return false, fmt.Errorf("user_email required")
 	}
@@ -232,13 +232,13 @@ func (s *PgMembershipStore) PutMembershipWithinLimit(ctx context.Context, m Memb
 }
 
 func (s *PgMembershipStore) DeleteMembership(ctx context.Context, email, tenant string) error {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	_, err := s.pool.Exec(ctx, `DELETE FROM memberships WHERE user_email=$1 AND tenant=$2`, email, tenant)
 	return err
 }
 
 func (s *PgMembershipStore) DeleteByEmail(ctx context.Context, email string) (int, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	return deleteWhere(ctx, s.pool, "memberships", "user_email", email)
 }
 
@@ -247,7 +247,7 @@ func (s *PgMembershipStore) DeleteByTenant(ctx context.Context, tenant string) (
 }
 
 func (s *PgMembershipStore) GetMembership(ctx context.Context, email, tenant string) (Membership, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	row := s.pool.QueryRow(ctx,
 		`SELECT user_email, tenant, workspace, roles, COALESCE(invited_by,''), created_at
          FROM memberships WHERE user_email=$1 AND tenant=$2`, email, tenant)
@@ -256,7 +256,7 @@ func (s *PgMembershipStore) GetMembership(ctx context.Context, email, tenant str
 }
 
 func (s *PgMembershipStore) ListByEmail(ctx context.Context, email string) ([]Membership, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	return queryRows(ctx, s.pool, scanMembership,
 		`SELECT user_email, tenant, workspace, roles, COALESCE(invited_by,''), created_at
          FROM memberships WHERE user_email=$1
@@ -298,7 +298,7 @@ func NewPgInvitationStore(ctx context.Context, pool *pgxpool.Pool) (*PgInvitatio
 }
 
 func (s *PgInvitationStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
-	ident = strings.ToLower(strings.TrimSpace(ident))
+	ident = NormalizeEmail(ident)
 	if ident == "" {
 		return 0, nil
 	}
@@ -317,7 +317,7 @@ func (s *PgInvitationStore) PutInvitation(ctx context.Context, inv Invitation) e
 	if inv.Tenant == "" {
 		return fmt.Errorf("tenant required")
 	}
-	inv.Email = strings.ToLower(strings.TrimSpace(inv.Email))
+	inv.Email = NormalizeEmail(inv.Email)
 	roles, err := marshalRoles(inv.Roles)
 	if err != nil {
 		return err
@@ -357,7 +357,7 @@ func (s *PgInvitationStore) ListByTenant(ctx context.Context, tenant string) ([]
 }
 
 func (s *PgInvitationStore) ListByEmail(ctx context.Context, email string) ([]Invitation, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	return queryRows(ctx, s.pool, scanInvitation,
 		`SELECT token, email, tenant, workspace, roles, invited_by, created_at, expires_at, accepted_at, revoked_at
          FROM invitations WHERE email=$1
@@ -365,7 +365,7 @@ func (s *PgInvitationStore) ListByEmail(ctx context.Context, email string) ([]In
 }
 
 func (s *PgInvitationStore) DeleteByEmail(ctx context.Context, email string) (int, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	return deleteWhere(ctx, s.pool, "invitations", "email", email)
 }
 

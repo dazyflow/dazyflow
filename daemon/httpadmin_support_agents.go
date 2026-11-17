@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
 )
 
@@ -43,7 +44,7 @@ func (h *orgAPI) grantSupportAgent(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(body.Email))
+	email := auth.NormalizeEmail(body.Email)
 	if email == "" || !strings.Contains(email, "@") {
 		writeJSONError(rw, http.StatusBadRequest, "a valid email is required")
 		return
@@ -67,7 +68,7 @@ func (h *orgAPI) revokeSupportAgent(rw http.ResponseWriter, r *http.Request, p c
 		writeJSONError(rw, http.StatusNotImplemented, "support agents are not enabled on this deployment")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	if email == "" {
 		writeJSONError(rw, http.StatusBadRequest, "email required")
 		return
