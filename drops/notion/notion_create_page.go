@@ -130,11 +130,8 @@ func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Pr
 	raw, _ := json.Marshal(payload)
 
 	status, body, err := notionDo(ctx, "POST", currentHTTPBase()+"/pages", token, raw, params.IntDefault(job.Params, "timeout_ms", 15000))
-	if err != nil {
-		return params.Err(job, "notion_http_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "notion_error", notionError(status, body)), nil
+	if fail := params.HTTPFailure(job, "notion", "Notion", status, body, err, extractNotionError); fail != nil {
+		return *fail, nil
 	}
 
 	var page struct {
@@ -150,10 +147,7 @@ func executeNotionCreatePage(ctx context.Context, job core.Job, _ chan<- core.Pr
 		rest = rest[len(batch):]
 		b, _ := json.Marshal(map[string]any{"children": batch})
 		st, rb, aerr := notionDo(ctx, "PATCH", currentHTTPBase()+"/blocks/"+url.PathEscape(page.ID)+"/children", token, b, params.IntDefault(job.Params, "timeout_ms", 15000))
-		if aerr == nil && (st < 200 || st >= 300) {
-			aerr = fmt.Errorf("%s", notionError(st, rb))
-		}
-		if aerr != nil {
+		if aerr = params.HTTPError("Notion", st, rb, aerr, extractNotionError); aerr != nil {
 			// The page exists; say where, so a retry doesn't just make another.
 			return params.Err(job, "notion_error", fmt.Sprintf(
 				"page created at %s, but adding the rest of its body failed: %v", page.URL, aerr)), nil

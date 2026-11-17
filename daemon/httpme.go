@@ -68,37 +68,6 @@ func readFlowID(rw http.ResponseWriter, r *http.Request, p core.Principal) (stri
 	return tenant, workspace, id, true
 }
 
-// A non-platform-admin is pinned to their own tenant whatever they ask for.
-func resolveScope(rw http.ResponseWriter, r *http.Request, p core.Principal, action string) (tenant, workspace string, ok bool) {
-	tenant = r.URL.Query().Get("tenant")
-	workspace = r.URL.Query().Get("workspace")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if workspace == "" {
-		workspace = p.Workspace
-	}
-	if tenant == "" || workspace == "" {
-		writeAPIError(rw, http.StatusBadRequest, "missing_scope",
-			"tenant and workspace required (no principal binding)")
-		return "", "", false
-	}
-	if isPlatformAdmin(p) {
-		return tenant, workspace, true
-	}
-	if p.Tenant != "" && tenant != p.Tenant {
-		writeAPIError(rw, http.StatusForbidden, "forbidden_scope",
-			fmt.Sprintf("cannot %s tenant %q (principal is bound to %q)", action, tenant, p.Tenant))
-		return "", "", false
-	}
-	if p.Workspace != "" && workspace != p.Workspace {
-		writeAPIError(rw, http.StatusForbidden, "forbidden_scope",
-			fmt.Sprintf("cannot %s workspace %q (principal is bound to %q)", action, workspace, p.Workspace))
-		return "", "", false
-	}
-	return tenant, workspace, true
-}
-
 func resolveTenantWorkspaceScope(rw http.ResponseWriter, r *http.Request, p core.Principal) (string, string, bool) {
 	return resolveScope(rw, r, p, "act on")
 }
@@ -353,11 +322,7 @@ func (h *flowAPI) labelRevisionMe(rw http.ResponseWriter, r *http.Request, p cor
 	label := strings.TrimSpace(body.Label)
 	commit, err := h.svc.LabelRevision(r.Context(), p, tenant, workspace, id, strings.TrimSpace(body.Ref), label)
 	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
-			return
-		}
-		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+		writeFlowOpError(rw, err, tenant, workspace, id)
 		return
 	}
 	h.audit(r.Context(), p, "graph.label", id, "commit="+commit+" label="+label)
@@ -373,25 +338,17 @@ func (h *flowAPI) publishFlowMe(rw http.ResponseWriter, r *http.Request, p core.
 	if !ok {
 		return
 	}
-	var body struct {
+	body, ok := decodeRequestJSONOptional[struct {
 		Ref   string `json:"ref"`
 		Label string `json:"label"`
-	}
-	if r.Body != nil {
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-			writeAPIError(rw, http.StatusBadRequest, "bad_request",
-				fmt.Sprintf("could not read the request body: %v", err))
-			return
-		}
+	}](rw, r)
+	if !ok {
+		return
 	}
 	label := strings.TrimSpace(body.Label)
 	commit, err := h.svc.PublishFlow(r.Context(), p, tenant, workspace, id, strings.TrimSpace(body.Ref), label)
 	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
-			return
-		}
-		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+		writeFlowOpError(rw, err, tenant, workspace, id)
 		return
 	}
 	detail := "commit=" + commit
@@ -415,11 +372,7 @@ func (h *flowAPI) unpublishFlowMe(rw http.ResponseWriter, r *http.Request, p cor
 		return
 	}
 	if err := h.svc.UnpublishFlow(r.Context(), p, tenant, workspace, id); err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
-			return
-		}
-		writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+		writeFlowOpError(rw, err, tenant, workspace, id)
 		return
 	}
 	h.audit(r.Context(), p, "graph.unpublish", id, "")
@@ -600,9 +553,8 @@ func (h *flowAPI) patchFlowMe(rw http.ResponseWriter, r *http.Request, p core.Pr
 		return
 	}
 
-	current, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, "")
-	if err != nil {
-		writeAPIError(rw, http.StatusNotFound, "flow_not_found", err.Error())
+	current, ok := loadVisibleFlow(rw, r, h.svc, p, tenant, workspace, id, "")
+	if !ok {
 		return
 	}
 	// Round-trip through a map, so merge semantics apply to unknown keys too.
@@ -673,16 +625,8 @@ func (h *flowAPI) runFlowMe(rw http.ResponseWriter, r *http.Request, p core.Prin
 	q.Set("tenant", tenant)
 	q.Set("workspace", workspace)
 	q.Set("id", id)
-	r2 := r.Clone(r.Context())
+	r2 := legacyFlowRequest(r, tenant, workspace, id)
 	r2.URL.RawQuery = q.Encode()
-	r2.SetPathValue("tenant", tenant)
-	r2.SetPathValue("workspace", workspace)
-	r2.SetPathValue("id", id)
-	// A clean 404 before delegating, so the legacy path's error is not surfaced.
-	if _, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, ""); err != nil {
-		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
-		return
-	}
 	h.runCtl.runGraph(rw, r2, p)
 }
 
@@ -738,10 +682,7 @@ func (h *flowAPI) testTriggerFlowMe(rw http.ResponseWriter, r *http.Request, p c
 	if !ok {
 		return
 	}
-	r2 := r.Clone(r.Context())
-	r2.SetPathValue("tenant", tenant)
-	r2.SetPathValue("workspace", workspace)
-	r2.SetPathValue("id", id)
+	r2 := legacyFlowRequest(r, tenant, workspace, id)
 	h.runCtl.testTrigger(rw, r2, p)
 }
 
@@ -750,10 +691,7 @@ func (h *flowAPI) sampleFlowNodeMe(rw http.ResponseWriter, r *http.Request, p co
 	if !ok {
 		return
 	}
-	r2 := r.Clone(r.Context())
-	r2.SetPathValue("tenant", tenant)
-	r2.SetPathValue("workspace", workspace)
-	r2.SetPathValue("id", id)
+	r2 := legacyFlowRequest(r, tenant, workspace, id)
 	r2.SetPathValue("nodeID", r.PathValue("node_id"))
 	h.sampleNode(rw, r2, p)
 }
@@ -763,10 +701,7 @@ func (h *flowAPI) listFlowRunsMe(rw http.ResponseWriter, r *http.Request, p core
 	if !ok {
 		return
 	}
-	r2 := r.Clone(r.Context())
-	r2.SetPathValue("tenant", tenant)
-	r2.SetPathValue("workspace", workspace)
-	r2.SetPathValue("id", id)
+	r2 := legacyFlowRequest(r, tenant, workspace, id)
 	h.listRuns(rw, r2, p)
 }
 
@@ -805,9 +740,7 @@ func (h *flowAPI) validateFlowMe(rw http.ResponseWriter, r *http.Request, p core
 	}
 	g := body
 	if len(g.Nodes) == 0 {
-		var err error
-		if g, err = h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, ""); err != nil {
-			writeAPIError(rw, http.StatusNotFound, "flow_not_found", err.Error())
+		if g, ok = loadVisibleFlow(rw, r, h.svc, p, tenant, workspace, id, ""); !ok {
 			return
 		}
 	}
@@ -1209,12 +1142,38 @@ func (l flowLoader) loadFlowForRequest(rw http.ResponseWriter, r *http.Request, 
 	if !ok {
 		return "", "", "", core.Graph{}, false
 	}
-	g, err := l.svc.LoadGraph(r.Context(), p, tenant, workspace, id, ref)
-	if err != nil {
-		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
+	g, ok = loadVisibleFlow(rw, r, l.svc, p, tenant, workspace, id, ref)
+	if !ok {
 		return "", "", "", core.Graph{}, false
 	}
 	return tenant, workspace, id, g, true
+}
+
+// loadVisibleFlow writes the masked 404 when the flow is missing or invisible.
+func loadVisibleFlow(rw http.ResponseWriter, r *http.Request, svc *Service, p core.Principal, tenant, workspace, id, ref string) (core.Graph, bool) {
+	g, err := svc.LoadGraph(r.Context(), p, tenant, workspace, id, ref)
+	if err != nil {
+		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
+		return core.Graph{}, false
+	}
+	return g, true
+}
+
+func writeFlowOpError(rw http.ResponseWriter, err error, tenant, workspace, id string) {
+	if errors.Is(err, core.ErrNotFound) {
+		writeAPIError(rw, http.StatusNotFound, "flow_not_found", flowNotFoundMessage(tenant, workspace, id))
+		return
+	}
+	writeAPIError(rw, http.StatusForbidden, "forbidden", err.Error())
+}
+
+// legacyFlowRequest adapts a /me request to the path values the legacy handlers read.
+func legacyFlowRequest(r *http.Request, tenant, workspace, id string) *http.Request {
+	r2 := r.Clone(r.Context())
+	r2.SetPathValue("tenant", tenant)
+	r2.SetPathValue("workspace", workspace)
+	r2.SetPathValue("id", id)
+	return r2
 }
 
 func (h *HTTPGateway) flows() flowLoader { return flowLoader{svc: h.svc} }

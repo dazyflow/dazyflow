@@ -23,7 +23,7 @@ import {
 import { Trans, useTranslation } from "react-i18next";
 import i18n from "../../i18n";
 import { enumOptionLabel, fieldHelp, fieldTitle } from "../../lib/dropText";
-import { isFieldVisible } from "../../lib/schemaFields";
+import { isAdvancedField, isFieldVisible } from "../../lib/schemaFields";
 import type {
   EmailTemplateSummary,
   JSONSchema,
@@ -198,13 +198,6 @@ export function SchemaForm({
   );
 }
 
-const ADVANCED_FIELD_NAMES = new Set([
-  "timeout_ms",
-  "page_token",
-  "next_page_token",
-  "cursor",
-]);
-
 const HIDDEN_FIELD_KEYS = new Set([
   "timeout_ms", // request-timeout dial
   "base_url", // API-host override — a test seam pointing at a mock server
@@ -212,17 +205,6 @@ const HIDDEN_FIELD_KEYS = new Set([
   "thread_id", // Gmail reply-in-thread by opaque id — wire it, don't type it
   "reply_to", // org-admin sets a default centrally; not per-flow (see /admin/google)
 ]);
-
-function isAdvancedField(
-  name: string,
-  schema: JSONSchema,
-  siblings: Record<string, JSONSchema>,
-): boolean {
-  if (schema.x_advanced || schema["x-advanced"]) return true;
-  if (ADVANCED_FIELD_NAMES.has(name)) return true;
-  if (name === "token" && "account" in siblings) return true;
-  return false;
-}
 
 type FieldProps = {
   name: string;
@@ -236,18 +218,10 @@ type FieldProps = {
   siblings?: Record<string, unknown>;
 };
 
-function SchemaField({ name, schema, required, value, onChange, wired, resolvedName, wiredSource, siblings }: FieldProps) {
-  const {
-    workspace,
-    accountPicker,
-    references,
-    extraReferenceItems,
-    tokenLabels,
-    wired: wiredSiblings,
-    geoRunCoordinate,
-    previewFor,
-  } = useFormCtx();
-  const { t } = useTranslation();
+function SchemaField(props: FieldProps) {
+  const { name, schema, required, value, onChange, wired, resolvedName, wiredSource, siblings } = props;
+  const ctx = useFormCtx();
+  const { accountPicker, references, extraReferenceItems, tokenLabels } = ctx;
   // Decided by the incoming wire, so the editor is read-only.
   const isResourcePicker =
     schema.type === "string" && !!schema.format && !!RESOURCE_PICKERS[schema.format] && !!references;
@@ -273,30 +247,15 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       </FieldWrap>
     );
   }
-  if (schema.format === "ssh-account" && schema.type === "string") {
-    return (
-      <FieldWrap name={name} schema={schema} required={required}>
-        <SSHCredAccountField
-          value={(value as string) ?? ""}
-          // Blank is meaningful on the SFTP steps: it is the single
-          // pre-existing connection those flows already use — but only while
-          // that connection exists. Everywhere else, and there, it means no
-          // server has been chosen yet.
-          connectionSlug={schema.x_blank_connection}
-          onChange={onChange}
-        />
-      </FieldWrap>
-    );
-  }
-  if (schema.format === "git-account" && schema.type === "string") {
-    return (
-      <FieldWrap name={name} schema={schema} required={required}>
-        <GitCredAccountField
-          value={(value as string) ?? (schema.default as string | undefined) ?? "default"}
-          onChange={onChange}
-        />
-      </FieldWrap>
-    );
+  const args: FieldArgs = { ...props, ctx };
+  const byFormat = schema.format ? FIELD_BY_FORMAT[schema.format] : undefined;
+  const formatField =
+    byFormat && schema.type && byFormat.types.includes(schema.type) ? byFormat : undefined;
+  // A few formats outrank oneOf and enum: they are pickers whose options come
+  // from the server, whatever the schema lists.
+  if (formatField?.beforeEnum) {
+    const node = formatField.render(args);
+    if (node !== null) return node;
   }
   if (schema.oneOf && schema.oneOf.length > 0) {
     return (
@@ -305,379 +264,59 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
       </FieldWrap>
     );
   }
-  if (schema.format === "suggest" && schema.enum && schema.enum.length > 0) {
-    return (
-      <SuggestField
-        name={name}
-        schema={schema}
-        required={required}
-        value={value}
-        onChange={onChange}
-        references={references}
-        extraReferenceItems={extraReferenceItems}
-        tokenLabels={tokenLabels}
-      />
-    );
-  }
-  if (schema.format === "toggle" && schema.enum && schema.enum.length > 0) {
-    const current = (value as string) ?? (schema.default as string) ?? "";
-    return (
-      <FieldWrap name={name} schema={schema} required={required}>
-        {/* A group of pressed-state buttons, not a tablist: these pick a
-            value, they don't switch a panel. Same idiom as the note-colour
-            swatches on the canvas. */}
-        <div
-          className="sf-mode-toggle"
-          role="group"
-          aria-label={schema.title ? fieldTitle(schema.title, i18n.language) : humanize(name)}
-        >
-          {schema.enum.map((v, i) => {
-            const val = String(v);
-            const label = enumOptionLabel(schema, i, i18n.language);
-            return (
-              <Button
-                key={val}
-                className={val === current ? "active" : undefined}
-                aria-pressed={val === current}
-                onClick={() => onChange(val)}
-              >
-                {label}
-              </Button>
-            );
-          })}
-        </div>
-      </FieldWrap>
-    );
-  }
   if (schema.enum && schema.enum.length > 0) {
-    const current = (value as string) ?? schema.default ?? "";
-    const unlistedValue =
-      current !== "" && !schema.enum.some((v) => String(v) === current)
-        ? current
-        : undefined;
-    const hasEmptyOption = schema.enum.some((v) => String(v) === "");
-    return (
-      <FieldWrap name={name} schema={schema} required={required}>
-        <select value={current} onChange={(e) => onChange(e.target.value)}>
-          {/* Only offer a blank "(unset)" on an optional enum with NO default
-              and no empty value of its own. When the field has a default,
-              "unset" just falls back to that default anyway, so the empty
-              option is confusing noise.
-              When the ENUM already carries "" — the Date & time step's "Follow
-              the flow's language", Stripe's "(none)", Fortnox's "All" — adding
-              ours puts two options with the SAME value in one select, and the
-              browser resolves that by showing the first. The symptom is a
-              dropdown that refuses to hold your choice: you pick the drop's
-              own empty option and it snaps back to "(not set)", because to the
-              select they are the same option. The drop names what empty means
-              for it, so ours steps aside. */}
-          {!required && schema.default === undefined && !hasEmptyOption && (
-            <option value="">{t("schemaForm.unsetOption")}</option>
-          )}
-          {/* A stored value the enum no longer offers gets an option of its
-              own. Without it the <select> shows the FIRST option while the
-              param still holds something else — the form lies about what the
-              flow will do, and one idle click silently rewrites it. Happens
-              whenever a drop retires an option (the date step's "kitchen"
-              clock) or accepts more than it lists (any IANA timezone, where
-              the dropdown is the common ones). Labelled with the raw value,
-              because that is the only name we have for it. */}
-          {unlistedValue !== undefined && (
-            <option value={unlistedValue}>
-              {hasToken(unlistedValue) ? tokenChipLabel(unlistedValue, tokenLabels) : unlistedValue}
-            </option>
-          )}
-          {schema.enum.map((v, i) => (
-            <option key={String(v)} value={String(v)}>
-              {enumOptionLabel(schema, i, i18n.language)}
-            </option>
-          ))}
-        </select>
-      </FieldWrap>
-    );
+    if (schema.format === "suggest") {
+      return (
+        <SuggestField
+          name={name}
+          schema={schema}
+          required={required}
+          value={value}
+          onChange={onChange}
+          references={references}
+          extraReferenceItems={extraReferenceItems}
+          tokenLabels={tokenLabels}
+        />
+      );
+    }
+    return <EnumSelectField {...props} />;
+  }
+  if (schema.type === "string") {
+    const picker = schema.format ? RESOURCE_PICKERS[schema.format] : undefined;
+    if (picker && references) {
+      const extra: Record<string, string> = {};
+      let missingDep: string | undefined;
+      for (const dep of picker.dependsOn ?? []) {
+        const v = siblings?.[dep];
+        if (typeof v === "string" && v.trim()) extra[dep] = v;
+        else missingDep = dep;
+      }
+      return (
+        <AccountResourceField
+          picker={picker}
+          name={name}
+          schema={schema}
+          required={required}
+          value={value}
+          onChange={onChange}
+          references={references}
+          account={typeof siblings?.account === "string" ? siblings.account : undefined}
+          extra={extra}
+          missingDep={missingDep}
+          wired={wired}
+          resolvedName={resolvedName}
+          extraReferenceItems={extraReferenceItems}
+          tokenLabels={tokenLabels}
+        />
+      );
+    }
+  }
+  if (formatField && !formatField.beforeEnum) {
+    const node = formatField.render(args);
+    if (node !== null) return node;
   }
   switch (schema.type) {
-    case "string": {
-      const picker = schema.format ? RESOURCE_PICKERS[schema.format] : undefined;
-      if (picker && references) {
-        const extra: Record<string, string> = {};
-        let missingDep: string | undefined;
-        for (const dep of picker.dependsOn ?? []) {
-          const v = siblings?.[dep];
-          if (typeof v === "string" && v.trim()) extra[dep] = v;
-          else missingDep = dep;
-        }
-        return (
-          <AccountResourceField
-            picker={picker}
-            name={name}
-            schema={schema}
-            required={required}
-            value={value}
-            onChange={onChange}
-            references={references}
-            account={typeof siblings?.account === "string" ? siblings.account : undefined}
-            extra={extra}
-            missingDep={missingDep}
-            wired={wired}
-            resolvedName={resolvedName}
-            extraReferenceItems={extraReferenceItems}
-            tokenLabels={tokenLabels}
-          />
-        );
-      }
-      if (schema.format === "workspace-path" && workspace) {
-        return (
-          <FieldWrap name={name} schema={schema} required={required}>
-            <WorkspacePathField
-              value={(value as string) ?? ""}
-              onChange={(v) => onChange(v === "" && !required ? undefined : v)}
-              ctx={workspace}
-            />
-          </FieldWrap>
-        );
-      }
-      if (schema.format === "workspace-dir" && workspace) {
-        return (
-          <FieldWrap name={name} schema={schema} required={required}>
-            <WorkspaceDirField
-              value={(value as string) ?? ""}
-              onChange={(v) => onChange(v === "" && !required ? undefined : v)}
-              ctx={workspace}
-            />
-          </FieldWrap>
-        );
-      }
-      if (schema.format === "row-condition") {
-        const collectionCols =
-          schema.x_columns_source === "collection" && typeof siblings?.table === "string"
-            ? (siblings.table as string)
-            : null;
-        return (
-          <FieldWrap name={name} schema={schema} required={required} value={value}>
-            {collectionCols !== null ? (
-              <CollectionRowConditionField
-                value={(value as string) ?? ""}
-                onChange={(v) => onChange(v === "" && !required ? undefined : v)}
-                collection={collectionCols}
-                token={references?.token}
-              />
-            ) : (
-              <RowConditionField
-                value={(value as string) ?? ""}
-                onChange={(v) => onChange(v === "" && !required ? undefined : v)}
-              />
-            )}
-          </FieldWrap>
-        );
-      }
-      if (schema.format === "collection-column") {
-        const collection = typeof siblings?.table === "string" ? (siblings.table as string) : "";
-        return (
-          <CollectionColumnField
-            name={name}
-            schema={schema}
-            required={required}
-            value={value}
-            onChange={onChange}
-            collection={collection}
-            token={references?.token}
-          />
-        );
-      }
-      if (schema.format === "collection") {
-        return (
-          <CollectionField
-            name={name}
-            schema={schema}
-            required={required}
-            value={value}
-            onChange={onChange}
-            references={references}
-          />
-        );
-      }
-      if (schema.format === "collection-name") {
-        return (
-          <CollectionNameField
-            name={name}
-            schema={schema}
-            required={required}
-            value={value}
-            onChange={onChange}
-            references={references}
-          />
-        );
-      }
-      const chosenLang = (() => {
-        // A step that runs exactly one language names it outright; the rest
-        // read it off the sibling param where the author picks one.
-        if (schema.x_lang) return schema.x_lang;
-        const key = schema.x_lang_param ?? (schema.format === "script" ? "shell" : undefined);
-        const v = key ? siblings?.[key] : undefined;
-        return typeof v === "string" ? v : undefined;
-      })();
-      if (schema.format === "script") {
-        const text = (value as string) ?? (schema.default as string | undefined) ?? "";
-        const write = (v: string) => onChange(v === "" && !required ? undefined : v);
-        return (
-          <FieldWrap
-            name={name}
-            schema={schema}
-            required={required}
-            value={value}
-            action={
-              <ExpandedEditor
-                title={fieldLabel(name, schema)}
-                value={text}
-                lang={scriptLangFor(chosenLang)}
-                onChange={write}
-                preview={previewFor?.(name)}
-              />
-            }
-          >
-            <ScriptEditor
-              value={text}
-              lang={scriptLangFor(chosenLang)}
-              onChange={write}
-              rows={10}
-            />
-          </FieldWrap>
-        );
-      }
-      if (schema.format === "timezone") {
-        return (
-          <FieldWrap name={name} schema={schema} required={required}>
-            <TimezoneField
-              value={(value as string) ?? (schema.default as string) ?? ""}
-              onChange={(v) => onChange(v === "" && !required ? undefined : v)}
-            />
-          </FieldWrap>
-        );
-      }
-      if (schema.format === "geo-point") {
-        return (
-          <FieldWrap name={name} schema={schema} required={required}>
-            <GeoPointField
-              value={(value as string) ?? ""}
-              onChange={(v) => onChange(v === "" && !required ? undefined : v)}
-              place={typeof siblings?.place === "string" ? (siblings.place as string) : undefined}
-              placeWired={(wiredSiblings?.has("place") || wiredSiblings?.has("coordinate")) ?? false}
-              runCoordinate={geoRunCoordinate}
-            />
-          </FieldWrap>
-        );
-      }
-      if (schema.format === "json") {
-        const text = (value as string) ?? (schema.default as string | undefined) ?? "";
-        return (
-          <FieldWrap name={name} schema={schema} required={required} value={value}>
-            <JsonEditor
-              value={text}
-              onChange={(v) => onChange(v === "" && !required ? undefined : v)}
-              rows={10}
-              placeholder={schema.default ? String(schema.default) : undefined}
-              invalid={isInvalidJSON(text)}
-            />
-          </FieldWrap>
-        );
-      }
-      if (schema.format === "email-template" && schema.type === "string") {
-        return (
-          <FieldWrap name={name} schema={schema} required={required} value={value}>
-            <EmailTemplatePicker
-              value={(value as string) ?? ""}
-              onChange={(v) => onChange(v === "" ? undefined : v)}
-              token={references?.token}
-              body={typeof siblings?.body === "string" ? (siblings.body as string) : undefined}
-              subject={typeof siblings?.subject === "string" ? (siblings.subject as string) : undefined}
-              format={typeof siblings?.format === "string" ? (siblings.format as string) : undefined}
-            />
-          </FieldWrap>
-        );
-      }
-      if (schema.format === "datetime") {
-        return (
-          <FieldWrap name={name} schema={schema} required={required} value={value}>
-            <input
-              type="datetime-local"
-              value={isoToLocalInput((value as string) ?? "")}
-              onChange={(e) => {
-                const iso = localInputToISO(e.target.value);
-                onChange(iso === "" && !required ? undefined : iso);
-              }}
-            />
-          </FieldWrap>
-        );
-      }
-      if (schema.format === "multiline") {
-        const celFooter = schema.x_cel ? (
-          <div className="sf-docs-hint">
-            <Trans
-              i18nKey="schemaForm.celHint"
-              components={{
-                celLink: (
-                  <a
-                    href="https://github.com/google/cel-spec/blob/master/doc/langdef.md"
-                    target="_blank"
-                    rel="noreferrer noopener"
-                  />
-                ),
-              }}
-            />
-          </div>
-        ) : undefined;
-        const text = (value as string) ?? (schema.default as string | undefined) ?? "";
-        const write = (v: string) => onChange(v === "" && !required ? undefined : v);
-        // Undefined is prose, and prose opens in a plain box. The rule lives
-        // here, once, so the field and the window it expands into can never
-        // disagree about what is being written.
-        const lang =
-          chosenLang && chosenLang !== "plain" ? scriptLangFor(chosenLang) : undefined;
-        const expand = (
-          <ExpandedEditor
-            title={fieldLabel(name, schema)}
-            value={text}
-            lang={lang}
-            placeholder={schema.default ? String(schema.default) : undefined}
-            onChange={write}
-            preview={previewFor?.(name)}
-          />
-        );
-        if (lang) {
-          return (
-            <FieldWrap
-              name={name}
-              schema={schema}
-              required={required}
-              value={value}
-              footer={celFooter}
-              action={expand}
-            >
-              <ScriptEditor value={text} lang={lang} onChange={write} rows={8} />
-            </FieldWrap>
-          );
-        }
-        return (
-          <FieldWrap
-            name={name}
-            schema={schema}
-            required={required}
-            value={value}
-            footer={celFooter}
-            action={expand}
-          >
-            <textarea
-              className={schema.x_mono ? "sf-mono" : undefined}
-              rows={4}
-              value={text}
-              placeholder={schema.default ? String(schema.default) : undefined}
-              onChange={(e) => write(e.target.value)}
-              style={{ resize: "both" }}
-            />
-          </FieldWrap>
-        );
-      }
+    case "string":
       return (
         <PlainStringField
           name={name}
@@ -690,159 +329,14 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
           tokenLabels={tokenLabels}
         />
       );
-    }
     case "integer":
     case "number":
-      if (schema.format === "duration-seconds") {
-        return (
-          <FieldWrap name={name} schema={schema} required={required}>
-            <DurationSecondsField
-              value={typeof value === "number" ? value : (schema.default as number | undefined)}
-              onChange={onChange}
-            />
-          </FieldWrap>
-        );
-      }
-      return (
-        <FieldWrap name={name} schema={schema} required={required}>
-          <input
-            type="number"
-            step={schema.type === "integer" ? 1 : "any"}
-            min={schema.minimum}
-            max={schema.maximum}
-            value={
-              (value as number | undefined) ??
-              (schema.default as number | undefined) ??
-              ""
-            }
-            placeholder={schema.default !== undefined ? String(schema.default) : undefined}
-            onChange={(e) => {
-              const raw = e.target.value;
-              if (raw === "") {
-                onChange(undefined);
-                return;
-              }
-              let n =
-                schema.type === "integer" ? parseInt(raw, 10) : parseFloat(raw);
-              // Clearing to undefined would silently discard what the user typed.
-              if (Number.isNaN(n)) {
-                onChange(undefined);
-                return;
-              }
-              if (typeof schema.minimum === "number") n = Math.max(schema.minimum, n);
-              if (typeof schema.maximum === "number") n = Math.min(schema.maximum, n);
-              onChange(n);
-            }}
-          />
-        </FieldWrap>
-      );
-    case "boolean": {
-      const cur = (value as boolean | undefined) ?? (schema.default as boolean | undefined) ?? false;
-      return (
-        <FieldWrap name={name} schema={schema} required={required}>
-          <select
-            value={cur ? "yes" : "no"}
-            onChange={(e) => onChange(e.target.value === "yes")}
-          >
-            <option value="yes">{t("common.yes")}</option>
-            <option value="no">{t("common.no")}</option>
-          </select>
-        </FieldWrap>
-      );
-    }
+      return <NumberField {...props} />;
+    case "boolean":
+      return <BooleanField {...props} />;
     case "object":
-      if (schema.properties) {
-        const sub = (value as Record<string, unknown>) ?? {};
-        return (
-          <FieldWrap name={name} schema={schema} required={required}>
-            <div className="sf-object">
-              <SchemaForm
-                schema={schema}
-                value={sub}
-                workspace={workspace}
-                onChange={(v) =>
-                  onChange(Object.keys(v).length === 0 && !required ? undefined : v)
-                }
-              />
-            </div>
-          </FieldWrap>
-        );
-      }
-      if (
-        typeof schema.additionalProperties === "object" &&
-        schema.additionalProperties !== null
-      ) {
-        return (
-          <FieldWrap name={name} schema={schema} required={required}>
-            <DictField
-              confirmRemove={!!schema.x_confirm_remove}
-              keyPlaceholder={schema.x_key_placeholder}
-              valuePlaceholder={schema.x_value_placeholder}
-              valueSchema={schema.additionalProperties}
-              value={(value as Record<string, unknown>) ?? {}}
-              onChange={onChange}
-            />
-          </FieldWrap>
-        );
-      }
-      return (
-        <FieldWrap name={name} schema={schema} required={required}>
-          <JSONField value={value} onChange={onChange} />
-        </FieldWrap>
-      );
+      return <ObjectField {...args} />;
     case "array":
-      if (schema.format === "sheet-mapping") {
-        return (
-          <FieldWrap name={name} schema={schema} required={required}>
-            <MappingField
-              value={(value as MappingRow[]) ?? []}
-              onChange={onChange}
-              references={references}
-              siblings={siblings}
-            />
-          </FieldWrap>
-        );
-      }
-      if (schema.format === "collection-columns") {
-        const collection = typeof siblings?.table === "string" ? (siblings.table as string) : "";
-        return (
-          <FieldWrap name={name} schema={schema} required={required}>
-            <CollectionColumnsField
-              value={(value as string[]) ?? []}
-              onChange={onChange}
-              collection={collection}
-              token={references?.token}
-            />
-          </FieldWrap>
-        );
-      }
-      if (schema.format === "runner-tags") {
-        return (
-          <RunnerTagsField
-            name={name}
-            schema={schema}
-            required={required}
-            value={(value as string[]) ?? []}
-            onChange={onChange}
-            references={references}
-          />
-        );
-      }
-      if (schema.format === "string-multiselect" && schema.items?.enum) {
-        const opts = schema.items.enum.map((v, i) => ({
-          value: String(v),
-          label: enumOptionLabel(schema.items, i, i18n.language),
-        }));
-        return (
-          <FieldWrap name={name} schema={schema} required={required}>
-            <MultiSelectField
-              value={(value as string[]) ?? []}
-              onChange={onChange}
-              options={opts}
-            />
-          </FieldWrap>
-        );
-      }
       if (schema.items) {
         return (
           <FieldWrap name={name} schema={schema} required={required}>
@@ -866,6 +360,569 @@ function SchemaField({ name, schema, required, value, onChange, wired, resolvedN
         </FieldWrap>
       );
   }
+}
+
+type FieldArgs = FieldProps & { ctx: FormCtx };
+
+// One entry per `format`: the param types it applies to and how it renders.
+// A render that returns null declines — the context it needs is missing — and
+// the field falls back to the plain control for its type.
+type FormatField = {
+  types: readonly string[];
+  render: (a: FieldArgs) => React.ReactNode | null;
+  // Checked ahead of oneOf and enum rather than after them.
+  beforeEnum?: boolean;
+};
+
+// Blank on an optional text param means "not set", not "set to empty".
+const writeOptional = (a: FieldArgs) => (v: string) =>
+  a.onChange(v === "" && !a.required ? undefined : v);
+
+const siblingString = (a: FieldArgs, key: string): string | undefined => {
+  const v = a.siblings?.[key];
+  return typeof v === "string" ? v : undefined;
+};
+
+// The language a code-ish text param is written in. A step that runs exactly
+// one language names it outright; the rest read it off the sibling param where
+// the author picks one.
+function chosenLangFor(schema: JSONSchema, siblings?: Record<string, unknown>): string | undefined {
+  if (schema.x_lang) return schema.x_lang;
+  const key = schema.x_lang_param ?? (schema.format === "script" ? "shell" : undefined);
+  const v = key ? siblings?.[key] : undefined;
+  return typeof v === "string" ? v : undefined;
+}
+
+const STRING: readonly string[] = ["string"];
+const NUMERIC: readonly string[] = ["integer", "number"];
+const ARRAY: readonly string[] = ["array"];
+
+const FIELD_BY_FORMAT: Record<string, FormatField> = {
+  "ssh-account": {
+    types: STRING,
+    beforeEnum: true,
+    render: (a) => (
+      <FieldWrap name={a.name} schema={a.schema} required={a.required}>
+        <SSHCredAccountField
+          value={(a.value as string) ?? ""}
+          // Blank is meaningful on the SFTP steps: it is the single
+          // pre-existing connection those flows already use — but only while
+          // that connection exists. Everywhere else, and there, it means no
+          // server has been chosen yet.
+          connectionSlug={a.schema.x_blank_connection}
+          onChange={a.onChange}
+        />
+      </FieldWrap>
+    ),
+  },
+  "git-account": {
+    types: STRING,
+    beforeEnum: true,
+    render: (a) => (
+      <FieldWrap name={a.name} schema={a.schema} required={a.required}>
+        <GitCredAccountField
+          value={(a.value as string) ?? (a.schema.default as string | undefined) ?? "default"}
+          onChange={a.onChange}
+        />
+      </FieldWrap>
+    ),
+  },
+  "workspace-path": {
+    types: STRING,
+    render: (a) =>
+      a.ctx.workspace ? (
+        <FieldWrap name={a.name} schema={a.schema} required={a.required}>
+          <WorkspacePathField
+            value={(a.value as string) ?? ""}
+            onChange={writeOptional(a)}
+            ctx={a.ctx.workspace}
+          />
+        </FieldWrap>
+      ) : null,
+  },
+  "workspace-dir": {
+    types: STRING,
+    render: (a) =>
+      a.ctx.workspace ? (
+        <FieldWrap name={a.name} schema={a.schema} required={a.required}>
+          <WorkspaceDirField
+            value={(a.value as string) ?? ""}
+            onChange={writeOptional(a)}
+            ctx={a.ctx.workspace}
+          />
+        </FieldWrap>
+      ) : null,
+  },
+  "row-condition": {
+    types: STRING,
+    render: (a) => {
+      const table = siblingString(a, "table");
+      const collectionCols =
+        a.schema.x_columns_source === "collection" && table !== undefined ? table : null;
+      return (
+        <FieldWrap name={a.name} schema={a.schema} required={a.required} value={a.value}>
+          {collectionCols !== null ? (
+            <CollectionRowConditionField
+              value={(a.value as string) ?? ""}
+              onChange={writeOptional(a)}
+              collection={collectionCols}
+              token={a.ctx.references?.token}
+            />
+          ) : (
+            <RowConditionField value={(a.value as string) ?? ""} onChange={writeOptional(a)} />
+          )}
+        </FieldWrap>
+      );
+    },
+  },
+  "collection-column": {
+    types: STRING,
+    render: (a) => (
+      <CollectionColumnField
+        name={a.name}
+        schema={a.schema}
+        required={a.required}
+        value={a.value}
+        onChange={a.onChange}
+        collection={siblingString(a, "table") ?? ""}
+        token={a.ctx.references?.token}
+      />
+    ),
+  },
+  collection: {
+    types: STRING,
+    render: (a) => (
+      <CollectionField
+        name={a.name}
+        schema={a.schema}
+        required={a.required}
+        value={a.value}
+        onChange={a.onChange}
+        references={a.ctx.references}
+      />
+    ),
+  },
+  "collection-name": {
+    types: STRING,
+    render: (a) => (
+      <CollectionNameField
+        name={a.name}
+        schema={a.schema}
+        required={a.required}
+        value={a.value}
+        onChange={a.onChange}
+        references={a.ctx.references}
+      />
+    ),
+  },
+  script: {
+    types: STRING,
+    render: (a) => {
+      const text = (a.value as string) ?? (a.schema.default as string | undefined) ?? "";
+      const write = writeOptional(a);
+      const lang = scriptLangFor(chosenLangFor(a.schema, a.siblings));
+      return (
+        <FieldWrap
+          name={a.name}
+          schema={a.schema}
+          required={a.required}
+          value={a.value}
+          action={
+            <ExpandedEditor
+              title={fieldLabel(a.name, a.schema)}
+              value={text}
+              lang={lang}
+              onChange={write}
+              preview={a.ctx.previewFor?.(a.name)}
+            />
+          }
+        >
+          <ScriptEditor value={text} lang={lang} onChange={write} rows={10} />
+        </FieldWrap>
+      );
+    },
+  },
+  timezone: {
+    types: STRING,
+    render: (a) => (
+      <FieldWrap name={a.name} schema={a.schema} required={a.required}>
+        <TimezoneField
+          value={(a.value as string) ?? (a.schema.default as string) ?? ""}
+          onChange={writeOptional(a)}
+        />
+      </FieldWrap>
+    ),
+  },
+  "geo-point": {
+    types: STRING,
+    render: (a) => (
+      <FieldWrap name={a.name} schema={a.schema} required={a.required}>
+        <GeoPointField
+          value={(a.value as string) ?? ""}
+          onChange={writeOptional(a)}
+          place={siblingString(a, "place")}
+          placeWired={(a.ctx.wired?.has("place") || a.ctx.wired?.has("coordinate")) ?? false}
+          runCoordinate={a.ctx.geoRunCoordinate}
+        />
+      </FieldWrap>
+    ),
+  },
+  json: {
+    types: STRING,
+    render: (a) => {
+      const text = (a.value as string) ?? (a.schema.default as string | undefined) ?? "";
+      return (
+        <FieldWrap name={a.name} schema={a.schema} required={a.required} value={a.value}>
+          <JsonEditor
+            value={text}
+            onChange={writeOptional(a)}
+            rows={10}
+            placeholder={a.schema.default ? String(a.schema.default) : undefined}
+            invalid={isInvalidJSON(text)}
+          />
+        </FieldWrap>
+      );
+    },
+  },
+  "email-template": {
+    types: STRING,
+    render: (a) => (
+      <FieldWrap name={a.name} schema={a.schema} required={a.required} value={a.value}>
+        <EmailTemplatePicker
+          value={(a.value as string) ?? ""}
+          onChange={(v) => a.onChange(v === "" ? undefined : v)}
+          token={a.ctx.references?.token}
+          body={siblingString(a, "body")}
+          subject={siblingString(a, "subject")}
+          format={siblingString(a, "format")}
+        />
+      </FieldWrap>
+    ),
+  },
+  datetime: {
+    types: STRING,
+    render: (a) => (
+      <FieldWrap name={a.name} schema={a.schema} required={a.required} value={a.value}>
+        <input
+          type="datetime-local"
+          value={isoToLocalInput((a.value as string) ?? "")}
+          onChange={(e) => {
+            const iso = localInputToISO(e.target.value);
+            a.onChange(iso === "" && !a.required ? undefined : iso);
+          }}
+        />
+      </FieldWrap>
+    ),
+  },
+  multiline: {
+    types: STRING,
+    render: (a) => <MultilineField {...a} />,
+  },
+  "duration-seconds": {
+    types: NUMERIC,
+    render: (a) => (
+      <FieldWrap name={a.name} schema={a.schema} required={a.required}>
+        <DurationSecondsField
+          value={typeof a.value === "number" ? a.value : (a.schema.default as number | undefined)}
+          onChange={a.onChange}
+        />
+      </FieldWrap>
+    ),
+  },
+  "sheet-mapping": {
+    types: ARRAY,
+    render: (a) => (
+      <FieldWrap name={a.name} schema={a.schema} required={a.required}>
+        <MappingField
+          value={(a.value as MappingRow[]) ?? []}
+          onChange={a.onChange}
+          references={a.ctx.references}
+          siblings={a.siblings}
+        />
+      </FieldWrap>
+    ),
+  },
+  "collection-columns": {
+    types: ARRAY,
+    render: (a) => (
+      <FieldWrap name={a.name} schema={a.schema} required={a.required}>
+        <CollectionColumnsField
+          value={(a.value as string[]) ?? []}
+          onChange={a.onChange}
+          collection={siblingString(a, "table") ?? ""}
+          token={a.ctx.references?.token}
+        />
+      </FieldWrap>
+    ),
+  },
+  "runner-tags": {
+    types: ARRAY,
+    render: (a) => (
+      <RunnerTagsField
+        name={a.name}
+        schema={a.schema}
+        required={a.required}
+        value={(a.value as string[]) ?? []}
+        onChange={a.onChange}
+        references={a.ctx.references}
+      />
+    ),
+  },
+  "string-multiselect": {
+    types: ARRAY,
+    render: (a) => {
+      const items = a.schema.items;
+      if (!items?.enum) return null;
+      const opts = items.enum.map((v, i) => ({
+        value: String(v),
+        label: enumOptionLabel(items, i, i18n.language),
+      }));
+      return (
+        <FieldWrap name={a.name} schema={a.schema} required={a.required}>
+          <MultiSelectField value={(a.value as string[]) ?? []} onChange={a.onChange} options={opts} />
+        </FieldWrap>
+      );
+    },
+  },
+};
+
+// A param with a fixed list of values: a row of buttons when the drop asks for
+// a toggle, a dropdown otherwise.
+function EnumSelectField({ name, schema, required, value, onChange }: FieldProps) {
+  const { t } = useTranslation();
+  const { tokenLabels } = useFormCtx();
+  const options = schema.enum ?? [];
+  if (schema.format === "toggle") {
+    const current = (value as string) ?? (schema.default as string) ?? "";
+    return (
+      <FieldWrap name={name} schema={schema} required={required}>
+        {/* A group of pressed-state buttons, not a tablist: these pick a
+            value, they don't switch a panel. Same idiom as the note-colour
+            swatches on the canvas. */}
+        <div
+          className="sf-mode-toggle"
+          role="group"
+          aria-label={schema.title ? fieldTitle(schema.title, i18n.language) : humanize(name)}
+        >
+          {options.map((v, i) => {
+            const val = String(v);
+            const label = enumOptionLabel(schema, i, i18n.language);
+            return (
+              <Button
+                key={val}
+                className={val === current ? "active" : undefined}
+                aria-pressed={val === current}
+                onClick={() => onChange(val)}
+              >
+                {label}
+              </Button>
+            );
+          })}
+        </div>
+      </FieldWrap>
+    );
+  }
+  const current = (value as string) ?? schema.default ?? "";
+  const unlistedValue =
+    current !== "" && !options.some((v) => String(v) === current)
+      ? current
+      : undefined;
+  const hasEmptyOption = options.some((v) => String(v) === "");
+  return (
+    <FieldWrap name={name} schema={schema} required={required}>
+      <select value={current} onChange={(e) => onChange(e.target.value)}>
+        {/* Only offer a blank "(unset)" on an optional enum with NO default
+            and no empty value of its own. When the field has a default,
+            "unset" just falls back to that default anyway, so the empty
+            option is confusing noise.
+            When the ENUM already carries "" — the Date & time step's "Follow
+            the flow's language", Stripe's "(none)", Fortnox's "All" — adding
+            ours puts two options with the SAME value in one select, and the
+            browser resolves that by showing the first. The symptom is a
+            dropdown that refuses to hold your choice: you pick the drop's
+            own empty option and it snaps back to "(not set)", because to the
+            select they are the same option. The drop names what empty means
+            for it, so ours steps aside. */}
+        {!required && schema.default === undefined && !hasEmptyOption && (
+          <option value="">{t("schemaForm.unsetOption")}</option>
+        )}
+        {/* A stored value the enum no longer offers gets an option of its
+            own. Without it the <select> shows the FIRST option while the
+            param still holds something else — the form lies about what the
+            flow will do, and one idle click silently rewrites it. Happens
+            whenever a drop retires an option (the date step's "kitchen"
+            clock) or accepts more than it lists (any IANA timezone, where
+            the dropdown is the common ones). Labelled with the raw value,
+            because that is the only name we have for it. */}
+        {unlistedValue !== undefined && (
+          <option value={unlistedValue}>
+            {hasToken(unlistedValue) ? tokenChipLabel(unlistedValue, tokenLabels) : unlistedValue}
+          </option>
+        )}
+        {options.map((v, i) => (
+          <option key={String(v)} value={String(v)}>
+            {enumOptionLabel(schema, i, i18n.language)}
+          </option>
+        ))}
+      </select>
+    </FieldWrap>
+  );
+}
+
+// Long free text: prose in a plain box, or code with highlighting when the
+// param names a language.
+function MultilineField(a: FieldArgs) {
+  const { name, schema, required, value, siblings, ctx } = a;
+  const celFooter = schema.x_cel ? (
+    <div className="sf-docs-hint">
+      <Trans
+        i18nKey="schemaForm.celHint"
+        components={{
+          celLink: (
+            <a
+              href="https://github.com/google/cel-spec/blob/master/doc/langdef.md"
+              target="_blank"
+              rel="noreferrer noopener"
+            />
+          ),
+        }}
+      />
+    </div>
+  ) : undefined;
+  const text = (value as string) ?? (schema.default as string | undefined) ?? "";
+  const write = writeOptional(a);
+  const chosenLang = chosenLangFor(schema, siblings);
+  // Undefined is prose, and prose opens in a plain box. The rule lives
+  // here, once, so the field and the window it expands into can never
+  // disagree about what is being written.
+  const lang = chosenLang && chosenLang !== "plain" ? scriptLangFor(chosenLang) : undefined;
+  const placeholder = schema.default ? String(schema.default) : undefined;
+  return (
+    <FieldWrap
+      name={name}
+      schema={schema}
+      required={required}
+      value={value}
+      footer={celFooter}
+      action={
+        <ExpandedEditor
+          title={fieldLabel(name, schema)}
+          value={text}
+          lang={lang}
+          placeholder={placeholder}
+          onChange={write}
+          preview={ctx.previewFor?.(name)}
+        />
+      }
+    >
+      {lang ? (
+        <ScriptEditor value={text} lang={lang} onChange={write} rows={8} />
+      ) : (
+        <textarea
+          className={schema.x_mono ? "sf-mono" : undefined}
+          rows={4}
+          value={text}
+          placeholder={placeholder}
+          onChange={(e) => write(e.target.value)}
+          style={{ resize: "both" }}
+        />
+      )}
+    </FieldWrap>
+  );
+}
+
+function NumberField({ name, schema, required, value, onChange }: FieldProps) {
+  return (
+    <FieldWrap name={name} schema={schema} required={required}>
+      <input
+        type="number"
+        step={schema.type === "integer" ? 1 : "any"}
+        min={schema.minimum}
+        max={schema.maximum}
+        value={
+          (value as number | undefined) ??
+          (schema.default as number | undefined) ??
+          ""
+        }
+        placeholder={schema.default !== undefined ? String(schema.default) : undefined}
+        onChange={(e) => {
+          const raw = e.target.value;
+          if (raw === "") {
+            onChange(undefined);
+            return;
+          }
+          let n =
+            schema.type === "integer" ? parseInt(raw, 10) : parseFloat(raw);
+          // Clearing to undefined would silently discard what the user typed.
+          if (Number.isNaN(n)) {
+            onChange(undefined);
+            return;
+          }
+          if (typeof schema.minimum === "number") n = Math.max(schema.minimum, n);
+          if (typeof schema.maximum === "number") n = Math.min(schema.maximum, n);
+          onChange(n);
+        }}
+      />
+    </FieldWrap>
+  );
+}
+
+function BooleanField({ name, schema, required, value, onChange }: FieldProps) {
+  const { t } = useTranslation();
+  const cur = (value as boolean | undefined) ?? (schema.default as boolean | undefined) ?? false;
+  return (
+    <FieldWrap name={name} schema={schema} required={required}>
+      <select
+        value={cur ? "yes" : "no"}
+        onChange={(e) => onChange(e.target.value === "yes")}
+      >
+        <option value="yes">{t("common.yes")}</option>
+        <option value="no">{t("common.no")}</option>
+      </select>
+    </FieldWrap>
+  );
+}
+
+function ObjectField({ name, schema, required, value, onChange, ctx }: FieldArgs) {
+  if (schema.properties) {
+    const sub = (value as Record<string, unknown>) ?? {};
+    return (
+      <FieldWrap name={name} schema={schema} required={required}>
+        <div className="sf-object">
+          <SchemaForm
+            schema={schema}
+            value={sub}
+            workspace={ctx.workspace}
+            onChange={(v) =>
+              onChange(Object.keys(v).length === 0 && !required ? undefined : v)
+            }
+          />
+        </div>
+      </FieldWrap>
+    );
+  }
+  if (
+    typeof schema.additionalProperties === "object" &&
+    schema.additionalProperties !== null
+  ) {
+    return (
+      <FieldWrap name={name} schema={schema} required={required}>
+        <DictField
+          confirmRemove={!!schema.x_confirm_remove}
+          keyPlaceholder={schema.x_key_placeholder}
+          valuePlaceholder={schema.x_value_placeholder}
+          valueSchema={schema.additionalProperties}
+          value={(value as Record<string, unknown>) ?? {}}
+          onChange={onChange}
+        />
+      </FieldWrap>
+    );
+  }
+  return (
+    <FieldWrap name={name} schema={schema} required={required}>
+      <JSONField value={value} onChange={onChange} />
+    </FieldWrap>
+  );
 }
 
 function OneOfControl({
@@ -1981,14 +2038,7 @@ function ReferenceMenu({
     };
   }, [open, groups, error, ctx]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  useEscapeToClose(() => open && setOpen(false));
 
   const sections: { kind: keyof ReferenceGroups; label: string }[] = [
     { kind: "upstream", label: t("schemaForm.refPicker.upstream") },
@@ -2036,8 +2086,6 @@ function ReferenceMenu({
       <span className="ref-pop-desc">{label}</span>
     </Button>
   );
-
-  useEscapeToClose(() => open && setOpen(false));
 
   return (
     <div className="ref-menu">
@@ -3558,6 +3606,81 @@ function AccountField({
   );
 }
 
+// A dropdown of the saved credentials of one kind, with a link to the admin
+// page that manages them. The listing loads once per sign-in; until it lands,
+// or if it fails, only the fixed options and the saved value are offered.
+//
+// The saved value stays selectable even when the listing has not arrived or
+// the account has since been deleted, so opening a flow never silently
+// repoints a step at a different credential.
+function CredentialPickerField<C extends { account: string }>({
+  value,
+  onChange,
+  load,
+  describe,
+  manageHref,
+  linkLabel,
+  blankLabel,
+  fixedOptions = [],
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  load: (token: string) => Promise<C[]>;
+  // The option text for an account; the bare name when omitted.
+  describe?: (account: string, creds: C[]) => string;
+  manageHref: string;
+  // Null while the listing is still loading.
+  linkLabel: (creds: C[] | null) => string;
+  // When given, a blank option heads the list with this text.
+  blankLabel?: (creds: C[] | null) => string;
+  // Offered whatever the listing says, ahead of the saved accounts.
+  fixedOptions?: string[];
+}) {
+  const { token } = useAuth();
+  const [creds, setCreds] = useState<C[] | null>(null);
+  const loadRef = useRef(load);
+  loadRef.current = load;
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    loadRef
+      .current(token)
+      .then((r) => {
+        if (!cancelled) setCreds(r);
+      })
+      .catch(() => {
+        if (!cancelled) setCreds([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const known = creds ?? [];
+  const opts = Array.from(
+    new Set([...fixedOptions, ...known.map((c) => c.account), ...(value ? [value] : [])]),
+  );
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)" }}>
+      <select style={{ maxWidth: "100%" }} value={value} onChange={(e) => onChange(e.target.value)}>
+        {blankLabel && <option value="">{blankLabel(creds)}</option>}
+        {opts.map((a) => (
+          <option key={a} value={a}>
+            {describe ? describe(a, known) : a}
+          </option>
+        ))}
+      </select>
+      {/* The link keeps its own line rather than breaking across two: the row
+          wraps when a credential's name and description outgrow the column. */}
+      <Link to={manageHref} style={{ fontSize: "var(--text-sm)", whiteSpace: "nowrap" }}>
+        {linkLabel(creds)}
+      </Link>
+    </div>
+  );
+}
+
 // The picker for a named SSH/SFTP server. Unlike the git equivalent it shows
 // user@host beside the name: "bank" and "supplier" mean nothing six months on,
 // and picking the wrong server is the mistake this field exists to prevent.
@@ -3571,73 +3694,36 @@ function SSHCredAccountField({
   onChange: (v: unknown) => void;
 }) {
   const { t } = useTranslation();
-  const { token } = useAuth();
   const { connectedIntegrations } = useFormCtx();
-  const [creds, setCreds] = useState<SSHCredential[] | null>(null);
   // Blank falls back to the integration's own connection, but only while that
   // connection exists; until it does, blank points at nothing.
   const hasConnection = !!connectionSlug && !!connectedIntegrations?.has(connectionSlug);
 
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    api
-      .listSSHCredentials(token)
-      .then((r) => {
-        if (!cancelled) setCreds(r.credentials ?? []);
-      })
-      .catch(() => {
-        if (!cancelled) setCreds([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
-
-  const known = creds ?? [];
-  const names = known.map((c) => c.account);
-  // The saved value stays selectable even when the listing has not arrived or
-  // the account has since been deleted, so opening a flow never silently
-  // repoints a step at a different server.
-  const extra = value && !names.includes(value) ? [value] : [];
-  const describe = (account: string) => {
-    const c = known.find((k) => k.account === account);
-    if (!c?.host) return account;
-    return `${account} — ${c.username ? `${c.username}@` : ""}${c.host}`;
-  };
-
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)" }}>
-      <select
-        style={{ maxWidth: "100%" }}
-        value={value}
-        onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
-      >
-        {/* Blank is always offered, and is what an unpointed step shows. With
-            no servers saved there is nothing else in here: naming one would
-            name a server that does not exist. */}
-        <option value="">
-          {hasConnection
-            ? t("sshCreds.useConnection")
-            : creds !== null && names.length === 0
-              ? t("sshCreds.noneYet")
-              : t("sshCreds.chooseServer")}
-        </option>
-        {[...names, ...extra].map((a) => (
-          <option key={a} value={a}>
-            {describe(a)}
-          </option>
-        ))}
-      </select>
-      {/* The link keeps its own line rather than breaking across two: the row
-          wraps when a server's name and address outgrow the column. */}
-      <Link
-        to="/admin/ssh-credentials"
-        style={{ fontSize: "var(--text-sm)", whiteSpace: "nowrap" }}
-      >
-        {known.length === 0 ? t("sshCreds.addLink") : t("sshCreds.manageLink")}
-      </Link>
-    </div>
+    <CredentialPickerField<SSHCredential>
+      value={value}
+      onChange={(v) => onChange(v === "" ? undefined : v)}
+      load={(token) => api.listSSHCredentials(token).then((r) => r.credentials ?? [])}
+      describe={(account, creds) => {
+        const c = creds.find((k) => k.account === account);
+        if (!c?.host) return account;
+        return `${account} — ${c.username ? `${c.username}@` : ""}${c.host}`;
+      }}
+      manageHref="/admin/ssh-credentials"
+      linkLabel={(creds) =>
+        (creds ?? []).length === 0 ? t("sshCreds.addLink") : t("sshCreds.manageLink")
+      }
+      // Blank is always offered, and is what an unpointed step shows. With
+      // no servers saved there is nothing else in here: naming one would
+      // name a server that does not exist.
+      blankLabel={(creds) =>
+        hasConnection
+          ? t("sshCreds.useConnection")
+          : creds !== null && creds.length === 0
+            ? t("sshCreds.noneYet")
+            : t("sshCreds.chooseServer")
+      }
+    />
   );
 }
 
@@ -3649,48 +3735,17 @@ function GitCredAccountField({
   onChange: (v: unknown) => void;
 }) {
   const { t } = useTranslation();
-  const { token } = useAuth();
-  const [accounts, setAccounts] = useState<string[] | null>(null);
-
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    api
-      .listGitCredentials(token)
-      .then((r) => {
-        if (!cancelled) setAccounts((r.credentials ?? []).map((c) => c.account));
-      })
-      .catch(() => {
-        if (!cancelled) setAccounts([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
-
-  const current = value || "default";
-  const opts = Array.from(
-    new Set(["default", ...(accounts ?? []), current]),
-  );
-
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)" }}>
-      <select style={{ maxWidth: "100%" }} value={current} onChange={(e) => onChange(e.target.value)}>
-        {opts.map((a) => (
-          <option key={a} value={a}>
-            {a}
-          </option>
-        ))}
-      </select>
-      <Link
-        to="/admin/git-credentials"
-        style={{ fontSize: "var(--text-sm)", whiteSpace: "nowrap" }}
-      >
-        {accounts && accounts.length === 0
-          ? t("gitCreds.addLink")
-          : t("gitCreds.manageLink")}
-      </Link>
-    </div>
+    <CredentialPickerField
+      value={value || "default"}
+      onChange={onChange}
+      load={(token) => api.listGitCredentials(token).then((r) => r.credentials ?? [])}
+      manageHref="/admin/git-credentials"
+      linkLabel={(creds) =>
+        creds && creds.length === 0 ? t("gitCreds.addLink") : t("gitCreds.manageLink")
+      }
+      fixedOptions={["default"]}
+    />
   );
 }
 

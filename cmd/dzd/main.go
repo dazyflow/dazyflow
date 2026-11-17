@@ -321,10 +321,19 @@ func main() {
 		})
 	}
 	if encryptedSecrets != nil {
-		daemon.RegisterResourceLister("stripe", "prices", stripeLister(encryptedSecrets, "prices", stripe.ListPrices))
-		daemon.RegisterResourceLister("stripe", "subscriptions", stripeLister(encryptedSecrets, "subscriptions", stripe.ListSubscriptions))
-		daemon.RegisterResourceLister("stripe", "payment_intents", stripeLister(encryptedSecrets, "payments", stripe.ListPaymentIntents))
-		daemon.RegisterResourceLister("stripe", "customers", stripeLister(encryptedSecrets, "customers", stripe.ListCustomers))
+		stripeLister := func(noun string, list func(context.Context, core.Job) ([]core.AccountResource, error)) daemon.ResourceLister {
+			return func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
+				key, err := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Stripe", "api_key"))
+				if err != nil {
+					return nil, fmt.Errorf("connect Stripe first (add your secret API key on the Apps page) to list %s: %w", noun, err)
+				}
+				return list(ctx, core.Job{Params: map[string]any{"api_key": key}})
+			}
+		}
+		daemon.RegisterResourceLister("stripe", "prices", stripeLister("prices", stripe.ListPrices))
+		daemon.RegisterResourceLister("stripe", "subscriptions", stripeLister("subscriptions", stripe.ListSubscriptions))
+		daemon.RegisterResourceLister("stripe", "payment_intents", stripeLister("payments", stripe.ListPaymentIntents))
+		daemon.RegisterResourceLister("stripe", "customers", stripeLister("customers", stripe.ListCustomers))
 		haConn := func(ctx context.Context) (core.Job, error) {
 			base, _ := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Home Assistant", "base_url"))
 			token, _ := encryptedSecrets.Get(ctx, core.ConnectionSecretKey("Home Assistant", "token"))
@@ -650,7 +659,7 @@ func main() {
 	}
 
 	if devKey {
-		_, ct, err := auth.IssueAPIKey(ks, ctx, "dev", "dev", "main", "dev@local", []core.Role{devAdminRole}, nil)
+		_, ct, err := auth.IssueAPIKey(ks, ctx, "dev", "dev", "main", "dev@local", []core.Role{core.TeamRoleAdmin()}, nil)
 		if err != nil {
 			log.Fatalf("issue dev key: %v", err)
 		}
@@ -667,8 +676,7 @@ func main() {
 
 	healthSrv := health.NewServer()
 	grpc_health_v1.RegisterHealthServer(srv, healthSrv)
-	grpcReady := func(ctx context.Context) error { return pgPool.Ping(ctx) }
-	go daemon.MonitorGRPCHealth(ctx, healthSrv, grpcReady, 5*time.Second)
+	go daemon.MonitorGRPCHealth(ctx, healthSrv, pgPool.Ping, 5*time.Second)
 
 	lis, err := net.Listen("tcp", listen)
 	if err != nil {
@@ -1064,55 +1072,91 @@ func startRetentionSweeps(ctx context.Context, svc *daemon.Service, jobs core.Jo
 			runnerTaskPruner = rt
 		}
 	}
-	var terminalJobs pruner
-	if jobPruner != nil {
-		terminalJobs = pruneFunc(jobPruner.PruneTerminal)
-	}
-	// One row per global sweep; a nil pruner or a non-positive retention skips it.
-	sweeps := []struct {
-		op, what  string
-		p         pruner
-		retention time.Duration
-		batch     int
-	}{
-		{"prune jobs", "terminal job row(s)", terminalJobs, jobRetention, 5000},
-		{"prune audit", "audit row(s)", retentionAudit, auditRetention, 5000},
-		{"prune run logs", "run-log row(s)", logPruner, runLogRetention, 5000},
-		{"prune runner tasks", "runner task row(s)", runnerTaskPruner, runnerTaskRetention, 5000},
-		{"prune support tickets", "closed support ticket(s)", ticketPruner, supportRetention, 1000},
-		{"prune support bundles", "support bundle(s)", bundlePruner, supportRetention, 1000},
-	}
 	// Startup pass, so rows that aged out while the daemon was down go promptly.
 	runEvery(ctx, bgWg, time.Hour, true, func() {
-		for _, s := range sweeps {
-			if s.p == nil || s.retention <= 0 {
-				continue
-			}
-			n, err := s.p.Prune(ctx, s.retention, s.batch)
-			logPrune(ctx, s.op, s.what, n, err)
+		if jobRetention > 0 && jobPruner != nil {
+			n, err := jobPruner.PruneTerminal(ctx, jobRetention, 5000)
+			logPrune(ctx, "jobs", "terminal job row(s)", n, err)
 		}
-		if svc == nil || perTenantLogPruner == nil {
-			return
+		if auditRetention > 0 {
+			n, err := retentionAudit.Prune(ctx, auditRetention, 5000)
+			logPrune(ctx, "audit", "audit row(s)", n, err)
 		}
-		tenants, err := perTenantLogPruner.RunLogTenants(ctx)
-		if err != nil && ctx.Err() == nil {
-			log.Printf("retention: list tenants for run-log sweep: %v", err)
+		if runLogRetention > 0 && logPruner != nil {
+			n, err := logPruner.Prune(ctx, runLogRetention, 5000)
+			logPrune(ctx, "run logs", "run-log row(s)", n, err)
 		}
-		for _, tenant := range tenants {
-			days := svc.RunLogRetentionDays(ctx, tenant)
-			if days <= 0 {
-				continue // uncapped — global sweep is the only bound
+		if runnerTaskPruner != nil {
+			n, err := runnerTaskPruner.Prune(ctx, runnerTaskRetention, 5000)
+			logPrune(ctx, "runner tasks", "runner task row(s)", n, err)
+		}
+		if supportRetention > 0 && ticketPruner != nil {
+			n, err := ticketPruner.Prune(ctx, supportRetention, 1000)
+			logPrune(ctx, "support tickets", "closed support ticket(s)", n, err)
+		}
+		if supportRetention > 0 && bundlePruner != nil {
+			n, err := bundlePruner.Prune(ctx, supportRetention, 1000)
+			logPrune(ctx, "support bundles", "support bundle(s)", n, err)
+		}
+		if svc != nil && perTenantLogPruner != nil {
+			tenants, err := perTenantLogPruner.RunLogTenants(ctx)
+			if err != nil {
+				if ctx.Err() == nil {
+					log.Printf("retention: list tenants for run-log sweep: %v", err)
+				}
 			}
-			win := time.Duration(days) * 24 * time.Hour
-			if runLogRetention > 0 && win >= runLogRetention {
-				continue // global sweep already covers this window
+			for _, tenant := range tenants {
+				days := svc.RunLogRetentionDays(ctx, tenant)
+				if days <= 0 {
+					continue // uncapped — global sweep is the only bound
+				}
+				win := time.Duration(days) * 24 * time.Hour
+				if runLogRetention > 0 && win >= runLogRetention {
+					continue // global sweep already covers this window
+				}
+				n, err := perTenantLogPruner.PruneTenant(ctx, tenant, win, 5000)
+				logPrune(ctx, "run logs for "+tenant, fmt.Sprintf("run-log row(s) for %s (%dd)", tenant, days), n, err)
 			}
-			n, err := perTenantLogPruner.PruneTenant(ctx, tenant, win, 5000)
-			logPrune(ctx, "prune run logs for "+tenant, fmt.Sprintf("run-log row(s) for %s (%dd)", tenant, days), n, err)
 		}
 	})
 	log.Printf("retention sweeps: jobs=%s audit=%s run-logs=%s support=%s (0 = disabled)",
 		jobRetention, auditRetention, runLogRetention, supportRetention)
+}
+
+// logPrune reports one retention prune: the error unless shutting down,
+// otherwise the row count when anything was removed.
+func logPrune(ctx context.Context, what, rows string, n int, err error) {
+	if err != nil {
+		if ctx.Err() == nil {
+			log.Printf("retention: prune %s: %v", what, err)
+		}
+		return
+	}
+	if n > 0 {
+		log.Printf("retention: pruned %d %s", n, rows)
+	}
+}
+
+// runEvery calls fn every interval on a goroutine tracked by wg until ctx is
+// done. With runAtStart it also calls fn once before the first tick.
+func runEvery(ctx context.Context, wg *sync.WaitGroup, interval time.Duration, runAtStart bool, fn func()) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if runAtStart {
+			fn()
+		}
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				fn()
+			}
+		}
+	}()
 }
 
 type gatewayDeps struct {
@@ -1168,7 +1212,7 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 	gw.MCPGrants = d.mcpGrants
 	// Extra https hosts MCP clients may be sent back to after OAuth
 	// approval, beyond claude.ai and claude.com; comma-separated.
-	gw.MCPRedirectHosts = splitList(os.Getenv("DAZYFLOW_MCP_OAUTH_REDIRECT_HOSTS"), true)
+	gw.MCPRedirectHosts = append(gw.MCPRedirectHosts, splitList(os.Getenv("DAZYFLOW_MCP_OAUTH_REDIRECT_HOSTS"), true)...)
 	gw.SessionTTL = d.sessionTTL
 	gw.MaxSessionAge = d.sessionMaxAge
 
@@ -1375,73 +1419,6 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 		}
 	}()
 }
-
-// runEvery runs fn every interval on a goroutine tracked by wg until ctx is
-// done. With runAtStart, fn also runs once immediately, before the first tick.
-func runEvery(ctx context.Context, wg *sync.WaitGroup, interval time.Duration, runAtStart bool, fn func()) {
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if runAtStart {
-			fn()
-		}
-		t := time.NewTicker(interval)
-		defer t.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				fn()
-			}
-		}
-	}()
-}
-
-// logPrune reports one retention prune: the error unless shutdown caused it,
-// otherwise the row count when anything was removed. what names the rows
-// ("audit row(s)"); op names the pass in error messages ("prune audit").
-func logPrune(ctx context.Context, op, what string, n int, err error) {
-	if err != nil {
-		if ctx.Err() == nil {
-			log.Printf("retention: %s: %v", op, err)
-		}
-		return
-	}
-	if n > 0 {
-		log.Printf("retention: pruned %d %s", n, what)
-	}
-}
-
-// pruneFunc adapts a prune method with another name to the Prune shape.
-type pruneFunc func(context.Context, time.Duration, int) (int, error)
-
-func (f pruneFunc) Prune(ctx context.Context, retention time.Duration, batch int) (int, error) {
-	return f(ctx, retention, batch)
-}
-
-// splitList splits a comma-separated value, trimming each entry and dropping
-// empty ones; lower also lowercases them.
-func splitList(s string, lower bool) []string {
-	var out []string
-	for _, e := range strings.Split(s, ",") {
-		e = strings.TrimSpace(e)
-		if lower {
-			e = strings.ToLower(e)
-		}
-		if e != "" {
-			out = append(out, e)
-		}
-	}
-	return out
-}
-
-// devAdminRole is the all-permissions role given to the dev API key and the
-// seeded dev user.
-var devAdminRole = core.Role{Name: "admin", Permissions: []core.Permission{
-	core.PermOrganizationAdmin, core.PermGraphRun, core.PermGraphEdit, core.PermGraphAdmin,
-	core.PermSecretRead, core.PermSecretWrite,
-}}
 
 func waitForGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
 	done := make(chan struct{})
@@ -1708,7 +1685,7 @@ func seedDefaultUser(ctx context.Context, users auth.UserStore, dev bool) {
 		Subject:      "test@example.com",
 		Tenant:       "dev",
 		Workspace:    "main",
-		Roles:        []core.Role{devAdminRole},
+		Roles:        []core.Role{core.TeamRoleAdmin()},
 		CreatedAt:    time.Now(),
 	}
 	if err := users.PutUser(ctx, u); err != nil {
@@ -1835,25 +1812,26 @@ func wireConnectorTokenHooks(reg *daemon.OAuthRegistry) {
 	})
 }
 
-// resourceListFunc is the shape of a connector's resource listing call.
-type resourceListFunc func(context.Context, core.Job) ([]core.AccountResource, error)
-
-// accountLister lists resources for the picked connected account.
-func accountLister(list resourceListFunc) daemon.ResourceLister {
-	return func(ctx context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
-		return list(ctx, core.Job{Params: map[string]any{"account": account}})
+// splitList splits a comma-separated list, trimming entries and dropping
+// empty ones; lower also lower-cases them.
+func splitList(s string, lower bool) []string {
+	var out []string
+	for _, e := range strings.Split(s, ",") {
+		e = strings.TrimSpace(e)
+		if lower {
+			e = strings.ToLower(e)
+		}
+		if e != "" {
+			out = append(out, e)
+		}
 	}
+	return out
 }
 
-// stripeLister lists Stripe resources with the org's stored API key; noun
-// names them in the "connect Stripe first" error.
-func stripeLister(secrets *daemon.EncryptedSecrets, noun string, list resourceListFunc) daemon.ResourceLister {
-	return func(ctx context.Context, _ string, _ map[string]string) ([]core.AccountResource, error) {
-		key, err := secrets.Get(ctx, core.ConnectionSecretKey("Stripe", "api_key"))
-		if err != nil {
-			return nil, fmt.Errorf("connect Stripe first (add your secret API key on the Apps page) to list %s: %w", noun, err)
-		}
-		return list(ctx, core.Job{Params: map[string]any{"api_key": key}})
+// accountLister adapts a list function that needs only the connected account.
+func accountLister(list func(context.Context, core.Job) ([]core.AccountResource, error)) daemon.ResourceLister {
+	return func(ctx context.Context, account string, _ map[string]string) ([]core.AccountResource, error) {
+		return list(ctx, core.Job{Params: map[string]any{"account": account}})
 	}
 }
 

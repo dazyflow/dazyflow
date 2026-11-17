@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/google"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/drops/internal/reltime"
 	"github.com/dazyflow/dazyflow/engine"
@@ -155,35 +156,20 @@ func ListEvents(ctx context.Context, job core.Job) ([]map[string]any, error) {
 	// A page can hold fewer than maxResults with more behind nextPageToken, so
 	// follow it until the limit is reached.
 	limit := max(params.IntDefault(job.Params, "limit", 250), 1)
-	out := []map[string]any{}
-	for page := 0; page < maxEventPages && len(out) < limit; page++ {
-		q.Set("maxResults", strconv.Itoa(limit-len(out)))
-		endpoint := calBaseURL(job) + "/calendars/" + url.PathEscape(resolveCalendarID(job)) + "/events?" + q.Encode()
-		status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
-		if err != nil {
-			return nil, err
+	calID := resolveCalendarID(job)
+	events, _, err := google.Paginate(ctx, func(pageToken string, remaining int) ([]rawEvent, string, error) {
+		q.Set("maxResults", strconv.Itoa(remaining))
+		if pageToken != "" {
+			q.Set("pageToken", pageToken)
 		}
-		if status < 200 || status >= 300 {
-			return nil, fmt.Errorf("%s", calErr(body))
-		}
-
-		var parsed struct {
-			Items         []rawEvent `json:"items"`
-			NextPageToken string     `json:"nextPageToken"`
-		}
-		if err := json.Unmarshal(body, &parsed); err != nil {
-			return nil, fmt.Errorf("events.list decode: %w", err)
-		}
-		for _, it := range parsed.Items {
-			out = append(out, it.normalize())
-		}
-		if parsed.NextPageToken == "" {
-			break
-		}
-		q.Set("pageToken", parsed.NextPageToken)
+		return eventsPage(ctx, job, token, calID, q)
+	}, limit, maxEventPages)
+	if err != nil {
+		return nil, err
 	}
-	if len(out) > limit {
-		out = out[:limit]
+	out := make([]map[string]any, 0, len(events))
+	for _, it := range events {
+		out = append(out, it.normalize())
 	}
 	return out, nil
 }

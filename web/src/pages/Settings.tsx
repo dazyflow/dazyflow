@@ -17,6 +17,7 @@ import { Switch } from "../components/ui/Switch";
 import { Button } from "../components/ui/Button";
 import { ICON } from "../icons";
 import { FEEDBACK } from "../lib/timing";
+import { useCopyToClipboard } from "../components/ui/useCopyToClipboard";
 
 // Settings is the per-user, per-browser preferences page — reached
 // from the account menu in the sidebar. Holds appearance + language,
@@ -391,13 +392,7 @@ function TwoFactorCard() {
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [disabling, setDisabling] = useState(false);
   const [disablePassword, setDisablePassword] = useState("");
-  const [copied, setCopied] = useState<"secret" | "codes" | null>(null);
-
-  const copy = (text: string, which: "secret" | "codes") => {
-    void navigator.clipboard?.writeText(text);
-    setCopied(which);
-    window.setTimeout(() => setCopied((c) => (c === which ? null : c)), FEEDBACK.copied);
-  };
+  const { copiedKey: copied, copy } = useCopyToClipboard<"secret" | "codes">();
 
   // Recovery codes are shown once — let the user keep an offline copy as a
   // .txt instead of only the clipboard (which a later copy would clobber).
@@ -527,7 +522,7 @@ function TwoFactorCard() {
             </ul>
             <div className="totp-actions">
               <Button
-                onClick={() => copy(recoveryCodes.join("\n"), "codes")}
+                onClick={() => void copy(recoveryCodes.join("\n"), "codes")}
               >
                 {copied === "codes" ? t("common.copied") : t("twoFactor.copyCodes")}
               </Button>
@@ -565,7 +560,7 @@ function TwoFactorCard() {
                   <code className="totp-secret">{setup.secret_base32}</code>
                   <Button
                     className="linklike"
-                    onClick={() => copy(setup.secret_base32, "secret")}
+                    onClick={() => void copy(setup.secret_base32, "secret")}
                   >
                     {copied === "secret" ? t("common.copied") : t("common.copy")}
                   </Button>

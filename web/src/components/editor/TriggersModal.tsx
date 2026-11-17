@@ -4,7 +4,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Sparkles,
-  Copy,
   Check,
   AlertCircle,
   Info,
@@ -21,6 +20,7 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { ConfirmModal } from "../ui/ConfirmModal";
 import { Button } from "../ui/Button";
+import { CopyButton } from "../ui/CopyButton";
 import { webhookKeys, webhookPublic } from "../../flowStatus";
 import { formatDateTime } from "../../lib/datetime";
 import { ICON } from "../../icons";
@@ -574,27 +574,15 @@ function RecentSubmissions({ graph }: { graph: Graph }) {
 }
 
 
-function useCopyButton(value: string) {
+function CodeCopyButton({ value, float }: { value: string; float?: boolean }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* clipboard unavailable — user can still select+copy manually */
-    }
-  };
-  return (extraClass?: string) => (
-    <Button
-      className={"dz-code-btn" + (extraClass ? " " + extraClass : "")}
-      onClick={copy}
+  return (
+    <CopyButton
+      text={value}
+      className={"dz-code-btn" + (float ? " dz-code-btn-float" : "")}
+      iconSize={ICON.sm}
       title={t("common.copy")}
-    >
-      {copied ? <Check size={ICON.sm} /> : <Copy size={ICON.sm} />}
-      <span>{copied ? t("common.copied") : t("common.copy")}</span>
-    </Button>
+    />
   );
 }
 
@@ -613,7 +601,6 @@ export function CodeField({
   action?: { href: string; label: string };
   trailing?: ReactNode;
 }) {
-  const copyButton = useCopyButton(value);
   return (
     <div>
       {label && (
@@ -627,7 +614,7 @@ export function CodeField({
         <code className="dz-code-value" title={value}>
           {value}
         </code>
-        {copyButton()}
+        <CodeCopyButton value={value} />
         {action && (
           <a
             href={action.href}
@@ -744,10 +731,9 @@ function WebhookKeys({
 }
 
 function CodeBlock({ value }: { value: string }) {
-  const copyButton = useCopyButton(value);
   return (
     <div className="dz-code dz-code-block">
-      {copyButton("dz-code-btn-float")}
+      <CodeCopyButton value={value} float />
       <pre>{value}</pre>
     </div>
   );
