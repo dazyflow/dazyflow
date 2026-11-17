@@ -46,12 +46,6 @@ func versionServer(t *testing.T, status int, version string) *httptest.Server {
 	return srv
 }
 
-func setVersion(v string) func() {
-	prev := buildinfo.Version
-	buildinfo.Version = v
-	return func() { buildinfo.Version = prev }
-}
-
 func TestParseSemver(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -210,25 +204,25 @@ func TestAdminVersion(t *testing.T) {
 	adminP := core.Principal{Roles: []core.Role{{Name: "p", Permissions: []core.Permission{core.PermPlatformAdmin}}}}
 	userP := core.Principal{Roles: []core.Role{{Name: "e", Permissions: []core.Permission{core.PermGraphRun}}}}
 
-	call := func(gw *HTTPGateway, p core.Principal) (int, versionStatus) {
+	call := func(api *versionAPI, p core.Principal) (int, versionStatus) {
 		t.Helper()
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/version", nil)
-		platformOnly(gw.versionAPI().adminVersion)(rec, req, p)
+		platformOnly(api.adminVersion)(rec, req, p)
 		var vs versionStatus
 		_ = json.Unmarshal(rec.Body.Bytes(), &vs)
 		return rec.Code, vs
 	}
 
 	t.Run("forbidden for non-platform-admin", func(t *testing.T) {
-		if code, _ := call(&HTTPGateway{UpdateURL: "http://x"}, userP); code != http.StatusForbidden {
+		if code, _ := call((&HTTPGateway{UpdateURL: "http://x"}).versionAPI(), userP); code != http.StatusForbidden {
 			t.Errorf("code = %d, want 403", code)
 		}
 	})
 
 	t.Run("disabled when no URL", func(t *testing.T) {
 		resetReleaseCache()
-		code, vs := call(&HTTPGateway{UpdateURL: ""}, adminP)
+		code, vs := call((&HTTPGateway{UpdateURL: ""}).versionAPI(), adminP)
 		if code != http.StatusOK || vs.CheckError != "update check disabled" {
 			t.Errorf("code=%d err=%q, want 200/disabled", code, vs.CheckError)
 		}
@@ -240,7 +234,7 @@ func TestAdminVersion(t *testing.T) {
 	t.Run("unreachable upstream degrades to a note", func(t *testing.T) {
 		resetReleaseCache()
 		srv := versionServer(t, http.StatusInternalServerError, "")
-		code, vs := call(&HTTPGateway{UpdateURL: srv.URL}, adminP)
+		code, vs := call(&versionAPI{UpdateURL: srv.URL, Version: "0.1.0"}, adminP)
 		if code != http.StatusOK || vs.CheckError != "could not reach the release server" {
 			t.Errorf("code=%d err=%q, want 200/unreachable", code, vs.CheckError)
 		}
@@ -251,9 +245,8 @@ func TestAdminVersion(t *testing.T) {
 
 	t.Run("update available when behind", func(t *testing.T) {
 		resetReleaseCache()
-		defer setVersion("0.1.0")()
 		srv := versionServer(t, http.StatusOK, "0.2.0")
-		code, vs := call(&HTTPGateway{UpdateURL: srv.URL}, adminP)
+		code, vs := call(&versionAPI{UpdateURL: srv.URL, Version: "0.1.0"}, adminP)
 		if code != http.StatusOK {
 			t.Fatalf("code=%d", code)
 		}
@@ -267,9 +260,8 @@ func TestAdminVersion(t *testing.T) {
 
 	t.Run("up to date when equal", func(t *testing.T) {
 		resetReleaseCache()
-		defer setVersion("0.2.0")()
 		srv := versionServer(t, http.StatusOK, "0.2.0")
-		_, vs := call(&HTTPGateway{UpdateURL: srv.URL}, adminP)
+		_, vs := call(&versionAPI{UpdateURL: srv.URL, Version: "0.2.0"}, adminP)
 		if vs.UpdateAvailable || vs.Latest != "0.2.0" {
 			t.Errorf("latest=%q update=%v, want 0.2.0/false", vs.Latest, vs.UpdateAvailable)
 		}
@@ -277,9 +269,8 @@ func TestAdminVersion(t *testing.T) {
 
 	t.Run("dev build is not comparable", func(t *testing.T) {
 		resetReleaseCache()
-		defer setVersion("dev")()
 		srv := versionServer(t, http.StatusOK, "0.2.0")
-		_, vs := call(&HTTPGateway{UpdateURL: srv.URL}, adminP)
+		_, vs := call(&versionAPI{UpdateURL: srv.URL, Version: "dev"}, adminP)
 		if vs.UpdateAvailable || vs.Latest != "0.2.0" {
 			t.Errorf("latest=%q update=%v, want 0.2.0/false (dev not comparable)", vs.Latest, vs.UpdateAvailable)
 		}
