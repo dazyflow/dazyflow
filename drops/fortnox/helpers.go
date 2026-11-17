@@ -51,20 +51,10 @@ func baseURL(job core.Job) string { return httpBase.For(job) }
 // fortnoxFailure. token is passed in (not resolved here) so tests can inject a
 // value and the SSRF-guard test can call this directly.
 func fortnoxDo(ctx context.Context, method, url, token string, body []byte, timeoutMS int) (int, []byte, error) {
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
-	headers := map[string]string{
-		"Authorization": "Bearer " + token,
-		"Accept":        "application/json",
-	}
-	if body != nil {
-		headers["Content-Type"] = "application/json"
-	}
 	// base_url is a tenant-supplied param, so net.Do guards the dial: the SSRF
 	// client blocks loopback/private/link-local targets and the egress allowlist
 	// (when set) bounds which public hosts the bearer token may be sent to.
-	status, raw, _, err := hfnet.Do(ctx, method, url, headers, body, timeoutMS, maxResponseBytes)
+	status, raw, _, err := hfnet.DoBearer(ctx, method, url, token, "application/json", map[string]string{"Accept": "application/json"}, body, timeoutMS, maxResponseBytes)
 	return status, raw, err
 }
 
