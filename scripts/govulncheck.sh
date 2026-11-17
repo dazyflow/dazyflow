@@ -18,10 +18,10 @@
 set -euo pipefail
 
 ALLOW=(
-  # excelize v2.11.0 already contains the fix (qax-os/excelize 93f0b3ca, #2331):
-  # xlsxC.getValueFrom rejects `xlsxSI < 0` (cell.go:626). The DB entry has no
+  # excelize v2.11.1 contains the fix (qax-os/excelize 93f0b3ca, #2331):
+  # xlsxC.getValueFrom rejects `xlsxSI < 0` (cell.go:663). The DB entry has no
   # fixed version, so every release is flagged.
-  "GO-2026-6452 github.com/xuri/excelize/v2@v2.11.0"
+  "GO-2026-6452 github.com/xuri/excelize/v2@v2.11.1"
 )
 
 GV="${GV:-$(go env GOPATH)/bin/govulncheck}"
