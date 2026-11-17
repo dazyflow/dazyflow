@@ -107,11 +107,8 @@ func executeSendSMS(ctx context.Context, job core.Job, _ chan<- core.Progress) (
 	}
 
 	status, respBody, err := elksDo(ctx, job, http.MethodPost, baseURL(job)+"/sms", form.Encode())
-	if err != nil {
-		return params.Err(job, "elks_http_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "elks_error", extractElksError(respBody)), nil
+	if fail := params.HTTPFailure(job, "elks", "46elks", status, respBody, err, extractElksError); fail != nil {
+		return *fail, nil
 	}
 
 	var parsed struct {
