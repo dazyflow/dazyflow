@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { ReactNode, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Rocket } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Callout } from "../ui/Callout";
 import { ICON } from "../../icons";
-import { useEscapeToClose } from "../ui/useEscapeToClose";
+import { Modal } from "../ui/Modal";
 
 // PublishLabelModal confirms a publish / go-live and nudges the user to name the
 // release. The name is always offered but never required: "Publish without a
@@ -50,60 +49,52 @@ export function PublishLabelModal({
     inputRef.current?.focus();
   }, []);
 
-  useEscapeToClose(onCancel);
-
   // Portal to <body> for the same reason as ConfirmModal: a transformed or
   // container-query ancestor in the editor tree would otherwise trap the
   // position:fixed backdrop inside that subtree.
-  return createPortal(
-    <div className="modal-backdrop" onClick={onCancel}>
-      <div
-        className={
-          "modal confirm-dialog" + (connect ? " publish-gate" : "")
-        }
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="modal-head">
-          <h2>{title}</h2>
-        </div>
-        <div className="modal-body">
-          {warning && <Callout variant="warning">{warning}</Callout>}
-          <label className="publish-label-field">
-            <span>{t("editor.publishLabelField")}</span>
-            <input
-              ref={inputRef}
-              type="text"
-              value={value}
-              placeholder={t("editor.publishLabelPlaceholder")}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") onPublish(value.trim());
-              }}
-            />
-          </label>
-          <p className="confirm-message">{message}</p>
-        </div>
-        <div className="modal-foot">
-          <Button onClick={() => onPublish("")}>
-            {t("editor.publishWithoutName")}
-          </Button>
-          <Button
-            variant={connect ? undefined : "primary"}
-            onClick={() => onPublish(value.trim())}
-          >
-            <Rocket size={ICON.sm} />
-            {confirmLabel}
-          </Button>
-          {connect && (
-            <Button variant="primary" onClick={connect.onClick}>
-              {connect.label}
-            </Button>
-          )}
-        </div>
+  return (
+    <Modal
+      title={title}
+      onClose={onCancel}
+      className={"confirm-dialog" + (connect ? " publish-gate" : "")}
+    >
+      <div className="modal-head">
+        <h2>{title}</h2>
       </div>
-    </div>,
-    document.body,
+      <div className="modal-body">
+        {warning && <Callout variant="warning">{warning}</Callout>}
+        <label className="publish-label-field">
+          <span>{t("editor.publishLabelField")}</span>
+          <input
+            ref={inputRef}
+            type="text"
+            value={value}
+            placeholder={t("editor.publishLabelPlaceholder")}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onPublish(value.trim());
+            }}
+          />
+        </label>
+        <p className="confirm-message">{message}</p>
+      </div>
+      <div className="modal-foot">
+        <Button onClick={() => onPublish("")}>
+          {t("editor.publishWithoutName")}
+        </Button>
+        <Button
+          variant={connect ? undefined : "primary"}
+          onClick={() => onPublish(value.trim())}
+        >
+          <Rocket size={ICON.sm} />
+          {confirmLabel}
+        </Button>
+        {connect && (
+          <Button variant="primary" onClick={connect.onClick}>
+            {connect.label}
+          </Button>
+        )}
+      </div>
+    </Modal>
   );
 }

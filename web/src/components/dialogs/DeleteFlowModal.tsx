@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { APIError } from "../../api";
 import { explainApiError } from "../../lib/explainApiError";
 import { Button } from "../ui/Button";
 import { ErrorNotice } from "../ui/ErrorNotice";
-import { useEscapeToClose } from "../ui/useEscapeToClose";
+import { Modal } from "../ui/Modal";
 
 // DeleteFlowModal is the password-gated confirm dialog for deleting a flow.
 // Deletion is irreversible (it drops the flow's whole history), so — like
@@ -37,7 +36,6 @@ export function DeleteFlowModal({
 
   // Escape cancels — but not mid-delete, so a stray keypress can't abandon
   // the dialog while the request is in flight.
-  useEscapeToClose(() => !busy && onClose());
 
   const submit = async () => {
     if (!password || busy) return;
@@ -58,53 +56,51 @@ export function DeleteFlowModal({
     }
   };
 
-  return createPortal(
-    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
-      <div
-        className="modal confirm-dialog"
-        onClick={(e) => e.stopPropagation()}
-        role="alertdialog"
-        aria-modal="true"
-      >
-        <div className="modal-head">
-          <h2>{t("deleteFlow.title")}</h2>
-        </div>
-        <div className="modal-body">
-          <p className="confirm-message">
-            {t("deleteFlow.body", { name: flowName })}
-          </p>
-          <div className="sf-field">
-            <div className="label-row">
-              <label htmlFor="delete-flow-password">
-                {t("deleteFlow.passwordLabel")}
-              </label>
-            </div>
-            <input
-              id="delete-flow-password"
-              type="password"
-              autoFocus
-              autoComplete="current-password"
-              value={password}
-              disabled={busy}
-              placeholder={t("deleteFlow.passwordPlaceholder")}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submit();
-              }}
-            />
-          </div>
-          {err && <ErrorNotice>{err}</ErrorNotice>}
-        </div>
-        <div className="modal-foot">
-          <Button onClick={onClose} disabled={busy}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="danger" onClick={submit} disabled={busy || !password}>
-            {busy ? t("deleteFlow.deleting") : t("common.deleteFlow")}
-          </Button>
-        </div>
+  return (
+    <Modal
+      title={t("deleteFlow.title")}
+      onClose={onClose}
+      dismissible={!busy}
+      className="confirm-dialog"
+      role="alertdialog"
+    >
+      <div className="modal-head">
+        <h2>{t("deleteFlow.title")}</h2>
       </div>
-    </div>,
-    document.body,
+      <div className="modal-body">
+        <p className="confirm-message">
+          {t("deleteFlow.body", { name: flowName })}
+        </p>
+        <div className="sf-field">
+          <div className="label-row">
+            <label htmlFor="delete-flow-password">
+              {t("deleteFlow.passwordLabel")}
+            </label>
+          </div>
+          <input
+            id="delete-flow-password"
+            type="password"
+            autoFocus
+            autoComplete="current-password"
+            value={password}
+            disabled={busy}
+            placeholder={t("deleteFlow.passwordPlaceholder")}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+            }}
+          />
+        </div>
+        {err && <ErrorNotice>{err}</ErrorNotice>}
+      </div>
+      <div className="modal-foot">
+        <Button onClick={onClose} disabled={busy}>
+          {t("common.cancel")}
+        </Button>
+        <Button variant="danger" onClick={submit} disabled={busy || !password}>
+          {busy ? t("deleteFlow.deleting") : t("common.deleteFlow")}
+        </Button>
+      </div>
+    </Modal>
   );
 }

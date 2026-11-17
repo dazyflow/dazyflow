@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {type ReactNode} from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "./Button";
-import { useEscapeToClose } from "./useEscapeToClose";
+import { Modal } from "./Modal";
 
 // ConfirmModal is the app's reusable "are you sure?" dialog — a themed
 // replacement for window.confirm(). Use it for any destructive action
@@ -36,20 +35,13 @@ export function ConfirmModal({
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
-  useEscapeToClose(onCancel);
-  // Portal to <body>: the backdrop is position:fixed, but a caller deep
-  // in the tree (e.g. the inspector panel) may sit under a transformed /
-  // container-query ancestor that would trap the fixed element inside
-  // that subtree instead of the viewport. Rendering at the body level
-  // makes the modal correct no matter where it's used.
-  return createPortal(
-    <div className="modal-backdrop" onClick={onCancel}>
-      <div
-        className="modal confirm-dialog"
-        onClick={(e) => e.stopPropagation()}
-        role="alertdialog"
-        aria-modal="true"
-      >
+  return (
+    <Modal
+      title={title}
+      onClose={onCancel}
+      className="confirm-dialog"
+      role="alertdialog"
+    >
         <div className="modal-head">
           <h2>{title}</h2>
         </div>
@@ -75,8 +67,6 @@ export function ConfirmModal({
             {confirmLabel}
           </Button>
         </div>
-      </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

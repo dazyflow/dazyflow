@@ -1,16 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import i18n from "../../i18n";
 import { ICON } from "../../icons";
 import { portLabel } from "../../lib/dropText";
 import { portTypeLabel } from "../../lib/ports";
 import { dataFaceSource, FULL_CAPS } from "../../lib/dataFace";
-import { useEscapeToClose } from "../ui/useEscapeToClose";
 import { FaceBody } from "./NodeDataFace";
 import type { Port, Ref } from "../../types";
+import { Modal } from "../ui/Modal";
 
 // The data face at reading size. The card's face is a 200px glance — three rows,
 // four columns, cells cut at 28 characters — which answers "did this produce
@@ -38,7 +37,6 @@ type Props = {
 };
 
 export function NodeDataModal({ name, ports, outputs, active, onSelect, onClose }: Props) {
-  useEscapeToClose(onClose);
 
   const port = ports.find((p) => p.port === active) ?? ports[0];
   const { tier, view } = dataFaceSource(port ? outputs?.[port.port] : undefined, port, FULL_CAPS);
@@ -46,61 +44,56 @@ export function NodeDataModal({ name, ports, outputs, active, onSelect, onClose 
   // Portal to <body>: the card lives inside React Flow's transformed viewport,
   // and a position:fixed backdrop inside a transformed ancestor is trapped in
   // that subtree — it would be clipped to the node and scaled by the zoom.
-  return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal dz-datamodal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={i18n.t("nodeCard.face.modalTitle", { name })}
-      >
-        <div className="modal-head">
-          <h2>{i18n.t("nodeCard.face.modalTitle", { name })}</h2>
-          <button
-            type="button"
-            className="dz-datamodal-close"
-            aria-label={i18n.t("common.close")}
-            onClick={onClose}
-          >
-            <X size={ICON.md} />
-          </button>
-        </div>
+  return (
+    <Modal
+      title={i18n.t("nodeCard.face.modalTitle", { name })}
+      onClose={onClose}
+      className="dz-datamodal"
+    >
+      <div className="modal-head">
+        <h2>{i18n.t("nodeCard.face.modalTitle", { name })}</h2>
+        <button
+          type="button"
+          className="dz-datamodal-close"
+          aria-label={i18n.t("common.close")}
+          onClick={onClose}
+        >
+          <X size={ICON.md} />
+        </button>
+      </div>
 
-        <div className="dz-datamodal-bar">
-          <span className={tierClass(tier)}>{i18n.t(tierKey(tier))}</span>
-          {ports.length > 1 && (
-            <div className="dz-datamodal-tabs" role="tablist">
-              {ports.map((p) => (
-                <button
-                  key={p.port}
-                  type="button"
-                  role="tab"
-                  aria-selected={p.port === active}
-                  className={"dz-face-tab" + (p.port === active ? " active" : "")}
-                  onClick={() => onSelect(p.port)}
-                >
-                  {portLabel(p.label ?? p.port, i18n.language)}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* The same renderings as the card, uncapped — see FaceBody. */}
-        <div className="modal-body dz-datamodal-body">
-          <FaceBody view={view} />
-        </div>
-
-        {port && (
-          <div className="dz-datamodal-foot">
-            <span>{countLabel(view, tier)}</span>
-            <span>{portTypeLabel(port, (k, dflt) => i18n.t(k, dflt))}</span>
+      <div className="dz-datamodal-bar">
+        <span className={tierClass(tier)}>{i18n.t(tierKey(tier))}</span>
+        {ports.length > 1 && (
+          <div className="dz-datamodal-tabs" role="tablist">
+            {ports.map((p) => (
+              <button
+                key={p.port}
+                type="button"
+                role="tab"
+                aria-selected={p.port === active}
+                className={"dz-face-tab" + (p.port === active ? " active" : "")}
+                onClick={() => onSelect(p.port)}
+              >
+                {portLabel(p.label ?? p.port, i18n.language)}
+              </button>
+            ))}
           </div>
         )}
       </div>
-    </div>,
-    document.body,
+
+      {/* The same renderings as the card, uncapped — see FaceBody. */}
+      <div className="modal-body dz-datamodal-body">
+        <FaceBody view={view} />
+      </div>
+
+      {port && (
+        <div className="dz-datamodal-foot">
+          <span>{countLabel(view, tier)}</span>
+          <span>{portTypeLabel(port, (k, dflt) => i18n.t(k, dflt))}</span>
+        </div>
+      )}
+    </Modal>
   );
 }
 
