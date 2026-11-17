@@ -119,19 +119,11 @@ func slackBaseURL(job core.Job) string { return httpBase.For(job) }
 // caller to translate into a friendly slack_error. timeoutMS bounds the
 // request (defaults to 15s). body is nil for GETs.
 func slackDo(ctx context.Context, method, url, token string, body []byte, timeoutMS int) (slackEnvelope, map[string]any, error) {
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
-	headers := map[string]string{"Authorization": "Bearer " + token}
-	if body != nil {
-		headers["Content-Type"] = "application/json; charset=utf-8"
-	}
-
 	// base_url is a tenant-supplied param, so net.Do guards the dial: the SSRF
 	// client blocks loopback/private/link-local targets (cloud metadata,
 	// internal services) and the egress allowlist (when the operator sets one)
 	// bounds which public hosts the bearer token may be sent to.
-	status, raw, _, err := hfnet.Do(ctx, method, url, headers, body, timeoutMS, maxResponseBytes)
+	status, raw, _, err := hfnet.DoBearer(ctx, method, url, token, "application/json; charset=utf-8", nil, body, timeoutMS, maxResponseBytes)
 	if err != nil {
 		return slackEnvelope{}, nil, err
 	}

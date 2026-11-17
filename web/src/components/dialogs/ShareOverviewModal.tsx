@@ -4,13 +4,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Copy, ExternalLink, RefreshCw, Tv } from "lucide-react";
+import { ExternalLink, RefreshCw, Tv } from "lucide-react";
 import { api, isErrorCode } from "../../api";
 import { explainApiError } from "../../lib/explainApiError";
 import { useAuth } from "../../auth";
 import { Button } from "../ui/Button";
 import type { ShareLink } from "../../types";
 import { ICON } from "../../icons";
+import { CopyButton } from "../ui/CopyButton";
 import { useEscapeToClose } from "../ui/useEscapeToClose";
 import { Loading } from "../ui/Loading";
 
@@ -30,7 +31,6 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const tenant = activeTenant || undefined;
   const workspace = activeWorkspace || undefined;
@@ -93,17 +93,6 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
     }
   }, [token, tenant, workspace, t]);
 
-  const copy = useCallback(async () => {
-    if (!link) return;
-    try {
-      await navigator.clipboard.writeText(publicURL(link));
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* clipboard may be blocked; user can select + copy manually */
-    }
-  }, [link]);
-
   useEscapeToClose(onClose);
 
   return createPortal(
@@ -134,10 +123,10 @@ export function ShareOverviewModal({ onClose }: { onClose: () => void }) {
                   marginTop: "var(--space-3)",
                 }}
               >
-                <Button onClick={copy}>
-                  <Copy size={ICON.xs} />
-                  {copied ? t("share.copied") : t("common.copyLink")}
-                </Button>
+                <CopyButton
+                  text={publicURL(link)}
+                  label={t("common.copyLink")}
+                />
                 <Button
                   onClick={() =>
                     window.open(publicURL(link), "_blank", "noreferrer")

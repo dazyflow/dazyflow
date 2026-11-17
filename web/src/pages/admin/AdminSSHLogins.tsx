@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ClipboardPaste, Copy, KeyRound, Plus, Trash2, Upload, UserRound } from "lucide-react";
+import { ClipboardPaste, KeyRound, Plus, Trash2, Upload, UserRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
+import { CopyButton } from "../../components/ui/CopyButton";
 import { useAuth } from "../../auth";
 import { api } from "../../api";
 import type { SSHLogin } from "../../types";
@@ -136,10 +137,6 @@ export function AdminSSHLogins() {
     }
   };
 
-  const copy = (text: string) => {
-    void navigator.clipboard?.writeText(text);
-  };
-
   const canSave =
     name.trim() !== "" &&
     username.trim() !== "" &&
@@ -176,14 +173,12 @@ export function AdminSSHLogins() {
                 </span>
                 <span className="ssh-login-actions">
                   {l.public_key && (
-                    <Button
+                    <CopyButton
                       variant="ghost"
                       size="sm"
-                      icon={<Copy size={ICON.sm} />}
-                      onClick={() => copy(l.public_key!)}
-                    >
-                      {t("common.copy")}
-                    </Button>
+                      iconSize={ICON.sm}
+                      text={l.public_key}
+                    />
                   )}
                   <Button
                     variant="ghost"
@@ -330,14 +325,11 @@ export function AdminSSHLogins() {
             <div className="ssh-key-line" style={{ marginTop: "var(--space-2)" }}>
               {publicKey}
             </div>
-            <Button
-              variant="secondary"
-              icon={<Copy size={ICON.sm} />}
+            <CopyButton
+              iconSize={ICON.sm}
               style={{ marginTop: "var(--space-2)" }}
-              onClick={() => copy(publicKey)}
-            >
-              {t("common.copy")}
-            </Button>
+              text={publicKey}
+            />
           </Notice>
         )}
 

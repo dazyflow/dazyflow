@@ -1,12 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { Children, isValidElement, ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { Children, isValidElement, ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 import { ICON } from "../icons";
 import { tokenizeJSON } from "../components/ui/JsonEditor";
-
-const COPIED_MS = 1600;
+import { useCopyToClipboard } from "../components/ui/useCopyToClipboard";
 
 // Display names for the fence languages the content actually uses. An
 // unrecognised fence shows its own tag; an unfenced block says nothing at all
@@ -38,22 +37,7 @@ export function CodeBlock({ children }: { children?: ReactNode }) {
   // would paste a blank line.
   const source = textOf(code?.props?.children).replace(/\n$/, "");
 
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  const copy = useCallback(() => {
-    navigator.clipboard?.writeText(source).then(
-      () => {
-        setCopied(true);
-        clearTimeout(timer.current);
-        timer.current = setTimeout(() => setCopied(false), COPIED_MS);
-      },
-      () => {
-        /* clipboard denied — leave the button as it was */
-      },
-    );
-  }, [source]);
+  const { copied, copy } = useCopyToClipboard();
 
   return (
     <div className="docs-code">
@@ -62,7 +46,7 @@ export function CodeBlock({ children }: { children?: ReactNode }) {
         <button
           type="button"
           className="docs-code-copy"
-          onClick={copy}
+          onClick={() => void copy(source)}
           aria-label={copied ? "Copied to clipboard" : "Copy code"}
         >
           {copied ? <Check size={ICON.xs} /> : <Copy size={ICON.xs} />}

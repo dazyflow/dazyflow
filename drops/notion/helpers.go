@@ -44,25 +44,14 @@ func SetHTTPBase(base string) { httpBase.Set(base) }
 func currentHTTPBase() string { return httpBase.Get() }
 
 func notionDo(ctx context.Context, method, url, token string, body []byte, timeoutMS int) (int, []byte, error) {
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
-	headers := map[string]string{
-		"Authorization":  "Bearer " + token,
-		"Notion-Version": notionVersion,
-	}
-	if body != nil {
-		headers["Content-Type"] = "application/json"
-	}
 	// base_url is a tenant-supplied param, so net.Do guards the dial: the SSRF
 	// client blocks loopback/private/link-local targets and the egress allowlist
 	// (when set) bounds which public hosts the bearer token may be sent to.
-	status, raw, _, err := hfnet.Do(ctx, method, url, headers, body, timeoutMS, maxResponseBytes)
+	extra := map[string]string{"Notion-Version": notionVersion}
+	status, raw, _, err := hfnet.DoBearer(ctx, method, url, token, "application/json", extra, body, timeoutMS, maxResponseBytes)
 	return status, raw, err
 }
 
-// extractNotionError pulls the message out of a Notion error body; the
-// status prefix comes from params.HTTPFailure / params.HTTPError.
 func extractNotionError(body []byte) string {
 	var e struct {
 		Code    string `json:"code"`
