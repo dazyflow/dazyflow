@@ -149,6 +149,24 @@ const INTERP = /\$\{[^}]*\}/g;
 // phantom names on the first run of this guard.
 const COMPARISON = /(?:===?|!==?)\s*$/;
 
+// A className that is ONE helper call, `{nodeClassName(d, selected,
+// "collapsed")}`, is a computed value like `{cls}`: its literals are arguments
+// (here a variant key the helper maps to `dz-node dz-node-collapsed`), not
+// classes. Only the whole-expression form is skipped, so a call used as a
+// condition — `{isSet(f) ? "credentials-set" : "connection-note"}` — still has
+// its branch literals checked.
+function isWholeCall(expr) {
+  const e = expr.trim();
+  const open = e.match(/^[A-Za-z_$][\w$.]*\(/);
+  if (!open || !e.endsWith(")")) return false;
+  let depth = 0;
+  for (let i = open[0].length - 1; i < e.length; i++) {
+    if (e[i] === "(") depth++;
+    else if (e[i] === ")" && --depth === 0) return i === e.length - 1;
+  }
+  return false;
+}
+
 // <Button> and <ButtonLink> derive classes from their semantic props rather
 // than from className (see components/Button.tsx): variant and size become
 // `primary` / `ghost` / `icon` / `sm` and so on. CSS pairs them with the
@@ -215,6 +233,7 @@ for (const file of srcFiles) {
       } else {
         const expr = m[2];
         chunks = [];
+        if (isWholeCall(expr)) continue;
         // Template literals: static segments are class text; the quoted
         // literals inside their interpolations are handled by the pass below,
         // which sees the whole expression.
