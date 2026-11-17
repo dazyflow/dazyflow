@@ -208,7 +208,7 @@ func TestAdminVersion(t *testing.T) {
 		t.Helper()
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/version", nil)
-		api.adminVersion(rec, req, p)
+		platformOnly(api.adminVersion)(rec, req, p)
 		var vs versionStatus
 		_ = json.Unmarshal(rec.Body.Bytes(), &vs)
 		return rec.Code, vs

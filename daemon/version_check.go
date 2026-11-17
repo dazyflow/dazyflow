@@ -178,10 +178,6 @@ type versionStatus struct {
 }
 
 func (h *versionAPI) adminVersion(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if err := requirePlatformAdmin(p); err != nil {
-		adminError(rw, err)
-		return
-	}
 	out := versionStatus{
 		Current:        h.Version,
 		Commit:         buildinfo.Commit,

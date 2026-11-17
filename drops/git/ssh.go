@@ -5,9 +5,7 @@ package git
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -17,7 +15,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
-	gossh "golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -224,20 +222,19 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	return gitssh.NewKnownHostsDb(f.Name())
 }
 
-// validateKnownHosts rejects any malformed line. x/crypto's knownhosts parser
-// skips bad lines once another line is valid, so a typo'd user entry would
-// otherwise be dropped silently behind the always-valid bundled keys.
+// validateKnownHosts rejects a credential's known_hosts if any line fails to
+// parse. x/crypto's knownhosts reader skips bad lines as long as the file has
+// at least one valid entry, and the bundled defaults always provide one, so
+// without this check a typo would silently drop the user's host key and the
+// clone would fail later with a confusing "unknown host" error.
 func validateKnownHosts(s string) error {
 	for i, line := range strings.Split(s, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		if _, _, _, _, _, err := gossh.ParseKnownHosts([]byte(line)); err != nil {
-			if errors.Is(err, io.EOF) {
-				err = errors.New("missing host or key")
-			}
-			return fmt.Errorf("known_hosts line %d: %w", i+1, err)
+		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
+			return fmt.Errorf("credential known_hosts line %d: %w", i+1, err)
 		}
 	}
 	return nil
