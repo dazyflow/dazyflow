@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/pgutil"
 )
 
 // Postgres-backed implementations of the three auth stores
@@ -128,10 +129,24 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS suspend_reason    TEXT NOT NULL DEFAU
 `
 
 func EnsurePgAuthSchema(ctx context.Context, pool *pgxpool.Pool) error {
+	return ensureSchema(ctx, pool, pgAuthSchema)
+}
+
+// ensureSchema runs an idempotent schema script against pool.
+func ensureSchema(ctx context.Context, pool *pgxpool.Pool, schema string) error {
 	if pool == nil {
 		return fmt.Errorf("nil pool")
 	}
-	_, err := pool.Exec(ctx, pgAuthSchema)
+	_, err := pool.Exec(ctx, schema)
+	return err
+}
+
+// noRows maps pgx.ErrNoRows to the store's not-found sentinel and passes
+// every other error (including nil) through unchanged.
+func noRows(err, sentinel error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sentinel
+	}
 	return err
 }
 
@@ -186,13 +201,7 @@ func (s *PgKeyStore) GetKey(ctx context.Context, id string) (APIKey, error) {
 		FROM api_keys WHERE id=$1
 	`
 	k, err := scanKey(s.pool.QueryRow(ctx, q, id))
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return APIKey{}, ErrInvalidCredential
-		}
-		return APIKey{}, err
-	}
-	return k, nil
+	return k, noRows(err, ErrInvalidCredential)
 }
 
 func (s *PgKeyStore) Revoke(ctx context.Context, id string, at time.Time) error {
@@ -238,25 +247,10 @@ func (s *PgKeyStore) DeleteByTenant(ctx context.Context, tenant string) (int, er
 	return deleteWhere(ctx, s.pool, "api_keys", "tenant", tenant)
 }
 
-type rowScanner interface {
-	Scan(dest ...any) error
-}
+type rowScanner = pgutil.Scanner
 
 func queryRows[T any](ctx context.Context, pool *pgxpool.Pool, scan func(rowScanner) (T, error), query string, args ...any) ([]T, error) {
-	rows, err := pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := make([]T, 0)
-	for rows.Next() {
-		v, err := scan(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, v)
-	}
-	return out, rows.Err()
+	return pgutil.QueryRows(ctx, pool, scan, query, args...)
 }
 
 // deleteWhere runs `DELETE FROM <table> WHERE <col>=$1` and returns the
@@ -308,10 +302,7 @@ func (s *PgSessionStore) GetSession(ctx context.Context, id string) (Session, er
 		&sess.ID, &sess.Subject, &sess.Tenant, &sess.Workspace, &rolesRaw, &sess.CreatedAt, &sess.ExpiresAt,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return Session{}, ErrInvalidCredential
-		}
-		return Session{}, err
+		return Session{}, noRows(err, ErrInvalidCredential)
 	}
 	roles, err := jsonOrZero[[]core.Role](rolesRaw)
 	if err != nil {
@@ -339,16 +330,12 @@ func (s *PgSessionStore) PutSession(ctx context.Context, sess Session) error {
 }
 
 func (s *PgSessionStore) DeleteSession(ctx context.Context, id string) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE id=$1`, id)
+	_, err := deleteWhere(ctx, s.pool, "sessions", "id", id)
 	return err
 }
 
 func (s *PgSessionStore) RevokeSubjectSessions(ctx context.Context, subject string) (int, error) {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE subject=$1`, subject)
-	if err != nil {
-		return 0, err
-	}
-	return int(tag.RowsAffected()), nil
+	return deleteWhere(ctx, s.pool, "sessions", "subject", subject)
 }
 
 type PgUserStore struct {
@@ -429,13 +416,7 @@ func (s *PgUserStore) GetByEmail(ctx context.Context, email string) (User, error
 	email = strings.ToLower(strings.TrimSpace(email))
 	const q = `SELECT ` + userColumns + ` FROM users WHERE email=$1`
 	u, err := scanUser(s.pool.QueryRow(ctx, q, email))
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return User{}, ErrUnknownUser
-		}
-		return User{}, err
-	}
-	return u, nil
+	return u, noRows(err, ErrUnknownUser)
 }
 
 func (s *PgUserStore) PutUser(ctx context.Context, u User) error {
@@ -533,6 +514,6 @@ func (s *PgUserStore) ListUsers(ctx context.Context) ([]User, error) {
 
 func (s *PgUserStore) DeleteUser(ctx context.Context, email string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
-	_, err := s.pool.Exec(ctx, `DELETE FROM users WHERE email=$1`, email)
+	_, err := deleteWhere(ctx, s.pool, "users", "email", email)
 	return err
 }

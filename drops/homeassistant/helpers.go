@@ -61,14 +61,7 @@ func haDo(ctx context.Context, job core.Job, method, path string, body []byte) (
 	if err != nil {
 		return 0, nil, err
 	}
-	url := base + path
-
-	timeoutMS := params.TimeoutMS(job, 15000)
-	headers := map[string]string{"Authorization": "Bearer " + token}
-	if body != nil {
-		headers["Content-Type"] = "application/json"
-	}
-	status, raw, _, err := hfnet.Do(ctx, method, url, headers, body, timeoutMS, maxResponseBytes)
+	status, raw, _, err := hfnet.DoBearer(ctx, method, base+path, token, "application/json", nil, body, params.TimeoutMS(job, 15000), maxResponseBytes)
 	return status, raw, err
 }
 

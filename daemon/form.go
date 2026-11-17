@@ -16,7 +16,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -29,12 +28,10 @@ var defaultFormFields = []string{"name", "email", "message"}
 // A PUBLIC page: no bearer token, so possession of the URL is the capability and
 // everything here must assume an anonymous, hostile caller.
 func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/form/"), "/")
-	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
-		http.Error(rw, "expected /form/<tenant>/<workspace>/<graph-id>", http.StatusBadRequest)
+	tenant, workspace, graphID, ok := flowPath(rw, r, "/form/")
+	if !ok {
 		return
 	}
-	tenant, workspace, graphID := parts[0], parts[1], parts[2]
 
 	store, err := w.svc.Workspaces.Open(tenant, workspace)
 	if err != nil {
@@ -107,12 +104,7 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 		view.Values = declaredFormValues(fields, posted)
 		values := collectFormValues(fields, posted)
 		seed := buildFormSeed(fields, values)
-		seeds := map[string]core.Result{}
-		for _, n := range g.Nodes {
-			if n.Module == core.FormInputModule && !triggerNodeDisabled(n) {
-				seeds[n.ID] = seed
-			}
-		}
+		seeds, _ := inputSeeds(g, core.FormInputModule, seed)
 		if len(seeds) == 0 {
 			// Unreachable: publicFormConfig already rejected a flow without a form.
 			view.Error = view.M.FormErrorClosed
@@ -134,10 +126,7 @@ func (w *WebhookListener) handleForm(rw http.ResponseWriter, r *http.Request) {
 				view.Error = view.M.FormErrorClosed
 				status = http.StatusServiceUnavailable
 				// Somebody just typed this, so the refusal has to be re-rendered with it.
-				capCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 15*time.Second)
-				_, stored := w.svc.recordRefusedDelivery(capCtx, g, seeds,
-					refusalCode(err), refusalMessage(err))
-				cancel()
+				_, stored := w.recordRefusal(r, g, seeds, err)
 				if !stored {
 					w.logger.Printf("form submit %s/%s/%s: submission NOT stored",
 						tenant, workspace, graphID)

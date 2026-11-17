@@ -13,10 +13,6 @@ import (
 )
 
 func (h *orgAPI) smtpTest(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if err := requirePlatformAdmin(p); err != nil {
-		adminError(rw, err)
-		return
-	}
 	if h.svc.Mailer == nil {
 		writeJSONError(rw, http.StatusNotImplemented,
 			"transactional mailer not configured (set DAZYFLOW_SMTP_URL)")

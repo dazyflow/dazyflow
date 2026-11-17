@@ -222,24 +222,25 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	return gitssh.NewKnownHostsDb(f.Name())
 }
 
-// validateKnownHosts rejects a credential's known_hosts if any entry fails to
-// parse. x/crypto's knownhosts reader skips invalid lines whenever the file
-// has at least one valid one, and the bundled defaults always are, so without
-// this a typo would be silently dropped and the host would then fail with a
-// confusing unknown-key error instead of a clear one here.
-// ssh.ParseKnownHosts itself skips a line with no whitespace, so each line is
-// checked on its own.
+// validateKnownHosts rejects a credential's known_hosts if any line fails to
+// parse. x/crypto's knownhosts reader skips bad lines as long as the file has
+// at least one valid entry, and the bundled defaults always provide one, so
+// without this check a typo would silently drop the user's host key and the
+// clone would fail later with a confusing "unknown host" error.
+//
+// ssh.ParseKnownHosts itself silently skips a line with no whitespace, so that
+// case is rejected explicitly.
 func validateKnownHosts(s string) error {
-	for n, line := range strings.Split(s, "\n") {
+	for i, line := range strings.Split(s, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		if !strings.ContainsAny(line, " \t") {
-			return fmt.Errorf("known_hosts line %d: invalid entry", n+1)
+			return fmt.Errorf("credential known_hosts line %d: invalid entry", i+1)
 		}
 		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
-			return fmt.Errorf("known_hosts line %d: %w", n+1, err)
+			return fmt.Errorf("credential known_hosts line %d: %w", i+1, err)
 		}
 	}
 	return nil
