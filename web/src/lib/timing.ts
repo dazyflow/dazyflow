@@ -33,6 +33,7 @@ export const FEEDBACK = {
   // The "Copied" tick on a copy-to-clipboard button. One affordance, and it
   // used to revert after 1500ms in six places and 2000ms in three, depending
   // on the file. Long enough to register, short enough that the button is
-  // ready again before you look back at it.
+  // ready again before you look back at it. Read it through
+  // useCopyToClipboard / <CopyButton> (components/ui), not directly.
   copied: 1_500,
 } as const;

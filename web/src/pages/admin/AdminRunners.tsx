@@ -3,9 +3,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Check, Copy, Plug, Trash2 } from "lucide-react";
+import { AlertTriangle, Plug, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
+import { CopyButton } from "../../components/ui/CopyButton";
 import { useAuth } from "../../auth";
 import { api } from "../../api";
 import type { Runner, RunnerToken } from "../../types";
@@ -15,7 +16,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
 import { ICON } from "../../icons";
-import { FEEDBACK, POLL } from "../../lib/timing";
+import { POLL } from "../../lib/timing";
 import { formatDateTime } from "../../lib/datetime";
 
 // AdminRunners is where an org adds machines of its own that flows can run
@@ -213,7 +214,6 @@ export function InstallCommand({
   onDone: () => void;
 }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
 
   // The daemon serves runner.sh with its address already substituted, so the
   // command carries only the token, and window.location is the right source for
@@ -233,26 +233,13 @@ export function InstallCommand({
     (token.name ? ` --name ${token.name}` : "") +
     ` --service`;
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopied(true);
-      setTimeout(() => setCopied(false), FEEDBACK.copied);
-    } catch {
-      /* clipboard unavailable — the command is selectable */
-    }
-  };
-
   return (
     <div className="card runner-install">
       <h2 className="runner-install-head">{t("runners.installHead")}</h2>
       <p className="desc">{t("runners.installIntro")}</p>
       <pre className="runner-install-cmd">{command}</pre>
       <div className="runner-install-actions">
-        <Button variant="primary" onClick={() => void copy()}>
-          {copied ? <Check size={ICON.sm} /> : <Copy size={ICON.sm} />}
-          {copied ? t("common.copied") : t("common.copy")}
-        </Button>
+        <CopyButton text={command} variant="primary" iconSize={ICON.sm} />
         <Button onClick={onDone}>{t("common.close")}</Button>
       </div>
       <p className="desc runner-install-expiry">

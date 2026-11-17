@@ -21,6 +21,7 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { ConfirmModal } from "../ui/ConfirmModal";
 import { Button } from "../ui/Button";
+import { useCopyToClipboard } from "../ui/useCopyToClipboard";
 import { webhookKeys, webhookPublic } from "../../flowStatus";
 import { formatDateTime } from "../../lib/datetime";
 import { ICON } from "../../icons";
@@ -576,20 +577,11 @@ function RecentSubmissions({ graph }: { graph: Graph }) {
 
 function useCopyButton(value: string) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* clipboard unavailable — user can still select+copy manually */
-    }
-  };
+  const { copied, copy } = useCopyToClipboard();
   return (extraClass?: string) => (
     <Button
       className={"dz-code-btn" + (extraClass ? " " + extraClass : "")}
-      onClick={copy}
+      onClick={() => void copy(value)}
       title={t("common.copy")}
     >
       {copied ? <Check size={ICON.sm} /> : <Copy size={ICON.sm} />}

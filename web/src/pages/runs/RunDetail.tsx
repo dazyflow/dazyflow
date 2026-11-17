@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, Check, ChevronDown, ChevronRight, Copy, RotateCw, RotateCcw, Square, LifeBuoy } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronRight, RotateCw, RotateCcw, Square, LifeBuoy } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "../../i18n/index";
 import { api, APIError } from "../../api";
@@ -11,6 +11,7 @@ import { dropLabel, dropSubtitle, portLabel } from "../../lib/dropText";
 import { useAuth } from "../../auth";
 import { BackLink } from "../../components/ui/BackLink";
 import { Button } from "../../components/ui/Button";
+import { CopyButton } from "../../components/ui/CopyButton";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { Callout } from "../../components/ui/Callout";
 import { explainRunError, type AppContext } from "../../lib/explainRunError";
@@ -28,7 +29,7 @@ import type { Graph, JobRecord, JobStatus, Manifest, Ref, RunLogEntry } from "..
 import { formatDateTime, formatRelative } from "../../lib/datetime";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
-import { POLL, TICK, FEEDBACK } from "../../lib/timing";
+import { POLL, TICK } from "../../lib/timing";
 import { NBSP, formatDuration } from "../../lib/format";
 import { Notice } from "../../components/ui/Notice";
 
@@ -55,7 +56,6 @@ export function RunDetail() {
   // Replay re-fires every step, side effects included, so it is confirmed.
   const [confirmReplay, setConfirmReplay] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
-  const [copiedID, setCopiedID] = useState(false);
   // Only true at render time, so it must be recomputed rather than memoized.
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -433,19 +433,13 @@ export function RunDetail() {
               <code style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>
                 {run.ID}
               </code>
-              <Button
+              <CopyButton
+                text={run.ID}
                 variant="ghost"
                 size="icon"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(run.ID);
-                  setCopiedID(true);
-                  window.setTimeout(() => setCopiedID(false), FEEDBACK.copied);
-                }}
-                aria-label={t("runDetail.copyId")}
-                title={copiedID ? t("common.copied") : t("runDetail.copyId")}
-              >
-                {copiedID ? <Check size={ICON.sm} /> : <Copy size={ICON.sm} />}
-              </Button>
+                iconSize={ICON.sm}
+                label={t("runDetail.copyId")}
+              />
             </span>
           }
         />
