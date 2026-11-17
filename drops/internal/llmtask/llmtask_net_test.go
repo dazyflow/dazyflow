@@ -5,6 +5,7 @@ package llmtask
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -122,5 +123,44 @@ func TestRegisterAll_RegistersDropsAndVerifier(t *testing.T) {
 	}
 	if verifiedKey != "sk-123" {
 		t.Errorf("VerifyKey got %q, want sk-123", verifiedKey)
+	}
+}
+
+func TestVerifyGET(t *testing.T) {
+	for _, tc := range []struct {
+		status   int
+		rejected bool
+		want     string
+	}{
+		{200, false, ""},
+		{403, true, "Acme rejected the API key"},
+		{500, false, "Acme returned HTTP 500: detail"},
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("x-key") != "k" {
+				t.Errorf("headers = %v", r.Header)
+			}
+			w.WriteHeader(tc.status)
+		}))
+		_, err := VerifyGET(context.Background(), "Acme", srv.URL, map[string]string{"x-key": "k"}, []int{401, 403},
+			func([]byte) string { return "detail" })
+		srv.Close()
+		switch {
+		case tc.want == "" && err != nil:
+			t.Errorf("status %d: err = %v", tc.status, err)
+		case tc.want != "" && (err == nil || err.Error() != tc.want):
+			t.Errorf("status %d: err = %v, want %q", tc.status, err, tc.want)
+		case errors.Is(err, ErrKeyRejected) != tc.rejected:
+			t.Errorf("status %d: errors.Is(ErrKeyRejected) = %v", tc.status, !tc.rejected)
+		}
+	}
+}
+
+func TestBaseOr(t *testing.T) {
+	if got := BaseOr("  http://h/ ", "d"); got != "http://h" {
+		t.Errorf("BaseOr = %q", got)
+	}
+	if got := BaseOr(" ", "d"); got != "d" {
+		t.Errorf("BaseOr empty = %q", got)
 	}
 }

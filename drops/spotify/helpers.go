@@ -20,7 +20,6 @@ package spotify
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/apibase"
@@ -68,15 +67,7 @@ func call(ctx context.Context, job core.Job, method, path string, body []byte) (
 }
 
 func extractSpotifyError(body []byte) string {
-	var e struct {
-		Error struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Error.Message != "" {
-		return e.Error.Message
-	}
-	return params.Truncate(string(body), 200)
+	return params.EnvelopeMessage(body, "", 200)
 }
 
 func spotifyFailure(job core.Job, status int, body []byte, err error) *core.Result {

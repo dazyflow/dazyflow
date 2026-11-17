@@ -175,11 +175,8 @@ func executeUpdateCells(ctx context.Context, job core.Job, _ chan<- core.Progres
 	}
 	endpoint := sheetsBaseURL(job) + "/spreadsheets/" + url.PathEscape(id) + "/values:batchUpdate"
 	status, body, err := googleDo(ctx, "POST", endpoint, token, "application/json", payload, timeout)
-	if err != nil {
-		return params.Err(job, "sheets_http_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "sheets_error", sheetsErr(body)), nil
+	if fail := params.HTTPFailure(job, "sheets", "Google Sheets", status, body, err, sheetsErr); fail != nil {
+		return *fail, nil
 	}
 	var parsed struct {
 		TotalUpdatedCells int `json:"totalUpdatedCells"`
