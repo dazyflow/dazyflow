@@ -12,7 +12,6 @@ package notion
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/apibase"
@@ -61,14 +60,16 @@ func notionDo(ctx context.Context, method, url, token string, body []byte, timeo
 	return status, raw, err
 }
 
-func notionError(status int, body []byte) string {
+// notionError pulls Notion's "code: message" out of an error body, falling
+// back to the (truncated) raw body. params.HTTPFailure adds the status.
+func notionError(body []byte) string {
 	var e struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	}
 	if err := json.Unmarshal(body, &e); err == nil && e.Message != "" {
 		if e.Code != "" {
-			return fmt.Sprintf("Notion %s: %s", e.Code, e.Message)
+			return e.Code + ": " + e.Message
 		}
 		return e.Message
 	}
@@ -76,5 +77,5 @@ func notionError(status int, body []byte) string {
 	if len(trunc) > 512 {
 		trunc = trunc[:512]
 	}
-	return fmt.Sprintf("Notion returned %d: %s", status, string(trunc))
+	return string(trunc)
 }

@@ -363,21 +363,20 @@ func withNotionAuthErr(t *testing.T) {
 func TestCovNotionError_Variants(t *testing.T) {
 	long := strings.Repeat("z", 600)
 	cases := []struct {
-		name   string
-		status int
-		body   []byte
-		want   string
+		name string
+		body []byte
+		want string
 	}{
-		{"code and message", 400, []byte(`{"code":"validation_error","message":"bad filter"}`), "Notion validation_error: bad filter"},
-		{"message only", 400, []byte(`{"message":"plain message"}`), "plain message"},
-		{"empty message falls through", 404, []byte(`{"code":"object_not_found","message":""}`), "Notion returned 404: " + `{"code":"object_not_found","message":""}`},
-		{"invalid json falls through", 500, []byte(`not json`), "Notion returned 500: not json"},
-		{"empty body falls through", 502, []byte(``), "Notion returned 502: "},
-		{"long body truncated", 500, []byte(long), "Notion returned 500: " + long[:512]},
+		{"code and message", []byte(`{"code":"validation_error","message":"bad filter"}`), "validation_error: bad filter"},
+		{"message only", []byte(`{"message":"plain message"}`), "plain message"},
+		{"empty message falls through", []byte(`{"code":"object_not_found","message":""}`), `{"code":"object_not_found","message":""}`},
+		{"invalid json falls through", []byte(`not json`), "not json"},
+		{"empty body falls through", []byte(``), ""},
+		{"long body truncated", []byte(long), long[:512]},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := notionError(c.status, c.body); got != c.want {
+			if got := notionError(c.body); got != c.want {
 				t.Errorf("notionError = %q, want %q", got, c.want)
 			}
 		})

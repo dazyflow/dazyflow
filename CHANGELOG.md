@@ -10,6 +10,16 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Changed
+
+- **Connector error messages now name the vendor and HTTP status.** Gmail,
+  Google Sheets, Drive, Calendar and Forms, GitHub, Notion, Twilio, 46elks,
+  Discord and Stripe failures read "Gmail returned 404: …" like the other
+  connectors, instead of just the vendor's message. A network failure in Drive
+  uploads and downloads, and in Calendar event creation, is now reported as
+  `drive_http_error` / `gcal_http_error`, the same as every other connector,
+  not `drive_error` / `gcal_error`.
+
 ## [0.43.2] - 2026-10-06
 
 ### Fixed

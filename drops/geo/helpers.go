@@ -22,7 +22,6 @@ package geo
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -146,9 +145,7 @@ func geoHTTPFailure(job core.Job, svc, rateHint string, status int, body []byte,
 			svc+" declined the request (HTTP "+strconv.Itoa(status)+"). "+rateHint)
 		return &r
 	}
-	if status < 200 || status >= 300 {
-		r := params.Err(job, "geocoder_error", fmt.Sprintf("%s returned %d: %s", svc, status, params.Truncate(string(body), 200)))
-		return &r
-	}
-	return nil
+	return params.HTTPFailure(job, "geocoder", svc, status, body, nil, truncateBody)
 }
+
+func truncateBody(body []byte) string { return params.Truncate(string(body), 200) }

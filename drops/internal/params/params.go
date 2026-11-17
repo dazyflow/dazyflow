@@ -243,6 +243,10 @@ func APIErrorMessage(body []byte, limit int) string {
 	return string(body)
 }
 
+// HTTPFailure turns a failed vendor call into an error Result: a transport
+// error becomes <vendor>_http_error, a non-2xx status becomes <vendor>_error
+// with "<label> returned <status>: <extracted message>". It returns nil when
+// the call succeeded.
 func HTTPFailure(job core.Job, vendor, vendorLabel string, status int, body []byte, err error, extract func([]byte) string) *core.Result {
 	if err != nil {
 		r := Err(job, vendor+"_http_error", err.Error())
@@ -251,6 +255,20 @@ func HTTPFailure(job core.Job, vendor, vendorLabel string, status int, body []by
 	if status < 200 || status >= 300 {
 		r := Err(job, vendor+"_error", fmt.Sprintf("%s returned %d: %s", vendorLabel, status, extract(body)))
 		return &r
+	}
+	return nil
+}
+
+// HTTPError is HTTPFailure for callers that return a plain error (pickers,
+// resource listers, paging helpers): the transport error as-is, or
+// "<label> returned <status>: <extracted message>" for a non-2xx status.
+// It returns nil when the call succeeded.
+func HTTPError(vendorLabel string, status int, body []byte, err error, extract func([]byte) string) error {
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return fmt.Errorf("%s returned %d: %s", vendorLabel, status, extract(body))
 	}
 	return nil
 }

@@ -428,3 +428,20 @@ func TestJSONFieldMessage(t *testing.T) {
 		})
 	}
 }
+
+func TestHTTPError(t *testing.T) {
+	extract := func(b []byte) string { return "EX:" + string(b) }
+
+	dial := errors.New("dial fail")
+	if err := HTTPError("Stripe", 0, nil, dial, extract); err != dial {
+		t.Fatalf("transport error = %v, want it passed through", err)
+	}
+	if err := HTTPError("Google Drive", 403, []byte("nope"), nil, extract); err == nil || err.Error() != "Google Drive returned 403: EX:nope" {
+		t.Fatalf("non-2xx = %v", err)
+	}
+	for _, s := range []int{200, 204, 299} {
+		if err := HTTPError("V", s, nil, nil, extract); err != nil {
+			t.Fatalf("status %d = %v, want nil", s, err)
+		}
+	}
+}
