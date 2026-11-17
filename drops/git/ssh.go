@@ -196,24 +196,35 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 // host therefore fails the clone with a known-hosts error, which the user
 // fixes by adding the host's key to the credential's known_hosts.
 //
-// NewKnownHostsDb reads the file eagerly into memory, so the temp file is
+// NewKnownHostsDb reads the files eagerly into memory, so the temp files are
 // removed as soon as the db is built.
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
-	combined := bundledKnownHosts
+	// The user's lines get their own file: x/crypto's reader skips unparseable
+	// lines and only fails a file with no valid entry, so merged into the
+	// bundled list a malformed known_hosts would be silently ignored.
+	contents := []string{bundledKnownHosts}
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
-		combined += s + "\n"
+		contents = append(contents, s+"\n")
 	}
-	f, err := os.CreateTemp("", "dazyflow-known-hosts-*")
-	if err != nil {
-		return nil, err
+	files := make([]string, 0, len(contents))
+	defer func() {
+		for _, name := range files {
+			os.Remove(name)
+		}
+	}()
+	for _, c := range contents {
+		f, err := os.CreateTemp("", "dazyflow-known-hosts-*")
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, f.Name())
+		if _, err := f.WriteString(c); err != nil {
+			_ = f.Close()
+			return nil, err
+		}
+		if err := f.Close(); err != nil {
+			return nil, err
+		}
 	}
-	defer os.Remove(f.Name())
-	if _, err := f.WriteString(combined); err != nil {
-		_ = f.Close()
-		return nil, err
-	}
-	if err := f.Close(); err != nil {
-		return nil, err
-	}
-	return gitssh.NewKnownHostsDb(f.Name())
+	return gitssh.NewKnownHostsDb(files...)
 }
