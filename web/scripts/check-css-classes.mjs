@@ -148,6 +148,21 @@ const INTERP = /\$\{[^}]*\}/g;
 // "dark" is a value being tested. Treating those as classes reported eleven
 // phantom names on the first run of this guard.
 const COMPARISON = /(?:===?|!==?)\s*$/;
+// Likewise a literal passed as an ARGUMENT to a call is the helper's input,
+// not class text: in `nodeClassName(d, selected, "collapsed")` the string is a
+// variant key the helper maps to `dz-node dz-node-collapsed`. The value such a
+// helper returns is dynamic, which this guard deliberately does not model.
+// `prefix` is the expression text before the literal; true when the literal
+// sits inside a still-open `ident(` / `x.y(` / `f()(` argument list.
+function insideCallArgs(prefix) {
+  const bare = prefix.replace(/"[^"]*"|'[^']*'|`[^`]*`/g, '""');
+  const open = []; // per unclosed "(": is it a call?
+  for (let i = 0; i < bare.length; i++) {
+    if (bare[i] === "(") open.push(/[\w$)\]]/.test(bare.slice(0, i).trimEnd().slice(-1)));
+    else if (bare[i] === ")") open.pop();
+  }
+  return open.some(Boolean);
+}
 
 // <Button> and <ButtonLink> derive classes from their semantic props rather
 // than from className (see components/Button.tsx): variant and size become
@@ -228,6 +243,7 @@ for (const file of srcFiles) {
         chunks.push(
           ...[...expr.matchAll(STRINGS)]
             .filter((s) => !COMPARISON.test(expr.slice(0, s.index)))
+            .filter((s) => !insideCallArgs(expr.slice(0, s.index)))
             .map((s) => s[1] ?? s[2] ?? ""),
         );
       }
