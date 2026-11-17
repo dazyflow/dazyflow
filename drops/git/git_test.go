@@ -574,6 +574,18 @@ func TestHostKeyDB_BadUserKnownHosts(t *testing.T) {
 	}
 }
 
+// One good entry must not carry a bad one: x/crypto's parser skips invalid
+// lines once any line is valid, so hostKeyDB has to catch them itself.
+func TestHostKeyDB_BadLineAmongValid(t *testing.T) {
+	good := strings.SplitN(strings.TrimSpace(bundledKnownHosts), "\n", 2)[0]
+	if _, err := hostKeyDB(good + "\n# comment\n\n" + good); err != nil {
+		t.Fatalf("valid known_hosts rejected: %v", err)
+	}
+	if _, err := hostKeyDB(good + "\nexample.com ssh-ed25519 not-base64!!"); err == nil {
+		t.Fatal("expected error for a malformed line after a valid one")
+	}
+}
+
 func TestSSHURLParts_PortAndDefaults(t *testing.T) {
 	cases := []struct {
 		url       string

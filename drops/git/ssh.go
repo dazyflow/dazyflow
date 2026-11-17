@@ -5,7 +5,9 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -15,6 +17,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -201,6 +204,9 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	combined := bundledKnownHosts
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
+		if err := validateKnownHosts(s); err != nil {
+			return nil, err
+		}
 		combined += s + "\n"
 	}
 	f, err := os.CreateTemp("", "dazyflow-known-hosts-*")
@@ -216,4 +222,28 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 		return nil, err
 	}
 	return gitssh.NewKnownHostsDb(f.Name())
+}
+
+// validateKnownHosts rejects a known_hosts text with any entry that does not
+// parse. x/crypto's knownhosts only fails a file that has no valid line at
+// all, and the bundled hosts always supply one, so without this a mistyped
+// entry would be dropped silently and surface only as a host-key mismatch at
+// clone time, with no pointer to the bad line.
+func validateKnownHosts(text string) error {
+	for n, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// ParseKnownHosts silently skips a line with no field separator, so
+		// io.EOF on a non-blank, non-comment line is a bad entry too.
+		_, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line))
+		if errors.Is(err, io.EOF) {
+			err = errors.New("not a known_hosts entry")
+		}
+		if err != nil {
+			return fmt.Errorf("known_hosts line %d: %w", n+1, err)
+		}
+	}
+	return nil
 }
