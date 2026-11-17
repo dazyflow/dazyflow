@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/robfig/cron/v3"
+	"github.com/netresearch/go-cron"
 
 	"github.com/dazyflow/dazyflow/core"
 )
 
-var cronValidator = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+var cronValidator = core.CronParser
 
 const nextFiresPreview = 3
 

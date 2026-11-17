@@ -4,6 +4,7 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -12,6 +13,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"image/png"
 	"os"
 	"slices"
 	"strings"
@@ -22,7 +24,6 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
-	qrcode "github.com/skip2/go-qrcode"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -158,12 +159,19 @@ type TOTPSetup struct {
 	QRPNGDataURL string
 }
 
-func encodeQR(otpauthURL string) (string, error) {
-	png, err := qrcode.Encode(otpauthURL, qrcode.Medium, 256)
+const totpQRSize = 256
+
+// Rendered by pquerna/otp (via boombuler/barcode), so no separate QR library.
+func encodeQR(k *otp.Key) (string, error) {
+	img, err := k.Image(totpQRSize, totpQRSize)
 	if err != nil {
 		return "", fmt.Errorf("qr encode: %w", err)
 	}
-	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(png), nil
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return "", fmt.Errorf("qr encode: %w", err)
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()), nil
 }
 
 func EnrolStart(ctx context.Context, store UserStore, key []byte, email string) (TOTPSetup, error) {
@@ -192,7 +200,7 @@ func EnrolStart(ctx context.Context, store UserStore, key []byte, email string) 
 		return TOTPSetup{}, err
 	}
 	otpauth := k.URL()
-	qr, err := encodeQR(otpauth)
+	qr, err := encodeQR(k)
 	if err != nil {
 		qr = ""
 	}
