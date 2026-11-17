@@ -22,7 +22,6 @@ package klarna
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -98,17 +97,10 @@ func klarnaDo(ctx context.Context, job core.Job, method, url string, body []byte
 	if err != nil {
 		return 0, nil, nil, err
 	}
-	headers := map[string]string{
-		"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+pass)),
-		"Accept":        "application/json",
-	}
-	if body != nil {
-		headers["Content-Type"] = "application/json"
-	}
 	// base_url is a tenant-supplied param, so net.Do guards the dial: the SSRF
 	// client blocks loopback/private/link-local targets and the egress allowlist
 	// (when set) bounds which public hosts the credentials may be sent to.
-	return hfnet.Do(ctx, method, url, headers, body, params.TimeoutMS(job, 15000), maxResponseBytes)
+	return hfnet.DoBasic(ctx, method, url, user, pass, "application/json", map[string]string{"Accept": "application/json"}, body, params.TimeoutMS(job, 15000), maxResponseBytes)
 }
 
 // order is the slice of a Klarna Order Management order the drops read: the

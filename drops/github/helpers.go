@@ -79,19 +79,12 @@ func githubDoH(ctx context.Context, method, url, token string, body []byte, time
 }
 
 func githubDoIdemH(ctx context.Context, method, url, token string, body []byte, timeoutMS int, idemKey string) (int, []byte, http.Header, error) {
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
-	headers := map[string]string{
-		"Authorization":        "Bearer " + token,
+	extra := map[string]string{
 		"Accept":               "application/vnd.github+json",
 		"X-GitHub-Api-Version": "2022-11-28",
 	}
 	if idemKey != "" {
-		headers["Idempotency-Key"] = idemKey
-	}
-	if body != nil {
-		headers["Content-Type"] = "application/json"
+		extra["Idempotency-Key"] = idemKey
 	}
 
 	// The request URL is guarded on every call — including pagination's
@@ -99,7 +92,7 @@ func githubDoIdemH(ctx context.Context, method, url, token string, body []byte, 
 	// verbatim. net.Do's SSRF client blocks loopback/private/link-local targets
 	// and the egress allowlist (when set) bounds which public hosts the bearer
 	// token may be sent to.
-	return hfnet.Do(ctx, method, url, headers, body, timeoutMS, maxResponseBytes)
+	return hfnet.DoBearer(ctx, method, url, token, "application/json", extra, body, timeoutMS, maxResponseBytes)
 }
 
 func parseNextLink(header string) string {

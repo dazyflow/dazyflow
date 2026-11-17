@@ -5,7 +5,6 @@ package google
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -55,20 +54,12 @@ func ResolveToken(ctx context.Context, job core.Job) (string, error) {
 	return tok, nil
 }
 
-// Do runs one authenticated Google API call through net.Do — a Bearer token
-// plus the shared SSRF dial guard, egress allowlist, timeout, and response cap.
-// It returns the status and capped body; callers classify non-2xx via
-// ErrMessage. maxBytes is the connector's own per-API response cap, and a
-// timeoutMS <= 0 falls back to the connectors' historical 15s default.
+// Do runs one authenticated Google API call through net.DoBearer. It returns
+// the status and capped body; callers classify non-2xx via ErrMessage.
+// maxBytes is the connector's own per-API response cap, and a timeoutMS <= 0
+// falls back to 15s.
 func Do(ctx context.Context, method, url, token, contentType string, body []byte, timeoutMS, maxBytes int) (int, []byte, error) {
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
-	h := map[string]string{"Authorization": "Bearer " + token}
-	if contentType != "" {
-		h["Content-Type"] = contentType
-	}
-	status, raw, _, err := hfnet.Do(ctx, method, url, h, body, timeoutMS, maxBytes)
+	status, raw, _, err := hfnet.DoBearer(ctx, method, url, token, contentType, nil, body, timeoutMS, maxBytes)
 	return status, raw, err
 }
 
@@ -76,18 +67,7 @@ func Do(ctx context.Context, method, url, token, contentType string, body []byte
 // ({"error":{"message":...}}), falling back to a slice of the raw body bounded
 // at limit bytes.
 func ErrMessage(body []byte, limit int) string {
-	var e struct {
-		Error struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Error.Message != "" {
-		return e.Error.Message
-	}
-	if len(body) > limit {
-		return string(body[:limit])
-	}
-	return string(body)
+	return params.EnvelopeMessage(body, "", limit)
 }
 
 // Paginate walks a nextPageToken-paged list. fetch runs one call for pageToken

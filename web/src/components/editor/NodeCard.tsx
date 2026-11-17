@@ -27,6 +27,9 @@ import {
   hasToken,
   cronToWords,
   secondsToWords,
+  nodeClassName,
+  nodeStyle,
+  missingInputsByPort,
 } from "./nodeCardShared";
 import { JsonEditor, isInvalidJSON } from "../ui/JsonEditor";
 import { Button } from "../ui/Button";
@@ -85,6 +88,16 @@ function operatorSymbol(m: Manifest): string {
   const parts = (m.label ?? "").trim().split(/\s+/);
   if (parts.length === 3) return parts[1]; // "A > B" -> ">"
   return m.label ?? "?";
+}
+
+function BreakpointMarker() {
+  return (
+    <div
+      className="dz-node-bp"
+      aria-label={i18n.t("nodeCard.breakpoint")}
+      title={i18n.t("nodeCard.breakpointTitle")}
+    />
+  );
 }
 
 function DazyNodeImpl({ data, selected }: NodeProps) {
@@ -150,11 +163,7 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
   const connectedInputs = d.connectedInputs ?? [];
   const connectedOutputs = d.connectedOutputs ?? [];
   const inputPortIds = new Set((d.manifest?.inputs ?? []).map((p) => p.port));
-  const missingByPort = new Map(
-    (d.configErrors ?? [])
-      .filter((e) => inputPortIds.has(e.key))
-      .map((e) => [e.key, e.message]),
-  );
+  const missingByPort = missingInputsByPort(d, d.manifest?.inputs ?? []);
   const required = d.manifest?.params_schema?.required ?? [];
   const inlineEligible = (s?: JSONSchema): s is JSONSchema =>
     !!s && !isAdvanced(s) && isPrimitive(s) && isFieldVisible(s, d.params, schemaProps);
@@ -219,7 +228,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
   const visibleLiteralFields = literalFields;
   const showLiteralFields = visibleLiteralFields.length > 0;
 
-  const statusClass = d.status ? " status-" + d.status : "";
   const isTrigger = d.manifest?.category === "trigger";
 
   if (d.manifest?.category === "logic" && inputs.length === 2) {
@@ -232,7 +240,6 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
         outputs={outputs}
         connectedInputs={connectedInputs}
         connectedOutputs={connectedOutputs}
-        statusClass={statusClass}
       />
     );
   }
@@ -245,38 +252,16 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
         : [inputs[0]];
     return (
       <div
-        className={
-          "dz-node dz-node-collapsed" +
-          (selected ? " selected" : "") +
-          statusClass +
-          (isTrigger ? " dz-node-trigger" : "") +
-          (d.loopOwned ? " dz-loop-owned" : "") +
-          (d.disabled ? " dz-node-off" : "") +
-          (!d.disabled && d.offByCascade ? " dz-node-off-cascade" : "") +
-          (d.locked ? " dz-node-locked" : "") +
-          (d.lintMessage ? " lint-warn" : "") +
-          (d.configErrors?.length ? " config-err" : "") +
-          (d.setupNeeded ? " needs-setup" : "") +
-          (d.paused ? " paused" : "") +
-          (d.enterDelay != null ? " dz-enter" : "") +
-          (d.assistantChanged ? " dz-assistant-changed" : "")
-        }
+        className={nodeClassName(d, selected, "collapsed")}
         role="group"
         aria-label={i18n.t("nodeCard.collapsedLabel", {
           name: d.label || d.moduleID,
           module: d.moduleID,
         })}
         aria-selected={selected}
-        style={
-          {
-            ...(isTrigger ? { "--node-accent": color } : {}),
-            ...(d.enterDelay != null ? { "--enter-delay": `${d.enterDelay}s` } : {}),
-          } as React.CSSProperties
-        }
+        style={nodeStyle(d, color, "collapsed") as React.CSSProperties}
       >
-        {d.breakpoint && (
-          <div className="dz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
-        )}
+        {d.breakpoint && <BreakpointMarker />}
         {inPins.map((p) => (
           <Handle
             key={p.port}
@@ -345,35 +330,16 @@ function DazyNodeImpl({ data, selected }: NodeProps) {
 
   return (
     <div
-      className={
-        "dz-node" +
-        (selected ? " selected" : "") +
-        statusClass +
-        (isTrigger ? " dz-node-trigger" : "") +
-        (d.loopOwned ? " dz-loop-owned" : "") +
-        (d.disabled ? " dz-node-off" : "") +
-        (!d.disabled && d.offByCascade ? " dz-node-off-cascade" : "") +
-        (d.locked ? " dz-node-locked" : "") +
-        (d.lintMessage ? " lint-warn" : "") +
-        (d.configErrors?.length ? " config-err" : "") +
-        (d.setupNeeded ? " needs-setup" : "") +
-        (d.paused ? " paused" : "") +
-        (d.enterDelay != null ? " dz-enter" : "") +
-          (d.assistantChanged ? " dz-assistant-changed" : "")
-      }
+      className={nodeClassName(d, selected, "expanded")}
       role="group"
-      aria-label={`${d.label || d.moduleID} (${d.moduleID})${d.disabled ? ", disabled" : ""} flow step`}
-      aria-selected={selected}
-      style={
-        {
-          ...(isTrigger ? { "--node-accent": color } : {}),
-          ...(d.enterDelay != null ? { "--enter-delay": `${d.enterDelay}s` } : {}),
-        } as React.CSSProperties
-      }
-    >
-      {d.breakpoint && (
-        <div className="dz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
+      aria-label={i18n.t(
+        d.disabled ? "nodeCard.expandedLabelDisabled" : "nodeCard.expandedLabel",
+        { name: d.label || d.moduleID, module: d.moduleID },
       )}
+      aria-selected={selected}
+      style={nodeStyle(d, color, "expanded") as React.CSSProperties}
+    >
+      {d.breakpoint && <BreakpointMarker />}
       {d.disabled && (
         <div className="dz-node-offchip" title={i18n.t("nodeCard.offTitle")}>
           {i18n.t("nodeCard.off")}
@@ -1062,7 +1028,6 @@ function OperatorChip({
   outputs,
   connectedInputs,
   connectedOutputs,
-  statusClass,
 }: {
   d: DazyNodeData;
   selected: boolean;
@@ -1071,7 +1036,6 @@ function OperatorChip({
   outputs: Port[];
   connectedInputs: string[];
   connectedOutputs: string[];
-  statusClass: string;
 }) {
   const sym = operatorSymbol(d.manifest!);
   const zoom = useStore((s) => s.transform[2]);
@@ -1082,36 +1046,14 @@ function OperatorChip({
     OP_MAX_FONT,
     Math.max(OP_BASE_FONT, OP_MIN_PX / (zoom || 1)),
   );
-  const inputPortIds = new Set(inputs.map((p) => p.port));
-  const missingByPort = new Map(
-    (d.configErrors ?? [])
-      .filter((e) => inputPortIds.has(e.key))
-      .map((e) => [e.key, e.message]),
-  );
+  const missingByPort = missingInputsByPort(d, inputs);
   return (
     <div
-      className={
-        "dz-node dz-op" +
-        (selected ? " selected" : "") +
-        statusClass +
-        (d.disabled ? " dz-node-off" : "") +
-        (d.lintMessage ? " lint-warn" : "") +
-        (d.configErrors?.length ? " config-err" : "") +
-        (d.paused ? " paused" : "") +
-        (d.enterDelay != null ? " dz-enter" : "") +
-          (d.assistantChanged ? " dz-assistant-changed" : "")
-      }
-      style={
-        {
-          ["--op-color"]: color,
-          ...(d.enterDelay != null ? { "--enter-delay": `${d.enterDelay}s` } : {}),
-        } as React.CSSProperties
-      }
+      className={nodeClassName(d, selected, "operator")}
+      style={nodeStyle(d, color, "operator") as React.CSSProperties}
       title={d.label}
     >
-      {d.breakpoint && (
-        <div className="dz-node-bp" aria-label={i18n.t("nodeCard.breakpoint")} title={i18n.t("nodeCard.breakpointTitle")} />
-      )}
+      {d.breakpoint && <BreakpointMarker />}
       <Handle
         type="target"
         position={Position.Left}

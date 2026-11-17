@@ -79,19 +79,15 @@ func executeGcalDeleteEvent(ctx context.Context, job core.Job, _ chan<- core.Pro
 
 	endpoint := calBaseURL(job) + "/calendars/" + url.PathEscape(cal) + "/events/" + url.PathEscape(id)
 	status, body, err := googleDo(ctx, "DELETE", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
-	if err != nil {
-		return params.Err(job, "gcal_http_error", err.Error()), nil
-	}
 
 	// 410 Gone (and 404) mean the event isn't there. Not an error: the
 	// calendar is in the state the flow asked for, and failing would break
 	// the second run of a cancellation flow.
-	removed := true
-	switch {
-	case status == 404 || status == 410:
-		removed = false
-	case status < 200 || status >= 300:
-		return params.Err(job, "gcal_error", calErr(body)), nil
+	removed := status != 404 && status != 410
+	if err != nil || removed {
+		if fail := params.HTTPFailure(job, "gcal", "Google Calendar", status, body, err, calErr); fail != nil {
+			return *fail, nil
+		}
 	}
 
 	return core.Result{

@@ -58,8 +58,7 @@ func (h *flowAPI) flowSamples(rw http.ResponseWriter, r *http.Request, p core.Pr
 	// Same gate as the run list: the flow must exist and be visible to this
 	// principal. Without it, a node id plus a guessed flow id would read
 	// another workspace's values.
-	if _, err := h.svc.LoadGraph(r.Context(), p, tenant, workspace, id, ""); err != nil {
-		writeAPIError(rw, http.StatusNotFound, "flow_not_found", err.Error())
+	if _, ok := loadVisibleFlow(rw, r, h.svc, p, tenant, workspace, id, ""); !ok {
 		return
 	}
 	if h.svc.Jobs == nil {

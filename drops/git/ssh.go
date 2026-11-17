@@ -15,6 +15,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -196,35 +197,45 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 // host therefore fails the clone with a known-hosts error, which the user
 // fixes by adding the host's key to the credential's known_hosts.
 //
-// NewKnownHostsDb reads the files eagerly into memory, so the temp files are
+// NewKnownHostsDb reads the file eagerly into memory, so the temp file is
 // removed as soon as the db is built.
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
-	// The user's lines get their own file: x/crypto's reader skips unparseable
-	// lines and only fails a file with no valid entry, so merged into the
-	// bundled list a malformed known_hosts would be silently ignored.
-	contents := []string{bundledKnownHosts}
+	combined := bundledKnownHosts
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
-		contents = append(contents, s+"\n")
+		if err := validateKnownHosts(s); err != nil {
+			return nil, err
+		}
+		combined += s + "\n"
 	}
-	files := make([]string, 0, len(contents))
-	defer func() {
-		for _, name := range files {
-			os.Remove(name)
+	f, err := os.CreateTemp("", "dazyflow-known-hosts-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.WriteString(combined); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	if err := f.Close(); err != nil {
+		return nil, err
+	}
+	return gitssh.NewKnownHostsDb(f.Name())
+}
+
+// validateKnownHosts rejects a credential's known_hosts if any line fails to
+// parse. x/crypto's knownhosts reader skips bad lines as long as the file has
+// at least one valid entry, and the bundled defaults always provide one, so
+// without this check a typo would silently drop the user's host key and the
+// clone would fail later with a confusing "unknown host" error.
+func validateKnownHosts(s string) error {
+	for i, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
 		}
-	}()
-	for _, c := range contents {
-		f, err := os.CreateTemp("", "dazyflow-known-hosts-*")
-		if err != nil {
-			return nil, err
-		}
-		files = append(files, f.Name())
-		if _, err := f.WriteString(c); err != nil {
-			_ = f.Close()
-			return nil, err
-		}
-		if err := f.Close(); err != nil {
-			return nil, err
+		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
+			return fmt.Errorf("credential known_hosts line %d: %w", i+1, err)
 		}
 	}
-	return gitssh.NewKnownHostsDb(files...)
+	return nil
 }

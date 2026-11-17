@@ -66,10 +66,6 @@ func (h *authAPI) createSignupInvite(rw http.ResponseWriter, r *http.Request, p 
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if err := requirePlatformAdmin(p); err != nil {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
-		return
-	}
 	// Anti-abuse: on verification-active deployments the inviter's own
 	// email must be confirmed before the daemon sends mail on their
 	// behalf. Mirrors createInvitation.
@@ -149,10 +145,6 @@ func (h *authAPI) listSignupInvites(rw http.ResponseWriter, r *http.Request, p c
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if err := requirePlatformAdmin(p); err != nil {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
-		return
-	}
 	rows, err := h.Invitations.ListByTenant(r.Context(), auth.SignupInviteTenant)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
@@ -193,10 +185,6 @@ func (h *authAPI) listSignupInvites(rw http.ResponseWriter, r *http.Request, p c
 func (h *authAPI) revokeSignupInvite(rw http.ResponseWriter, r *http.Request, p core.Principal) {
 	if h.Invitations == nil {
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
-		return
-	}
-	if err := requirePlatformAdmin(p); err != nil {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
 		return
 	}
 	token := r.PathValue("token")

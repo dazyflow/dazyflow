@@ -5,11 +5,8 @@ package auth
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -41,10 +38,7 @@ type PgMCPGrantStore struct {
 }
 
 func NewPgMCPGrantStore(ctx context.Context, pool *pgxpool.Pool) (*PgMCPGrantStore, error) {
-	if pool == nil {
-		return nil, fmt.Errorf("nil pool")
-	}
-	if _, err := pool.Exec(ctx, pgMCPGrantSchema); err != nil {
+	if err := ensureSchema(ctx, pool, pgMCPGrantSchema); err != nil {
 		return nil, err
 	}
 	return &PgMCPGrantStore{pool: pool}, nil
@@ -66,18 +60,8 @@ func (s *PgMCPGrantStore) PutGrant(ctx context.Context, g MCPGrant) error {
 }
 
 func (s *PgMCPGrantStore) GetGrant(ctx context.Context, id string) (MCPGrant, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+pgMCPGrantColumns+` FROM mcp_oauth_grants WHERE id=$1`, id)
-	if err != nil {
-		return MCPGrant{}, err
-	}
-	gs, err := scanMCPGrants(rows)
-	if err != nil {
-		return MCPGrant{}, err
-	}
-	if len(gs) == 0 {
-		return MCPGrant{}, ErrInvalidCredential
-	}
-	return gs[0], nil
+	g, err := scanMCPGrant(s.pool.QueryRow(ctx, `SELECT `+pgMCPGrantColumns+` FROM mcp_oauth_grants WHERE id=$1`, id))
+	return g, noRows(err, ErrInvalidCredential)
 }
 
 func (s *PgMCPGrantStore) SwapGrant(ctx context.Context, g MCPGrant, oldRefreshHash string) error {
@@ -97,25 +81,17 @@ func (s *PgMCPGrantStore) SwapGrant(ctx context.Context, g MCPGrant, oldRefreshH
 }
 
 func (s *PgMCPGrantStore) DeleteGrant(ctx context.Context, id string) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM mcp_oauth_grants WHERE id=$1`, id)
+	_, err := deleteWhere(ctx, s.pool, "mcp_oauth_grants", "id", id)
 	return err
 }
 
 func (s *PgMCPGrantStore) ListGrantsBySubject(ctx context.Context, subject string) ([]MCPGrant, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+pgMCPGrantColumns+` FROM mcp_oauth_grants
+	return queryRows(ctx, s.pool, scanMCPGrant, `SELECT `+pgMCPGrantColumns+` FROM mcp_oauth_grants
 		WHERE subject=$1 ORDER BY created_at DESC`, subject)
-	if err != nil {
-		return nil, err
-	}
-	return scanMCPGrants(rows)
 }
 
 func (s *PgMCPGrantStore) RevokeSubjectGrants(ctx context.Context, subject string) (int, error) {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM mcp_oauth_grants WHERE subject=$1`, subject)
-	if err != nil {
-		return 0, err
-	}
-	return int(tag.RowsAffected()), nil
+	return deleteWhere(ctx, s.pool, "mcp_oauth_grants", "subject", subject)
 }
 
 // nullTime stores a zero time as NULL: a grant never refreshed has no
@@ -127,31 +103,24 @@ func nullTime(t time.Time) *time.Time {
 	return &t
 }
 
-func scanMCPGrants(rows pgx.Rows) ([]MCPGrant, error) {
-	defer rows.Close()
-	var out []MCPGrant
-	for rows.Next() {
-		var (
-			g         MCPGrant
-			rolesRaw  []byte
-			refreshed *time.Time
-		)
-		if err := rows.Scan(&g.ID, &g.Subject, &g.Tenant, &g.Workspace, &rolesRaw, &g.ClientName, &g.RedirectHost, &g.Scope,
-			&g.AccessHash, &g.AccessExpiresAt, &g.RefreshHash, &g.PrevRefreshHash, &g.RefreshExpiresAt, &g.CreatedAt, &refreshed); err != nil {
-			return nil, err
-		}
-		roles, err := jsonOrZero[[]core.Role](rolesRaw)
-		if err != nil {
-			return nil, err
-		}
-		g.Roles = roles
-		if refreshed != nil {
-			g.RefreshedAt = *refreshed
-		}
-		out = append(out, g)
+// scanMCPGrant scans one mcp_oauth_grants row (in pgMCPGrantColumns order).
+func scanMCPGrant(row rowScanner) (MCPGrant, error) {
+	var (
+		g         MCPGrant
+		rolesRaw  []byte
+		refreshed *time.Time
+	)
+	if err := row.Scan(&g.ID, &g.Subject, &g.Tenant, &g.Workspace, &rolesRaw, &g.ClientName, &g.RedirectHost, &g.Scope,
+		&g.AccessHash, &g.AccessExpiresAt, &g.RefreshHash, &g.PrevRefreshHash, &g.RefreshExpiresAt, &g.CreatedAt, &refreshed); err != nil {
+		return MCPGrant{}, err
 	}
-	if err := rows.Err(); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, err
+	roles, err := jsonOrZero[[]core.Role](rolesRaw)
+	if err != nil {
+		return MCPGrant{}, err
 	}
-	return out, nil
+	g.Roles = roles
+	if refreshed != nil {
+		g.RefreshedAt = *refreshed
+	}
+	return g, nil
 }
