@@ -574,6 +574,18 @@ func TestHostKeyDB_BadUserKnownHosts(t *testing.T) {
 	}
 }
 
+// x/crypto >= v0.59 skips bad known_hosts lines when any line is valid; a
+// malformed user line must still be rejected rather than silently dropped.
+func TestHostKeyDB_BadLineAmongValidOnes(t *testing.T) {
+	valid := strings.SplitN(bundledKnownHosts, "\n", 2)[0]
+	if _, err := hostKeyDB(valid + "\n# comment\nnot a valid known_hosts line"); err == nil {
+		t.Fatal("expected error for a malformed line mixed with valid ones")
+	}
+	if _, err := hostKeyDB(valid + "\n# comment\n"); err != nil {
+		t.Fatalf("valid user known_hosts rejected: %v", err)
+	}
+}
+
 func TestSSHURLParts_PortAndDefaults(t *testing.T) {
 	cases := []struct {
 		url       string

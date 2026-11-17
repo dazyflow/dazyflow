@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -15,6 +16,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
+	xknownhosts "golang.org/x/crypto/ssh/knownhosts"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -201,6 +203,9 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	combined := bundledKnownHosts
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
+		if err := validateKnownHosts(s); err != nil {
+			return nil, err
+		}
 		combined += s + "\n"
 	}
 	f, err := os.CreateTemp("", "dazyflow-known-hosts-*")
@@ -216,4 +221,33 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 		return nil, err
 	}
 	return gitssh.NewKnownHostsDb(f.Name())
+}
+
+// validateKnownHosts rejects user known_hosts content with any unparseable
+// line. Since x/crypto v0.59 the knownhosts parser skips bad lines and only
+// fails when a file has no valid entry at all — and the combined file always
+// has the bundled entries — so a typo'd user line would otherwise be dropped
+// silently and surface later as a confusing "unknown host" clone failure.
+// Each line is parsed on its own so the library's exact rules still apply: a
+// one-line file fails if and only if that line is invalid.
+func validateKnownHosts(content string) error {
+	dir, err := os.MkdirTemp("", "dazyflow-known-hosts-check-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(dir)
+	path := filepath.Join(dir, "known_hosts")
+	for i, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || line[0] == '#' {
+			continue
+		}
+		if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
+			return err
+		}
+		if _, err := xknownhosts.New(path); err != nil {
+			return fmt.Errorf("known_hosts: invalid entry on line %d", i+1)
+		}
+	}
+	return nil
 }
