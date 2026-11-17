@@ -119,11 +119,8 @@ func ReadRange(ctx context.Context, job core.Job) (headers []string, rows []map[
 	endpoint := sheetsBaseURL(job) + "/spreadsheets/" + url.PathEscape(id) + "/values/" + url.PathEscape(rng) + "?" + q.Encode()
 
 	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
-	if err != nil {
+	if err = params.HTTPError("Google Sheets", status, body, err, sheetsErr); err != nil {
 		return nil, nil, err
-	}
-	if status < 200 || status >= 300 {
-		return nil, nil, fmt.Errorf("%s", sheetsErr(body))
 	}
 
 	var parsed struct {

@@ -348,6 +348,20 @@ func TestHTTPFailure(t *testing.T) {
 	})
 }
 
+func TestHTTPError(t *testing.T) {
+	extract := func(b []byte) string { return "EX:" + string(b) }
+	dial := errors.New("dial fail")
+	if err := HTTPError("Stripe", 0, nil, dial, extract); err != dial {
+		t.Fatalf("transport error = %v, want it passed through", err)
+	}
+	if err := HTTPError("Stripe", 404, []byte("nope"), nil, extract); err == nil || err.Error() != "Stripe returned 404: EX:nope" {
+		t.Fatalf("non-2xx = %v", err)
+	}
+	if err := HTTPError("Stripe", 204, nil, nil, extract); err != nil {
+		t.Fatalf("2xx = %v, want nil", err)
+	}
+}
+
 func TestTimeoutMS(t *testing.T) {
 	// The clamp every HTTP drop applies before handing the value to net.Do: a
 	// missing, zero or negative timeout must never reach the client, or the

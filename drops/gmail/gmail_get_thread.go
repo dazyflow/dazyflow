@@ -86,11 +86,8 @@ func executeGmailGetThread(ctx context.Context, job core.Job, _ chan<- core.Prog
 
 	endpoint := baseURL(job) + "/users/me/threads/" + url.PathEscape(id) + "?format=full"
 	status, body, err := gmailDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
-	if err != nil {
-		return params.Err(job, "gmail_http_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "gmail_error", extractGmailError(body)), nil
+	if fail := params.HTTPFailure(job, "gmail", "Gmail", status, body, err, extractGmailError); fail != nil {
+		return *fail, nil
 	}
 	var parsed struct {
 		ID       string           `json:"id"`

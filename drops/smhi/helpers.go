@@ -46,12 +46,10 @@ func httpFailure(job core.Job, status int, body []byte, err error) *core.Result 
 			"SMHI has no forecast for that coordinate — its model covers the Nordic region and the surrounding area, so the point may be outside it.")
 		return &r
 	}
-	if status < 200 || status >= 300 {
-		r := params.Err(job, "smhi_error", fmt.Sprintf("SMHI returned %d: %s", status, params.Truncate(string(body), 200)))
-		return &r
-	}
-	return nil
+	return params.HTTPFailure(job, "smhi", "SMHI", status, body, nil, extractSMHIError)
 }
+
+func extractSMHIError(body []byte) string { return params.Truncate(string(body), 200) }
 
 type smhiResponse struct {
 	TimeSeries []smhiEntry `json:"timeSeries"`

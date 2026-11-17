@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 )
 
 type notionServer struct {
@@ -368,8 +369,8 @@ func TestCovNotionError_Variants(t *testing.T) {
 		body   []byte
 		want   string
 	}{
-		{"code and message", 400, []byte(`{"code":"validation_error","message":"bad filter"}`), "Notion validation_error: bad filter"},
-		{"message only", 400, []byte(`{"message":"plain message"}`), "plain message"},
+		{"code and message", 400, []byte(`{"code":"validation_error","message":"bad filter"}`), "Notion returned 400: validation_error: bad filter"},
+		{"message only", 400, []byte(`{"message":"plain message"}`), "Notion returned 400: plain message"},
 		{"empty message falls through", 404, []byte(`{"code":"object_not_found","message":""}`), "Notion returned 404: " + `{"code":"object_not_found","message":""}`},
 		{"invalid json falls through", 500, []byte(`not json`), "Notion returned 500: not json"},
 		{"empty body falls through", 502, []byte(``), "Notion returned 502: "},
@@ -377,8 +378,9 @@ func TestCovNotionError_Variants(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := notionError(c.status, c.body); got != c.want {
-				t.Errorf("notionError = %q, want %q", got, c.want)
+			err := params.HTTPError("Notion", c.status, c.body, nil, extractNotionError)
+			if err == nil || err.Error() != c.want {
+				t.Errorf("HTTPError = %v, want %q", err, c.want)
 			}
 		})
 	}

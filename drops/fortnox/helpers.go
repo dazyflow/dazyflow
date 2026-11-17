@@ -101,11 +101,8 @@ func fortnoxFailure(job core.Job, status int, body []byte, err error) *core.Resu
 
 func ListCustomers(ctx context.Context, job core.Job) ([]core.AccountResource, error) {
 	status, body, err := call(ctx, job, http.MethodGet, "/customers", nil)
-	if err != nil {
+	if err = params.HTTPError("Fortnox", status, body, err, extractFortnoxError); err != nil {
 		return nil, err
-	}
-	if status < 200 || status >= 300 {
-		return nil, fmt.Errorf("fortnox returned %d: %s", status, extractFortnoxError(body))
 	}
 	var parsed struct {
 		Customers []struct {
