@@ -15,6 +15,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -201,6 +202,9 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	combined := bundledKnownHosts
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
+		if err := validateKnownHosts(s); err != nil {
+			return nil, err
+		}
 		combined += s + "\n"
 	}
 	f, err := os.CreateTemp("", "dazyflow-known-hosts-*")
@@ -216,4 +220,27 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 		return nil, err
 	}
 	return gitssh.NewKnownHostsDb(f.Name())
+}
+
+// validateKnownHosts rejects a credential's known_hosts if any entry fails to
+// parse. x/crypto's knownhosts reader skips invalid lines whenever the file
+// has at least one valid one, and the bundled defaults always are, so without
+// this a typo would be silently dropped and the host would then fail with a
+// confusing unknown-key error instead of a clear one here.
+// ssh.ParseKnownHosts itself skips a line with no whitespace, so each line is
+// checked on its own.
+func validateKnownHosts(s string) error {
+	for n, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if !strings.ContainsAny(line, " \t") {
+			return fmt.Errorf("known_hosts line %d: invalid entry", n+1)
+		}
+		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
+			return fmt.Errorf("known_hosts line %d: %w", n+1, err)
+		}
+	}
+	return nil
 }
