@@ -565,7 +565,7 @@ func (h *flowAPI) deleteFlowMe(rw http.ResponseWriter, r *http.Request, p core.P
 			Password string `json:"password"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		email := strings.ToLower(strings.TrimSpace(p.Subject))
+		email := auth.NormalizeEmail(p.Subject)
 		if _, err := auth.VerifyPassword(r.Context(), h.Users, email, body.Password); err != nil {
 			writeAPIError(rw, http.StatusUnauthorized, "bad_credentials", "password is incorrect")
 			return

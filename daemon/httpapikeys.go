@@ -28,8 +28,8 @@ func (h *HTTPGateway) apiKeyAPI() *apiKeyAPI {
 // name only themselves, a member of the target tenant, or a non-email service
 // identity — never an arbitrary person's account.
 func (h *apiKeyAPI) subjectAllowed(ctx context.Context, p core.Principal, subject, tenant string) bool {
-	subject = strings.ToLower(strings.TrimSpace(subject))
-	if isPlatformAdmin(p) || subject == "" || subject == strings.ToLower(strings.TrimSpace(p.Subject)) {
+	subject = auth.NormalizeEmail(subject)
+	if isPlatformAdmin(p) || subject == "" || subject == auth.NormalizeEmail(p.Subject) {
 		return true
 	}
 	if tenant == "" {

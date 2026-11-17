@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -426,7 +425,7 @@ func scanUser(row rowScanner) (User, error) {
 }
 
 func (s *PgUserStore) GetByEmail(ctx context.Context, email string) (User, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	const q = `SELECT ` + userColumns + ` FROM users WHERE email=$1`
 	u, err := scanUser(s.pool.QueryRow(ctx, q, email))
 	if err != nil {
@@ -439,7 +438,7 @@ func (s *PgUserStore) GetByEmail(ctx context.Context, email string) (User, error
 }
 
 func (s *PgUserStore) PutUser(ctx context.Context, u User) error {
-	u.Email = strings.ToLower(strings.TrimSpace(u.Email))
+	u.Email = NormalizeEmail(u.Email)
 	if u.Email == "" {
 		return fmt.Errorf("email required")
 	}
@@ -503,27 +502,27 @@ func (s *PgUserStore) execChanged(ctx context.Context, q string, args ...any) (b
 func (s *PgUserStore) AdvanceTOTPStep(ctx context.Context, email string, step int64) (bool, error) {
 	return s.execChanged(ctx,
 		`UPDATE users SET totp_last_step=$2 WHERE email=$1 AND totp_last_step < $2`,
-		strings.ToLower(strings.TrimSpace(email)), step)
+		NormalizeEmail(email), step)
 }
 
 func (s *PgUserStore) RemoveRecoveryCode(ctx context.Context, email, hash string) (bool, error) {
 	return s.execChanged(ctx,
 		`UPDATE users SET recovery_codes = recovery_codes - $2::text
 		 WHERE email=$1 AND recovery_codes ? $2::text`,
-		strings.ToLower(strings.TrimSpace(email)), hash)
+		NormalizeEmail(email), hash)
 }
 
 func (s *PgUserStore) ReplacePasswordHash(ctx context.Context, email string, old, fresh []byte) (bool, error) {
 	return s.execChanged(ctx,
 		`UPDATE users SET password_hash=$3 WHERE email=$1 AND password_hash=$2`,
-		strings.ToLower(strings.TrimSpace(email)), old, fresh)
+		NormalizeEmail(email), old, fresh)
 }
 
 func (s *PgUserStore) MarkEmailVerified(ctx context.Context, email string, at time.Time) (bool, error) {
 	return s.execChanged(ctx,
 		`UPDATE users SET verified_at=$2, verify_token_hash=NULL, verify_expires_at=NULL
 		 WHERE email=$1 AND verified_at IS NULL`,
-		strings.ToLower(strings.TrimSpace(email)), at)
+		NormalizeEmail(email), at)
 }
 
 func (s *PgUserStore) ListUsers(ctx context.Context) ([]User, error) {
@@ -532,7 +531,7 @@ func (s *PgUserStore) ListUsers(ctx context.Context) ([]User, error) {
 }
 
 func (s *PgUserStore) DeleteUser(ctx context.Context, email string) error {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	_, err := s.pool.Exec(ctx, `DELETE FROM users WHERE email=$1`, email)
 	return err
 }

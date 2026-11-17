@@ -60,7 +60,7 @@ func (h *gdprAPI) deleteMyAccountHandler(rw http.ResponseWriter, r *http.Request
 	if !requireSessionCredential(rw, r, "deleting your account") {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(p.Subject))
+	email := auth.NormalizeEmail(p.Subject)
 	if email == "" {
 		writeAPIError(rw, http.StatusBadRequest, "no_subject", "this credential has no associated account")
 		return
@@ -97,7 +97,7 @@ func (h *gdprAPI) adminDeleteUserHandler(rw http.ResponseWriter, r *http.Request
 		writeAPIError(rw, http.StatusNotImplemented, "not_configured", "user store not configured")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	if email == "" {
 		writeAPIError(rw, http.StatusBadRequest, "bad_request", "email required")
 		return

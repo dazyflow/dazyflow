@@ -170,7 +170,7 @@ func (h *platformAdminAPI) platformGetUser(rw http.ResponseWriter, r *http.Reque
 	if !h.requirePlatform(rw, p) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	u, err := h.Users.GetByEmail(r.Context(), email)
 	if err != nil {
 		writeJSONError(rw, http.StatusNotFound, "no such account")
@@ -193,7 +193,7 @@ func (h *platformAdminAPI) platformSuspendUser(rw http.ResponseWriter, r *http.R
 	if !h.requirePlatform(rw, p) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	body := decodeModerationBody(r)
 	u, ok := h.guardUserModeration(rw, r.Context(), p, email)
 	if !ok {
@@ -217,7 +217,7 @@ func (h *platformAdminAPI) platformUnsuspendUser(rw http.ResponseWriter, r *http
 	if !h.requirePlatform(rw, p) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	u, err := h.Users.GetByEmail(r.Context(), email)
 	if err != nil {
 		writeJSONError(rw, http.StatusNotFound, "no such account")
@@ -239,7 +239,7 @@ func (h *platformAdminAPI) platformVerifyUser(rw http.ResponseWriter, r *http.Re
 	if !h.requirePlatform(rw, p) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	u, err := h.Users.GetByEmail(r.Context(), email)
 	if err != nil {
 		writeJSONError(rw, http.StatusNotFound, "no such account")
@@ -267,7 +267,7 @@ func (h *platformAdminAPI) platformGrantAdmin(rw http.ResponseWriter, r *http.Re
 		writeJSONError(rw, http.StatusNotImplemented, "platform-admin grant store not configured")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	if email == "" {
 		writeJSONError(rw, http.StatusBadRequest, "email required")
 		return
@@ -298,12 +298,12 @@ func (h *platformAdminAPI) platformRevokeAdmin(rw http.ResponseWriter, r *http.R
 		writeJSONError(rw, http.StatusNotImplemented, "platform-admin grant store not configured")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	if email == "" {
 		writeJSONError(rw, http.StatusBadRequest, "email required")
 		return
 	}
-	if email == strings.ToLower(strings.TrimSpace(p.Subject)) {
+	if email == auth.NormalizeEmail(p.Subject) {
 		writeJSONError(rw, http.StatusBadRequest, "you can't revoke your own platform-admin role")
 		return
 	}
@@ -343,7 +343,7 @@ func (h *platformAdminAPI) platformBanUser(rw http.ResponseWriter, r *http.Reque
 		writeJSONError(rw, http.StatusNotImplemented, "blocklist store not configured")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	body := decodeModerationBody(r)
 	u, ok := h.guardUserModeration(rw, r.Context(), p, email)
 	if !ok {
@@ -361,7 +361,7 @@ func (h *platformAdminAPI) platformBanUser(rw http.ResponseWriter, r *http.Reque
 	h.revokeSubjectSessions(r.Context(), u.Subject)
 	value, kind := email, auth.BlockEmail
 	if body.Domain {
-		if d := emailDomainOf(email); d != "" {
+		if d := auth.EmailDomain(email); d != "" {
 			value, kind = d, auth.BlockDomain
 		}
 	}
@@ -380,7 +380,7 @@ func (h *platformAdminAPI) guardUserModeration(rw http.ResponseWriter, ctx conte
 		writeJSONError(rw, http.StatusBadRequest, "email required")
 		return auth.User{}, false
 	}
-	if email == strings.ToLower(strings.TrimSpace(p.Subject)) {
+	if email == auth.NormalizeEmail(p.Subject) {
 		writeJSONError(rw, http.StatusBadRequest, "you can't moderate your own account")
 		return auth.User{}, false
 	}
@@ -417,14 +417,6 @@ func (h *platformAdminAPI) signInLockout(ctx context.Context, u auth.User) (stri
 		return "your organization has been suspended", true
 	}
 	return "", false
-}
-
-func emailDomainOf(email string) string {
-	at := strings.LastIndex(email, "@")
-	if at < 1 || at == len(email)-1 {
-		return ""
-	}
-	return email[at+1:]
 }
 
 func (h *platformAdminAPI) platformListOrgs(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -854,7 +846,7 @@ func (h *platformAdminAPI) platformInviteMember(rw http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(body.Email))
+	email := auth.NormalizeEmail(body.Email)
 	if err := validSignupEmail(email); err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return

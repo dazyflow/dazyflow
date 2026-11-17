@@ -49,7 +49,7 @@ func (h *authAPI) validSignupInvite(ctx context.Context, email, token string) bo
 	}
 	return inv.IsSignupInvite() &&
 		inv.IsPending(time.Now().UTC()) &&
-		strings.EqualFold(inv.Email, strings.ToLower(strings.TrimSpace(email)))
+		strings.EqualFold(inv.Email, auth.NormalizeEmail(email))
 }
 
 func (h *authAPI) signupInviteURL(email, token string) string {
@@ -82,7 +82,7 @@ func (h *authAPI) createSignupInvite(rw http.ResponseWriter, r *http.Request, p 
 	if !ok {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(body.Email))
+	email := auth.NormalizeEmail(body.Email)
 	if err := validSignupEmail(email); err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return

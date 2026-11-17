@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log"
 	"slices"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -141,7 +140,7 @@ var timingDummyHash = sync.OnceValue(func() []byte {
 func WarmPasswordTiming() { _ = timingDummyHash() }
 
 func VerifyPassword(ctx context.Context, store UserStore, email, password string) (User, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	if email == "" || password == "" {
 		return User{}, ErrInvalidCredential
 	}
@@ -212,7 +211,7 @@ type JSONUserStore struct {
 }
 
 func normalizeUserEmail(u User) User {
-	u.Email = strings.ToLower(strings.TrimSpace(u.Email))
+	u.Email = NormalizeEmail(u.Email)
 	return u
 }
 
@@ -225,7 +224,7 @@ func OpenJSONUserStore(path string) (*JSONUserStore, error) {
 }
 
 func (s *JSONUserStore) GetByEmail(_ context.Context, email string) (User, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	u, ok := s.items[email]
@@ -249,7 +248,7 @@ func (s *JSONUserStore) PutUser(_ context.Context, u User) error {
 // update applies fn to the stored user under the write lock and flushes when fn
 // reports a change.
 func (s *JSONUserStore) update(email string, fn func(*User) bool) (bool, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	u, ok := s.items[email]
@@ -317,7 +316,7 @@ func (s *JSONUserStore) ListUsers(_ context.Context) ([]User, error) {
 }
 
 func (s *JSONUserStore) DeleteUser(_ context.Context, email string) error {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.items, email)

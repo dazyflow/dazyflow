@@ -1557,7 +1557,7 @@ func buildGateway(ctx context.Context, bgWg *sync.WaitGroup, d gatewayDeps) {
 		log.Printf("per-org subdomains enabled for *.%s (CORS/CSRF allow subdomains; sign-in derives org from host)", d.wildcardDomain)
 	}
 	for _, e := range strings.Split(envStr("DAZYFLOW_PLATFORM_ADMINS", ""), ",") {
-		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+		if e = auth.NormalizeEmail(e); e != "" {
 			gw.PlatformAdmins = append(gw.PlatformAdmins, e)
 		}
 	}

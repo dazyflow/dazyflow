@@ -9,6 +9,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/internal/emailtheme"
 	"github.com/dazyflow/dazyflow/internal/maillang"
@@ -29,7 +30,7 @@ func approvalParamApprovers(params map[string]any) []string {
 	for _, part := range strings.FieldsFunc(raw, func(r rune) bool {
 		return r == ',' || r == ';' || r == '\n'
 	}) {
-		addr := strings.ToLower(strings.TrimSpace(part))
+		addr := auth.NormalizeEmail(part)
 		if addr == "" || !strings.Contains(addr, "@") || seen[addr] {
 			continue
 		}
