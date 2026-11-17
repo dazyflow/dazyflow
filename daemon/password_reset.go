@@ -48,7 +48,7 @@ func (h *authAPI) requestPasswordReset(rw http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(body.Email))
+	email := auth.NormalizeEmail(body.Email)
 	// Do the real work only when the deployment can mail and the account
 	// exists with a password — but never let either fact change the
 	// response. An SSO-only account (no password hash) is skipped: this
@@ -139,7 +139,7 @@ func (h *authAPI) resetPassword(rw http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(body.Email))
+	email := auth.NormalizeEmail(body.Email)
 	if email == "" || body.Token == "" {
 		writeJSONError(rw, http.StatusBadRequest, "email and token required")
 		return

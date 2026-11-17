@@ -5,7 +5,6 @@ package google
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -55,20 +54,12 @@ func ResolveToken(ctx context.Context, job core.Job) (string, error) {
 	return tok, nil
 }
 
-// Do runs one authenticated Google API call through net.Do — a Bearer token
-// plus the shared SSRF dial guard, egress allowlist, timeout, and response cap.
-// It returns the status and capped body; callers classify non-2xx via
-// ErrMessage. maxBytes is the connector's own per-API response cap, and a
-// timeoutMS <= 0 falls back to the connectors' historical 15s default.
+// Do runs one authenticated Google API call through net.DoBearer. It returns
+// the status and capped body; callers classify non-2xx via ErrMessage.
+// maxBytes is the connector's own per-API response cap, and a timeoutMS <= 0
+// falls back to 15s.
 func Do(ctx context.Context, method, url, token, contentType string, body []byte, timeoutMS, maxBytes int) (int, []byte, error) {
-	if timeoutMS <= 0 {
-		timeoutMS = 15000
-	}
-	h := map[string]string{"Authorization": "Bearer " + token}
-	if contentType != "" {
-		h["Content-Type"] = contentType
-	}
-	status, raw, _, err := hfnet.Do(ctx, method, url, h, body, timeoutMS, maxBytes)
+	status, raw, _, err := hfnet.DoBearer(ctx, method, url, token, contentType, nil, body, timeoutMS, maxBytes)
 	return status, raw, err
 }
 
@@ -76,16 +67,39 @@ func Do(ctx context.Context, method, url, token, contentType string, body []byte
 // ({"error":{"message":...}}), falling back to a slice of the raw body bounded
 // at limit bytes.
 func ErrMessage(body []byte, limit int) string {
-	var e struct {
-		Error struct {
-			Message string `json:"message"`
-		} `json:"error"`
+	return params.EnvelopeMessage(body, "", limit)
+}
+
+// Paginate walks a nextPageToken-paged Google list. fetch makes one call with
+// the page token ("" for the first page) and the number of items still wanted
+// (0 when limit is unbounded), returning that page's items and the next token.
+//
+// The walk stops when a page carries no token, once limit items are collected
+// (limit <= 0 means no limit), or after maxPages calls — a guard against an API
+// that keeps handing back tokens. The result is trimmed to limit. next is the
+// token the walk stopped short of: "" when the listing was exhausted, so a
+// caller that must see everything can tell a capped walk from a complete one.
+func Paginate[T any](ctx context.Context, fetch func(pageToken string, remaining int) ([]T, string, error), limit, maxPages int) (items []T, next string, err error) {
+	for page := 0; page < maxPages; page++ {
+		if err := ctx.Err(); err != nil {
+			return nil, "", err
+		}
+		remaining := 0
+		if limit > 0 {
+			remaining = limit - len(items)
+		}
+		got, tok, err := fetch(next, remaining)
+		if err != nil {
+			return nil, "", err
+		}
+		items = append(items, got...)
+		next = tok
+		if next == "" || (limit > 0 && len(items) >= limit) {
+			break
+		}
 	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Error.Message != "" {
-		return e.Error.Message
+	if limit > 0 && len(items) > limit {
+		items = items[:limit]
 	}
-	if len(body) > limit {
-		return string(body[:limit])
-	}
-	return string(body)
+	return items, next, nil
 }

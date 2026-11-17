@@ -167,31 +167,8 @@ func (s *Service) SetTriggerEnabled(ctx context.Context, p core.Principal, tenan
 }
 
 func (h *flowAPI) listSchedulesMe(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	tenant := r.URL.Query().Get("tenant")
-	workspace := r.URL.Query().Get("workspace")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if workspace == "" {
-		workspace = p.Workspace
-	}
-	if tenant == "" || workspace == "" {
-		writeAPIError(rw, http.StatusBadRequest, "missing_scope",
-			"tenant and workspace required (no principal binding)")
-		return
-	}
-	// Reject a cross-tenant/workspace scope up front with a clean 403, like the
-	// sibling /me handlers (boards, flows). The service layer's RequireTenant
-	// also rejects it, but as an ErrUnauthorized that maps to a 500 with the
-	// internal error echoed — both a status and an info-leak inconsistency.
-	if tenant != p.Tenant && !isPlatformAdmin(p) {
-		writeAPIError(rw, http.StatusForbidden, "forbidden_scope",
-			fmt.Sprintf("cannot act on tenant %q (principal is bound to %q)", tenant, p.Tenant))
-		return
-	}
-	if workspace != p.Workspace && !isPlatformAdmin(p) {
-		writeAPIError(rw, http.StatusForbidden, "forbidden_scope",
-			fmt.Sprintf("cannot act on workspace %q (principal is bound to %q)", workspace, p.Workspace))
+	tenant, workspace, ok := resolveScope(rw, r, p, "act on")
+	if !ok {
 		return
 	}
 	entries, err := h.svc.ListSchedules(r.Context(), p, tenant, workspace)

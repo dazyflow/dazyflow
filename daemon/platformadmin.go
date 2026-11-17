@@ -7,10 +7,10 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/daemon/internal/pgstore"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -90,12 +90,8 @@ func NewPgPlatformAdminStore(ctx context.Context, pool *pgxpool.Pool) (*PgPlatfo
 	return s, nil
 }
 
-func normalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
-}
-
 func (s *PgPlatformAdminStore) Granted(email string) bool {
-	email = normalizeEmail(email)
+	email = auth.NormalizeEmail(email)
 	if email == "" {
 		return false
 	}
@@ -106,7 +102,7 @@ func (s *PgPlatformAdminStore) Granted(email string) bool {
 }
 
 func (s *PgPlatformAdminStore) Grant(ctx context.Context, email, grantedBy string) error {
-	email = normalizeEmail(email)
+	email = auth.NormalizeEmail(email)
 	if email == "" {
 		return fmt.Errorf("email required")
 	}
@@ -120,7 +116,7 @@ func (s *PgPlatformAdminStore) Grant(ctx context.Context, email, grantedBy strin
 }
 
 func (s *PgPlatformAdminStore) Revoke(ctx context.Context, email string) error {
-	email = normalizeEmail(email)
+	email = auth.NormalizeEmail(email)
 	if email == "" {
 		return fmt.Errorf("email required")
 	}
@@ -131,7 +127,7 @@ func (s *PgPlatformAdminStore) Revoke(ctx context.Context, email string) error {
 }
 
 func (s *PgPlatformAdminStore) AnonymizeGrantedBy(ctx context.Context, email string) (int, error) {
-	email = normalizeEmail(email)
+	email = auth.NormalizeEmail(email)
 	if email == "" {
 		return 0, fmt.Errorf("email required")
 	}
@@ -168,7 +164,7 @@ func (s *PgPlatformAdminStore) reload(ctx context.Context) error {
 	}
 	m := make(map[string]struct{}, len(grants))
 	for _, g := range grants {
-		m[normalizeEmail(g.Email)] = struct{}{}
+		m[auth.NormalizeEmail(g.Email)] = struct{}{}
 	}
 	s.mu.Lock()
 	s.granted = m

@@ -4,20 +4,18 @@
 import { describe, expect, it } from "vitest";
 import { isTypingTarget } from "./typingTarget";
 
-const el = (tagName: string, isContentEditable = false) =>
-  ({ tagName, isContentEditable }) as unknown as EventTarget;
-
 describe("isTypingTarget", () => {
-  it("is true for inputs, textareas and contentEditable elements", () => {
-    expect(isTypingTarget(el("INPUT"))).toBe(true);
-    expect(isTypingTarget(el("TEXTAREA"))).toBe(true);
-    expect(isTypingTarget(el("DIV", true))).toBe(true);
+  it("is true for inputs, textareas and editable content", () => {
+    expect(isTypingTarget(document.createElement("input"))).toBe(true);
+    expect(isTypingTarget(document.createElement("textarea"))).toBe(true);
+    const div = document.createElement("div");
+    Object.defineProperty(div, "isContentEditable", { value: true });
+    expect(isTypingTarget(div)).toBe(true);
   });
 
   it("is false for other elements and non-elements", () => {
-    expect(isTypingTarget(el("BUTTON"))).toBe(false);
+    expect(isTypingTarget(document.createElement("button"))).toBe(false);
     expect(isTypingTarget(null)).toBe(false);
-    expect(isTypingTarget(undefined)).toBe(false);
-    expect(isTypingTarget({} as EventTarget)).toBe(false);
+    expect(isTypingTarget(window)).toBe(false);
   });
 });

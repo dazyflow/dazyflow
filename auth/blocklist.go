@@ -60,12 +60,17 @@ type BlocklistStore interface {
 	AnonymizeCreatedBy(ctx context.Context, email string) (int, error)
 }
 
-func NormalizeBlockEmail(email string) string {
+// NormalizeEmail is the one canonical form of an email address. User,
+// membership, invitation, blocklist and admin-grant stores all key on it, so
+// every lookup and write must go through here.
+func NormalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
-func emailDomain(email string) string {
-	email = NormalizeBlockEmail(email)
+// EmailDomain returns the normalized domain of email, or "" when email has no
+// local part or no domain.
+func EmailDomain(email string) string {
+	email = NormalizeEmail(email)
 	at := strings.LastIndex(email, "@")
 	if at < 1 || at == len(email)-1 {
 		return ""
@@ -84,11 +89,7 @@ CREATE TABLE IF NOT EXISTS blocked_identities (
 `
 
 func EnsurePgBlocklistSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	if pool == nil {
-		return fmt.Errorf("nil pool")
-	}
-	_, err := pool.Exec(ctx, pgBlocklistSchema)
-	return err
+	return ensureSchema(ctx, pool, pgBlocklistSchema)
 }
 
 type PgBlocklistStore struct {
@@ -103,11 +104,11 @@ func NewPgBlocklistStore(ctx context.Context, pool *pgxpool.Pool) (*PgBlocklistS
 }
 
 func (s *PgBlocklistStore) IsBlocked(ctx context.Context, email string) (bool, Blocked, error) {
-	email = NormalizeBlockEmail(email)
+	email = NormalizeEmail(email)
 	if email == "" {
 		return false, Blocked{}, nil
 	}
-	domain := emailDomain(email)
+	domain := EmailDomain(email)
 	const q = `
 		SELECT value, kind, reason, created_by, created_at
 		FROM blocked_identities
@@ -125,7 +126,7 @@ func (s *PgBlocklistStore) IsBlocked(ctx context.Context, email string) (bool, B
 }
 
 func (s *PgBlocklistStore) Block(ctx context.Context, b Blocked) error {
-	b.Value = NormalizeBlockEmail(b.Value)
+	b.Value = NormalizeEmail(b.Value)
 	if b.Value == "" {
 		return fmt.Errorf("value required")
 	}
@@ -147,13 +148,13 @@ func (s *PgBlocklistStore) Block(ctx context.Context, b Blocked) error {
 }
 
 func (s *PgBlocklistStore) Unblock(ctx context.Context, value string) error {
-	value = NormalizeBlockEmail(value)
+	value = NormalizeEmail(value)
 	_, err := s.pool.Exec(ctx, `DELETE FROM blocked_identities WHERE value=$1`, value)
 	return err
 }
 
 func (s *PgBlocklistStore) AnonymizeCreatedBy(ctx context.Context, email string) (int, error) {
-	email = NormalizeBlockEmail(email)
+	email = NormalizeEmail(email)
 	if email == "" {
 		return 0, fmt.Errorf("email required")
 	}

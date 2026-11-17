@@ -17,9 +17,7 @@
 # GV overrides the binary (CI installs a pinned govulncheck into GOPATH/bin).
 set -euo pipefail
 
-ALLOW=(
-  # Format: "GO-YYYY-NNNN module@version" plus a comment with the reason.
-)
+ALLOW=()
 
 GV="${GV:-$(go env GOPATH)/bin/govulncheck}"
 out="$(mktemp)"

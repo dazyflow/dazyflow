@@ -101,28 +101,6 @@ func TestBareHostAndSameHost(t *testing.T) {
 	}
 }
 
-func TestEmailDomainHelpers(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		email      string
-		wantDomain string
-		wantOf     string
-	}{
-		{"alice@Example.COM", "example.com", "Example.COM"},
-		{"noatsign", "", ""},
-		{"trailing@", "", ""},
-		{"@leading.com", "leading.com", ""},
-	}
-	for _, c := range cases {
-		if got := emailDomain(c.email); got != c.wantDomain {
-			t.Errorf("emailDomain(%q) = %q, want %q", c.email, got, c.wantDomain)
-		}
-		if got := emailDomainOf(c.email); got != c.wantOf {
-			t.Errorf("emailDomainOf(%q) = %q, want %q", c.email, got, c.wantOf)
-		}
-	}
-}
-
 func TestGoogleRedirectURI(t *testing.T) {
 	t.Parallel()
 	h := newGatewayHarness(t)

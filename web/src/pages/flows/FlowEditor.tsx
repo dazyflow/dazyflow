@@ -114,8 +114,6 @@ import {
 } from "../../lib/edgeError";
 import { suggestNextDrops, topDropsByUsage } from "../../lib/suggest";
 import { explainApiError } from "../../lib/explainApiError";
-import { toggleInSet } from "../../lib/sets";
-import { isTypingTarget } from "../../lib/typingTarget";
 import { consoleLines } from "../../lib/consoleLog";
 import { findStrayEdges } from "../../lib/strayEdges";
 import { lintMessage } from "./editor/lintMessage";
@@ -147,6 +145,8 @@ import type {
 import { formatDateTime } from "../../lib/datetime";
 import { MOBILE, isNarrower } from "../../lib/breakpoints";
 import { pickGraphSettings } from "../../lib/graphMeta";
+import { isTypingTarget } from "../../lib/typingTarget";
+import { toggleInSet } from "../../lib/toggleInSet";
 import { Inspector } from "../../components/editor/Inspector";
 import { FlowStatusChip } from "../../components/ui/FlowStatusChip";
 import { flowRunStatusPublished, isTriggerModule } from "../../flowStatus";
@@ -1405,9 +1405,8 @@ function EditorInner() {
   }, []);
 
   useEffect(() => {
-    const inTextField = () => isTypingTarget(document.activeElement);
     const onCopy = (e: ClipboardEvent) => {
-      if (inTextField() || (window.getSelection()?.toString() ?? "")) return;
+      if (isTypingTarget(document.activeElement) || (window.getSelection()?.toString() ?? "")) return;
       const sel = nodes.filter((n) => n.selected);
       if (sel.length === 0) return;
       const ids = new Set(sel.map((n) => n.id));
@@ -1436,7 +1435,7 @@ function EditorInner() {
       e.preventDefault();
     };
     const onPaste = (e: ClipboardEvent) => {
-      if (inTextField()) return;
+      if (isTypingTarget(document.activeElement)) return;
       const text = e.clipboardData?.getData("text/plain") ?? "";
       let payload: {
         __dazyflow_clipboard?: number;
@@ -2030,7 +2029,8 @@ function EditorInner() {
 
   const toggleBreakpoint = useCallback(() => {
     const sel = nodes.filter((n) => n.selected);
-    if (sel.length === 1) toggleBreakpointFor(sel[0].id);
+    if (sel.length !== 1) return;
+    toggleBreakpointFor(sel[0].id);
   }, [nodes, toggleBreakpointFor]);
 
   const duplicateNode = useCallback(
@@ -2085,8 +2085,7 @@ function EditorInner() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      if (isTypingTarget(document.activeElement)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || isTypingTarget(document.activeElement)) return;
       switch (e.key.toLowerCase()) {
         case "c":
           if (pausedAt) {

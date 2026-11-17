@@ -7,10 +7,10 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/daemon/internal/pgstore"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -42,7 +42,7 @@ func NewMemAgentStore() *MemAgentStore {
 var _ AgentStore = (*MemAgentStore)(nil)
 
 func (s *MemAgentStore) Granted(email string) bool {
-	email = normalizeEmail(email)
+	email = auth.NormalizeEmail(email)
 	if email == "" {
 		return false
 	}
@@ -53,7 +53,7 @@ func (s *MemAgentStore) Granted(email string) bool {
 }
 
 func (s *MemAgentStore) Grant(_ context.Context, email, grantedBy string) error {
-	email = normalizeEmail(email)
+	email = auth.NormalizeEmail(email)
 	if email == "" {
 		return fmt.Errorf("email required")
 	}
@@ -69,7 +69,7 @@ func (s *MemAgentStore) Grant(_ context.Context, email, grantedBy string) error 
 }
 
 func (s *MemAgentStore) Revoke(_ context.Context, email string) error {
-	email = normalizeEmail(email)
+	email = auth.NormalizeEmail(email)
 	if email == "" {
 		return fmt.Errorf("email required")
 	}
@@ -80,7 +80,7 @@ func (s *MemAgentStore) Revoke(_ context.Context, email string) error {
 }
 
 func (s *MemAgentStore) AnonymizeGrantedBy(_ context.Context, email string) (int, error) {
-	email = normalizeEmail(email)
+	email = auth.NormalizeEmail(email)
 	if email == "" {
 		return 0, fmt.Errorf("email required")
 	}
@@ -88,7 +88,7 @@ func (s *MemAgentStore) AnonymizeGrantedBy(_ context.Context, email string) (int
 	defer s.mu.Unlock()
 	n := 0
 	for k, g := range s.grants {
-		if normalizeEmail(g.GrantedBy) == email {
+		if auth.NormalizeEmail(g.GrantedBy) == email {
 			g.GrantedBy = core.ErasedIdentity
 			s.grants[k] = g
 			n++
@@ -144,7 +144,7 @@ func NewPgAgentStore(ctx context.Context, pool *pgxpool.Pool) (*PgAgentStore, er
 }
 
 func (s *PgAgentStore) Granted(email string) bool {
-	email = normalizeEmail(email)
+	email = auth.NormalizeEmail(email)
 	if email == "" {
 		return false
 	}
@@ -155,7 +155,7 @@ func (s *PgAgentStore) Granted(email string) bool {
 }
 
 func (s *PgAgentStore) Grant(ctx context.Context, email, grantedBy string) error {
-	email = normalizeEmail(email)
+	email = auth.NormalizeEmail(email)
 	if email == "" {
 		return fmt.Errorf("email required")
 	}
@@ -169,7 +169,7 @@ func (s *PgAgentStore) Grant(ctx context.Context, email, grantedBy string) error
 }
 
 func (s *PgAgentStore) Revoke(ctx context.Context, email string) error {
-	email = normalizeEmail(email)
+	email = auth.NormalizeEmail(email)
 	if email == "" {
 		return fmt.Errorf("email required")
 	}
@@ -180,7 +180,7 @@ func (s *PgAgentStore) Revoke(ctx context.Context, email string) error {
 }
 
 func (s *PgAgentStore) AnonymizeGrantedBy(ctx context.Context, email string) (int, error) {
-	email = normalizeEmail(email)
+	email = auth.NormalizeEmail(email)
 	if email == "" {
 		return 0, fmt.Errorf("email required")
 	}
@@ -223,7 +223,7 @@ func (s *PgAgentStore) reload(ctx context.Context) error {
 	}
 	m := make(map[string]struct{}, len(grants))
 	for _, g := range grants {
-		m[normalizeEmail(g.Email)] = struct{}{}
+		m[auth.NormalizeEmail(g.Email)] = struct{}{}
 	}
 	s.mu.Lock()
 	s.granted = m
@@ -233,12 +233,4 @@ func (s *PgAgentStore) reload(ctx context.Context) error {
 
 func (s *PgAgentStore) refreshLoop(ctx context.Context) {
 	pgstore.PollReload(ctx, s.reload, s.logger.Printf, "refresh: %v")
-}
-
-// normalizeEmail case-folds and trims, because membership and every grant check
-// compare addresses and nobody types one into an admin form the same way twice.
-// Spelled out here rather than shared with daemon/platformadmin.go and auth/
-// because the package stands alone.
-func normalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
 }

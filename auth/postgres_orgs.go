@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -78,11 +77,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS org_profiles_subdomain_key
 `
 
 func EnsurePgOrgsSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	if pool == nil {
-		return fmt.Errorf("nil pool")
-	}
-	_, err := pool.Exec(ctx, pgOrgsSchema)
-	return err
+	return ensureSchema(ctx, pool, pgOrgsSchema)
 }
 
 // MigrateLegacyOrgAdminPerm rewrites the pre-rename "tenant:admin" permission
@@ -128,7 +123,7 @@ func NewPgMembershipStore(ctx context.Context, pool *pgxpool.Pool) (*PgMembershi
 }
 
 func (s *PgMembershipStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
-	ident = strings.ToLower(strings.TrimSpace(ident))
+	ident = NormalizeEmail(ident)
 	if ident == "" {
 		return 0, nil
 	}
@@ -141,7 +136,7 @@ func (s *PgMembershipStore) AnonymizeSubject(ctx context.Context, ident string) 
 }
 
 func (s *PgMembershipStore) PutMembership(ctx context.Context, m Membership) error {
-	email := strings.ToLower(strings.TrimSpace(m.UserEmail))
+	email := NormalizeEmail(m.UserEmail)
 	if email == "" {
 		return fmt.Errorf("user_email required")
 	}
@@ -184,7 +179,7 @@ const membershipUpsertSQL = `
 // the tenant id onto the bigint the advisory lock API takes, and a collision
 // costs a little contention and nothing else.
 func (s *PgMembershipStore) PutMembershipWithinLimit(ctx context.Context, m Membership, maxRows int) (bool, error) {
-	email := strings.ToLower(strings.TrimSpace(m.UserEmail))
+	email := NormalizeEmail(m.UserEmail)
 	if email == "" {
 		return false, fmt.Errorf("user_email required")
 	}
@@ -237,13 +232,13 @@ func (s *PgMembershipStore) PutMembershipWithinLimit(ctx context.Context, m Memb
 }
 
 func (s *PgMembershipStore) DeleteMembership(ctx context.Context, email, tenant string) error {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	_, err := s.pool.Exec(ctx, `DELETE FROM memberships WHERE user_email=$1 AND tenant=$2`, email, tenant)
 	return err
 }
 
 func (s *PgMembershipStore) DeleteByEmail(ctx context.Context, email string) (int, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	return deleteWhere(ctx, s.pool, "memberships", "user_email", email)
 }
 
@@ -252,19 +247,16 @@ func (s *PgMembershipStore) DeleteByTenant(ctx context.Context, tenant string) (
 }
 
 func (s *PgMembershipStore) GetMembership(ctx context.Context, email, tenant string) (Membership, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	row := s.pool.QueryRow(ctx,
 		`SELECT user_email, tenant, workspace, roles, COALESCE(invited_by,''), created_at
          FROM memberships WHERE user_email=$1 AND tenant=$2`, email, tenant)
 	m, err := scanMembership(row)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Membership{}, ErrUnknownMembership
-	}
-	return m, err
+	return m, noRows(err, ErrUnknownMembership)
 }
 
 func (s *PgMembershipStore) ListByEmail(ctx context.Context, email string) ([]Membership, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	return queryRows(ctx, s.pool, scanMembership,
 		`SELECT user_email, tenant, workspace, roles, COALESCE(invited_by,''), created_at
          FROM memberships WHERE user_email=$1
@@ -306,7 +298,7 @@ func NewPgInvitationStore(ctx context.Context, pool *pgxpool.Pool) (*PgInvitatio
 }
 
 func (s *PgInvitationStore) AnonymizeSubject(ctx context.Context, ident string) (int, error) {
-	ident = strings.ToLower(strings.TrimSpace(ident))
+	ident = NormalizeEmail(ident)
 	if ident == "" {
 		return 0, nil
 	}
@@ -325,7 +317,7 @@ func (s *PgInvitationStore) PutInvitation(ctx context.Context, inv Invitation) e
 	if inv.Tenant == "" {
 		return fmt.Errorf("tenant required")
 	}
-	inv.Email = strings.ToLower(strings.TrimSpace(inv.Email))
+	inv.Email = NormalizeEmail(inv.Email)
 	roles, err := marshalRoles(inv.Roles)
 	if err != nil {
 		return err
@@ -354,10 +346,7 @@ func (s *PgInvitationStore) GetByToken(ctx context.Context, token string) (Invit
 		`SELECT token, email, tenant, workspace, roles, invited_by, created_at, expires_at, accepted_at, revoked_at
          FROM invitations WHERE token=$1`, token)
 	inv, err := scanInvitation(row)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Invitation{}, ErrUnknownInvitation
-	}
-	return inv, err
+	return inv, noRows(err, ErrUnknownInvitation)
 }
 
 func (s *PgInvitationStore) ListByTenant(ctx context.Context, tenant string) ([]Invitation, error) {
@@ -368,7 +357,7 @@ func (s *PgInvitationStore) ListByTenant(ctx context.Context, tenant string) ([]
 }
 
 func (s *PgInvitationStore) ListByEmail(ctx context.Context, email string) ([]Invitation, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	return queryRows(ctx, s.pool, scanInvitation,
 		`SELECT token, email, tenant, workspace, roles, invited_by, created_at, expires_at, accepted_at, revoked_at
          FROM invitations WHERE email=$1
@@ -376,7 +365,7 @@ func (s *PgInvitationStore) ListByEmail(ctx context.Context, email string) ([]In
 }
 
 func (s *PgInvitationStore) DeleteByEmail(ctx context.Context, email string) (int, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	return deleteWhere(ctx, s.pool, "invitations", "email", email)
 }
 
@@ -454,10 +443,7 @@ func (s *PgOrgAuthStore) GetOrgAuth(ctx context.Context, tenant string) (OrgAuth
          FROM org_auth WHERE tenant=$1`, tenant)
 	var c OrgAuthConfig
 	err := row.Scan(&c.Tenant, &c.GoogleClientID, &c.GoogleClientSecret, &c.GoogleWorkspaceDomain, &c.UpdatedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return OrgAuthConfig{}, ErrUnknownOrgAuth
-	}
-	return c, err
+	return c, noRows(err, ErrUnknownOrgAuth)
 }
 
 func (s *PgOrgAuthStore) PutOrgAuth(ctx context.Context, cfg OrgAuthConfig) error {
@@ -513,10 +499,7 @@ func scanOrgProfile(row rowScanner) (OrgProfile, error) {
 func (s *PgOrgProfileStore) GetOrgProfile(ctx context.Context, tenant string) (OrgProfile, error) {
 	p, err := scanOrgProfile(s.pool.QueryRow(ctx,
 		`SELECT `+orgProfileColumns+` FROM org_profiles WHERE tenant=$1`, tenant))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return OrgProfile{}, ErrUnknownOrgProfile
-	}
-	return p, err
+	return p, noRows(err, ErrUnknownOrgProfile)
 }
 
 func (s *PgOrgProfileStore) GetOrgProfileBySubdomain(ctx context.Context, subdomain string) (OrgProfile, error) {
@@ -526,10 +509,7 @@ func (s *PgOrgProfileStore) GetOrgProfileBySubdomain(ctx context.Context, subdom
 	}
 	p, err := scanOrgProfile(s.pool.QueryRow(ctx,
 		`SELECT `+orgProfileColumns+` FROM org_profiles WHERE lower(subdomain)=$1`, subdomain))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return OrgProfile{}, ErrUnknownOrgProfile
-	}
-	return p, err
+	return p, noRows(err, ErrUnknownOrgProfile)
 }
 
 func (s *PgOrgProfileStore) PutOrgProfile(ctx context.Context, p OrgProfile) error {

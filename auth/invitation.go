@@ -104,7 +104,7 @@ func (s *JSONInvitationStore) PutInvitation(_ context.Context, inv Invitation) e
 	if inv.Tenant == "" {
 		return fmt.Errorf("tenant required")
 	}
-	inv.Email = strings.ToLower(strings.TrimSpace(inv.Email))
+	inv.Email = NormalizeEmail(inv.Email)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.items[inv.Token] = inv
@@ -112,7 +112,7 @@ func (s *JSONInvitationStore) PutInvitation(_ context.Context, inv Invitation) e
 }
 
 func (s *JSONInvitationStore) AnonymizeSubject(_ context.Context, ident string) (int, error) {
-	ident = strings.ToLower(strings.TrimSpace(ident))
+	ident = NormalizeEmail(ident)
 	if ident == "" {
 		return 0, nil
 	}
@@ -120,7 +120,7 @@ func (s *JSONInvitationStore) AnonymizeSubject(_ context.Context, ident string) 
 	defer s.mu.Unlock()
 	n := 0
 	for token, inv := range s.items {
-		if strings.ToLower(strings.TrimSpace(inv.InvitedBy)) == ident {
+		if NormalizeEmail(inv.InvitedBy) == ident {
 			inv.InvitedBy = core.ErasedIdentity
 			s.items[token] = inv
 			n++
@@ -171,7 +171,7 @@ func (s *JSONInvitationStore) deleteWhere(pred func(Invitation) bool) (int, erro
 }
 
 func emailMatches(email string) func(Invitation) bool {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = NormalizeEmail(email)
 	return func(i Invitation) bool { return strings.ToLower(i.Email) == email }
 }
 

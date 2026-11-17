@@ -111,11 +111,8 @@ func executeSendMessage(ctx context.Context, job core.Job, _ chan<- core.Progres
 	}
 
 	status, respBody, err := discordDo(ctx, job, endpoint, body)
-	if err != nil {
-		return params.Err(job, "discord_http_error", err.Error()), nil
-	}
-	if status < 200 || status >= 300 {
-		return params.Err(job, "discord_error", extractDiscordError(respBody)), nil
+	if fail := params.HTTPFailure(job, "discord", "Discord", status, respBody, err, extractDiscordError); fail != nil {
+		return *fail, nil
 	}
 
 	// With wait=true Discord returns the created message; parse the id when

@@ -38,7 +38,6 @@ import { ActiveFlowContext, FLOWS_CHANGED_EVENT } from "../activeFlow";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import { tenantDisplayName } from "../lib/orgDisplayName";
 import { downloadJson } from "../lib/download";
-import { isTypingTarget } from "../lib/typingTarget";
 import { Button } from "./ui/Button";
 import { useAnchoredPop } from "./ui/useAnchoredPop";
 import { OrgSwitcherModal } from "./dialogs/OrgSwitcherModal";
@@ -52,6 +51,7 @@ import type { FlowSummary } from "../types";
 import { POLL } from "../lib/timing";
 import { savedCollapsePref, initialNavCollapsed } from "../lib/navCollapse";
 import { resendOutcome } from "../lib/verifyResend";
+import { isTypingTarget } from "../lib/typingTarget";
 
 function orgGlyph(icon: string | undefined, size: number) {
   return isImageIcon(icon) ? (

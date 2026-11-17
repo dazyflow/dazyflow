@@ -218,16 +218,11 @@ func (h *orgAPI) listMembers(rw http.ResponseWriter, r *http.Request, p core.Pri
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if tenant != p.Tenant && !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "cannot list members of another tenant")
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot list members of another tenant")
+	if !ok {
 		return
 	}
 	rows, err := h.Memberships.ListByTenant(r.Context(), tenant)
@@ -280,21 +275,16 @@ func (h *orgAPI) removeMember(rw http.ResponseWriter, r *http.Request, p core.Pr
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	if email == "" {
 		writeJSONError(rw, http.StatusBadRequest, "email required")
 		return
 	}
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if tenant != p.Tenant && !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "cannot modify another tenant")
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot modify another tenant")
+	if !ok {
 		return
 	}
 	if h.Users != nil {
@@ -362,7 +352,7 @@ func (h *orgAPI) callerIsOrgOwner(ctx context.Context, p core.Principal, tenant 
 	if h.Users == nil {
 		return false
 	}
-	u, err := h.Users.GetByEmail(ctx, strings.ToLower(strings.TrimSpace(p.Subject)))
+	u, err := h.Users.GetByEmail(ctx, auth.NormalizeEmail(p.Subject))
 	return err == nil && u.Tenant == tenant
 }
 
@@ -418,21 +408,16 @@ func (h *orgAPI) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p co
 		writeJSONError(rw, http.StatusNotImplemented, "memberships not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(r.PathValue("email")))
+	email := auth.NormalizeEmail(r.PathValue("email"))
 	if email == "" {
 		writeJSONError(rw, http.StatusBadRequest, "email required")
 		return
 	}
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if tenant != p.Tenant && !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "cannot modify another tenant")
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot modify another tenant")
+	if !ok {
 		return
 	}
 	body, ok := decodeRequestJSON[struct {
@@ -513,17 +498,13 @@ func (h *orgAPI) invitationSeatExceeded(ctx context.Context, tenant, invitee str
 		if invs, err := h.Invitations.ListByTenant(ctx, tenant); err == nil {
 			for _, inv := range invs {
 				if inv.IsPending(now) {
-					held[normalizeSeatEmail(inv.Email)] = struct{}{}
+					held[auth.NormalizeEmail(inv.Email)] = struct{}{}
 				}
 			}
 		}
 	}
-	delete(held, normalizeSeatEmail(invitee))
+	delete(held, auth.NormalizeEmail(invitee))
 	return len(held) >= limit, limit
-}
-
-func normalizeSeatEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func (h *orgAPI) createInvitation(rw http.ResponseWriter, r *http.Request, p core.Principal) {
@@ -531,8 +512,7 @@ func (h *orgAPI) createInvitation(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
 	// An unverified signup must not be able to mint invitations.
@@ -545,7 +525,7 @@ func (h *orgAPI) createInvitation(rw http.ResponseWriter, r *http.Request, p cor
 	if !ok {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(body.Email))
+	email := auth.NormalizeEmail(body.Email)
 	if err := validSignupEmail(email); err != nil {
 		writeJSONError(rw, http.StatusBadRequest, err.Error())
 		return
@@ -643,16 +623,11 @@ func (h *orgAPI) listInvitations(rw http.ResponseWriter, r *http.Request, p core
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if tenant != p.Tenant && !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "cannot list invitations of another tenant")
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot list invitations of another tenant")
+	if !ok {
 		return
 	}
 	rows, err := h.Invitations.ListByTenant(r.Context(), tenant)
@@ -700,8 +675,7 @@ func (h *orgAPI) revokeInvitation(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
 	token := r.PathValue("token")
@@ -830,16 +804,11 @@ func (h *orgAPI) getOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
-	tenant := r.URL.Query().Get("tenant")
-	if tenant == "" {
-		tenant = p.Tenant
-	}
-	if tenant != p.Tenant && !isPlatformAdmin(p) {
-		writeJSONError(rw, http.StatusForbidden, "cannot view another tenant's SSO config")
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot view another tenant's SSO config")
+	if !ok {
 		return
 	}
 	cfg, err := h.OrgAuth.GetOrgAuth(r.Context(), tenant)
@@ -871,8 +840,11 @@ func (h *orgAPI) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
+		return
+	}
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot modify another tenant's SSO config")
+	if !ok {
 		return
 	}
 	body, ok := decodeRequestJSON[struct {
@@ -884,14 +856,14 @@ func (h *orgAPI) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p cor
 		return
 	}
 	cfg := auth.OrgAuthConfig{
-		Tenant:                p.Tenant,
+		Tenant:                tenant,
 		GoogleClientID:        strings.TrimSpace(body.GoogleClientID),
 		GoogleClientSecret:    strings.TrimSpace(body.GoogleClientSecret),
 		GoogleWorkspaceDomain: strings.TrimSpace(body.GoogleWorkspaceDomain),
 		UpdatedAt:             time.Now().UTC(),
 	}
 	if cfg.GoogleClientSecret == "" {
-		if old, err := h.OrgAuth.GetOrgAuth(r.Context(), p.Tenant); err == nil {
+		if old, err := h.OrgAuth.GetOrgAuth(r.Context(), tenant); err == nil {
 			cfg.GoogleClientSecret = old.GoogleClientSecret
 		}
 	}
@@ -899,7 +871,7 @@ func (h *orgAPI) putOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p cor
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.audit(r.Context(), p, "org_auth.update", p.Tenant, "")
+	h.audit(r.Context(), p, "org_auth.update", tenant, "")
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"tenant":         cfg.Tenant,
 		"google_enabled": cfg.GoogleEnabled(),
@@ -911,15 +883,18 @@ func (h *orgAPI) deleteOrgAuthConfig(rw http.ResponseWriter, r *http.Request, p 
 		writeJSONError(rw, http.StatusNotImplemented, "org SSO config not configured")
 		return
 	}
-	if !core.CanAdminOrg(p) {
-		writeJSONError(rw, http.StatusForbidden, "organization:admin required")
+	if !requireOrgAdmin(rw, p) {
 		return
 	}
-	if err := h.OrgAuth.DeleteOrgAuth(r.Context(), p.Tenant); err != nil {
+	tenant, ok := resolveTenantScope(rw, r, p, "cannot modify another tenant's SSO config")
+	if !ok {
+		return
+	}
+	if err := h.OrgAuth.DeleteOrgAuth(r.Context(), tenant); err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.audit(r.Context(), p, "org_auth.delete", p.Tenant, "")
+	h.audit(r.Context(), p, "org_auth.delete", tenant, "")
 	rw.WriteHeader(http.StatusNoContent)
 }
 
@@ -964,7 +939,7 @@ func (q seatQuota) ownerEmail(ctx context.Context, tenant string) string {
 	}
 	for _, u := range users {
 		if u.Tenant == tenant {
-			return normalizeSeatEmail(u.Email) // single home per tenant
+			return auth.NormalizeEmail(u.Email) // single home per tenant
 		}
 	}
 	return ""
@@ -978,7 +953,7 @@ func (q seatQuota) seatHolders(ctx context.Context, tenant string) (map[string]s
 	}
 	held := make(map[string]struct{}, len(members)+1)
 	for _, m := range members {
-		held[normalizeSeatEmail(m.UserEmail)] = struct{}{}
+		held[auth.NormalizeEmail(m.UserEmail)] = struct{}{}
 	}
 	if owner := q.ownerEmail(ctx, tenant); owner != "" {
 		held[owner] = struct{}{}
