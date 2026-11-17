@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/pgutil"
 )
 
 // Postgres-backed implementations of the three auth stores
@@ -211,7 +212,7 @@ func (s *PgKeyStore) ListByTenant(ctx context.Context, tenant string) ([]APIKey,
 		SELECT id, tenant, workspace, subject, roles, salt, hash, expires_at, revoked_at
 		FROM api_keys WHERE tenant=$1 ORDER BY id
 	`
-	return queryRows(ctx, s.pool, scanKey, q, tenant)
+	return pgutil.QueryRows(ctx, s.pool, scanKey, q, tenant)
 }
 
 func (s *PgKeyStore) ListAll(ctx context.Context) ([]APIKey, error) {
@@ -219,7 +220,7 @@ func (s *PgKeyStore) ListAll(ctx context.Context) ([]APIKey, error) {
 		SELECT id, tenant, workspace, subject, roles, salt, hash, expires_at, revoked_at
 		FROM api_keys ORDER BY id
 	`
-	return queryRows(ctx, s.pool, scanKey, q)
+	return pgutil.QueryRows(ctx, s.pool, scanKey, q)
 }
 
 func (s *PgKeyStore) ListBySubject(ctx context.Context, subject string) ([]APIKey, error) {
@@ -227,7 +228,7 @@ func (s *PgKeyStore) ListBySubject(ctx context.Context, subject string) ([]APIKe
 		SELECT id, tenant, workspace, subject, roles, salt, hash, expires_at, revoked_at
 		FROM api_keys WHERE subject=$1 ORDER BY id
 	`
-	return queryRows(ctx, s.pool, scanKey, q, subject)
+	return pgutil.QueryRows(ctx, s.pool, scanKey, q, subject)
 }
 
 func (s *PgKeyStore) DeleteBySubject(ctx context.Context, subject string) (int, error) {
@@ -238,26 +239,7 @@ func (s *PgKeyStore) DeleteByTenant(ctx context.Context, tenant string) (int, er
 	return deleteWhere(ctx, s.pool, "api_keys", "tenant", tenant)
 }
 
-type rowScanner interface {
-	Scan(dest ...any) error
-}
-
-func queryRows[T any](ctx context.Context, pool *pgxpool.Pool, scan func(rowScanner) (T, error), query string, args ...any) ([]T, error) {
-	rows, err := pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := make([]T, 0)
-	for rows.Next() {
-		v, err := scan(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, v)
-	}
-	return out, rows.Err()
-}
+type rowScanner = pgutil.Row
 
 // deleteWhere runs `DELETE FROM <table> WHERE <col>=$1` and returns the
 // rows-affected count. table and col are passed as compile-time constants
@@ -528,7 +510,7 @@ func (s *PgUserStore) MarkEmailVerified(ctx context.Context, email string, at ti
 
 func (s *PgUserStore) ListUsers(ctx context.Context) ([]User, error) {
 	const q = `SELECT ` + userColumns + ` FROM users ORDER BY email`
-	return queryRows(ctx, s.pool, scanUser, q)
+	return pgutil.QueryRows(ctx, s.pool, scanUser, q)
 }
 
 func (s *PgUserStore) DeleteUser(ctx context.Context, email string) error {

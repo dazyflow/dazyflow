@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/pgutil"
 )
 
 const pgOrgsSchema = `
@@ -265,14 +266,14 @@ func (s *PgMembershipStore) GetMembership(ctx context.Context, email, tenant str
 
 func (s *PgMembershipStore) ListByEmail(ctx context.Context, email string) ([]Membership, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
-	return queryRows(ctx, s.pool, scanMembership,
+	return pgutil.QueryRows(ctx, s.pool, scanMembership,
 		`SELECT user_email, tenant, workspace, roles, COALESCE(invited_by,''), created_at
          FROM memberships WHERE user_email=$1
          ORDER BY tenant`, email)
 }
 
 func (s *PgMembershipStore) ListByTenant(ctx context.Context, tenant string) ([]Membership, error) {
-	return queryRows(ctx, s.pool, scanMembership,
+	return pgutil.QueryRows(ctx, s.pool, scanMembership,
 		`SELECT user_email, tenant, workspace, roles, COALESCE(invited_by,''), created_at
          FROM memberships WHERE tenant=$1
          ORDER BY user_email`, tenant)
@@ -361,7 +362,7 @@ func (s *PgInvitationStore) GetByToken(ctx context.Context, token string) (Invit
 }
 
 func (s *PgInvitationStore) ListByTenant(ctx context.Context, tenant string) ([]Invitation, error) {
-	return queryRows(ctx, s.pool, scanInvitation,
+	return pgutil.QueryRows(ctx, s.pool, scanInvitation,
 		`SELECT token, email, tenant, workspace, roles, invited_by, created_at, expires_at, accepted_at, revoked_at
          FROM invitations WHERE tenant=$1
          ORDER BY created_at DESC`, tenant)
@@ -369,7 +370,7 @@ func (s *PgInvitationStore) ListByTenant(ctx context.Context, tenant string) ([]
 
 func (s *PgInvitationStore) ListByEmail(ctx context.Context, email string) ([]Invitation, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
-	return queryRows(ctx, s.pool, scanInvitation,
+	return pgutil.QueryRows(ctx, s.pool, scanInvitation,
 		`SELECT token, email, tenant, workspace, roles, invited_by, created_at, expires_at, accepted_at, revoked_at
          FROM invitations WHERE email=$1
          ORDER BY created_at DESC`, email)
@@ -569,7 +570,7 @@ func (s *PgOrgProfileStore) ListOrgProfiles(ctx context.Context, tenants []strin
 	if len(tenants) == 0 {
 		return out, nil
 	}
-	profiles, err := queryRows(ctx, s.pool, scanOrgProfile,
+	profiles, err := pgutil.QueryRows(ctx, s.pool, scanOrgProfile,
 		`SELECT `+orgProfileColumns+` FROM org_profiles WHERE tenant = ANY($1)`, tenants)
 	if err != nil {
 		return nil, err
@@ -581,7 +582,7 @@ func (s *PgOrgProfileStore) ListOrgProfiles(ctx context.Context, tenants []strin
 }
 
 func (s *PgOrgProfileStore) ListAllOrgProfiles(ctx context.Context) ([]OrgProfile, error) {
-	return queryRows(ctx, s.pool, scanOrgProfile,
+	return pgutil.QueryRows(ctx, s.pool, scanOrgProfile,
 		`SELECT `+orgProfileColumns+` FROM org_profiles ORDER BY updated_at DESC`)
 }
 

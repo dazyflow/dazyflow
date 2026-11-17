@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/pgutil"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -168,7 +169,7 @@ func (s *PgBlocklistStore) AnonymizeCreatedBy(ctx context.Context, email string)
 func (s *PgBlocklistStore) List(ctx context.Context) ([]Blocked, error) {
 	const q = `SELECT value, kind, reason, created_by, created_at
 		FROM blocked_identities ORDER BY created_at DESC`
-	return queryRows(ctx, s.pool, scanBlocked, q)
+	return pgutil.QueryRows(ctx, s.pool, scanBlocked, q)
 }
 
 func scanBlocked(row rowScanner) (Blocked, error) {

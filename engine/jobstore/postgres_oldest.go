@@ -5,7 +5,6 @@ package jobstore
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/dazyflow/dazyflow/core"
 )
@@ -16,79 +15,19 @@ import (
 // it. jobs_graph_status_idx (status, enqueued_at DESC) serves these read
 // backwards.
 
-func graphRunOldestOrderLimit(q string, args []any, opts core.ListGraphRunsOpts) (string, []any) {
-	limit := opts.Limit
-	if limit <= 0 {
-		limit = 50
-	}
-	args = append(args, limit)
-	q += fmt.Sprintf(" ORDER BY enqueued_at ASC, id ASC LIMIT $%d", len(args))
-	if opts.Offset > 0 {
-		args = append(args, opts.Offset)
-		q += fmt.Sprintf(" OFFSET $%d", len(args))
-	}
-	return q, args
-}
-
 func (s *Postgres) ListGraphRunsOldest(ctx context.Context, opts core.ListGraphRunsOpts) ([]core.JobRecord, error) {
-	q := `SELECT id, kind, graph_run_id, graph_id, node_id, tenant, workspace, status, job, graph_payload, result,
-	             enqueued_at, available_at, started_at, finished_at, attempt, lease_until, worker_id, parent_node_rec_id, manual
-	        FROM jobs WHERE kind = 'graph'`
-	q, args := graphRunPredicates(q, []any{}, opts)
-	q, args = graphRunOldestOrderLimit(q, args, opts)
-	rows, err := s.pool.Query(ctx, q, args...)
-	if err != nil {
-		return nil, wrapPgErr(err)
-	}
-	defer rows.Close()
-	var out []core.JobRecord
-	for rows.Next() {
-		rec, err := scanRecord(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, rec)
-	}
-	return out, rows.Err()
+	return s.listGraphRuns(ctx, opts, oldestFirst)
 }
 
 func (s *Postgres) ListGraphRunSummariesOldest(ctx context.Context, opts core.ListGraphRunsOpts) ([]core.RunSummary, error) {
-	q, args := graphRunPredicates(summarySelect, []any{}, opts)
-	q, args = graphRunOldestOrderLimit(q, args, opts)
-	rows, err := s.pool.Query(ctx, q, args...)
-	if err != nil {
-		return nil, wrapPgErr(err)
-	}
-	defer rows.Close()
-	var out []core.RunSummary
-	for rows.Next() {
-		sum, err := scanSummary(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, sum)
-	}
-	return out, rows.Err()
+	return s.listGraphRunSummaries(ctx, opts, oldestFirst)
 }
 
 // GraphRunTenants lists every tenant with a graph run in status, so a sweep
 // visits all of them rather than whichever filled one page of runs.
 func (s *Postgres) GraphRunTenants(ctx context.Context, status core.JobStatus) ([]string, error) {
-	rows, err := s.pool.Query(ctx,
+	return queryRows(ctx, s.pool, scanString,
 		`SELECT DISTINCT tenant FROM jobs WHERE kind = 'graph' AND status = $1`, string(status))
-	if err != nil {
-		return nil, wrapPgErr(err)
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var t string
-		if err := rows.Scan(&t); err != nil {
-			return nil, err
-		}
-		out = append(out, t)
-	}
-	return out, rows.Err()
 }
 
 // MarkGraphRunningCapped is MarkGraphRunning under the tenant's concurrency
