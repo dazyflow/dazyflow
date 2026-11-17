@@ -618,3 +618,33 @@ func TestPlatformInviteMember(t *testing.T) {
 		t.Fatalf("bad json = %d, want 400", rw.Code)
 	}
 }
+
+func TestPlatformInviteMember_SeatLimitAndTTL(t *testing.T) {
+	t.Parallel()
+	h, _, _, mem, ent, _ := platformHarness(t)
+	ctx := context.Background()
+	_ = ent.PutEntitlement(ctx, TenantEntitlement{Tenant: "acme", MaxMembers: ptrInt(2)})
+	_ = mem.PutMembership(ctx, auth.Membership{UserEmail: "alice@example.com", Tenant: "acme"})
+
+	rw := h.platformDo(t, "POST", "/api/v1/admin/platform/orgs/acme/invite", map[string]any{"email": "bob@example.com"})
+	if rw.Code != http.StatusCreated {
+		t.Fatalf("first invite = %d: %s", rw.Code, rw.Body.String())
+	}
+	list, _ := h.gw.Invitations.ListByTenant(ctx, "acme")
+	if len(list) != 1 || list[0].ExpiresAt.Sub(list[0].CreatedAt) != inviteTTL {
+		t.Fatalf("invitations = %+v, want one with TTL %v", list, inviteTTL)
+	}
+	if !strings.Contains(rw.Body.String(), `"accept_url"`) {
+		t.Fatalf("response lacks accept_url: %s", rw.Body.String())
+	}
+
+	// alice + bob's pending invite fill both seats.
+	rw = h.platformDo(t, "POST", "/api/v1/admin/platform/orgs/acme/invite", map[string]any{"email": "carol@example.com"})
+	if rw.Code != http.StatusPaymentRequired {
+		t.Fatalf("over-limit invite = %d, want 402: %s", rw.Code, rw.Body.String())
+	}
+	// Re-inviting someone who already holds a seat is not over the limit.
+	if rw := h.platformDo(t, "POST", "/api/v1/admin/platform/orgs/acme/invite", map[string]any{"email": "bob@example.com"}); rw.Code != http.StatusCreated {
+		t.Fatalf("re-invite = %d, want 201: %s", rw.Code, rw.Body.String())
+	}
+}

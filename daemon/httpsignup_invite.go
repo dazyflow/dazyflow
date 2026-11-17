@@ -29,7 +29,7 @@ import (
 // sentinel, so signup-invites inherit its TTL, audit and GDPR erasure. The
 // signUp gate consumes the token; these handlers only mint, list and revoke.
 
-const signupInviteTTL = 14 * 24 * time.Hour
+const signupInviteTTL = inviteTTL
 
 // validSignupInvite reports whether token is a pending platform
 // signup-invite addressed to email. It's the signUp gate's check — a

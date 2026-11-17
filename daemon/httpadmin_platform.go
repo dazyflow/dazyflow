@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"slices"
 	"sort"
@@ -21,7 +22,10 @@ type platformAdminAPI struct {
 	revokeMCPGrants func(ctx context.Context, subject string)
 	auditor
 	adminCheck
+	langPicker
+	seatQuota
 	svc                 *Service
+	logger              *log.Logger
 	Users               auth.UserStore
 	Sessions            auth.SessionStore
 	Memberships         auth.MembershipStore
@@ -33,7 +37,7 @@ type platformAdminAPI struct {
 }
 
 func (h *HTTPGateway) platformAdminAPI() *platformAdminAPI {
-	return &platformAdminAPI{auditor: h.auditor(), adminCheck: h.admins(), svc: h.svc, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, PlatformAdminGrants: h.PlatformAdminGrants, DropSwitches: h.DropSwitches, revokeMCPGrants: h.revokeMCPGrants}
+	return &platformAdminAPI{auditor: h.auditor(), adminCheck: h.admins(), langPicker: h.lang(), seatQuota: h.seats(), svc: h.svc, logger: h.logger, Users: h.Users, Sessions: h.Sessions, Memberships: h.Memberships, Invitations: h.Invitations, Profiles: h.Profiles, Blocklist: h.Blocklist, PlatformAdminGrants: h.PlatformAdminGrants, DropSwitches: h.DropSwitches, revokeMCPGrants: h.revokeMCPGrants}
 }
 
 // Cross-tenant tools; every route here is gated on platform:admin.
@@ -810,6 +814,10 @@ func (h *platformAdminAPI) platformInviteMember(rw http.ResponseWriter, r *http.
 		return
 	}
 	tenant := strings.TrimSpace(r.PathValue("tenant"))
+	if tenant == "" {
+		writeJSONError(rw, http.StatusBadRequest, "tenant required")
+		return
+	}
 	body, ok := decodeRequestJSON[struct {
 		Email     string      `json:"email"`
 		Roles     []core.Role `json:"roles"`
@@ -831,33 +839,23 @@ func (h *platformAdminAPI) platformInviteMember(rw http.ResponseWriter, r *http.
 			return
 		}
 		roles = resolved
-	} else {
-		roles = []core.Role{core.TeamRoleEditor()}
 	}
-	ws := body.Workspace
-	if ws == "" {
-		ws = "main"
-	}
-	token, err := auth.MintInvitationToken()
+	inv, err := h.mintOrgInvitation(r.Context(), p.Subject, tenant, email, body.Workspace, roles)
 	if err != nil {
-		writeJSONError(rw, http.StatusInternalServerError, err.Error())
-		return
-	}
-	now := time.Now().UTC()
-	inv := auth.Invitation{
-		Token:     token,
-		Email:     email,
-		Tenant:    tenant,
-		Workspace: ws,
-		Roles:     roles,
-		InvitedBy: p.Subject,
-		CreatedAt: now,
-		ExpiresAt: now.Add(14 * 24 * time.Hour),
-	}
-	if err := h.Invitations.PutInvitation(r.Context(), inv); err != nil {
-		writeJSONError(rw, http.StatusInternalServerError, err.Error())
+		writeMintInvitationError(rw, err)
 		return
 	}
 	h.audit(r.Context(), p, "platform.member.invite", tenant, "email="+email)
-	writeJSON(rw, http.StatusCreated, map[string]any{"token": token, "email": email, "tenant": tenant})
+	// Platform admins are trusted inviters, so no verified-inviter gate here.
+	emailSent := h.sendOrgInviteEmail(r.Context(), h.logger, inv)
+	writeJSON(rw, http.StatusCreated, map[string]any{
+		"token":      inv.Token,
+		"email":      email,
+		"tenant":     inv.Tenant,
+		"workspace":  inv.Workspace,
+		"roles":      inv.Roles,
+		"expires_at": inv.ExpiresAt,
+		"accept_url": orgInviteURL(h.svc.PublicBaseURL, inv.Token),
+		"email_sent": emailSent,
+	})
 }

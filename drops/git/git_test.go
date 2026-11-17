@@ -572,6 +572,14 @@ func TestHostKeyDB_BadUserKnownHosts(t *testing.T) {
 	if _, err := hostKeyDB("this-is-not-a-valid-known-hosts-line"); err == nil {
 		t.Fatal("expected error for malformed user known_hosts")
 	}
+	// A valid entry must not mask a bad one next to it.
+	valid := strings.SplitN(strings.TrimSpace(bundledKnownHosts), "\n", 2)[0]
+	if _, err := hostKeyDB(valid + "\nthis-is-not-a-valid-known-hosts-line"); err == nil {
+		t.Fatal("expected error for a malformed line beside a valid one")
+	}
+	if _, err := hostKeyDB("# comment\n\n" + valid); err != nil {
+		t.Fatalf("valid user known_hosts rejected: %v", err)
+	}
 }
 
 func TestSSHURLParts_PortAndDefaults(t *testing.T) {
