@@ -48,7 +48,7 @@ func (h *authAPI) signUp(rw http.ResponseWriter, r *http.Request) {
 		writeJSONError(rw, http.StatusBadRequest, "we couldn't read the sign-up details — please try again")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(body.Email))
+	email := auth.NormalizeEmail(body.Email)
 	invited := h.validSignupInvite(r.Context(), email, body.SignupInvite)
 	if !h.EnableSignup && !h.isPlatformAdminEmail(email) && !invited {
 		writeJSONError(rw, http.StatusNotImplemented, "self-serve signup is not enabled on this deployment")

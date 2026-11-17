@@ -36,7 +36,7 @@ func (h *authAPI) changePasswordHandler(rw http.ResponseWriter, r *http.Request,
 		writeAPIError(rw, http.StatusBadRequest, "weak_password", "new password must be at least 8 characters")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(p.Subject))
+	email := auth.NormalizeEmail(p.Subject)
 	if _, err := auth.VerifyPassword(r.Context(), h.Users, email, body.CurrentPassword); err != nil {
 		writeAPIError(rw, http.StatusUnauthorized, "bad_credentials", "current password is incorrect")
 		return
@@ -89,8 +89,8 @@ func (h *authAPI) changeEmailHandler(rw http.ResponseWriter, r *http.Request, p 
 	if !ok {
 		return
 	}
-	oldEmail := strings.ToLower(strings.TrimSpace(p.Subject))
-	newEmail := strings.ToLower(strings.TrimSpace(body.NewEmail))
+	oldEmail := auth.NormalizeEmail(p.Subject)
+	newEmail := auth.NormalizeEmail(body.NewEmail)
 	if !looksLikeEmail(newEmail) {
 		writeAPIError(rw, http.StatusBadRequest, "bad_email", "new_email is not a valid email address")
 		return
