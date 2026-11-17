@@ -89,3 +89,35 @@ func ErrMessage(body []byte, limit int) string {
 	}
 	return string(body)
 }
+
+// Paginate walks a nextPageToken-paged list. fetch runs one call for pageToken
+// ("" for the first page) and is told how many items are still wanted (0 when
+// limit <= 0, meaning no limit). The walk stops at the last page, at limit
+// items, or after maxPages calls; more reports that a token was left unfollowed,
+// so a caller that must not silently truncate can refuse instead.
+func Paginate[T any](fetch func(pageToken string, want int) ([]T, string, error), limit, maxPages int) (items []T, more bool, err error) {
+	token := ""
+	for page := 0; page < maxPages; page++ {
+		want := 0
+		if limit > 0 {
+			if len(items) >= limit {
+				break
+			}
+			want = limit - len(items)
+		}
+		got, next, err := fetch(token, want)
+		if err != nil {
+			return nil, false, err
+		}
+		items = append(items, got...)
+		if next == "" {
+			token = ""
+			break
+		}
+		token = next
+	}
+	if limit > 0 && len(items) > limit {
+		items = items[:limit]
+	}
+	return items, token != "", nil
+}

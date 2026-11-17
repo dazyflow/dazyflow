@@ -153,3 +153,27 @@ func TestErrMessage(t *testing.T) {
 		t.Errorf("truncated = %q (len %d)", got, len(got))
 	}
 }
+
+func TestPaginate(t *testing.T) {
+	pages := map[string][]int{"": {1, 2}, "a": {3, 4}, "b": {5}}
+	next := map[string]string{"": "a", "a": "b", "b": ""}
+	fetch := func(tok string, _ int) ([]int, string, error) { return pages[tok], next[tok], nil }
+
+	got, more, err := Paginate(fetch, 0, 10)
+	if err != nil || more || len(got) != 5 {
+		t.Fatalf("unbounded = %v, %v, %v", got, more, err)
+	}
+	got, more, _ = Paginate(fetch, 3, 10)
+	if len(got) != 3 || !more {
+		t.Fatalf("limit 3 = %v, more %v", got, more)
+	}
+	got, more, _ = Paginate(fetch, 0, 2)
+	if len(got) != 4 || !more {
+		t.Fatalf("cap 2 = %v, more %v", got, more)
+	}
+
+	looping := func(string, int) ([]int, string, error) { return []int{0}, "again", nil }
+	if got, more, _ := Paginate(looping, 0, 3); len(got) != 3 || !more {
+		t.Fatalf("endless tokens = %v, more %v", got, more)
+	}
+}

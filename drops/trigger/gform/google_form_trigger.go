@@ -13,6 +13,7 @@ import (
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/cursor"
+	"github.com/dazyflow/dazyflow/drops/internal/google"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 	"github.com/dazyflow/dazyflow/pollstate"
@@ -226,10 +227,7 @@ func fetchTitles(ctx context.Context, job core.Job, formID, token string, timeou
 
 func fetchNewResponses(ctx context.Context, job core.Job, formID, token string, timeoutMS int, cursor string) ([]formResponse, string, error) {
 	base := formsBaseURL(job) + "/forms/" + url.PathEscape(formID) + "/responses"
-	newCursor := cursor
-	var fresh []formResponse
-	pageToken := ""
-	for {
+	all, more, err := google.Paginate(func(pageToken string, _ int) ([]formResponse, string, error) {
 		q := url.Values{}
 		q.Set("pageSize", "200")
 		if cursor != "" {
@@ -242,25 +240,36 @@ func fetchNewResponses(ctx context.Context, job core.Job, formID, token string, 
 		}
 		status, body, err := googleGet(ctx, base+"?"+q.Encode(), token, timeoutMS)
 		if err != nil {
-			return nil, cursor, err
+			return nil, "", err
 		}
 		if status < 200 || status >= 300 {
-			return nil, cursor, fmt.Errorf("forms.responses.list: %s", formsErr(body))
+			return nil, "", fmt.Errorf("forms.responses.list: %s", formsErr(body))
 		}
 		var page responsesList
 		if err := json.Unmarshal(body, &page); err != nil {
-			return nil, cursor, fmt.Errorf("forms.responses.list decode: %w", err)
+			return nil, "", fmt.Errorf("forms.responses.list decode: %w", err)
 		}
-		for _, r := range page.Responses {
-			if newerThan(r.LastSubmittedTime, cursor) {
-				fresh = append(fresh, r)
-				newCursor = maxTime(newCursor, r.LastSubmittedTime)
-			}
+		return page.Responses, page.NextPageToken, nil
+	}, 0, maxResponsePages)
+	if err != nil {
+		return nil, cursor, err
+	}
+	if more {
+		// Responses are not guaranteed to arrive in time order, so emitting a
+		// partial walk and advancing the cursor could step over unread ones.
+		// Refuse and leave the cursor where it is.
+		return nil, cursor, fmt.Errorf("forms.responses.list: more than %d pages of responses since the last check; nothing was skipped, the position is unchanged", maxResponsePages)
+	}
+	newCursor := cursor
+	var fresh []formResponse
+	for _, r := range all {
+		if newerThan(r.LastSubmittedTime, cursor) {
+			fresh = append(fresh, r)
+			newCursor = maxTime(newCursor, r.LastSubmittedTime)
 		}
-		if page.NextPageToken == "" {
-			break
-		}
-		pageToken = page.NextPageToken
 	}
 	return fresh, newCursor, nil
 }
+
+// maxResponsePages bounds one check's page walk (200 responses a page).
+const maxResponsePages = 100
