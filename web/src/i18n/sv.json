@@ -1710,6 +1710,8 @@
     "maximize": "Maximera {{name}}",
     "maximizeTitle": "Fäll ut steget igen",
     "collapsedLabel": "{{name}} ({{module}}) flödessteg, minimerat",
+    "expandedLabel": "{{name}} ({{module}}) flödessteg",
+    "expandedLabelDisabled": "{{name}} ({{module}}), avstängt flödessteg",
     "locked": "Låst",
     "lockedHint": "Det här steget är låst: fälten går inte att ändra och kortet kan inte flyttas. Lås upp det i inspektören.",
     "fireTrigger": "Testkör",
