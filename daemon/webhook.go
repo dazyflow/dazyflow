@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -48,72 +47,102 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/trigger/"), "/")
-	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
-		http.Error(rw, "expected /trigger/<tenant>/<workspace>/<graph-id>", http.StatusBadRequest)
+	g, ok := w.authPublishedFlow(rw, r, "/trigger/", core.GraphWebhookSecrets, core.GraphWebhookPublic)
+	if !ok {
 		return
 	}
-	tenant, workspace, graphID := parts[0], parts[1], parts[2]
 
-	// Every pre-authentication failure returns the SAME generic 401, so a prober
-	// cannot tell a missing flow from a wrong key.
+	// Capped, or an anonymous caller can OOM the daemon with one POST.
+	rawBody, ok := w.readCallBody(rw, r)
+	if !ok {
+		return
+	}
+
+	seeds, inputs := inputSeeds(g, webhookInputModuleID, buildWebhookSeed(rawBody, r))
+	// Firing anyway would start a run whose trigger step is skipped.
+	if inputs > 0 && len(seeds) == 0 {
+		http.Error(rw, `{"error":{"code":"trigger_disabled","message":"this flow's webhook step is turned off — re-enable the step to accept deliveries"}}`, http.StatusForbidden)
+		return
+	}
+
+	runID, ok := w.submitInbound(rw, r, g, seeds, webhookInbound)
+	if !ok {
+		return
+	}
+	w.logger.Printf("fired %s → %s (%d webhook_input seed(s))", flowRef(g), runID, len(seeds))
+	rw.Header().Set("Content-Type", "application/json")
+	rw.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(rw).Encode(map[string]string{"job_id": runID})
+}
+
+// splitFlowPath parses <prefix><tenant>/<workspace>/<graph-id>, answering 400
+// itself when the path doesn't have that shape.
+func splitFlowPath(rw http.ResponseWriter, r *http.Request, prefix string) (tenant, workspace, graphID string, ok bool) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, prefix), "/")
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		http.Error(rw, "expected "+prefix+"<tenant>/<workspace>/<graph-id>", http.StatusBadRequest)
+		return "", "", "", false
+	}
+	return parts[0], parts[1], parts[2], true
+}
+
+// authPublishedFlow resolves the PUBLISHED revision (never a draft) named by
+// the path and checks the caller's key against it. ok is false once it has
+// answered the caller itself.
+//
+// Every pre-authentication failure returns the SAME generic 401, so a prober
+// cannot tell a missing flow from a wrong key. Only after the key verifies is
+// anything about the flow (such as it being disabled) revealed.
+func (w *WebhookListener) authPublishedFlow(
+	rw http.ResponseWriter,
+	r *http.Request,
+	prefix string,
+	secrets func(core.Graph) []string,
+	public func(core.Graph) bool,
+) (core.Graph, bool) {
+	tenant, workspace, graphID, ok := splitFlowPath(rw, r, prefix)
+	if !ok {
+		return core.Graph{}, false
+	}
 	const unauthorized = "unknown endpoint or invalid secret"
 
 	store, err := w.svc.Workspaces.Open(tenant, workspace)
 	if err != nil {
 		http.Error(rw, unauthorized, http.StatusUnauthorized)
-		return
+		return core.Graph{}, false
 	}
-	// The PUBLISHED revision, never a draft.
 	g, err := store.LoadPublished(graphID)
 	if err != nil {
 		http.Error(rw, unauthorized, http.StatusUnauthorized)
-		return
+		return core.Graph{}, false
 	}
-
-	keys := core.GraphWebhookSecrets(g)
+	keys := secrets(g)
 	switch {
 	case len(keys) > 0:
 		if !anyKeyMatches(keys, webhookKey(r)) {
 			http.Error(rw, unauthorized, http.StatusUnauthorized)
-			return
+			return core.Graph{}, false
 		}
-	case core.GraphWebhookPublic(g):
+	case public(g):
 		// Marked open by the author: possession of the URL is the capability.
 	default:
 		http.Error(rw, unauthorized, http.StatusUnauthorized)
-		return
+		return core.Graph{}, false
 	}
-
-	// Only AFTER the key verifies is anything about the flow revealed.
 	if g.Disabled {
 		http.Error(rw, `{"error":{"code":"flow_disabled","message":"flow is currently disabled — re-enable via enable_flow"}}`, http.StatusForbidden)
-		return
+		return core.Graph{}, false
 	}
+	return g, true
+}
 
-	// Capped, or an anonymous caller can OOM the daemon with one POST.
-	var rawBody []byte
-	if r.Body != nil {
-		limited := io.LimitReader(r.Body, w.MaxBodyBytes+1)
-		data, err := io.ReadAll(limited)
-		_ = r.Body.Close()
-		if err != nil {
-			http.Error(rw, "read body", http.StatusBadRequest)
-			return
-		}
-		if int64(len(data)) > w.MaxBodyBytes {
-			http.Error(rw, fmt.Sprintf("body exceeds %d bytes", w.MaxBodyBytes), http.StatusRequestEntityTooLarge)
-			return
-		}
-		rawBody = data
-	}
-
-	seed := buildWebhookSeed(rawBody, r)
-	seeds := map[string]core.Result{}
-	inputs := 0
+// inputSeeds seeds every enabled node of the given trigger module. inputs
+// counts all such nodes, enabled or not, so a caller can tell "no trigger step"
+// from "trigger step turned off".
+func inputSeeds(g core.Graph, module string, seed core.Result) (seeds map[string]core.Result, inputs int) {
+	seeds = map[string]core.Result{}
 	for _, n := range g.Nodes {
-		if n.Module != webhookInputModuleID {
+		if n.Module != module {
 			continue
 		}
 		inputs++
@@ -122,59 +151,95 @@ func (w *WebhookListener) handleTrigger(rw http.ResponseWriter, r *http.Request)
 		}
 		seeds[n.ID] = seed
 	}
-	// Firing anyway would start a run whose trigger step is skipped.
-	if inputs > 0 && len(seeds) == 0 {
-		http.Error(rw, `{"error":{"code":"trigger_disabled","message":"this flow's webhook step is turned off — re-enable the step to accept deliveries"}}`, http.StatusForbidden)
-		return
-	}
+	return seeds, inputs
+}
 
-	// A system principal scoped to the graph's own tenant, never the caller's.
-	principal := SystemPrincipal("dazyflow-webhook", g.Tenant, g.Workspace)
-	// Detached from the request: a sender that hangs up must not cancel the run.
+// inboundKind is the identity and wording one inbound endpoint uses when it
+// submits a run.
+type inboundKind struct {
+	principal  string // system principal name
+	loopMsg    string // trigger_loop refusal
+	refusedMsg string // owner-side refusal that could not be kept
+	keptMsg    string // owner-side refusal that was kept for the owner
+}
+
+var (
+	webhookInbound = inboundKind{
+		principal:  "dazyflow-webhook",
+		loopMsg:    "this delivery came from a run this flow started — the chain is too deep, so a flow is triggering itself",
+		refusedMsg: "this flow is not accepting deliveries right now — the owner has been told; please retry",
+		keptMsg:    "this flow is not accepting deliveries right now; the delivery has been kept and the owner has been told — do not resend",
+	}
+	requestInbound = inboundKind{
+		principal:  "dazyflow-request",
+		loopMsg:    "this call came from a run this flow started — the chain is too deep, so a flow is calling itself",
+		refusedMsg: "this flow is not accepting calls right now — the owner has been told; please retry",
+		keptMsg:    "this flow is not accepting calls right now; the call has been kept and the owner has been told — do not resend",
+	}
+)
+
+// submitInbound starts a run for an inbound endpoint under a system principal
+// scoped to the graph's own tenant, never the caller's. On failure it answers
+// the caller itself and returns ok=false: 429 for a trigger loop, 402/403/503
+// for a refusal only the owner can fix (recorded so the owner is told), and
+// 500 for anything else.
+func (w *WebhookListener) submitInbound(
+	rw http.ResponseWriter,
+	r *http.Request,
+	g core.Graph,
+	seeds map[string]core.Result,
+	kind inboundKind,
+) (string, bool) {
+	principal := SystemPrincipal(kind.principal, g.Tenant, g.Workspace)
+	// Detached from the request: a caller that hangs up must not cancel the
+	// run, nor leave the submit half-written.
 	runID, err := w.svc.SubmitGraphOpts(context.WithoutCancel(r.Context()), principal, g, SubmitOpts{
 		Seeds:        seeds,
 		TriggerDepth: inboundTriggerDepth(r),
 	})
-	if errors.Is(err, core.ErrTriggerLoop) {
-		w.logger.Printf("refused %s/%s/%s: %v", tenant, workspace, graphID, err)
-		http.Error(rw, `{"error":{"code":"trigger_loop","message":"this delivery came from a run this flow started — the chain is too deep, so a flow is triggering itself"}}`,
-			http.StatusTooManyRequests)
-		return
+	if err == nil {
+		return runID, true
 	}
-	// Distinguishes what the owner must fix from what the sender got wrong.
-	if err != nil && ownerMustFix(err) {
-		w.logger.Printf("refused %s/%s/%s: %v", tenant, workspace, graphID, err)
-		capCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 15*time.Second)
-		refusedRunID, stored := w.svc.recordRefusedDelivery(capCtx, g, seeds,
-			refusalCode(err), refusalMessage(err))
-		cancel()
-		code, status := refusalCode(err), http.StatusServiceUnavailable
-		msg := "this flow is not accepting deliveries right now — the owner has been told; please retry"
+	if errors.Is(err, core.ErrTriggerLoop) {
+		w.logger.Printf("refused %s: %v", flowRef(g), err)
+		writeJSON(rw, http.StatusTooManyRequests, map[string]any{
+			"error": map[string]string{"code": "trigger_loop", "message": kind.loopMsg},
+		})
+		return "", false
+	}
+	// Distinguishes what the owner must fix from what the caller got wrong.
+	if ownerMustFix(err) {
+		w.logger.Printf("refused %s: %v", flowRef(g), err)
+		refusedRunID, stored := w.recordRefusal(r, g, seeds, err)
+		status, msg := http.StatusServiceUnavailable, kind.refusedMsg
 		if stored {
-			msg = "this flow is not accepting deliveries right now; the delivery has been kept and the owner has been told — do not resend"
+			msg = kind.keptMsg
 			status = http.StatusPaymentRequired
 			if !errors.Is(err, core.ErrPlanLimit) {
 				status = http.StatusForbidden
 			}
 		}
-		rw.Header().Set("Content-Type", "application/json")
-		rw.WriteHeader(status)
-		_ = json.NewEncoder(rw).Encode(map[string]any{
-			"error": map[string]string{"code": code, "message": msg},
+		writeJSON(rw, status, map[string]any{
+			"error": map[string]string{"code": refusalCode(err), "message": msg},
 			"run":   refusedRunID,
 		})
-		return
+		return "", false
 	}
-	if err != nil {
-		w.logger.Printf("submit %s/%s/%s: %v", tenant, workspace, graphID, err)
-		http.Error(rw, fmt.Sprintf("submit: %v", err), http.StatusInternalServerError)
-		return
-	}
-	w.logger.Printf("fired %s/%s/%s → %s (%d webhook_input seed(s))",
-		tenant, workspace, graphID, runID, len(seeds))
-	rw.Header().Set("Content-Type", "application/json")
-	rw.WriteHeader(http.StatusAccepted)
-	_ = json.NewEncoder(rw).Encode(map[string]string{"job_id": runID})
+	w.logger.Printf("submit %s: %v", flowRef(g), err)
+	http.Error(rw, fmt.Sprintf("submit: %v", err), http.StatusInternalServerError)
+	return "", false
+}
+
+// recordRefusal keeps an owner-side refusal so the owner is told about it,
+// even if the caller has already hung up.
+func (w *WebhookListener) recordRefusal(r *http.Request, g core.Graph, seeds map[string]core.Result, err error) (string, bool) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 15*time.Second)
+	defer cancel()
+	return w.svc.recordRefusedDelivery(ctx, g, seeds, refusalCode(err), refusalMessage(err))
+}
+
+func flowRef(g core.Graph) string {
+	return g.Tenant + "/" + g.Workspace + "/" + g.ID
 }
 
 func anyKeyMatches(keys []string, provided string) bool {

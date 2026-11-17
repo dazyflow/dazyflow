@@ -451,3 +451,40 @@ func TestCall_KeylessStepIsInertUnlessPublic(t *testing.T) {
 		t.Errorf("status=%d, want 401", code)
 	}
 }
+
+// A refusal only the owner can fix is answered like /trigger answers it — kept
+// for the owner and reported with its code — not as a 500 "submit:" error.
+func TestCall_OwnerSideRefusalIsNotAServerError(t *testing.T) {
+	t.Parallel()
+	svc, wh, _, _, wsStore := startWebhookHarness(t)
+	svc.MaxGraphEdges = 1
+	savePublished(t, wsStore, core.Graph{
+		ID: "call-too-big", Tenant: "acme", Workspace: "ws1",
+		Nodes: []core.Node{
+			requestNode("in"),
+			{ID: "out", Module: "reply", Params: map[string]any{"body": "ack"}},
+			{ID: "after", Module: "delay", Params: map[string]any{"ms": 1}},
+		},
+		Edges: []core.Edge{
+			{From: "in", FromPort: "body", To: "out", ToPort: core.PassPort},
+			{From: "out", FromPort: core.PassPort, To: "after", ToPort: core.PassPort},
+		},
+	})
+	code, body, ctype := callPost(t, wh, "call-too-big", "s3cr3t", "")
+	if code != http.StatusForbidden {
+		t.Fatalf("status=%d, want 403 (refusal kept for the owner); body=%s", code, body)
+	}
+	if !strings.Contains(ctype, "json") {
+		t.Errorf("content-type=%q, want JSON", ctype)
+	}
+	var got struct {
+		Error struct{ Code, Message string } `json:"error"`
+		Run   string                         `json:"run"`
+	}
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatalf("body %q is not JSON: %v", body, err)
+	}
+	if got.Error.Code != "graph_too_large" || got.Run == "" {
+		t.Errorf("body=%s, want code graph_too_large and the kept run's ID", body)
+	}
+}
