@@ -29,8 +29,6 @@ import (
 // sentinel, so signup-invites inherit its TTL, audit and GDPR erasure. The
 // signUp gate consumes the token; these handlers only mint, list and revoke.
 
-const signupInviteTTL = 14 * 24 * time.Hour
-
 // validSignupInvite reports whether token is a pending platform
 // signup-invite addressed to email. It's the signUp gate's check — a
 // true result is the third way past a disabled-signup deployment.
@@ -101,7 +99,7 @@ func (h *authAPI) createSignupInvite(rw http.ResponseWriter, r *http.Request, p 
 		Tenant:    auth.SignupInviteTenant,
 		InvitedBy: p.Subject,
 		CreatedAt: now,
-		ExpiresAt: now.Add(signupInviteTTL),
+		ExpiresAt: now.Add(inviteTTL),
 	}
 	if err := h.Invitations.PutInvitation(r.Context(), inv); err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())

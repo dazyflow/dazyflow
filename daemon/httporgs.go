@@ -495,19 +495,19 @@ func (h *orgAPI) updateMemberRoles(rw http.ResponseWriter, r *http.Request, p co
 
 // Counts outstanding invitations as well as members, or an org could invite past
 // its seat limit and only find out on acceptance.
-func (h *orgAPI) invitationSeatExceeded(ctx context.Context, tenant, invitee string) (bool, int) {
-	limit := h.svc.effectiveLimits(ctx, tenant).MaxMembers
-	if limit <= 0 || h.Memberships == nil {
+func (q seatQuota) invitationSeatExceeded(ctx context.Context, tenant, invitee string) (bool, int) {
+	limit := q.svc.effectiveLimits(ctx, tenant).MaxMembers
+	if limit <= 0 || q.Memberships == nil {
 		return false, limit
 	}
-	held, ok := h.seatHolders(ctx, tenant)
+	held, ok := q.seatHolders(ctx, tenant)
 	if !ok {
 		return false, limit // fail open
 	}
-	if h.Invitations != nil {
+	if q.Invitations != nil {
 		// Cannot see the outstanding promises, so fail closed.
 		now := time.Now().UTC()
-		if invs, err := h.Invitations.ListByTenant(ctx, tenant); err == nil {
+		if invs, err := q.Invitations.ListByTenant(ctx, tenant); err == nil {
 			for _, inv := range invs {
 				if inv.IsPending(now) {
 					held[normalizeSeatEmail(inv.Email)] = struct{}{}
@@ -541,17 +541,6 @@ func (h *orgAPI) createInvitation(rw http.ResponseWriter, r *http.Request, p cor
 	if !ok {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(body.Email))
-	if err := validSignupEmail(email); err != nil {
-		writeJSONError(rw, http.StatusBadRequest, err.Error())
-		return
-	}
-	// Refuse at the gate, not on acceptance.
-	if exceeded, limit := h.invitationSeatExceeded(r.Context(), p.Tenant, email); exceeded {
-		writeJSONError(rw, http.StatusPaymentRequired,
-			fmt.Sprintf("your plan includes %d members — upgrade to add more", limit))
-		return
-	}
 	if len(body.Roles) > 0 {
 		roles, err := resolveCatalogRoles(body.Roles)
 		if err != nil {
@@ -564,70 +553,141 @@ func (h *orgAPI) createInvitation(rw http.ResponseWriter, r *http.Request, p cor
 			return
 		}
 	}
-	if len(body.Roles) == 0 {
-		body.Roles = []core.Role{core.TeamRoleEditor()}
+	inv, err := h.mintOrgInvitation(r.Context(), p.Subject, p.Tenant, body.Email, body.Workspace, body.Roles)
+	if err != nil {
+		writeInviteError(rw, err)
+		return
 	}
-	if body.Workspace == "" {
-		body.Workspace = "main"
+	h.audit(r.Context(), p, "invitation.create", inv.Token, "email="+inv.Email)
+	acceptURL := h.inviteURL(inv.Token)
+	emailSent := false
+	if mayEmailInvite {
+		emailSent = h.sendOrgInviteEmail(r.Context(), h.logger, inv, acceptURL)
+	}
+	writeJSON(rw, http.StatusCreated, orgInvitationResponse(inv, acceptURL, emailSent))
+}
+
+// inviteTTL is how long an org invitation (and a platform signup-invite)
+// stays redeemable.
+const inviteTTL = 14 * 24 * time.Hour
+
+// inviteError carries the HTTP status a failed mintOrgInvitation maps to.
+type inviteError struct {
+	status int
+	msg    string
+}
+
+func (e *inviteError) Error() string { return e.msg }
+
+// writeInviteError answers a mintOrgInvitation failure: its own status for an
+// inviteError, 500 for a store or token error.
+func writeInviteError(rw http.ResponseWriter, err error) {
+	var ie *inviteError
+	if errors.As(err, &ie) {
+		writeJSONError(rw, ie.status, ie.msg)
+		return
+	}
+	writeJSONError(rw, http.StatusInternalServerError, err.Error())
+}
+
+// mintOrgInvitation is the one path that creates an invitation into an org:
+// it validates the address, refuses past the tenant's seat limit, applies the
+// editor-role and "main"-workspace defaults, and stores the invitation.
+// roles must already be resolved against the catalog (and capped to the
+// caller where that applies). Auditing and emailing stay with the caller.
+func (q seatQuota) mintOrgInvitation(ctx context.Context, inviter, tenant, email, ws string, roles []core.Role) (auth.Invitation, error) {
+	if q.Invitations == nil {
+		return auth.Invitation{}, &inviteError{http.StatusNotImplemented, "invitations not configured"}
+	}
+	if tenant == "" {
+		return auth.Invitation{}, &inviteError{http.StatusBadRequest, "tenant required"}
+	}
+	email = strings.ToLower(strings.TrimSpace(email))
+	if err := validSignupEmail(email); err != nil {
+		return auth.Invitation{}, &inviteError{http.StatusBadRequest, err.Error()}
+	}
+	// Refuse at the gate, not on acceptance.
+	if exceeded, limit := q.invitationSeatExceeded(ctx, tenant, email); exceeded {
+		return auth.Invitation{}, &inviteError{http.StatusPaymentRequired,
+			fmt.Sprintf("your plan includes %d members — upgrade to add more", limit)}
+	}
+	if len(roles) == 0 {
+		roles = []core.Role{core.TeamRoleEditor()}
+	}
+	if ws == "" {
+		ws = "main"
 	}
 	token, err := auth.MintInvitationToken()
 	if err != nil {
-		writeJSONError(rw, http.StatusInternalServerError, err.Error())
-		return
+		return auth.Invitation{}, err
 	}
-	const inviteTTL = 14 * 24 * time.Hour
 	now := time.Now().UTC()
 	inv := auth.Invitation{
 		Token:     token,
 		Email:     email,
-		Tenant:    p.Tenant,
-		Workspace: body.Workspace,
-		Roles:     body.Roles,
-		InvitedBy: p.Subject,
+		Tenant:    tenant,
+		Workspace: ws,
+		Roles:     roles,
+		InvitedBy: inviter,
 		CreatedAt: now,
 		ExpiresAt: now.Add(inviteTTL),
 	}
-	if err := h.Invitations.PutInvitation(r.Context(), inv); err != nil {
-		writeJSONError(rw, http.StatusInternalServerError, err.Error())
-		return
+	if err := q.Invitations.PutInvitation(ctx, inv); err != nil {
+		return auth.Invitation{}, err
 	}
-	h.audit(r.Context(), p, "invitation.create", token, "email="+email)
-	emailSent := false
-	if acceptURL := h.inviteURL(token); mayEmailInvite && h.svc.Mailer != nil && strings.HasPrefix(acceptURL, "http") {
-		lang := h.inviteLang(r.Context(), email, p.Subject)
-		m := maillang.For(lang)
-		expFmt := datenames.FormatDate(inv.ExpiresAt, lang)
-		content := emailtheme.Content{
-			Subject:    m.OrgInviteSubject,
-			Preheader:  fmt.Sprintf(m.OrgInvitePreheader, p.Subject),
-			Eyebrow:    m.OrgInviteEyebrow,
-			Heading:    m.OrgInviteHeading,
-			Intro:      []string{fmt.Sprintf(m.OrgInviteIntro, p.Subject)},
-			Button:     &emailtheme.Button{Label: m.OrgInviteButton, URL: acceptURL},
-			Outro:      []string{fmt.Sprintf(m.OrgInviteExpiry, expFmt)},
-			FooterNote: m.OrgInviteFooter,
-			LogoURL:    emailLogoURL(h.svc.PublicBaseURL),
-		}
-		if err := h.svc.Mailer.SendThemed(r.Context(), email, emailtheme.PlainText(content), content); err != nil {
-			h.logger.Printf("invite email to %s: %v", email, err)
-		} else {
-			emailSent = true
-		}
-	}
-	writeJSON(rw, http.StatusCreated, map[string]any{
-		"token":      token,
-		"email":      email,
+	return inv, nil
+}
+
+func orgInvitationResponse(inv auth.Invitation, acceptURL string, emailSent bool) map[string]any {
+	return map[string]any{
+		"token":      inv.Token,
+		"email":      inv.Email,
 		"tenant":     inv.Tenant,
 		"workspace":  inv.Workspace,
 		"roles":      inv.Roles,
 		"expires_at": inv.ExpiresAt,
-		"accept_url": h.inviteURL(token),
+		"accept_url": acceptURL,
 		"email_sent": emailSent,
-	})
+	}
 }
 
-func (h *orgAPI) inviteURL(token string) string {
-	base := strings.TrimRight(h.svc.PublicBaseURL, "/")
+// sendOrgInviteEmail mails inv's accept link to the invitee, in their language
+// (or the inviter's). It reports whether a message went out; a relative
+// acceptURL (no public base URL configured) or no mailer means none does.
+func (l langPicker) sendOrgInviteEmail(ctx context.Context, logger *log.Logger, inv auth.Invitation, acceptURL string) bool {
+	if l.svc == nil || l.svc.Mailer == nil || !strings.HasPrefix(acceptURL, "http") {
+		return false
+	}
+	lang := l.inviteLang(ctx, inv.Email, inv.InvitedBy)
+	m := maillang.For(lang)
+	expFmt := datenames.FormatDate(inv.ExpiresAt, lang)
+	content := emailtheme.Content{
+		Subject:    m.OrgInviteSubject,
+		Preheader:  fmt.Sprintf(m.OrgInvitePreheader, inv.InvitedBy),
+		Eyebrow:    m.OrgInviteEyebrow,
+		Heading:    m.OrgInviteHeading,
+		Intro:      []string{fmt.Sprintf(m.OrgInviteIntro, inv.InvitedBy)},
+		Button:     &emailtheme.Button{Label: m.OrgInviteButton, URL: acceptURL},
+		Outro:      []string{fmt.Sprintf(m.OrgInviteExpiry, expFmt)},
+		FooterNote: m.OrgInviteFooter,
+		LogoURL:    emailLogoURL(l.svc.PublicBaseURL),
+	}
+	if err := l.svc.Mailer.SendThemed(ctx, inv.Email, emailtheme.PlainText(content), content); err != nil {
+		if logger != nil {
+			logger.Printf("invite email to %s: %v", inv.Email, err)
+		}
+		return false
+	}
+	return true
+}
+
+func (h *orgAPI) inviteURL(token string) string { return orgInviteURL(h.svc, token) }
+
+func orgInviteURL(svc *Service, token string) string {
+	base := ""
+	if svc != nil {
+		base = strings.TrimRight(svc.PublicBaseURL, "/")
+	}
 	if base == "" {
 		return "/invite/" + token
 	}
@@ -943,6 +1003,7 @@ type seatQuota struct {
 	svc         *Service
 	Users       auth.UserStore
 	Memberships auth.MembershipStore
+	Invitations auth.InvitationStore
 }
 
 func (q seatQuota) ownerEmail(ctx context.Context, tenant string) string {
@@ -1013,5 +1074,5 @@ func (q seatQuota) seatMembership(ctx context.Context, m auth.Membership) (bool,
 }
 
 func (h *HTTPGateway) seats() seatQuota {
-	return seatQuota{svc: h.svc, Users: h.Users, Memberships: h.Memberships}
+	return seatQuota{svc: h.svc, Users: h.Users, Memberships: h.Memberships, Invitations: h.Invitations}
 }

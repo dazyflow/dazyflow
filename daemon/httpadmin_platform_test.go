@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dazyflow/dazyflow/auth"
 	"github.com/dazyflow/dazyflow/core"
@@ -616,5 +617,31 @@ func TestPlatformInviteMember(t *testing.T) {
 	}
 	if rw := platformRaw(t, h, "POST", "/api/v1/admin/platform/orgs/acme/invite", []byte("{")); rw.Code != http.StatusBadRequest {
 		t.Fatalf("bad json = %d, want 400", rw.Code)
+	}
+}
+
+// The platform route must honour the same seat limit as the org route: the
+// pending invite above already holds the only seat.
+func TestPlatformInviteMember_SeatLimit(t *testing.T) {
+	t.Parallel()
+	h, _, _, _, _, _ := platformHarness(t)
+	h.svc.FreeMaxMembers = 1
+
+	rw := h.platformDo(t, "POST", "/api/v1/admin/platform/orgs/acme/invite", map[string]any{"email": "first@example.com"})
+	if rw.Code != http.StatusCreated {
+		t.Fatalf("first invite = %d: %s", rw.Code, rw.Body.String())
+	}
+	var resp struct {
+		AcceptURL string    `json:"accept_url"`
+		ExpiresAt time.Time `json:"expires_at"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &resp); err != nil || resp.AcceptURL == "" {
+		t.Fatalf("response missing accept_url: %s", rw.Body.String())
+	}
+	if d := time.Until(resp.ExpiresAt); d < inviteTTL-time.Minute || d > inviteTTL {
+		t.Fatalf("expires_at %v not ~inviteTTL from now", resp.ExpiresAt)
+	}
+	if rw := h.platformDo(t, "POST", "/api/v1/admin/platform/orgs/acme/invite", map[string]any{"email": "second@example.com"}); rw.Code != http.StatusPaymentRequired {
+		t.Fatalf("over-limit invite = %d, want 402: %s", rw.Code, rw.Body.String())
 	}
 }

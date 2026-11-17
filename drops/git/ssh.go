@@ -227,11 +227,17 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 // at least one valid entry, and the bundled defaults always provide one, so
 // without this check a typo would silently drop the user's host key and the
 // clone would fail later with a confusing "unknown host" error.
+//
+// ssh.ParseKnownHosts itself silently skips a line with no whitespace, so that
+// case is rejected explicitly.
 func validateKnownHosts(s string) error {
 	for i, line := range strings.Split(s, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
+		}
+		if !strings.ContainsAny(line, " \t") {
+			return fmt.Errorf("credential known_hosts line %d: invalid entry", i+1)
 		}
 		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
 			return fmt.Errorf("credential known_hosts line %d: %w", i+1, err)
