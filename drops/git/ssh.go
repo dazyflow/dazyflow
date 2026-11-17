@@ -15,6 +15,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/skeema/knownhosts"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
@@ -201,6 +202,9 @@ func authForURL(ctx context.Context, job core.Job, rawURL string) (gogittranspor
 func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	combined := bundledKnownHosts
 	if s := strings.TrimSpace(userKnownHosts); s != "" {
+		if err := validateKnownHosts(s); err != nil {
+			return nil, err
+		}
 		combined += s + "\n"
 	}
 	f, err := os.CreateTemp("", "dazyflow-known-hosts-*")
@@ -216,4 +220,21 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 		return nil, err
 	}
 	return gitssh.NewKnownHostsDb(f.Name())
+}
+
+// validateKnownHosts rejects a known_hosts with any line that does not parse.
+// The parser skips bad lines and only fails a file with no valid line at all,
+// so once merged with the bundled defaults a typo would vanish silently and
+// the host the user meant to pin would fail later as "unknown host".
+func validateKnownHosts(s string) error {
+	for i, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line + "\n")); err != nil {
+			return fmt.Errorf("known_hosts line %d is not a valid entry", i+1)
+		}
+	}
+	return nil
 }
