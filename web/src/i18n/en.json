@@ -1709,6 +1709,8 @@
     "minimizeTitle": "Fold this step down to its name",
     "maximize": "Maximize {{name}}",
     "maximizeTitle": "Open this step back up",
+    "cardLabel": "{{name}} ({{module}}) flow step",
+    "cardLabelDisabled": "{{name}} ({{module}}), disabled, flow step",
     "collapsedLabel": "{{name}} ({{module}}) flow step, minimized",
     "locked": "Locked",
     "lockedHint": "This step is locked: its fields can't be edited and the card won't move. Unlock it in the inspector.",

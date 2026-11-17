@@ -5,7 +5,9 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -233,7 +235,13 @@ func validateKnownHosts(s string) error {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
+		// ParseKnownHosts skips a line with no field separator and reports
+		// io.EOF, which would read as a bare "EOF"; name the problem instead.
+		_, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line))
+		if errors.Is(err, io.EOF) {
+			err = errors.New("not a known_hosts entry")
+		}
+		if err != nil {
 			return fmt.Errorf("credential known_hosts line %d: %w", i+1, err)
 		}
 	}

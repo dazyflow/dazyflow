@@ -185,3 +185,45 @@ export function portColor(mime: string[] | undefined): string {
   if (m.startsWith("application/")) return "#9a9a9a"; // gray  — generic binary/file
   return "var(--border-strong)";
 }
+
+// The state classes every face of a step shares, so a state added to one face
+// shows on all of them. `base` is the face's own classes: "dz-node" for the
+// card, plus dz-node-collapsed or dz-op for the folded card and operator chip.
+export function nodeClassName(d: DazyNodeData, selected: boolean, base: string): string {
+  return (
+    base +
+    (selected ? " selected" : "") +
+    (d.status ? " status-" + d.status : "") +
+    (d.manifest?.category === "trigger" ? " dz-node-trigger" : "") +
+    (d.loopOwned ? " dz-loop-owned" : "") +
+    (d.disabled ? " dz-node-off" : "") +
+    (!d.disabled && d.offByCascade ? " dz-node-off-cascade" : "") +
+    (d.locked ? " dz-node-locked" : "") +
+    (d.lintMessage ? " lint-warn" : "") +
+    (d.configErrors?.length ? " config-err" : "") +
+    (d.setupNeeded ? " needs-setup" : "") +
+    (d.paused ? " paused" : "") +
+    (d.enterDelay != null ? " dz-enter" : "") +
+    (d.assistantChanged ? " dz-assistant-changed" : "")
+  );
+}
+
+// CSS custom properties for a step's root element. The operator chip always
+// carries its colour; a card only does when it is a trigger.
+export function nodeStyle(d: DazyNodeData, color: string, operator = false): Record<string, string> {
+  const style: Record<string, string> = {};
+  if (operator) style["--op-color"] = color;
+  else if (d.manifest?.category === "trigger") style["--node-accent"] = color;
+  if (d.enterDelay != null) style["--enter-delay"] = `${d.enterDelay}s`;
+  return style;
+}
+
+// Config errors that belong to an input port, keyed by port id, so the port
+// can be drawn as missing with the error as its tooltip.
+export function missingByPort(d: DazyNodeData, inputPortIds: Set<string>): Map<string, string> {
+  return new Map(
+    (d.configErrors ?? [])
+      .filter((e) => inputPortIds.has(e.key))
+      .map((e) => [e.key, e.message] as [string, string]),
+  );
+}
