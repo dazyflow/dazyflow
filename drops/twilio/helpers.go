@@ -12,7 +12,6 @@ package twilio
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 
 	"github.com/dazyflow/dazyflow/core"
@@ -55,7 +54,7 @@ func twilioDo(ctx context.Context, job core.Job, method, url, form string) (int,
 		b = []byte(form)
 	}
 	headers := map[string]string{
-		"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(sid+":"+token)),
+		"Authorization": hfnet.BasicAuth(sid, token),
 	}
 	if form != "" {
 		headers["Content-Type"] = "application/x-www-form-urlencoded"

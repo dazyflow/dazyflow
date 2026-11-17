@@ -6,6 +6,7 @@ package net
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -85,4 +86,28 @@ func Do(ctx context.Context, method, url string, headers map[string]string, body
 		return resp.StatusCode, nil, resp.Header, fmt.Errorf("response exceeds %d bytes", maxBytes)
 	}
 	return resp.StatusCode, raw, resp.Header, nil
+}
+
+// DoBearer is Do with `Authorization: Bearer <token>` — the shape most
+// connectors share. contentType is sent only when there is a body, extra adds
+// vendor headers (Accept, API version, idempotency key…), and timeoutMS <= 0
+// falls back to the connectors' historical 15s default.
+func DoBearer(ctx context.Context, method, url, token, contentType string, extra map[string]string, body []byte, timeoutMS, maxBytes int) (int, []byte, http.Header, error) {
+	if timeoutMS <= 0 {
+		timeoutMS = 15000
+	}
+	h := make(map[string]string, len(extra)+2)
+	for k, v := range extra {
+		h[k] = v
+	}
+	h["Authorization"] = "Bearer " + token
+	if body != nil && contentType != "" {
+		h["Content-Type"] = contentType
+	}
+	return Do(ctx, method, url, h, body, timeoutMS, maxBytes)
+}
+
+// BasicAuth returns the HTTP Basic `Authorization` header value for user:pass.
+func BasicAuth(user, pass string) string {
+	return "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+pass))
 }
