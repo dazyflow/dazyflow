@@ -91,10 +91,7 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 	}
 	raw, _ := json.Marshal(body)
 
-	base := strings.TrimRight(req.BaseURL, "/")
-	if base == "" {
-		base = defaultBase
-	}
+	base := llmtask.BaseOr(req.BaseURL, defaultBase)
 	status, respBody, jerr := llmtask.PostJSON(ctx, base+"/v1/chat/completions", map[string]string{
 		"content-type": "application/json", "authorization": "Bearer " + apiKey,
 	}, raw, req.TimeoutMS)
