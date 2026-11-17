@@ -13,3 +13,13 @@ func TestMain(m *testing.M) {
 	SetEgressRateLimit(0, 0, 0)
 	os.Exit(m.Run())
 }
+
+// setPrivateEgress sets the package-global private-egress opt-in for the
+// duration of t and restores the previous value afterwards, so tests don't
+// leak state into whichever test runs next.
+func setPrivateEgress(t *testing.T, v bool) {
+	t.Helper()
+	prev := PrivateEgressAllowed()
+	SetAllowPrivateEgress(v)
+	t.Cleanup(func() { SetAllowPrivateEgress(prev) })
+}

@@ -47,8 +47,7 @@ func TestIsSelfDirected(t *testing.T) {
 // what breaks a flow that calls itself — and must never be sent anywhere
 // else, since it describes our run topology.
 func TestHTTPRequest_StampsTriggerDepthOnlyForSelf(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 
 	var got http.Header
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
@@ -139,8 +138,7 @@ func TestSetSelfOrigins_EveryConfiguredOrigin(t *testing.T) {
 // the HTTP step could no longer run came straight back through the drop
 // whose whole purpose is POSTing to a URL.
 func TestWebhookSend_StampsTriggerDepthOnlyForSelf(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 
 	var got http.Header
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {

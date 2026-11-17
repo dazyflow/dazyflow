@@ -21,8 +21,7 @@ func checkJob(url string, extra map[string]any) core.Job {
 }
 
 func TestSiteCheck_FiresOnTransitionsOnly(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 	memWatchStore(t)
 
 	code := 200
@@ -72,8 +71,7 @@ func TestSiteCheck_FiresOnTransitionsOnly(t *testing.T) {
 }
 
 func TestSiteCheck_FirstCheckDownFires(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 	memWatchStore(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -88,8 +86,7 @@ func TestSiteCheck_FirstCheckDownFires(t *testing.T) {
 }
 
 func TestSiteCheck_ExpectText(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 	memWatchStore(t)
 
 	page := "ok"
@@ -114,8 +111,7 @@ func TestSiteCheck_ExpectText(t *testing.T) {
 // An unreachable host is a down report, not a failed run — otherwise the
 // alert step downstream never gets to run.
 func TestSiteCheck_UnreachableIsAReport(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 	memWatchStore(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
