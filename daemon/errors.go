@@ -117,6 +117,19 @@ func requireOrgAdmin(rw http.ResponseWriter, p core.Principal) bool {
 	return true
 }
 
+// platformOnly gates a platform-operator route. It is the one place the
+// platform:admin check lives: every such route is wrapped with it in
+// httproutes.go, so the handlers themselves don't re-check.
+func platformOnly(next authedHandler) authedHandler {
+	return func(rw http.ResponseWriter, r *http.Request, p core.Principal) {
+		if !isPlatformAdmin(p) {
+			writeAPIError(rw, http.StatusForbidden, "forbidden", "platform:admin required")
+			return
+		}
+		next(rw, r, p)
+	}
+}
+
 // jsonErrors rewrites the ServeMux's plain-text 404/405 as the same JSON
 // envelope as every other error. It decides at WriteHeader time and never
 // buffers, so SSE streams are untouched.
