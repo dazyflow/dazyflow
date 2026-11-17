@@ -1,14 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Angels' Ware
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useState } from "react";
-import { Copy } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../ui/Button";
 import type { IssuedAPIKey } from "../../types";
-import { ICON } from "../../icons";
-import { FEEDBACK } from "../../lib/timing";
 import { Modal } from "../ui/Modal";
+import { CopyButton } from "../ui/CopyButton";
 
 // RevealSecretModal renders the one-time view of a freshly-minted API
 // key's secret. Once closed, the secret is gone — Dazyflow keeps only
@@ -21,23 +18,9 @@ export function RevealSecretModal({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(issued.secret);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), FEEDBACK.copied);
-    } catch {
-      /* clipboard may be blocked; user can select + copy manually */
-    }
-  };
 
   return (
-    <Modal
-      title={t("revealSecret.title")}
-      onClose={onClose}
-      size="md"
-    >
+    <Modal title={t("revealSecret.title")} onClose={onClose} size="md">
       <div className="modal-head">
         <h2>{t("revealSecret.title")}</h2>
       </div>
@@ -46,10 +29,11 @@ export function RevealSecretModal({
           {t("revealSecret.warning")}
         </p>
         <div className="secret-reveal">{issued.secret}</div>
-        <Button onClick={copy} style={{ marginTop: "var(--space-3)" }}>
-          <Copy size={ICON.xs} />
-          {copied ? t("common.copied") : t("revealSecret.copy")}
-        </Button>
+        <CopyButton
+          text={issued.secret}
+          label={t("revealSecret.copy")}
+          style={{ marginTop: "var(--space-3)" }}
+        />
         <div className="sf-field" style={{ marginTop: "var(--space-4)" }}>
           <div className="label-row">
             <label>{t("revealSecret.keyIdLabel")}</label>

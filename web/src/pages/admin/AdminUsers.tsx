@@ -4,8 +4,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Check,
-  Copy,
   Mail,
   Plus,
   ShieldCheck,
@@ -28,7 +26,8 @@ import { formatDate } from "../../lib/datetime";
 import { explainApiError } from "../../lib/explainApiError";
 import { ErrorNotice } from "../../components/ui/ErrorNotice";
 import { ICON } from "../../icons";
-import { FEEDBACK } from "../../lib/timing";
+import { absoluteURL } from "../../lib/absoluteURL";
+import { CopyButton } from "../../components/ui/CopyButton";
 import { Loading } from "../../components/ui/Loading";
 import { Notice } from "../../components/ui/Notice";
 import { EmptyState } from "../../components/ui/EmptyState";
@@ -373,23 +372,11 @@ function InvitationCard({
 }) {
   const { t } = useTranslation();
   const { token } = useAuth();
-  const [copied, setCopied] = useState(false);
   const [revoking, setRevoking] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const copy = async () => {
-    const link = absoluteInviteURL(inv.accept_url);
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), FEEDBACK.copied);
-    } catch {
-      // Clipboard API can fail in non-secure contexts — fall back to
-      // selecting the link text would require a portal; just leave
-      // the visible URL for manual copy.
-    }
-  };
+
   const revoke = async () => {
     if (!token) return;
     setRevoking(true);
@@ -437,11 +424,12 @@ function InvitationCard({
         </div>
         {inv.pending && (
           <div className="invite-link-row">
-            <code className="invite-link">{absoluteInviteURL(inv.accept_url)}</code>
-            <Button onClick={copy} title={t("admin.users.copyLink")}>
-              {copied ? <Check size={ICON.xs} /> : <Copy size={ICON.xs} />}
-              {copied ? t("common.copied") : t("common.copyLink")}
-            </Button>
+            <code className="invite-link">{absoluteURL(inv.accept_url)}</code>
+            <CopyButton
+              text={absoluteURL(inv.accept_url)}
+              label={t("common.copyLink")}
+              title={t("admin.users.copyLink")}
+            />
           </div>
         )}
       </div>
@@ -483,17 +471,7 @@ function InviteIssuedCard({
   onDismiss: () => void;
 }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const link = absoluteInviteURL(inv.accept_url);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), FEEDBACK.copied);
-    } catch {
-      /* manual copy fallback */
-    }
-  };
+  const link = absoluteURL(inv.accept_url);
   return (
     <div className="card invite-issued-card">
       <div className="invite-issued-head">
@@ -510,10 +488,11 @@ function InviteIssuedCard({
       </div>
       <div className="invite-link-row">
         <code className="invite-link">{link}</code>
-        <Button onClick={copy} variant="primary">
-          {copied ? <Check size={ICON.xs} /> : <Copy size={ICON.xs} />}
-          {copied ? t("common.copied") : t("admin.users.copyLink")}
-        </Button>
+        <CopyButton
+          text={link}
+          variant="primary"
+          label={t("admin.users.copyLink")}
+        />
       </div>
     </div>
   );
@@ -680,14 +659,6 @@ function teamRoleOf(roles: Role[]): TeamRoleName | null {
   if (roles.length !== 1) return null;
   const n = roles[0].name;
   return n === "viewer" || n === "editor" || n === "admin" ? n : null;
-}
-
-function absoluteInviteURL(acceptURL: string): string {
-  if (/^https?:\/\//i.test(acceptURL)) return acceptURL;
-  if (typeof window !== "undefined") {
-    return window.location.origin + acceptURL;
-  }
-  return acceptURL;
 }
 
 // shortDate renders an ISO timestamp as the locale's short date form.

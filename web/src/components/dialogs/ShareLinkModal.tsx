@@ -3,12 +3,12 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, ExternalLink, RefreshCw } from "lucide-react";
+import { ExternalLink, RefreshCw } from "lucide-react";
 import { isErrorCode } from "../../api";
 import { explainApiError } from "../../lib/explainApiError";
-import { FEEDBACK } from "../../lib/timing";
 import { useAuth } from "../../auth";
 import { Button } from "../ui/Button";
+import { CopyButton } from "../ui/CopyButton";
 import { Modal } from "../ui/Modal";
 import { Loading } from "../ui/Loading";
 import { ICON } from "../../icons";
@@ -54,7 +54,6 @@ export function useShareLink<L extends { token: string }>({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const tenant = activeTenant || undefined;
   const workspace = activeWorkspace || undefined;
@@ -125,18 +124,7 @@ export function useShareLink<L extends { token: string }>({
 
   const url = link ? `${window.location.origin}${basePath}/${link.token}` : null;
 
-  const copy = useCallback(async () => {
-    if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), FEEDBACK.copied);
-    } catch {
-      /* clipboard may be blocked; user can select + copy manually */
-    }
-  }, [url]);
-
-  return { link, url, loading, busy, error, copied, create, disable, copy };
+  return { link, url, loading, busy, error, create, disable };
 }
 
 export function ShareLinkModal<L extends { token: string }>({
@@ -166,7 +154,7 @@ export function ShareLinkModal<L extends { token: string }>({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const { url, loading, busy, error, copied, create, disable, copy } =
+  const { url, loading, busy, error, create, disable } =
     useShareLink(hook);
 
   return (
@@ -190,10 +178,7 @@ export function ShareLinkModal<L extends { token: string }>({
                 marginTop: "var(--space-3)",
               }}
             >
-              <Button onClick={copy}>
-                <Copy size={ICON.xs} />
-                {copied ? t("common.copied") : t("common.copyLink")}
-              </Button>
+              <CopyButton text={url} label={t("common.copyLink")} />
               <Button onClick={() => window.open(url, "_blank", "noreferrer")}>
                 {openIcon}
                 {openLabel}

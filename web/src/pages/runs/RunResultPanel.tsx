@@ -8,7 +8,7 @@ import { Button } from "../../components/ui/Button";
 import { formatCellDisplay, rowsToCSV } from "../../lib/cells";
 import { downloadText } from "../../lib/download";
 import { ICON } from "../../icons";
-import { FEEDBACK } from "../../lib/timing";
+import { useCopyToClipboard } from "../../components/ui/useCopyToClipboard";
 import {
   RESULT_ROW_LIMIT,
   RESULT_TEXT_MAX,
@@ -27,7 +27,7 @@ export function RunResultPanel({
   filenameStem: string;
 }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyToClipboard();
   const [expanded, setExpanded] = useState(false);
 
   if (view.kind === "none") return null;
@@ -43,12 +43,6 @@ export function RunResultPanel({
         ? "application/json"
         : "text/plain;charset=utf-8";
 
-  const copy = () => {
-    void navigator.clipboard?.writeText(asText);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), FEEDBACK.copied);
-  };
-
   const shownRows =
     view.kind === "rows" ? view.rows.slice(0, RESULT_ROW_LIMIT) : [];
   const foldText = view.kind === "text" && view.text.length > RESULT_TEXT_MAX;
@@ -63,7 +57,7 @@ export function RunResultPanel({
             <Button
               variant="ghost"
               size="sm"
-              onClick={copy}
+              onClick={() => void copy(asText)}
               title={copied ? t("common.copied") : t("runDetail.copyResult")}
             >
               {copied ? <Check size={ICON.sm} /> : <Copy size={ICON.sm} />}

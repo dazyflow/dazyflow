@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState, type ReactNode } from "react";
-import { Check, Copy, Terminal } from "lucide-react";
+import { Terminal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth";
 import { api } from "../../api";
@@ -11,8 +11,8 @@ import { Button } from "../ui/Button";
 import type { IssuedAPIKey } from "../../types";
 import { ErrorNotice } from "../ui/ErrorNotice";
 import { ICON } from "../../icons";
-import { FEEDBACK } from "../../lib/timing";
 import { Modal } from "../ui/Modal";
+import { CopyButton } from "../ui/CopyButton";
 
 
 type Stage = "confirm" | "reveal";
@@ -179,7 +179,7 @@ function ConfirmStage({
             onFocus={(e) => e.currentTarget.select()}
             style={{ fontFamily: "var(--font-mono)" }}
           />
-          <CopyButton text={`${window.location.origin}/mcp`} labelKey="connectMcp.copyUrl" />
+          <McpCopyButton text={`${window.location.origin}/mcp`} labelKey="connectMcp.copyUrl" />
         </div>
         <h3>{t("connectMcp.localTitle")}</h3>
         <p className="settings-help">
@@ -295,7 +295,7 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
             <pre className="secret-reveal" style={{ whiteSpace: "pre", overflowX: "auto" }}>
               {json}
             </pre>
-            <CopyButton text={json} labelKey="connectMcp.copySnippet" />
+            <McpCopyButton text={json} labelKey="connectMcp.copySnippet" />
           </div>
           {cli && (
             <div className="sf-field">
@@ -308,7 +308,7 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
               <pre className="secret-reveal" style={{ whiteSpace: "pre", overflowX: "auto" }}>
                 {cli}
               </pre>
-              <CopyButton text={cli} labelKey="connectMcp.copyCli" />
+              <McpCopyButton text={cli} labelKey="connectMcp.copyCli" />
             </div>
           )}
         </div>
@@ -326,7 +326,7 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
               onFocus={(e) => e.currentTarget.select()}
               style={{ fontFamily: "var(--font-mono)" }}
             />
-            <CopyButton text={issued.secret} labelKey="connectMcp.copyToken" />
+            <McpCopyButton text={issued.secret} labelKey="connectMcp.copyToken" />
           </div>
         </details>
       </div>
@@ -339,27 +339,14 @@ function RevealStage({ issued, onDone }: { issued: IssuedAPIKey; onDone: () => v
   );
 }
 
-function CopyButton({ text, labelKey }: { text: string; labelKey: string }) {
+function McpCopyButton({ text, labelKey }: { text: string; labelKey: string }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), FEEDBACK.copied);
-    } catch {
-      /* clipboard blocked — input/pre is selectable for manual copy */
-    }
-  };
   return (
-    <Button type="button" onClick={copy} style={{ marginTop: "var(--space-2)" }}>
-      {copied ? (
-        <Check size={ICON.xs} />
-      ) : (
-        <Copy size={ICON.xs} />
-      )}
-      {copied ? t("common.copied") : t(labelKey)}
-    </Button>
+    <CopyButton
+      text={text}
+      label={t(labelKey)}
+      style={{ marginTop: "var(--space-2)" }}
+    />
   );
 }
 
