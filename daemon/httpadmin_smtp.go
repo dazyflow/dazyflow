@@ -13,8 +13,7 @@ import (
 )
 
 func (h *orgAPI) smtpTest(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	if err := requirePlatformAdmin(p); err != nil {
-		adminError(rw, err)
+	if !requirePlatformAdmin(rw, p) {
 		return
 	}
 	if h.svc.Mailer == nil {

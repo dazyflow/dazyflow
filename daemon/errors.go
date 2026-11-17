@@ -117,6 +117,15 @@ func requireOrgAdmin(rw http.ResponseWriter, p core.Principal) bool {
 	return true
 }
 
+// Instance-wide settings, so tenant admin is not enough.
+func requirePlatformAdmin(rw http.ResponseWriter, p core.Principal) bool {
+	if !isPlatformAdmin(p) {
+		writeAPIError(rw, http.StatusForbidden, "forbidden", "platform:admin required")
+		return false
+	}
+	return true
+}
+
 // jsonErrors rewrites the ServeMux's plain-text 404/405 as the same JSON
 // envelope as every other error. It decides at WriteHeader time and never
 // buffers, so SSE streams are untouched.

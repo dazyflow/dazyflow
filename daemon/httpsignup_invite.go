@@ -66,8 +66,7 @@ func (h *authAPI) createSignupInvite(rw http.ResponseWriter, r *http.Request, p 
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if err := requirePlatformAdmin(p); err != nil {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
+	if !requirePlatformAdmin(rw, p) {
 		return
 	}
 	// Anti-abuse: on verification-active deployments the inviter's own
@@ -149,8 +148,7 @@ func (h *authAPI) listSignupInvites(rw http.ResponseWriter, r *http.Request, p c
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if err := requirePlatformAdmin(p); err != nil {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
+	if !requirePlatformAdmin(rw, p) {
 		return
 	}
 	rows, err := h.Invitations.ListByTenant(r.Context(), auth.SignupInviteTenant)
@@ -195,8 +193,7 @@ func (h *authAPI) revokeSignupInvite(rw http.ResponseWriter, r *http.Request, p 
 		writeJSONError(rw, http.StatusNotImplemented, "invitations not configured")
 		return
 	}
-	if err := requirePlatformAdmin(p); err != nil {
-		writeJSONError(rw, http.StatusForbidden, "platform:admin required")
+	if !requirePlatformAdmin(rw, p) {
 		return
 	}
 	token := r.PathValue("token")
