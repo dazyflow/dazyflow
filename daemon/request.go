@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,42 +37,8 @@ func (w *WebhookListener) handleCall(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/call/"), "/")
-	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
-		http.Error(rw, "expected /call/<tenant>/<workspace>/<graph-id>", http.StatusBadRequest)
-		return
-	}
-	tenant, workspace, graphID := parts[0], parts[1], parts[2]
-
-	// One generic 401 for every pre-authentication failure, so an
-	// unauthenticated caller can't enumerate which flows exist. Same stance
-	// as handleTrigger.
-	const unauthorized = "unknown endpoint or invalid secret"
-
-	store, err := w.svc.Workspaces.Open(tenant, workspace)
-	if err != nil {
-		http.Error(rw, unauthorized, http.StatusUnauthorized)
-		return
-	}
-	g, err := store.LoadPublished(graphID)
-	if err != nil {
-		http.Error(rw, unauthorized, http.StatusUnauthorized)
-		return
-	}
-	keys := core.GraphRequestSecrets(g)
-	switch {
-	case len(keys) > 0:
-		if !anyKeyMatches(keys, webhookKey(r)) {
-			http.Error(rw, unauthorized, http.StatusUnauthorized)
-			return
-		}
-	case core.GraphRequestPublic(g):
-	default:
-		http.Error(rw, unauthorized, http.StatusUnauthorized)
-		return
-	}
-	if g.Disabled {
-		http.Error(rw, `{"error":{"code":"flow_disabled","message":"flow is currently disabled — re-enable via enable_flow"}}`, http.StatusForbidden)
+	g, ok := w.authPublishedFlow(rw, r, "/call/", core.GraphRequestSecrets, core.GraphRequestPublic)
+	if !ok {
 		return
 	}
 
@@ -91,43 +56,24 @@ func (w *WebhookListener) handleCall(rw http.ResponseWriter, r *http.Request) {
 	}
 	defer claim.release()
 
-	seed := buildWebhookSeed(rawBody, r)
-	seeds := map[string]core.Result{}
-	inputs := 0
-	for _, n := range g.Nodes {
-		if n.Module != core.RequestInputModule {
-			continue
-		}
-		inputs++
-		if triggerNodeDisabled(n) {
-			continue
-		}
-		seeds[n.ID] = seed
-	}
+	seeds, inputs := inputSeeds(g, core.RequestInputModule, buildWebhookSeed(rawBody, r))
 	if inputs > 0 && len(seeds) == 0 {
 		http.Error(rw, `{"error":{"code":"trigger_disabled","message":"this flow's Request step is turned off — re-enable the step to accept calls"}}`, http.StatusForbidden)
 		return
 	}
 
-	principal := SystemPrincipal("dazyflow-request", g.Tenant, g.Workspace)
-	// The submit itself must not be abandoned half-written if the caller
-	// hangs up between here and the first byte of the response.
-	runID, err := w.svc.SubmitGraphOpts(context.WithoutCancel(r.Context()), principal, g, SubmitOpts{
-		Seeds:        seeds,
-		TriggerDepth: inboundTriggerDepth(r),
-	})
-	if errors.Is(err, core.ErrTriggerLoop) {
-		w.logger.Printf("refused %s/%s/%s: %v", tenant, workspace, graphID, err)
-		http.Error(rw, `{"error":{"code":"trigger_loop","message":"this call came from a run this flow started — the chain is too deep, so a flow is calling itself"}}`,
-			http.StatusTooManyRequests)
+	cw := &captureWriter{ResponseWriter: rw, headers: http.Header{}}
+	runID, stored, ok := w.submitInbound(cw, r, g, "dazyflow-request", seeds,
+		`{"error":{"code":"trigger_loop","message":"this call came from a run this flow started — the chain is too deep, so a flow is calling itself"}}`)
+	if !ok {
+		// A refusal that was kept already holds this call's payload: a retry
+		// with the same key must replay "do not resend", not store it twice.
+		if stored {
+			claim.commit(cw)
+		}
 		return
 	}
-	if err != nil {
-		w.logger.Printf("submit %s/%s/%s: %v", tenant, workspace, graphID, err)
-		http.Error(rw, fmt.Sprintf("submit: %v", err), http.StatusInternalServerError)
-		return
-	}
-	w.logger.Printf("called %s/%s/%s → %s (%d request seed(s))", tenant, workspace, graphID, runID, len(seeds))
+	w.logger.Printf("called %s/%s/%s → %s (%d request seed(s))", g.Tenant, g.Workspace, g.ID, runID, len(seeds))
 	// From here a retry of this key must join this run, never start another.
 	claim.attach(runID)
 
@@ -135,7 +81,6 @@ func (w *WebhookListener) handleCall(rw http.ResponseWriter, r *http.Request) {
 		writeCallPending(rw, runID)
 		return
 	}
-	cw := &captureWriter{ResponseWriter: rw, headers: http.Header{}}
 	w.awaitReply(cw, r, g, runID, wait)
 	claim.commit(cw)
 }

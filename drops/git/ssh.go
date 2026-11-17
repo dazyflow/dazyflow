@@ -222,18 +222,19 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	return gitssh.NewKnownHostsDb(f.Name())
 }
 
-// validateKnownHosts rejects a known_hosts with any line that does not parse.
-// The parser skips bad lines and only fails a file with no valid line at all,
-// so once merged with the bundled defaults a typo would vanish silently and
-// the host the user meant to pin would fail later as "unknown host".
+// validateKnownHosts rejects a credential's known_hosts if any line fails to
+// parse. x/crypto's knownhosts reader skips bad lines as long as the file has
+// at least one valid entry, and the bundled defaults always provide one, so
+// without this check a typo would silently drop the user's host key and the
+// clone would fail later with a confusing "unknown host" error.
 func validateKnownHosts(s string) error {
 	for i, line := range strings.Split(s, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line + "\n")); err != nil {
-			return fmt.Errorf("known_hosts line %d is not a valid entry", i+1)
+		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
+			return fmt.Errorf("credential known_hosts line %d: %w", i+1, err)
 		}
 	}
 	return nil

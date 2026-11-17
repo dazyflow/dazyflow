@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/robfig/cron/v3"
+	cron "github.com/netresearch/go-cron"
 )
 
 // MaxHostedFormFields caps a hosted form's fields. The page renders every one on

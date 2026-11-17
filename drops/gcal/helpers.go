@@ -57,11 +57,8 @@ func calendarID(job core.Job) string {
 func eventsPage(ctx context.Context, job core.Job, token, calID string, q url.Values) (items []rawEvent, nextPageToken string, err error) {
 	endpoint := calBaseURL(job) + "/calendars/" + url.PathEscape(calID) + "/events?" + q.Encode()
 	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
-	if err != nil {
+	if err = params.HTTPError("Google Calendar", status, body, err, calErr); err != nil {
 		return nil, "", err
-	}
-	if status < 200 || status >= 300 {
-		return nil, "", fmt.Errorf("%s", calErr(body))
 	}
 	var parsed struct {
 		Items         []rawEvent `json:"items"`
