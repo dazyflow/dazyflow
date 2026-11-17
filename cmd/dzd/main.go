@@ -61,6 +61,7 @@ import (
 	"github.com/dazyflow/dazyflow/engine/jobstore"
 	"github.com/dazyflow/dazyflow/engine/mcp"
 	"github.com/dazyflow/dazyflow/engine/webapi"
+	"github.com/dazyflow/dazyflow/internal/netutil"
 	"github.com/dazyflow/dazyflow/pollstate"
 	"github.com/dazyflow/dazyflow/workspace"
 )
@@ -1721,11 +1722,11 @@ func productionConfigProblems(devKey bool, postgresDSN, masterKeyB64, publicBase
 	if devKey {
 		var signals []string
 		if publicBaseURL != "" {
-			if u, err := url.Parse(publicBaseURL); err == nil && !hostIsLocal(u.Hostname()) {
+			if u, err := url.Parse(publicBaseURL); err == nil && !netutil.IsLoopbackHost(u.Hostname()) {
 				signals = append(signals, "DAZYFLOW_PUBLIC_BASE_URL is "+publicBaseURL)
 			}
 		}
-		if cfg, err := pgxpool.ParseConfig(postgresDSN); err == nil && !hostIsLocal(cfg.ConnConfig.Host) {
+		if cfg, err := pgxpool.ParseConfig(postgresDSN); err == nil && !netutil.IsLoopbackHost(cfg.ConnConfig.Host) {
 			signals = append(signals, "the Postgres host is "+cfg.ConnConfig.Host)
 		}
 		if len(signals) > 0 {
@@ -1734,23 +1735,6 @@ func productionConfigProblems(devKey bool, postgresDSN, masterKeyB64, publicBase
 		}
 	}
 	return problems
-}
-
-func hostIsLocal(host string) bool {
-	host = strings.ToLower(strings.TrimSpace(host))
-	host = strings.Trim(host, "[]")
-	switch {
-	case host == "":
-		return false
-	case strings.HasPrefix(host, "/"): // unix socket
-		return true
-	case host == "localhost" || strings.HasSuffix(host, ".localhost"):
-		return true
-	}
-	if ip := net.ParseIP(host); ip != nil {
-		return ip.IsLoopback()
-	}
-	return false
 }
 
 func dsnSSLMode(dsn string) string {

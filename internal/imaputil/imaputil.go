@@ -19,6 +19,7 @@ import (
 	"github.com/emersion/go-imap/v2/imapclient"
 
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/internal/netutil"
 )
 
 const (
@@ -129,21 +130,13 @@ func (c *Client) Close() {
 	}
 }
 
-func isLoopbackHost(host string) bool {
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
-}
-
 // The caller owns Close.
 func Dial(ctx context.Context, cfg Config) (*Client, error) {
 	if cfg.Host == "" {
 		return nil, errors.New("no mail server configured")
 	}
 	// A login over an unencrypted connection puts the password on the wire.
-	if cfg.TLS == ModeNone && cfg.Password != "" && !isLoopbackHost(cfg.Host) {
+	if cfg.TLS == ModeNone && cfg.Password != "" && !netutil.IsLoopbackHost(cfg.Host) {
 		return nil, fmt.Errorf("refusing to send the mailbox password to %s unencrypted — set connection security to \"starttls\" (port 143) or \"implicit\" (port 993), or clear the login if the server takes no password", cfg.Host)
 	}
 

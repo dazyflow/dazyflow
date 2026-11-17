@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/dazyflow/dazyflow/daemon"
+	"github.com/dazyflow/dazyflow/internal/netutil"
 )
 
 // daemonConn dials dzd. It is a package-level var rather than a plain func
@@ -80,12 +81,7 @@ func isLoopbackTarget(target string) bool {
 	if h, _, err := net.SplitHostPort(target); err == nil {
 		host = h
 	}
-	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	return netutil.IsLoopbackHost(host)
 }
 
 // authCtx attaches the API key from DZCTL_TOKEN as a bearer token in

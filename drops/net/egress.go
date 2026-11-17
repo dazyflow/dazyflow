@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/netutil"
 )
 
 // The SSRF guard blocks where a request may go by ADDRESS; this bounds it by
@@ -219,7 +220,7 @@ func loopbackAliases(origin string) []string {
 	if i := strings.LastIndex(rest, ":"); i > strings.LastIndex(rest, "]") {
 		host, port = rest[:i], rest[i:]
 	}
-	if !isLoopbackHost(host) {
+	if !netutil.IsLoopbackHost(host) {
 		return nil
 	}
 	out := make([]string, 0, len(loopbackNames))
@@ -229,14 +230,6 @@ func loopbackAliases(origin string) []string {
 		}
 	}
 	return out
-}
-
-func isLoopbackHost(host string) bool {
-	if host == "localhost" {
-		return true
-	}
-	ip := stdnet.ParseIP(strings.Trim(host, "[]"))
-	return ip != nil && ip.IsLoopback()
 }
 
 func canonicalOrigin(rawURL string) string {
