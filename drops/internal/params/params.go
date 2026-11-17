@@ -261,6 +261,10 @@ func APIErrorMessage(body []byte, limit int) string {
 	return string(body)
 }
 
+// HTTPFailure turns a failed vendor call into an error Result: a transport
+// error becomes <vendor>_http_error, a non-2xx status becomes <vendor>_error
+// with "<label> returned <status>: <extracted message>". It returns nil when
+// the call succeeded.
 func HTTPFailure(job core.Job, vendor, vendorLabel string, status int, body []byte, err error, extract func([]byte) string) *core.Result {
 	if err != nil {
 		r := Err(job, vendor+"_http_error", err.Error())
