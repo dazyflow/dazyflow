@@ -38,6 +38,7 @@ import { ActiveFlowContext, FLOWS_CHANGED_EVENT } from "../activeFlow";
 import { shouldShowTenantID } from "../lib/visibleTenant";
 import { tenantDisplayName } from "../lib/orgDisplayName";
 import { downloadJson } from "../lib/download";
+import { isTypingTarget } from "../lib/typingTarget";
 import { Button } from "./ui/Button";
 import { useAnchoredPop } from "./ui/useAnchoredPop";
 import { OrgSwitcherModal } from "./dialogs/OrgSwitcherModal";
@@ -239,13 +240,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         return;
       }
       if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const el = e.target as HTMLElement | null;
-        const typing =
-          !!el &&
-          (el.tagName === "INPUT" ||
-            el.tagName === "TEXTAREA" ||
-            el.isContentEditable);
-        if (typing) return;
+        if (isTypingTarget(e.target)) return;
         e.preventDefault();
         setHelpOpen((v) => !v);
       }
