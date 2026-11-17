@@ -10,6 +10,12 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Changed
+
+- **One loopback-host check (`internal/netutil.IsLoopbackHost`) replaces five
+  copies.** SMTP and IMAP now accept `LOCALHOST`, `[::1]` and `*.localhost` as
+  local, matching dzd's dev-key check and dzctl.
+
 ## [0.43.2] - 2026-10-06
 
 ### Fixed

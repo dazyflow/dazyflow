@@ -18,6 +18,7 @@ import (
 	"time"
 
 	hfnet "github.com/dazyflow/dazyflow/drops/net"
+	"github.com/dazyflow/dazyflow/internal/netutil"
 )
 
 // A send needs both the bare address for the envelope and the display form for
@@ -47,15 +48,6 @@ func Auth(host, username, password string) (smtp.Auth, error) {
 		return nil, errors.New("a username is set but no password — enter the mail server password (or an app password), or clear the username if the server takes mail without a login")
 	}
 	return smtp.PlainAuth("", username, password, host), nil
-}
-
-// Mirrors net/smtp's own notion of a local connection.
-func isLoopbackHost(host string) bool {
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
 }
 
 // RFC 5322 form; a non-conforming Date is a common spam signal.
@@ -113,7 +105,7 @@ func dial(ctx context.Context, addr, host, mode string, auth smtp.Auth, guard bo
 				c.Close()
 				return nil, fmt.Errorf("starttls: %w", err)
 			}
-		case auth != nil && !isLoopbackHost(host):
+		case auth != nil && !netutil.IsLoopbackHost(host):
 			c.Close()
 			return nil, fmt.Errorf("%s doesn't offer STARTTLS, so the login can't be sent encrypted — use port 465 with connection security \"implicit\", or \"none\" only for a trusted local relay", host)
 		}

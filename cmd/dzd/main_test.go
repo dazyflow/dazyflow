@@ -121,30 +121,6 @@ func TestProductionConfigProblems_DevKeyGuard(t *testing.T) {
 	}
 }
 
-func TestHostIsLocal(t *testing.T) {
-	for _, tc := range []struct {
-		host string
-		want bool
-	}{
-		{"localhost", true},
-		{"LOCALHOST", true},
-		{"dz.localhost", true},
-		{"127.0.0.1", true},
-		{"127.5.5.5", true},
-		{"::1", true},
-		{"[::1]", true},
-		{"/var/run/postgresql", true}, // unix socket
-		{"db.internal", false},
-		{"10.0.0.5", false},
-		{"app.example.com", false},
-		{"", false},
-	} {
-		if got := hostIsLocal(tc.host); got != tc.want {
-			t.Errorf("hostIsLocal(%q) = %v, want %v", tc.host, got, tc.want)
-		}
-	}
-}
-
 func TestReadRotationKey(t *testing.T) {
 	const b64 = "c3Ryb25nLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9rIQ=="
 	file := filepath.Join(t.TempDir(), "key")
