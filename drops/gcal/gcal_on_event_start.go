@@ -14,6 +14,7 @@ import (
 
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/cursor"
+	"github.com/dazyflow/dazyflow/drops/internal/google"
 	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/engine"
 	"github.com/dazyflow/dazyflow/pollstate"
@@ -244,24 +245,14 @@ func fetchStarting(ctx context.Context, job core.Job, token, calID string, now t
 		q.Set("q", v)
 	}
 
-	out := make([]rawEvent, 0, limit)
-	pageToken := ""
-	for page := 0; page < startPageCap && len(out) < limit; page++ {
+	out, _, err := google.Paginate(ctx, limit, startPageCap, func(pageToken string, _ int) ([]rawEvent, string, error) {
 		if pageToken != "" {
 			q.Set("pageToken", pageToken)
 		}
-		items, next, err := eventsPage(ctx, job, token, calID, q)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, items...)
-		if next == "" {
-			break
-		}
-		pageToken = next
-	}
-	if len(out) > limit {
-		out = out[:limit]
+		return eventsPage(ctx, job, token, calID, q)
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }
