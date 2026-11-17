@@ -104,17 +104,10 @@ func nshiftDo(ctx context.Context, job core.Job, method, url string, body []byte
 	if err != nil {
 		return 0, nil, nil, err
 	}
-	headers := map[string]string{
-		"Authorization": "Bearer " + key,
-		"Accept":        "application/json",
-	}
-	if body != nil {
-		headers["Content-Type"] = "application/json"
-	}
 	// base_url is a tenant-supplied param, so net.Do guards the dial: the SSRF
 	// client blocks loopback/private/link-local targets and the egress allowlist
 	// (when set) bounds which public hosts the credential may be sent to.
-	return hfnet.Do(ctx, method, url, headers, body, params.TimeoutMS(job, 20000), maxResponseBytes)
+	return hfnet.DoBearer(ctx, method, url, key, "application/json", map[string]string{"Accept": "application/json"}, body, params.TimeoutMS(job, 20000), maxResponseBytes)
 }
 
 func extractNshiftError(body []byte) string {

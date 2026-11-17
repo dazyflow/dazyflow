@@ -5,9 +5,7 @@ package git
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -224,21 +222,19 @@ func hostKeyDB(userKnownHosts string) (*knownhosts.HostKeyDB, error) {
 	return gitssh.NewKnownHostsDb(f.Name())
 }
 
-// validateKnownHosts rejects any malformed line in the credential's own
-// known_hosts. knownhosts.Read skips invalid lines once the file has a valid
-// one, and the bundled defaults always are, so a typo would otherwise be
-// dropped silently and surface later as an unknown-host failure.
+// validateKnownHosts rejects a credential's known_hosts if any line fails to
+// parse. x/crypto's knownhosts reader skips bad lines as long as the file has
+// at least one valid entry, and the bundled defaults always provide one, so
+// without this check a typo would silently drop the user's host key and the
+// clone would fail later with a confusing "unknown host" error.
 func validateKnownHosts(s string) error {
-	for n, line := range strings.Split(s, "\n") {
+	for i, line := range strings.Split(s, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		if _, _, _, _, _, err := ssh.ParseKnownHosts([]byte(line)); err != nil {
-			if errors.Is(err, io.EOF) {
-				err = errors.New("invalid entry")
-			}
-			return fmt.Errorf("known_hosts line %d: %w", n+1, err)
+			return fmt.Errorf("credential known_hosts line %d: %w", i+1, err)
 		}
 	}
 	return nil

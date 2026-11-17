@@ -81,7 +81,7 @@ func (s *PgMCPGrantStore) SwapGrant(ctx context.Context, g MCPGrant, oldRefreshH
 }
 
 func (s *PgMCPGrantStore) DeleteGrant(ctx context.Context, id string) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM mcp_oauth_grants WHERE id=$1`, id)
+	_, err := deleteWhere(ctx, s.pool, "mcp_oauth_grants", "id", id)
 	return err
 }
 
@@ -103,6 +103,7 @@ func nullTime(t time.Time) *time.Time {
 	return &t
 }
 
+// scanMCPGrant scans one mcp_oauth_grants row (in pgMCPGrantColumns order).
 func scanMCPGrant(row rowScanner) (MCPGrant, error) {
 	var (
 		g         MCPGrant

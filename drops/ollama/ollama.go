@@ -32,6 +32,7 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 	"github.com/dazyflow/dazyflow/drops/internal/chatcompletion"
 	"github.com/dazyflow/dazyflow/drops/internal/llmtask"
+	"github.com/dazyflow/dazyflow/drops/internal/params"
 	"github.com/dazyflow/dazyflow/internal/llm"
 )
 
@@ -117,12 +118,7 @@ func (provider) Call(ctx context.Context, apiKey string, req llmtask.Request) (l
 	return res, nil
 }
 
-func baseOr(base string) string {
-	if b := strings.TrimRight(strings.TrimSpace(base), "/"); b != "" {
-		return b
-	}
-	return defaultBase
-}
+func baseOr(base string) string { return llmtask.BaseOr(base, defaultBase) }
 
 func init() {
 	llm.Register(llm.ProviderInfo{
@@ -158,15 +154,9 @@ func verifyReachable(ctx context.Context, apiKey, base string) error {
 	if apiKey != "" {
 		headers["authorization"] = "Bearer " + apiKey
 	}
-	status, body, err := llmtask.GetStatus(ctx, baseOr(base)+"/api/tags", headers)
+	body, err := llmtask.VerifyGET(ctx, "Ollama", baseOr(base)+"/api/tags", headers, []int{401, 403}, ollamaError)
 	if err != nil {
-		return fmt.Errorf("could not reach Ollama at %s: %w", baseOr(base), err)
-	}
-	switch {
-	case status == 401 || status == 403:
-		return errors.New("Ollama rejected the API key")
-	case status < 200 || status >= 300:
-		return fmt.Errorf("Ollama returned HTTP %d: %s", status, ollamaError(body))
+		return err
 	}
 	if n := modelCount(body); n == 0 {
 		return errors.New("Ollama is reachable but has no models pulled — run `ollama pull llama3.1` on that machine first")
@@ -230,15 +220,7 @@ func ollamaError(body []byte) string {
 	if err := json.Unmarshal(body, &flat); err == nil && flat.Error != "" {
 		return flat.Error
 	}
-	var nested struct {
-		Error struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(body, &nested); err == nil && nested.Error.Message != "" {
-		return nested.Error.Message
-	}
-	return string(body)
+	return params.EnvelopeMessage(body, "", 512)
 }
 
 // listModels asks this Ollama which models are pulled. Backs the model picker.

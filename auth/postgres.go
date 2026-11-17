@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/dazyflow/dazyflow/core"
+	"github.com/dazyflow/dazyflow/internal/pgutil"
 )
 
 // Postgres-backed implementations of the three auth stores
@@ -131,6 +132,7 @@ func EnsurePgAuthSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	return ensureSchema(ctx, pool, pgAuthSchema)
 }
 
+// ensureSchema runs an idempotent schema script against pool.
 func ensureSchema(ctx context.Context, pool *pgxpool.Pool, schema string) error {
 	if pool == nil {
 		return fmt.Errorf("nil pool")
@@ -245,25 +247,10 @@ func (s *PgKeyStore) DeleteByTenant(ctx context.Context, tenant string) (int, er
 	return deleteWhere(ctx, s.pool, "api_keys", "tenant", tenant)
 }
 
-type rowScanner interface {
-	Scan(dest ...any) error
-}
+type rowScanner = pgutil.Scanner
 
 func queryRows[T any](ctx context.Context, pool *pgxpool.Pool, scan func(rowScanner) (T, error), query string, args ...any) ([]T, error) {
-	rows, err := pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := make([]T, 0)
-	for rows.Next() {
-		v, err := scan(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, v)
-	}
-	return out, rows.Err()
+	return pgutil.QueryRows(ctx, pool, scan, query, args...)
 }
 
 // deleteWhere runs `DELETE FROM <table> WHERE <col>=$1` and returns the
@@ -343,7 +330,7 @@ func (s *PgSessionStore) PutSession(ctx context.Context, sess Session) error {
 }
 
 func (s *PgSessionStore) DeleteSession(ctx context.Context, id string) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE id=$1`, id)
+	_, err := deleteWhere(ctx, s.pool, "sessions", "id", id)
 	return err
 }
 
@@ -527,6 +514,6 @@ func (s *PgUserStore) ListUsers(ctx context.Context) ([]User, error) {
 
 func (s *PgUserStore) DeleteUser(ctx context.Context, email string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
-	_, err := s.pool.Exec(ctx, `DELETE FROM users WHERE email=$1`, email)
+	_, err := deleteWhere(ctx, s.pool, "users", "email", email)
 	return err
 }
