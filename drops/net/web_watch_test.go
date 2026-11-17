@@ -43,8 +43,7 @@ func watchJob(url string, extra map[string]any) core.Job {
 }
 
 func TestWebWatch_BaselineThenChange(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 	memWatchStore(t)
 
 	page := "<html><body><h1>Tenders</h1><p>Nothing yet</p></body></html>"
@@ -85,8 +84,7 @@ func TestWebWatch_BaselineThenChange(t *testing.T) {
 
 // Markup churn that a reader would never notice must not count as a change.
 func TestWebWatch_IgnoresInvisibleMarkup(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 	memWatchStore(t)
 
 	page := `<html><head><meta name="csrf" content="aaa"></head><body><script>var t=1</script><p>Price: 100 kr</p></body></html>`
@@ -111,8 +109,7 @@ func TestWebWatch_IgnoresInvisibleMarkup(t *testing.T) {
 }
 
 func TestWebWatch_Pattern(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 	memWatchStore(t)
 
 	page := "<p>Price: 100 kr</p><p>Views: 1</p>"
@@ -142,8 +139,7 @@ func TestWebWatch_Pattern(t *testing.T) {
 }
 
 func TestWebWatch_PatternMissingIsAClearError(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 	memWatchStore(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -161,8 +157,7 @@ func TestWebWatch_PatternMissingIsAClearError(t *testing.T) {
 }
 
 func TestWebWatch_SendsHeaders(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 	memWatchStore(t)
 
 	var gotAuth, gotAccept string
@@ -206,8 +201,7 @@ func TestWebWatch_SendsHeaders(t *testing.T) {
 }
 
 func TestWebWatch_BadHeadersParamIsAClearError(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 	memWatchStore(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

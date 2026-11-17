@@ -180,8 +180,7 @@ func TestCov_SafeHTTPClientCached(t *testing.T) {
 }
 
 func TestCov_SSRFGuardAndDialControl(t *testing.T) {
-	SetAllowPrivateEgress(false)
-	defer SetAllowPrivateEgress(true)
+	setPrivateEgress(t, false)
 
 	ctrl := SSRFDialControl()
 	if ctrl == nil {
@@ -202,15 +201,14 @@ func TestCov_SSRFGuardAndDialControl(t *testing.T) {
 }
 
 func TestCov_SSRFDialControlNilWhenOptedIn(t *testing.T) {
-	SetAllowPrivateEgress(true) // already on via TestMain, assert anyway
+	setPrivateEgress(t, true)
 	if SSRFDialControl() != nil {
 		t.Error("control should be nil when private egress allowed")
 	}
 }
 
 func TestCov_CheckDialHost(t *testing.T) {
-	SetAllowPrivateEgress(false)
-	defer SetAllowPrivateEgress(true)
+	setPrivateEgress(t, false)
 
 	if err := CheckDialHost("127.0.0.1:5432"); err == nil {
 		t.Error("loopback host:port should be blocked")
@@ -228,15 +226,14 @@ func TestCov_CheckDialHost(t *testing.T) {
 }
 
 func TestCov_CheckDialHostOptInAllows(t *testing.T) {
-	SetAllowPrivateEgress(true)
+	setPrivateEgress(t, true)
 	if err := CheckDialHost("127.0.0.1:5432"); err != nil {
 		t.Errorf("opted-in private egress should allow loopback: %v", err)
 	}
 }
 
 func TestCov_IsUnsafeIPRanges(t *testing.T) {
-	SetAllowPrivateEgress(false)
-	defer SetAllowPrivateEgress(true)
+	setPrivateEgress(t, false)
 	if err := CheckDialHost("100.64.0.1"); err == nil {
 		t.Error("CGNAT address should be blocked")
 	}
@@ -343,7 +340,7 @@ func TestCov_WebhookSendHeaderBadParam(t *testing.T) {
 }
 
 func TestCov_WebhookSendIdempotencyKeySet(t *testing.T) {
-	SetAllowPrivateEgress(true)
+	setPrivateEgress(t, true)
 	var gotKey string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotKey = r.Header.Get("Idempotency-Key")

@@ -15,8 +15,7 @@ import (
 )
 
 func TestWebhookSend_ObjectBodyJSONEncoded(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 
 	var gotCT string
 	var gotBody map[string]any
@@ -46,8 +45,7 @@ func TestWebhookSend_ObjectBodyJSONEncoded(t *testing.T) {
 }
 
 func TestWebhookSend_StringBody(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 	var gotBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
@@ -64,8 +62,7 @@ func TestWebhookSend_StringBody(t *testing.T) {
 }
 
 func TestWebhookSend_URLFromInput(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 	}))
@@ -98,8 +95,7 @@ func TestWebhookSend_BadMethod(t *testing.T) {
 }
 
 func TestWebhookSend_4xxIsError(t *testing.T) {
-	SetAllowPrivateEgress(true)
-	defer SetAllowPrivateEgress(false)
+	setPrivateEgress(t, true)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
 		_, _ = w.Write([]byte("nope"))
