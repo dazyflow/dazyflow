@@ -1585,7 +1585,7 @@ func TestHTTPGateway_ValidateCron_AgreesWithSchedulerParser(t *testing.T) {
 	// scheduler does — otherwise users get a green "valid" hint on
 	// an expression the scheduler then refuses at rescan time.
 	// Spot-check by trying a "@yearly"-style expression that
-	// robfig/cron supports only with the optional Descriptor flag —
+	// go-cron supports only with the optional Descriptor flag —
 	// the scheduler doesn't enable that, so the endpoint shouldn't
 	// either.
 	h := newGatewayHarness(t)

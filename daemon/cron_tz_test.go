@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	cron "github.com/netresearch/go-cron"
+	"github.com/dazyflow/dazyflow/core"
 )
 
 func TestParseCronInTZ(t *testing.T) {
 	t.Parallel()
-	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	parser := core.CronParser
 
 	// A fixed instant well clear of any DST boundary: 2026-06-01 00:00 UTC.
 	from := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
@@ -48,7 +48,7 @@ func TestParseCronInTZ(t *testing.T) {
 // zone.
 func TestParseCronInTZ_BadZone(t *testing.T) {
 	t.Parallel()
-	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	parser := core.CronParser
 	if _, err := parseCronInTZ(parser, "0 9 * * *", "Not/AZone"); err == nil {
 		t.Fatal("expected error for bad timezone, got nil")
 	}

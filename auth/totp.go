@@ -159,8 +159,11 @@ type TOTPSetup struct {
 	QRPNGDataURL string
 }
 
+const totpQRSize = 256
+
+// Rendered by pquerna/otp (via boombuler/barcode), so no separate QR library.
 func encodeQR(k *otp.Key) (string, error) {
-	img, err := k.Image(256, 256)
+	img, err := k.Image(totpQRSize, totpQRSize)
 	if err != nil {
 		return "", fmt.Errorf("qr encode: %w", err)
 	}

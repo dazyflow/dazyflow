@@ -12,7 +12,7 @@ import (
 	"github.com/dazyflow/dazyflow/core"
 )
 
-var scheduleCronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+var scheduleCronParser = core.CronParser
 
 type ScheduleSpec struct {
 	Tenant    string
