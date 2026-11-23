@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/dazyflow/dazyflow/auth"
@@ -57,21 +56,12 @@ func (h *runCtlAPI) countPendingApprovals(rw http.ResponseWriter, r *http.Reques
 }
 
 func (h *runCtlAPI) listDecidedApprovals(rw http.ResponseWriter, r *http.Request, p core.Principal) {
-	limit := 0
-	if v := r.URL.Query().Get("limit"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n <= 0 {
-			writeJSONError(rw, http.StatusBadRequest, "limit must be a positive number")
-			return
-		}
-		limit = n
-	}
 	approvals, err := h.svc.ListDecidedApprovals(
 		r.Context(),
 		p,
 		r.URL.Query().Get("tenant"),
 		r.URL.Query().Get("workspace"),
-		limit,
+		queryLimit(r, decidedApprovalsDefault, decidedApprovalsCap),
 	)
 	if err != nil {
 		writeJSONError(rw, http.StatusInternalServerError, err.Error())

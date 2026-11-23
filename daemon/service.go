@@ -1494,7 +1494,10 @@ type DecidedApproval struct {
 	Workspace       string    `json:"workspace"`
 }
 
-const decidedApprovalsCap = 200
+const (
+	decidedApprovalsDefault = 50
+	decidedApprovalsCap     = 200
+)
 
 func (s *Service) ListDecidedApprovals(ctx context.Context, p core.Principal, narrowTenant, narrowWorkspace string, limit int) ([]DecidedApproval, error) {
 	tenant := p.Tenant
@@ -1506,7 +1509,7 @@ func (s *Service) ListDecidedApprovals(ctx context.Context, p core.Principal, na
 		ws = narrowWorkspace
 	}
 	if limit <= 0 {
-		limit = 50
+		limit = decidedApprovalsDefault
 	}
 	if limit > decidedApprovalsCap {
 		limit = decidedApprovalsCap

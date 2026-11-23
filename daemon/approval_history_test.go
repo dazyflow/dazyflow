@@ -342,11 +342,13 @@ func TestHTTPGateway_DecidedApprovals(t *testing.T) {
 		t.Errorf("cancelled row names a decider: %+v", cancelled)
 	}
 
-	if bad := h.do(t, "GET", "/api/v1/approvals/decided?limit=soon", nil); bad.Code != http.StatusBadRequest {
-		t.Errorf("limit=soon → %d, want 400", bad.Code)
-	}
-	if bad := h.do(t, "GET", "/api/v1/approvals/decided?limit=0", nil); bad.Code != http.StatusBadRequest {
-		t.Errorf("limit=0 → %d, want 400", bad.Code)
+	// Malformed or non-positive limits fall back to the default, like every
+	// other paged endpoint (queryLimit).
+	for _, q := range []string{"limit=soon", "limit=0", "limit=-3", "limit=1"} {
+		res := h.do(t, "GET", "/api/v1/approvals/decided?"+q, nil)
+		if res.Code != http.StatusOK {
+			t.Errorf("%s → %d, want 200", q, res.Code)
+		}
 	}
 
 	req := httptest.NewRequest("GET", "/api/v1/approvals/decided", nil)
