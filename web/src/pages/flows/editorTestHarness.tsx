@@ -21,6 +21,16 @@
 //   for the wrong reason.
 
 import { vi } from "vitest";
+import { configure } from "@testing-library/react";
+
+// Every FlowEditor test file imports this module, so these budgets apply to
+// exactly those files. A full EditorInner mount is heavy: alone it renders in
+// well under a second, but in a parallel run (or on a slower machine) it
+// overruns vitest's 5s test default and Testing Library's 1s findBy/waitFor
+// default, and which test times out changes from run to run. A real hang still
+// fails, just later.
+vi.setConfig({ testTimeout: 20_000 });
+configure({ asyncUtilTimeout: 5_000 });
 
 
 export type StreamFrame = [kind: string, data: unknown];

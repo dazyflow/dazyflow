@@ -22,7 +22,12 @@ import (
 
 func TestFSSandbox_PerWorkspaceIsolation(t *testing.T) {
 	t.Parallel()
-	base := t.TempDir()
+	// NewFSSandbox resolves symlinks (macOS: /var -> /private/var), so
+	// compare against the resolved base.
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("EvalSymlinks: %v", err)
+	}
 	sb, err := daemon.NewFSSandbox(base)
 	if err != nil {
 		t.Fatalf("NewFSSandbox: %v", err)

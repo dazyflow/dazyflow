@@ -139,8 +139,15 @@ async function letAutosaveFire() {
   });
 }
 
+// Autosave is debounced (AUTOSAVE_DEBOUNCE_MS, 1.5s in useAutosave.ts) — longer
+// than vi.waitFor's default 1s timeout — so step the fake clock past it rather
+// than leaning on real time drifting it forward, then allow slack for the
+// save's own promise chain on a loaded machine.
 async function awaitAutosave() {
-  await vi.waitFor(() => expect(saveGraph).toHaveBeenCalled());
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
+  await vi.waitFor(() => expect(saveGraph).toHaveBeenCalled(), { timeout: 5000 });
 }
 
 beforeEach(() => {

@@ -70,7 +70,12 @@ type dropOutcome struct {
 // hang we deliberately leak the goroutine (Go can't kill it) and leave the
 // progress channel open — closing it could race a send-on-closed panic in
 // the still-live drop — so the caller just reports the failure.
+//
+// Budgets are wall-clock, so both the budget and the watchdog grace are
+// scaled by raceSlowdown: under -race a slow-but-finite run must not read as
+// a hang.
 func runDropSafely(parent context.Context, tr core.Transport, job core.Job, budget time.Duration) dropOutcome {
+	budget *= raceSlowdown
 	ctx, cancel := context.WithTimeout(parent, budget)
 	defer cancel()
 
@@ -103,7 +108,7 @@ func runDropSafely(parent context.Context, tr core.Transport, job core.Job, budg
 		done <- completion{r, e}
 	}()
 
-	watchdog := time.NewTimer(budget + 8*time.Second)
+	watchdog := time.NewTimer(budget + 8*time.Second*raceSlowdown)
 	defer watchdog.Stop()
 
 	select {

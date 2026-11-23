@@ -19,9 +19,10 @@
 // which would need @types/node in the app's tsconfig.
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const SRC = new URL("../src/", import.meta.url).pathname;
+const SRC = fileURLToPath(new URL("../src/", import.meta.url));
 
 // Language data, by the shape of its path: `sv.json`, `i18n/drops/sv.ts` and
 // `<name>.sv.ts` are all one language's translation of something.
@@ -38,6 +39,10 @@ const BUNDLED = new Map([
   // does not clear that bar the way the catalogues and the vocabulary do.
   ["i18n/templates.sv.ts", "7 KB — too small to be worth its own chunk"],
 ]);
+
+// Paths relative to SRC with forward slashes, so the matching below (and the
+// BUNDLED keys) work the same on Windows.
+const relSrc = (f) => relative(SRC, f).split(sep).join("/");
 
 const EXTS = ["", ".ts", ".tsx", ".json", "/index.ts", "/index.tsx"];
 
@@ -68,7 +73,7 @@ function* sources(dir) {
 const offenders = [];
 let scanned = 0;
 for (const file of sources(SRC)) {
-  const rel = relative(SRC, file);
+  const rel = relSrc(file);
   // Language data importing its own siblings is one chunk, not a leak; the
   // test harness registers a language up front on purpose (src/test/setup.ts).
   if (isLocaleData(rel) || rel.startsWith("test/")) continue;
@@ -76,7 +81,7 @@ for (const file of sources(SRC)) {
   for (const m of readFileSync(file, "utf8").matchAll(STATIC_IMPORT)) {
     const target = resolveImport(file, m[1]);
     if (!target) continue;
-    const targetRel = relative(SRC, target);
+    const targetRel = relSrc(target);
     if (isLocaleData(targetRel) && !BUNDLED.has(targetRel)) {
       offenders.push([rel, targetRel]);
     }
