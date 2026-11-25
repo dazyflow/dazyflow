@@ -20,7 +20,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/creack/pty"
@@ -196,13 +195,7 @@ func executeShell(ctx context.Context, job core.Job, progress chan<- core.Progre
 		if cmd.Process == nil {
 			return nil
 		}
-		pid := cmd.Process.Pid
-		if pgid, err := syscall.Getpgid(pid); err == nil && pgid == pid {
-			if syscall.Kill(-pgid, syscall.SIGKILL) == nil {
-				return nil
-			}
-		}
-		return cmd.Process.Kill()
+		return killProcessGroup(cmd.Process)
 	}
 	cmd.WaitDelay = 5 * time.Second
 	combined := &boundedBuffer{limit: maxBytes}
