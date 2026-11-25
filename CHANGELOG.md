@@ -10,6 +10,14 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
 
 ## [Unreleased]
 
+### Security
+
+- **OpenTelemetry bumped to v1.47.0** (GO-2026-6974: span attribute length
+  limits could be bypassed with U+FFFD runes).
+- **gorilla/websocket bumped to commit d67f41855da4** (GO-2026-6278: client mask
+  keys came from a weak PRNG). No tagged release contains the fix yet; move to
+  the next tag once one ships.
+
 ### Changed
 
 - **One loopback-host check (`internal/netutil.IsLoopbackHost`) replaces five
