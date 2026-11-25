@@ -69,7 +69,7 @@ func parseCronInTZ(p cron.Parser, expr, tz string) (cron.Schedule, error) {
 	if _, err := time.LoadLocation(tz); err != nil {
 		return nil, fmt.Errorf("bad timezone %q: %w", tz, err)
 	}
-	return p.Parse("CRON_TZ=" + tz + " " + expr)
+	return core.ParseCron(p, "CRON_TZ="+tz+" "+expr)
 }
 
 func paramSeconds(params map[string]any, key string) int {

@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	cron "github.com/netresearch/go-cron"
 )
 
 // MaxHostedFormFields caps a hosted form's fields. The page renders every one on
@@ -31,8 +29,6 @@ const MaxHostedFormTitleLen = 200
 // fire every tick. The scheduler rejects past it at runtime; the lint warns at
 // save time.
 const MaxPollIntervalSeconds = 366 * 24 * 60 * 60
-
-var cronLintParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
 var cronLintAnchor = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 
@@ -60,7 +56,7 @@ func lintTriggers(g Graph) []LintIssue {
 					"A cron trigger has no schedule expression, so it will never fire. Set a schedule like \"0 9 * * *\" (every day at 09:00)."))
 				continue
 			}
-			sched, err := cronLintParser.Parse(expr)
+			sched, err := ParseCron(CronParser, expr)
 			if err != nil {
 				issues = append(issues, triggerIssue("trigger_cron_invalid",
 					fmt.Sprintf("Cron trigger %q isn't a valid schedule (%v), so it will never fire. Use 5 fields: minute hour day-of-month month day-of-week.", expr, err)))
@@ -115,7 +111,7 @@ func lintTriggers(g Graph) []LintIssue {
 		if expr == "" {
 			continue
 		}
-		sched, err := cronLintParser.Parse(expr)
+		sched, err := ParseCron(CronParser, expr)
 		if err != nil {
 			issues = append(issues, nodeTriggerIssue("trigger_cron_invalid", n.ID,
 				fmt.Sprintf("Schedule node's cron %q isn't valid (%v), so it will never fire. Use 5 fields: minute hour day-of-month month day-of-week.", expr, err)))
