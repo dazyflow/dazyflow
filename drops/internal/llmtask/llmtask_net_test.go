@@ -164,3 +164,19 @@ func TestBaseOr(t *testing.T) {
 		t.Errorf("BaseOr empty = %q", got)
 	}
 }
+
+func TestVerifyGET_Unreachable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	u := srv.URL
+	srv.Close()
+	_, err := VerifyGET(context.Background(), "Acme", u, nil, nil, func([]byte) string { return "" })
+	if err == nil || !strings.HasPrefix(err.Error(), "could not reach Acme at "+u) {
+		t.Errorf("err = %v, want a reachability error naming the endpoint", err)
+	}
+}
+
+func TestMediaType(t *testing.T) {
+	if got := MediaType("image/png; charset=binary"); got != "image/png" {
+		t.Errorf("MediaType = %q", got)
+	}
+}
