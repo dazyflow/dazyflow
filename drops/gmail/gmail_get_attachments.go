@@ -186,11 +186,8 @@ func fetchAttachment(ctx context.Context, job core.Job, token, msgID, attID stri
 	endpoint := baseURL(job) + "/users/me/messages/" + url.PathEscape(msgID) +
 		"/attachments/" + url.PathEscape(attID)
 	status, body, err := gmailDo(ctx, "GET", endpoint, token, "", nil, timeoutMS)
-	if err != nil {
+	if err = params.HTTPError("Gmail", status, body, err, extractGmailError); err != nil {
 		return nil, err
-	}
-	if status < 200 || status >= 300 {
-		return nil, fmt.Errorf("%s", extractGmailError(body))
 	}
 	var env struct {
 		Data string `json:"data"`

@@ -357,7 +357,7 @@ func ListDriveFiles(ctx context.Context, job core.Job, mimeType string) ([]core.
 	q.Set("pageSize", "100")
 	endpoint := driveBaseURL(job) + "/files?" + q.Encode()
 	status, body, err := googleDo(ctx, "GET", endpoint, token, "", nil, params.IntDefault(job.Params, "timeout_ms", 15000))
-	if err = params.HTTPError("Google Sheets", status, body, err, sheetsErr); err != nil {
+	if err = params.HTTPError("Google Drive", status, body, err, sheetsErr); err != nil {
 		return nil, err
 	}
 	var parsed struct {
