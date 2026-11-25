@@ -24,6 +24,14 @@ heading; `make patch` (or `minor` / `major`) promotes it and tags.
   copies.** SMTP and IMAP now accept `LOCALHOST`, `[::1]` and `*.localhost` as
   local, matching dzd's dev-key check and dzctl.
 
+### Security
+
+- **Dependency bumps for two new advisories.** `go.opentelemetry.io/otel/*`
+  1.46.0 → 1.47.0 (GO-2026-6974, attribute length limit bypass) and
+  `github.com/gorilla/websocket` 1.5.3 → the upstream fix commit d67f41855da4
+  (GO-2026-6278, weak PRNG for client mask keys, used by the MQTT drop's
+  WebSocket transport; no tagged release carries the fix yet).
+
 ## [0.43.2] - 2026-10-06
 
 ### Fixed
